@@ -6,11 +6,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { typeCustomRate } from '../../helpers/customNetworkFee.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AttachContentForm } from '../../../packages/core/src/shared/routes/AttachContentForm.jsx';
 import { GatedPublishForm } from '../../../packages/core/src/shared/routes/GatedPublishForm.jsx';
 import { PublishFileForm } from '../../../packages/core/src/shared/routes/PublishFileForm.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+import { maxPublicFileBytes } from '../../../packages/core/src/flows/fileSizeLimits.js';
+import { formatBytes } from '../../../packages/core/src/shared/utils/formatBytes.js';
 
 const CHAIN = 'bitcoin-regtest';
 const SOURCE = {
@@ -249,9 +252,21 @@ describe('publish forms replace file state safely', () => {
     it('uses the encoding-aware attachment cap and rechecks it after metadata edits', async () => {
         mount(<AttachContentForm walletId="w" chainId={CHAIN} tick="ART" issuerAddress={SOURCE.address} onBack={() => {}} />);
         const input = await screen.findByLabelText('Choose file to attach');
-        const file = new File([new Uint8Array(8_080)], 'art.txt', { type: 'text/plain' });
+        // A software signer on a Taproot chain rides the envelope, so Attach
+        // Artwork offers the full single-transaction ceiling (operator walk
+        // 2026-11-15). A file exactly at it fits with no title and is over it
+        // once a 100-character title is added.
+        const cap = maxPublicFileBytes({ name: 'art.txt', type: 'text/plain', title: '', memo: '' }, { encoding: 'TAPROOT' });
+        expect(cap).toBeGreaterThan(maxPublicFileBytes({ name: 'art.txt', type: 'text/plain', title: '', memo: '' }));
+        // The field offers the envelope ceiling once the From address is read.
+        const envelopeLabel = `Artwork file (up to ${formatBytes(
+            maxPublicFileBytes({ name: 'file', type: 'application/octet-stream', title: '', memo: '' }, { encoding: 'TAPROOT' }),
+            { limit: true },
+        )})`;
+        await waitFor(() => expect(document.body.textContent).toContain(envelopeLabel));
+        const file = new File([new Uint8Array(cap)], 'art.txt', { type: 'text/plain' });
         fireEvent.change(input, { target: { files: [file] } });
-        await act(async () => readers[0].succeed(8_080));
+        await act(async () => readers[0].succeed(cap));
         await waitFor(() => expect(document.body.textContent).toContain('art.txt'));
 
         fireEvent.change(screen.getByLabelText('Title'), {
@@ -361,7 +376,8 @@ describe('publish forms replace file state safely', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
-        expect(await screen.findByText('report.txt · 3 bytes · text/plain')).toBeInTheDocument();
+        // Sizes read in KB, never bytes; a 3-byte file reads as the 0.1 KB floor.
+        expect(await screen.findByText('report.txt · 0.1 KB · text/plain')).toBeInTheDocument();
         expect(screen.getByText('Quarterly report')).toBeInTheDocument();
         expect(screen.getByText((_, element) => (
             element?.tagName === 'DD' && element.textContent === ' keep these spaces '
@@ -396,7 +412,9 @@ describe('publish forms replace file state safely', () => {
         await openSection('Memo');
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '  October  ' } });
         await openSection('Access');
-        fireEvent.click(await screen.findByRole('radio', { name: new RegExp(keyHash.slice(0, 12)) }));
+        // Pack is the themed dropdown (G119): open it, pick the existing pack.
+        fireEvent.click(await screen.findByRole('button', { name: 'Pack: New pack (fresh key)' }));
+        fireEvent.click(screen.getByRole('option', { name: new RegExp(keyHash.slice(0, 12)) }));
         fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
         await waitFor(() => expect(client.composeGatedPublishForConfirm).toHaveBeenCalledTimes(1));
@@ -412,10 +430,10 @@ describe('publish forms replace file state safely', () => {
         expect(screen.getByLabelText('Memo')).toHaveValue('  October  ');
     });
 
+    // Typed into the one custom fee editor, the Network fee line (G113).
     it.each([
-        ['', 'Enter a custom fee rate.'],
-        ['1.123456789', 'Custom fee rate can have at most 8 decimal places.'],
-        ['999999999999999999999', 'Enter a rate no higher than 1,000 sat/vB.'],
+        ['', 'Enter a custom network fee.'],
+        ['50000', 'Enter a rate no higher than 1,000 sat/vB.'],
     ])('refuses the public custom fee %j before review', async (rate, message) => {
         const client = messaging();
         client.getSettings.mockResolvedValue({ walletMode: 'watcher' });
@@ -427,13 +445,8 @@ describe('publish forms replace file state safely', () => {
             target: { files: [new File(['abc'], 'report.txt', { type: 'text/plain' })] },
         });
         await act(async () => readers[0].succeed(3));
-        await openSection('Network fee');
-        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
-            target: { value: '3' },
-        });
-        fireEvent.change(screen.getByLabelText('Custom fee rate (sat/vB)'), {
-            target: { value: rate },
-        });
+        await openSection('Speed and Fees');
+        await typeCustomRate(rate);
         fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
 
         expect(await screen.findByText(message)).toBeInTheDocument();
@@ -511,13 +524,8 @@ describe('publish forms replace file state safely', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('network accepts at most 250 characters');
 
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '' } });
-        await openSection('Network fee');
-        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
-            target: { value: '3' },
-        });
-        fireEvent.change(screen.getByLabelText('Custom fee rate (sat/vB)'), {
-            target: { value: '0' },
-        });
+        await openSection('Speed and Fees');
+        await typeCustomRate('0');
         fireEvent.click(screen.getByRole('button', { name: 'Publish File' }));
         expect(await screen.findAllByText(/must be greater than zero/)).not.toHaveLength(0);
         expect(client.getTokenInfo).not.toHaveBeenCalled();

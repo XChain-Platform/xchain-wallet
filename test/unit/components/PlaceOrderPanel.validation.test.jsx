@@ -11,6 +11,7 @@ import { resolve } from 'node:path';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { PlaceOrderPanel } from '../../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = {
@@ -72,6 +73,33 @@ function pressEnter(button) {
 }
 
 describe('PlaceOrderPanel validation', () => {
+    it('puts the shared Advanced section directly above Speed and Fees on the Trade form', async () => {
+        mount({ layout: 'trade' });
+        await screen.findByLabelText('From address');
+        const ids = [...document.querySelectorAll('[data-form-section]')].map((n) => n.getAttribute('data-form-section'));
+        expect(ids.slice(-2)).toEqual(['advanced', 'fee']);
+    });
+
+    // The Trade section body stacks its fields on an 8px gap (--xc-space-2), so the
+    // Auto pay card must add no margin of its own: a 0.5rem margin on top of that gap
+    // read as 16px under Expiration. The standalone panel has no such gap and keeps it.
+    it('puts the Auto pay card 8px under Expiration on the Trade form, with no margin of its own', async () => {
+        mount({ layout: 'trade' });
+        const consent = await screen.findByRole('switch', { name: 'Auto pay' });
+        const card = consent.closest('[data-autopay-card]');
+        expect(card).not.toBeNull();
+        expect(card.style.marginTop).toBe('0px');
+        expect(card.style.marginBottom).toBe('0px');
+        expect(card.parentElement.querySelector('[data-autopay-card]')).toBe(card);
+        expect(card.previousElementSibling).toHaveTextContent('Expiration');
+    });
+
+    it('keeps the standalone panel Auto pay card margin', async () => {
+        mount();
+        const consent = await screen.findByRole('switch', { name: 'Auto pay' });
+        expect(consent.closest('[data-autopay-card]').style.marginTop).toBe('0.5rem');
+    });
+
     it('gates order review while wallet balances are loading', async () => {
         const balanceRequest = deferred();
         mount({}, { getWalletBalances: vi.fn(() => balanceRequest.promise) });
@@ -99,15 +127,28 @@ describe('PlaceOrderPanel validation', () => {
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('uses a consent checkbox for CoinPay auto-pay', async () => {
+    it('offers Auto pay as a switch card, on by default, with its four facts in both states', async () => {
         mount();
 
-        const consent = await screen.findByRole('checkbox', {
-            name: /Enable auto-pay/,
-        });
+        const consent = await screen.findByRole('switch', { name: 'Auto pay' });
         expect(consent).toBeChecked();
+        const card = consent.closest('[data-autopay-card]');
+        expect(card).not.toBeNull();
+        expect(card).toHaveTextContent("Pays each match's BTC before its window (about 2 hours) closes");
+        expect(card).toHaveTextContent('Works while this wallet is open');
+        expect(card).not.toHaveTextContent(/unlocked/);
+        expect(card).toHaveTextContent('Sends no more than this order gives');
+        expect(card).toHaveTextContent('Turn it off any time in the open-orders list');
+        expect(card).not.toHaveTextContent(/Off: you are only notified/);
+
+        fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '0.0001' } });
+        fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '500' } });
+        expect(card).toHaveTextContent('Sends no more than 0.05 BTC for this order');
+
         fireEvent.click(consent);
         expect(consent).not.toBeChecked();
+        expect(card).toHaveTextContent('Off: you are only notified, so you can pay each match by hand from Payments due.');
+        expect(card).toHaveTextContent('Works while this wallet is open');
     });
 
     it('rejects wire amounts with more precision than either market asset supports', async () => {
@@ -183,7 +224,7 @@ describe('PlaceOrderPanel validation', () => {
         expect(screen.getByRole('button', { name: 'Place Sell Order' })).toBeEnabled();
 
         const expiration = screen.getByRole('combobox', { name: 'Expiration' });
-        fireEvent.change(expiration, { target: { value: 'custom' } });
+        selectOption(expiration, 'custom');
         expect(screen.getByLabelText('Custom expiration')).toBeInTheDocument();
     });
 
@@ -213,10 +254,9 @@ describe('PlaceOrderPanel validation', () => {
             process.cwd(),
             'packages/core/src/shared/routes/ObligationsView.module.css',
         ), 'utf8');
-        expect(ordersCss).toMatch(
-            /@media \(max-width: 420px\)[\s\S]*?\.row\s*\{[^}]*flex-direction:\s*column/,
-        );
-        expect(ordersCss).toMatch(/\.rowActions\s*\{[^}]*flex-wrap:\s*wrap/s);
+        // Each payment is a shared ListRow (G101), so a narrow shell keeps the
+        // whole row and wraps the payee and meta lines instead of squeezing them.
+        expect(ordersCss).toMatch(/\.rowDetail\s*\{[^}]*overflow-wrap:\s*anywhere/s);
     });
 
     it('builds an unsigned order from a watch-only address', async () => {
@@ -234,8 +274,8 @@ describe('PlaceOrderPanel validation', () => {
         fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
         pressEnter(await screen.findByRole('button', { name: 'Place Buy Order' }));
-        expect(await screen.findByText(/Watcher mode: this prepares the transaction for your offline signer/)).toBeInTheDocument();
-        fireEvent.click(await screen.findByRole('button', { name: 'Place Buy Order' }));
+        expect(await screen.findByText(/Another phone signs for this wallet: this prepares the transaction for it/)).toBeInTheDocument();
+        fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
 
         expect(await screen.findByLabelText('Unsigned transaction code')).toHaveValue('aa00');
         expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
@@ -261,15 +301,16 @@ describe('PlaceOrderPanel validation', () => {
         fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
         fireEvent.click(await screen.findByRole('button', { name: 'Place Buy Order' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Place Buy Order' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "Couldn't place this order. Something went wrong. Try again.",
         );
         expect(document.body).not.toHaveTextContent('node.invalid');
-        expect(screen.getByText('Give 6 BTC, get 3 XCHAIN')).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('3 XCHAIN');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('6 BTC');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Place Buy Order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
         expect(await screen.findByLabelText('Unsigned transaction code')).toHaveValue('aa00');
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(2);
@@ -285,15 +326,15 @@ describe('PlaceOrderPanel validation', () => {
         fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
         pressEnter(await screen.findByRole('button', { name: 'Place Buy Order' }));
-        expect(await screen.findByRole('button', { name: 'Edit Order' })).toBeInTheDocument();
-        expect(screen.getAllByText(ADDRESS.address)).toHaveLength(2);
-        expect(screen.getByText('Settlement address')).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Reject' })).toBeInTheDocument();
+        expect(screen.getAllByText(ADDRESS.address)).toHaveLength(1);
+        expect(screen.queryByText('Settlement address')).toBeNull();
 
         fireEvent.keyDown(window, { key: 'Escape' });
 
         expect(await screen.findByLabelText('Price (BTC)')).toHaveValue('2');
         expect(screen.getByLabelText('Size (XCHAIN)')).toHaveValue('3');
-        expect(screen.queryByRole('button', { name: 'Edit Order' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
     });
 
     it('returns from review without resubmitting and preserves the order fields', async () => {
@@ -307,10 +348,10 @@ describe('PlaceOrderPanel validation', () => {
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place Buy Order' }));
 
-        expect(fireEvent.click(await screen.findByRole('button', { name: 'Edit Order' }))).toBe(false);
+        expect(fireEvent.click(await screen.findByRole('button', { name: 'Reject' }))).toBe(false);
         expect(await screen.findByLabelText('Price (BTC)')).toHaveValue('2');
         expect(screen.getByLabelText('Size (XCHAIN)')).toHaveValue('3');
-        expect(screen.queryByRole('button', { name: 'Edit Order' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
     });
 
     it('clears the review focus timer on unmount', async () => {
@@ -363,7 +404,7 @@ describe('PlaceOrderPanel validation', () => {
         fireEvent.change(await screen.findByLabelText('Price (BTC)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '3' } });
         fireEvent.click(await screen.findByRole('button', { name: 'Place Buy Order' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Place Buy Order' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
 
         view.rerender(
             <MessagingProvider shell="desktop" messaging={messaging}>
@@ -396,7 +437,7 @@ describe('PlaceOrderPanel validation', () => {
                 <PlaceOrderPanel walletId="wallet-old" chainId={CHAIN} tick1="XCHAIN" tick2="BTC" />
             </MessagingProvider>,
         );
-        expect(await screen.findByText(/Outstanding auto-pay exposure on this network/)).toBeInTheDocument();
+        expect(await screen.findByText(/Outstanding auto pay exposure on this network/)).toBeInTheDocument();
 
         view.rerender(
             <MessagingProvider shell="desktop" messaging={messaging}>
@@ -404,7 +445,7 @@ describe('PlaceOrderPanel validation', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.queryByText(/Outstanding auto-pay exposure on this network/)).toBeNull();
+        expect(screen.queryByText(/Outstanding auto pay exposure on this network/)).toBeNull();
         expect(getAutopayExposure).toHaveBeenLastCalledWith({ walletId: 'wallet-new' });
     });
 });

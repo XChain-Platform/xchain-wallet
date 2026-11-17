@@ -107,12 +107,14 @@ async function approveVote(messaging) {
         ));
         await drain();
     });
+    // The Stable row opens Cast Vote with it chosen; Sign Vote opens the
+    // confirm screen.
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('checkbox', { name: '0: Stable' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Vote for Stable' }));
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Vote' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Sign Vote' }));
         await drain();
     });
     const approve = utils.getByTestId('confirm-approve');
@@ -131,6 +133,12 @@ describe('Poll page: a poll that closes between Review and Approve', () => {
         const utils = await approveVote(messaging);
         expect(calls.cast).toBe(0);
         expect(utils.container.textContent).toMatch(/This poll closed while the review was open\. Nothing was sent\./);
+        // The closed poll takes Cast Vote away: the poll page returns, the
+        // refusal first, and its tab strip offers Result in place of Vote.
+        expect(utils.getByRole('heading', { name: 'Poll' })).toBeTruthy();
+        expect(utils.queryByRole('button', { name: 'Sign Vote' })).toBeNull();
+        const sectionTabs = utils.getByRole('tablist', { name: 'Poll sections' });
+        expect([...sectionTabs.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Result', 'Activity', 'Details']);
     });
 
     it('refuses a freshly closed poll while the reusable row is still open', async () => {
@@ -180,15 +188,16 @@ async function buildWatcherVote(messaging) {
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('checkbox', { name: '0: Stable' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Vote for Stable' }));
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Vote' }));
+        fireEvent.click(utils.getByRole('button', { name: 'Sign Vote' }));
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Create Unsigned Transaction' }));
+        expect(utils.getByTestId('confirm-modal')).toBeInTheDocument();
+        fireEvent.click(utils.getByTestId('confirm-approve'));
         await drain(60);
     });
     return utils;

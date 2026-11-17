@@ -8,9 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Token detail shows its actions as tiles on the Actions tab: Send, Receive
-// and Exchange first, 80px tall, four across a phone row and 80px squares
-// from 600px. History is a tab and Manage token sits in the owner group.
+// Token detail shows its actions as one action list on the Actions tab (G101):
+// Send, Receive and Exchange first, a description under each title, a
+// blocked action as a disabled row with its reason. History is a tab and
+// Manage token sits in the owner list. The grid CSS checks below stay while
+// other pages still draw the shared tile grid.
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -50,17 +52,15 @@ describe('TokenDetail quick actions CSS', () => {
         expect(blocksFor('.quickActionMoreMenu')).toHaveLength(0);
     });
 
-    it('spans four equal tiles 8px apart across a phone row', () => {
-        const base = exactBlocks('.assetActionGrid')[0].body;
-        expect(base).toMatch(/display:\s*grid/);
-        expect(base).toMatch(/grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
-        expect(base).toMatch(/gap:\s*var\(--xc-space-2\)/);
+    it('keeps no tile grid or tile reason styles now the actions are a list (G101)', () => {
+        expect(blocksFor('.assetActionGrid')).toHaveLength(0);
+        expect(blocksFor('.assetActionReasons')).toHaveLength(0);
+        expect(blocksFor('.quickActionReason')).toHaveLength(0);
     });
 
-    it('draws every tile 80px tall and 80px squares as many as fit from 600px', () => {
-        const tile = css.match(/(?:\.assetActionGrid)+ > \*\s*\{([^}]*)\}/)?.[1] || '';
-        expect(tile).toMatch(/block-size:\s*80px/);
-        expect(css).toMatch(/@media \(min-width: 600px\)\s*\{\s*\.assetActionGrid\s*\{\s*grid-template-columns:\s*repeat\(auto-fill,\s*80px\);/);
+    it('stacks the action list and the owner list 8px apart', () => {
+        expect(exactBlocks('.assetActions')[0].body).toMatch(/gap:\s*var\(--xc-space-2\)/);
+        expect(exactBlocks('.assetActionOwner')[0].body).toMatch(/gap:\s*var\(--xc-space-2\)/);
     });
 });
 
@@ -87,7 +87,7 @@ const CHAIN = 'bitcoin-regtest';
 const MINE = 'bcrt1qmineminemineminemineminemineminemine0';
 const OTHER = 'bcrt1qotherotherotherotherotherotherotherot';
 
-function renderDetail({ creator = OTHER, quantity = '100', kind = 'token' } = {}) {
+function renderDetail({ creator = OTHER, quantity = '100', kind = 'token', assetActions = null } = {}) {
     const handlers = {
         onSend: vi.fn(),
         onReceive: vi.fn(),
@@ -113,40 +113,60 @@ function renderDetail({ creator = OTHER, quantity = '100', kind = 'token' } = {}
             kind,
             quantity,
             onBack() {},
+            assetActions,
             ...handlers,
         }),
     ));
     return handlers;
 }
 
-function tileNames(group) {
-    return within(group).getAllByRole('button').map((b) => b.getAttribute('aria-label') || b.textContent);
+/** The action ids of a list's rows, in page order. */
+function rowIds(list) {
+    return [...list.querySelectorAll('[data-action-id]')].map((row) => row.getAttribute('data-action-id'));
 }
 
-describe('TokenDetail quick actions render', () => {
-    it('holds Send, Receive and Exchange first, in that order, as compact tiles on the Actions tab', async () => {
+describe('TokenDetail action list render (G101)', () => {
+    it('holds Send, Receive and Exchange first, in that order, as action list rows on the Actions tab', async () => {
         renderDetail();
-        await screen.findByRole('button', { name: 'Send' });
-        const group = screen.getByRole('group', { name: 'Actions for S18PROBE' });
-        expect(tileNames(group).slice(0, 3)).toEqual(['Send', 'Receive', 'Exchange']);
-        expect(within(group).queryByRole('button', { name: 'More info' })).toBeNull();
-        expect(within(group).queryByRole('button', { name: /Market view|Trade/ })).toBeNull();
-        expect(within(group).queryByRole('button', { name: 'History' })).toBeNull();
-        expect(group.querySelector(`.${listRowStyles.row}`)).toBeNull();
-        for (const button of within(group).getAllByRole('button')) {
-            expect(button).not.toHaveClass(listRowStyles.row);
+        await screen.findByRole('button', { name: /^Send\b/ });
+        // Actions is the first tab and the one selected.
+        const tabs = within(screen.getByRole('tablist', { name: 'Coin or token view' })).getAllByRole('tab');
+        expect(tabs[0].textContent).toBe('Actions');
+        expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+        const list = screen.getByRole('list', { name: 'Actions for S18PROBE' });
+        expect(list.tagName).toBe('UL');
+        expect(rowIds(list).slice(0, 3)).toEqual(['send', 'receive', 'exchange']);
+        expect(within(list).queryByRole('button', { name: /^More info/ })).toBeNull();
+        expect(within(list).queryByRole('button', { name: /^(Market view|Trade)/ })).toBeNull();
+        expect(within(list).queryByRole('button', { name: /^History/ })).toBeNull();
+        // Each row is the kit list row with a description line under its title.
+        for (const row of within(list).getAllByRole('button')) {
+            expect(row).toHaveClass(listRowStyles.row);
+            expect(row.querySelector(`.${listRowStyles.subtitle}`)?.textContent).toBeTruthy();
         }
+        expect(within(list).getByRole('button', { name: /^Send\b/ }).textContent)
+            .toContain('Send S18PROBE to an address or contact');
     });
 
     it('opens Exchange with the selected asset', async () => {
         const { onBuy } = renderDetail();
-        fireEvent.click(await screen.findByRole('button', { name: 'Exchange' }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Exchange\b/ }));
         expect(onBuy).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs each basic action handler from its row', async () => {
+        const { onSend, onReceive } = renderDetail();
+        const send = await screen.findByRole('button', { name: /^Send\b/ });
+        await waitFor(() => expect(send).not.toHaveAttribute('aria-disabled'));
+        fireEvent.click(send);
+        fireEvent.click(screen.getByRole('button', { name: /^Receive\b/ }));
+        expect(onSend).toHaveBeenCalledTimes(1);
+        expect(onReceive).toHaveBeenCalledTimes(1);
     });
 
     it('retires the More info menu: History is a tab and the other panels are Details rows', async () => {
         renderDetail();
-        await screen.findByRole('button', { name: 'Send' });
+        await screen.findByRole('button', { name: /^Send\b/ });
         expect(screen.queryByRole('button', { name: 'More info' })).toBeNull();
         expect(screen.queryByRole('menu')).toBeNull();
         expect(within(screen.getByRole('tablist', { name: 'Coin or token view' })).getAllByRole('tab').map((tab) => tab.textContent))
@@ -157,35 +177,46 @@ describe('TokenDetail quick actions render', () => {
         expect(screen.getByRole('button', { name: 'Holders' })).toBeTruthy();
     });
 
-    it('keeps a blocked Send visible with the reason that blocks it', async () => {
-        renderDetail({ quantity: '0' });
-        const group = await screen.findByRole('group', { name: 'Actions for S18PROBE' });
-        const send = await within(group).findByRole('button', { name: 'Send' });
-        await waitFor(() => expect(send).toBeDisabled());
-        const reason = screen.getByText('No balance to send.');
-        expect(send.getAttribute('aria-describedby')).toBe(reason.closest('[id]').id);
+    it('keeps a blocked Send as a disabled row that says why', async () => {
+        const { onSend } = renderDetail({ quantity: '0' });
+        const list = await screen.findByRole('list', { name: 'Actions for S18PROBE' });
+        const send = await within(list).findByRole('button', { name: /^Send\b/ });
+        await waitFor(() => expect(send).toHaveAttribute('aria-disabled', 'true'));
+        const reason = within(send).getByText('No balance to send.');
+        expect(send.getAttribute('aria-describedby')).toBe(reason.id);
+        fireEvent.click(send);
+        expect(onSend).not.toHaveBeenCalled();
     });
 
-    it('lists Manage token in its own owner group only for the token owner', async () => {
+    it('lists Manage token when the shell wires it and leaves authorization to the forms', async () => {
         renderDetail({ creator: OTHER });
-        await screen.findByRole('group', { name: 'Actions for S18PROBE' });
-        await waitFor(() => expect(screen.queryByRole('button', { name: 'Manage token' })).toBeNull());
-        expect(screen.queryByRole('group', { name: 'You issued this token' })).toBeNull();
+        const nonOwner = await screen.findByRole('list', { name: 'You issued this token' });
+        expect(within(nonOwner).getByRole('button', { name: /^Manage token\b/ })).toBeTruthy();
         cleanup();
         __clearTokenInfoCache();
 
         const { onManageToken } = renderDetail({ creator: MINE });
-        const owner = await screen.findByRole('group', { name: 'You issued this token' });
-        const main = screen.getByRole('group', { name: 'Actions for S18PROBE' });
-        expect(within(main).queryByRole('button', { name: 'Manage token' })).toBeNull();
-        fireEvent.click(within(owner).getByRole('button', { name: 'Manage token' }));
+        const owner = await screen.findByRole('list', { name: 'You issued this token' });
+        const main = screen.getByRole('list', { name: 'Actions for S18PROBE' });
+        expect(within(main).queryByRole('button', { name: /^Manage token\b/ })).toBeNull();
+        fireEvent.click(within(owner).getByRole('button', { name: /^Manage token\b/ }));
         expect(onManageToken).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps the Send, Receive and Exchange tiles for a native coin', async () => {
+    it('draws a registry Destroy row in the danger tone', async () => {
+        const onDestroy = vi.fn();
+        renderDetail({ assetActions: { onDestroy } });
+        const destroy = await screen.findByRole('button', { name: /^Destroy\b/ });
+        expect(destroy.getAttribute('data-tone')).toBe('danger');
+        expect(within(screen.getByRole('list', { name: 'Actions for S18PROBE' })).getByRole('button', { name: /^Destroy\b/ })).toBe(destroy);
+        fireEvent.click(destroy);
+        expect(onDestroy).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the Send, Receive and Exchange rows for a native coin', async () => {
         renderDetail({ kind: 'native' });
-        await screen.findByRole('button', { name: 'Send' });
-        expect(tileNames(screen.getByRole('group', { name: 'Actions for BTC' })).slice(0, 3))
-            .toEqual(['Send', 'Receive', 'Exchange']);
+        await screen.findByRole('button', { name: /^Send\b/ });
+        expect(rowIds(screen.getByRole('list', { name: 'Actions for BTC' })).slice(0, 3))
+            .toEqual(['send', 'receive', 'exchange']);
     });
 });

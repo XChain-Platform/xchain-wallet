@@ -2,9 +2,14 @@
 // Based on XChain Platform by Dankest, LLC - https://dankest.llc
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of XChain Platform. Licensed under the GNU Affero
+// General Public License v3.0 or later; see LICENSE.md. A commercial
+// license (without AGPL source-disclosure terms) is available -
+// contact legal@dankest.llc.
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ExecuteContractForm } from '../../../packages/core/src/shared/routes/ExecuteContractForm.jsx';
 import * as walletModes from '../../../packages/core/src/shared/hooks/useWalletMode.js';
@@ -65,44 +70,24 @@ afterEach(() => {
     walletModes.resetWalletModes?.();
 });
 
-describe('a contract abi that answers after the user typed a call', () => {
-    it('keeps the typed method and arguments in the manual lane', async () => {
+describe('a contract abi that answers after the form opens', () => {
+    it('offers no method field and keeps Call Contract disabled until the list arrives', async () => {
         const reply = deferred();
         mount(reply);
-        fireEvent.change(await screen.findByLabelText('Method'), { target: { value: 'transfer' } });
-        fireEvent.change(screen.getByLabelText('Arguments'), { target: { value: 'alice|7' } });
-
-        reply.resolve({ data: { abi: ABI } });
-        await flush();
-
-        expect(screen.getByLabelText('Method')).toHaveValue('transfer');
-        expect(screen.getByLabelText('Arguments')).toHaveValue('alice|7');
-        expect(screen.getByRole('button', { name: 'Use Declared Methods' })).toBeInTheDocument();
+        expect(await screen.findByText(/Loading the contract/)).toBeInTheDocument();
+        expect(screen.queryByLabelText('Method')).toBeNull();
+        expect(screen.queryByLabelText('Arguments')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Call Contract' })).toBeDisabled();
     });
 
-    it('leaves the call under review untouched', async () => {
+    it('selects the first declared method once the list arrives', async () => {
         const reply = deferred();
         mount(reply);
-        fireEvent.change(await screen.findByLabelText('Method'), { target: { value: 'transfer' } });
-        fireEvent.change(screen.getByLabelText('Arguments'), { target: { value: 'alice|7' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
-        await screen.findByRole('heading', { name: 'Review Contract Call' });
-
-        reply.resolve({ data: { abi: ABI } });
-        await flush();
-
-        expect(screen.getByText('transfer')).toBeInTheDocument();
-        expect(screen.queryByText('zzz')).toBeNull();
-        expect(screen.getByText('alice')).toBeInTheDocument();
-    });
-
-    it('still selects the first declared method on an untouched form', async () => {
-        const reply = deferred();
-        mount(reply);
-        await screen.findByLabelText('Method');
+        await screen.findByText(/Loading the contract/);
         reply.resolve({ data: { abi: ABI } });
         await flush();
 
         expect(screen.getByLabelText('Method')).toHaveValue('zzz');
+        expect(screen.getByRole('button', { name: 'Call Contract' })).toBeEnabled();
     });
 });

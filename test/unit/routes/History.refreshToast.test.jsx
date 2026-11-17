@@ -5,10 +5,11 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
+import { REFRESH_ITEM, chooseHistoryMenuItem, historyMenuItem } from './historyMoreMenu.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -67,12 +68,14 @@ describe('History refresh failures', () => {
         await screen.findByRole('button', { name: /Send.*Confirmed/i });
 
         client.getAddressHistory.mockRejectedValue(new Error('explorer exploded'));
-        const refresh = () => screen.getByRole('button', { name: /refresh history/i });
+        // Refresh sits in the title line's ⋯ menu, which closes on each choice,
+        // so the item is looked up afresh every time.
+        const refresh = () => historyMenuItem(REFRESH_ITEM);
         await waitFor(() => expect(refresh()).not.toBeDisabled());
-        fireEvent.click(refresh());
+        chooseHistoryMenuItem(REFRESH_ITEM);
         await waitFor(() => expect(client.getAddressHistory).toHaveBeenCalledTimes(2));
         await waitFor(() => expect(refresh()).not.toBeDisabled());
-        fireEvent.click(refresh());
+        chooseHistoryMenuItem(REFRESH_ITEM);
         await waitFor(() => expect(client.getAddressHistory).toHaveBeenCalledTimes(3));
         await waitFor(() => expect(refresh()).not.toBeDisabled());
 

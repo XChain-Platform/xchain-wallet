@@ -19,10 +19,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AmountField } from '../../packages/core/src/shared/components/AmountField.jsx';
 import { BackupReminderCard } from '../../packages/core/src/shared/components/BackupReminderCard.jsx';
 import { PriceAlertForm } from '../../packages/core/src/shared/components/PriceAlertForm.jsx';
-import { DisplaySection } from '../../packages/core/src/shared/components/settings/DisplaySection.jsx';
+import { AddWatchedTokenSection } from '../../packages/core/src/shared/components/settings/AddWatchedTokenSection.jsx';
 import { MessagingContext } from '../../packages/core/src/shared/MessagingContext.js';
 import buttonStyles from '../../packages/core/src/ui/Button.module.css';
 import inputStyles from '../../packages/core/src/ui/Input.module.css';
+import iconSelectStyles from '../../packages/core/src/ui/IconSelect.module.css';
+import tokenFieldStyles from '../../packages/core/src/shared/components/TokenField.module.css';
 
 function expectButtonsUseSize(buttons, size) {
     for (const button of buttons) {
@@ -45,13 +47,14 @@ afterEach(() => {
 });
 
 describe('regression/remaining-control-rows', () => {
-    it('[REGRESSION P1] gives both backup reminder actions the shared small control class', async () => {
+    it('[REGRESSION P1] gives the backup reminder action the shared small control class', async () => {
         render(<BackupReminderCard walletId="wallet-1" hasFunds onAction={vi.fn()} />);
 
-        expectButtonsUseSize([
-            await screen.findByRole('button', { name: 'Back Up Now' }),
-            screen.getByRole('button', { name: 'Remind Me Tomorrow' }),
-        ], 'sm');
+        // The reminder is a kit Notice (the Notice Standard): its one action
+        // is the shared small Button, and the snooze is the Notice's own X
+        // (a 24px tap target drawn by the kit), no longer a second button.
+        expectButtonsUseSize([await screen.findByRole('button', { name: 'Back Up Now' })], 'sm');
+        expect(screen.getByRole('button', { name: 'Remind Me Tomorrow' }).closest('[data-tone]')).not.toBeNull();
     });
 
     it('[REGRESSION P1] gives the shared Send and Receive amount-line controls the small class', () => {
@@ -68,7 +71,7 @@ describe('regression/remaining-control-rows', () => {
         ], 'sm');
     });
 
-    it('[REGRESSION P1] gives every watched-token row control the shared medium class', async () => {
+    it('[REGRESSION P1] gives the Add Watched Token search the shared medium class', async () => {
         const settings = {
             privacy: { hideSmallBalances: false },
             pinnedTokens: [],
@@ -86,35 +89,32 @@ describe('regression/remaining-control-rows', () => {
         };
         render(
             <MessagingContext.Provider value={{ shell: 'web', messaging }}>
-                <DisplaySection />
+                <AddWatchedTokenSection />
             </MessagingContext.Provider>,
         );
 
-        const chain = await screen.findByRole('button', { name: /^Network:/ });
-        expect(chain.parentElement.className).toMatch(/(?:^|\s)_?md_/);
         expectFieldsUseSize([
-            screen.getByRole('textbox', { name: 'Token ticker' }),
-        ], 'md');
-        expectButtonsUseSize([
-            screen.getByRole('button', { name: 'Watch Token' }),
+            await screen.findByRole('searchbox', { name: 'Search tokens to watch' }),
         ], 'md');
     });
 
-    it('[REGRESSION P1] gives every price-alert row control the shared medium class', () => {
+    // 2026-11-14: the price alert page was rebuilt as a Form Standard form
+    // (PriceAlertsSection): the Coin select became the Asset token field, the
+    // Direction select the When the price dropdown, and the Add and Cancel
+    // row gave way to the form's one submit action.
+    it('[REGRESSION P1] gives every price-alert field the shared medium size', () => {
         render(<PriceAlertForm
             initialAlert={{ chainId: 'bitcoin-mainnet', direction: 'below', targetFiat: 65000 }}
             onCreate={vi.fn()}
             onCancel={vi.fn()}
         />);
 
+        const asset = screen.getByRole('button', { name: /^Asset: / });
+        expect(asset.closest(`.${tokenFieldStyles.field}`)).not.toHaveClass(tokenFieldStyles.lg);
+        const direction = screen.getByRole('button', { name: /^When the price: / });
+        expect(direction.closest(`.${iconSelectStyles.wrap}`)).toHaveClass(iconSelectStyles.md);
         expectFieldsUseSize([
-            screen.getByRole('combobox', { name: 'Coin' }),
-            screen.getByRole('combobox', { name: 'Direction' }),
             screen.getByRole('textbox', { name: 'Target price' }),
-        ], 'md');
-        expectButtonsUseSize([
-            screen.getByRole('button', { name: 'Add Alert' }),
-            screen.getByRole('button', { name: 'Cancel' }),
         ], 'md');
     });
 });

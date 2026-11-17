@@ -31,6 +31,7 @@ import {
     openSettings,
     test,
 } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 
 const VIEWPORTS = [
     { width: 1440, height: 900 },
@@ -81,14 +82,14 @@ const ALL_FORMS = [
     { label: 'Sweep address', open: (page) => palette(page, 'Sweep address') },
     {
         label: 'Settings change password',
-        open: (page) => settingsForm(page, 'This wallet', 'Change…'),
-        // The open inline form keeps the palette shortcut in its password field.
-        close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
+        // The Wallet password page opens straight on its form (no Change
+        // button, no Cancel); the next case's open steps back out of it.
+        open: (page) => settingsDirectPage(page, 'Security', 'Wallet password'),
     },
     {
         label: 'Settings change password refused',
         fault: { fail: { 'wallet.changePassword': 'The vault service is unavailable.' } },
-        open: (page) => settingsForm(page, 'This wallet', 'Change…'),
+        open: (page) => settingsDirectPage(page, 'Security', 'Wallet password'),
         trigger: async (page) => {
             const main = page.getByRole('main');
             await main.getByLabel('Current wallet password', { exact: true }).fill('e2epassword1234');
@@ -96,7 +97,6 @@ const ALL_FORMS = [
             await main.getByLabel('Confirm new wallet password', { exact: true }).fill('e2enewpassword5678');
             await main.locator('form button[type="submit"]').filter({ visible: true }).last().click();
         },
-        close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
     },
     {
         label: 'Settings public keys refused',
@@ -136,54 +136,46 @@ const ALL_FORMS = [
     {
         label: 'Settings sign throttle refused',
         fault: { fail: { 'settings.update': 'The settings service is unavailable.' } },
-        open: (page) => settingsSubpage(page, 'Connected sites'),
+        open: (page) => settingsSubpage(page, 'Connected Sites'),
         trigger: async (page) => {
             const main = page.getByRole('main');
-            await main.getByLabel('Sign-throttle burst (max requests per window)', { exact: true }).fill('5');
-            await main.getByRole('button', { name: 'Apply Throttle', exact: true }).click();
+            // The sign-request throttle lives on the Options view.
+            await main.getByRole('radio', { name: 'Options' }).click();
+            // The limit applies at once from its themed dropdown, so the pick is the submit.
+            await main.getByTestId('throttle-select-burst').click();
+            await page.getByRole('option', { name: '10', exact: true }).click();
         },
     },
+    // The block history clear case is removed: history is no longer shown.
+    // An unlocked session publishes and checks with its pooled signer, so the
+    // label forms show a password field only with the pool empty (operator
+    // preference 2026-11-14); each case fills it only when it is there.
     {
-        label: 'Settings block history clear refused',
-        fault: {
-            reply: { 'sites.auditLog.list': [{ at: 1700000000000, action: 'add', entry: 'https://e2e-blocked.example' }] },
-            fail: { 'sites.auditLog.clear': 'The site list service is unavailable.' },
-        },
+        label: 'Settings publish labels refused',
+        fault: { fail: { 'wallet.prepareLabels': 'The label service is unavailable.' } },
         open: async (page) => {
-            await settingsSubpage(page, 'Connected sites');
-            await expect(page.getByRole('main').getByRole('button', { name: 'Clear History', exact: true })).toBeEnabled();
+            // The Publish labels page opens straight on its form.
+            await settingsDirectPage(page, 'Backup', 'Publish labels on-chain');
+            await expect(page.getByRole('main').getByRole('button', { name: 'Publish Labels', exact: true })).toBeVisible();
         },
         trigger: async (page) => {
-            await page.getByRole('main').getByRole('button', { name: 'Clear History', exact: true }).click();
-            await page.getByRole('dialog').getByRole('button', { name: 'Clear History', exact: true }).click();
+            const main = page.getByRole('main');
+            await fillPasswordIfAsked(main);
+            await main.getByRole('button', { name: 'Publish Labels', exact: true }).click();
         },
-    },
-    {
-        label: 'Settings publish labels without a password',
-        open: async (page) => {
-            await settingsSubpage(page, 'Backup');
-            await page.getByRole('main').getByRole('button', { name: 'Publish Now…', exact: true }).click();
-            await expect(page.getByRole('main').getByLabel('Wallet password', { exact: true })).toBeVisible();
-        },
-        trigger: async (page) => {
-            await page.getByRole('main').getByRole('button', { name: 'Publish Labels', exact: true }).click();
-        },
-        close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
     },
     {
         label: 'Settings restore labels refused',
         fault: { fail: { 'wallet.restoreLabels': 'The label service is unavailable.' } },
         open: async (page) => {
-            await settingsSubpage(page, 'Backup');
-            await page.getByRole('main').getByRole('button', { name: 'Check…', exact: true }).click();
-            await expect(page.getByRole('main').getByLabel('Wallet password', { exact: true })).toBeVisible();
+            await settingsDirectPage(page, 'Backup', 'Restore contacts');
+            await expect(page.getByRole('main').getByRole('button', { name: 'Check for Contacts', exact: true })).toBeVisible();
         },
         trigger: async (page) => {
             const main = page.getByRole('main');
-            await main.getByLabel('Wallet password', { exact: true }).fill('e2epassword1234');
+            await fillPasswordIfAsked(main);
             await main.getByRole('button', { name: 'Check for Contacts', exact: true }).click();
         },
-        close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
     },
     {
         label: 'Developer mode faucet amount missing',
@@ -200,28 +192,29 @@ const ALL_FORMS = [
     {
         label: 'Developer mode custom network unreadable',
         open: async (page) => {
-            await openDeveloperMode(page);
-            await page.getByRole('main').getByRole('button', { name: 'Add Custom Network…', exact: true }).click();
+            await openAddNetwork(page);
+            // Add Custom Network is the plus in Add Network's title bar.
+            await page.getByRole('button', { name: 'Add Custom Network', exact: true }).click();
+            await expect(page.getByRole('heading', { level: 1, name: 'Add Custom Network' })).toBeVisible();
         },
         trigger: async (page) => {
             const main = page.getByRole('main');
+            await main.getByRole('button', { name: /^Descriptor JSON/ }).click();
             // Exact, so the field's 'About ...' help tip (U57) is not matched too.
-            await main.getByLabel('Custom network descriptor JSON', { exact: true }).fill('{ not json');
+            await main.getByLabel('Descriptor JSON', { exact: true }).fill('{ not json');
             await main.getByRole('button', { name: 'Add Network', exact: true }).click();
         },
-        close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).last().click(),
     },
     {
         label: 'Developer mode regtest activation refused',
         fault: { fail: { 'wallet.activateChain': 'The vault service is unavailable.' } },
-        open: async (page) => {
-            await openDeveloperMode(page);
-            await page.getByRole('main').getByRole('button', { name: 'Activate…', exact: true }).first().click();
-        },
+        // Add Network asks for the password in place (operator picks 2026-11-14).
+        open: openAddNetwork,
         trigger: async (page) => {
             const main = page.getByRole('main');
-            await main.getByLabel('Bitcoin activation password', { exact: true }).fill('e2epassword1234');
-            await main.getByRole('button', { name: /^Activate / }).click();
+            await main.getByRole('button', { name: /Activate with your password/ }).first().click();
+            await main.getByLabel('Wallet password', { exact: true }).fill('e2epassword1234');
+            await main.getByRole('button', { name: 'Activate Network', exact: true }).click();
         },
     },
     // A native amount under the dust floor is a note under the amount field, not a notice.
@@ -262,9 +255,13 @@ const ALL_FORMS = [
     // check does not require the former in-page Union notice.
     {
         label: 'Union list',
+        // Create List and Create Union List are one form: open Create List
+        // and pick the Union type in its themed List type dropdown.
         open: async (page) => {
-            await gotoSection(page, 'Lists');
-            await page.getByRole('main').getByRole('button', { name: 'Create Union List', exact: true }).click();
+            await palette(page, 'Create a list');
+            const main = page.getByRole('main');
+            await main.getByRole('button', { name: /^List type:/ }).click();
+            await main.getByRole('option', { name: 'Union', exact: true }).click();
         },
         trigger: async () => {},
     },
@@ -308,7 +305,7 @@ const ALL_FORMS = [
         fault: { reply: { 'sdk.listActions': ['SEND'] } },
         open: (page) => palette(page, 'Advanced action'),
         trigger: async (page) => {
-            await page.getByRole('main').getByLabel('Action', { exact: true }).selectOption('SEND');
+            await pickOption(page.getByRole('main').getByLabel('Action', { exact: true }), 'SEND');
         },
         notice: /Token-gated content rule/,
     },
@@ -379,18 +376,44 @@ async function settingsSubpage(page, section) {
     await page.getByRole('main').getByRole('button', { name: new RegExp(`^${section}`) }).first().click();
 }
 
-/** Developer mode opens with its switch off; turn it on so the regtest forms show. */
-async function openDeveloperMode(page) {
-    await settingsSubpage(page, 'Developer mode');
-    const developerSwitch = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
-    if (!(await developerSwitch.isChecked())) await developerSwitch.click();
-    await expect(page.getByRole('main').getByText('Regtest networks')).toBeVisible();
+/** Types the e2e wallet password when the form asks for it (an empty signer pool). */
+async function fillPasswordIfAsked(main) {
+    const field = main.getByLabel('Wallet password', { exact: true });
+    if (await field.count()) await field.fill('e2epassword1234');
 }
 
-/** The faucet shows once a regtest network has a fee entry; the fault gives settings one. */
+/** Opens a Settings group, then one of its rows; a direct page lands on its form. */
+async function settingsDirectPage(page, group, row) {
+    await settingsSubpage(page, group);
+    await page.getByRole('main').getByRole('button', { name: new RegExp(`^${row}`) }).first().click();
+}
+
+/**
+ * Advanced > Developer options with Developer mode on: the switch is on the
+ * Advanced row, and Developer options lists Test networks and the faucet.
+ */
+async function openDeveloperMode(page) {
+    await settingsSubpage(page, 'Advanced');
+    const main = page.getByRole('main');
+    const developerSwitch = main.getByRole('switch', { name: 'Developer mode', exact: true });
+    if (!(await developerSwitch.isChecked())) await developerSwitch.click();
+    await main.getByRole('button', { name: /^Developer options/ }).click();
+    await expect(main.getByText('Test networks')).toBeVisible();
+}
+
+/** Test Networks > Add Network: the built-in regtest networks not active yet, with the Add Custom Network plus in its title bar. */
+async function openAddNetwork(page) {
+    await openDeveloperMode(page);
+    await page.getByRole('main').getByRole('button', { name: /^Test networks/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Add Network/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Add Network' })).toBeVisible();
+}
+
+/** The faucet asks the miner once a regtest network has a fee entry; the fault gives settings one. */
 async function openDeveloperFaucet(page) {
     await openDeveloperMode(page);
-    await expect(page.getByRole('main').getByText('Regtest faucet')).toBeVisible();
+    await page.getByRole('main').getByRole('button', { name: /^Regtest faucet/ }).click();
+    await expect(page.getByRole('main').getByRole('button', { name: 'Get Test Coins', exact: true })).toBeVisible();
 }
 
 async function settingsForm(page, section, action) {

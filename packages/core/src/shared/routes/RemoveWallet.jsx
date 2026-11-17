@@ -68,7 +68,8 @@ export function RemoveWallet({ walletId, walletName = '', walletFormat, activeWa
                 notices={<div ref={setNoticeHost} style={{ display: 'contents' }} data-page-notice-host="" />}
             >
                 <PageNoticeHostContext.Provider value={noticeHost}>
-                    <div className={settingsStyles.settingsSurface} data-settings-section="wallet-remove">
+                    {/* No card wrapper: the explanation is the only card on this page. */}
+                    <div data-settings-section="wallet-remove" style={{ display: 'contents' }}>
                         {wallet ? (
                             <ThisWalletSection
                                 // Keyed by wallet so a page reused for another wallet
@@ -76,6 +77,7 @@ export function RemoveWallet({ walletId, walletName = '', walletFormat, activeWa
                                 key={walletId}
                                 activeWallet={wallet}
                                 only="remove"
+                                direct
                                 onWalletRemoved={handleRemoved}
                                 onBusyChange={setBusy}
                             />

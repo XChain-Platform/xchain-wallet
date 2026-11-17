@@ -109,9 +109,11 @@ assert.match(
 assert.match(homeSrc, /Sign a Transaction/, 'marquee CTA label "Sign a Transaction"');
 assert.match(homeSrc, /Sign a Message/, 'secondary CTA label "Sign a Message"');
 assert.match(homeSrc, /Verify a Signature/, 'tertiary CTA label "Verify a Signature"');
+// The banner is a Notice Standard info note (G120) whose bold title line
+// names the mode.
 assert.match(
     homeSrc,
-    /<strong[^>]*>Signer mode<\/strong>/,
+    /<Notice tone="info" title="Signer for another phone">/,
     'explanatory banner identifies the mode',
 );
 // Each CTA disabled when its handler prop is missing.

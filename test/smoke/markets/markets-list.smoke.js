@@ -43,10 +43,13 @@ assert.ok(existsSync(routePath), 'MarketsList.jsx exists');
 const routeSrc = readFileSync(routePath, 'utf8');
 assert.ok(/export function MarketsList\b/.test(routeSrc),
     'MarketsList is a named export');
-assert.ok(/listWatchlistForWallet/.test(routeSrc)
-    && /saveWatchlistEntry/.test(routeSrc)
-    && /clearWatchlistEntry/.test(routeSrc),
-    'MarketsList reads + writes the watchlist via messaging');
+// The list reads the watchlist for its Show watchlist choice; the star that
+// writes it lives on the market page.
+assert.ok(/listWatchlistForWallet/.test(routeSrc),
+    'MarketsList reads the watchlist via messaging');
+const marketViewSrc = readFileSync(join(core, 'src', 'shared', 'routes', 'MarketView.jsx'), 'utf8');
+assert.ok(/saveWatchlistEntry/.test(marketViewSrc) && /clearWatchlistEntry/.test(marketViewSrc),
+    'MarketView writes the watchlist via messaging');
 assert.ok(/messaging\.getMarkets\(/.test(routeSrc),
     'MarketsList queries sdk.getMarkets per chain');
 assert.ok(/onOpenMarket/.test(routeSrc),

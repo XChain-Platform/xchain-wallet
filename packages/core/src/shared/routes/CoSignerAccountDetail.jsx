@@ -27,17 +27,20 @@ import {
     ChainBadge,
     AddressText,
     CopyButton,
+    EmptyState,
     FormPage,
     Icon,
+    Notice,
     StatusMessage,
     ListPage,
     Tabs,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
-import { QuickActionTile } from '../../ui/QuickActionTile.jsx';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { balanceSummary, formatHolding } from './CoSignerAccountList.jsx';
-import { allowedTokensText, agentNetworkName } from '../utils/coSignerPolicyLimit.js';
+import { allowedTokensText } from '../utils/coSignerPolicyLimit.js';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
 import { normalizeAllowedTicks, nativeTickForChain } from '../../cosigner/allowedTicks.js';
 import { describePolicyReason } from '../components/coSignPolicyReasons.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
@@ -46,6 +49,7 @@ import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/coSigner.js';
 import '../../i18n/locales/en/extension.js';
 import '../../i18n/locales/en/home.js';
+import '../../i18n/locales/en/renameAccount.js';
 import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/settings.js';
@@ -61,13 +65,27 @@ import { addressValidationError } from '../utils/addressValidation.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { ConfirmModal } from '../components/ConfirmModal.jsx';
 import { useConfirmModal } from '../hooks/useConfirmModal.js';
+import { listDetailStyles } from '../components/PanelSplit.jsx';
+// The agent's tile and its Edit look page share the wallet and account look:
+// the same initials tile, the same TileLookFields, the same per-device store.
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
+import { TileLookFields, TILE_COLOURS } from '../components/TileLookFields.jsx';
+import { FormAction, FormFrame } from '../components/formStandard/index.js';
+import { readWalletTile, writeWalletTile, tileRadius, walletTileText } from '../utils/walletTile.js';
+import { NAME_MAX_LENGTH, hasVisibleText, nameLength } from '../../util/display_name.js';
 import styles from './IssueTokenForm.module.css';
-// The token page's identity card, details card, tile grid and icon tabs.
+// The token page's identity card, details card and icon tabs.
 import tokenPageStyles from './ManageToken.module.css';
 import tokenDetailStyles from './TokenDetail.module.css';
 import homeTabsStyles from '../components/HomeTabs.module.css';
-import listStyles from './CoSignerAccountList.module.css';
 import local from './CoSignerAccountDetail.module.css';
+// The Fund page: the Receive page's QR look over the standard Send form,
+// whose destination is this agent's address.
+import { Send } from './Send.jsx';
+import { KeyQR } from '../components/KeyQR.jsx';
+import { InPageScreen } from '../../ui/navHistory.js';
+import qrStyles from '../../ui/QrDisplay.module.css';
+import '../../i18n/locales/en/receive.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -99,8 +117,10 @@ function policyAddressError(built, descriptor) {
  * @param {string} props.accountId
  * @param {string} [props.walletId]
  * @param {() => void} props.onBack
+ * @param {boolean} [props.embedded]
+ * @param {(el: HTMLElement | null) => void} [props.measureRef]
  */
-export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
+export function CoSignerAccountDetail({ accountId, walletId, onBack, embedded = false, measureRef }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const confirmDialog = useConfirmModal();
@@ -116,12 +136,17 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
     // Per-ticker messages from the last save's token number lookup.
     const [tokenErrors, setTokenErrors] = useState(/** @type {Record<string, string> | null} */ (null));
     const editBaselineRef = useRef('');
+    // Edit look stands in for this page until Back or Save (no modal, G104);
+    // closing it re-renders the page, which reads the stored tile again.
+    const [lookOpen, setLookOpen] = useState(false);
     const viewRef = useRef(0);
     const operationRef = useRef(0);
     const busyRef = useRef(false);
 
     const tabsId = useId();
     const [activeTab, setActiveTab] = useState('actions');
+    // The Fund page stands in for this page until its Back, like Edit rules,
+    // so Back from it returns here and never to the agents list.
     const [showFund, setShowFund] = useState(false);
     const [copied, setCopied] = useState(false);
     // Balances keyed by account id (one read for the wallet's agent accounts); null while loading.
@@ -221,6 +246,8 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
         setError(null);
         setBusy(false);
         setEditing(false);
+        setLookOpen(false);
+        setShowFund(false);
         setName('');
         setPolicyDraft(null);
         setEditError(null);
@@ -369,19 +396,42 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
         return Array.isArray(entries) ? entries.length : 0;
     }, [account]);
 
-    const header = <PageHeader onBack={onBack} title={t('coSigner.detail.title')} />;
-    const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {children}
-            {confirmDialog.request ? (
-                <ConfirmModal
-                    {...confirmDialog.request}
-                    onConfirm={confirmDialog.onConfirm}
-                    onCancel={confirmDialog.onCancel}
-                />
-            ) : null}
-        </Screen>
-    );
+    // Edit rules stands in for this page, so its Back (and the system Back)
+    // closes the editor and returns here, never to the agents list.
+    const header = editing && account
+        ? (
+            <PageHeader
+                nested
+                onBack={() => { if (!busyRef.current) setEditing(false); }}
+                backDisabled={busy}
+                title={t('coSigner.detail.title')}
+            />
+        )
+        : <PageHeader onBack={onBack} title={t('coSigner.detail.title')} />;
+    const wrap = (children) => {
+        const page = (
+            <>
+                {children}
+                {confirmDialog.request ? (
+                    <ConfirmModal
+                        {...confirmDialog.request}
+                        onConfirm={confirmDialog.onConfirm}
+                        onCancel={confirmDialog.onCancel}
+                    />
+                ) : null}
+            </>
+        );
+        if (embedded) return page;
+        return (
+            <Screen variant={variant} header={header}>
+                {measureRef ? (
+                    <div ref={measureRef} className={listDetailStyles.layoutRoot} data-list-detail="page">
+                        {page}
+                    </div>
+                ) : page}
+            </Screen>
+        );
+    };
 
     if (error && !account) return wrap(<ListPage><StatusMessage variant="error">{error}</StatusMessage></ListPage>);
     if (!account) return wrap(<ListPage><p className={styles.hint}>Loading…</p></ListPage>);
@@ -395,7 +445,7 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
                 actions={(
                     <>
                         <Button type="button" variant="secondary" icon={<Icon.XIcon />} onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
-                        <Button type="submit" variant="primary" icon={<Icon.PencilIcon />} loading={busy} disabled={busy}>Update policy</Button>
+                        <Button type="submit" variant="primary" icon={<Icon.SaveIcon />} loading={busy} disabled={busy}>Update Policy</Button>
                     </>
                 )}
             >
@@ -415,6 +465,28 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
         );
     }
 
+    if (lookOpen) {
+        return (
+            <AgentLookPage
+                account={account}
+                walletId={walletId}
+                onBack={() => setLookOpen(false)}
+                onSaved={(updated) => { setAccount(updated); setLookOpen(false); }}
+            />
+        );
+    }
+
+    if (showFund) {
+        return (
+            <AgentFundPage
+                account={account}
+                walletId={walletId || account.walletId}
+                onBack={() => setShowFund(false)}
+            />
+        );
+    }
+
+    const tile = readWalletTile(account.id);
     const descriptor = chainRegistry.get(account.chainId);
     const p = account.policy || {};
     const allowedTicks = normalizeAllowedTicks(p.allowedTicks);
@@ -454,9 +526,14 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
                 </section>
             ))}
 
-            {/* The identity card: name, status, network, allowed tokens and what it holds. */}
+            {/* The identity card: name, what it holds and its status (G16). No
+                network chip and no fact chips: the network and the allowed
+                tokens are Details rows (G14, U12). */}
             <section className={tokenPageStyles.approvedHero} aria-label={t('extension.sign.agentAccount')}>
-                <span className={listStyles.rowIcon} aria-hidden="true"><Icon.UsersIcon /></span>
+                {/* The agent's tile: its initials, or the look Edit look saved. */}
+                <span className={tokenPageStyles.approvedHeroIcon} aria-hidden="true" data-agent-tile="" style={{ '--xc-avatar-shape': tileRadius(tile.shape) }}>
+                    <IdentityAvatar name={account.name || 'Agent'} text={walletTileText(account.name)} seed={account.id} context="list" variant="asset" tone={tile.colour} src={tile.image || null} />
+                </span>
                 <div className={tokenPageStyles.approvedHeroText}>
                     <h2 className={tokenPageStyles.approvedHeroName}>{account.name}</h2>
                     <p className={local.summary} data-testid="agent-balance">{balanceSummary(balances, account.id)}</p>
@@ -464,8 +541,6 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
                         <span className={`${local.chip} ${account.enabled ? local.chipActive : ''}`}>
                             {account.enabled ? t('settings.developer.active') : t('coSigner.status.off')}
                         </span>
-                        {descriptor ? <span className={local.chip}>{t('coSigner.network', { network: agentNetworkName(descriptor) })}</span> : null}
-                        <span className={local.chip} data-testid="agent-allowed-tokens">{allowedTokensText(p)}</span>
                     </div>
                 </div>
             </section>
@@ -491,47 +566,66 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
             >
                 {activeTab === 'actions' ? (
                     <>
-                        <div className={tokenDetailStyles.assetActionGrid} role="group" aria-label={t('routes.manageToken.actions')}>
-                            <QuickActionTile square icon={<Icon.ReceiveIcon />} onClick={() => setShowFund((v) => !v)} aria-expanded={showFund}>
-                                {t('coSigner.detail.fund')}
-                            </QuickActionTile>
-                            <QuickActionTile square icon={<Icon.SendIcon />} disabled title={t('coSigner.detail.withdrawLocked')}>
-                                {t('coSigner.detail.withdraw')}
-                            </QuickActionTile>
-                            <QuickActionTile square icon={<Icon.PencilIcon />} onClick={startEdit} disabled={busy}>
-                                {t('coSigner.detail.editRules')}
-                            </QuickActionTile>
-                            <QuickActionTile square icon={<Icon.CopyIcon />} onClick={copyAddress}>
-                                {t('coSigner.detail.copyAddress')}
-                            </QuickActionTile>
-                            <QuickActionTile
-                                square
-                                className={account.enabled ? tokenPageStyles.dangerTile : undefined}
+                        {/* The one action list (G101). Fund opens the Fund page
+                            (the address QR over a Send form to this address).
+                            Withdraw stays a disabled row that says why on the
+                            row itself: the wallet holds only its half of the
+                            shared key, so only the agent can start a spend.
+                            Turning off is undone by Turn on, so its row keeps
+                            the default tone. */}
+                        <ActionList label={t('routes.manageToken.actions')}>
+                            <ActionListItem
+                                icon={<Icon.ReceiveIcon />}
+                                title={t('coSigner.detail.fund')}
+                                description={t('coSigner.detail.fundDesc')}
+                                onClick={() => setShowFund(true)}
+                            />
+                            <ActionListItem
+                                icon={<Icon.SendIcon />}
+                                title={t('coSigner.detail.withdraw')}
+                                disabled
+                                disabledReason={t('coSigner.detail.withdrawLocked')}
+                            />
+                            <ActionListItem
+                                icon={<Icon.PencilIcon />}
+                                title={t('coSigner.detail.editRules')}
+                                description={t('coSigner.detail.editRulesDesc')}
+                                onClick={startEdit}
+                                disabled={busy}
+                            />
+                            {/* Name and tile, the same Edit look page wallets and accounts use. */}
+                            <ActionListItem
+                                icon={<Icon.PaletteIcon />}
+                                title={t('coSigner.detail.editLook')}
+                                description={t('coSigner.detail.editLookDesc')}
+                                onClick={() => setLookOpen(true)}
+                                disabled={busy}
+                            />
+                            <ActionListItem
+                                icon={<Icon.CopyIcon />}
+                                title={t('coSigner.detail.copyAddress')}
+                                description={t('coSigner.detail.copyAddressDesc')}
+                                onClick={copyAddress}
+                            />
+                            <ActionListItem
                                 icon={account.enabled ? <Icon.PauseIcon /> : <Icon.PlayIcon />}
+                                title={account.enabled ? t('coSigner.detail.turnOff') : t('coSigner.detail.turnOn')}
+                                description={account.enabled ? t('coSigner.detail.turnOffDesc') : t('coSigner.detail.turnOnDesc')}
                                 onClick={toggleEnabled}
                                 disabled={busy}
-                            >
-                                {account.enabled ? t('coSigner.detail.turnOff') : t('coSigner.detail.turnOn')}
-                            </QuickActionTile>
-                        </div>
-                        {/* Why Withdraw is locked, printed under the tiles (a hover title never shows on a phone). */}
-                        <p className={tokenPageStyles.lockedReason}>{t('coSigner.detail.withdrawLocked')}</p>
+                            />
+                        </ActionList>
                         {copied ? <StatusMessage variant="success" role="status">{t('coSigner.detail.copied')}</StatusMessage> : null}
-                        {showFund ? (
-                            <div className={local.fundCard} aria-label={t('coSigner.detail.fundAddress')}>
-                                <AddressText address={account.aggregateAddress} />
-                                <CopyButton value={account.aggregateAddress || ''} label="Copy funding address" />
-                            </div>
-                        ) : null}
                     </>
                 ) : null}
 
                 {activeTab === 'activity' ? (
                     <>
                         {activity.length === 0 ? (
-                            <p className={local.rowNote}>
-                                {p.maxPerWindow ? t('coSigner.detail.activityEmpty') : t('coSigner.detail.activityNoRecord')}
-                            </p>
+                            <EmptyState
+                                title={t('coSigner.detail.activityEmptyTitle')}
+                                body={p.maxPerWindow ? t('coSigner.detail.activityEmpty') : t('coSigner.detail.activityNoRecord')}
+                            />
                         ) : (
                             <ul className={local.rows} aria-label={t('home.tabs.activity')}>
                                 {activity.map((entry, i) => (
@@ -547,7 +641,11 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
                                 ))}
                             </ul>
                         )}
-                        {p.maxPerWindow ? <p className={tokenPageStyles.lockedReason}>{t('coSigner.detail.activityNote')}</p> : null}
+                        {p.maxPerWindow && activity.length > 0 ? (
+                            <WarningCard data-agent-activity-note="">
+                                <WarningLine>{t('coSigner.detail.activityNote')}</WarningLine>
+                            </WarningCard>
+                        ) : null}
                     </>
                 ) : null}
 
@@ -580,27 +678,25 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
                         <section className={tokenPageStyles.approvedDetailsCard} aria-label={t('components.reachabilityLine.details')}>
                             <dl className={tokenPageStyles.approvedDetailsList}>
                                 <DetailRow label={t('coSigner.detail.fundAddress')} value={(
-                                    <span style={{ display: 'inline-flex', gap: 'var(--xc-space-1)', alignItems: 'center' }}>
-                                        <AddressText address={account.aggregateAddress} />
-                                        <CopyButton value={account.aggregateAddress || ''} label="Copy funding address" />
+                                    // A row of the cell's full width, so the address shows in full
+                                    // when it fits beside the copy icon (G99).
+                                    <span style={{ display: 'flex', width: '100%', minWidth: 0, justifyContent: 'flex-end', gap: 'var(--xc-space-1)', alignItems: 'center' }}>
+                                        <AddressText address={account.aggregateAddress} fit />
+                                        <CopyButton value={account.aggregateAddress || ''} label="Copy Funding Address" />
                                     </span>
                                 )} />
                                 {descriptor ? (
                                     <DetailRow label={t('settings.network.label')} value={<ChainBadge descriptor={descriptor} size="sm" showName={false} />} />
                                 ) : null}
-                                <DetailRow label={t('coSigner.detail.allowedActions')} value={(p.allowedActions || []).map(actionDisplayLabel).join(', ') || '-'} />
+                                {/* The allowed actions and the rolling limit rate are left off
+                                    this card by ruling (2026-11-15); Edit rules still shows and
+                                    sets both, and the policy is unchanged. */}
                                 <DetailRow label={t('coSigner.policy.tokens.title')} value={allowedTokensText(p)} />
                                 <DetailRow
                                     label={t('coSigner.detail.allowedRecipients')}
                                     value={Array.isArray(p.allowedDestinations) && p.allowedDestinations.length > 0
                                         ? t('coSigner.detail.recipientCount', { count: p.allowedDestinations.length })
                                         : t('coSigner.detail.anyRecipient')}
-                                />
-                                <DetailRow
-                                    label={t('coSigner.detail.rollingLimit')}
-                                    value={p.maxPerWindow
-                                        ? `${p.maxPerWindow.maxActions ? `${p.maxPerWindow.maxActions} actions ` : ''}per ${p.maxPerWindow.hours}h`
-                                        : t('send.advanced.none')}
                                 />
                                 <DetailRow label={t('coSigner.detail.windowActivity')} value={t('coSigner.detail.windowCount', { count: windowCount })} />
                                 <DetailRow label={t('walletDetails.type')} value={account.recoveryPublicKey ? t('coSigner.detail.kind2of3') : t('coSigner.detail.kind2of2')} />
@@ -611,13 +707,156 @@ export function CoSignerAccountDetail({ accountId, walletId, onBack }) {
                                 ) : null}
                             </dl>
                         </section>
-                        <p className={tokenPageStyles.lockedReason}>
-                            {account.enabled ? t('coSigner.detail.activeHint') : t('coSigner.detail.offHint')}
-                        </p>
+                        {/* The account's state as a note in the one warning card, never a loose line. */}
+                        {account.enabled ? (
+                            <WarningCard data-agent-state-note="">
+                                <WarningLine>{t('coSigner.detail.activeHint')}</WarningLine>
+                            </WarningCard>
+                        ) : (
+                            <Notice tone="danger" role="note" data-agent-state-note="">
+                                {t('coSigner.detail.offHint')}
+                            </Notice>
+                        )}
                     </>
                 ) : null}
             </div>
         </ListPage>,
+    );
+}
+
+/**
+ * Edit look for an agent account: its own page (no modal, G104), the twin of
+ * Edit Account. The name saves to the agent record through
+ * updateCoSignerAccount (a local vault field, nothing on chain); the tile's
+ * colour, shape and image save to the same per-device store wallets and
+ * accounts use, keyed by the agent's id. Back stores nothing.
+ *
+ * @param {object} props
+ * @param {any} props.account
+ * @param {string} [props.walletId]
+ * @param {() => void} props.onBack
+ * @param {(account: any) => void} props.onSaved   the stored record after Save
+ */
+function AgentLookPage({ account, walletId, onBack, onSaved }) {
+    const { messaging, shell } = useMessaging();
+    const variant = screenVariantFor(shell);
+    const saved = readWalletTile(account.id);
+    const [name, setName] = useState(account.name || '');
+    const [colour, setColour] = useState(saved.colour || TILE_COLOURS[0]);
+    const [image, setImage] = useState(/** @type {string | null} */ (saved.image || null));
+    const [shape, setShape] = useState(saved.shape === 'rounded' ? 'rounded' : 'circle');
+    const [error, setError] = useState(/** @type {string | null} */ (null));
+    const [busy, setBusy] = useState(false);
+    // The name section starts open, the Look section closed, as on Edit Account.
+
+    const tooLong = (text) => nameLength(text.trim()) > NAME_MAX_LENGTH;
+
+    async function handleSubmit(event) {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        if (busy) return;
+        const trimmed = name.trim();
+        if (!hasVisibleText(trimmed)) { setError(t('coSigner.look.nameRequired')); return; }
+        if (tooLong(trimmed)) { setError(t('coSigner.look.nameTooLong', { max: NAME_MAX_LENGTH })); return; }
+        setError(null);
+        setBusy(true);
+        // The tile's look is saved with the name, as Edit Account does.
+        writeWalletTile(account.id, { colour, image, shape });
+        if (trimmed === account.name) {
+            onSaved(account);
+            return;
+        }
+        try {
+            const updated = await messaging.updateCoSignerAccount({ id: account.id, patch: { name: trimmed } });
+            if (!accountMatchesScope(updated, account.id, walletId)) {
+                throw new Error('The updated agent account could not be loaded for this wallet and network.');
+            }
+            onSaved(updated);
+        } catch (err) {
+            setError(userFacingMessage(err, t('coSigner.look.saveFailed')));
+            setBusy(false);
+        }
+    }
+
+    const saveDisabled = busy || !hasVisibleText(name) || tooLong(name);
+
+    return (
+        <Screen variant={variant} header={<PageHeader onBack={onBack} backDisabled={busy} title={t('coSigner.look.title')} />}>
+            <FormFrame
+                label={t('coSigner.look.title')}
+                onSubmit={handleSubmit}
+                action={(
+                    <FormAction icon={<Icon.SaveIcon />} disabled={saveDisabled}>
+                        {t('renameAccount.saveChanges')}
+                    </FormAction>
+                )}
+            >
+                {/* One flat form, no section wrappers: the look tile, name, then Icon colour, shape and image. */}
+                <div data-flat-look-form="" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-4)', minWidth: 0 }}>
+                    {/* The agent's current look tile, centred at the top. */}
+                    <div style={{ display: 'flex', justifyContent: 'center' }} aria-hidden="true">
+                        <span style={{ '--xc-avatar-shape': tileRadius(shape), display: 'inline-flex' }}>
+                            <IdentityAvatar name={name || 'Agent'} text={walletTileText(name)} seed={account.id} context="hero" variant="asset" tone={colour} src={image} />
+                        </span>
+                    </div>
+                    <Input
+                        label={t('renameAccount.name')}
+                        help={t('coSigner.look.nameHelp')}
+                        maxLength={NAME_MAX_LENGTH}
+                        value={name}
+                        onChange={(e) => {
+                            const next = e.target.value;
+                            setName(next);
+                            setError(tooLong(next) ? t('coSigner.look.nameTooLong', { max: NAME_MAX_LENGTH }) : null);
+                        }}
+                        autoComplete="off"
+                        disabled={busy}
+                        error={error || undefined}
+                    />
+                    <TileLookFields kind="account" colour={colour} onColour={setColour} shape={shape} onShape={setShape} image={image} onImage={setImage} />
+                </div>
+            </FormFrame>
+        </Screen>
+    );
+}
+
+/**
+ * The Fund page: the agent address as a QR with its copy button (the Receive
+ * page's QR look), over the standard Send form with this address as the
+ * destination, so the user funds the agent from this wallet in place. Send
+ * draws the page (header, review, signing); its Back returns to the agent page.
+ *
+ * @param {object} props
+ * @param {any} props.account
+ * @param {string} props.walletId
+ * @param {() => void} props.onBack
+ */
+function AgentFundPage({ account, walletId, onBack }) {
+    const address = account.aggregateAddress || '';
+    // A new object per render would re-run Send's prefill effects.
+    const prefill = useMemo(() => ({ address, chainId: account.chainId }), [address, account.chainId]);
+    const qr = address ? (
+        <section className={local.fundCard} aria-label={t('coSigner.detail.fundAddress')}>
+            <KeyQR value={address} alt={t('receive.qrCodeFor', { address })} />
+            <span className={`${qrStyles.caption} ${local.fundAddress}`}>
+                <AddressText address={address} fit />
+                <CopyButton value={address} label="Copy Funding Address" />
+            </span>
+        </section>
+    ) : null;
+    return (
+        <InPageScreen>
+            <Send
+                walletId={walletId}
+                prefill={prefill}
+                onBack={onBack}
+                title={t('coSigner.detail.fund')}
+                formLead={qr}
+                presetTo={address}
+                // One draft per agent, so a draft left on one agent's Fund
+                // page never offers its address under another agent's QR.
+                draftView={`cosigner-fund:${account.id}`}
+            />
+        </InPageScreen>
     );
 }
 

@@ -175,7 +175,8 @@ function violations(source, filename = 'fixture.jsx') {
         }
         if (node.type === 'JSXExpressionContainer' && outputsNetworkKind(node.expression, taintedNames)) {
             const isChild = parent?.type === 'JSXElement' || parent?.type === 'JSXFragment';
-            const isDisplayProp = parent?.type === 'JSXAttribute' && parent.name?.name !== 'networkKind';
+            const isDisplayProp = parent?.type === 'JSXAttribute'
+                && !['networkKind', 'value'].includes(parent.name?.name);
             if (isChild || isDisplayProp) record(node, 'renders networkKind as text');
         }
         if (node.type === 'TemplateLiteral' && outputsNetworkKind(node)) {
@@ -238,6 +239,7 @@ describe('network label source guard', () => {
             "const result = <span>{networkKind === 'mainnet' ? 'Live' : 'Development'}</span>;",
             'const payloadKind = networkKind;',
             'const share = <Share networkKind={payloadKind} />;',
+            'const picker = <Picker value={networkKind} />;',
         ].join('\n');
 
         expect(violations(source)).toEqual([]);

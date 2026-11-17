@@ -21,6 +21,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { feeForRate, networkFeeEditor } from '../../helpers/customNetworkFee.js';
 
 // The Asset field opens the token picker page; a stub with one button for the
 // token under test keeps these cases about the opening chain.
@@ -234,7 +235,7 @@ describe('Send resets asset-specific draft fields', () => {
         });
         await waitFor(() => expect(fromField().value).toBe(BTC_FROM));
         fireEvent.change(await screen.findByLabelText('Network fee'), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '77' } });
+        fireEvent.change(networkFeeEditor(), { target: { value: feeForRate(77, BTC) } });
         expect(screen.getByLabelText('Network fee').getAttribute('aria-valuetext')).toContain('Custom: 77');
 
         const to = screen.getByLabelText(/^To$/);

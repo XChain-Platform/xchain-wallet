@@ -8,23 +8,70 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Select, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Button, EmptyState, Icon, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
-// The standard title-line filter, the gauge card and the My bets tab body.
+// The standard title-line filter, the gauge card and the wallet's bets loader.
 import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { BetMarketCard, betPoolTotal } from '../components/BetMarketCard.jsx';
-import { BetMyBetsPanel, useWalletBets, yourBetText } from '../components/BetMyBetsPanel.jsx';
-// The My markets tab is the oracle console drawn inside this page.
-import { OracleConsole } from './OracleConsole.jsx';
+import { useWalletBets, yourBetText } from '../components/BetMyBetsPanel.jsx';
+import {
+    LIST_DETAIL_MIN_WIDTH,
+    ListDetailSplit,
+    listDetailStyles,
+    useWideContent,
+} from '../components/PanelSplit.jsx';
 import local from './BetFeedsList.module.css';
 
 /** The tab ids a caller may open the list on. */
 export const BET_LIST_VIEWS = ['all', 'bets', 'markets'];
+
+const marketKey = (chainId, m) => `${chainId}:${m?.action_index}`;
+const sameMarket = (a, b) => Boolean(a && b
+    && a.chainId === b.chainId
+    && String(a.feedIndex) === String(b.feedIndex));
+
+/**
+ * The markets one tab lists, before the search and sort. All three tabs are
+ * the same list (operator ruling 2026-11-13): My bets and My markets only
+ * narrow the markets listed, so they share its network, status, search,
+ * sort and cards. My bets keeps the markets this wallet has a bet in; My
+ * markets keeps the markets one of this network's wallet addresses created
+ * (the explorer's `source`; its rows come from the per-address creator
+ * read, so the filter only guards a stale render).
+ *
+ * @param {'all' | 'bets' | 'markets'} view
+ * @param {any[]} rows                 the network's markets, as All lists them
+ * @param {object} ctx
+ * @param {string} ctx.chainId
+ * @param {Map<string, any[]>} ctx.betsByMarket   the wallet's bets, keyed chain:market
+ * @param {Set<string>} ctx.ownAddresses          the wallet's addresses on chainId
+ * @returns {any[]}
+ */
+export function marketsForView(view, rows, { chainId, betsByMarket, ownAddresses }) {
+    if (view === 'bets') return rows.filter((m) => betsByMarket.has(marketKey(chainId, m)));
+    if (view === 'markets') return rows.filter((m) => ownAddresses.has(String(m?.source || '')));
+    return rows;
+}
+
+// What a tab says when none of the listed markets is the tab's. Status
+// defaults to Taking bets, so a settled bet or market sits behind that
+// filter rather than being missing; a wallet that has bets, just not on
+// the markets listed here, is told so instead of "No bets yet".
+function emptyViewState(view, openOnly, hasBets) {
+    const behindFilter = openOnly ? ' Set Status to All markets to see settled ones.' : '';
+    if (view === 'bets') {
+        if (hasBets) {
+            return { title: 'No bets on these markets', body: `Your bets are on markets outside this network or filter.${behindFilter}` };
+        }
+        return { title: 'No bets yet', body: `Markets this wallet has bet on appear here.${behindFilter}` };
+    }
+    return { title: 'No markets yet', body: `Betting markets created by this wallet appear here.${behindFilter}` };
+}
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -77,6 +124,11 @@ function sortMarkets(rows, sortBy) {
  * chain's markets (newest first), and is the entry point into a market's detail
  * page. Read-only itself (calls messaging.betFeeds, an explorer read).
  *
+ * The All, My bets and My markets tabs draw one list. The page's reads are
+ * the wallet's addresses, the network's markets (All and My bets) or the
+ * markets each address created (My markets), and the wallet's bets, one per
+ * address: none grows with the markets on screen.
+ *
  * @param {object} props
  * @param {string} props.walletId
  * @param {(chainId: string, feedIndex: string | number) => void} props.onOpenMarket
@@ -84,14 +136,33 @@ function sortMarkets(rows, sortBy) {
  * @param {'all' | 'bets' | 'markets'} [props.view]   The tab to show (the shell keeps it, so
  *   the My bets and My markets palette entries open the list on their tab)
  * @param {(view: string) => void} [props.onViewChange]  Told when the user picks a tab
- * @param {(chainId: string, feedIndex: string | number) => void} [props.onDuplicate]  My markets'
- *   "Copy to a new market" (a new market pre-filled from this one)
  * @param {() => void} props.onBack
+ * @param {{ chainId: string, feedIndex: string | number } | null} [props.selectedMarket]
+ * @param {(market: { chainId: string, feedIndex: string | number }) => void} [props.onSelectMarket]
+ * @param {(market: { chainId: string, feedIndex: string | number }) => import('react').ReactNode} [props.renderMarket]
+ * @param {(market: { chainId: string, feedIndex: string | number }, page: { measureRef: (el: HTMLElement | null) => void }) => import('react').ReactNode} [props.renderMarketPage]
  */
-export function BetFeedsList({ walletId, onOpenMarket, onCreate, onDuplicate, view: viewProp, onViewChange, onBack }) {
+export function BetFeedsList({
+    walletId,
+    onOpenMarket,
+    onCreate,
+    view: viewProp,
+    onViewChange,
+    onBack,
+    selectedMarket = null,
+    onSelectMarket,
+    renderMarket,
+    renderMarketPage,
+}) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const betChainIds = useBetChainIds();
+    const canSplit = typeof renderMarket === 'function';
+    const [layoutRef, wideContent, measured] = useWideContent(LIST_DETAIL_MIN_WIDTH, canSplit);
+    const twoPanel = canSplit && wideContent;
+    const detailRoute = typeof renderMarketPage === 'function' && Boolean(selectedMarket);
+    const listShown = !detailRoute || (measured && twoPanel);
+    const [localSelection, setLocalSelection] = useState(null);
 
     const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
     const [noChain, setNoChain] = useState(false);
@@ -115,12 +186,13 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onDuplicate, vi
     const openOnly = statusFilter === 'open';
 
     // The wallet's addresses from the one read below, shared with the
-    // bets loader and the My markets tab so neither asks again.
+    // bets loader and the My markets filter so neither asks again.
     const [addressesByChain, setAddressesByChain] = useState(/** @type {Record<string, any[]> | null} */ (null));
     // The wallet's bets, read once for the cards' "You bet" chips and the My bets tab.
     const walletBets = useWalletBets({ byChain: addressesByChain, messaging });
 
     useEffect(() => {
+        if (!listShown) return undefined;
         let cancelled = false;
         setChainId(null);
         setNoChain(false);
@@ -134,19 +206,56 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onDuplicate, vi
                 setAddressesByChain(byChain || {});
                 const avail = betChainIds.filter((cid) => Array.isArray(byChain?.[cid]) && byChain[cid].length > 0);
                 setBetChains(avail);
-                if (avail.length > 0) setChainId(avail[0]);
+                if (avail.length > 0) {
+                    const requestedChain = selectedMarket?.chainId;
+                    setChainId(requestedChain && avail.includes(requestedChain) ? requestedChain : avail[0]);
+                }
                 else setNoChain(true);
             })
             .catch((err) => {
                 if (!cancelled) setError(userFacingMessage(err, 'Could not load betting addresses. Try again.'));
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, betChainIds, addressesReload]);
+    }, [walletId, messaging, betChainIds, addressesReload, listShown]);
+
+    // The wallet's addresses on the shown network: a market one of them
+    // created is this wallet's market.
+    const ownAddresses = useMemo(() => new Set(
+        (addressesByChain?.[chainId] || []).map((a) => String(a?.address || '')).filter(Boolean),
+    ), [addressesByChain, chainId]);
+
+    // Which read fills the list. My markets asks for the markets each of
+    // the wallet's addresses created (one read per address, never per
+    // market), so a market older than the network's newest 50 is still
+    // listed; All and My bets share the network's own list.
+    const readMode = view === 'markets' ? 'own' : 'network';
+    const [rowsMode, setRowsMode] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
         if (!chainId) return undefined;
         let cancelled = false;
         let latestRequestId = 0;
+
+        // The markets this network's wallet addresses created, newest first,
+        // with the Status filter applied here since a creator read carries
+        // every status. Fails only when no address answered.
+        const readOwn = () => Promise.all([...ownAddresses].map((address) => Promise.resolve()
+            .then(() => messaging.betFeeds({ chainId, query: address, type: 'source', opts: { limit: 100 } }))
+            .then(extractRows)
+            .catch(() => null)))
+            .then((answers) => {
+                if (answers.length > 0 && answers.every((a) => a === null)) {
+                    throw new Error('No market source answered.');
+                }
+                const seen = new Set();
+                const all = [];
+                for (const m of answers.flat()) {
+                    if (!m || seen.has(String(m.action_index))) continue;
+                    seen.add(String(m.action_index));
+                    if (!openOnly || m.feed_status === 'open') all.push(m);
+                }
+                return all.sort((a, b) => Number(b.action_index || 0) - Number(a.action_index || 0));
+            });
 
         // `clear` separates the FIRST read of a chain/filter from the refreshes
         // that follow it: blanking the rows is what shows "Loading markets…",
@@ -159,10 +268,14 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onDuplicate, vi
             const req = openOnly
                 ? { chainId, query: 'open', type: 'status', opts: { limit: 50 } }
                 : { chainId, opts: { limit: 50 } };
-            return messaging.betFeeds(req)
-                .then((resp) => {
+            const read = readMode === 'own'
+                ? readOwn()
+                : messaging.betFeeds(req).then(extractRows);
+            return read
+                .then((list) => {
                     if (!cancelled && requestId === latestRequestId) {
-                        setRows(extractRows(resp));
+                        setRows(list);
+                        setRowsMode(readMode);
                         setError(null);
                     }
                 })
@@ -191,11 +304,7 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onDuplicate, vi
         // last had the tab in front of them.
         const timer = setInterval(() => load(false), REFRESH_MS);
         return () => { cancelled = true; clearInterval(timer); };
-    }, [chainId, openOnly, messaging, feedsReload]);
-
-    // My markets is the oracle console drawn in this page (below), which
-    // reads the markets this wallet's addresses run, with the owner records its
-    // actions sign from.
+    }, [chainId, openOnly, messaging, feedsReload, readMode, ownAddresses]);
 
     const betsByMarket = useMemo(() => {
         const map = new Map();
@@ -206,6 +315,34 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onDuplicate, vi
         }
         return map;
     }, [walletBets.rows]);
+
+    // The right panel follows a shell-held pick, then a pick made in this list.
+    // All's first row seeds the initial selection. After that, tabs and filters
+    // affect only the left list: even an empty or loading view keeps the detail
+    // the user was already reading.
+    const betsPending = view === 'bets' && walletBets.rows === null && !walletBets.error;
+    const liveRows = rowsMode === readMode ? rows : null;
+    const inView = liveRows && !betsPending
+        ? marketsForView(view, liveRows, { chainId, betsByMarket, ownAddresses })
+        : null;
+    const orderedRows = inView ? sortMarkets(inView, sortBy) : null;
+    const needle = query.trim().toLowerCase();
+    const shown = orderedRows ? orderedRows.filter((m) => matchesSearch(m, needle)) : null;
+    const requested = selectedMarket || localSelection;
+    const firstAllRef = view === 'all' && orderedRows?.[0]
+        ? { chainId, feedIndex: orderedRows[0].action_index }
+        : null;
+    const shownRef = twoPanel
+        ? (requested || firstAllRef)
+        : null;
+    const shownMarket = shownRef && liveRows
+        ? liveRows.find((m) => String(m.action_index) === String(shownRef.feedIndex)) || null
+        : null;
+
+    useEffect(() => {
+        if (shownRef && !requested) setLocalSelection(shownRef);
+        if (shownRef && !sameMarket(shownRef, selectedMarket)) onSelectMarket?.(shownRef);
+    }, [shownRef?.chainId, shownRef?.feedIndex, requested, selectedMarket?.chainId, selectedMarket?.feedIndex, onSelectMarket]);
 
     // The title bar holds the filter (search, Network, Status, Sort)
     // and a plus for Create market at the far right; the icon is lit when any
@@ -227,34 +364,38 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onDuplicate, vi
                         searchPlaceholder="Search"
                         searchLabel="Search bet markets"
                     >
-                        <Select
+                        {/* The standard Network field opens the full-screen
+                            network list (operator ruling 2026-11-13). */}
+                        <NetworkField
                             label="Network"
+                            help="Shows the bet markets on the network you pick."
                             size="md"
                             value={chainId}
-                            onChange={(event) => setChainId(event.target.value)}
-                        >
-                            {offeredChains.map((cid) => (
-                                <option key={cid} value={cid}>{chainRegistry.get(cid)?.displayName || cid}</option>
-                            ))}
-                        </Select>
+                            onChange={setChainId}
+                            chainIds={offeredChains}
+                            chainRegistry={chainRegistry}
+                            notSource
+                        />
                         <Select
                             label="Status"
+                            help="Shows only the markets still taking bets, or every market."
                             size="md"
                             value={statusFilter}
                             onChange={(event) => setStatusFilter(event.target.value)}
                         >
-                            <option value="open">Taking bets</option>
-                            <option value="all">All markets</option>
+                            <Select.Option value="open" icon={<Icon.PlayIcon />}>Taking bets</Select.Option>
+                            <Select.Option value="all" icon={<Icon.ListIcon />}>All markets</Select.Option>
                         </Select>
                         <Select
                             label="Sort"
+                            help="The order the markets are listed in: newest, closing soonest, or biggest pool."
                             size="md"
                             value={sortBy}
                             onChange={(event) => setSortBy(event.target.value)}
                         >
-                            <option value="newest">Newest first</option>
-                            <option value="closing">Closing soonest</option>
-                            <option value="pool">Biggest pool</option>
+                            <Select.Option value="newest" icon={<Icon.HistoryIcon />}>Newest first</Select.Option>
+                            <Select.Option value="closing" icon={<Icon.ClockIcon />}>Closing soonest</Select.Option>
+                            <Select.Option value="pool" icon={<Icon.CoinsIcon />}>Biggest pool</Select.Option>
                         </Select>
                     </ListFilterMenu>
                     {onCreate ? (
@@ -266,7 +407,21 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onDuplicate, vi
             ) : null}
         />
     );
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => (
+        <Screen variant={variant} header={header}>
+            <div ref={layoutRef} className={listDetailStyles.layoutRoot} data-list-detail="list">
+                {children}
+            </div>
+        </Screen>
+    );
+
+    // A deep-linked market keeps its standalone page below the breakpoint and
+    // rejoins the list at wide widths. The detail page keeps the measuring ref
+    // while it is standalone so resizing can switch layouts in either direction.
+    if (detailRoute && !(measured && twoPanel)) {
+        if (!measured) return wrap(null);
+        return renderMarketPage(selectedMarket, { measureRef: layoutRef });
+    }
 
     if (noChain) {
         return wrap(
@@ -300,49 +455,80 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onDuplicate, vi
         );
     }
 
-    const needle = query.trim().toLowerCase();
-    const card = (m, marketChainId, yours = false) => (
-        <li key={`${marketChainId}:${String(m.action_index)}`}>
+    // One card for every tab. The wallet's own stake and the "Your market"
+    // chip ride on it wherever the market is listed, so a market looks the
+    // same on All as on My bets or My markets.
+    const card = (m) => {
+        const ref = { chainId, feedIndex: m.action_index };
+        const selected = twoPanel && sameMarket(ref, shownRef);
+        return (
+        <li key={marketKey(chainId, m)} data-selected={selected ? 'true' : undefined}>
             <BetMarketCard
                 market={m}
-                onOpen={() => onOpenMarket(marketChainId, m.action_index)}
-                yourBet={yourBetText(betsByMarket.get(`${marketChainId}:${m.action_index}`), m)}
-                yours={yours}
+                onOpen={() => {
+                    if (!twoPanel) {
+                        onOpenMarket(chainId, m.action_index);
+                        return;
+                    }
+                    setLocalSelection(ref);
+                    onSelectMarket?.(ref);
+                }}
+                selected={selected}
+                className={twoPanel ? local.splitRow : undefined}
+                yourBet={yourBetText(betsByMarket.get(marketKey(chainId, m)), m)}
+                yours={ownAddresses.has(String(m?.source || ''))}
             />
         </li>
-    );
-    const noMatches = <EmptyState title="No matching markets" body="Change or clear the filter to see more." titleAs="p" />;
-
-    let body = null;
-    if (view === 'all') {
-        const shown = rows ? sortMarkets(rows.filter((m) => matchesSearch(m, needle)), sortBy) : null;
-        body = (
-            <>
-                {rows && rows.length === 0 ? (
-                    <EmptyState
-                        title="No markets"
-                        body={openOnly ? 'No markets are taking bets on this network right now.' : 'Markets created on this network appear here.'}
-                    />
-                ) : null}
-                {rows && rows.length > 0 && shown.length === 0 ? noMatches : null}
-                {shown && shown.length > 0 ? (
-                    <div className={local.cardArea}>
-                        <ul className={local.marketList} aria-label="Bet markets">
-                            {shown.map((m) => card(m, chainId))}
-                        </ul>
-                    </div>
-                ) : null}
-            </>
         );
-    } else if (view === 'bets') {
-        body = (
-            <BetMyBetsPanel
-                rows={walletBets.rows}
-                error={walletBets.error}
-                onRetry={walletBets.reload}
-                messaging={messaging}
-                onOpenMarket={onOpenMarket}
+    };
+    let emptyState = null;
+    if (readMode === 'network' && liveRows && liveRows.length === 0) {
+        emptyState = (
+            <EmptyState
+                title="No markets"
+                body={openOnly ? 'No markets are taking bets on this network right now.' : 'Markets created on this network appear here.'}
             />
+        );
+    } else if (inView && inView.length === 0) {
+        const copy = emptyViewState(view, openOnly, (walletBets.rows || []).length > 0);
+        emptyState = <EmptyState title={copy.title} body={copy.body} />;
+    } else if (shown && shown.length === 0) {
+        emptyState = <EmptyState title="No matching markets" body="Change or clear the filter to see more." titleAs="p" />;
+    }
+    const body = (
+        <>
+            {emptyState}
+            {shown && shown.length > 0 ? (
+                <div className={local.cardArea}>
+                    <ul className={local.marketList} aria-label="Bet markets" data-xc-split-list={twoPanel ? '' : undefined}>
+                        {shown.map(card)}
+                    </ul>
+                </div>
+            ) : null}
+        </>
+    );
+
+    let notice = null;
+    if (error) {
+        notice = (
+            <StatusMessage
+                variant="error"
+                recovery={{ label: 'Try Again', onAction: () => setFeedsReload((value) => value + 1) }}
+            >
+                {error}
+            </StatusMessage>
+        );
+    } else if (!liveRows || betsPending) {
+        notice = (
+            <div role="status" aria-label="Loading betting markets" aria-busy="true">
+                Loading betting markets…
+            </div>
+        );
+    } else if (view === 'bets' && walletBets.error) {
+        notice = (
+            <StatusMessage variant="error" recovery={{ label: 'Try Again', onAction: walletBets.reload }}>
+                {walletBets.error}
+            </StatusMessage>
         );
     }
 
@@ -361,41 +547,39 @@ export function BetFeedsList({ walletId, onOpenMarket, onCreate, onDuplicate, vi
         </div>
     );
 
-    // My markets lists the markets this wallet runs as the same gauge cards, each with its
-    // actions (post the result, cancel and refund, edit lists, copy) inline. The console
-    // owns its page while a confirm or unsigned result is open.
-    if (view === 'markets') {
+    const listPage = (
+        <ListPage notices={notice} toolbar={twoPanel ? undefined : tabsToolbar}>
+            {body}
+        </ListPage>
+    );
+    // The split and its docked tabs are structural, not a data state. Empty,
+    // loading and error results belong inside the left panel and never unmount
+    // either the tabs or an existing detail.
+    const showPanel = twoPanel;
+    if (showPanel) {
+        const fallback = <div role="status" aria-label="Loading market detail">Loading market…</div>;
         return (
-            <OracleConsole
-                walletId={walletId}
-                header={header}
-                toolbar={tabsToolbar}
-                arrange={(list) => sortMarkets(list.filter((m) => matchesSearch(m, needle)), sortBy)}
-                yourBetFor={(m) => yourBetText(betsByMarket.get(`${m.chainId}:${m.action_index}`), m)}
-                onOpenMarket={onOpenMarket}
-                onDuplicate={onDuplicate}
-                onBack={onBack}
-            />
+            <Screen variant={variant} header={header} bodyClassName={listDetailStyles.twoPanelBody}>
+                <ListDetailSplit
+                    measureRef={layoutRef}
+                    storageKey="bets"
+                    resizeLabel="Resize the bet markets list"
+                    resizeHint="Drag to resize the bet markets list, or press Enter to reset."
+                    layoutName="two-panel"
+                    listHeader={tabsToolbar}
+                    list={listPage}
+                    listLabel="Bet markets"
+                    detailLabel={shownMarket?.label || 'Bet market'}
+                    detailBusy={!shownRef}
+                    detailFallback={fallback}
+                    detail={shownRef ? (
+                        <Fragment key={`${shownRef.chainId}:${shownRef.feedIndex}`}>
+                            {renderMarket(shownRef)}
+                        </Fragment>
+                    ) : fallback}
+                />
+            </Screen>
         );
     }
-
-    return wrap(
-        <ListPage
-            notices={view !== 'all' ? null : (error ? (
-                <StatusMessage
-                    variant="error"
-                    recovery={{ label: 'Try Again', onAction: () => setFeedsReload((value) => value + 1) }}
-                >
-                    {error}
-                </StatusMessage>
-            ) : (chainId && !rows ? (
-                <div role="status" aria-label="Loading betting markets" aria-busy="true">
-                    Loading betting markets…
-                </div>
-            ) : null))}
-            toolbar={tabsToolbar}
-        >
-            {body}
-        </ListPage>,
-    );
+    return wrap(listPage);
 }

@@ -55,8 +55,10 @@ describe('empty list screens offer the create action', () => {
         expect(await screen.findByText('No lists yet', {}, { timeout: 10_000 })).toBeTruthy();
         expect(screen.getByText('Create an address list for airdrops or a token list for project rosters and gates.')).toBeTruthy();
         expect(screen.queryByText(/Use Create list/)).toBeNull();
-        const buttons = screen.getAllByRole('button', { name: 'Create List' });
-        fireEvent.click(buttons[buttons.length - 1]);
+        // Create is the plus at the far right of the title line, offered once.
+        const buttons = screen.getAllByRole('button', { name: 'Create list' });
+        expect(buttons).toHaveLength(1);
+        fireEvent.click(buttons[0]);
         expect(onCreateList).toHaveBeenCalled();
     }, 20_000);
 });

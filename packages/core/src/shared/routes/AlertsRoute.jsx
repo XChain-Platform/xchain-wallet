@@ -4,18 +4,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Checkbox, EmptyState, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
+import { Button, Checkbox, EmptyState, Icon, InfoTip, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/alerts.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/firstPaint.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/home.js';
+import '../../i18n/locales/en/ui.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { ActivityIcon, BillIcon, DoubleCheckIcon, FunnelIcon, MessageIcon, PriceTrendIcon, SecurityShieldIcon, WalletAlertIcon } from '../components/alertIcons.jsx';
-import { ListSearchField } from '../components/ListSearchField.jsx';
-import { ListFilterPopover } from '../components/ListFilterPopover.jsx';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { announceNotificationsChanged } from '../hooks/useNotificationUnreadCount.js';
+import { usePendingNoticeAlerts } from '../hooks/usePendingNoticeAlerts.js';
+import { withoutDeadNoticeAlerts } from '../walletAlerts.js';
 import styles from './AlertsRoute.module.css';
 
 const TYPE_ORDER = ['all', 'price', 'activity', 'payments', 'messages', 'security', 'wallet'];
@@ -52,9 +54,13 @@ function dayKey(at, now = new Date()) {
 
 // The inbox record of a wallet-level warning: everything but its action, which
 // is a function, so the warning keeps its read state once it has been opened.
-function storable({ id, type, title, message, at }) {
-    return { id, type, title, message, at: Number(at) || Date.now(), read: true };
+function storable({ id, type, label, title, message, at }) {
+    return { id, type, ...(label ? { label } : {}), title, message, at: Number(at) || Date.now(), read: true };
 }
+
+// Line 1 of a row: the kind of activity the alert carries ("Governance poll"),
+// or its type's name when the alert names no kind of its own.
+const rowLabel = (alert) => alert.label || typeLabel(alert.type);
 
 function Highlight({ text, query }) {
     if (!query) return text;
@@ -64,8 +70,12 @@ function Highlight({ text, query }) {
         ? <mark key={`${part}-${index}`}>{part}</mark> : part);
 }
 
-export function AlertsRoute({ onBack, walletId, alerts = [] }) {
+export function AlertsRoute({ onBack, walletId, accountId = null, alerts: walletAlerts = [], isWatcherMode = false, onResumeCoinpay, onResumeAirdrop }) {
     const { messaging, shell } = useMessaging();
+    // The Home notices (payment due, pending airdrop) list here beside the
+    // wallet-level alerts, opening the same destination the Home notice does.
+    const noticeAlerts = usePendingNoticeAlerts({ walletId, accountId, isWatcherMode, onResumeCoinpay, onResumeAirdrop });
+    const alerts = useMemo(() => [...(Array.isArray(walletAlerts) ? walletAlerts : []), ...noticeAlerts], [walletAlerts, noticeAlerts]);
     const variant = screenVariantFor(shell);
     const [inboxAlerts, setInboxAlerts] = useState([]);
     const [localRead, setLocalRead] = useState(() => new Set());
@@ -86,7 +96,8 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
 
     const allAlerts = useMemo(() => {
         const byId = new Map();
-        for (const alert of [...inboxAlerts, ...(Array.isArray(alerts) ? alerts : [])]) {
+        // A stored payment-due or airdrop-pending row lists only while its notice is pending.
+        for (const alert of [...withoutDeadNoticeAlerts(inboxAlerts, noticeAlerts), ...(Array.isArray(alerts) ? alerts : [])]) {
             if (!alert?.id) continue;
             const previous = byId.get(alert.id);
             byId.set(alert.id, {
@@ -98,12 +109,12 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
             });
         }
         return [...byId.values()].sort((a, b) => b.at - a.at);
-    }, [alerts, inboxAlerts, localRead]);
+    }, [alerts, noticeAlerts, inboxAlerts, localRead]);
 
     const counts = useMemo(() => Object.fromEntries(TYPE_ORDER.map((key) => [key, key === 'all' ? allAlerts.length : allAlerts.filter((alert) => alert.type === key).length])), [allAlerts]);
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const visible = allAlerts.filter((alert) => (types.size === 0 || types.has(alert.type)) && (!unreadOnly || !alert.read)
-        && (!normalizedQuery || [typeLabel(alert.type), alert.title, alert.message].some((value) => String(value || '').toLocaleLowerCase().includes(normalizedQuery))));
+        && (!normalizedQuery || [typeLabel(alert.type), alert.label, alert.title, alert.message].some((value) => String(value || '').toLocaleLowerCase().includes(normalizedQuery))));
     const groups = visible.reduce((map, alert) => {
         const key = dayKey(alert.at);
         if (!map.has(key)) map.set(key, []);
@@ -141,14 +152,27 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
         return next;
     });
     const filterActive = normalizedQuery !== '' || types.size > 0 || unreadOnly;
-    // The count shows only while a search or type filter is set, so an
-    // unfiltered list gives no row to it.
-    const matchLine = filterActive ? <p className={styles.matchCount} aria-live="polite">{t('alerts.matches', { count: visible.length })}</p> : undefined;
+    // The count is announced only while a search or type filter is set. It is
+    // read to screen readers and never drawn: nothing sits between the header
+    // and the list (G95), and the filter button's dot already shows a filter is on.
+    const matchLine = <p className="sr-only" aria-live="polite" data-alert-match-count="">{filterActive ? t('alerts.matches', { count: visible.length }) : ''}</p>;
     const filterButton = (
-        <ListFilterPopover label={t('alerts.filter')} active={filterActive} size="sm">
-            <ListSearchField value={query} onChange={setQuery} placeholder={t('alerts.search')} />
+        <ListFilterMenu
+            query={query}
+            onQueryChange={setQuery}
+            searchPlaceholder={t('alerts.search')}
+            searchLabel={t('alerts.search')}
+            label={t('alerts.filter')}
+            active={types.size > 0 || unreadOnly}
+        >
             <fieldset className={styles.typeGroup}>
-                <legend className={styles.typeLegend}>{t('alerts.filterType')}</legend>
+                <legend className={styles.typeLegend}>
+                    {t('alerts.filterType')}{' '}
+                    <InfoTip
+                        label={t('alerts.filterTypeHelp')}
+                        aria={t('ui.field.about', { label: t('alerts.filterType') })}
+                    />
+                </legend>
                 <div className={styles.typeOptions}>
                     <Checkbox
                         checked={unreadOnly}
@@ -170,7 +194,7 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                     })}
                 </div>
             </fieldset>
-        </ListFilterPopover>
+        </ListFilterMenu>
     );
 
     return (
@@ -187,7 +211,8 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                 </span>
             )}
         />}>
-            <ListPage toolbar={matchLine} className={styles.page}>
+            <ListPage className={styles.page}>
+                {matchLine}
                 {visible.length === 0 ? <EmptyState title={t('alerts.empty.title')} body={t('alerts.empty.body')} /> : (
                     <div className={styles.groups}>
                         {[...groups.entries()].map(([label, rows]) => (
@@ -202,15 +227,28 @@ export function AlertsRoute({ onBack, walletId, alerts = [] }) {
                                                 <Button variant="rowAction" icon={null} className={styles.rowButton} onClick={() => openAlert(alert)} aria-label={alert.action?.label || alert.title}>
                                                     <span className={styles.rowGrid}>
                                                         <span className={`${styles.iconTile} ${TYPE_ICON_CLASS[alert.type] || ''}`}><TypeIcon /></span>
+                                                        {/* Exactly three lines, each clamped to one line with an
+                                                            ellipsis: the kind of activity (the time is beside it),
+                                                            a short detail, a short description. The rows' copy is
+                                                            written to fit (alertCopy.js); the clamp is the backstop. */}
                                                         <span className={styles.copy}>
-                                                            <span className={`${styles.typeLabel} ${TYPE_LABEL_CLASS[alert.type] || ''}`}><Highlight text={typeLabel(alert.type)} query={normalizedQuery} /></span>
-                                                            <span className={styles.title}><Highlight text={alert.title} query={normalizedQuery} /></span>
-                                                            <span className={styles.message}><Highlight text={alert.message} query={normalizedQuery} /></span>
+                                                            <span className={`${styles.typeLabel} ${TYPE_LABEL_CLASS[alert.type] || ''}`} data-alert-line="label"><Highlight text={rowLabel(alert)} query={normalizedQuery} /></span>
+                                                            <span className={styles.title} data-alert-line="title"><Highlight text={alert.title} query={normalizedQuery} /></span>
+                                                            <span className={styles.message} data-alert-line="message"><Highlight text={alert.message} query={normalizedQuery} /></span>
                                                         </span>
                                                         <span className={styles.meta}>
                                                             <time dateTime={new Date(alert.at).toISOString()}>{new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(alert.at)}</time>
                                                             {!alert.read ? <span className={styles.unreadDot} aria-label={t('alerts.unread')} /> : null}
                                                         </span>
+                                                        {/* Every row ends in the same chevron-wide slot, so the
+                                                            time and dot share one right edge. A row that opens a
+                                                            page fills it with the standard chevron (G97); a row
+                                                            that only marks itself read leaves it empty. */}
+                                                        {typeof alert.action?.onSelect === 'function' ? (
+                                                            <span className={styles.chevron} aria-hidden="true" data-alert-chevron=""><Icon.ForwardIcon /></span>
+                                                        ) : (
+                                                            <span className={styles.chevron} aria-hidden="true" data-alert-chevron-slot="" />
+                                                        )}
                                                     </span>
                                                 </Button>
                                             </li>

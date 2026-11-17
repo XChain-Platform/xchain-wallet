@@ -29,11 +29,13 @@ describe('token detail long labels', () => {
         expect(rule).toMatch(/text-overflow:\s*ellipsis/);
     });
 
-    it('allows the ManageToken name and description to wrap', () => {
+    // The token page is TokenDetail now (G12); the identity card's name that
+    // the co-signer and View Address pages borrow still wraps. Its old
+    // description class went with Manage token's identity card.
+    it('allows the borrowed identity card name to wrap', () => {
         const hero = manageCss.match(/\.approvedHeroName\s*\{[^}]*\}/s)?.[0] || '';
-        const description = manageCss.match(/\.approvedHeroDescription\s*\{[^}]*\}/s)?.[0] || '';
         expect(hero).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(description).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(manageCss).not.toMatch(/\.approvedHeroDescription\s*\{/);
     });
 
     it('lets the price facts wrap instead of cutting a value to an ellipsis', () => {

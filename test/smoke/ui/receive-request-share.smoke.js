@@ -105,12 +105,22 @@ assert.ok(webShare < copyFallback, 'Web Share precedes clipboard fallback');
 
 // --- buttons ---------------------------------------------------------
 
-// The buttons read Copy and Share so four fit one row at 360px; their
-// accessible names say what is copied and shared.
-assert.match(recvSrc, /aria-label=\{canCopyImages \? t\('receive\.copyQrCode'\) : t\('receive\.copyPaymentLink'\)\}/, 'Copy QR button');
-assert.match(recvSrc, /\{t\('common\.copy'\)\}/, 'Copy QR button shows the short Copy label');
-assert.match(recvSrc, /aria-label=\{t\('receive\.shareQrPaymentLink'\)\}/, 'Share QR button is always offered for a rendered request');
-assert.match(recvSrc, /\{t\('multisig\.signingLink\.share'\)\}/, 'Share QR button shows the short Share label');
+// Copy and Share are rows of the QR's ActionList (G101); each row's title
+// says what is copied and shared. The source may read as i18n keys or as
+// the English the keys resolve to.
+assert.match(recvSrc, /<ActionList\b/, 'the QR actions are an ActionList');
+assert.match(
+    recvSrc,
+    /title=\{canCopyImages \? (?:t\('receive\.copyQrCode'\)|"Copy QR code"|'Copy QR code') : (?:t\('receive\.copyPaymentLink'\)|"Copy payment link"|'Copy payment link')\}/,
+    'Copy QR row',
+);
+assert.match(recvSrc, /onClick=\{copyQrImage\}/, 'Copy QR row runs the QR copy');
+assert.match(
+    recvSrc,
+    /title=(?:\{t\('receive\.shareQrPaymentLink'\)\}|"Share QR payment link"|\{'Share QR payment link'\})/,
+    'Share QR row is always offered for a rendered request',
+);
+assert.match(recvSrc, /onClick=\{shareQrImage\}/, 'Share QR row runs the QR share');
 assert.doesNotMatch(
     recvSrc,
     /\{canShareFiles \? \(/,

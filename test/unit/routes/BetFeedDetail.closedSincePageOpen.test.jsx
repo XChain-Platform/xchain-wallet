@@ -85,7 +85,8 @@ async function reviewBet(messaging) {
     // Details is the default tab; the bet form shows only on the Bet tab.
     const betTab = utils.getByRole('tab', { name: /^Bet$/ });
     await domAct(async () => { fireEvent.click(betTab); await drain(); });
-    const yes = utils.getByRole('button', { name: 'Yes' });
+    // Tapping Yes opens the Place Bet step, where the stake is.
+    const yes = utils.getByRole('button', { name: /^Bet on Yes,/ });
     await domAct(async () => { yes.click(); await drain(); });
     fireEvent.change(utils.getByLabelText(/^Stake/), { target: { value: '30' } });
     const review = utils.getByRole('button', { name: /Place Bet/ });

@@ -5,6 +5,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 
@@ -55,7 +56,7 @@ describe('BetFeedsList states', () => {
         const status = screen.getByRole('combobox', { name: 'Status' });
         expect(status).toHaveValue('open');
 
-        fireEvent.change(status, { target: { value: 'all' } });
+        selectOption(status, 'all');
         expect(status).toHaveValue('all');
         expect(await screen.findByText(/Markets created on this network/)).toBeInTheDocument();
         expect(betFeeds).toHaveBeenLastCalledWith({ chainId: CHAIN, opts: { limit: 50 } });

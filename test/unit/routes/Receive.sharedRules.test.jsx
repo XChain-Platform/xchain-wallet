@@ -67,6 +67,13 @@ describe('Receive field help tips', () => {
         expect(screen.queryByRole('button', { name: 'About Address label' })).toBeNull();
     });
 
+    // Ruling 2026-11-13: every labelled field shows its '?' tip, Address and Asset included.
+    it('explains the receive address and the asset', async () => {
+        renderReceive();
+        expect(await tipText(/^About Address$/)).toMatch(/address the payer sends to/);
+        expect(await tipText(/^About Asset$/)).toMatch(/coin or token you want to be paid in/);
+    });
+
     it('explains the requested amount', async () => {
         renderReceive();
         expect(await tipText(/^About Amount/)).toMatch(/QR code and payment link/);

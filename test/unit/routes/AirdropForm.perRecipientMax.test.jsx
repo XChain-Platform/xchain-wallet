@@ -25,6 +25,7 @@ import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -246,7 +247,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         mountAirdrop({ holderCount: 4 });
         await flushTimers();
         const mode = screen.getByRole('combobox', { name: /^Airdrop to/ });
-        fireEvent.change(mode, { target: { value: 'holders' } });
+        selectOption(mode, 'holders');
         const ticks = screen.getByRole('textbox', { name: 'Tokens (one per line)' });
         fireEvent.change(ticks, { target: { value: 'S19MINT' } });
         await maxReady();
@@ -261,7 +262,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await maxReady();
         fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
-        expect(screen.getByRole('alert')).toHaveTextContent(
+        expect(screen.getByRole('alert', { name: /form errors/i })).toHaveTextContent(
             'This pays ~9,998 XCHAIN in total, more than the 4,999 XCHAIN this address holds.',
         );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -277,7 +278,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         fireEvent.change(amountField(), { target: { value } });
         fireEvent.click(submitButton());
 
-        expect(screen.getByRole('alert')).toHaveTextContent(message);
+        expect(screen.getByRole('alert', { name: /form errors/i })).toHaveTextContent(message);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -286,11 +287,12 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.change(amountField(), { target: { value: '1.001' } });
+        expect(submitButton()).toBeEnabled();
+        fireEvent.click(submitButton());
 
-        expect(screen.getByRole('alert')).toHaveTextContent(
+        expect(screen.getByRole('alert', { name: /form errors/i })).toHaveTextContent(
             'Amount can have at most 2 decimal places.',
         );
-        expect(submitButton()).toBeDisabled();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -299,21 +301,24 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.change(amountField(), { target: { value: '1.5' } });
-        expect(screen.getByRole('alert')).toHaveTextContent(
+        expect(submitButton()).toBeEnabled();
+        fireEvent.click(submitButton());
+        expect(screen.getByRole('alert', { name: /form errors/i })).toHaveTextContent(
             'Amount can have at most 0 decimal places.',
         );
-        expect(submitButton()).toBeDisabled();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(messaging.createList).not.toHaveBeenCalled();
     });
 
-    it('lets a payable amount through to the recipient review', async () => {
+    it('lets a payable amount through to the shared recipient-list confirm', async () => {
         mountAirdrop();
         await pasteRecipients();
         await maxReady();
         fireEvent.change(amountField(), { target: { value: '2499.5' } });
         fireEvent.click(submitButton());
-        await expectText(/Review Address List/);
+        await flushTimers();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-buttons')).toHaveTextContent('RejectApprove');
     });
 
     it('Back from recipient review keeps the amount and recipients', async () => {
@@ -321,7 +326,8 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '10.00' } });
         fireEvent.click(submitButton());
-        await expectText(/Review Address List/);
+        await flushTimers();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
@@ -330,19 +336,19 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
             .toHaveValue(RECIPIENTS.join('\n'));
     });
 
-    it('shows distribution and both transaction fees before the first confirm', async () => {
+    it('shows distribution and the known leg fee in the shared confirm', async () => {
         mountAirdrop();
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '10' } });
         fireEvent.click(submitButton());
 
         await flushTimers();
-        expect(screen.getByRole('form', { name: 'Review recipient list' })).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
         expect(screen.getByText('Total distribution')).toBeTruthy();
         expect(document.body.textContent).toMatch(/~20 XCHAIN/);
-        expect(screen.getByText('Estimated network fees (2 transactions)')).toBeTruthy();
-        expect(screen.getByText('Airdrop protocol fee')).toBeTruthy();
-        expect(screen.getByText(/final recipient count when the airdrop executes/)).toBeTruthy();
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent(/BTC/);
+        expect(screen.getByTestId('confirm-facts')).toHaveTextContent('Protocol fee');
+        expect(document.body.textContent).not.toMatch(/Estimate unavailable/);
     });
 
     it('shows encoder failures as plain copy without developer wording', async () => {
@@ -355,7 +361,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '10' } });
         fireEvent.click(submitButton());
-        fireEvent.click(screen.getByRole('button', { name: /Sign address list/ }));
+        fireEvent.click(screen.getByTestId('confirm-approve'));
         await flushTimers();
 
         const alert = screen.getByRole('alert');
@@ -385,7 +391,8 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
-        await expectText(/Review Address List/);
+        await flushTimers();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
     });
 });
 
@@ -421,7 +428,7 @@ describe('AirdropForm counts only the recipients the token pays', () => {
         await expectText(/4,999 XCHAIN available · up to 2,499\.5 each/);
         fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
-        expect(screen.getByRole('alert')).toHaveTextContent(
+        expect(screen.getByRole('alert', { name: /form errors/i })).toHaveTextContent(
             'Paying every listed address takes ~9,998 XCHAIN in total, more than the 4,999 XCHAIN this address holds.',
         );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -432,7 +439,8 @@ describe('AirdropForm counts only the recipients the token pays', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.click(submitButton());
-        await expectText(/Review Address List/);
+        await flushTimers();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
         expect(document.body.textContent).toContain('As the lists stand now, this airdrop pays 0.');
     });
 
@@ -441,7 +449,8 @@ describe('AirdropForm counts only the recipients the token pays', () => {
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.click(submitButton());
-        await expectText(/Review Address List/);
+        await flushTimers();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
         expect(document.body.textContent).toContain(
             'excludes 1 of these addresses, and the network pays it nothing. As the lists stand now, '
                 + 'this airdrop pays 1. The lists can change before the airdrop confirms, so Max and the '
@@ -463,7 +472,8 @@ describe('AirdropForm counts only the recipients the token pays', () => {
         fireEvent.change(amountField(), { target: { value: '1' } });
         await expectText(/total ~2 XCHAIN/);
         fireEvent.click(submitButton());
-        await expectText(/Review Address List/);
+        await flushTimers();
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
         expect(document.body.textContent).toContain(
             'It combines other lists, which this wallet cannot count. This token has an allow or block list, '
                 + 'so the network may pay fewer addresses than shown here.',

@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -150,15 +150,19 @@ describe('History keyboard operation', () => {
         fireEvent.keyDown(disclosure, { key: 'Enter' });
         fireEvent.click(disclosure);
 
+        // The network filter opens the full-screen network list from the
+        // keyboard; the arrows move between its rows and Enter picks one.
         const chainTrigger = screen.getByRole('button', { name: 'Filter by network' });
         chainTrigger.focus();
         fireEvent.keyDown(chainTrigger, { key: 'ArrowDown' });
-        const chainOptions = await screen.findAllByRole('option');
-        await waitFor(() => expect(chainOptions[0]).toHaveFocus());
+        const networkList = await screen.findByRole('dialog', { name: 'Network' });
+        const chainOptions = within(networkList).getAllByRole('button', { name: /^Select / });
+        chainOptions[0].focus();
         fireEvent.keyDown(chainOptions[0], { key: 'ArrowDown' });
         expect(chainOptions[1]).toHaveFocus();
-        fireEvent.keyDown(chainOptions[1], { key: 'Enter' });
+        // A native button turns Enter into a click.
         fireEvent.click(chainOptions[1]);
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(chainTrigger).toHaveFocus();
         await waitFor(() => {
             expect(view.container.querySelectorAll('button[data-history-row]')).toHaveLength(2);

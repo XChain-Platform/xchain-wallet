@@ -6,6 +6,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { userEvent } from '../../helpers/userEvent.js';
+import { selectOption, selectOptionDetails, selectOptionLabels } from '../../helpers/selectOption.js';
 import {
     registerLocale,
     setLocale,
@@ -40,15 +41,21 @@ const { ContactsSection } = await import(
 const { SafetySection } = await import(
     '../../../packages/core/src/shared/components/settings/SafetySection.jsx'
 );
-const { FeesSection } = await import(
-    '../../../packages/core/src/shared/components/settings/FeesSection.jsx'
-);
+// The Fees page lists networks; the harness opens a network's page like Settings.
+const { FeesHarness: FeesSection } = await import('./networkRowHarness.jsx');
 const { ToggleRow } = await import(
     '../../../packages/core/src/shared/components/settings/_settingsPrimitives.jsx'
 );
 const { WalletModeField } = await import(
     '../../../packages/core/src/shared/components/WalletModeField.jsx'
 );
+
+// Fees lists the networks; a row opens that network's own page (G117).
+function openFeesNetwork(chainId) {
+    const row = document.querySelector(`[data-network-row="${chainId}"] button`);
+    expect(row).not.toBeNull();
+    fireEvent.click(row);
+}
 
 beforeAll(() => {
     registerLocale('de-DE', {});
@@ -84,15 +91,14 @@ afterEach(async () => {
 });
 
 describe('settings form validation', () => {
-    it('uses app-close wording for auto-lock Never on desktop', () => {
+    it('uses the compact Never label for auto-lock on desktop', () => {
         shell = 'desktop';
         settings = { ...settings, autolockMinutes: 0 };
         render(<SafetySection />);
 
         const select = screen.getByLabelText('Auto-lock timeout');
-        const never = Array.from(select.options).find((option) => option.value === '0');
-        expect(never).toHaveTextContent('Never (until the app closes)');
-        expect(never.textContent).not.toMatch(/tab/i);
+        const never = selectOptionDetails(select).find((option) => option.value === '0');
+        expect(never.label).toBe('Never');
     });
 
     it('closes the fiat currency dropdown on Android Back instead of minimizing the app', () => {
@@ -195,19 +201,20 @@ describe('settings form validation', () => {
     it('offers pseudo-RTL only while developer mode is enabled', () => {
         const { rerender } = render(<LanguageRegionSection />);
 
-        expect(screen.queryByRole('option', { name: 'pseudo-rtl' })).toBeNull();
+        expect(selectOptionLabels(screen.getByLabelText('Language'))).not.toContain('pseudo-rtl');
 
         settings = { ...settings, developerMode: true };
         rerender(<LanguageRegionSection />);
 
-        expect(screen.getByRole('option', { name: 'pseudo-rtl' })).toHaveValue('pseudo-rtl');
+        expect(selectOptionDetails(screen.getByLabelText('Language')))
+            .toContainEqual(expect.objectContaining({ label: 'pseudo-rtl', value: 'pseudo-rtl' }));
     });
 
     it('applies and persists a selected language', async () => {
         settings = { ...settings, developerMode: true };
         render(<LanguageRegionSection />);
 
-        fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'pseudo-rtl' } });
+        selectOption(screen.getByLabelText('Language'), 'pseudo-rtl');
 
         await waitFor(() => expect(update).toHaveBeenCalledWith({ language: 'pseudo-rtl' }));
         expect(document.documentElement.lang).toBe('en');
@@ -295,36 +302,45 @@ describe('settings form validation', () => {
 
     it('does not turn an empty test-send threshold into zero', () => {
         render(<SafetySection />);
-        const input = screen.getByLabelText('Test-send warning threshold (sats)');
+        const input = screen.getByLabelText('Test-send threshold (USD)');
         fireEvent.change(input, { target: { value: '' } });
         fireEvent.blur(input);
 
         expect(update).not.toHaveBeenCalled();
         const error = screen.getByRole('alert');
-        expect(error).toHaveTextContent(/whole number of sats/);
+        expect(error).toHaveTextContent(/amount above zero/);
         expect(input).toHaveAttribute('aria-invalid', 'true');
         expect(input.getAttribute('aria-describedby').split(' ')).toContain(error.id);
         expect(screen.queryByRole('switch', { name: 'Auto-arm panic mode' })).toBeNull();
     });
 
-    it('saves the test-send threshold as an exact normalized integer string', () => {
+    it('saves the test-send threshold as a normalized amount in the display currency', () => {
         render(<SafetySection />);
-        const input = screen.getByLabelText('Test-send warning threshold (sats)');
-        fireEvent.change(input, { target: { value: '009007199254740993' } });
+        const input = screen.getByLabelText('Test-send threshold (USD)');
+        fireEvent.change(input, { target: { value: '001,250.50' } });
         fireEvent.blur(input);
 
         expect(update).toHaveBeenCalledWith({
-            grace: { testSendThresholdSats: '9007199254740993' },
+            grace: { testSendThresholdFiat: '1250.5' },
         });
     });
 
-    it('uses a wheel-safe integer text field and rejects exponent test-send thresholds', () => {
+    it('saves 0 as Off', () => {
         render(<SafetySection />);
-        const input = screen.getByLabelText('Test-send warning threshold (sats)');
+        const input = screen.getByLabelText('Test-send threshold (USD)');
+        fireEvent.change(input, { target: { value: '0' } });
+        fireEvent.blur(input);
+
+        expect(update).toHaveBeenCalledWith({ grace: { testSendThresholdFiat: '0' } });
+    });
+
+    it('uses a wheel-safe decimal text field and rejects exponent test-send thresholds', () => {
+        render(<SafetySection />);
+        const input = screen.getByLabelText('Test-send threshold (USD)');
         const initialValue = input.value;
 
         expect(input.type).toBe('text');
-        expect(input.inputMode).toBe('numeric');
+        expect(input.inputMode).toBe('decimal');
         expect(input).toHaveAttribute('enterkeyhint', 'done');
         expect(input).toHaveAttribute('autocomplete', 'off');
         fireEvent.wheel(input, { deltaY: -100 });
@@ -333,21 +349,21 @@ describe('settings form validation', () => {
         fireEvent.change(input, { target: { value: '1e3' } });
         fireEvent.blur(input);
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByText(/whole number of sats/)).toBeTruthy();
+        expect(screen.getByText(/amount above zero/)).toBeTruthy();
     });
 
-    it('explains the exact test-send gate and always-on recipient warnings', () => {
+    it('explains the fiat test-send gate and offers the lookalike warnings switch', () => {
         render(<SafetySection />);
 
-        const input = screen.getByLabelText('Test-send warning threshold (sats)');
         fireEvent.click(screen.getByRole('button', { name: 'About the new-recipient test-send warning' }));
-        const hint = screen.getByText(/native-coin sends above this amount/i);
-        expect(hint.textContent).toMatch(/native-coin sends above this amount/i);
+        const hint = screen.getByText(/native-coin sends worth more than this amount/i);
         expect(hint.textContent).toMatch(/outside your contacts and send history/i);
-        expect(hint.textContent).toMatch(/0 to turn this warning off/i);
-        expect(screen.getByText('Lookalike address warnings')).toBeTruthy();
-        expect(screen.getByText(/closely resembles a contact or a previous recipient/i)).toBeTruthy();
-        expect(screen.getByText('Always on')).toBeTruthy();
+        expect(hint.textContent).toMatch(/in your display currency/i);
+        expect(hint.textContent).toMatch(/with no price for a send, no suggestion is shown/i);
+        const lookalike = screen.getByRole('switch', { name: 'Lookalike address warnings' });
+        expect(lookalike.checked).toBe(true);
+        fireEvent.click(lookalike);
+        expect(update).toHaveBeenCalledWith({ grace: { lookalikeWarnings: false } });
     });
 
     it('does not offer a backup cadence that the reminder engine ignores', () => {
@@ -371,6 +387,7 @@ describe('settings form validation', () => {
             },
         };
         render(<FeesSection />);
+        openFeesNetwork('bitcoin-mainnet');
         const input = screen.getByLabelText('Bitcoin custom fee rate');
         fireEvent.change(input, { target: { value: '' } });
         fireEvent.blur(input);
@@ -398,6 +415,7 @@ describe('settings form validation', () => {
             },
         };
         render(<FeesSection />);
+        openFeesNetwork('bitcoin-mainnet');
         const input = screen.getByLabelText('Bitcoin custom fee rate');
 
         fireEvent.change(input, { target: { value } });
@@ -421,10 +439,9 @@ describe('settings form validation', () => {
         };
         update = vi.fn(() => new Promise(() => {}));
         render(<FeesSection />);
+        openFeesNetwork('bitcoin-mainnet');
 
-        fireEvent.change(screen.getByLabelText('Bitcoin fee strategy'), {
-            target: { value: 'fast' },
-        });
+        selectOption(screen.getByLabelText('Bitcoin fee strategy'), 'fast');
         fireEvent.click(screen.getByRole('switch', { name: /Bitcoin allow fee bump/ }));
 
         expect(update).toHaveBeenNthCalledWith(1, {
@@ -443,8 +460,71 @@ describe('settings form validation', () => {
         };
         render(<FeesSection />);
 
-        expect(screen.getAllByRole('group').length).toBeGreaterThan(1);
+        // The list holds a row per network and no fee controls (G117).
+        expect(document.querySelectorAll('[data-network-row]').length).toBeGreaterThan(1);
+        expect(screen.queryAllByRole('group')).toHaveLength(0);
+        expect(screen.queryAllByRole('combobox')).toHaveLength(0);
         expect(screen.queryByText('Choose the balance between confirmation speed and network cost.')).toBeNull();
+        openFeesNetwork('bitcoin-mainnet');
+        expect(screen.getAllByRole('group')).toHaveLength(1);
+        expect(screen.queryByText('Choose the balance between confirmation speed and network cost.')).toBeNull();
+    });
+
+    it('lists each network with its fee speed as the row value', () => {
+        settings = {
+            ...createDefaultSettings(),
+            fees: {
+                'bitcoin-mainnet': { strategy: 'fast', customSatsPerKb: null, rbfByDefault: true },
+                'litecoin-mainnet': { strategy: 'normal', customSatsPerKb: null, rbfByDefault: true },
+                'dogecoin-mainnet': { strategy: 'custom', customSatsPerKb: 2000000, rbfByDefault: false },
+            },
+        };
+        render(<FeesSection />);
+
+        const row = (id) => document.querySelector(`[data-network-row="${id}"]`);
+        expect(row('bitcoin-mainnet')).toHaveTextContent('Bitcoin');
+        expect(row('bitcoin-mainnet')).toHaveTextContent('Fast speed');
+        expect(row('litecoin-mainnet')).toHaveTextContent('Normal speed');
+        expect(row('dogecoin-mainnet')).toHaveTextContent('Custom rate');
+        for (const id of ['bitcoin-mainnet', 'litecoin-mainnet', 'dogecoin-mainnet']) {
+            expect(row(id).querySelector('button svg, button img, button [aria-hidden="true"]')).not.toBeNull();
+        }
+    });
+
+    it('opens a network page with its fee controls, Back returns, and a saved choice shows in the row', () => {
+        settings = {
+            ...createDefaultSettings(),
+            fees: {
+                'bitcoin-mainnet': { strategy: 'normal', customSatsPerKb: null, rbfByDefault: true },
+                'litecoin-mainnet': { strategy: 'normal', customSatsPerKb: null, rbfByDefault: true },
+            },
+        };
+        update = vi.fn(() => Promise.resolve());
+        const view = render(<FeesSection onBack={() => {}} />);
+        openFeesNetwork('litecoin-mainnet');
+
+        expect(screen.getByRole('combobox', { name: 'Litecoin fee strategy' })).toBeTruthy();
+        expect(screen.getByRole('switch', { name: /Litecoin allow fee bump/ })).toBeTruthy();
+        expect(document.querySelector('[data-network-row]')).toBeNull();
+
+        selectOption(screen.getByLabelText('Litecoin fee strategy'), 'fast');
+        expect(update).toHaveBeenCalledWith({
+            fees: { 'litecoin-mainnet': { strategy: 'fast', customSatsPerKb: null } },
+        });
+
+        // The settings hook now returns the stored record.
+        settings = {
+            ...settings,
+            fees: { ...settings.fees, 'litecoin-mainnet': { strategy: 'fast', customSatsPerKb: null, rbfByDefault: true } },
+        };
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        view.rerender(<FeesSection onBack={() => {}} />);
+
+        expect(screen.queryAllByRole('combobox')).toHaveLength(0);
+        expect(document.querySelector('[data-network-row="litecoin-mainnet"]')).toHaveTextContent('Fast speed');
+        expect(document.querySelector('[data-network-row="bitcoin-mainnet"]')).toHaveTextContent('Normal speed');
+        openFeesNetwork('litecoin-mainnet');
+        expect(screen.getByLabelText('Litecoin fee strategy')).toHaveTextContent('Fast');
     });
 
     it('does not repeat the active network kind in fee headings', () => {
@@ -478,6 +558,7 @@ describe('settings form validation', () => {
             },
         };
         render(<FeesSection />);
+        openFeesNetwork('bitcoin-mainnet');
         const input = screen.getByLabelText('Bitcoin custom fee rate');
 
         fireEvent.change(input, { target: { value: '2,75' } });
@@ -504,6 +585,7 @@ describe('settings form validation', () => {
             },
         };
         render(<FeesSection />);
+        openFeesNetwork('bitcoin-mainnet');
         const input = screen.getByLabelText('Bitcoin custom fee rate');
         const initialValue = input.value;
 
@@ -530,7 +612,7 @@ describe('settings form validation', () => {
     it('the wallet mode field reports a pick and never writes settings', () => {
         const onChange = vi.fn();
         render(<WalletModeField value="full" onChange={onChange} />);
-        fireEvent.click(screen.getByRole('radio', { name: /Watch-only/ }));
+        selectOption(screen.getByRole('combobox', { name: 'Wallet mode' }), 'watcher');
         expect(onChange).toHaveBeenCalledWith('watcher');
         expect(update).not.toHaveBeenCalled();
         expect(screen.queryByRole('dialog')).toBeNull();

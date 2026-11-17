@@ -8,21 +8,23 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useId, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { EmptyState, Icon, ListPage, PageHeader, Screen, SectionHeader, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
+import { ActionsDetailsToggle } from '../components/ActionsDetailsToggle.jsx';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 // The Copy Address action and safe market titles.
 import { copyText } from '../clipboard.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import styles from './IssueTokenForm.module.css';
-// The blue oracle card, the icon tabs and fact rows shared with the bet
-// market page, and this page's own actions row and market rows.
+// The identity card, the fact rows shared with the bet market page, and
+// this page's own market rows.
 import { OracleRecordHero } from './OracleRecordHero.jsx';
-import { feeRangeText } from './oracleRecordSeries.js';
+import { ORACLE_MARKET_STATUSES, feeRangeText, marketStatusKind, orderedMarkets } from './oracleRecordSeries.js';
 import betLocal from './BetFeedDetail.module.css';
 import local from './OracleRecord.module.css';
-import homeTabsStyles from '../components/HomeTabs.module.css';
 
 function extractRows(resp) {
     if (!resp) return [];
@@ -40,24 +42,13 @@ function unwrap(resp) {
     return null;
 }
 
-function statusLabel(status) {
-    if (status === 'open') return 'Taking bets';
-    if (status === 'closed') return 'Awaiting result';
-    if (status === 'resolved') return 'Settled';
-    if (status === 'resolved_void') return 'Void, refunded';
-    if (status === 'cancelled') return 'Cancelled, refunded';
-    if (status === 'expired') return 'Expired, refunded';
-    return status ? String(status) : 'Unknown';
-}
-
-/** One chip colour per market state. */
-function chipClass(status) {
-    if (status === 'open') return local.chipOpen;
-    if (status === 'closed') return local.chipPending;
-    if (status === 'resolved') return local.chipSettled;
-    if (status === 'expired') return local.chipExpired;
-    return local.chipRefunded;
-}
+/** Each list state's pill word, Status option and icon. */
+const STATUS_META = {
+    open: { label: 'Open', pill: local.chipOpen, Glyph: Icon.ZapIcon },
+    resolving: { label: 'Resolving', pill: local.chipPending, Glyph: Icon.ClockIcon },
+    resolved: { label: 'Resolved', pill: local.chipSettled, Glyph: Icon.CheckIcon },
+    refunded: { label: 'Refunded', pill: local.chipRefunded, Glyph: Icon.IncomingIcon },
+};
 
 function num(v) {
     const n = Number(v || 0);
@@ -75,9 +66,6 @@ function shortDate(seconds) {
     }
 }
 
-/** Newest betting close first. */
-const byDeadlineDesc = (a, b) => num(b?.deadline) - num(a?.deadline);
-
 /**
  * One betting oracle's public track record, read before you trust them with a stake.
  *
@@ -92,9 +80,12 @@ const byDeadlineDesc = (a, b) => num(b?.deadline) - num(a?.deadline);
  * it has taken the bettors' money out of play for the whole refund window and
  * decided nothing, so it gets counted separately and called what it is.
  *
- * Laid out like the bet market page: a blue card with the markets
- * resolved over time, an actions row, then icon tabs (Markets, Resolutions,
- * Disputes, About), of which only the chosen one shows.
+ * Laid out as a detail page with no chart (G16): the white identity card,
+ * then the Actions, Markets and Details toggle (G102), of which only the
+ * chosen tab shows. Actions opens first and holds the action list (G101).
+ * Markets is every loaded market of this oracle in one list with a status
+ * pill each; the header's filter icon searches and filters it by status, and
+ * shows only while Markets is chosen.
  *
  * @param {object} props
  * @param {string} props.chainId
@@ -116,10 +107,14 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
     // this wallet's addresses is the oracle (each one read, never per market).
     const [contactName, setContactName] = useState(/** @type {string | null} */ (null));
     const [isOwnOracle, setIsOwnOracle] = useState(false);
-    const [tab, setTab] = useState('markets');
+    // Actions opens first (G102). The page owns the chosen tab so the header
+    // filter can show on Markets alone and Place bet can move to Markets.
+    const [view, setView] = useState('actions');
+    // The Markets filter lives here, not in the panel, so it outlives a tab switch.
+    const [query, setQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
     const [copied, setCopied] = useState(/** @type {'idle' | 'copied' | 'failed'} */ ('idle'));
-    const tabsId = useId();
-    const openGroupRef = useRef(/** @type {HTMLElement | null} */ (null));
+    const listRef = useRef(/** @type {HTMLElement | null} */ (null));
     const copyTimerRef = useRef(/** @type {any} */ (null));
 
     useEffect(() => {
@@ -138,9 +133,9 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
         return () => { cancelled = true; };
     }, [chainId, address, messaging]);
 
-    // Their markets load separately and are allowed to fail on their own: the
-    // record is the point of the page, and a listing error must not blank it.
-    // This one page of markets also feeds the card's chart.
+    // Their markets load separately, in one read, and are allowed to fail on
+    // their own: the record is the point of the page, and a listing error
+    // must not blank it. Search and the Status filter work over this one page.
     useEffect(() => {
         let cancelled = false;
         setMarkets(null);
@@ -157,7 +152,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
     }, [chainId, address, messaging]);
 
     // The card's title is the contact name saved for this address,
-    // when there is one; otherwise its short address.
+    // when there is one; otherwise its address.
     useEffect(() => {
         let cancelled = false;
         setContactName(null);
@@ -193,7 +188,55 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
 
     useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
-    const header = <PageHeader onBack={onBack} title="Oracle Record" />;
+    const rows = useMemo(() => orderedMarkets(markets || []), [markets]);
+    const statusCounts = useMemo(() => {
+        const counts = { all: rows.length, open: 0, resolving: 0, resolved: 0, refunded: 0 };
+        for (const m of rows) {
+            const kind = marketStatusKind(m?.feed_status);
+            if (kind) counts[kind] += 1;
+        }
+        return counts;
+    }, [rows]);
+    const visibleRows = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        return rows.filter((m) => {
+            if (statusFilter !== 'all' && marketStatusKind(m?.feed_status) !== statusFilter) return false;
+            if (!q) return true;
+            return [m?.label, String(m?.action_index ?? ''), m?.tick]
+                .some((v) => typeof v === 'string' && v.toLowerCase().includes(q));
+        });
+    }, [rows, query, statusFilter]);
+
+    // The header filter (search, then Status) shows only on the Markets tab;
+    // the other tabs have nothing for it to narrow.
+    const filterMenu = view === 'markets' && record && !error ? (
+        <ListFilterMenu
+            query={query}
+            onQueryChange={setQuery}
+            active={statusFilter !== 'all'}
+            label="Filter markets"
+            searchPlaceholder="Search"
+            searchLabel="Search markets"
+        >
+            {/* The themed dropdown with an icon per option, never radios (G119). */}
+            <Select
+                label="Status"
+                size="md"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+            >
+                <Select.Option value="all" icon={<Icon.ListIcon />}>{`All statuses (${statusCounts.all})`}</Select.Option>
+                {ORACLE_MARKET_STATUSES.map((kind) => {
+                    const { label, Glyph } = STATUS_META[kind];
+                    return (
+                        <Select.Option key={kind} value={kind} icon={<Glyph />}>{`${label} (${statusCounts[kind]})`}</Select.Option>
+                    );
+                })}
+            </Select>
+        </ListFilterMenu>
+    ) : null;
+
+    const header = <PageHeader onBack={onBack} title="Oracle Record" trailing={filterMenu} />;
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
             <ListPage>{children}</ListPage>
@@ -219,11 +262,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
     const active = num(record.active_feeds);
     const fees = Array.isArray(record.fees_earned) ? record.fees_earned : [];
 
-    const rows = markets || [];
-    const openRows = rows.filter((m) => m.feed_status === 'open').sort(byDeadlineDesc).reverse();
-    const pendingRows = rows.filter((m) => m.feed_status === 'closed').sort(byDeadlineDesc).reverse();
-    const resolvedRows = rows.filter((m) => m.feed_status === 'resolved' || m.feed_status === 'resolved_void').sort(byDeadlineDesc);
-    const refundedRows = rows.filter((m) => m.feed_status === 'cancelled' || m.feed_status === 'expired').sort(byDeadlineDesc);
+    const openRows = rows.filter((m) => m.feed_status === 'open');
     const partial = markets !== null && !marketsError && rows.length < total;
     const feeText = markets ? feeRangeText(rows) : null;
 
@@ -238,18 +277,22 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
         </div>
     );
 
-    // One market per row; the whole row opens the market.
-    const marketItem = (m, { dateLabel } = {}) => {
-        const date = dateLabel ? shortDate(m.deadline) : null;
+    // One market per row with its status pill; the whole row opens the market.
+    const marketItem = (m) => {
+        const kind = marketStatusKind(m.feed_status);
+        const meta = kind ? STATUS_META[kind] : null;
+        const date = shortDate(m.deadline);
         const body = (
             <>
                 <span className={local.marketTitle}>
                     {neutralizeControlText(m.label, { maxLength: 250 }) || '(untitled market)'}
                 </span>
                 <span className={local.marketMeta}>
-                    <span className={`${local.chip} ${chipClass(m.feed_status)}`}>{statusLabel(m.feed_status)}</span>
+                    <span className={`${local.chip} ${meta ? meta.pill : local.chipRefunded}`} data-market-status={kind || 'unknown'}>
+                        {meta ? meta.label : (m.feed_status ? String(m.feed_status) : 'Unknown')}
+                    </span>
                     <span>#{String(m.action_index)} · {m.tick || 'n/a'}</span>
-                    {date ? <span>{dateLabel} {date}</span> : null}
+                    {date ? <span>{kind === 'open' ? 'Closes' : 'Closed'} {date}</span> : null}
                 </span>
             </>
         );
@@ -266,16 +309,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
         );
     };
 
-    // A group heading inside a tab (icon, name, count), the list's
-    // loading, error and empty states, and the one-page note, shared by the
-    // Markets, Resolutions and Disputes tabs.
-    const groupHead = (IconGlyph, text, ref) => (
-        <h3 className={local.groupHead} ref={ref} tabIndex={ref ? -1 : undefined}>
-            <span className={local.groupIcon} aria-hidden="true"><IconGlyph /></span>
-            {text}
-        </h3>
-    );
-
+    // The list's loading, error and empty states.
     const listState = () => {
         if (marketsError) {
             return (
@@ -290,87 +324,24 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
         }
         return null;
     };
-    const partialNote = partial ? (
-        <p className={styles.hint}>Showing the latest {rows.length} of this address&apos;s {total} markets.</p>
-    ) : null;
 
-    // Markets holds the markets still live (taking bets, then
-    // awaiting the oracle's result).
-    const marketsPanel = (
+    // Markets: every loaded market in one list, narrowed by the header filter.
+    const marketsPanel = listState() || (
         <>
-            {listState()}
-            {markets && markets.length > 0 && openRows.length === 0 && pendingRows.length === 0 ? (
-                <EmptyState
-                    title="No markets running"
-                    body="None of this address's markets is taking bets or awaiting a result; its finished markets are under Resolutions and Disputes."
-                    titleAs="p"
-                />
+            {visibleRows.length === 0 ? (
+                <EmptyState title="No matching markets" body="Change the search or the Status filter to see more." titleAs="p" />
+            ) : (
+                <ul className={local.marketList} aria-label="Oracle markets" ref={listRef}>
+                    {visibleRows.map((m) => marketItem(m))}
+                </ul>
+            )}
+            {partial ? (
+                <p className={styles.hint}>Showing the latest {rows.length} of this address&apos;s {total} markets.</p>
             ) : null}
-            {openRows.length > 0 ? (
-                <>
-                    {groupHead(Icon.ZapIcon, `Taking Bets (${openRows.length})`, openGroupRef)}
-                    <ul className={local.marketList}>{openRows.map((m) => marketItem(m, { dateLabel: 'Closes' }))}</ul>
-                </>
-            ) : null}
-            {pendingRows.length > 0 ? (
-                <>
-                    {groupHead(Icon.ClockIcon, `Awaiting Result (${pendingRows.length})`)}
-                    <ul className={local.marketList}>{pendingRows.map((m) => marketItem(m, { dateLabel: 'Closed' }))}</ul>
-                </>
-            ) : null}
-            {partialNote}
         </>
     );
 
-    // Resolutions holds the settled counts and the settled markets.
-    const resolutionsPanel = (
-        <>
-            <dl className={betLocal.facts}>
-                {factRow('Settled with a result', settled)}
-                {factRow('Settled with nobody on the winning side', voided, 'Everyone refunded')}
-            </dl>
-            {listState()}
-            {markets && markets.length > 0 && resolvedRows.length === 0 ? (
-                <EmptyState title="No settled markets loaded" body="Markets this address settles appear here." titleAs="p" />
-            ) : null}
-            {resolvedRows.length > 0 ? (
-                <>
-                    {groupHead(Icon.CheckIcon, `Recent Resolutions (${resolvedRows.length})`)}
-                    <ul className={local.marketList}>{resolvedRows.map((m) => marketItem(m, { dateLabel: 'Betting closed' }))}</ul>
-                </>
-            ) : null}
-            {partialNote}
-        </>
-    );
-
-    // Disputes says there is no dispute process (so no dispute
-    // figure exists) and holds the cancelled and expired counts and markets.
-    const disputesPanel = (
-        <>
-            <div role="note" className={local.note}>
-                <strong>Betting markets have no dispute process.</strong>
-                <p>
-                    Who wins is the oracle&apos;s call and nobody can overrule it. What you can check
-                    is how often this address walked away from a market instead of settling it.
-                </p>
-            </div>
-            <dl className={betLocal.facts}>
-                {factRow('Cancelled by the oracle', cancelled, 'Everyone refunded')}
-                {/* The failure mode a bettor most needs to see, so it is named
-                    plainly and never averaged into a success rate. */}
-                {factRow('Left to expire with no result', expired, 'Everyone refunded')}
-            </dl>
-            {refundedRows.length > 0 ? (
-                <>
-                    {groupHead(Icon.XIcon, `Cancelled or Expired (${refundedRows.length})`)}
-                    <ul className={local.marketList}>{refundedRows.map((m) => marketItem(m, { dateLabel: 'Betting closed' }))}</ul>
-                </>
-            ) : null}
-            {partialNote}
-        </>
-    );
-
-    // About holds the address, the opened and running counts, the
+    // Details holds the address, every count (expired on its own line), the
     // fee, the fees earned and the not-a-guarantee caveat.
     const firstMarket = (() => {
         let first = Infinity;
@@ -381,13 +352,19 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
         return Number.isFinite(first) ? shortDate(first) : null;
     })();
 
-    const aboutPanel = (
+    const detailsPanel = (
         <>
             <dl className={betLocal.facts}>
                 {factRow('Oracle address', <span className={betLocal.factAddress}>{address}</span>)}
                 {factRow('Markets opened', total)}
                 {factRow('Still running', active)}
                 {pending > 0 ? factRow('Awaiting its result', pending) : null}
+                {factRow('Settled with a result', settled)}
+                {factRow('Settled with nobody on the winning side', voided, 'Everyone refunded')}
+                {factRow('Cancelled by the oracle', cancelled, 'Everyone refunded')}
+                {/* The failure mode a bettor most needs to see, so it is named
+                    plainly and never averaged into a success rate. */}
+                {factRow('Left to expire with no result', expired, 'Everyone refunded')}
                 {firstMarket ? factRow(partial ? 'Oldest loaded market' : 'First market', firstMarket) : null}
                 {feeText ? factRow('Oracle fee', `${feeText} of the pot`) : null}
             </dl>
@@ -430,17 +407,19 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
         </>
     );
 
-    // The actions row. Place Bet opens the one market taking bets, or
-    // shows the Taking Bets group when there are several; Copy Address stands
-    // in for Report (the app has no report or follow feature); Resolve shows
-    // only to the oracle itself.
+    // The action list (G101), the Actions tab's panel. Place bet opens the
+    // one market taking bets, or shows Markets narrowed to the open ones when
+    // there are several; Copy address stands in for Report (the app has no
+    // report or follow feature); Resolve shows only to the oracle itself.
     const onPlaceBet = () => {
         if (openRows.length === 1 && onOpenMarket) {
             onOpenMarket(chainId, openRows[0].action_index);
             return;
         }
-        setTab('markets');
-        setTimeout(() => openGroupRef.current?.focus(), 0);
+        setQuery('');
+        setStatusFilter('open');
+        setView('markets');
+        setTimeout(() => listRef.current?.querySelector('button')?.focus(), 0);
     };
     const onCopy = async () => {
         const { ok } = await copyText(address);
@@ -448,67 +427,48 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
         clearTimeout(copyTimerRef.current);
         copyTimerRef.current = setTimeout(() => setCopied('idle'), 1500);
     };
-    const actions = (
-        <div className={local.actions}>
+    const actionsPanel = (
+        <ActionList label="Oracle actions">
             {openRows.length > 0 && onOpenMarket ? (
-                <Button variant="primary" className={local.action} icon={<Icon.ZapIcon />} onClick={onPlaceBet}>Place Bet</Button>
+                <ActionListItem
+                    icon={<Icon.ZapIcon />}
+                    title="Place bet"
+                    description={openRows.length === 1
+                        ? 'Open the market taking bets'
+                        : `Choose one of ${openRows.length} markets taking bets`}
+                    onClick={onPlaceBet}
+                />
             ) : null}
-            <Button
-                variant="secondary"
-                className={local.action}
+            <ActionListItem
                 icon={copied === 'copied' ? <Icon.CheckIcon /> : <Icon.CopyIcon />}
+                title={copied === 'copied' ? 'Copied' : copied === 'failed' ? 'Copy failed' : 'Copy address'}
+                description="Copy this oracle's address"
                 onClick={onCopy}
-            >
-                {copied === 'copied' ? 'Copied' : copied === 'failed' ? 'Copy Failed' : 'Copy Address'}
-            </Button>
+                chevron={false}
+            />
             {isOwnOracle && pending > 0 ? (
-                <Button variant="secondary" className={local.action} icon={<Icon.CheckIcon />} onClick={onResolvePending}>
-                    Resolve ({pending})
-                </Button>
+                <ActionListItem
+                    icon={<Icon.CheckIcon />}
+                    title={`Resolve (${pending})`}
+                    description={`Post the result of ${pending === 1 ? 'the market' : `${pending} markets`} awaiting it`}
+                    onClick={onResolvePending}
+                />
             ) : null}
-        </div>
+        </ActionList>
     );
 
-    // The four icon tabs, as on the bet market page; Markets opens
-    // first and only the chosen tab's panel renders.
-    const tabLabel = (IconGlyph, text) => (
-        <span className={homeTabsStyles.tabWithIcon}>
-            <span className={homeTabsStyles.tabIcon} aria-hidden="true"><IconGlyph /></span>
-            {text}
-        </span>
-    );
-    const tabItems = [
-        { id: 'markets', label: tabLabel(Icon.MarketIcon, 'Markets') },
-        { id: 'resolutions', label: tabLabel(Icon.CheckIcon, 'Resolutions') },
-        { id: 'disputes', label: tabLabel(Icon.ThumbsDownIcon, 'Disputes') },
-        { id: 'about', label: tabLabel(Icon.InfoIcon, 'About') },
-    ];
-
-    // The blue card, the actions row, then the tabs above their panel.
+    // The identity card, then the toggle above its one chosen panel.
     return wrap(
         <>
-            <OracleRecordHero address={address} name={contactName} record={record} markets={marketsError ? [] : markets} />
-            {actions}
-            <Tabs
-                id={tabsId}
-                items={tabItems}
-                value={tab}
-                onChange={setTab}
-                panelId={`${tabsId}-panel`}
-                aria-label="Oracle sections"
-                className={betLocal.sectionTabs}
+            <OracleRecordHero chainId={chainId} address={address} name={contactName} record={record} markets={marketsError ? [] : markets} />
+            <ActionsDetailsToggle
+                label="Oracle sections"
+                view={view}
+                onViewChange={setView}
+                actions={actionsPanel}
+                extra={{ id: 'markets', label: 'Markets', icon: <Icon.MarketIcon />, panel: marketsPanel }}
+                details={detailsPanel}
             />
-            <div
-                id={`${tabsId}-panel`}
-                role="tabpanel"
-                aria-labelledby={`${tabsId}-tab-${tab}`}
-                className={betLocal.panel}
-            >
-                {tab === 'markets' ? marketsPanel : null}
-                {tab === 'resolutions' ? resolutionsPanel : null}
-                {tab === 'disputes' ? disputesPanel : null}
-                {tab === 'about' ? aboutPanel : null}
-            </div>
         </>,
     );
 }

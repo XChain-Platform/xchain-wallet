@@ -10,6 +10,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { BatchComposerForm } from '../../../packages/core/src/shared/routes/BatchComposerForm.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const FROM = {
@@ -56,23 +57,25 @@ describe('BatchComposerForm rows', () => {
         const quoteProtocolFee = vi.fn().mockResolvedValue({ xchainFee: '0.064', requiredFeeSats: 197 });
         mount({ quoteProtocolFee });
 
-        // The From section labels the field "From address".
-        expect(await screen.findByLabelText('From address')).toBeInTheDocument();
-        expect(screen.getByText('The address that signs and pays for the whole batch.')).toBeInTheDocument();
+        // No page-level From section: the transaction's own From row names
+        // its address (layout 1).
+        const fromRow = await screen.findByRole('button', { name: 'Change the network and From address of transaction 1' });
+        expect(within(fromRow).getByLabelText(FROM.address)).toBeInTheDocument();
+        expect(screen.queryByLabelText('From address')).toBeNull();
         expect(screen.getByText('One sub-action included in this single BATCH transaction.')).toBeInTheDocument();
         expect(screen.getByText("This action's fields, entered as a JSON object.")).toBeInTheDocument();
         expect(screen.getByText('Protocol fee')).toBeInTheDocument();
         expect(screen.queryByRole('switch', { name: /Pay protocol fee in/, hidden: true })).toBeNull();
 
         const batch = screen.getByRole('button', { name: 'Review 1 Transaction' });
-        const add = screen.getByRole('button', { name: 'Add to This Transaction' });
+        // Add action is a plain row with a bare icon, never a button inside a row.
+        const add = screen.getByRole('button', { name: /^Add action/ });
         expect(batch.className).toMatch(/success/);
         expect(batch.querySelector('[data-xc-icon]')).toBeTruthy();
-        expect(add.querySelector('[data-xc-icon]')).toBeTruthy();
+        expect(add.querySelector('svg')).toBeTruthy();
+        expect(add.className).not.toMatch(/danger|secondary/);
 
-        fireEvent.change(screen.getByRole('combobox', { name: 'Action' }), {
-            target: { value: 'BROADCAST' },
-        });
+        selectOption(screen.getByRole('combobox', { name: 'Action' }), 'BROADCAST');
         await waitFor(() => expect(quoteProtocolFee).toHaveBeenCalledWith({
             chainId: CHAIN,
             source: FROM.address,
@@ -105,16 +108,20 @@ describe('BatchComposerForm rows', () => {
 
     it('adds and removes stable action rows without allowing the last row to disappear', async () => {
         mount();
-        const add = await screen.findByRole('button', { name: 'Add to This Transaction' });
-        fireEvent.click(add);
+        // One transaction with one action offers nothing to remove.
+        await screen.findByRole('region', { name: 'Action 1' });
+        expect(screen.queryByRole('button', { name: /^Remove action/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Remove transaction/ })).toBeNull();
 
+        fireEvent.click(screen.getByRole('button', { name: /^Add action/ }));
         expect(screen.getAllByRole('region', { name: /Action \d/ })).toHaveLength(2);
-        const remove = screen.getAllByRole('button', { name: 'Remove' });
-        expect(remove[0]).not.toBeDisabled();
-        expect(remove[1]).not.toBeDisabled();
+        // Each open action carries its own Remove action row.
+        const remove = screen.getAllByRole('button', { name: /^Remove action/ });
+        expect(remove).toHaveLength(2);
+        expect(within(screen.getByRole('region', { name: 'Action 2' })).getByRole('button', { name: /^Remove action/ })).toBe(remove[1]);
         fireEvent.click(remove[1]);
         expect(screen.getAllByRole('region', { name: /Action \d/ })).toHaveLength(1);
-        expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled();
+        expect(screen.queryByRole('button', { name: /^Remove action/ })).toBeNull();
     });
 
     it('stops offering Add action once the batch holds the maximum number of actions', async () => {
@@ -122,7 +129,7 @@ describe('BatchComposerForm rows', () => {
         expect(typeof flows.BATCH_MAX_COMMANDS).toBe('number');
 
         mount();
-        const add = await screen.findByRole('button', { name: 'Add to This Transaction' });
+        const add = await screen.findByRole('button', { name: /^Add action/ });
         for (let i = 1; i < flows.BATCH_MAX_COMMANDS; i += 1) fireEvent.click(add);
 
         expect(screen.getAllByRole('region', { name: /Action \d/ })).toHaveLength(flows.BATCH_MAX_COMMANDS);
@@ -137,10 +144,11 @@ describe('BatchComposerForm rows', () => {
         expect(review).not.toBeDisabled();
 
         fireEvent.click(review);
-        expect(screen.getByText('Step 1: pick an action.')).toBeInTheDocument();
-        expect(review).toBeDisabled();
+        expect(within(screen.getByLabelText('Form errors')).getByText('Step 1: pick an action.')).toBeInTheDocument();
+        expect(review).not.toBeDisabled();
+        expect(screen.getByRole('combobox', { name: 'Action' })).toHaveAttribute('aria-invalid', 'true');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add to This Transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Add action/ }));
         const rows = screen.getAllByRole('region', { name: /Action \d/ });
         expect(within(rows[1]).queryByText(/pick an action/)).toBeNull();
         fireEvent.change(within(rows[1]).getByRole('textbox', { name: 'Params (JSON object)' }), {
@@ -151,13 +159,13 @@ describe('BatchComposerForm rows', () => {
 
     it('shows validation beside the affected row and retracts it when the field is fixed', async () => {
         mount();
-        fireEvent.click(await screen.findByRole('button', { name: 'Add to This Transaction' }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Add action/ }));
         const rows = screen.getAllByRole('region', { name: /Action \d/ });
         const second = within(rows[1]);
 
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
         expect(second.getByText('Step 2: pick an action.')).toBeInTheDocument();
-        fireEvent.change(second.getByRole('combobox', { name: 'Action' }), { target: { value: 'SEND' } });
+        selectOption(second.getByRole('combobox', { name: 'Action' }), 'SEND');
         expect(second.queryByText('Step 2: pick an action.')).toBeNull();
 
         fireEvent.change(second.getByRole('textbox', { name: 'Params (JSON object)' }), { target: { value: '{' } });
@@ -168,26 +176,50 @@ describe('BatchComposerForm rows', () => {
         expect(second.queryByText(/Step 2:/)).toBeNull();
     });
 
-    it('reviews every queued action and displays one batch network-fee selector', async () => {
+    it('reviews every queued action and reads the batch fees back without a second picker', async () => {
         const messaging = mount();
         const firstAction = await screen.findByRole('combobox', { name: 'Action' });
-        fireEvent.change(firstAction, { target: { value: 'SEND' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Add to This Transaction' }));
+        selectOption(firstAction, 'SEND');
+        fireEvent.click(screen.getByRole('button', { name: /^Add action/ }));
         const actions = screen.getAllByRole('combobox', { name: 'Action' });
-        fireEvent.change(actions[1], { target: { value: 'BROADCAST' } });
+        selectOption(actions[1], 'BROADCAST');
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
 
         await waitFor(() => expect(messaging.buildBatchCommand).toHaveBeenCalledTimes(1));
         expect(await screen.findByText('SEND|0|PEPE|1|alice')).toBeInTheDocument();
         expect(screen.getByText('BROADCAST|0|1|hello')).toBeInTheDocument();
-        expect(screen.getAllByRole('slider')).toHaveLength(1);
-        expect(screen.getAllByText('Network fee')).toHaveLength(2);
+        // The speed and any custom fee are picked only in the compose form's
+        // Speed and Fees section (G113); the review reads the fees back with
+        // their Total and draws no slider or fee input of its own.
+        expect(screen.queryAllByRole('slider')).toHaveLength(0);
+        expect(screen.queryByRole('textbox', { name: /Network fee amount|Custom fee rate/ })).toBeNull();
+        expect(document.querySelector('[data-fees-row="network"]')).toHaveTextContent('Network fee');
+        expect(document.querySelector('[data-fees-row="total"]')).toBeInTheDocument();
+    });
+
+    it('answers a missing signing password without disabling Sign Batch', async () => {
+        const advancedAction = vi.fn();
+        const messaging = mount({
+            signerReady: vi.fn().mockResolvedValue({ ready: false }),
+            advancedAction,
+        });
+        selectOption(await screen.findByRole('combobox', { name: 'Action' }), 'BROADCAST');
+        fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
+
+        const sign = await screen.findByRole('button', { name: 'Sign Batch' });
+        expect(sign).not.toBeDisabled();
+        fireEvent.click(sign);
+
+        expect(await within(screen.getByLabelText('Form errors')).findByText('Enter your password to sign this batch.')).toBeInTheDocument();
+        expect(screen.getByLabelText('Password')).toHaveAttribute('aria-invalid', 'true');
+        expect(advancedAction).not.toHaveBeenCalled();
+        expect(messaging.buildActionPsbtRequest).toBeUndefined();
     });
 
     it('returns from review without resubmitting and preserves the batch rows', async () => {
         mount();
         const action = await screen.findByRole('combobox', { name: 'Action' });
-        fireEvent.change(action, { target: { value: 'SEND' } });
+        selectOption(action, 'SEND');
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
 
         expect(await screen.findByText('SEND|0|PEPE|1|alice')).toBeInTheDocument();
@@ -209,10 +241,10 @@ describe('BatchComposerForm rows', () => {
         const messaging = mount({
             validateAction: vi.fn().mockResolvedValue({ valid: false, errors: [{ message }] }),
         });
-        fireEvent.change(await screen.findByRole('combobox', { name: 'Action' }), { target: { value: 'BROADCAST' } });
+        selectOption(await screen.findByRole('combobox', { name: 'Action' }), 'BROADCAST');
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
 
-        expect(await screen.findByText(`Step 1: ${message}`)).toBeInTheDocument();
+        expect(within(await screen.findByLabelText('Form errors')).getByText(`Step 1: ${message}`)).toBeInTheDocument();
         expect(screen.getByRole('region', { name: 'Action 1' })).toBeInTheDocument();
         expect(messaging.buildBatchCommand).not.toHaveBeenCalled();
     });
@@ -227,10 +259,10 @@ describe('BatchComposerForm rows', () => {
                 ],
             }),
         });
-        fireEvent.change(await screen.findByRole('combobox', { name: 'Action' }), { target: { value: 'BROADCAST' } });
+        selectOption(await screen.findByRole('combobox', { name: 'Action' }), 'BROADCAST');
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
 
-        const error = await screen.findByText(/Step 1: Amount must be greater than zero/);
+        const error = within(await screen.findByLabelText('Form errors')).getByText(/Step 1: Amount must be greater than zero/);
         expect(error).toHaveTextContent('DESTINATION: enter a valid value.');
         expect(error.textContent).not.toMatch(/BAD_ADDRESS|\{.*\}/);
     });
@@ -247,13 +279,13 @@ describe('BatchComposerForm rows', () => {
             }),
         });
         const first = await screen.findByRole('region', { name: 'Action 1' });
-        fireEvent.change(within(first).getByRole('combobox', { name: 'Action' }), { target: { value: 'SEND' } });
+        selectOption(within(first).getByRole('combobox', { name: 'Action' }), 'SEND');
         fireEvent.change(within(first).getByRole('textbox', { name: 'Params (JSON object)' }), {
             target: { value: '{"VERSION":"0","TICK":"PEPE","AMOUNT":"6.25","DESTINATION":"alice"}' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Add to This Transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Add action/ }));
         const second = screen.getAllByRole('region', { name: /Action \d/ })[1];
-        fireEvent.change(within(second).getByRole('combobox', { name: 'Action' }), { target: { value: 'SEND' } });
+        selectOption(within(second).getByRole('combobox', { name: 'Action' }), 'SEND');
         fireEvent.change(within(second).getByRole('textbox', { name: 'Params (JSON object)' }), {
             target: { value: '{"VERSION":"0","TICK":"PEPE","AMOUNT":"4","DESTINATION":"bob"}' },
         });
@@ -290,7 +322,7 @@ describe('BatchComposerForm rows', () => {
                 <BatchComposerForm walletId="wallet-1" onBack={onBack} />
             </MessagingProvider>,
         );
-        fireEvent.change(await screen.findByRole('combobox', { name: 'Action' }), { target: { value: 'BROADCAST' } });
+        selectOption(await screen.findByRole('combobox', { name: 'Action' }), 'BROADCAST');
         const params = screen.getByRole('textbox', { name: 'Params (JSON object)' });
         fireEvent.change(params, { target: { value: '{"VERSION":"0","VALUE":"kept"}' } });
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
@@ -305,13 +337,13 @@ describe('BatchComposerForm rows', () => {
 
     it('refuses review when fresh balances cannot be loaded', async () => {
         const messaging = mount({ getAddressBalances: vi.fn().mockRejectedValue(new Error('offline')) });
-        fireEvent.change(await screen.findByRole('combobox', { name: 'Action' }), { target: { value: 'SEND' } });
+        selectOption(await screen.findByRole('combobox', { name: 'Action' }), 'SEND');
         fireEvent.change(screen.getByRole('textbox', { name: 'Params (JSON object)' }), {
             target: { value: '{"VERSION":"0","TICK":"PEPE","AMOUNT":"1","DESTINATION":"alice"}' },
         });
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
 
-        expect(await screen.findByText(/Couldn't refresh this address's balances/)).toBeInTheDocument();
+        expect(within(await screen.findByLabelText('Form errors')).getByText(/Couldn't refresh this address's balances/)).toBeInTheDocument();
         expect(messaging.buildBatchCommand).not.toHaveBeenCalled();
     });
 
@@ -320,13 +352,13 @@ describe('BatchComposerForm rows', () => {
             .mockResolvedValueOnce({ valid: true, errors: [] })
             .mockResolvedValueOnce({ valid: false, errors: ['Quote expired. Refresh it and try again.'] });
         const messaging = mount({ validateAction });
-        fireEvent.change(await screen.findByRole('combobox', { name: 'Action' }), { target: { value: 'BROADCAST' } });
+        selectOption(await screen.findByRole('combobox', { name: 'Action' }), 'BROADCAST');
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
         await screen.findByText('BROADCAST|0|1|hello');
         fireEvent.click(screen.getAllByRole('button', { name: 'Back' })[0]);
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
 
-        expect(await screen.findByText('Step 1: Quote expired. Refresh it and try again.')).toBeInTheDocument();
+        expect(within(await screen.findByLabelText('Form errors')).getByText('Step 1: Quote expired. Refresh it and try again.')).toBeInTheDocument();
         expect(validateAction).toHaveBeenCalledTimes(2);
         expect(messaging.buildBatchCommand).toHaveBeenCalledTimes(1);
     });
@@ -336,10 +368,10 @@ describe('BatchComposerForm rows', () => {
             .mockRejectedValueOnce(new Error('sdk.validateAction: RPC 503'))
             .mockResolvedValueOnce({ valid: true, errors: [] });
         const messaging = mount({ validateAction });
-        fireEvent.change(await screen.findByRole('combobox', { name: 'Action' }), { target: { value: 'BROADCAST' } });
+        selectOption(await screen.findByRole('combobox', { name: 'Action' }), 'BROADCAST');
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
 
-        expect(await screen.findByText(/Couldn't validate every action/)).toBeInTheDocument();
+        expect(within(await screen.findByLabelText('Form errors')).getByText(/Couldn't validate every action/)).toBeInTheDocument();
         expect(document.body.textContent).not.toMatch(/sdk\.validateAction|RPC 503/);
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
         expect(await screen.findByText('BROADCAST|0|1|hello')).toBeInTheDocument();

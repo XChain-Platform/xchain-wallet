@@ -102,8 +102,8 @@ test.describe('Wallet mode', () => {
                 await page.getByRole('button', { name: `Wallet details for ${walletName}` }).click();
                 await expect(page.getByRole('main').locator('dl'),
                     'Wallet Details does not show the mode the wallet was created with, so it was never persisted')
-                    .toContainText('Wallet modeAir-gapped signer', { timeout: 30_000 });
-                await expect(page.getByRole('radio', { name: /^Air-gapped signer/ }),
+                    .toContainText('Wallet modeSigner for another phone', { timeout: 30_000 });
+                await expect(page.getByRole('radio', { name: /^Signer for another phone/ }),
                     'Wallet Details offers a mode switch, but a wallet\'s mode is final once chosen')
                     .toHaveCount(0);
             });

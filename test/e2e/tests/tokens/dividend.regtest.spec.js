@@ -200,7 +200,7 @@ test.describe('DIVIDEND on regtest', () => {
             await main.getByRole('button', { name: 'Pay Dividend', exact: true }).click();
 
             await expectConfirmModal(issuer, 'the DIVIDEND');
-            await expect(issuer.getByTestId('action-intent'))
+            await expect(issuer.getByTestId('confirm-sentence'))
                 .toContainText(`Pay ${RATE} XCHAIN per unit of ${HOLDER_TICK}`);
             dividendTxid = await approveAndReadTxid(issuer, 'the DIVIDEND');
             await expect(main).toContainText('Dividend sent');

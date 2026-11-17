@@ -14,9 +14,10 @@
 //   1. ContractDetail.jsx exists and is a single-component named export.
 //   2. Loads contract / deploy action / state / balances / executions +
 //      addresses for ownership in parallel via messaging helpers.
-//   3. Renders the spec-mandated header block (Owner / Deployed /
-//      Gas limit / Status / Code hash) + State (expandable) + Balances
-//      + Execution history (paginated) + action buttons.
+//   3. Renders the spec-mandated facts (Owner / Published / Gas limit /
+//      Status / Holdings) on Details, the code hash and State on their own
+//      pages, the execution history (paginated) on Activity, and the
+//      action rows.
 //   4. Action buttons disable when their optional on* props are omitted
 //      Step 3 ships with read-only surface; Steps 5+6 wire signing.
 //   5. Core flows guard inputs + call the right SDK method, re-exported
@@ -70,16 +71,21 @@ for (const fn of [
 
 // --- 3. Spec-mandated sections ---------------------------------------
 
+// Layout 3 (screen walk 2026-11-14): the facts sit on the Details tab, with
+// the code hash on the View code page and the State table on its own page;
+// the execution history is the Activity tab.
 for (const label of [
-    'Owner:',
-    'Published:',
-    'Gas limit:',
-    'Status:',
-    'Code hash:',
-    'title="State"',
-    'Expand',
-    'title="Holdings"',
-    'title="Execution history"',
+    "'Owner'",
+    "['Published'",
+    "['Gas limit'",
+    "['Status'",
+    "['Holdings'",
+    "factRow('Code hash'",
+    'title="View code"',
+    'title="View state"',
+    '<StateTable state={state} />',
+    'aria-label="Contract activity"',
+    "id: 'activity'",
 ]) {
     assert.ok(detailSrc.includes(label), `ContractDetail renders "${label}"`);
 }
@@ -90,23 +96,28 @@ assert.ok(/\(you\)/.test(detailSrc), 'ContractDetail flags owner-matches-wallet 
 assert.ok(/<Icon\.BackIcon\s*\/>\s*Prev/.test(detailSrc)
     && /Next\s*<Icon\.ForwardIcon\s*\/>/.test(detailSrc),
     'ContractDetail paginates execution history with RTL-aware icons');
-// Action buttons.
-for (const label of ['Call method', 'Deposit', 'Withdraw']) {
-    assert.ok(detailSrc.includes(label), `ContractDetail renders "${label}" button`);
+// Action rows: the standard actions, then the contract's functions and
+// Call by name under a Contract Functions heading.
+for (const label of ['title="Deposit"', 'title="Withdraw"', 'title="Contract Functions"', 'title="Call by name"']) {
+    assert.ok(detailSrc.includes(label), `ContractDetail renders "${label}" row`);
 }
 
-// --- 4. Action buttons disable without signing props ------------------
+// --- 4. Action rows disable without signing props ---------------------
 
 assert.ok(
     /onExecute\s*\?\s*\(\)\s*=>\s*onExecute\(\{\s*chainId,\s*contractActionIndex\s*\}\)\s*:\s*undefined/.test(detailSrc),
-    'Call method button only fires onExecute when the prop is passed',
+    'Call by name only fires onExecute when the prop is passed',
+);
+assert.ok(
+    /onExecute\s*\?\s*\(\)\s*=>\s*onExecute\(\{\s*chainId,\s*contractActionIndex,\s*method:\s*fn\.name\s*\}\)\s*:\s*undefined/.test(detailSrc),
+    'a function row opens the call form with that function chosen',
 );
 assert.ok(
     /disabled=\{!onExecute\}/.test(detailSrc),
-    'Call method button disables when onExecute is absent',
+    'function rows and Call by name disable when onExecute is absent',
 );
 assert.ok(
-    /disabled=\{!onDeposit\}/.test(detailSrc) && /disabled=\{!onWithdraw\}/.test(detailSrc),
+    /disabled=\{!onDeposit\}/.test(detailSrc) && /disabled=\{!onWithdraw\b/.test(detailSrc),
     'Deposit / Withdraw buttons disable without their props',
 );
 assert.ok(
@@ -255,5 +266,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: contract detail smoke (ContractDetail shared route + five read-only passthroughs + messaging helpers in popup/web/desktop + list to detail nav + Call method / Deposit / Withdraw buttons disabled until Step 5+6)',
+    'OK: contract detail smoke (ContractDetail shared route + five read-only passthroughs + messaging helpers in popup/web/desktop + list to detail nav + function, Call by name, Deposit and Withdraw rows disabled without their handlers)',
 );

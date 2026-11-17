@@ -32,7 +32,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Button, EmptyState, FormPage, Input, NetworkField, PageHeader, Screen, Select, StatusMessage,
+    Button, EmptyState, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -45,12 +45,14 @@ import styles from './AddAddressModal.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const MAX_ADDRESSES = 25;
+const MAX_DERIVATION_INDEX = 0x7fffffff;
 
 /**
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} [props.accountId]              active account; new addresses are scoped to it
  * @param {string[]} props.chainIds the chains the account is already on; the coin options are these UNION the chains active on the current network
+ * @param {string} [props.initialChainId]         chain to pre-select (Receive passes its active chain)
  * @param {() => void} props.onClose
  * @param {(count: number) => void} [props.onGenerated]   called with the number persisted, including a partial batch
  */
@@ -81,7 +83,7 @@ export function addressTypeHint(descriptor, type) {
     return ADDRESS_TYPE_HINT[descriptor?.coin]?.[descriptor?.networkKind]?.[type] || null;
 }
 
-export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGenerated }) {
+export function AddAddressModal({ walletId, accountId, chainIds, initialChainId, onClose, onGenerated }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const { settings } = useSettings();
@@ -125,11 +127,13 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
             networkKind: d.networkKind,
         })), [offeredChainIds, walletFormat]);
 
-    const [chainId, setChainId] = useState(coinOptions[0]?.chainId || '');
+    // A caller that already has a chain (Receive) seeds it; an unknown one
+    // falls back to the first option through `selected` below.
+    const [chainId, setChainId] = useState(initialChainId || coinOptions[0]?.chainId || '');
     // Settings land after the first render, so the option list can grow from
     // empty. Fall back to the first option until the user picks one.
     const selected = coinOptions.find((c) => c.chainId === chainId) || coinOptions[0] || null;
-    const effectiveChainId = chainId || selected?.chainId || '';
+    const effectiveChainId = selected?.chainId || chainId || '';
     // Left empty on purpose: both the coin options and the wallet format
     // land after the first render, so seeding this from that render's
     // `selected` would freeze in a default computed before either arrived.
@@ -146,6 +150,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
     );
     const [purpose, setPurpose] = useState(/** @type {'receive' | 'dispenser'} */ ('receive'));
     const [count, setCount] = useState('1');
+    const [derivationIndex, setDerivationIndex] = useState('');
     const [busy, setBusy] = useState(false);
     const [done, setDone] = useState(0);
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -160,11 +165,55 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
         setError(null);
     }
 
+    // The optional Address index: blank generates the next address; a value
+    // derives the address at exactly that index (the former "Generate at
+    // Index" flow, same validation and the same host duplicate check).
+    const hasIndex = derivationIndex.trim() !== '';
+
     async function handleGenerate(event) {
         event.preventDefault();
         if (generateLockRef.current) return;
-        const n = Number(count);
+        const n = hasIndex ? 1 : Number(count);
         if (!effectiveChainId) { setError('Pick a coin.'); return; }
+        if (hasIndex) {
+            const index = Number(derivationIndex);
+            if (!Number.isInteger(index) || index < 0 || index > MAX_DERIVATION_INDEX) {
+                setError(`Enter an address number from 0 to ${MAX_DERIVATION_INDEX}.`);
+                return;
+            }
+            if (purpose === 'dispenser') {
+                setError('An address index works with the Receive purpose only.');
+                return;
+            }
+            if (typeof messaging.generateReceiveAddress !== 'function') {
+                setError('Address generation is not available in this shell.');
+                return;
+            }
+            generateLockRef.current = true;
+            setBusy(true);
+            setError(null);
+            setDone(0);
+            try {
+                await messaging.generateReceiveAddress({
+                    walletId,
+                    chainId: effectiveChainId,
+                    accountId,
+                    addressType: effectiveAddressType,
+                    derivationIndex: index,
+                });
+                onGenerated?.(1);
+                onClose();
+            } catch (err) {
+                setError(userFacingMessage(
+                    err,
+                    'Could not generate that address. Check the address number and try again.',
+                ));
+            } finally {
+                generateLockRef.current = false;
+                setBusy(false);
+            }
+            return;
+        }
         if (!Number.isInteger(n) || n < 1 || n > MAX_ADDRESSES) {
             setError(`Enter a number between 1 and ${MAX_ADDRESSES}.`);
             return;
@@ -206,7 +255,9 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
     }
 
     const countNum = Number(count);
-    const generateLabel = Number.isInteger(countNum) && countNum > 1 ? `Generate ${countNum}` : 'Generate';
+    const generateLabel = !hasIndex && Number.isInteger(countNum) && countNum > 1
+        ? `Add ${countNum} Addresses`
+        : 'Add Address';
 
     const header = (
         <PageHeader
@@ -222,9 +273,9 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                 size="md"
                 block
                 loading={busy}
-                disabled={busy || !effectiveChainId}
                 data-testid="add-address-generate"
             >
+                <Icon.PlusIcon aria-hidden="true" />
                 {generateLabel}
             </Button>
         </form>
@@ -258,6 +309,7 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                         />
                         <Select
                             label="Type"
+                            help="The address format to generate. Each type starts with its own prefix, and every type receives coins on this network."
                             value={effectiveAddressType}
                             onChange={(e) => { setAddressType(e.target.value); setError(null); }}
                             disabled={busy || !selected}
@@ -265,9 +317,9 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                             {offeredTypes.map((t) => {
                                 const hint = addressTypeHint(selected, t);
                                 return (
-                                    <option key={t} value={t}>
+                                    <Select.Option key={t} value={t} icon={<Icon.AddressIcon />}>
                                         {t.toUpperCase()}{hint ? ` (starts with ${hint})` : ''}
-                                    </option>
+                                    </Select.Option>
                                 );
                             })}
                         </Select>
@@ -283,14 +335,15 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                                 data-testid="add-address-purpose"
                                 help={purpose === 'dispenser'
                                     ? 'Listed under Misc on the Addresses page and offered when opening a dispenser.'
-                                    : undefined}
+                                    : 'What the new addresses are for. Receive addresses are listed with this account and offered for payments.'}
                             >
-                                <option value="receive">Receive</option>
-                                <option value="dispenser">Dispenser</option>
+                                <Select.Option value="receive" icon={<Icon.ReceiveIcon />}>Receive</Select.Option>
+                                <Select.Option value="dispenser" icon={<Icon.TokenIcon />}>Dispenser</Select.Option>
                             </Select>
                         ) : null}
                         <Input
                             label="Number of addresses"
+                            help={`How many new addresses to add at once, up to ${MAX_ADDRESSES}. They come next in order from your recovery phrase.`}
                             type="number"
                             inputMode="numeric"
                             enterKeyHint="go"
@@ -300,7 +353,24 @@ export function AddAddressModal({ walletId, accountId, chainIds, onClose, onGene
                             value={count}
                             onChange={(e) => { setCount(e.target.value); setError(null); }}
                             onWheel={blurNumberInputOnWheel}
+                            disabled={busy || hasIndex}
+                        />
+                        <Input
+                            label="Address index"
+                            optional
+                            type="number"
+                            inputMode="numeric"
+                            enterKeyHint="go"
+                            autoComplete="off"
+                            min={0}
+                            max={MAX_DERIVATION_INDEX}
+                            step={1}
+                            value={derivationIndex}
+                            onChange={(e) => { setDerivationIndex(e.target.value); setError(null); }}
+                            onWheel={blurNumberInputOnWheel}
+                            help="Leave blank to add the next address. Enter a number to add the address at that exact index of your recovery phrase instead (advanced)."
                             disabled={busy}
+                            data-testid="add-address-index"
                         />
                 </FormPage>
             )}

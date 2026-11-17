@@ -70,8 +70,17 @@ describe('CreatePollForm UI rulings', () => {
 
     it('pins the action names, icons, review navigation, and result action', () => {
         expect(source).toMatch(/<FormAction\s+icon=\{<Icon\.PlusIcon \/>\}[\s\S]*?Create Poll\s+<\/FormAction>/);
-        expect(source).toContain('<Button type="button" variant="ghost" onClick={addOption}>{t(\'governance.action.addOption\')}</Button>');
-        expect(source).toContain('<Button type="button" variant="ghost" onClick={() => removeOption(i)}>Remove</Button>');
+        // Add Option is the standard secondary button with its icon, never a custom grey
+        // one, and Remove is red with the trash icon.
+        expect(source).toContain('<Button type="button" variant="secondary" icon={<Icon.PlusIcon />} onClick={addOption}>{t(\'governance.action.addOption\')}</Button>');
+        // Removal is the trash icon in the option's own trailing slot, never a Remove button.
+        expect(source).not.toContain('>Remove</Button>');
+        expect(source).toMatch(/fieldAction=\{\(\s*<FieldIconButton\s+icon=\{<Icon\.TrashIcon \/>\}\s+label=\{`Remove option \$\{i \+ 1\}`\}/);
+        // The binding-poll note is in the warning card, never a loose paragraph.
+        expect(source).toContain('<WarningCard data-poll-binding-note="">');
+        // A rule the poll still misses is one danger notice, never a critical line in the card.
+        expect(source).toContain('<Notice tone="danger" role="note" data-poll-binding-errors="">');
+        expect(source).not.toContain('WarningLine key={e} critical');
         expect(source).not.toContain("{singleEncode ? 'Create poll' : 'Preview'}");
         expect(source).not.toContain('>Back</Button>');
         expect(source).toContain('<Button variant="success" icon={<Icon.CheckIcon />} onClick={onCreated || onBack}>Done</Button>');

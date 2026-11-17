@@ -90,8 +90,8 @@ assert.match(handlerBlock, /vault\.addresses\.get\(addressId\)/, 'fetches Addres
 assert.match(handlerBlock, /resolveSigner\(\{ vault, address \}\)/, 'resolves descriptor via shared helper');
 assert.match(handlerBlock, /descriptor\.kind !== 'trezor' && descriptor\.kind !== 'ledger'/,
     'rejects non-HW source addresses');
-assert.match(handlerBlock, /signerBridge\.getTransport\(descriptor\.signerRecord\.id\)/,
-    'fetches transport from signer bridge');
+assert.match(handlerBlock, /signerBridge\.requireTransport\(descriptor\.signerRecord\.id\)/,
+    'fetches transport from signer bridge (HW_NOT_CONNECTED when absent)');
 assert.match(handlerBlock, /buildRemoteSigner\(descriptor, transport\)/,
     'builds RemoteSigner against the transport');
 assert.match(handlerBlock, /sdk\?\.wallet\?\.decomposePsbt/, 'guards against missing decomposePsbt');

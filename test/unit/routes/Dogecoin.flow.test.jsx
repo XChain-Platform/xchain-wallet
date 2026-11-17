@@ -177,8 +177,8 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
         fireEvent.change(amount, { target: { value: '0.001' } });
         await waitFor(() => expect(screen.queryByText(/too small to send/i)).toBeNull());
         expect(screen.queryByRole('switch', { name: /fee bumping/i })).toBeNull();
-        // The Network fee section starts closed; open it to reach the selector.
-        fireEvent.click(screen.getByRole('button', { name: /^Network fee\b/, expanded: false }));
+        // The Fees section starts closed; open it to reach the selector.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees\b/, expanded: false }));
         expect(screen.getByRole('slider', { name: 'Network fee' }))
             .toHaveAttribute('aria-valuetext', expect.stringContaining('0.25'));
 
@@ -190,7 +190,7 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
             feePerKb: 100_000_000,
             rbf: false,
         })));
-        expect(await screen.findByTestId('confirm-fee')).toHaveTextContent('0.25 DOGE');
+        expect(await screen.findByTestId('confirm-fee-network')).toHaveTextContent('0.25 DOGE');
     });
 
     it('composes a Dogecoin mint without a protocol fee flag or fee control', async () => {
@@ -254,7 +254,7 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
             encoderOpts: { feePerKb: 100_000_000 },
         })));
         await screen.findByTestId('confirm-approve');
-        expect(screen.queryByTestId('confirm-native-protocol-fee')).toBeNull();
+        expect(screen.queryByTestId('confirm-fee-protocol')).toBeNull();
 
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } });
         fireEvent.click(screen.getByTestId('confirm-approve'));

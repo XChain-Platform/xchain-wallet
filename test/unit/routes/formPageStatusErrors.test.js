@@ -49,7 +49,9 @@ function listSources(ast) {
     const sources = new Map();
     const add = (name, node) => sources.set(name, [...(sources.get(name) || []), node]);
     walk(ast, (node) => {
-        if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init) {
+        if (node.type === 'VariableDeclarator'
+            && node.id.type === 'Identifier'
+            && node.init?.type === 'ArrayExpression') {
             add(node.id.name, node.init);
         }
         if (node.type === 'CallExpression'
@@ -80,6 +82,11 @@ function isErrorStatus(element, identifier, sources = new Map()) {
     const name = element.openingElement.name.name;
     if (name === 'StatusMessage') {
         return attribute(element, 'variant')?.value?.value === 'error'
+            && references(element, identifier);
+    }
+    // The Notice Standard's name for the same component (danger tone).
+    if (name === 'Notice') {
+        return attribute(element, 'tone')?.value?.value === 'danger'
             && references(element, identifier);
     }
     // The linked validation summary: every field error, form errors included.
@@ -148,14 +155,13 @@ describe('form-level error placement', () => {
     });
 
     it('clears migrated form errors when an editable field changes', () => {
+        // Dispenser, Issue token and Send moved to the form error standard (useFormErrors):
+        // their fields clear their own entries, and the next test pins that wiring.
         const files = new Map([
-            ['DispenserForm.jsx', 'setFormError'],
-            ['IssueTokenForm.jsx', 'setFormError'],
             ['LinkForm.jsx', 'setFormError'],
             ['ListCreateForm.jsx', 'setFormError'],
             ['SellOwnershipForm.jsx', 'setFormError'],
-            ['Send.jsx', 'setFormError'],
-            ['StakeForm.jsx', 'setFormError'],
+            ['StakingForm.jsx', 'setFormError'],
             ['SwapForm.jsx', 'setFormError'],
         ]);
 
@@ -169,6 +175,17 @@ describe('form-level error placement', () => {
                 candidates.some((page) => references(attribute(page, 'onChangeCapture'), clearHandler)),
                 `${name} change clearing`,
             ).toBe(true);
+        }
+    });
+
+    it('keeps the forms on the form error standard off the old wipe-everything wiring', () => {
+        for (const name of ['DispenserForm.jsx', 'IssueTokenForm.jsx', 'Send.jsx', 'ImportWallet.jsx']) {
+            const source = readFileSync(join(routesDir, name), 'utf8');
+            expect(source, `${name} uses useFormErrors`).toMatch(/useFormErrors\(\)/);
+            expect(source, `${name} hands the map to the page`).toMatch(/errors=\{(form|formErrors)\}/);
+            // No form-level change capture that nulls every error on any edit.
+            expect(source, `${name} onChangeCapture`).not.toMatch(/onChangeCapture=\{[^}]*setFormError\(null\)/);
+            expect(source, `${name} setFormError`).not.toMatch(/\bsetFormError\b/);
         }
     });
 });

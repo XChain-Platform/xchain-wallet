@@ -26,6 +26,8 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
+import { feeForRate, networkFeeEditor, queryNetworkFeeEditor } from '../../helpers/customNetworkFee.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const ADDRESSES = {
     'bitcoin-mainnet': [
@@ -41,7 +43,7 @@ const ADDRESSES = {
 
 let composeForConfirm;
 
-function mountForm(overrides = {}) {
+function mountForm(overrides = {}, walletMode = 'full') {
     composeForConfirm = vi.fn().mockResolvedValue({
         psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
     });
@@ -55,6 +57,7 @@ function mountForm(overrides = {}) {
         issueToken: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
         ...overrides,
     };
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     return render(
         React.createElement(
             MessagingProvider,
@@ -101,10 +104,24 @@ async function composedParams() {
     return composeForConfirm.mock.calls[0][0].actionData.params;
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    resetWalletModes();
+});
 beforeEach(() => { composeForConfirm = undefined; });
 
 describe('IssueTokenForm initial mint', () => {
+    it('uses Confirm Standard for watcher review with a known network fee', async () => {
+        mountForm({}, 'watcher');
+        await fill({ supply: '1000' });
+        await submit();
+
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-buttons')).toHaveTextContent('RejectApprove');
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent(/BTC/);
+        expect(document.body.textContent).not.toMatch(/Fee estimate unavailable|Estimate unavailable/);
+    });
+
     it('refuses a hostile description before compose', async () => {
         mountForm();
         await fill({ supply: '10' });
@@ -211,16 +228,17 @@ describe('IssueTokenForm initial mint', () => {
             }),
         });
         await screen.findByLabelText('Ticker');
-        // Network fee and From are closed standard sections; open both.
-        fireEvent.click(screen.getByRole('button', { name: /^Network fee/ }));
+        // Fees and From are closed standard sections; open both.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/ }));
         fireEvent.click(screen.getByRole('button', { name: /^From Bitcoin/ }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '3' },
         });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '25' } });
+        // Custom opened the Network fee line's one editor (G113).
+        fireEvent.change(networkFeeEditor(), { target: { value: feeForRate(25, 'bitcoin-mainnet') } });
         expect(screen.getByRole('slider', { name: 'Network fee' })).toHaveAttribute(
             'aria-valuetext',
-            expect.stringMatching(/^Custom:/),
+            'Custom: 25 sat/vB',
         );
 
         fireEvent.click(screen.getByRole('button', { name: /Network: Bitcoin/i }));
@@ -230,12 +248,19 @@ describe('IssueTokenForm initial mint', () => {
             'aria-valuetext',
             expect.stringMatching(/^Normal:/),
         ));
+        // The reset closes the editor; no rate box is left behind.
+        expect(queryNetworkFeeEditor()).toBeNull();
         expect(screen.queryByLabelText(/Custom fee rate/)).toBeNull();
 
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '3' },
         });
-        expect(screen.getByLabelText(/Custom fee rate/)).toHaveValue('1');
+        // Custom seeds from the new chain's Normal rate, not the old one.
+        expect(screen.getByRole('slider', { name: 'Network fee' })).toHaveAttribute(
+            'aria-valuetext',
+            'Custom: 1 DOGE/kB',
+        );
+        expect(networkFeeEditor()).toBeInTheDocument();
     });
 
     it('tabs in field order and opens review from Enter only when valid', async () => {
@@ -344,7 +369,8 @@ describe('IssueTokenForm initial mint', () => {
         await fill({ supply: '5000', initialMint: '6000' });
         await submit();
 
-        await screen.findByText('Initial mint cannot be more than the max supply.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' }))
+            .toHaveTextContent('Initial mint cannot be more than the max supply.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -357,7 +383,8 @@ describe('IssueTokenForm initial mint', () => {
         });
         await submit();
 
-        await screen.findByText('Initial mint cannot be more than the max supply.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' }))
+            .toHaveTextContent('Initial mint cannot be more than the max supply.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 

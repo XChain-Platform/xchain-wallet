@@ -202,6 +202,7 @@ describe('checkForDirectUpdate', () => {
         expect(fetchImpl).toHaveBeenCalledWith(UPDATE_FEED_URL, expect.objectContaining({
             credentials: 'omit',
             redirect: 'error',
+            referrerPolicy: 'no-referrer',
         }));
     });
 

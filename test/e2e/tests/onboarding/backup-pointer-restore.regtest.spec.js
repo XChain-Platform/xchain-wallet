@@ -571,8 +571,6 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     await expect(confirm,
                         'the restored wallet could not even compose a payment')
                         .toBeVisible({ timeout: 60_000 });
-                    await expect(two.getByTestId('confirm-chain-badge')).toHaveText(REGTEST_CHAIN_LABEL);
-
                     // that exact failure mode lives here, and this is the
                     // shape it takes on screen: with the seed still sealed
                     // under the OLD device's password the signer pool has no

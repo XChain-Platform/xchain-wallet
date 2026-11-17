@@ -9,11 +9,13 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { Icon } from '@xchain-wallet/core/ui';
+import { Icon, InfoTip, SegmentedControl } from '@xchain-wallet/core/ui';
+import inputStyles from '../../ui/Input.module.css';
 import styles from './LayoutModeToggle.module.css';
 import { useToast } from './ToastHost.jsx';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/ui.js';
 import { LAYOUT_MODE_STORAGE_KEY } from '../utils/layoutModeStorageKey.js';
 
 /**
@@ -118,37 +120,30 @@ export function LayoutModeToggle() {
 
     return (
         <div className={styles.wrap}>
-            <span id={labelId} className={styles.label}>{t('components.layoutModeToggle.openAs')}</span>
+            {/* The kit label row: the label, then its '?' help (ruling 2026-11-13).
+                The tip sits outside the labelled span, so the group's name stays the label. */}
+            <span className={inputStyles.labelRow}>
+                <span id={labelId} className={styles.label}>{t('components.layoutModeToggle.openAs')}</span>
+                <InfoTip
+                    className={inputStyles.labelHelp}
+                    label={t('components.layoutModeToggle.openAsHelp')}
+                    aria={t('ui.field.about', { label: t('components.layoutModeToggle.openAs') })}
+                />
+            </span>
             <span id={descriptionId} className={styles.description}>
                 {t('components.layoutModeToggle.chooseHowTheWalletOpens')}
             </span>
-            <div
-                className={styles.buttons}
-                role="radiogroup"
+            {/* The shared view toggle, the one look every mode switch uses. */}
+            <SegmentedControl
                 aria-labelledby={labelId}
                 aria-describedby={descriptionId}
-            >
-                <button
-                    type="button"
-                    role="radio"
-                    aria-checked={mode === 'popup'}
-                    className={`${styles.btn} ${mode === 'popup' ? styles.btnActive : ''}`}
-                    onClick={() => pick('popup')}
-                >
-                    <Icon.HomeIcon />
-                    <span>{t('components.layoutModeToggle.popup')}</span>
-                </button>
-                <button
-                    type="button"
-                    role="radio"
-                    aria-checked={mode === 'sidepanel'}
-                    className={`${styles.btn} ${mode === 'sidepanel' ? styles.btnActive : ''}`}
-                    onClick={() => pick('sidepanel')}
-                >
-                    <Icon.MoreIcon />
-                    <span>{t('components.layoutModeToggle.sidebar')}</span>
-                </button>
-            </div>
+                value={mode}
+                onChange={(next) => pick(/** @type {'popup' | 'sidepanel'} */ (next))}
+                items={[
+                    { id: 'popup', label: <><Icon.HomeIcon aria-hidden="true" /><span>{t('components.layoutModeToggle.popup')}</span></> },
+                    { id: 'sidepanel', label: <><Icon.MoreIcon aria-hidden="true" /><span>{t('components.layoutModeToggle.sidebar')}</span></> },
+                ]}
+            />
         </div>
     );
 }

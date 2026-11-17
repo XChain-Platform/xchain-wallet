@@ -111,11 +111,11 @@ describe('confirmation password cleanup', () => {
             walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'PROJ', issuerAddress: FROM.address, onBack() {},
         });
         // Tokens join the roster through the token picker.
-        await screen.findByText('No list published yet. This will be the first.');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
         fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
         fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: 'MEMBER' } });
         fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Create Project Tokens' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
 
         await rejectConfirmation();
     });
@@ -138,12 +138,14 @@ describe('primary action validation', () => {
         mount(ProjectRosterForm, {
             walletId: 'wallet-1', chainId: CHAIN_ID, tick: 'PROJ', issuerAddress: FROM.address, onBack() {},
         });
-        await screen.findByText('No list published yet. This will be the first.');
-        const action = screen.getByRole('button', { name: 'Create Project Tokens' });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+        const action = screen.getByRole('button', { name: 'Create and Link' });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
 
-        expect(await screen.findByText('Add at least one token to the list.')).toBeTruthy();
+        // G120: the notice at the top names the problem and the token box
+        // carries the same line under it.
+        expect(await screen.findAllByText('Add at least one token to the list.')).toHaveLength(2);
     });
 });

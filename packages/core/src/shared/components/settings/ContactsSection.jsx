@@ -19,13 +19,14 @@
 // owns the bulk export / import action.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button } from '@xchain-wallet/core/ui';
+import { Button, FieldNote, FormPage, Icon, IconSelect } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
 import { FileField } from '../FileField.jsx';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
 import { contactsFromCsv, contactsToCsv } from '../../utils/contactsCsv.js';
 import { detectAddressCoin, isValidAddressAnyNetwork } from '../../utils/addressValidation.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
+import { formatBytes } from '../../utils/formatBytes.js';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
 import {
     ROW,
@@ -58,16 +59,24 @@ const CONTACT_IMPORT_FIELD = {
     flex: '1 1 100%',
     minWidth: 0,
 };
-const CONTACT_IMPORT_ACCEPT = ['application/json', 'text/csv', '.json', '.csv'];
+export const CONTACT_IMPORT_ACCEPT = ['application/json', 'text/csv', '.json', '.csv'];
 
 const MAX_CONTACT_IMPORT_BYTES = 2 * 1024 * 1024;
 const CONTACT_FIELDS = new Set([
-    'schemaVersion', 'id', 'name', 'notes', 'entries', 'avatarSeed', 'createdAt', 'updatedAt',
+    // look: the tile look Edit Contact saves, so an exported file imports back.
+    'schemaVersion', 'id', 'name', 'notes', 'entries', 'avatarSeed', 'look', 'createdAt', 'updatedAt',
 ]);
 const ENTRY_FIELDS = new Set(['chain', 'address', 'label']);
 const SUPPORTED_CHAINS = new Set(['bitcoin', 'litecoin', 'dogecoin']);
 
-export function ContactsSection() {
+/**
+ * The address book's file export and import, shared by this section and the
+ * Export contacts and Import contacts rows on Backup and Recovery. With
+ * `readCount` off the contact count is read only after an import.
+ *
+ * @param {{ readCount?: boolean }} [options]
+ */
+export function useContactsTransfer({ readCount = true } = {}) {
     const { messaging } = useMessaging();
     const confirmDialog = useConfirmModal();
     const [count, setCount] = useState(/** @type {number | null} */ (null));
@@ -96,9 +105,9 @@ export function ContactsSection() {
     }, [messaging]);
 
     useEffect(() => {
-        reload();
+        if (readCount) reload();
         return () => { reloadRequestRef.current += 1; };
-    }, [reload]);
+    }, [reload, readCount]);
 
     const reportImportFailure = (message, subject = 'Import file') => {
         setError(null);
@@ -229,6 +238,85 @@ export function ContactsSection() {
         }
     };
 
+    return { count, error, importResult, onExport, onExportCsv, onImportFile, confirmDialog, reload };
+}
+
+/** The import outcome and any error, under the controls that caused them. */
+export function ContactsTransferMessages({ error, importResult, confirmDialog }) {
+    return (
+        <>
+            {importResult ? (
+                <>
+                    <Status
+                        text={t('settings.contacts.importedSummary', {
+                            imported: importResult.imported,
+                            skipped: importResult.failures.length,
+                            duplicates: importResult.duplicates,
+                        })}
+                    />
+                    <DiagnosticDetails
+                        summary={t('settings.contacts.skippedContacts', { length: importResult.failures.length })}
+                        items={importResult.failures}
+                    />
+                </>
+            ) : null}
+            {error ? <Status text={error} tone="error" /> : null}
+            {confirmDialog.request ? (
+                <ConfirmModal
+                    {...confirmDialog.request}
+                    onConfirm={confirmDialog.onConfirm}
+                    onCancel={confirmDialog.onCancel}
+                />
+            ) : null}
+        </>
+    );
+}
+
+/**
+ * The Export contacts page on Backup and Recovery (2026-11-14): a JSON or CSV
+ * choice and the green Export button, which downloads the address book in the
+ * chosen format. Neither format is encrypted, and the page says so.
+ */
+export function ContactsExportPage() {
+    const { count, error, onExport, onExportCsv, confirmDialog } = useContactsTransfer();
+    const [format, setFormat] = useState('json');
+    const submit = async (event) => {
+        event.preventDefault();
+        if (count === 0) return;
+        await (format === 'csv' ? onExportCsv() : onExport());
+    };
+    return (
+        <FormPage
+            onSubmit={submit}
+            label={t('settings.contacts.exportContactsPage')}
+            status={error ? <Status text={error} tone="error" /> : undefined}
+            actions={(
+                <Button type="submit" variant="success" icon={<Icon.DownloadIcon />} disabled={count === 0}>
+                    {t('history.export.confirm')}
+                </Button>
+            )}
+        >
+            {/* The themed dropdown with an icon per option, never radios (G119);
+                the not-encrypted line sits under it as the field's note. */}
+            <IconSelect
+                label={t('settings.contacts.fileFormat')}
+                help={t('settings.contacts.fileFormatHelp')}
+                value={format}
+                onChange={setFormat}
+                options={[
+                    { value: 'json', label: t('settings.inline.jsonFile'), icon: <Icon.DocumentIcon /> },
+                    { value: 'csv', label: t('settings.inline.csvFile'), icon: <Icon.GridIcon /> },
+                ]}
+            />
+            <FieldNote variant="info">{t('settings.inline.exportNotEncrypted')}</FieldNote>
+            <ContactsTransferMessages error={null} importResult={null} confirmDialog={confirmDialog} />
+        </FormPage>
+    );
+}
+
+export function ContactsSection() {
+    const { count, error, importResult, onExport, onExportCsv, onImportFile, confirmDialog } = useContactsTransfer();
+
     return (
         <div style={STACK}>
             <div style={ROW}>
@@ -282,29 +370,7 @@ export function ContactsSection() {
                     />
                 </div>
             </div>
-            {importResult ? (
-                <>
-                    <Status
-                        text={t('settings.contacts.importedSummary', {
-                            imported: importResult.imported,
-                            skipped: importResult.failures.length,
-                            duplicates: importResult.duplicates,
-                        })}
-                    />
-                    <DiagnosticDetails
-                        summary={t('settings.contacts.skippedContacts', { length: importResult.failures.length })}
-                        items={importResult.failures}
-                    />
-                </>
-            ) : null}
-            {error ? <Status text={error} tone="error" /> : null}
-            {confirmDialog.request ? (
-                <ConfirmModal
-                    {...confirmDialog.request}
-                    onConfirm={confirmDialog.onConfirm}
-                    onCancel={confirmDialog.onCancel}
-                />
-            ) : null}
+            <ContactsTransferMessages error={error} importResult={importResult} confirmDialog={confirmDialog} />
         </div>
     );
 }
@@ -409,7 +475,7 @@ function isContactsImportFile(file) {
 }
 
 function importSizeMessage(bytes) {
-    return `File is too large (${Math.ceil(bytes / 1024)} KB; max ${MAX_CONTACT_IMPORT_BYTES / 1024} KB).`;
+    return `File is too large (${formatBytes(bytes)}; max ${formatBytes(MAX_CONTACT_IMPORT_BYTES, { limit: true })}).`;
 }
 
 function triggerDownload(prefix, content, extension, type) {

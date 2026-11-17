@@ -52,7 +52,20 @@ import { policyNoLimitText, allowedTokensText } from '../utils/coSignerPolicyLim
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/coSigner.js';
 import styles from './IssueTokenForm.module.css';
+// The token page's details card: label-left value-right fact rows.
+import tokenPageStyles from './ManageToken.module.css';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
+
+// One fact as a label-left value-right row of the details card.
+function FactRow({ label, value, mono = false, testId }) {
+    return (
+        <div className={tokenPageStyles.approvedDetailRow}>
+            <dt>{label}</dt>
+            <dd className={mono ? tokenPageStyles.approvedMono : undefined} data-testid={testId}>{value}</dd>
+        </div>
+    );
+}
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -283,6 +296,7 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review' ? () => setStage('compose') : onBack}
             backLabel={stage === 'review' ? 'Back to form' : undefined}
             backDisabled={stage === 'submitting'}
@@ -318,7 +332,8 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="This Wallet's Key"                walletId={walletId}
+                title="This Wallet's Key"
+                walletId={walletId}
                 chainId={chainId}
                 onChainChange={handleChainChange}
                 onPick={(address) => {
@@ -341,26 +356,34 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                         icon={onDone ? <Icon.ForwardIcon /> : <Icon.CheckIcon />}
                         onClick={() => (onDone ? onDone(account?.id) : onBack())}
                     >
-                        {onDone ? 'View account' : 'Done'}
+                        {onDone ? 'View Account' : 'Done'}
                     </Button>
                 )}
             >
                 <p className={styles.successTitle}>Agent account created</p>
-                <p className={styles.hint}>
-                    Fund this address to give the agent a balance to operate on. The
-                    agent and this wallet must both sign every spend, so each request
-                    waits for your approval in this wallet; the rules refuse anything
-                    outside them.
-                </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Name</dt>
-                    <dd className={styles.detailsValue}>{account?.name}</dd>
-                    <dt className={styles.detailsLabel}>Fund this address</dt>
-                    <dd className={styles.detailsValue} style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <AddressText address={account?.aggregateAddress} />
-                        <CopyButton value={account?.aggregateAddress || ''} label="Copy address" />
-                    </dd>
-                </dl>
+                {/* Facts as label-left value-right rows, the address in full when it fits (G99). */}
+                <section className={tokenPageStyles.approvedDetailsCard} aria-label="Agent account">
+                    <dl className={tokenPageStyles.approvedDetailsList}>
+                        <FactRow label="Name" value={account?.name} />
+                        <FactRow label="Fund this address" value={(
+                            // A row of the cell's full width (not shrink-to-content), so the
+                            // fit measures the real room beside the copy icon.
+                            <span style={{ display: 'flex', width: '100%', minWidth: 0, alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--xc-space-1)' }}>
+                                <AddressText address={account?.aggregateAddress} fit />
+                                <CopyButton value={account?.aggregateAddress || ''} label="Copy Address" />
+                            </span>
+                        )} />
+                    </dl>
+                </section>
+                {/* The one note, in the warning card, never a loose paragraph. */}
+                <WarningCard data-agent-created-note="">
+                    <WarningLine>
+                        Fund this address to give the agent a balance to operate on. The
+                        agent and this wallet must both sign every spend, so each request
+                        waits for your approval in this wallet; the rules refuse anything
+                        outside them.
+                    </WarningLine>
+                </WarningCard>
             </FormPage>,
         );
     }
@@ -373,48 +396,41 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 onSubmit={handleSubmit}
                 status={submitError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
                 actions={(
-                    <Button type="submit" variant="primary" loading={stage === 'submitting'} disabled={stage === 'submitting'}>
-                        Create agent account
+                    <Button type="submit" variant="primary" icon={<Icon.PlusIcon />} loading={stage === 'submitting'} disabled={stage === 'submitting'}>
+                        Create Agent Account
                     </Button>
                 )}
             >
-                <p className={styles.hint}>Check every value before creating this account.</p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Account name</dt>
-                    <dd className={styles.detailsValue}>{reviewPayload.name}</dd>
-                    <dt className={styles.detailsLabel}>Wallet</dt>
-                    <dd className={styles.detailsValue}><code>{reviewPayload.walletId}</code></dd>
-                    <dt className={styles.detailsLabel}>This wallet's address</dt>
-                    <dd className={styles.detailsValue}><AddressText address={daemonAddress?.address || ''} /></dd>
-                    <dt className={styles.detailsLabel}>This wallet's public key</dt>
-                    <dd className={styles.detailsValue}><code>{reviewPayload.daemonPubkey}</code></dd>
-                    <dt className={styles.detailsLabel}>This wallet's account path</dt>
-                    <dd className={styles.detailsValue}><code>{reviewPayload.daemonDerivationPath}</code></dd>
-                    <dt className={styles.detailsLabel}>Agent public key</dt>
-                    <dd className={styles.detailsValue}><code>{reviewPayload.agentPubkey}</code></dd>
-                    <dt className={styles.detailsLabel}>Allowed actions</dt>
-                    <dd className={styles.detailsValue}>
-                        {reviewedPolicy.allowedActions.map(actionDisplayLabel).join(', ')}
-                        {' '}<code>{exactValue(reviewedPolicy.allowedActions)}</code>
-                    </dd>
-                    <dt className={styles.detailsLabel}>{t('coSigner.policy.tokens.title')}</dt>
-                    <dd className={styles.detailsValue} data-testid="review-allowed-tokens">
-                        {allowedTokensText(reviewedPolicy)}
-                        {Array.isArray(reviewedPolicy.allowedTicks) ? <>{' '}<code>{exactValue(reviewedPolicy.allowedTicks)}</code></> : null}
-                        {/* The token number each named token is saved with. */}
-                        {reviewedPolicy.tickIds ? <>{' '}<code data-testid="review-token-numbers">{exactValue(reviewedPolicy.tickIds)}</code></> : null}
-                    </dd>
-                    <dt className={styles.detailsLabel}>Allowed recipients</dt>
-                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.allowedDestinations)}</dd>
-                    <dt className={styles.detailsLabel}>Per-action limits</dt>
-                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.maxPerAction)}</dd>
-                    <dt className={styles.detailsLabel}>Rolling limit</dt>
-                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.maxPerWindow)}</dd>
-                    <dt className={styles.detailsLabel}>Confirmation thresholds</dt>
-                    <dd className={styles.detailsValue}>{limitValue(reviewedPolicy.confirmAbove)}</dd>
-                    <dt className={styles.detailsLabel}>Allowed transaction outputs</dt>
-                    <dd className={styles.detailsValue}><code>{exactValue(reviewPayload.allowedOutputs)}</code></dd>
-                </dl>
+                {/* Every value as a label-left value-right row; no stacked uppercase labels. */}
+                <section className={tokenPageStyles.approvedDetailsCard} aria-label="Agent account values">
+                    <dl className={tokenPageStyles.approvedDetailsList}>
+                        <FactRow label="Account name" value={reviewPayload.name} />
+                        <FactRow label="Wallet" value={reviewPayload.walletId} mono />
+                        <FactRow label="This wallet's address" value={<AddressText address={daemonAddress?.address || ''} fit />} />
+                        <FactRow label="This wallet's public key" value={reviewPayload.daemonPubkey} mono />
+                        <FactRow label="This wallet's account path" value={reviewPayload.daemonDerivationPath} mono />
+                        <FactRow label="Agent public key" value={reviewPayload.agentPubkey} mono />
+                        <FactRow label="Allowed actions" value={(
+                            <>
+                                {reviewedPolicy.allowedActions.map(actionDisplayLabel).join(', ')}
+                                {' '}<code>{exactValue(reviewedPolicy.allowedActions)}</code>
+                            </>
+                        )} />
+                        <FactRow label={t('coSigner.policy.tokens.title')} testId="review-allowed-tokens" value={(
+                            <>
+                                {allowedTokensText(reviewedPolicy)}
+                                {Array.isArray(reviewedPolicy.allowedTicks) ? <>{' '}<code>{exactValue(reviewedPolicy.allowedTicks)}</code></> : null}
+                                {/* The token number each named token is saved with. */}
+                                {reviewedPolicy.tickIds ? <>{' '}<code data-testid="review-token-numbers">{exactValue(reviewedPolicy.tickIds)}</code></> : null}
+                            </>
+                        )} />
+                        <FactRow label="Allowed recipients" value={limitValue(reviewedPolicy.allowedDestinations)} />
+                        <FactRow label="Per-action limits" value={limitValue(reviewedPolicy.maxPerAction)} />
+                        <FactRow label="Rolling limit" value={limitValue(reviewedPolicy.maxPerWindow)} />
+                        <FactRow label="Confirmation thresholds" value={limitValue(reviewedPolicy.confirmAbove)} />
+                        <FactRow label="Allowed transaction outputs" value={<code>{exactValue(reviewPayload.allowedOutputs)}</code>} />
+                    </dl>
+                </section>
             </FormPage>,
         );
     }
@@ -433,8 +449,9 @@ export function CoSignerProvision({ walletId, onBack, onDone }) {
                 <Button
                     type="submit"
                     variant="primary"
+                    icon={<Icon.PlusIcon />}
                 >
-                    Create agent account
+                    Create Agent Account
                 </Button>
             )}
         >

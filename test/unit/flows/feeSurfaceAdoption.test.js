@@ -45,12 +45,13 @@ const FEE_BEARING_SURFACES = new Set([
     'routes/DividendForm.jsx',
     'routes/ExecuteContractForm.jsx',
     'routes/IssueTokenForm.jsx',
+    // The one List form (Create, Edit, Share, Transfer and Fork).
     'routes/ListCreateForm.jsx',
-    'routes/ListForkForm.jsx',
-    'routes/ListRenameForm.jsx',
-    'routes/ListShareForm.jsx',
     'routes/SellOwnershipForm.jsx',
     'routes/SwapForm.jsx',
+    // Edit and Cancel for orders and swaps (ORDER and SWAP are fee-bearing;
+    // an edit re-charges the expiration fee).
+    'routes/TradeOwnerActionForm.jsx',
     'routes/SweepForm.jsx',
 ]);
 

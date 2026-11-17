@@ -789,7 +789,7 @@ extension ScreenshotTests {
                                     "Messaging", "Contacts", "Lists", "Payments due"]
     private static let settingsDrills = ["This Wallet", "Accounts & Addresses", "Display", "Keyboard", "Privacy",
                                          "Safety", "Wallet Mode", "Backup", "Fees", "Network & Endpoints",
-                                         "Connected Sites", "Automatic Donation System", "Developer Mode", "About"]
+                                         "Connected Sites", "Automatic Donations", "Developer Mode", "About"]
     private static let menuRows = ["Decentralized Exchange", "Marketplace", "Dispensers", "My Tokens", "Alerts",
                                    "More actions", "Messaging", "Cross-chain", "Contacts", "My Lists", "Addresses",
                                    "Contracts", "Staking", "Multisig"]
@@ -1142,7 +1142,7 @@ extension ScreenshotTests {
         return true
     }
 
-    /// After import the app shows the Automatic Donation System notice (Continue) and
+    /// After import the app shows the Automatic Donations notice (Continue) and
     /// a four-step intro (Skip / Next / Get started). Clear them until the wallet is up.
     private func settleAfterImport() {
         for round in 0..<10 {

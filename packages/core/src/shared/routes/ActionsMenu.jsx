@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Button, Icon, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
+import { Icon, ListPage, PageHeader, Screen, SectionHeader } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/actionsMenu.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
-import styles from './ActionsMenu.module.css';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
 
 const SIGNER_ACTION_IDS = new Set(['sign-psbt', 'sign-message', 'verify-signature']);
 
@@ -78,7 +78,6 @@ export function ActionsMenu({ entries, onBack }) {
     const { shell } = useMessaging();
     const { isSignerMode } = useWalletMode();
     const variant = screenVariantFor(shell);
-    const isFull = variant === 'full';
     const visibleEntries = entries.filter((entry) => {
         if (isSignerMode && !SIGNER_ACTION_IDS.has(entry.id)) return false;
         return typeof entry.onSelect === 'function'
@@ -98,7 +97,6 @@ export function ActionsMenu({ entries, onBack }) {
     const header = (
         <PageHeader
             onBack={onBack}
-            backLabel={t('common.backToHome')}
             title={t('actionsMenu.title')}
         />
     );
@@ -110,53 +108,29 @@ export function ActionsMenu({ entries, onBack }) {
                     return (
                         <section key={group.id} aria-labelledby={headingId}>
                             <SectionHeader id={headingId} title={group.label} />
-                            <ul
-                                className={isFull ? styles.listFull : styles.listPopup}
-                                data-xc-menu-list="cards"
-                            >
+                            {/* One ActionList per group (G101): icon square, title,
+                                description and chevron; an unavailable entry stays as
+                                an off row whose line says why. */}
+                            <ActionList label={group.label}>
                                 {group.entries.map((entry) => {
                                     const EntryIcon = ENTRY_ICON[entry.id]
                                         || Icon.iconForLabel(entry.label)
                                         || Icon.MoreIcon;
-                                    const descriptionId = entry.description
-                                        ? `action-${entry.id}-description`
-                                        : undefined;
-                                    const reasonId = entry.disabledReason
-                                        ? `action-${entry.id}-reason`
-                                        : undefined;
                                     return (
-                                        <li key={entry.id} className={styles.listItem}>
-                                            <Button
-                                                type="button"
-                                                className={styles.entry}
-                                                data-xc-menu-item
-                                                onClick={entry.disabled ? undefined : entry.onSelect}
-                                                aria-disabled={entry.disabled ? 'true' : undefined}
-                                                aria-describedby={[descriptionId, reasonId].filter(Boolean).join(' ') || undefined}
-                                            >
-                                                <span className={styles.entryText}>
-                                                    <span className={styles.entryHead}>
-                                                        <span className={styles.entryIcon} aria-hidden="true">
-                                                            <EntryIcon />
-                                                        </span>
-                                                        <span className={styles.entryLabel}>{entry.label}</span>
-                                                    </span>
-                                                    {entry.description ? (
-                                                        <span id={descriptionId} className={styles.entryDescription}>
-                                                            {entry.description}
-                                                        </span>
-                                                    ) : null}
-                                                    {entry.disabledReason ? (
-                                                        <span id={reasonId} className={styles.entryReason}>
-                                                            {t('actionsMenu.unavailable', { reason: entry.disabledReason })}
-                                                        </span>
-                                                    ) : null}
-                                                </span>
-                                            </Button>
-                                        </li>
+                                        <ActionListItem
+                                            key={entry.id}
+                                            icon={<EntryIcon />}
+                                            title={entry.label}
+                                            description={entry.description}
+                                            onClick={entry.onSelect}
+                                            disabled={entry.disabled === true}
+                                            disabledReason={entry.disabledReason
+                                                ? t('actionsMenu.unavailable', { reason: entry.disabledReason })
+                                                : undefined}
+                                        />
                                     );
                                 })}
-                            </ul>
+                            </ActionList>
                         </section>
                     );
                 })}

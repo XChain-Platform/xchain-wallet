@@ -378,6 +378,55 @@ export function formatDisplayAmount(value, locale) {
     return nonZero ? `${sign}${formatted}` : formatted;
 }
 
+// Decoded detail rows whose leading number is a quantity a person reads at a
+// glance: amounts, supplies, prices, escrows, counts. Block heights, action
+// indexes, list ids, expirations, keys and hashes are not in it and stay as
+// the decoder wrote them.
+const DECODED_QUANTITY_LABEL = new RegExp([
+    'amount', 'quantity', 'supply', 'price', 'escrow', 'pool', 'fee\\b',
+    '^stake$', '^value$', '^items$', '^give$', '^get$', '^(?:burn|drop) \\d+$',
+    '^minimum bet$', '^mint now$', '^initial mint$', '^max mint per', '^estimated fills$',
+    '^gas limit$', '^cooldown blocks$', '^refill escrow by$', '^buyer pays',
+].join('|'), 'i');
+
+/**
+ * Group the leading number of every quantity row of a decoded action (the
+ * label and value rows a review shows) and the same figure in its summary,
+ * so "Give 250000 PEPE" reads "Give 250,000 PEPE". Display only: full
+ * precision is kept, a value that does not start with a plain decimal is left
+ * alone, and an already grouped value is not touched again. Warnings and
+ * every other field pass through unchanged.
+ *
+ * @template {{ summary?: string, details?: Array<{ label?: string, value?: unknown }> }} T
+ * @param {T | null | undefined} decoded
+ * @param {string} [locale]
+ * @returns {T | null | undefined}
+ */
+export function groupDecodedAmounts(decoded, locale) {
+    if (!decoded || typeof decoded !== 'object' || !Array.isArray(decoded.details)) return decoded;
+    let { summary } = decoded;
+    let changed = false;
+    const details = decoded.details.map((detail) => {
+        const label = String(detail?.label ?? '').trim();
+        if (!DECODED_QUANTITY_LABEL.test(label)) return detail;
+        const value = String(detail?.value ?? '');
+        const match = /^([+-]?\d+(?:\.\d+)?)(?=$|\s)/.exec(value);
+        if (!match) return detail;
+        const grouped = formatWithThousands(match[1], locale);
+        if (!grouped || grouped === match[1]) return detail;
+        changed = true;
+        if (typeof summary === 'string') {
+            const escaped = match[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            summary = summary.replace(
+                new RegExp(`(^|[\\s(])${escaped}(?=$|[\\s),:;])`),
+                (_whole, prefix) => `${prefix}${grouped}`,
+            );
+        }
+        return { ...detail, value: `${grouped}${value.slice(match[1].length)}` };
+    });
+    return changed ? { ...decoded, summary, details } : decoded;
+}
+
 /**
  * True when a wire amount is a plain decimal a row can print: a finite number,
  * a bigint, or a decimal string (exponent form included). An object, NaN or

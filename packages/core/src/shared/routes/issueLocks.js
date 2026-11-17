@@ -26,4 +26,5 @@ export const ISSUE_LOCKS = ISSUE_LOCK_KEYS.map(([key, field]) => ({
     field,
     label: LOCK_COPY_BY_FIELD.get(field).label,
     description: LOCK_COPY_BY_FIELD.get(field).hint,
+    help: LOCK_COPY_BY_FIELD.get(field).help,
 }));

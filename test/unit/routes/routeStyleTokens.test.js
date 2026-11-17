@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -17,7 +17,6 @@ const locked = readRouteCss('Locked');
 const input = readFileSync(join(process.cwd(), 'packages/core/src/ui/Input.module.css'), 'utf8');
 const manageToken = readRouteCss('ManageToken');
 const messagingInbox = readRouteCss('MessagingInbox');
-const mySwaps = readRouteCss('MySwapsView');
 const obligations = readRouteCss('ObligationsView');
 
 describe('route style tokens', () => {
@@ -26,13 +25,16 @@ describe('route style tokens', () => {
         expect(input).toContain('min-inline-size: var(--xc-tap-min);');
         expect(input).toContain('min-block-size: var(--xc-tap-min);');
 
-        // The token page's own tiles and rows are retired; its lock and edit marks keep the small icon token.
-        expect(manageToken).toContain('width: var(--xc-icon-sm);');
+        // The token page is TokenDetail now (G12); ManageToken.module.css keeps
+        // only the identity card and details card the co-signer and View
+        // Address pages borrow, so its unused lock and edit marks went with
+        // the page. What is left uses no literal radius fallback.
         expect(manageToken).not.toMatch(/var\(--xc-radius-[^)]+,\s*\d+px\)/);
 
         expect(messagingInbox).toContain('width: var(--xc-icon-sm);');
         expect(messagingInbox).toContain('font-size: var(--xc-text-xs);');
-        expect(messagingInbox).toContain('border-start-start-radius: var(--xc-control-radius)');
+        // The composer has no send button, so its input is one whole rounded field.
+        expect(messagingInbox).toMatch(/\.composerInput\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\);/s);
         expect(messagingInbox).toContain(
             'scroll-margin-top: calc(var(--xc-control-h-lg) + var(--xc-space-2));',
         );
@@ -42,11 +44,9 @@ describe('route style tokens', () => {
     });
 
     it('documents exact pixel geometry that has no matching shared token', () => {
-        expect(locked).toMatch(
-            /\/\* The brand mark has no matching size token at its default presentation width\. \*\/\s*width: 96px;/,
-        );
-        // The in-field action strip is inset by a spacing token, so no raw pixel inset remains.
-        expect(input).toMatch(/\.controlActions\s*\{[^}]*inset-inline-end: var\(--xc-space-1\);/s);
+        expect(locked).toMatch(/\.logo\s*\{[^}]*composes:\s*standardSize from '\.\/BootLogo\.module\.css';/s);
+        // The in-field action strip is inset by the G112 field-slot token, so no raw pixel inset remains.
+        expect(input).toMatch(/\.controlActions\s*\{[^}]*inset-inline-end: var\(--xc-control-action-inset\);/s);
         expect(input).not.toContain('inset-inline-end: 2px;');
         expect(messagingInbox).toMatch(
             /\/\* Half-grid spacing keeps the two conversation lines visually connected\. \*\/\s*gap: 2px;/,
@@ -56,8 +56,11 @@ describe('route style tokens', () => {
         );
     });
 
-    it('leaves MySwapsView free of pixel literals outside its breakpoint', () => {
-        expect(mySwaps.replace('@media (max-width: 420px)', '')).not.toMatch(/\d+px/);
+    // MySwapsView draws its rows in the shared Form Standard components and
+    // keeps no route stylesheet of its own (2026-11-15), so it has no pixel
+    // literals to pin.
+    it('gives MySwapsView no route stylesheet', () => {
+        expect(existsSync(join(routeRoot, 'MySwapsView.module.css'))).toBe(false);
     });
 });
 
@@ -69,11 +72,15 @@ describe('route styles use the shared geometry tokens (staking, settings)', () =
         expect(css).not.toContain('var(--xc-page-gutter)');
     });
 
-    it('tokens stake chooser control and icon sizes', () => {
+    it('draws the stake chooser icons bare through the shared ActionList', () => {
         const css = readRouteCss('StakeNew');
 
-        expect(css).toMatch(/\.optionIcon\s*\{[^}]*width:\s*var\(--xc-control-h-md\);[^}]*height:\s*var\(--xc-control-h-md\)/s);
-        expect(css).toMatch(/\.chainIcon\s*\{[^}]*width:\s*var\(--xc-icon-xl\);[^}]*height:\s*var\(--xc-icon-xl\)/s);
+        // No circle or tint behind a menu row's icon (ruling 2026-11-13).
+        expect(css).not.toMatch(/\.optionIcon\s*\{/);
+        expect(css).not.toMatch(/border-radius:\s*50%/);
+        // The network step draws the standard network rows (NetworkPicker),
+        // so the route sheet no longer sizes a chain icon of its own.
+        expect(css).not.toMatch(/\.chainIcon\s*\{/);
     });
 
     it('tokens staking list icons, controls, spacing, radii, and ring', () => {

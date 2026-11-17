@@ -68,7 +68,9 @@ export function RadioGroup({
             disabled={disabled}
             aria-describedby={groupDescribedBy}
             aria-invalid={error ? 'true' : undefined}
-            aria-labelledby={fieldsetProps['aria-labelledby'] ?? legendTextId}
+            // A caller's own aria-label names the group; otherwise the legend
+            // text does, so the help tip's name stays out of it.
+            aria-labelledby={fieldsetProps['aria-labelledby'] ?? (fieldsetProps['aria-label'] ? undefined : legendTextId)}
         >
             <legend className={styles.legend}>
                 {hasHelp ? <span id={legendTextId}>{legend}</span> : legend}

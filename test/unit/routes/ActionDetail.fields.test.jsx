@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ActionDetail } from '../../../packages/core/src/shared/routes/ActionDetail.jsx';
+import { detailsPanel, fact, queryFact } from '../../helpers/detailFacts.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const OURS = 'bc1qwalletaddress000000000000000000000000001';
@@ -63,8 +64,7 @@ function renderDetails(value) {
 }
 
 function field(label) {
-    const panel = screen.getByRole('tabpanel');
-    return within(panel).getByRole('rowheader', { name: label }).closest('tr').querySelector('td');
+    return fact(label);
 }
 
 afterEach(() => cleanup());
@@ -122,9 +122,6 @@ describe('transaction detail field sources', () => {
         if (counterparty.length > 14) {
             expect(counterpartyCell.querySelector(`[title="${counterparty}"]`)).toBeTruthy();
             expect(counterpartyCell).toHaveTextContent(`${counterparty.slice(0, 6)}…${counterparty.slice(-6)}`);
-            // The copy button follows the value and says only "Copy".
-            const copy = within(counterpartyCell).getByRole('button', { name: 'Copy counterparty address' });
-            expect(copy).toHaveTextContent(/^Copy$/);
         } else {
             expect(counterpartyCell).toHaveTextContent(counterparty);
         }
@@ -133,7 +130,9 @@ describe('transaction detail field sources', () => {
         expect(field('Block')).toHaveTextContent('100');
         // The network is named; the network kind (regtest) is not.
         expect(field('Network')).toHaveTextContent('Bitcoin');
-        expect(within(screen.getByRole('tabpanel')).queryByRole('rowheader', { name: 'Network type' })).toBeNull();
+        expect(queryFact('Network type')).toBeNull();
+        // Details carries no copy button beside any value (2026-11-13).
+        expect(within(detailsPanel()).queryAllByRole('button', { name: /copy/i })).toHaveLength(0);
         expect(field('Time')).not.toHaveTextContent(/^-$|^$/);
         expect(field('Memo')).not.toHaveTextContent('-');
         expect(within(field('Explorer')).getByRole('link', { name: 'Open in explorer' }))

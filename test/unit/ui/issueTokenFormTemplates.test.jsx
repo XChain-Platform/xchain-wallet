@@ -9,9 +9,9 @@
 // contact legal@dankest.llc.
 
 // IssueTokenForm draws every state through a page template: the load error,
-// the loading line, the result panels, the review and the form each reach
-// Screen through the route's wrap() helper with a FormPage or ListPage as the
-// content, so no state puts bare content straight into Screen.
+// the loading line, the result panels and the form reach Screen through the
+// route's wrap() helper with a FormPage or ListPage as the content. Review
+// uses the shared ConfirmActionModal, so no state puts bare content into Screen.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -60,8 +60,9 @@ describe('IssueTokenForm: every state renders through a page template', () => {
         }
     });
 
-    it('passes a FormPage or ListPage to wrap() on every return path', () => {
-        expect(wrapCalls.length).toBeGreaterThanOrEqual(7);
+    it('templates every wrap() path and uses ConfirmActionModal for review', () => {
+        expect(wrapCalls.length).toBeGreaterThanOrEqual(6);
+        expect(readFileSync(routePath(), 'utf8')).toContain('<ConfirmActionModal');
         const roots = wrapCalls.map((call) => `line ${call.loc.start.line}: ${jsxName(call.arguments[0]) ?? call.arguments[0]?.type}`);
         const bare = roots.filter((_, i) => !TEMPLATES.includes(jsxName(wrapCalls[i].arguments[0])));
         expect(bare, 'each wrap() argument is a FormPage or ListPage').toEqual([]);

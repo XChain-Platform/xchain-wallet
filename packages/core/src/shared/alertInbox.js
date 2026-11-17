@@ -15,6 +15,7 @@ function normalizeAlert(value) {
     return {
         id: value.id,
         type: value.type,
+        ...(typeof value.label === 'string' && value.label ? { label: value.label } : {}),
         title: value.title,
         message: value.message,
         at,

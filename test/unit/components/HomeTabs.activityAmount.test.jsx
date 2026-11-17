@@ -127,7 +127,7 @@ describe('Home Activity amounts', () => {
 
         // The Home Activity tab is retired (ruling n.253): History prints these rows, so Home
         // draws none and the amount rules above are the ones History uses.
-        await screen.findByRole('tab', { name: 'Coins' });
+        await screen.findByRole('tab', { name: 'Balances' });
         expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
         expect(document.querySelector('[data-activity-row]')).toBeNull();
         expect(recentActivity.length).toBeGreaterThan(0);
@@ -193,7 +193,7 @@ describe('Home Activity amounts', () => {
 
         // Home draws no activity rows any more; the paid ticker and qualifier come from the
         // shared helpers History uses.
-        await screen.findByRole('tab', { name: 'Coins' });
+        await screen.findByRole('tab', { name: 'Balances' });
         expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
         expect(document.querySelector('[data-activity-row]')).toBeNull();
         expect(activityRowTick(recentActivity[0])).toBe('XCP');

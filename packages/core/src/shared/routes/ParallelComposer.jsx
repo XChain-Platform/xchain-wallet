@@ -9,10 +9,10 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FieldNote, FormPage, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FieldNote, FormPage, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea, useFormErrors } from '@xchain-wallet/core/ui';
 // The Wallet Form Standard frame. Its FormSection is the collapsible one,
 // not the settings block of the same name in core/ui.
-import { FeeSection, FormAction, FormFrame, FormSection, summaryAddress, useFormSections } from '../components/formStandard/index.js';
+import { FeeSection, FormAction, FormFrame, FormSection, SummaryAddress, joinSummaryParts, useFormSections } from '../components/formStandard/index.js';
 import { t } from '../../i18n/index.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/parallelComposer.js';
@@ -27,6 +27,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useFormLeaveGuard } from '../hooks/useFormLeaveGuard.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { actionSelectOptions } from '../utils/actionOptionIcon.jsx';
 import { titleCase } from '../utils/titleCase.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
@@ -40,6 +41,8 @@ import {
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import parallelStyles from './ParallelComposer.module.css';
+// Row facts as label-left value-right rows, never stacked uppercase labels.
+import facts from './FactRows.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { isNativeFeeMandatory } from '../../registry/nativeFee.js';
 import {
@@ -105,8 +108,10 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     );
     const [actionsList, setActionsList] = useState(/** @type {string[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    const [validationError, setValidationError] = useState(/** @type {string | null} */ (null));
+    const [, setValidationError] = useState(/** @type {string | null} */ (null));
     const [validating, setValidating] = useState(false);
+    const composeFormErrors = useFormErrors();
+    const signFormErrors = useFormErrors();
     const validationRunRef = useRef(0);
     // Rows the user has edited, or every row once Review was pressed. A row
     // still missing its chain, address or action only says so after one of those.
@@ -256,7 +261,16 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
 
     const updateRow = (index, patch) => {
         const id = rows[index]?.id;
-        if (id) setTouchedRows((t) => (t[id] ? t : { ...t, [id]: true }));
+        if (id) {
+            setTouchedRows((t) => (t[id] ? t : { ...t, [id]: true }));
+            if (Object.prototype.hasOwnProperty.call(patch, 'chainId')) {
+                composeFormErrors.clear(`parallel-network-${id}`);
+                composeFormErrors.clear(`parallel-from-${id}`);
+            }
+            if (Object.prototype.hasOwnProperty.call(patch, 'fromAddressId')) composeFormErrors.clear(`parallel-from-${id}`);
+            if (Object.prototype.hasOwnProperty.call(patch, 'action')) composeFormErrors.clear(`parallel-action-${id}`);
+            if (Object.prototype.hasOwnProperty.call(patch, 'paramsJson')) composeFormErrors.clear(`parallel-params-${id}`);
+        }
         validationRunRef.current += 1;
         setValidating(false);
         setValidationError(null);
@@ -323,7 +337,19 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
 
     const goReview = async () => {
         setTouchedRows(Object.fromEntries(rows.map((row) => [row.id, true])));
-        if (composeError || validating) return;
+        if (validating) return;
+        const problems = {};
+        if (rows.length === 0) problems['form:rows'] = 'Add at least one action.';
+        rowIssues.forEach((issue, index) => {
+            if (!issue) return;
+            const row = rows[index];
+            const field = !row.chainId ? 'network'
+                : !row.fromAddressId || !(addressesByChain?.[row.chainId] || []).some((address) => address.id === row.fromAddressId) ? 'from'
+                    : !row.action || !isActionOfferedOnChain(chainRegistry, row.chainId, row.action)
+                        || !isActionOfferedInBuild(row.action, { hasDexSurface }) ? 'action' : 'params';
+            problems[`parallel-${field}-${row.id}`] = issue.message;
+        });
+        if (!composeFormErrors.validate(problems)) return;
         const runId = ++validationRunRef.current;
         const draftRows = rows.map((row) => ({ ...row }));
         setValidationError(null);
@@ -349,12 +375,15 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     : actionValidationMessage(result);
                 if (!message) continue;
                 setValidationError(`Row ${i + 1}: ${message}`);
+                composeFormErrors.validate({ [`parallel-params-${draftRows[i].id}`]: `Row ${i + 1}: ${message}` });
                 return;
             }
             setStage('review');
         } catch (err) {
             if (validationRunRef.current === runId) {
-                setValidationError(`Could not validate the actions. ${userFacingMessage(err, 'Try again.')}`);
+                const message = `Could not validate the actions. ${userFacingMessage(err, 'Try again.')}`;
+                setValidationError(message);
+                composeFormErrors.fail(message, 'form:validation');
             }
         } finally {
             if (validationRunRef.current === runId) setValidating(false);
@@ -412,10 +441,18 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         : null;
 
     async function signActiveRow() {
-        if (!activeRow || !activeFromAddress) return;
+        if (!activeRow) {
+            signFormErrors.fail('No action is available to sign.', 'form:row');
+            return;
+        }
         if (activeLane.composing || activeRow.status === 'submitting') return;
+        if (!signFormErrors.validate({
+            'parallel-sign-from': !activeFromAddress
+                ? 'Choose an available From address before signing this action.' : null,
+        })) return;
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) {
+            if (feeStop.formError) signFormErrors.fail(feeStop.formError, 'form:fee');
             if (feeStop.formError) updateRow(activeRowIndex, { status: 'failed', error: feeStop.formError });
             return;
         }
@@ -432,6 +469,10 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
             if (message) {
                 updateRow(activeRowIndex, { status: 'failed', error: message });
                 setValidationError(`Row ${activeRowIndex + 1}: ${message}`);
+                composeFormErrors.fail(
+                    `Row ${activeRowIndex + 1}: ${message}`,
+                    `parallel-params-${activeRow.id}`,
+                );
                 setStage('compose');
                 return;
             }
@@ -439,6 +480,10 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
             const message = userFacingMessage(err, 'Validation could not be refreshed. Try again.');
             updateRow(activeRowIndex, { status: 'failed', error: message });
             setValidationError(`Row ${activeRowIndex + 1}: ${message}`);
+            composeFormErrors.fail(
+                `Row ${activeRowIndex + 1}: ${message}`,
+                `parallel-params-${activeRow.id}`,
+            );
             setStage('compose');
             return;
         }
@@ -500,6 +545,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
 
     const header = (
         <PageHeader
+            nested={stage === 'review'}
             onBack={stage === 'review' ? () => setStage('compose') : leaveGuard.guardedOnBack}
             title={t('parallelComposer.title')}
         />
@@ -557,6 +603,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 }}
                 screenVariant={variant}
                 chainLabel={activeDescriptor?.displayName || activeChainId || ''}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${activeCoinTicker}`.trim()
                     : undefined}
@@ -624,6 +671,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
             <FormFrame
                 demoGuard={demoGuard}
                 label="Sign parallel actions"
+                errors={signFormErrors}
                 status={activeRow.status === 'failed' && activeRow.error ? (
                     <StatusMessage variant="error">{activeRow.error}</StatusMessage>
                 ) : null}
@@ -640,6 +688,10 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                         revealKey={activeRow.status === 'failed' && activeRow.error
                             && activeRow.error === customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate })?.formError
                             ? `fee-${activeRow.error}` : 0}
+                        // Each queued row is its own confirmation, built from
+                        // inputs the earlier rows leave; one set of Advanced
+                        // choices cannot apply to them all, so none is offered.
+                        advanced={false}
                     />
                 ) : null}
                 action={(
@@ -664,8 +716,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                             type="button"
                             variant="success"
                             icon={activeRow.status === 'failed' ? <RefreshIcon /> : <SignIcon />}
-                            loading={activeLane.composing}
-                            disabled={!activeFromAddress || activeRow.status === 'submitting'}
+                            loading={activeLane.composing || activeRow.status === 'submitting'}
                             onClick={signActiveRow}
                         >
                             {activeRow.status === 'failed' ? 'Retry row' : 'Sign'}
@@ -681,10 +732,22 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 >
                     {progressText}
                 </p>
-                <RowDetail
-                    row={activeRow}
-                    addressesByChain={addressesByChain}
-                />
+                <div
+                    id="parallel-sign-from"
+                    tabIndex={-1}
+                    aria-invalid={signFormErrors.errorFor('parallel-sign-from') ? 'true' : undefined}
+                    aria-describedby={signFormErrors.errorFor('parallel-sign-from') ? 'parallel-sign-from-error' : undefined}
+                >
+                    <RowDetail
+                        row={activeRow}
+                        addressesByChain={addressesByChain}
+                    />
+                    {signFormErrors.errorFor('parallel-sign-from') ? (
+                        <FieldNote id="parallel-sign-from-error" variant="error">
+                            {signFormErrors.errorFor('parallel-sign-from')}
+                        </FieldNote>
+                    ) : null}
+                </div>
             </FormFrame>,
         );
     }
@@ -740,13 +803,14 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         <FormFrame
             demoGuard={demoGuard}
             label="Compose parallel actions"
+            errors={composeFormErrors}
             onSubmit={async (event) => {
                 event.preventDefault();
                 await goReview();
             }}
             status={[
-                shownComposeError || validationError ? (
-                    <StatusMessage key="error" variant="error">{shownComposeError || validationError}</StatusMessage>
+                shownComposeError && !composeFormErrors.hasErrors ? (
+                    <StatusMessage key="error" variant="error">{shownComposeError}</StatusMessage>
                 ) : null,
                 resumeNotice ? (
                     <StatusMessage key="resume" variant="status">
@@ -758,7 +822,6 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 <FormAction
                     icon={<SignIcon />}
                     loading={validating}
-                    disabled={Boolean(shownComposeError) || validating}
                 >
                     Sign and Send Queue
                 </FormAction>
@@ -798,10 +861,10 @@ function RowEditor({ index, row, open, onOpenChange, revealKey, chainIds, addres
     const pickedAddress = addrs.find((address) => address.id === row.fromAddressId) || null;
     const network = row.chainId ? (chainRegistry.get(row.chainId)?.displayName || row.chainId) : null;
     // Closed, a row reads "Send on Bitcoin, bc1q...7c1c".
-    const summary = [
+    const summary = joinSummaryParts([
         row.action ? `${actionDisplayLabel(row.action)}${network ? ` on ${network}` : ''}` : network,
-        pickedAddress ? summaryAddress(pickedAddress.address) : null,
-    ].filter(Boolean).join(', ') || t('parallelComposer.rowEmpty');
+        pickedAddress?.address ? <SummaryAddress address={pickedAddress.address} /> : null,
+    ]) || t('parallelComposer.rowEmpty');
 
     return (
         <FormSection
@@ -821,6 +884,7 @@ function RowEditor({ index, row, open, onOpenChange, revealKey, chainIds, addres
             </div>
 
             <NetworkField
+                id={`parallel-network-${row.id}`}
                 label="Network"
                 help="The network this row's action is submitted on."
                 value={row.chainId || ''}
@@ -830,6 +894,7 @@ function RowEditor({ index, row, open, onOpenChange, revealKey, chainIds, addres
             />
 
             <AddressField
+                id={`parallel-from-${row.id}`}
                 label="From"
                 help="The wallet address that signs this row and pays its network fee."
                 icon="addresses"
@@ -841,19 +906,18 @@ function RowEditor({ index, row, open, onOpenChange, revealKey, chainIds, addres
             />
 
             <Select
+                id={`parallel-action-${row.id}`}
                 label="Action"
                 help="The raw action this row sends. Each row is its own transaction, signed and broadcast one after another; the queue is not atomic, so a later failure does not undo an earlier transaction."
                 value={row.action || ''}
                 onChange={(e) => onChange({ action: e.target.value })}
             >
-                <option value="">Select action</option>
                 {/* One SDK list serves every row; drop what this row's chain refuses at every version. */}
-                {actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, row.chainId, a)).map((a) => (
-                    <option key={a} value={a}>{actionDisplayLabel(a)} ({a})</option>
-                ))}
+                {actionSelectOptions(actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, row.chainId, a)), 'Select action')}
             </Select>
 
             <Textarea
+                id={`parallel-params-${row.id}`}
                 label="Params (JSON object)"
                 help="A JSON object containing this action's fields, using the same format as Advanced action."
                 rows={4}
@@ -864,9 +928,10 @@ function RowEditor({ index, row, open, onOpenChange, revealKey, chainIds, addres
             />
 
             <div className={styles.actions} style={{ justifyContent: 'flex-end' }}>
+                {/* Remove is red, as every Remove is. */}
                 <Button
                     type="button"
-                    variant="ghost"
+                    variant="danger"
                     size="sm"
                     icon={<TrashIcon />}
                     onClick={onRemove}
@@ -884,25 +949,26 @@ function RowDetail({ row, addressesByChain }) {
     const descriptor = row.chainId ? chainRegistry.get(row.chainId) : null;
     const fromAddress = (addressesByChain[row.chainId] || []).find((a) => a.id === row.fromAddressId);
     return (
-        <dl className={styles.detailsList}>
+        // Label-left value-right fact rows, never stacked uppercase labels.
+        <dl className={facts.list}>
             {descriptor ? (
                 <>
-                    <dt className={styles.detailsLabel}>Network</dt>
-                    <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                    <dt className={facts.label}>Network</dt>
+                    <dd className={facts.value}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
                 </>
             ) : null}
-            <dt className={styles.detailsLabel}>From</dt>
-            <dd className={styles.detailsValue}>
-                {fromAddress ? <AddressText address={fromAddress.address} /> : 'unknown'}
+            <dt className={facts.label}>From</dt>
+            <dd className={facts.value}>
+                {fromAddress ? <AddressText address={fromAddress.address} fit /> : 'unknown'}
             </dd>
-            <dt className={styles.detailsLabel}>Action</dt>
-            <dd className={styles.detailsValue}>
+            <dt className={facts.label}>Action</dt>
+            <dd className={facts.value}>
                 {row.action ? `${actionDisplayLabel(row.action)} (${row.action})` : 'none'}
             </dd>
-            <dt className={styles.detailsLabel}>Status</dt>
-            <dd className={styles.detailsValue}><StatusPill status={row.status} /></dd>
-            <dt className={styles.detailsLabel}>Params</dt>
-            <dd className={styles.detailsValue} style={{ fontFamily: 'var(--xc-font-mono, monospace)', fontSize: 'var(--xc-text-xs)' }}>
+            <dt className={facts.label}>Status</dt>
+            <dd className={facts.value}><StatusPill status={row.status} /></dd>
+            <dt className={facts.label}>Params</dt>
+            <dd className={facts.value} style={{ fontFamily: 'var(--xc-font-mono, monospace)', fontSize: 'var(--xc-text-xs)' }}>
                 {row.paramsJson}
             </dd>
         </dl>

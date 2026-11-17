@@ -34,6 +34,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', () => ({
 }));
 
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
+import { showHomeBalances } from '../../helpers/homeBalances.js';
 
 const descriptors = new Map([
     ['bitcoin-mainnet', {
@@ -97,7 +98,7 @@ afterEach(() => {
 describe('Home Tokens sorting', () => {
     it('does not show a sort control on Tokens', () => {
         mount();
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
 
         expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
     });
@@ -105,7 +106,7 @@ describe('Home Tokens sorting', () => {
     it('keeps Tokens in saved name order', () => {
         localStorage.setItem('xc:balances:sort:wallet-sort', 'name');
         mount();
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
 
         expect(renderedKeys()).toEqual([
             'bitcoin-mainnet:AAA',
@@ -116,6 +117,8 @@ describe('Home Tokens sorting', () => {
 
     it('applies the saved sort choice across coin and token lists', () => {
         localStorage.setItem('xc:balances:sort:wallet-sort', 'name');
+        // Balances remembered as Coins on this wallet.
+        localStorage.setItem('xc:balances:type:wallet-sort', 'coins');
         mount();
 
         fireEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
@@ -135,7 +138,7 @@ describe('Home Tokens sorting', () => {
             'litecoin-mainnet:LTC',
         ]);
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
         expect(renderedKeys()).toEqual([
             'bitcoin-mainnet:ZED',
             'bitcoin-mainnet:BETA',

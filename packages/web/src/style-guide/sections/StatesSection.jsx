@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Skeleton, StatusMessage, Icon, EmptyState } from '@xchain-wallet/core/ui';
+import { Skeleton, StatusMessage, Notice, Icon, EmptyState } from '@xchain-wallet/core/ui';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 
 export function StatesSection() {
@@ -114,6 +114,36 @@ showToast({ variant: 'success', message: 'Address copied to clipboard.' });`}
                 <StatusMessage variant="status">
                     Fee estimate refreshing…
                 </StatusMessage>
+            </LiveExample>
+
+            <Guidance
+                what={<>Notice (the Notice Standard, G120): three tones, one look. A fill tinted in the tone, a thin border of the same tone, 8px corners, the tone icon, an optional bold <code>title</code>, the body, at most one <code>action</code> and an optional X (<code>onDismiss</code>). <code>tone</code> is <code>info</code>, <code>danger</code> (every warning, error and critical caution) or <code>success</code>. A toast takes the same tones and icons over the raised surface: its warning and error variants both paint danger.</>}
+                when={<>Any message about the page or form the user is on.</>}
+                whenNot={<>A field error (the field's own line under it) · a result the user has already moved on from (a toast).</>}
+                doRule={<>✓ Use <code>role="note"</code> for a static critical caution · put the notice outside a card</>}
+                dontRule={<>✗ A solid red fill · a coloured edge bar · a notice inside a card</>}
+            />
+            <Markup>
+{`<Notice tone="info">Tokens you receive show here after one confirmation.</Notice>
+<Notice tone="danger" action={{ label: 'Try again', onAction: retry }}>Couldn't send.</Notice>
+<Notice tone="danger" role="note" title="Never share your recovery phrase">Anyone with these words can take everything.</Notice>
+<Notice tone="info" title="Auto backup is on" onDismiss={hide}>An encrypted copy saves after each change.</Notice>
+<Notice tone="success" title="Order placed">It stays under Open orders until it fills.</Notice>`}
+            </Markup>
+            <LiveExample label="Notice: one per tone, then a dismissible one">
+                <Notice tone="info">Tokens you receive show here after one confirmation.</Notice>
+                <Notice tone="danger" action={{ label: 'Try again', onAction: () => {} }}>
+                    Couldn&apos;t send. The amount is more than this address holds.
+                </Notice>
+                <Notice tone="danger" role="note" title="Never share your recovery phrase">
+                    Anyone with these words can take everything in this wallet.
+                </Notice>
+                <Notice tone="success" title="Order placed">
+                    It stays under Open orders until it fills or expires.
+                </Notice>
+                <Notice tone="info" title="Auto backup is on" onDismiss={() => {}}>
+                    An encrypted copy saves after each change.
+                </Notice>
             </LiveExample>
         </Section>
     );

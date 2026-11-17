@@ -54,6 +54,34 @@ it('submits typed native amount and fee rate, then opens the new session', async
     expect(onSessionStarted).toHaveBeenCalledWith('session-9');
 });
 
+it('keeps Start Signing enabled and reports each missing payment field without sending', async () => {
+    render(
+        <MultisigSendForm
+            walletId="wallet-1"
+            chainId="bitcoin-mainnet"
+            multisigConfigId="config-1"
+            multisig={{
+                multisigConfigId: 'config-1',
+                address: 'bc1qmultisig',
+                scheme: 'p2wsh-multisig',
+                threshold: 2,
+                cosignerCount: 3,
+            }}
+        />,
+    );
+
+    const submit = screen.getByRole('button', { name: /^Start signing$/i });
+    expect(submit).not.toBeDisabled();
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(document.querySelector('[data-form-errors]')).toHaveTextContent(
+        'Enter the destination address.',
+    ));
+    expect(screen.getByLabelText('To')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Amount (BTC)')).toHaveAttribute('aria-invalid', 'true');
+    expect(startMultisigSend).not.toHaveBeenCalled();
+});
+
 it('shows the Taproot limitation and disables starting', () => {
     render(
         <MultisigSendForm

@@ -1,4 +1,6 @@
-/* 8px between every block on the page, as on the coin page. */
+/* The token page's former look, kept for the pages that still borrow it:
+   the co-signer account pages and View Address (the token page itself is
+   TokenDetail now, G12). 8px between every block on the page. */
 .approvedBody.approvedBody {
     gap: var(--xc-space-2);
 }
@@ -38,18 +40,6 @@
     overflow-wrap: anywhere;
 }
 
-.approvedHeroDescription {
-    margin: 0;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
-    overflow-wrap: anywhere;
-}
-
-.approvedTabPanel {
-    min-width: 0;
-}
-
 .approvedDetailsCard {
     composes: card from '../../ui/Card.module.css';
 }
@@ -62,8 +52,10 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
     align-items: center;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-3) 0;
+    /* Rows sit 8px apart (card inset plus row padding); a label that stacks over
+       its value keeps a small 4px gap. */
+    gap: var(--xc-space-1) var(--xc-space-3);
+    padding: var(--xc-space-2) 0;
     border-bottom: 1px solid var(--xc-border);
 }
 
@@ -90,58 +82,8 @@
     overflow-wrap: anywhere;
 }
 
+/* Used by CoSignerAccountDetail only; the token Details tab uses the normal UI font. */
 .approvedMono {
     font-family: var(--xc-font-mono);
     font-variant-numeric: tabular-nums;
-}
-
-.approvedAddressValue,
-.approvedLocked,
-.approvedEditable {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--xc-space-1);
-    min-width: 0;
-}
-
-.approvedLocked,
-.approvedEditable {
-    font-weight: 600;
-}
-
-.approvedLocked {
-    color: var(--xc-warning-text);
-}
-
-.approvedEditable {
-    color: var(--xc-success);
-}
-
-.approvedLocked svg,
-.approvedEditable svg {
-    width: var(--xc-icon-sm);
-    height: var(--xc-icon-sm);
-}
-
-/* Destroy is the same tile as the rest; only its icon and label
-   take the danger colour. Four classes outrank QuickActionTile .square. */
-.dangerTile.dangerTile.dangerTile.dangerTile {
-    color: var(--xc-danger);
-}
-
-/* The action groups stack 8px apart, and each heading sits 8px
-   over its tiles, the page's one spacing step. */
-.actionGroups {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-}
-
-/* The locked-tile reason under a group, small and muted. */
-.lockedReason {
-    margin: 0;
-    font-size: var(--xc-text-xs);
-    line-height: 1.4;
-    color: var(--xc-text-muted);
 }

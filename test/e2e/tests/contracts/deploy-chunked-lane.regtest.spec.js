@@ -689,7 +689,9 @@ test.describe('§11.3: the chunked deploy lane', () => {
             const scope = page.getByRole('main');
             await expect(page.getByRole('heading', { name: rowLabel }).first())
                 .toBeVisible({ timeout: 30_000 });
-            await page.getByRole('button', { name: 'Call method', exact: true }).click();
+            // Call by name ends the Contract Functions list on the Actions tab;
+            // its name carries the description too.
+            await page.getByRole('button', { name: /^Call by name\b/ }).click();
             // ExecuteContractForm's network field is fixed to the contract's
             // own chain. The From address is what proves the call signs on
             // the venue chain, and from the address that deployed.

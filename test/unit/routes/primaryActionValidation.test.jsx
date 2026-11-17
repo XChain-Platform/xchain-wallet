@@ -158,8 +158,8 @@ describe('primary actions explain missing form input', () => {
         expect(field.value).not.toBe('0.000000001');
     });
 
-    it('AirdropForm explains that its token is required', async () => {
+    it('AirdropForm explains that its token must be picked', async () => {
         const { container } = mount(<AirdropForm walletId="w" onBack={() => {}} />);
-        await submitAndExpect(container, 'Token is required.');
+        await submitAndExpect(container, 'Pick the token to drop.');
     });
 });

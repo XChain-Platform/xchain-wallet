@@ -12,7 +12,7 @@ import { t } from '../../i18n/index.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 // Network, From and the fee selector come from the standard FromSection and
 // FeeSection.
-import { AddressText, Button, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormNotice, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 // The Wallet Form Standard frame (From, main section, Memo, Network fee,
 // status slot, one action).
 import {
@@ -21,10 +21,10 @@ import {
     FormFrame,
     FormSection,
     FromSection,
+    MemoSection,
     useFormSections,
 } from '../components/formStandard/index.js';
-import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
-import { formatCoinBaseUnits } from '../../flows/feesCard.js';
+import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -40,12 +40,12 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import {
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
-import { formatWithThousands } from '../utils/amountFormat.js';
-import { SignCredentials } from '../components/SignCredentials.jsx';
+import { formatWithThousands, groupDecodedAmounts } from '../utils/amountFormat.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
@@ -64,11 +64,12 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import styles from './IssueTokenForm.module.css';
-import callbackStyles from './CallbackForm.module.css';
+import facts from './FactRows.module.css';
+import cbStyles from './CallbackForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { APPROVE_REFUSAL_NAME, approveRefusal } from '../utils/approveRefusal.js';
-import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import {
@@ -76,8 +77,11 @@ import {
     tokenIssuerEligibility,
 } from '../utils/tokenIssuerEligibility.js';
 import { compareDecimalStrings, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
+const CALLBACK_PAYOUT_WARNING = 'The holder count and payout can change until the callback confirms. Holders can split balances across new addresses, so the final payout may be higher than shown.';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -120,7 +124,6 @@ export function callbackTermsError(info, payoutDivisibility = null) {
     }
     return null;
 }
-
 function sameCallbackTerms(left, right) {
     return String(left?.callbackTick || '').trim()
             === String(right?.callbackTick || '').trim()
@@ -215,10 +218,13 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     // the section holding the refused value reopens on every press.
     const formSections = useFormSections({ from: false, main: true, memo: false, fee: false });
     const [reviewAttempt, setReviewAttempt] = useState(0);
+    // Set by an Execute Callback press (G22): an empty Token then shows red.
+    const [attempted, setAttempted] = useState(false);
     const [errorSection, setErrorSection] = useState(/** @type {'from' | 'main' | 'memo' | 'fee' | null} */ (null));
 
-    // Typed-confirmation gate (CALLBACK force-recalls everything; rides the
-    // same typed-word rail as DESTROY / SWEEP).
+    // Typed-confirmation gate: a callback recalls every holder's tokens, so it
+    // keeps a typed word like DESTROY and SWEEP. The hint only says how to
+    // type it; what is recalled is said in the review's warnings card.
     const [typedConfirm, setTypedConfirm] = useState('');
     const typedConfirmOk = isExactTypedConfirmation(typedConfirm, 'CALLBACK');
 
@@ -406,61 +412,92 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         // nothing read and, worse, read like the confirm surface still
         // depended on form state.
         if (stage !== 'review' && stage !== 'submitting') return null;
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action: 'CALLBACK',
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
-        });
+        }));
     }, [stage, confirmModalOpen, actionParams, chainId]);
 
-    // Shared preview block: config, live holder count, total payout, and
-    // the dust-split caveat. Rendered on the form and the review stage.
+    const paysText = `${cbAmount} ${cbTick} per unit of ${ticker}`;
+    const blockText = cbBlock == null
+        ? ''
+        : `${String(cbBlock)}${currentHeight != null
+            ? (blockReached ? ' (reached)' : ` (current ${String(currentHeight)})`)
+            : ''}`;
+    const holdersText = summaryLoading && !summary
+        ? 'Loading…'
+        : summary
+            ? `${(Number(summary.recipientCount) || 0).toLocaleString('en-US')}${summary.partial ? '+' : ''}`
+            : 'Unavailable';
+    const payoutText = summary && summary.totalPayout != null
+        ? `${formatWithThousands(summary.totalPayout)} ${cbTick}${summary.partial ? ' (at least)' : ''}`
+        : '';
+    const callbackFacts = [
+        ...(configComplete ? [{ label: 'Pays holders', value: paysText }] : []),
+        ...(blockText ? [{ label: 'Allowed from block', value: blockText }] : []),
+        { label: 'Holders to pay', value: holdersText === 'Unavailable' ? 'Could not check' : holdersText },
+        ...(payoutText ? [{ label: 'Total payout', value: payoutText }] : []),
+    ];
+    const quotedProtocolFee = normalizeProtocolFee(protocolFeeQuote);
+    const reviewDecoded = useMemo(() => (decoded ? {
+        ...decoded,
+        warnings: [...(decoded.warnings || []), CALLBACK_PAYOUT_WARNING],
+    } : null), [decoded]);
+    const legacyComposed = useMemo(() => (reviewDecoded ? {
+        action: 'CALLBACK',
+        chainId,
+        decoded: reviewDecoded,
+        protocolFeeKnownFree: quotedProtocolFee.known && quotedProtocolFee.free,
+        actionWarnings: ['CALLBACK'],
+    } : null), [chainId, quotedProtocolFee.free, quotedProtocolFee.known, reviewDecoded]);
+    const confirmComposed = useMemo(() => {
+        const composed = confirmAction.composed;
+        if (!composed?.decoded) return composed;
+        return {
+            ...composed,
+            decoded: {
+                ...composed.decoded,
+                warnings: [...(composed.decoded.warnings || []), CALLBACK_PAYOUT_WARNING],
+            },
+        };
+    }, [confirmAction.composed]);
+
+    // Shared preview block: config, live holder count and total payout.
     const previewBlock = (
-        <dl className={`${styles.detailsList} ${styles.flatDetailsList}`}>
-            <dt className={callbackStyles.summaryLabel}>Pays holders</dt>
-            <dd className={callbackStyles.summaryValue}>
+        <>
+        {/* The shared FactRows look: one row per fact, one divider per row.
+            Every label and value holds one line; a long value truncates and
+            keeps its full text in a title. Read-only facts carry no help icon. */}
+        <dl className={`${facts.list} ${cbStyles.facts}`} data-callback-facts="">
+            <dt className={facts.label} title="Pays holders">Pays holders</dt>
+            <dd className={facts.value} title={paysText}>
                 {configComplete
-                    ? `${cbAmount} ${cbTick} per unit of ${ticker}`
+                    ? paysText
                     : termsUnread
                         ? t('balances.unavailable')
                         : <em>No callback configured for {ticker || 'this token'}.</em>}
             </dd>
             {cbBlock != null ? (
                 <>
-                    <dt className={callbackStyles.summaryLabel}>Allowed from block</dt>
-                    <dd className={callbackStyles.summaryValue}>
-                        {cbBlock.toLocaleString('en-US')}
-                        {currentHeight != null
-                            ? (blockReached ? ' (reached)' : ` (current ${currentHeight.toLocaleString('en-US')})`)
-                            : ''}
-                    </dd>
+                    <dt className={facts.label} title="Allowed from block">Allowed from block</dt>
+                    <dd className={facts.value} title={blockText}>{blockText}</dd>
                 </>
             ) : null}
-            <dt className={callbackStyles.summaryLabel}>
-                Holders to pay
-                <InfoTip
-                    aria="About the holder payout estimate"
-                    label="The holder count and payout are indicative: they can change until the callback confirms. Holders can split their balance across new addresses to inflate the payout you owe, so the final cost may be higher than shown."
-                />
-            </dt>
-            <dd className={callbackStyles.summaryValue}>
-                {summaryLoading && !summary
-                    ? 'Loading…'
-                    : summary
-                        ? `${(Number(summary.recipientCount) || 0).toLocaleString('en-US')}${summary.partial ? '+' : ''}`
-                        : 'Unavailable'}
-            </dd>
+            <dt className={facts.label} title="Holders to pay">Holders to pay</dt>
+            <dd className={facts.value} title={holdersText}>{holdersText}</dd>
             {summary && summary.totalPayout != null ? (
                 <>
-                    <dt className={callbackStyles.summaryLabel}>Total payout</dt>
-                    <dd className={callbackStyles.summaryValue}>
-                        {formatWithThousands(summary.totalPayout)} {cbTick}
-                        {summary.partial ? ' (at least)' : ''}
-                    </dd>
+                    <dt className={facts.label} title="Total payout">Total payout</dt>
+                    <dd className={facts.value} title={payoutText}>{payoutText}</dd>
                 </>
             ) : null}
         </dl>
+        <p className={styles.hint} data-callback-estimate-hint="">
+            The holder count and payout are indicative: they can change until the callback confirms. Holders can split their balance across new addresses to inflate the payout you owe, so the final cost may be higher than shown.
+        </p>
+        </>
     );
 
     async function openConfirmModal() {
@@ -475,7 +512,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 preflightOpts: {
                     mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report',
                 },
-                compose: () => messaging.composeForConfirm({
+                compose: () => messaging.composeForConfirm(withAdvancedOptions({
                     walletId,
                     chainId,
                     from,
@@ -486,7 +523,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                         payFeeInNativeCoin: nativeFee.flag,
                         ...(feePerKb != null ? { feePerKb } : {}),
                     },
-                }),
+                })),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 // §4.6: the input-liveness half of the Approve-time re-check,
                 // the same one useActionConfirmFlow.run gives every migrated form.
@@ -605,7 +642,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
     async function refreshBeforeReview() {
         if (demoWallet) {
             if (!blockReached) {
-                return `Callback is not allowed until block ${cbBlock?.toLocaleString('en-US')}.`;
+                return `Callback is not allowed until block ${String(cbBlock)}.`;
             }
             return null;
         }
@@ -650,7 +687,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             setCurrentHeight(height);
             const freshBlock = Number(freshInfo.callbackBlock);
             if (height < freshBlock) {
-                return `Callback is not allowed until block ${freshBlock.toLocaleString('en-US')}. The network is at ${height.toLocaleString('en-US')}.`;
+                return `Callback is not allowed until block ${String(freshBlock)}. The network is at ${String(height)}.`;
             }
             if (typeof messaging?.tokenHolderSummary !== 'function') {
                 return 'Could not refresh the callback payout. Try again.';
@@ -707,8 +744,18 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
         // Every press counts, so the section that holds the refused
         // value opens again even after the user closed it.
         setReviewAttempt((n) => n + 1);
+        setAttempted(true);
+        // G22: an empty Token is marked on the field and takes the cursor.
+        if (!ticker) {
+            setErrorSection('main');
+            setFormError(null);
+            setTimeout(() => document.getElementById('callback-token')?.focus(), 0);
+            return;
+        }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setErrorSection('fee'); setFormError(feeStop.formError); return; }
+        // A token with no callback set stops here with no second notice:
+        // its Pays holders row already reads "No callback configured" (U86).
         if (refreshing || !guardBeforeSign()) return;
         setFormError(null);
         setRefreshing(true);
@@ -718,6 +765,7 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             setFormError(refreshError);
             return;
         }
+        setTypedConfirm('');
         if (!isWatcherMode) {
             openConfirmModal();
             return;
@@ -771,12 +819,14 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
     function handleBuildAnother() {
         setResult(null);
+        setAttempted(false); // a fresh form opens with no G22 marks
         setSubmitError(null);
         setStage('form');
     }
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
@@ -828,108 +878,80 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     {' '}once this confirms and indexes.
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrapForm(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review callback"
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant={isWatcherMode ? 'primary' : 'danger'}
-                        icon={isWatcherMode || isHwSource ? <Icon.SignIcon /> : <Icon.ReceiveIcon />}
-                        loading={stage === 'submitting'}
-                        disabled={stage === 'submitting' || !typedConfirmOk || (
-                                isWatcherMode
-                                    ? false
-                                    : isHwSource
-                                        ? hwStatus !== 'available'
-                                        : (!signerReady && password.length === 0)
-                            )
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create Unsigned Transaction'
-                            : 'Call Back'}
-                    </Button>
-                )}
-            >
-                <p className={styles.summary}>{decoded?.summary}</p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    <DetailRow label="Token" value={actionParams.TICK} />
-                    {actionParams.MEMO ? <DetailRow label="Memo" value={actionParams.MEMO} /> : null}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                </dl>
-                {previewBlock}
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-                <Input
-                    label="Type CALLBACK to confirm"
-                    help={t('common.typedConfirmationCallbackHint')}
-                    value={typedConfirm}
-                    onChange={(e) => setTypedConfirm(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                />
-            </FormPage>,
-        );
-    }
-
-    if (confirmModalOpen) {
         return (
-            <ActionConfirmScreen
-                confirmAction={confirmAction}
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setTypedConfirm(''); setStage('form'); }}
+                decoded={reviewDecoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentialsReady={typedConfirmOk}
+                credentials={(
+                    <>
+                        <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
+                        <Input
+                            label="Type CALLBACK to confirm"
+                            help={t('common.typedConfirmationHint', { word: 'CALLBACK' })}
+                            value={typedConfirm}
+                            onChange={(event) => setTypedConfirm(event.target.value)}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                        />
+                    </>
+                )}
                 summary={{
                     verb: t('components.confirmSummary.verbExecuteCallback'),
                     ...(actionParams.TICK ? { ticker: String(actionParams.TICK).toUpperCase() } : {}),
                     direction: 'none',
                     chainId,
                     address: fromAddress?.address,
+                    facts: callbackFacts,
+                    ...(!nativeFee.flag && quotedProtocolFee.known ? {
+                        protocolFee: {
+                            amount: quotedProtocolFee.free ? '0' : String(quotedProtocolFee.amount ?? ''),
+                            ticker: 'XCHAIN',
+                        },
+                    } : {}),
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
+        );
+    }
+
+    if (confirmModalOpen) {
+        return (
+            <ActionConfirmScreen
+                confirmAction={{ ...confirmAction, composed: confirmComposed }}
+                summary={{
+                    verb: t('components.confirmSummary.verbExecuteCallback'),
+                    ...(actionParams.TICK ? { ticker: String(actionParams.TICK).toUpperCase() } : {}),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    facts: callbackFacts,
                 }}
                 screenVariant={variant}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -941,16 +963,13 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     ? hwStatus === 'available'
                     : (signerReady || password.length > 0)) && typedConfirmOk}
                 extraCredentials={(
-                    <>
-                        {previewBlock}
-                        <Input
-                            label='Type "CALLBACK" to confirm'
-                            help={t('common.typedConfirmationCallbackReviewHint')}
-                            value={typedConfirm}
-                            onChange={(e) => setTypedConfirm(e.target.value)}
-                            autoComplete="off"
-                        />
-                    </>
+                    <Input
+                        label='Type "CALLBACK" to confirm'
+                        help={t('common.typedConfirmationHint', { word: 'CALLBACK' })}
+                        value={typedConfirm}
+                        onChange={(e) => setTypedConfirm(e.target.value)}
+                        autoComplete="off"
+                    />
                 )}
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}
@@ -1004,7 +1023,9 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
 
     // Section helpers. The section holding the last refusal reopens
     // on every Review press.
-    const errorKey = (id) => (formError && errorSection === id ? reviewAttempt + 1 : 0);
+    const errorKey = (id) => (
+        (formError && errorSection === id) || (id === 'main' && attempted && !ticker) ? reviewAttempt + 1 : 0
+    );
     return wrapForm(
         <FormFrame
             demoGuard={demoGuard}
@@ -1018,11 +1039,10 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 <FormAction
                     icon={<Icon.ContractIcon />}
                     loading={refreshing || confirmAction.composing}
-                    disabled={!fromAddress
-                        || issuerEligibility.pending
-                        || !!issuerEligibility.error
-                        || !configComplete
-                        || !!memoTooLong
+                    // G22: enabled whatever the fields hold; a press with
+                    // the Token empty marks it, and every other refusal
+                    // (no callback set, memo too long) shows in the slot.
+                    disabled={issuerEligibility.pending
                         || refreshing
                         || confirmAction.composing}
                 >
@@ -1067,12 +1087,6 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                     customEstimate={feeCustomEstimate}
                     disabled={refreshing}
                     revealKey={errorKey('fee')}
-                    protocolSummary={protocolFeeSummary({
-                        quote: protocolFeeQuote,
-                        pending: protocolFeePending,
-                        payInNative: nativeFee.toggleProps.checked || nativeFee.toggleProps.mandatory,
-                        coinTicker,
-                    })}
                     fees={{
                         quote: protocolFeeQuote,
                         pending: protocolFeePending,
@@ -1091,6 +1105,8 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
             >
             {(
                 <TokenField
+                    id="callback-token"
+                    error={attempted && !ticker ? 'Pick the token whose callback to run.' : undefined}
                     label="Token"
                     help={t('routes.callback.tokenHelp')}
                     value={ticker && chainId ? { chainId, tick: ticker } : null}
@@ -1099,62 +1115,28 @@ export function CallbackForm({ walletId, onBack, initialChainId, initialTick, in
                 />
             )}
 
-            {/* The callback card sits 8px from the Token field above
-                and the Memo field below, not the form's full gap. */}
-            <div className={callbackStyles.formPreview}>{previewBlock}</div>
+            {/* The facts sit directly in the section, no card of their own. */}
+            {previewBlock}
             {summaryLoading ? <p className={styles.hint}>Loading holder preview…</p> : null}
             {termsUnread || !configComplete ? null : !blockReached ? (
                 <FormNotice variant="warning" role="alert">
-                    {`Callback is not allowed yet. It becomes available at block ${cbBlock?.toLocaleString('en-US') ?? ''}`
-                        + `${currentHeight != null ? ` (network is at ${currentHeight.toLocaleString('en-US')})` : ''}.`}
+                    {`Callback is not allowed yet. It becomes available at block ${cbBlock == null ? '' : String(cbBlock)}`
+                        + `${currentHeight != null ? ` (network is at ${String(currentHeight)})` : ''}.`}
                 </FormNotice>
             ) : null}
             </FormSection>
-            {/* Memo is its own optional section; inside it the field
-                drops its own Optional tag. */}
-            <FormSection
-                id="memo"
-                title="Memo"
-                icon={Icon.MessageIcon}
-                optional
+            {/* Memo is its own optional section holding only the memo: the
+                section title names the field and carries its count. */}
+            <MemoSection
                 {...formSections.bind('memo')}
                 revealKey={errorKey('memo')}
                 summary={trimmedMemo || 'None'}
-            >
-            <Input
-                label="Memo"
                 maxLength={MAX_MEMO_LENGTH}
-                help={MEMO_HINT}
                 error={memoTooLong || undefined}
                 value={memo}
                 onChange={(e) => { setMemo(e.target.value); setFormError(null); }}
-                autoComplete="off"
                 disabled={refreshing}
             />
-            </FormSection>
         </FormFrame>,
-    );
-}
-
-// The protocol fee's part of the Network fee row's closed summary,
-// in the unit it will be paid in; nothing while the quote is unknown.
-function protocolFeeSummary({ quote, pending, payInNative, coinTicker }) {
-    if (pending) return undefined;
-    const normalized = normalizeProtocolFee(quote);
-    if (!normalized.known) return undefined;
-    if (normalized.free) return 'no protocol fee';
-    if (payInNative) {
-        const native = formatCoinBaseUnits(quote?.requiredFeeSats);
-        return native ? `${native} ${coinTicker} protocol fee` : undefined;
-    }
-    return normalized.amount ? `${normalized.amount} XCHAIN protocol fee` : undefined;
-}
-
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
     );
 }

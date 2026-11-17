@@ -52,6 +52,9 @@
 // (matches the convention in @xchain-wallet/signers-trezor).
 
 import { sha256 } from '@noble/hashes/sha2';
+// Resolved from the workspace root, as core/src/signers/verifyTxSignatures.js
+// (already in this package's import graph) resolves it.
+import { bech32 } from '@scure/base';
 import {
     Signer, SignerStatusError, assertCannotSignEnvelopeReveal, assertFullInputCoverage,
     hardwareSigningError,
@@ -62,6 +65,7 @@ import { assertInputSignaturesVerify } from '../../core/src/signers/verifyInputS
 // does not pull the bundled descriptors in behind it.
 import { FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../core/src/registry/validate.js';
 import {
+    LEDGER_NETWORK_SUPPORT,
     addressTypeFromPath,
     chainIdToLedgerCurrency,
     composeBitcoinCompactSignature,
@@ -94,9 +98,11 @@ import { readLedgerAppInfo } from './appInfo.js';
  * so getStatus and the sign-time check can confirm the right app is open. Each
  * coin runs its own device app.
  *
- * bitcoin-testnet is deliberately absent (see coinTypeFor): the Bitcoin Test
- * app forces SLIP-44 coin-type 1', which diverges from the wallet's
- * 0'-anchored derivation, so the network is hardware-unsupported.
+ * Bitcoin testnet and regtest both run in the Bitcoin Test app, at its own
+ * coin type 1' (operator ruling 2026-11-15; see coinTypeFor). Litecoin and
+ * Dogecoin ship no test network app, so their test networks are absent and
+ * refused (LEDGER_NETWORK_SUPPORT). "Bitcoin Test" is the name the app reports,
+ * as hw-app-btc's own Btc.changeImplIfNecessary switches on it.
  */
 // Exported so the cross-signer parity suite can DERIVE its coverage set from
 // the chains this seam actually supports. Hand-listing that set is how a newly
@@ -104,9 +110,44 @@ import { readLedgerAppInfo } from './appInfo.js';
 // visible gap.
 export const LEDGER_APP_NAME_FOR_CHAIN = {
     'bitcoin-mainnet': 'Bitcoin',
+    'bitcoin-testnet': 'Bitcoin Test',
+    'bitcoin-regtest': 'Bitcoin Test',
     'litecoin-mainnet': 'Litecoin',
     'dogecoin-mainnet': 'Dogecoin',
 };
+
+/**
+ * The chains this seam derives in the Bitcoin Test app, at coin type 1'.
+ * @type {ReadonlySet<string>}
+ */
+export const LEDGER_TEST_CHAIN_IDS = Object.freeze(new Set(['bitcoin-testnet', 'bitcoin-regtest']));
+
+/** The SLIP-44 coin type the Bitcoin Test app is restricted to, hardened. */
+export const LEDGER_TEST_COIN_TYPE = "1'";
+
+// Address prefixes the Bitcoin Test app can write: bech32 'tb1', base58
+// P2PKH at version 111 ('m' or 'n') and P2SH at version 196 ('2').
+const TEST_APP_ADDRESS = /^(tb1|[mn2])/i;
+
+/**
+ * The regtest form of an address the Bitcoin Test app wrote. The app encodes
+ * with Bitcoin testnet parameters; regtest shares the base58 versions (111,
+ * 196), so those come back as they are, and differs only in the segwit prefix,
+ * tb against the SDK's bcrt, so a segwit address keeps its witness program and
+ * gets the regtest prefix. Only witness v0 (bech32) is derivable here, so a
+ * bech32m or malformed answer fails to decode and is refused.
+ *
+ * @param {string} address
+ * @returns {string}
+ */
+export function regtestAddressFromTestApp(address) {
+    if (!/^tb1/i.test(address)) return address;
+    const { prefix, words } = bech32.decode(address);
+    if (prefix !== 'tb') {
+        throw new Error(`LedgerSigner: the Bitcoin Test app answered a "${prefix}" segwit address`);
+    }
+    return bech32.encode('bcrt', words);
+}
 
 // Plain-language error for the hardware MuSig2 gap: this message is what the
 // sign screen renders directly, so it stays house-voice (no Class.method:
@@ -125,18 +166,30 @@ function hwMusig2UnsupportedError(qualifiedMethod, detail) {
 function chainIdToLedgerFormat(chainId) {
     switch (chainId) {
         case 'bitcoin-mainnet':
+        case 'bitcoin-testnet':
+        case 'bitcoin-regtest':
             return 'bech32';
         // DOGE + LTC default to legacy on Ledger; keep this in step with the
         // 44' default in bip44PurposeFor, or the device refuses the pair.
         case 'litecoin-mainnet':
         case 'dogecoin-mainnet':
             return 'legacy';
-        case 'bitcoin-testnet':
-        case 'bitcoin-regtest':
-            throw unsupportedBitcoinNetworkError(chainId);
         default:
-            throw new Error(`LedgerSigner: unsupported chainId "${chainId}"`);
+            throw unsupportedNetworkError(chainId);
     }
+}
+
+// Every XChain network Ledger cannot sign gets the typed vendor refusal from
+// ledgerFormat.js (LEDGER_NETWORK_SUPPORT); an id the table does not know keeps
+// the plain internal error.
+function unsupportedNetworkError(chainId) {
+    if (Object.prototype.hasOwnProperty.call(LEDGER_NETWORK_SUPPORT, chainId)) {
+        return unsupportedBitcoinNetworkError(chainId);
+    }
+    return Object.assign(
+        new Error(`LedgerSigner: unsupported chainId "${chainId}"`),
+        { code: 'HW_NETWORK_UNSUPPORTED' },
+    );
 }
 
 // Pick the client currency for a call: the chain's own when this seam supports
@@ -207,7 +260,7 @@ export class LedgerSigner extends Signer {
      *   - `'wrong-app'`: device responsive but a different app open;
      *                    UI should prompt the user to open the right one
      *   - `'unsupported-network'`: a chainId was passed that the Ledger path
-     *                    cannot derive (no app / non-mainnet coin-type)
+     *                    cannot derive (no Ledger app signs that network)
      *   - `'locked'`: the app-info read reports a locked device
      *   - `'disconnected'`: the app-info read throws after a cable or
      *                       transport failure
@@ -267,6 +320,12 @@ export class LedgerSigner extends Signer {
     async getAddresses({ chainId, accountIndex, change, startIndex, count, addressType, verify }) {
         const format = ledgerFormatFor(addressType, chainId);
         const app = this._appFor(clientCurrencyFor(chainId));
+        // A test network derives in the Bitcoin Test app only. Another app
+        // answering a 1' path would write the address in its own coin's form
+        // (bc1...), which a test-network record must never hold, so the open
+        // app is confirmed before the first request. Mainnet makes no probe.
+        const isTestNetwork = LEDGER_TEST_CHAIN_IDS.has(chainId);
+        if (isTestNetwork) await this._assertAppOpenFor(chainId);
         const out = [];
         for (let i = 0; i < count; i += 1) {
             const index = startIndex + i;
@@ -288,12 +347,25 @@ export class LedgerSigner extends Signer {
             );
             out.push({
                 index,
-                address: res.bitcoinAddress,
+                address: isTestNetwork ? this._testNetworkAddress(chainId, res.bitcoinAddress) : res.bitcoinAddress,
                 publicKey: res.publicKey,
                 path,
             });
         }
         return out;
+    }
+
+    // The address a test-network record stores: the Test app's own answer,
+    // refused unless it has a Bitcoin test form, with the regtest segwit prefix
+    // when the chain is regtest (see regtestAddressFromTestApp).
+    _testNetworkAddress(chainId, address) {
+        if (typeof address !== 'string' || !TEST_APP_ADDRESS.test(address)) {
+            throw new SignerStatusError(
+                this._id, 'error',
+                `getAddresses: the Ledger answered ${String(address)} on ${chainId}, which is not a Bitcoin test address`,
+            );
+        }
+        return chainId === 'bitcoin-regtest' ? regtestAddressFromTestApp(address) : address;
     }
 
     /**
@@ -628,30 +700,31 @@ function formatBip44Path({ purpose, chainId, accountIndex, change, index }) {
     return `m/${purpose}/${coinType}/${accountIndex}'/${change}/${index}`;
 }
 
-// Mainnet SLIP-44 slots only, matching the chain descriptors' parity anchor
-// (registry/descriptors: coin-type stays at the mainnet slot on every network).
-// bitcoin-testnet must NOT map to 1' here: the descriptor/SoftwareSigner/backend
-// derive it at 0', so a 1' hardware derivation yields different addresses for
-// the same seed (funds appear missing). Since the Ledger firmware cannot honor
-// 0' on its testnet app, the network throws as hardware-unsupported instead.
+// The SLIP-44 coin type for a chain. Mainnet chains take their family's mainnet
+// slot, matching the chain descriptors' parity anchor, so a mainnet hardware
+// account derives the same addresses as the software signer. The Bitcoin test
+// networks take the Bitcoin Test app's own 1' (operator ruling 2026-11-15: a
+// hardware wallet uses the device's native test derivation; the app is
+// OS-restricted to */1' paths, app-bitcoin-new Makefile PATH_APP_LOAD_PARAMS).
+// A software wallet on the same seed derives those networks at 0', so its
+// testnet addresses differ from the device's; that is the accepted cost.
 //
-// The slot VALUES are read from the registry's FAMILY_MAINNET_COIN_TYPE_SLOT,
-// the one copy the cross-repo parity test binds to the SDK's FAMILY_SLIP44.
-// A hand-copied literal here would be a second copy bound to nothing, free to
-// drift from the descriptors the software signer derives against.
+// The mainnet slot VALUES are read from the registry's
+// FAMILY_MAINNET_COIN_TYPE_SLOT, the one copy the cross-repo parity test binds
+// to the SDK's FAMILY_SLIP44. A hand-copied literal here would be a second
+// copy bound to nothing, free to drift from the descriptors the software
+// signer derives against.
 //
-// ORDER IS LOAD BEARING. The unsupported-network throws must come BEFORE the
-// family lookup: bitcoin-testnet splits to family `bitcoin` and would
-// otherwise resolve to 0' and hand the device a derivation its firmware
-// cannot honour. Membership is decided by LEDGER_APP_NAME_FOR_CHAIN, never by
-// the family prefix, so support stays fail-closed by absence.
+// ORDER IS LOAD BEARING. The membership throw and the test-network branch must
+// come BEFORE the family lookup: bitcoin-testnet splits to family `bitcoin`
+// and would otherwise resolve to 0', a path the Test app refuses. Membership
+// is decided by LEDGER_APP_NAME_FOR_CHAIN, never by the family prefix, so
+// support stays fail-closed by absence.
 export function coinTypeFor(chainId) {
-    if (chainId === 'bitcoin-testnet' || chainId === 'bitcoin-regtest') {
-        throw unsupportedBitcoinNetworkError(chainId);
-    }
     if (!Object.prototype.hasOwnProperty.call(LEDGER_APP_NAME_FOR_CHAIN, chainId)) {
-        throw new Error(`LedgerSigner: unsupported chainId "${chainId}"`);
+        throw unsupportedNetworkError(chainId);
     }
+    if (LEDGER_TEST_CHAIN_IDS.has(chainId)) return LEDGER_TEST_COIN_TYPE;
     const family = String(chainId).split('-')[0];
     const slot = FAMILY_MAINNET_COIN_TYPE_SLOT[family];
     if (!slot) {
@@ -717,11 +790,15 @@ function hexToBytes(hex) {
     return bytes;
 }
 
+const LEDGER_MODEL_CODES = new Set(['nanoS', 'nanoSP', 'nanoX', 'stax', 'europa', 'apex']);
+
 /**
  * Map Ledger's reported model flag (when the wallet exposes it via
- * transport.deviceModel) to a firmware-manifest key. If the flag
- * isn't supplied, fall back to 'nanoX' (the most common modern
- * Ledger) and leave the pairing flow free to correct it.
+ * transport.deviceModel) to the model code the signer records. Each known
+ * @ledgerhq/devices id keeps its own code (nanoS, nanoSP, nanoX, stax, europa
+ * for the Flex, apex for the Nano Gen5), which hardwareModelName names. An
+ * absent or unrecognised id stores the neutral 'unknown' code, never another
+ * model's code.
  *
  * @param {unknown} deviceModel
  * @returns {string}
@@ -729,10 +806,8 @@ function hexToBytes(hex) {
 export function modelFromLedgerTransport(deviceModel) {
     if (deviceModel && typeof deviceModel === 'object' && typeof /** @type {any} */ (deviceModel).id === 'string') {
         const id = /** @type {any} */ (deviceModel).id;
-        if (id === 'nanoS') return 'nanoS';
-        if (id === 'nanoSP') return 'nanoSP';
-        if (id === 'nanoX') return 'nanoX';
-        if (id === 'stax') return 'stax';
+        if (LEDGER_MODEL_CODES.has(id)) return id;
+        if (id === 'flex') return 'europa';
     }
-    return 'nanoX';
+    return 'unknown';
 }

@@ -4,6 +4,14 @@
     width: 100%;
     min-width: 0;
     max-width: 100%;
+    /* Flush rows inside the list card (G07). */
+    border-radius: 0;
+}
+
+/* Row text never pushes the chevron off the card at phone width. */
+.contractRow > span:nth-child(2) {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 /* The filter row shares one control size (U07): the small buttons beside the
@@ -25,7 +33,6 @@
 /* Single-line technical values stay intact and scroll within their control.
    This keeps long hex and JSON arguments from widening the screen. */
 .monospaceInput,
-.monospaceValue,
 .codeSource {
     direction: ltr;
     unicode-bidi: isolate;
@@ -40,14 +47,6 @@
     white-space: nowrap;
 }
 
-.monospaceValue {
-    min-width: 0;
-    max-width: 100%;
-    font-family: var(--xc-font-mono);
-    overflow-wrap: anywhere;
-    white-space: normal;
-}
-
 .codeSource {
     composes: scrollArea from '../../ui/Screen.module.css';
     display: block;
@@ -60,17 +59,6 @@
     overflow: auto;
     white-space: pre;
     resize: vertical;
-}
-
-.toolActions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
-.toolActions > * {
-    flex: 0 1 auto;
 }
 
 /* The All | Mine | Interactions tabs sit directly above the contract list. */
@@ -97,4 +85,87 @@
     flex: 0 0 auto;
     width: 1rem;
     height: 1rem;
+}
+
+/* One network's contract rows: one rounded list card with dividers (G07);
+   the shared ListRow draws the trailing chevron (G97). */
+.list {
+    composes: flush from '../../ui/Card.module.css';
+    list-style: none;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.listItem + .listItem {
+    border-top: var(--xc-table-row-divider);
+}
+
+/* Two networks with contracts stack their cards 8px apart (G93). */
+section + section > .list {
+    margin-top: var(--xc-space-2);
+}
+
+/* The contract icon in a tinted circle with the network badge at its corner,
+   the badge being the only network indicator on the row (G61). */
+.rowIcon {
+    position: relative;
+    flex: 0 0 auto;
+    width: var(--xc-control-h-lg);
+    height: var(--xc-control-h-lg);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-bg-muted);
+    color: var(--xc-accent-text);
+}
+
+.rowIcon > svg {
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
+}
+
+.chainOverlay {
+    position: absolute;
+    inset-block-end: calc(var(--xc-space-1) * -0.5);
+    inset-inline-end: calc(var(--xc-space-1) * -0.5);
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-surface);
+    box-shadow: var(--xc-shadow-surface-ring);
+    object-fit: cover;
+}
+
+.publisher {
+    display: flex;
+    align-items: baseline;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.publisher > :last-child {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* The status pill, sentence case like every other status pill. */
+.statusPill {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    line-height: 1.6;
+    background: var(--xc-bg-muted);
+    color: var(--xc-text-muted);
+}
+
+.statusLive {
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
 }

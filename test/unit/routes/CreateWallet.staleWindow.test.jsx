@@ -48,6 +48,7 @@ function toMnemonic() {
 
 function toVerifyAndSubmit() {
     toMnemonic();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
     fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
     const words = PHRASE.split(' ');

@@ -10,7 +10,7 @@
 // readings instead of running a browser.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { AddressField } from '../../../packages/core/src/ui/AddressField.jsx';
 import { truncateAddress } from '../../../packages/core/src/ui/AddressText.jsx';
 
@@ -97,15 +97,59 @@ describe('<AddressField> read-only width fit', () => {
         expect(input).toHaveAttribute('title', ADDRESS);
     });
 
-    it('leaves an editable address untrimmed: the input holds the full value', () => {
-        mockMeasurements();
-        const { container } = render(
-            <div data-fit-width="120">
-                <AddressField label="To" icon="contacts" value={ADDRESS} onChange={() => {}} onIconClick={() => {}} />
+    // G99 on an editable field (Bridge move's Receive at): at rest the address
+    // is drawn whole when it fits and cut in the middle when it does not, never
+    // cut at the end; while the input has focus the typed text shows as typed.
+    function renderEditable(width, props = {}) {
+        return render(
+            <div data-fit-width={String(width)}>
+                <AddressField label="To" icon="contacts" value={ADDRESS} onChange={() => {}} onIconClick={() => {}} {...props} />
             </div>,
         );
+    }
+
+    it('shows an editable address whole at rest when it fits', () => {
+        mockMeasurements();
+        const { container } = renderEditable(600);
 
         expect(screen.getByLabelText('To')).toHaveValue(ADDRESS);
-        expect(container.querySelector('[class*="readOnlyValue"]')).toBeNull();
+        expect(shownAddress(container)).toBe(ADDRESS);
+    });
+
+    it('cuts an editable address in the middle at rest when it does not fit, keeping the full value', () => {
+        mockMeasurements();
+        const { container } = renderEditable(250);
+
+        const shown = shownAddress(container);
+        expect(shown).toContain('…');
+        const [head, tail] = shown.split('…');
+        expect(ADDRESS.startsWith(head)).toBe(true);
+        expect(ADDRESS.endsWith(tail)).toBe(true);
+        expect(head.length).toBe(tail.length);
+        const input = screen.getByLabelText('To');
+        expect(input).toHaveValue(ADDRESS);
+        expect(input).toHaveAttribute('title', ADDRESS);
+    });
+
+    it('drops the overlay while the input has focus and restores it on blur, calling the host handlers', () => {
+        mockMeasurements();
+        const onFocus = vi.fn();
+        const onBlur = vi.fn();
+        const { container } = renderEditable(250, { onFocus, onBlur });
+        const input = screen.getByLabelText('To');
+
+        fireEvent.focus(input);
+        expect(container.querySelector('[data-address-overlay]')).toBeNull();
+        expect(onFocus).toHaveBeenCalledTimes(1);
+
+        fireEvent.blur(input);
+        expect(container.querySelector('[data-address-overlay]')).not.toBeNull();
+        expect(onBlur).toHaveBeenCalledTimes(1);
+    });
+
+    it('draws no overlay for an empty editable field', () => {
+        mockMeasurements();
+        const { container } = renderEditable(250, { value: '' });
+        expect(container.querySelector('[data-address-overlay]')).toBeNull();
     });
 });

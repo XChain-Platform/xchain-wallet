@@ -73,18 +73,25 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('My delegations list', () => {
-    it('lists the active address\'s live delegations from one read, each with Clear', async () => {
+    it('lists the active address\'s live delegations from one read, each with an X to clear', async () => {
         const messaging = messagingWith();
         const onClear = vi.fn();
         mount(MyDelegations, { walletId: 'wallet-1', chainId: CHAIN, onClear, onBack() {} }, messaging);
 
         const list = await screen.findByRole('list', { name: 'My Delegations' });
         expect(within(list).getByText('TOK0')).toBeInTheDocument();
-        expect(within(list).getByText(/^To bc1q\.\.\.f3t4 · Since /)).toBeInTheDocument();
+        // G99: the delegate is the fitting AddressText (whole when the row has
+        // room), named by the full address; jsdom has no layout to fit.
+        const delegateText = within(list).getByLabelText(DELEGATE);
+        // The second line is only the address: no "To" and no "Since" (operator 2026-11-13).
+        expect(within(list).queryByText(/^To |Since /)).toBeNull();
+        expect(delegateText).toBeInTheDocument();
         expect(messaging.governanceVoteDelegations).toHaveBeenCalledTimes(1);
         expect(messaging.governanceVoteDelegations).toHaveBeenCalledWith({ chainId: CHAIN, address: ACTIVE.address });
 
-        const clear = within(list).getByRole('button', { name: 'Clear the TOK0 delegation' });
+        // The whole row opens Clear vote delegation, with a chevron and no separate ✕ button.
+        const clear = within(list).getByRole('button', { name: /^TOK0\b/ });
+        expect(within(list).getAllByRole('button')).toHaveLength(1);
         expect(clear.querySelector('svg')).not.toBeNull();
         fireEvent.click(clear);
         expect(onClear).toHaveBeenCalledWith(CHAIN, { tick: 'TOK0', delegate: DELEGATE, address: ACTIVE.address });

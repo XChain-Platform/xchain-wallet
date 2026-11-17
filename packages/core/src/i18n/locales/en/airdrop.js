@@ -28,8 +28,6 @@ const messages = {
     'airdrop.summary.holders': 'holders of {count} {count, plural, one {token} other {tokens}}',
     'airdrop.summary.addresses': '{count} {count, plural, one {address} other {addresses}}',
     'airdrop.summary.each': '{amount} {tick} each',
-    'airdrop.summary.protocolFeeNative': '{amount} {coin} protocol fee',
-    'airdrop.summary.protocolFeeXchain': '{amount} XCHAIN protocol fee',
     'airdrop.action.reviewRecipients': 'Review Recipients',
     'airdrop.from.networkHelp': 'The chain the airdrop is recorded on. Your From address, token, recipients, and fees are on this network.',
     'airdrop.from.addressHelp': 'The address that sends the airdrop. It must hold the token and pays the fees.',
@@ -37,6 +35,11 @@ const messages = {
     'airdrop.file.label': 'Recipients file (CSV or TXT)',
     'airdrop.file.help': 'A CSV or text file of addresses, one per line or comma-separated. Its addresses fill the Recipients box above, where you can check them before publishing.',
     'airdrop.file.inputLabel': 'Upload CSV of addresses',
+    'airdrop.ticksFile.label': 'Tokens file (CSV or TXT)',
+    'airdrop.ticksFile.help': 'A CSV or text file of token tickers, one per line. Its tokens fill the Tokens box above, where you can check them before publishing.',
+    'airdrop.ticksFile.inputLabel': 'Upload CSV of tokens',
+    'airdrop.ticksFile.badLines': '{count} {count, plural, one {line is} other {lines are}} not a token name:',
+    'airdrop.ticksFile.badLine': 'Line {line}:',
 };
 
 addEnglish(messages);

@@ -22,6 +22,16 @@ export { importedAddressIdsFor } from './_importedAddressIds.js';
 export { createWallet } from './createWallet.js';
 export { createAccount } from './createAccount.js';
 export { activateChain } from './activateChain.js';
+// A seedless wallet whose keys live on a Trezor or Ledger.
+export {
+    addHardwareWallet,
+    isHardwareWallet,
+    hardwareNetworkSupport,
+    refuseHardwareWallet,
+    HARDWARE_NETWORK_SUPPORT,
+    HardwareWalletHasNoSeedError,
+    HardwareWalletAlreadyLinkedError,
+} from './hardwareWallet.js';
 export { fundBtcFromMiner } from './regtestFaucet.js';
 export { renameWallet } from './renameWallet.js';
 export { renameAccount } from './renameAccount.js';
@@ -259,6 +269,7 @@ export {
     getCoinpayObligationsForAddress,
     getCoinpaysForAddress,
 } from './coinpayQueries.js';
+export { getCoinpayMatchSides, matchSideKey } from './coinpayMatchSides.js';
 export {
     dispensersForSource,
     dispensersForAddress,
@@ -544,6 +555,7 @@ export {
     importBackupFile,
     restoreFromBackupPointer,
     rekeyWalletRecord,
+    verifyBackupFileForRestore,
     BackupConflictError,
     BackupPointerUnresolvedError,
     BackupSeedPasswordError,
@@ -560,6 +572,7 @@ export {
     RESTORE_PASSWORD_HINTS,
     restoreDeviceHint,
     restoreDeviceLabel,
+    restoreFailureKind,
     restoreFailureMessage,
     restorePasswordRequiredMessage,
 } from './restorePasswordCopy.js';
@@ -586,10 +599,20 @@ export {
 export { signMessageFlow, signPsbtFlow } from './signFlows.js';
 export { createDemoWallet } from './createDemoWallet.js';
 export {
-    resolveAdsForNextTx,
-    resolveAdsPlanForNextTx,
-    stepAdsAccumulator,
+    adsSettingsOf,
+    isAdsOn,
+    isAdsDue,
+    resolveAdsPayout,
+    stepAdsQueue,
     commitAdsStep,
+    isAdsCountedSend,
+    adsReservationOf,
+    reserveAdsPayout,
+    releaseAdsReservation,
+    settleAdsReservation,
+    reconcileAdsReservation,
+    returnAdsReservationToReview,
+    ADS_RECIPIENT_ROLE,
 } from './ads.js';
 export { checkReachability } from './reachability.js';
 export {
@@ -604,6 +627,37 @@ export {
     applyExternalLockoutState,
     LOCKOUT_STORAGE_KEY,
 } from './lockoutTracking.js';
+export {
+    readPhraseRecovery,
+    phraseResetAvailable,
+    vaultWalletIds,
+    withPhraseRecovery,
+    dropPhraseRecoveryWallet,
+    dropPhraseRecoveryWalletInMeta,
+    reconcilePhraseRecovery,
+    reconcilePhraseRecoveryInMeta,
+    reconcilePhraseRecoveryDetached,
+    resetPasswordWithRecoveryPhrase,
+    RecoveryPhraseMismatchError,
+    PhraseResetUnavailableError,
+    PhraseResetStaleError,
+} from './phraseRecovery.js';
+export {
+    ERASE_HOLD_MS,
+    ERASE_SCHEDULE_STORAGE_KEY,
+    configureEraseSchedulePersistence,
+    getEraseSchedule,
+    scheduleErase,
+    cancelEraseSchedule,
+    eraseRemainingMs,
+    isEraseDue,
+    shouldRunDueErase,
+    runDueErase,
+    markEraseGuardUnavailable,
+    EraseCancelError,
+    ERASE_CANCELLED_STORAGE_KEY,
+    VAULT_SESSION_LOCK_NAME,
+} from './eraseSchedule.js';
 export {
     isBiometricSupported,
     isBiometricRegistered,
@@ -778,6 +832,7 @@ export {
     synthesizeDemoMessages,
     synthesizeDemoContacts,
     synthesizeDemoDispensers,
+    synthesizeDemoMarketDispensers,
     synthesizeDemoDispenses,
     synthesizeDemoOrders,
     synthesizeDemoSwaps,

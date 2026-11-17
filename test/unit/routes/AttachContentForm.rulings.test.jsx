@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
@@ -95,7 +95,8 @@ function openSection(title) {
     fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${title}\\b`), expanded: false }));
 }
 
-const FILE_LABEL = /^Artwork file \(up to [\d,]+ bytes\)$/;
+// The ceiling reads in KB or MB, rounded down; never raw bytes.
+const FILE_LABEL = /^Artwork file \(up to [\d.,]+ (KB|MB)\)$/;
 // The file field's hidden picker input, named apart from the visible field.
 const PICKER_LABEL = 'Choose file to attach';
 
@@ -197,10 +198,11 @@ describe('AttachContentForm app-wide form rulings', () => {
         await composeReady();
 
         // The standard file field carries the live limit in its label
-        // ("Artwork file (up to N bytes)"), not in a line under a chooser.
+        // ("Artwork file (up to 7.9 KB)"), not in a line under a chooser.
         const limitOf = () => {
             const label = screen.getByText(FILE_LABEL, { selector: 'label' });
-            return Number(label.textContent.match(/[\d,]+/)[0].replace(/,/g, ''));
+            const [, n, unit] = label.textContent.match(/([\d.,]+) (KB|MB)/);
+            return Number(n.replace(/,/g, '')) * (unit === 'MB' ? 1024 : 1);
         };
         const before = limitOf();
 
@@ -216,9 +218,11 @@ describe('AttachContentForm app-wide form rulings', () => {
         expect(await screen.findByText(/Two signatures: one to upload the file, one to make it official\. A compact image \(SVG, small PNG\/JPEG\/WebP\) works best\./))
             .toBeInTheDocument();
 
-        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'A gallery title' } });
+        // A long title takes room from the file; the 0.1 KB label may round
+        // a small change away, so it never grows.
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'A gallery title '.repeat(6).trim() } });
         const after = limitOf();
-        expect(after).toBeLessThan(before);
+        expect(after).toBeLessThanOrEqual(before);
 
         const input = screen.getByLabelText(PICKER_LABEL);
         fireEvent.change(input, { target: { files: [new File(['x'], 'art.png', { type: 'image/png' })] } });
@@ -238,18 +242,23 @@ describe('AttachContentForm app-wide form rulings', () => {
         await composeReady();
 
         // Title keeps its own Optional pill inside the required
-        // Artwork section; Memo and Token Picture are optional sections whose
-        // headers carry the tag (the Memo field has none of its own).
+        // Artwork section; Memo is an optional section whose header carries
+        // the tag (the Memo field has none of its own), as does the shared
+        // Advanced section above Speed and Fees.
         expect(screen.getAllByText('Optional')).toHaveLength(3);
+        expect(within(screen.getByRole('button', { name: /^Advanced\b/ })).getByText('Optional')).toBeInTheDocument();
         const titleRow = screen.getByText('Title', { selector: 'label' }).parentElement;
         expect(within(titleRow).getByText('Optional')).toBeInTheDocument();
         expect(within(screen.getByRole('button', { name: /^Memo\b/ })).getByText('Optional')).toBeInTheDocument();
-        expect(within(screen.getByRole('button', { name: /^Token Picture\b/ })).getByText('Optional')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Token Picture\b/ })).toBeNull();
         expect(screen.queryByText(/\(optional\)/i)).toBeNull();
         expect(screen.getByText('0 / 100')).toBeInTheDocument();
-        expect(screen.getByText('0 / 250')).toBeInTheDocument();
+        // The memo's count lives in its section header (hidden while closed),
+        // and the lone memo has no label row or tip of its own.
+        const memoCount = document.querySelector('[data-form-section="memo"] [data-section-count]');
+        expect(memoCount).toHaveTextContent('0 / 250');
         expect(screen.getByRole('button', { name: 'About Title' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'About Memo', hidden: true })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'About Memo', hidden: true })).toBeNull();
         expect(screen.getByRole('button', { name: 'About From address', hidden: true })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About Network', hidden: true })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About Token' })).toBeInTheDocument();
@@ -261,13 +270,15 @@ describe('AttachContentForm app-wide form rulings', () => {
 
         // The fee selector sits in the standard Network fee section, closed.
         expect(screen.getByRole('slider', { name: 'Network fee', hidden: true })).toBeInTheDocument();
-        expect(screen.queryByRole('switch', { hidden: true })).toBeNull();
+        // No protocol-fee switch in Speed and Fees; the only switches are the
+        // shared Advanced section's, above it.
+        const feeSection = document.querySelector('[data-form-section="fee"]');
+        expect(within(feeSection).queryByRole('switch', { hidden: true })).toBeNull();
         expect(screen.queryByText(/protocol fee/i)).toBeNull();
         expect(screen.queryByText('Total')).toBeNull();
     });
 
     it('makes each stage main action green with an icon, and gives every button an icon', async () => {
-        let releaseTis = () => {};
         const client = messagingFor({
             overrides: {
                 composeForConfirm: vi.fn().mockResolvedValue({
@@ -279,16 +290,9 @@ describe('AttachContentForm app-wide form rulings', () => {
                     decoded: { summary: 'Review action', details: [], warnings: [] },
                 }),
                 preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
-                fileAction: vi.fn()
-                    .mockResolvedValueOnce({ txid: 'file-tx' })
-                    .mockResolvedValueOnce({ txid: 'tis-tx' }),
+                fileAction: vi.fn().mockResolvedValue({ txid: 'file-tx' }),
                 linkAction: vi.fn().mockResolvedValue({ txid: 'link-tx' }),
-                issueToken: vi.fn().mockResolvedValue({ txid: 'desc-tx' }),
-                getActionByTxid: vi.fn()
-                    .mockResolvedValueOnce({ action_index: 12 })
-                    .mockImplementationOnce(() => new Promise((resolve) => {
-                        releaseTis = () => resolve({ action_index: 13 });
-                    })),
+                getActionByTxid: vi.fn().mockResolvedValue({ action_index: 12 }),
             },
         });
         mount(client);
@@ -304,8 +308,6 @@ describe('AttachContentForm app-wide form rulings', () => {
             target: { files: [new File(['x'], 'art.png', { type: 'image/png' })] },
         });
         await screen.findByText('art.png');
-        openSection('Token Picture');
-        fireEvent.click(screen.getByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: 'Attach Artwork' }));
 
         form = await screen.findByRole('form', { name: 'Review artwork upload' });
@@ -324,25 +326,7 @@ describe('AttachContentForm app-wide form rulings', () => {
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
 
-        form = await screen.findByRole('form', { name: 'Upload token info' });
-        expectOneGreenAction(form, 'Upload Token Info');
-        expectButtonsHaveIcons(form, ['Skip (Artwork Only)', 'Upload Token Info']);
-        fireEvent.click(within(form).getByRole('button', { name: 'Upload Token Info' }));
-        approve = await screen.findByTestId('confirm-approve');
-        await waitFor(() => expect(approve).toBeEnabled());
-        fireEvent.click(approve);
-
-        // The token-info wait stage: its only button is the ghost Close.
-        const close = await screen.findByRole('button', { name: 'Close (Keep Waiting)' });
-        expect(close.querySelector('svg')).not.toBeNull();
-        expect(close).not.toHaveClass(buttonStyles.success);
-        await act(async () => { releaseTis(); });
-
-        form = await screen.findByRole('form', { name: 'Update token description' });
-        expectOneGreenAction(form, 'Update Description');
-        expectButtonsHaveIcons(form, ['Skip', 'Update Description']);
-        fireEvent.click(within(form).getByRole('button', { name: 'Skip' }));
-
+        // The link is the last signature: no token-info or description step follows.
         const done = await screen.findByRole('button', { name: 'Done' });
         expect(done).toHaveClass(buttonStyles.success);
         expect(done.querySelector('svg')).not.toBeNull();

@@ -179,7 +179,7 @@ export function GiveGetStandardSection() {
             id="give-get"
             title="Give / Get"
             tag="CANONICAL · giveGet"
-            kicker="The shared shape of Swap, Create Order, Dispenser and Cross Chain Swap: one You give side, one You get side, in a Quick or a Full view of the same form state."
+            kicker="The shared shape of Swap, Create Order, Dispenser and Cross-Chain Swap: one You give side, one You get side, in a Quick or a Full view of the same form state."
         >
             <Guidance
                 what={<><code>ViewSwitch</code> picks Quick or Full. <code>GiveGetQuick</code> shows two big cards with a flip button, a rate line, an ownership group and one terms row. <code>GiveGetFull</code> shows collapsible You give and You get sections, then Options. <code>useGiveGetView</code> holds the view and the open sections per form.</>}

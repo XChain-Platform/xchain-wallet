@@ -95,7 +95,7 @@ Use `<ListRow>` for repeated, full-width items that share one reading order: opt
     <FormPage
         label="Verify signature"
         onSubmit={handleSubmit}
-        status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+        status={error ? <Notice tone="danger">{error}</Notice> : null}
         actions={<Button type="submit" variant="primary" loading={busy}>Verify signature</Button>}
     >
         <Input label="Address" ... />
@@ -145,7 +145,7 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 | `trailing` | optional right-side slot for page-scoped actions (filter, scan, etc.); buttons render as icon controls at the Back control size (small), with a touch-floor hit area, so the header keeps one height |
 | `nested` | marks a sub-screen that shares its parent route id (a Settings section, a Contacts detail, a review step), so Back always shows |
 
-**When Back shows**: the chevron is left out on a route the visible navigation links to directly, so the nav row is the way out. With the sidebar or icon rail on screen that is every sidebar destination (Home, History, Send, Receive, Scan, DEX, Marketplace, Dispensers, Contracts, Messaging, Contacts, Lists, Payments due, Settings); with the bottom tab bar it is Home, Send, Receive, History and Settings. Every other screen keeps Back. The lists live in `routeRegistry.js` (`NAV_SURFACE_DESTINATIONS`, with `TAB_BAR_DESTINATIONS` taken from the wallet menu catalogue), and LeftNav and BottomTabBar build their rows from them, so a new route gets Back without a flag. The leading lane keeps its width and the header keeps its height when Back is hidden, and the system Back gesture still runs `onBack`.
+**When Back shows**: the chevron follows the shell's one navigation history (G06). A page opened from another page (Token detail's Send or Receive, a market's Trade, any list row) shows Back, and Back returns to that page with its item. A root page, one opened from the sidebar, the bottom bar, the menu, the command palette or a go-to shortcut, shows none, since the history starts over on it and there is nothing to go back to. Shells open a root with `nav.navigateRoot` and a push with `nav.navigate`, and hand `nav.canGoBack` to `ShellRouteOutlet`, which PageHeader reads; outside a shell Back always shows. A sub-screen whose Back steps inside its page (a review step, a picker) passes `nested` and always shows Back. The leading lane keeps its width and the header keeps its height when Back is hidden, and the system Back gesture and Android Back still run `onBack`, which takes a root page to Home.
 
 **Why the chevron alignment is non-obvious**: AppHeader and Screen.header are chrome with their own padding; neither uses `--xc-page-gutter`. `<PageHeader />` uses mirrored medium control lanes, aligns their boxes to the content edges, and centres each icon inside its control. This keeps the title centred without shifting the chevron inside its button.
 
@@ -163,7 +163,15 @@ return <Screen variant={variant} header={header}>{...}</Screen>;
 
 ## Buttons
 
-Use `<Button>` from `@xchain-wallet/core/ui` for anything button-shaped. Variants: `primary` (the one action the screen exists for), `secondary` (a second real action), `ghost` (cancel, back out, less-used actions), `danger` (destroys or spends irreversibly), `success` (approve a pending request). Sizes follow the shared `sm` / `md` / `lg` control scale below. `block` makes it full width, `loading` shows a spinner and disables it, `disabled` disables it, and `type` defaults to `button` so it never submits by accident. `icon` accepts a node; omit it to select an icon from a static string label or pass `null` to suppress that automatic icon. Other native button attributes pass through. A variant name outside this list retains the base Button layout and size but has no variant color styling, so treat it as invalid. The style guide's Buttons section shows every supported combination.
+Use `<Button>` from `@xchain-wallet/core/ui` for anything button-shaped. Variants: `primary` (the one action the screen exists for), `secondary` (a second real action), `ghost` (cancel, back out, less-used actions), `danger` (destroys or spends irreversibly), `success` (approve a pending request). Sizes follow the shared `sm` / `md` / `lg` control scale below. `block` makes it full width, `loading` shows a spinner and ignores repeat taps, `disabled` ignores taps, and neither changes the button's colours (G130: a button never looks disabled). Never disable a button to wait for valid input: keep it enabled and answer the tap with the form's error summary and field messages (G129). `type` defaults to `button` so it never submits by accident. `icon` accepts a node; omit it to select an icon from a static string label or pass `null` to suppress that automatic icon. Other native button attributes pass through. A variant name outside this list retains the base Button layout and size but has no variant color styling, so treat it as invalid. The style guide's Buttons section shows every supported combination.
+
+## Notices, form errors and toasts
+
+Use `<Notice>` from `@xchain-wallet/core/ui` for a message about the page the user is on (`StatusMessage` is the same component under its older name). It has three tones: `info`, `danger` (every warning, error and critical caution) and `success`. The look is one: a fill tinted in the tone, a thin border of the same tone, 8px corners, the tone icon, an optional bold `title`, the body, at most one `action` and an optional X (`onDismiss`). There is no solid red fill and no coloured edge bar, and a notice never sits inside a card. A static critical caution that is on the page from the first paint uses `role="note"`.
+
+A form that validates on submit uses `useFormErrors()` and hands the object to `FormPage` or `FormFrame` as `errors`: one danger notice ("Fix N things to continue" plus the list) at the top of the page, each failing field outlined red with its own line under it, both clearing as the user fixes the field.
+
+A toast takes the same tones and icons over the raised surface: info, success, and danger for both its `warning` and `error` variants, with the X to dismiss.
 
 For dialogs use the shared `NoticeModal` (one OK) from `@xchain-wallet/core/shared/components/NoticeModal.jsx` and `ConfirmModal` (Cancel / Confirm, `danger` for destructive confirms) from `@xchain-wallet/core/shared/components/ConfirmModal.jsx`, never `alert()` or `confirm()`.
 

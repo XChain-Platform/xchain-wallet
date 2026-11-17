@@ -13,7 +13,6 @@ import { NetworkFilter } from '../../../packages/core/src/shared/components/Netw
 import { NetworkFilterDropdown } from '../../../packages/core/src/shared/components/NetworkFilterDropdown.jsx';
 import { NoticeModal } from '../../../packages/core/src/shared/components/NoticeModal.jsx';
 import { OpenOrdersPanel } from '../../../packages/core/src/shared/components/OpenOrdersPanel.jsx';
-import { OperatorPublisherMode } from '../../../packages/core/src/shared/components/OperatorPublisherMode.jsx';
 import { OrderbookPanel } from '../../../packages/core/src/shared/components/OrderbookPanel.jsx';
 import { OriginIdentity } from '../../../packages/core/src/shared/components/OriginIdentity.jsx';
 import { OwnAddressPickerScreen } from '../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx';
@@ -156,24 +155,6 @@ const RENDER_CASES = [
         />,
         { getAddressesByChain: pending, getMarketOrders: pending },
     )],
-    ['OperatorPublisherMode', () => {
-        const messaging = {
-            getSettings: vi.fn().mockResolvedValue({}),
-            getAddressesByChain: pending,
-            signerReady: vi.fn().mockResolvedValue({ ready: false }),
-        };
-        return withMessaging(
-            <OperatorPublisherMode
-                walletId="wallet-1"
-                chainId="bitcoin-mainnet"
-                address="bc1qowner"
-                feed={{ action_index: 7 }}
-                messaging={messaging}
-                variant="full"
-            />,
-            messaging,
-        );
-    }],
     ['OrderbookPanel', () => withMessaging(
         <OrderbookPanel chainId="bitcoin-mainnet" tick1="XCHAIN" tick2="BTC" />,
         { getOrderbook: pending },

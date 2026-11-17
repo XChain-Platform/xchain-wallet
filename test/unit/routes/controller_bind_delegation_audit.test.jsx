@@ -11,8 +11,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+import { typeCustomRate } from '../../helpers/customNetworkFee.js';
 import { ControllerBindForm } from '../../../packages/core/src/shared/routes/ControllerBindForm.jsx';
-import { DelegationActionForm } from '../../../packages/core/src/shared/routes/DelegationActionForm.jsx';
+// The staking-delegate and staking-revoke routes: the one Staking form on the network.
+import { NetworkDelegationRoute as DelegationActionForm } from '../../helpers/stakingFormRoutes.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 const VALID_ADDRESS = 'bc1qdevmockabcdef';
@@ -162,13 +164,19 @@ describe('controller binding and signing-key delegation disclosures', () => {
         expect(screen.queryByText(/review the source address, signing key, and fee before signing/)).toBeNull();
     });
 
-    it.each([
-        ['controller binding', mountController],
-        ['delegation', mountDelegation],
-    ])('shows the unsigned watch-only state on the initial %s form', async (_name, mount) => {
-        mount({ walletMode: 'watcher' });
+    it('shows the unsigned another-phone state on the initial controller binding form', async () => {
+        mountController({ walletMode: 'watcher' });
 
-        expect(await screen.findByText(/Watch-only mode creates an unsigned transaction and cannot sign it/)).toBeTruthy();
+        expect(await screen.findByText(/Another phone signs for this wallet, so this creates an unsigned transaction and cannot sign it/)).toBeTruthy();
+    });
+
+    // The one Staking form has no note: with another phone signing, its action
+    // opens a review (whose button creates the unsigned transaction) instead
+    // of the shared confirm page.
+    it('opens the unsigned review lane on the initial delegation form', async () => {
+        mountDelegation({ walletMode: 'watcher' });
+
+        expect(await screen.findByRole('button', { name: /^Review Delegate Signing Key/ })).toBeTruthy();
     });
 
     it.each([
@@ -244,17 +252,12 @@ describe('controller binding and signing-key delegation disclosures', () => {
     it('refuses an invalid custom fee instead of silently composing with the default', async () => {
         const messaging = mountController();
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '7' } });
-        // The fee selector sits in the closed Network fee section.
-        fireEvent.click(screen.getByRole('button', { name: /^Network fee\b/, expanded: false }));
-        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
-            target: { value: '3' },
-        });
-        fireEvent.change(await screen.findByLabelText(/Custom fee rate/), {
-            target: { value: '1.123456789' },
-        });
+        // The fee selector sits in the closed Fees section.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees\b/, expanded: false }));
+        await typeCustomRate('50000');
         fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
 
-        expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
+        expect(await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).toHaveLength(1);
         expect(messaging.buildControllerBindParams).not.toHaveBeenCalled();
     });
 
@@ -299,9 +302,9 @@ describe('controller binding and signing-key delegation disclosures', () => {
         expect(await screen.findByDisplayValue('007')).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
-        fireEvent.click(await screen.findByRole('button', {
-            name: 'Bind controller',
-        }));
+        expect(await screen.findByTestId('confirm-sentence')).toHaveTextContent('Bind');
+        await waitFor(() => expect(screen.getByTestId('confirm-approve')).not.toBeDisabled());
+        fireEvent.click(screen.getByTestId('confirm-approve'));
         await waitFor(() => expect(messaging.buildControllerBindParams).toHaveBeenCalled());
         expect(messaging.buildControllerBindParams.mock.calls.at(-1)[0]).toMatchObject({
             controller: '007',

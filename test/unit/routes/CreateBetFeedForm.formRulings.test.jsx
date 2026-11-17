@@ -114,7 +114,9 @@ describe('Open a market form rulings', () => {
         // The oracle address is the From address; the Quick view's Market
         // section holds the question, the Outcomes group and Closes.
         expect(tipFor(utils, 'From address')).toMatch(/only one that can publish the result/);
-        expect(tipFor(utils, 'Question')).toMatch(/permanent once it is on the chain/);
+        // Field help only; that the terms are permanent is the confirm
+        // screen's warnings card (actionWarnings MARKET_CREATE).
+        expect(tipFor(utils, 'Question')).toBe('The question bettors back an outcome of, such as who wins a match.');
         const outcomesLabel = [...utils.container.querySelectorAll('span')].find((s) => s.textContent.trim() === 'Outcomes');
         expect(outcomesLabel?.parentElement?.querySelector('[role="tooltip"]')?.textContent || '').toMatch(/Exactly one outcome can win/);
         expect(tipFor(utils, 'Closes')).toBeTruthy();
@@ -123,6 +125,25 @@ describe('Open a market form rulings', () => {
         expect(paragraphs.some((t) => /This address IS the market/.test(t))).toBe(false);
         expect(paragraphs.some((t) => /^Everything above is permanent/.test(t.trim()))).toBe(false);
         expect(paragraphs.some((t) => /^Exactly one of these can win/.test(t.trim()))).toBe(false);
+    });
+
+    it('puts each outcome circle inside its input wrapper and gives the Outcomes label no icon (G112)', async () => {
+        const utils = await mount();
+        const outcomesLabel = [...utils.container.querySelectorAll('span')].find((s) => s.textContent.trim() === 'Outcomes');
+        expect(outcomesLabel).toBeTruthy();
+        // The label's first child is its text: no leading icon.
+        expect(outcomesLabel.parentElement.firstElementChild).toBe(outcomesLabel);
+        const fields = utils.container.querySelectorAll('[data-testid="outcome-field"]');
+        expect(fields.length).toBeGreaterThanOrEqual(2);
+        for (const field of fields) {
+            const dot = field.querySelector('[data-testid="outcome-dot"]');
+            expect(dot, 'circle inside the input wrapper').toBeTruthy();
+            expect(field.querySelector('input[aria-label^="Outcome "]')).toBeTruthy();
+            expect(dot.getAttribute('aria-hidden')).toBe('true');
+        }
+        // No circle remains outside an input wrapper.
+        const allDots = utils.container.querySelectorAll('[data-testid="outcome-dot"]');
+        expect(allDots.length).toBe(fields.length);
     });
 
     it('gives every button an icon', async () => {

@@ -49,13 +49,11 @@ assert.ok(
     /import \{ ConnectedSitesSection \} from '\.\.\/components\/settings\/ConnectedSitesSection\.jsx'/.test(route),
     'the route mounts the SHARED section (not a fork of the panel body)',
 );
+// The section draws the whole screen, header included (G95 filter and
+// plus), so the route passes only the shell's Back and screen variant.
 assert.ok(
-    /<ConnectedSitesSection \/>/.test(route),
-    'the route renders the section with no props of its own, so behaviour cannot drift',
-);
-assert.ok(
-    /<PageHeader onBack=\{onBack\} title="Connected Sites" \/>/.test(route),
-    'the route owns its header and hands back to the shell',
+    /<ConnectedSitesSection onBack=\{onBack\} variant=\{screenVariantFor\(shell\)\} \/>/.test(route),
+    'the route renders the section with only Back and the variant, so behaviour cannot drift',
 );
 // Its own screen means its own state: nothing about Settings may leak in.
 assert.ok(
@@ -89,16 +87,18 @@ const helper = popupApp.slice(
     popupApp.indexOf('const paletteCommands'),
 );
 assert.ok(helper.length > 0, 'openSettingsSection is defined before the palette commands');
+// The palette opens it as a root; a page button passes the push navigator.
 assert.ok(
-    /sectionId === 'connected-sites'/.test(helper)
-    && /palette\.navigate\('connected-sites'\)/.test(helper),
+    /const openSettingsSection = \(sectionId, open = palette\.navigate\) =>/.test(helper)
+    && /sectionId === 'connected-sites'/.test(helper)
+    && /open\('connected-sites'\)/.test(helper),
     "openSettingsSection routes 'connected-sites' to the top-level view, not into Settings",
 );
 assert.ok(
-    /useCommandPalette\(\{[\s\S]{0,240}?navigate:\s*setUnlockedView/.test(popupApp),
-    'popup palette navigation forwards connected-sites to setUnlockedView',
+    /useCommandPalette\(\{[\s\S]{0,240}?navigate:\s*openRootView/.test(popupApp),
+    'popup palette navigation forwards connected-sites to the history root navigation',
 );
-const cutoff = helper.indexOf("palette.navigate('settings')");
+const cutoff = helper.indexOf("open('settings')");
 assert.ok(
     cutoff > helper.indexOf("sectionId === 'connected-sites'"),
     'the connected-sites branch returns BEFORE the generic Settings deep-link',

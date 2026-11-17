@@ -105,8 +105,8 @@ const approvalSrc = readFileSync(
 assert.match(approvalSrc, /usePanicFreeze\(PANIC_SURFACE_REJECT_ONLY, (?:t\(.extension\.approval\.reject.\)|.Reject.)\)/, 'the approval window reads the reject-only freeze and names the Reject label');
 assert.match(
     approvalSrc,
-    /<ListPage>\s*\{panicFrozen \? \(\s*<PanicSignStatus/,
-    'the approval window states a self-armed freeze as its first content',
+    /<ConfirmStandard[\s\S]{0,260}top=\{panicFrozen \|\| shownBlock \? \([\s\S]{0,600}?\{panicFrozen \? \(\s*<PanicSignStatus/,
+    'the approval window states a self-armed freeze at the top of Confirm Standard',
 );
 assert.match(
     approvalSrc,

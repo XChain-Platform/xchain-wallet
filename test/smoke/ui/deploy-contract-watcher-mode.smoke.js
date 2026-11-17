@@ -26,5 +26,11 @@ assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMo
 assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'DEPLOY'/);
-assert.match(formSrc, /Create Unsigned Transaction/);
+assert.match(formSrc, /if \(result\?\.psbtHex && !txid\)[\s\S]{0,500}?<ResultScreen[\s\S]{0,200}?state="unsigned"/);
+assert.match(
+    formSrc,
+    /<ConfirmActionModal[\s\S]{0,1100}?credentialsReady=\{isWatcherMode[\s\S]{0,600}?watcherBuildsUnsigned/,
+    'watcher guidance and readiness live on the Confirm Standard review',
+);
+assert.doesNotMatch(formSrc, /Create Unsigned Transaction/, 'old review action label is retired');
 console.log('deploy-contract-watcher-mode smoke OK');

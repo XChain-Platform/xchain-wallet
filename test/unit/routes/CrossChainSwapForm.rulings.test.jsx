@@ -21,6 +21,14 @@ vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
     ),
 }));
 
+vi.mock('../../../packages/core/src/shared/components/ListPickerScreen.jsx', () => ({
+    ListPickerScreen: ({ title, onSelect }) => (
+        <button type="button" onClick={() => onSelect({ actionIndex: '7', name: title.includes('Allow') ? 'Team wallets' : undefined })}>
+            List row {title}
+        </button>
+    ),
+}));
+
 vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx', () => ({
     OwnAddressPickerScreen: ({ title, chainId, lockNetwork, onPick }) => (
         <div>
@@ -152,6 +160,8 @@ describe('CrossChainSwapForm UI rulings', () => {
 
         openTip('From address', 'address on the give network whose tokens are escrowed');
         openTip('Give amount', 'give side stays escrowed until a match');
+        // Ownership is its own optional section in both input styles (operator 2026-11-13).
+        openSection('Ownership');
         openTip(
             "Give this token's ownership instead of an amount",
             "give token name's ownership record",
@@ -164,10 +174,16 @@ describe('CrossChainSwapForm UI rulings', () => {
         );
         openSection('Swap Terms');
         openTip('Expiration', 'Cancel from My swaps or let the offer expire');
-        openTip('Memo', 'public note stored with this cross-chain swap');
-
-        fireEvent.click(screen.getByLabelText('Expire at a specific time'));
+        // Expires always shows and follows the Expiration choice (operator 2026-11-13).
         openTip('Expires', 'local date and time');
+
+        fireEvent.click(screen.getByRole('combobox', { name: /^Expiration/ }));
+        fireEvent.click(screen.getByRole('option', { name: 'Expire at a specific time' }));
+        openTip('Expires', 'local date and time');
+        // Memo is its own section with no label row or tip, as on every form.
+        openSection('Memo');
+        expect(screen.queryByRole('button', { name: 'About Memo' })).toBeNull();
+        expect(screen.getByRole('textbox', { name: 'Memo' })).toBeInTheDocument();
         // One Network picker, in From; the get network follows the get token.
         expect(screen.getByRole('button', { name: 'About Network' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'About Get network' })).toBeNull();
@@ -182,7 +198,7 @@ describe('CrossChainSwapForm UI rulings', () => {
         await waitFor(() => expect(receive).toHaveValue(BTC_ADDRESS));
 
         fireEvent.click(screen.getByRole('button', { name: 'Choose receiving address' }));
-        expect(screen.getByRole('heading', { name: 'Receive at' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Receive At' })).toBeInTheDocument();
         expect(screen.getByTestId('picker-chain')).toHaveTextContent(BTC);
         expect(screen.getByTestId('picker-lock')).toHaveTextContent('locked');
         fireEvent.click(screen.getByRole('button', { name: 'Pick receiving address' }));
@@ -202,12 +218,10 @@ describe('CrossChainSwapForm UI rulings', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
 
-        const edit = await screen.findByRole('button', { name: 'Edit' });
+        const reject = await screen.findByRole('button', { name: 'Reject' });
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
-        const submit = screen.getByRole('button', {
-            name: 'Create Unsigned Cross-Chain Swap Transaction',
-        });
-        expectIcon(edit);
+        const submit = screen.getByRole('button', { name: 'Approve' });
+        expectIcon(reject);
         expectIcon(back);
         expect(submit).toHaveClass(buttonStyles.success);
         expectIcon(submit);
@@ -216,5 +230,44 @@ describe('CrossChainSwapForm UI rulings', () => {
         fireEvent.click(submit);
         const done = await screen.findByRole('button', { name: 'Done' });
         expectIcon(done);
+    });
+
+    // Swap Terms holds only the expiry; Lists and Memo are their own optional
+    // sections, and the default term reads 3 months (operator 2026-11-13).
+    it('splits the expiry, the lists and the memo into their own sections', async () => {
+        mount();
+        await chooseTokensAndAmounts();
+
+        const terms = screen.getByRole('button', { name: /^Swap Terms/ });
+        expect(terms).toHaveAccessibleName(expect.stringContaining('3 months'));
+        const lists = screen.getByRole('button', { name: /^Lists/ });
+        expect(lists).toHaveAccessibleName(expect.stringContaining('None'));
+        expect(screen.getByRole('button', { name: /^Memo/ })).toHaveAttribute('aria-expanded', 'false');
+
+        openSection('Swap Terms');
+        expect(screen.getByRole('combobox', { name: /^Expiration/ })).toBeInTheDocument();
+        // Expires shows for the default term too, set 3 months out.
+        expect(screen.getByLabelText('Expires')).not.toHaveValue('');
+        expect(screen.getByLabelText('Memo')).not.toBeVisible();
+        expect(screen.queryByRole('button', { name: /^Allow list:/ })).toBeNull();
+
+        openSection('Lists');
+        expect(screen.getByRole('button', { name: 'Allow list: None set' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Block list: None set' })).toBeInTheDocument();
+
+        // A picked list shows its name (G114); an unnamed one reads List #N.
+        fireEvent.click(screen.getByRole('button', { name: 'Allow list: None set' }));
+        fireEvent.click(screen.getByRole('button', { name: 'List row Choose Allow-List' }));
+        expect(await screen.findByRole('button', { name: 'Allow list: Team wallets (List #7)' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Block list: None set' }));
+        fireEvent.click(screen.getByRole('button', { name: 'List row Choose Block-List' }));
+        expect(await screen.findByRole('button', { name: 'Block list: List #7' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Clear allow list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Clear block list' }));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
+        await screen.findByRole('button', { name: 'Reject' });
+        const expirationLabel = screen.getByText('Expiration', { selector: 'dt' });
+        expect(expirationLabel.nextElementSibling).toHaveTextContent('3 months');
     });
 });

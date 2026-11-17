@@ -1,0 +1,49 @@
+/* Upgrade Wallet's sweep list: one standard card per legacy address, its
+   facts as label-left, value-right rows (G14), 8px apart (G80). */
+.sweepList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.sweepCard {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    margin: 0;
+}
+
+.facts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    margin: 0;
+}
+
+.factRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.factLabel {
+    flex: 0 0 auto;
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+.factValue {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    display: flex;
+    justify-content: flex-end;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    text-align: end;
+    overflow-wrap: anywhere;
+}

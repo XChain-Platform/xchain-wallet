@@ -55,7 +55,7 @@ describe('Wallet details used-address check', () => {
                 <WalletDetails walletId={wallet.id} onBack={() => {}} />
             </MessagingProvider>,
         );
-        fireEvent.click(await screen.findByRole('button', { name: 'Check for Used Addresses' }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Check for Used Addresses/ }));
         await waitFor(() => expect(messaging.discoverAddresses).toHaveBeenCalledWith({ walletId: 'w-1' }));
         expect(await screen.findByText('Checking for used addresses (0 of 1 network checked)')).toBeInTheDocument();
 
@@ -80,6 +80,6 @@ describe('Wallet details used-address check', () => {
             </MessagingProvider>,
         );
         await screen.findByText('Restored');
-        expect(screen.queryByRole('button', { name: 'Check for Used Addresses' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Check for Used Addresses/ })).toBeNull();
     });
 });

@@ -12,9 +12,11 @@
     --address-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
     --address-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
     /* The room the read-only address leaves for the field icon is the icon
-       button itself (inset 4px from the control edge) plus a 4px gap, so a
-       full address that fits is shown whole, not trimmed early. */
-    --address-field-action-room: calc(var(--xc-tap-min) + var(--xc-space-1) * 2);
+       button itself, inset from the control edge by its G112 square-slot
+       inset (the Input's own --xc-control-action-inset), plus a 4px gap, so
+       a full address that fits is shown whole, not trimmed early. */
+    --address-action-inset: var(--xc-field-action-inset-md);
+    --address-field-action-room: calc(var(--address-action-inset) + var(--xc-tap-min) + var(--xc-space-1));
     --address-control-row: 2;
     position: relative;
     display: grid;
@@ -37,6 +39,7 @@
     --xc-icon-size: var(--xc-control-icon-sm, var(--xc-icon-sm));
     --address-control-padding-x: var(--xc-control-pad-x-sm, var(--xc-control-pad-x));
     --address-control-font-size: var(--xc-control-font-sm, var(--xc-control-font));
+    --address-action-inset: var(--xc-field-action-inset-sm);
 }
 
 .md {
@@ -44,6 +47,7 @@
     --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
     --address-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
     --address-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
+    --address-action-inset: var(--xc-field-action-inset-md);
 }
 
 .lg {
@@ -51,15 +55,25 @@
     --xc-icon-size: var(--xc-control-icon-lg, var(--xc-icon-lg));
     --address-control-padding-x: var(--xc-control-pad-x-lg, var(--xc-control-pad-x));
     --address-control-font-size: var(--xc-control-font-lg, var(--xc-control-font));
+    --address-action-inset: var(--xc-field-action-inset-lg);
 }
 
 .wrap label {
     line-height: 20px;
 }
 
-/* The input is forced left to right so an address always reads in order. */
+/* The input is forced left to right so an address always reads in order.
+   It types in the same mono face as the read-only AddressText over it, so the
+   text does not change look or size when the field takes focus (operator
+   2026-11-13). */
 .wrap input {
     padding-inline-end: var(--address-control-padding-x);
+    font-family: var(--xc-font-mono);
+}
+
+/* The hint is words, not an address, so it stays in the sans face. */
+.wrap input::placeholder {
+    font-family: var(--xc-font-sans);
 }
 
 :global([dir='rtl']) .wrap input {
@@ -125,10 +139,8 @@
     line-height: 1.35;
 }
 
+/* The component drops the overlay while the input itself has focus (focus on
+   the field icon keeps it); this keeps the typed text visible meanwhile. */
 .readOnly input:focus {
     color: var(--xc-text);
-}
-
-.readOnly > :first-child:focus-within + .readOnlyValue {
-    visibility: hidden;
 }

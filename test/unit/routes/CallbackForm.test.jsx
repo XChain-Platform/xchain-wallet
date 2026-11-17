@@ -11,6 +11,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { networkFeeEditor } from '../../helpers/customNetworkFee.js';
 import { readFileSync } from 'node:fs';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -132,7 +133,11 @@ describe('callback field validation', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: /^Execute callback$/i })).toBeDisabled();
+        // G22: the button stays enabled; the press is refused.
+        const submit = screen.getByRole('button', { name: /^Execute callback$/i });
+        expect(submit).not.toBeDisabled();
+        fireEvent.click(submit);
+        await waitFor(() => expect(screen.getAllByText(/issuer could not be confirmed/).length).toBeGreaterThan(0));
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -157,7 +162,7 @@ describe('CallbackForm review safety', () => {
         fireEvent.click(await readySubmit());
 
         expect(await screen.findByText(
-            'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+            'Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
         )).toBeInTheDocument();
     });
 
@@ -182,36 +187,82 @@ describe('CallbackForm review safety', () => {
         const messages = await screen.findAllByText(/no callback configured/i);
         expect(messages).toHaveLength(1);
         expect(messages[0].closest('dd')).not.toBeNull();
-        expect(screen.getByRole('button', { name: /^Execute callback$/i })).toBeDisabled();
+        // G22: the button stays enabled; a press adds no second notice.
+        const submit = screen.getByRole('button', { name: /^Execute callback$/i });
+        expect(submit).not.toBeDisabled();
+        fireEvent.click(submit);
+        await waitFor(() => expect(screen.getAllByText(/no callback configured/i)).toHaveLength(1));
         expect(screen.queryByText(/nothing to recall/i)).toBeNull();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
-    it('stretches both wide summary cells to one row height', () => {
-        const css = readFileSync(
-            'packages/core/src/shared/routes/CallbackForm.module.css',
-            'utf8',
-        );
-        const wideRules = css.match(/@media \(min-width: 834px\) \{([\s\S]*)\}\s*$/)?.[1] || '';
-
-        expect(wideRules).toMatch(/\.summaryLabel\s*,\s*\.summaryValue\s*\{[^}]*align-self:\s*stretch/s);
-    });
-
-    it('keeps the holder help tip inside its dt and paired with the holder value', async () => {
+    it('renders the callback facts through FactRows with no nested card', async () => {
         mount();
         await readySubmit();
 
-        const tip = screen.getByRole('button', { name: 'About the holder payout estimate' });
-        const labelCell = tip.closest('dt');
-        expect(labelCell).not.toBeNull();
-        expect(labelCell).toHaveTextContent('Holders to pay');
-        expect(labelCell.nextElementSibling?.tagName).toBe('DD');
-        const bubble = screen.getByText(/The holder count and payout are indicative/);
-        expect(bubble).toHaveAttribute('hidden');
+        const list = document.querySelector('dl[data-callback-facts]');
+        expect(list).not.toBeNull();
+        // The shared FactRows classes, one dt and one dd per fact.
+        const factsCss = readFileSync(
+            'packages/core/src/shared/routes/FactRows.module.css',
+            'utf8',
+        );
+        expect(factsCss).toMatch(/align-items:\s*stretch/);
+        expect(list.className).toMatch(/list/);
+        const cells = Array.from(list.children);
+        expect(cells.length).toBeGreaterThanOrEqual(6);
+        cells.forEach((cell, i) => {
+            expect(cell.tagName).toBe(i % 2 === 0 ? 'DT' : 'DD');
+            expect(cell.className).toMatch(i % 2 === 0 ? /label/ : /value/);
+        });
+        // No wrapper card around the facts: the list sits directly in the
+        // form section, and the retired local sheet is not used.
+        expect(list.parentElement.className).not.toMatch(/formPreview|card|panel/i);
+        expect(list.className).not.toMatch(/factRows|flatDetailsList/);
+        expect(list.parentElement.closest('[class*="formPreview"]')).toBeNull();
+    });
 
-        fireEvent.click(tip);
-        expect(bubble).not.toHaveAttribute('hidden');
-        expect(bubble.closest('dt')).toBe(labelCell);
+    it('carries no help icon on the read-only callback facts (G121)', async () => {
+        mount();
+        await readySubmit();
+
+        const list = document.querySelector('dl[data-callback-facts]');
+        expect(list).not.toBeNull();
+        expect(screen.queryByRole('button', { name: 'About the holder payout estimate' })).toBeNull();
+        expect(list.querySelector('button, svg')).toBeNull();
+        // The indicative-payout warning is a plain static hint under the card.
+        const hint = document.querySelector('[data-callback-estimate-hint]');
+        expect(hint).not.toBeNull();
+        expect(hint.tagName).toBe('P');
+        expect(hint.textContent).toMatch(/Holders can split their balance across new addresses/);
+        expect(hint.querySelector('button, svg')).toBeNull();
+        expect(list.nextElementSibling).toBe(hint);
+        const holders = Array.from(list.querySelectorAll('dt'))
+            .find((dt) => dt.textContent === 'Holders to pay');
+        expect(holders).toBeDefined();
+        expect(holders.nextElementSibling?.tagName).toBe('DD');
+    });
+
+    it('holds the facts in one standard card with every label and value on one line at 360 px', async () => {
+        mount();
+        await readySubmit();
+
+        const list = document.querySelector('dl[data-callback-facts]');
+        // The list is the shared card (FactRows composes the Card sheet).
+        const factsCss = readFileSync('packages/core/src/shared/routes/FactRows.module.css', 'utf8');
+        expect(factsCss).toMatch(/composes:\s*card from '\.\.\/\.\.\/ui\/Card\.module\.css'/);
+        // The local sheet pins single-line cells and an ellipsis for long values.
+        const css = readFileSync('packages/core/src/shared/routes/CallbackForm.module.css', 'utf8');
+        expect(css).toMatch(/white-space:\s*nowrap/);
+        expect(css).toMatch(/text-overflow:\s*ellipsis/);
+        expect(css).toMatch(/grid-template-columns:\s*fit-content\(60%\)\s+minmax\(0,\s*1fr\)/);
+        expect(list.className).toMatch(/facts/);
+        // Every cell names its full text in a title so a truncated value stays readable.
+        Array.from(list.children).forEach((cell) => {
+            expect(cell.getAttribute('title')).toBe(cell.textContent);
+        });
+        const labels = Array.from(list.querySelectorAll('dt')).map((dt) => dt.textContent);
+        expect(labels).toEqual(expect.arrayContaining(['Pays holders', 'Allowed from block', 'Holders to pay']));
     });
 
     it('uses the success action style and an icon', async () => {
@@ -316,13 +367,13 @@ describe('CallbackForm review safety', () => {
     it('refuses an invalid custom fee instead of silently using the default', async () => {
         const messaging = mount();
         const submit = await readySubmit();
-        // The fee selector sits in the standard Network fee section,
+        // The fee selector sits in the standard Fees section,
         // closed by default.
-        fireEvent.click(screen.getByRole('button', { name: /^Network fee\b/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees\b/ }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '3' },
         });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '0' } });
+        fireEvent.change(networkFeeEditor(), { target: { value: '0' } });
 
         fireEvent.click(submit);
 
@@ -407,7 +458,11 @@ describe('CallbackForm review safety', () => {
         fireEvent.click(await readySubmit());
 
         expect(await screen.findByText('final note')).toBeTruthy();
-        expect(screen.getByText('CALLABLE')).toBeTruthy();
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('CALLABLE');
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+        expect(screen.getByTestId('confirm-facts')).toHaveTextContent('Holders to pay');
+        expect(screen.queryByText(/Estimate unavailable/)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(await screen.findByLabelText('Memo')).toHaveValue('  final note  ');
     });
@@ -446,7 +501,12 @@ describe('CallbackForm with an unread token record', () => {
         expect(screen.queryByText(/has no callback configured/)).toBeNull();
         expect(screen.queryByText(/No callback configured/)).toBeNull();
         expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0);
-        expect(screen.getByRole('button', { name: /^Execute callback$/i })).toBeDisabled();
+        // G22: the button stays enabled; the press is refused.
+        const submit = screen.getByRole('button', { name: /^Execute callback$/i });
+        expect(submit).not.toBeDisabled();
+        fireEvent.click(submit);
+        await waitFor(() => expect(screen.getAllByText(/issuer could not be confirmed/).length).toBeGreaterThan(0));
+        expect(screen.queryByText(/has no callback configured/)).toBeNull();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 });

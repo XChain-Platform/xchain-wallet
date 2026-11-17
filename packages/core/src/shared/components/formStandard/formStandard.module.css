@@ -52,17 +52,23 @@
 .sectionTitle {
     flex: 0 0 auto;
     min-width: 0;
-    font-size: var(--xc-text-sm);
+    /* Section titles are 16px (operator 2026-11-13), a step above the 13px field labels. */
+    font-size: var(--xc-text-lg);
     font-weight: 600;
     white-space: nowrap;
 }
 
+/* Every field sits 8px inside the section box and 8px from the next one
+   (operator ruling). The form gap is redefined here rather than the gap
+   alone, so the rules inside that subtract it (a field note's 4px, the fee
+   totals' 8px) keep their intended spacing in the tighter stack. */
 .sectionBody {
+    --xc-form-gap: var(--xc-space-2);
     display: flex;
     flex-direction: column;
     gap: var(--xc-form-gap);
     min-width: 0;
-    padding: var(--xc-space-3);
+    padding: var(--xc-space-2);
     border-top: 1px solid var(--xc-border);
 }
 
@@ -76,6 +82,26 @@
     flex-direction: column;
     gap: var(--xc-space-2);
     min-width: 0;
+}
+
+/* The lead note (the deployer-can-withdraw warning, the panic freeze) sits
+   8px above the first section like the sections sit apart, not the form's
+   16px gap plus the notice row's own 8px margin. It draws nothing when the
+   host passes no lead, so the empty wrapper must not take a gap either. */
+.lead {
+    min-width: 0;
+    margin-block-end: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
+}
+
+/* A FormNotice in `lead` is drawn by FormPage in the form's own status slot,
+   which already sits 8px above the next element (FormPage.module.css). */
+
+.lead:empty {
+    display: none;
+}
+
+.lead.lead.lead > * {
+    margin-block: 0;
 }
 
 /* The sibling margins above pull a section up by (form gap - 8px), to make
@@ -108,6 +134,10 @@
     white-space: nowrap;
 }
 
+.count[hidden] {
+    display: none;
+}
+
 .count + .chevron {
     margin-inline-start: 0;
 }
@@ -124,6 +154,14 @@
     text-align: end;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* An address in a summary line (SummaryAddress) takes the line's own colour
+   and weight, ahead of the kit's AddressText text colour; it keeps the
+   monospace face, and fits the rest of the line (G99). */
+.summaryAddress[aria-label] {
+    color: inherit;
+    font-weight: inherit;
 }
 
 /* Chevron right while closed, down while open, always at the trailing edge. */

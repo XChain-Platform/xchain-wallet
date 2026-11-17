@@ -11,6 +11,7 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -88,12 +89,6 @@ async function expectSharedLineControlHeights(controls, label) {
             `${label}: controls on one line differ by ${difference}px: ${JSON.stringify(line)}`,
         ).toBeLessThanOrEqual(2);
     }
-}
-
-function priceAlertFormControls(page) {
-    return page.getByLabel('Target price', { exact: true })
-        .locator('xpath=ancestor::div[.//select and .//button][1]')
-        .locator('select, input, button');
 }
 
 for (const viewport of VIEWPORTS) {
@@ -177,38 +172,37 @@ for (const viewport of VIEWPORTS) {
             await priceAlerts.scrollIntoViewIfNeeded();
             if (!(await priceAlerts.isChecked())) await priceAlerts.click();
             await expect(priceAlerts).toBeChecked();
-            await expect(main.getByText('No price alerts yet', { exact: true })).toBeVisible();
 
-            await expectSharedLineControlHeights(
-                priceAlertFormControls(page),
-                `${viewport.name} add price alert row`,
-            );
-            await main.getByLabel('Target price', { exact: true }).fill('71000');
-            await main.getByRole('button', { name: 'Add Alert' }).click();
+            // The alert list is its own page (2026-11-14): the row opens it, the plus adds.
+            await main.getByRole('button', { name: /^Your price alerts/ }).click();
+            await expect(page.getByRole('heading', { level: 1, name: 'Price Alerts', exact: true })).toBeVisible();
+            await expect(page.getByText('No price alerts yet', { exact: true })).toBeVisible();
 
-            await expect(main.getByText('Bitcoin rises above $71,000', { exact: true })).toBeVisible();
+            await page.getByRole('button', { name: 'Add Price Alert', exact: true }).click();
+            await expect(page.getByRole('heading', { level: 1, name: 'Add Price Alert', exact: true })).toBeVisible();
+            await page.getByRole('button', { name: /^Asset:/ }).click();
+            await page.getByRole('button', { name: /^Bitcoin/ }).first().click();
+            await page.getByLabel('Target price', { exact: true }).fill('71000');
+            await page.getByRole('button', { name: 'Add Alert' }).click();
+
+            await expect(page.getByText('BTC above $71,000')).toBeVisible();
             await expectScreen(page, `${viewport.name} created price alert`, 'Settings');
-            const edit = main.getByRole('button', { name: 'Edit Bitcoin price alert' });
-            const savedRowControls = edit.locator('xpath=parent::span').locator('button');
-            await expectSharedLineControlHeights(savedRowControls, `${viewport.name} saved price alert row`);
 
-            await edit.click();
-            await expect(main.getByLabel('Coin', { exact: true })).toHaveValue('bitcoin-mainnet');
-            await expect(main.getByLabel('Direction', { exact: true })).toHaveValue('above');
-            await expect(main.getByLabel('Target price', { exact: true })).toHaveValue('71000');
-            await expectSharedLineControlHeights(
-                priceAlertFormControls(page),
-                `${viewport.name} edit price alert row`,
-            );
+            // The row opens the Price Alert page, whose Edit action reuses the add form.
+            await page.getByRole('button', { name: /^Open BTC above \$71,000 alert/ }).click();
+            await expect(page.getByRole('heading', { level: 1, name: 'Price Alert', exact: true })).toBeVisible();
+            await page.getByRole('button', { name: /^Edit alert/ }).click();
+            await expect(page.getByRole('heading', { level: 1, name: 'Edit Price Alert', exact: true })).toBeVisible();
+            await expect(page.getByLabel('Target price', { exact: true })).toHaveValue('71000');
             await expectScreen(page, `${viewport.name} edit price alert`, 'Settings');
 
-            await main.getByLabel('Direction', { exact: true }).selectOption('below');
-            await main.getByLabel('Target price', { exact: true }).fill('65000');
-            // Editing keeps the form's one action name, Add Alert (U51).
-            await main.getByRole('button', { name: 'Add Alert' }).click();
+            await pickOption(page.getByRole('button', { name: /^When the price/ }), 'below');
+            await page.getByLabel('Target price', { exact: true }).fill('65000');
+            await page.getByRole('button', { name: 'Save Alert' }).click();
 
-            await expect(main.getByText('Bitcoin falls below $65,000', { exact: true })).toBeVisible();
-            await expect(main.getByText('Bitcoin rises above $71,000', { exact: true })).toHaveCount(0);
+            await expect(page.getByRole('heading', { level: 1, name: 'Price Alert', exact: true })).toBeVisible();
+            await expect(page.getByText('BTC below $65,000', { exact: true })).toBeVisible();
+            await expect(page.getByText('BTC above $71,000', { exact: true })).toHaveCount(0);
             await expectScreen(page, `${viewport.name} updated price alert`, 'Settings');
         });
     });

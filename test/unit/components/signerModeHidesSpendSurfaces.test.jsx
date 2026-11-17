@@ -76,7 +76,7 @@ describe('LeftNav: the primary rail honours signer mode', () => {
         // not a stripped nav.
         expect(labels).toContain('Home');
         expect(labels).toContain('History');
-        expect(labels).toContain('Scan');
+        expect(labels).not.toContain('Scan');
         expect(labels).toContain('Messaging');
     });
 });
@@ -169,7 +169,7 @@ describe('Send: the route refuses in signer mode', () => {
 
     it('refuses, and says why and how to undo it, in signer mode', async () => {
         mount(Send, 'signer');
-        expect(await screen.findByText(/air-gapped signer\. It can sign transactions from a watch-only wallet, but it can't send them to the network/i))
+        expect(await screen.findByText(/signer for another phone\. It signs transactions built on that phone, but it can't send them to the network/i))
             .toBeInTheDocument();
         // The way to see the mode is Wallet Details; Settings no longer has one.
         expect(screen.getByText(/shown on Wallet Details/i)).toBeInTheDocument();
@@ -189,7 +189,7 @@ describe('Receive: the route refuses in signer mode', () => {
 
     it('refuses in signer mode', async () => {
         mount(Receive, 'signer');
-        expect(await screen.findByText(/air-gapped signer\. It can sign transactions from a watch-only wallet, but it doesn't have an address for receiving funds/i))
+        expect(await screen.findByText(/signer for another phone\. It signs transactions built on that phone, but it doesn't have an address for receiving funds/i))
             .toBeInTheDocument();
     });
 });

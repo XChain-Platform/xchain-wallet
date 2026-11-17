@@ -52,6 +52,7 @@ import {
     getTokenFiatRate,
     refreshTokenFiatRate,
 } from '../../../packages/core/src/flows/priceLookup.js';
+import { showHomeBalances } from '../../helpers/homeBalances.js';
 
 const tabsCss = readFileSync(
     'packages/core/src/shared/components/HomeTabs.module.css',
@@ -207,7 +208,7 @@ describe('balance row sorting', () => {
         expect(filter).toBeVisible();
         expect(filter.parentElement?.parentElement).toBe(tablist.parentElement);
         expect(screen.getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Coins', 'Tokens', 'NFTs', 'DeFi']);
+            .toEqual(['Balances', 'NFTs', 'DeFi']);
         expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
         expect(tablist.compareDocumentPosition(filter)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 
@@ -220,7 +221,8 @@ describe('balance row sorting', () => {
         );
         expect(narrowRules).toMatch(/\.tabsRow\s*>\s*\[role='tablist'\]\s*\{[^}]*width:\s*100%;/s);
         expect(narrowRules).not.toMatch(/flex-direction:\s*column/);
-        expect(tabsCss).toMatch(/\.tabsRow\s+\[role='tab'\]\s*\{[^}]*flex:\s*0 0 auto;[^}]*white-space:\s*nowrap;/s);
+        // The tabs share the row evenly, as every view toggle does, on one line.
+        expect(tabsCss).toMatch(/\.tabsRow\s+\[role='tab'\]\s*\{[^}]*flex:\s*1 1 0;[^}]*white-space:\s*nowrap;/s);
         expect(renderedKeys()).toEqual([
             'litecoin-mainnet:LTC',
             'dogecoin-mainnet:DOGE',
@@ -248,8 +250,18 @@ describe('balance row sorting', () => {
 
         expect(screen.getByText('Fund your wallet')).toBeVisible();
         expect(screen.queryByRole('button', { name: 'Filter and sort' })).toBeNull();
+        cleanup();
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        // Balances remembered as Tokens on this wallet.
+        localStorage.setItem('xc:balances:type:empty-wallet', 'tokens');
+        render(
+            <HomeTabs
+                chainRegistry={chainRegistry}
+                balances={{}}
+                walletId="empty-wallet"
+                networkFilter="all"
+            />,
+        );
         expect(screen.getByText('No tokens yet')).toBeVisible();
         expect(screen.queryByRole('button', { name: 'Filter and sort' })).toBeNull();
     });
@@ -273,7 +285,7 @@ describe('balance row sorting', () => {
 
     it('sorts tokens by name by default and renders an unpriced token as zero fiat', () => {
         mountTokens();
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
 
         expect(screen.queryByRole('combobox', { name: 'Sort balances' })).toBeNull();
         expect(renderedKeys()).toEqual([
@@ -294,16 +306,17 @@ describe('balance row sorting', () => {
         ]);
     });
 
-    it('stacks an NFT ticker immediately under its name', () => {
+    it('puts the NFT name alone under its image on the NFTs tab', () => {
+        // Operator 2026-11-15: the NFTs tab is a grid of large images to
+        // browse, the name under each and no ticker or balance line.
         mocks.collectibleKeys.add('bitcoin-mainnet:AAA');
         mountTokens();
         fireEvent.click(screen.getByRole('tab', { name: 'NFTs' }));
 
         const name = screen.getByText('Alpha token');
-        const ticker = screen.getByText('AAA');
         expect(name.tagName).toBe('DIV');
-        expect(ticker.tagName).toBe('DIV');
-        expect(name.nextElementSibling).toBe(ticker);
+        expect(name.nextElementSibling).toBeNull();
+        expect(screen.queryByText('AAA')).toBeNull();
     });
 });
 

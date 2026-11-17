@@ -9,8 +9,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
-import { DelegationActionForm } from '../../../packages/core/src/shared/routes/DelegationActionForm.jsx';
+// The staking position routes: the one Staking form on the network.
+import {
+    NetworkDelegationRoute as DelegationActionForm,
+    NetworkPositionRoute as StakingActionForm,
+} from '../../helpers/stakingFormRoutes.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 const ACTIVE = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';

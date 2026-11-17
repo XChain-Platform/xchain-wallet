@@ -29,6 +29,10 @@ export const WALLET_VERSION = '0.342.1';
 export const LICENSE_NAME = 'GNU Affero General Public License v3.0 (AGPL-3.0)';
 export const LICENSE_FILE = 'LICENSE.md';
 export const NOTICE_FILE = 'NOTICE.md';
+// Repo files are read from the public repository's default branch, which is
+// `master` (a `main` path 404s), so every repo-relative doc link builds here.
+export const REPO_FILE_BASE = 'https://github.com/XChain-Platform/xchain-wallet/blob/master/';
+export const LICENSE_URL = `${REPO_FILE_BASE}${LICENSE_FILE}`;
 // Bump whenever the binding terms in LICENSE.md materially change. The
 // onboarding gate compares the user's persisted acceptance against this
 // constant and forces re-acceptance on mismatch (Cluster J FOLLOWUP 4).

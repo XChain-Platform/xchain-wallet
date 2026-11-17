@@ -13,6 +13,7 @@ import { GovernancePolls } from '../../../packages/core/src/shared/routes/Govern
 import { PollDetail } from '../../../packages/core/src/shared/routes/PollDetail.jsx';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 import { userEvent } from '../../helpers/userEvent.js';
+import { typeCustomRate } from '../../helpers/customNetworkFee.js';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
@@ -31,6 +32,9 @@ const ADDRESS = Object.freeze({
 function openSection(title) {
     fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${title}\\b`), expanded: false }));
 }
+
+const confirmFactValue = (label) => within(screen.getByTestId('confirm-facts'))
+    .getByText(label, { selector: 'dt' }).nextElementSibling;
 
 // Fills the required poll fields: the question (open Poll section), two options
 // (numbered from 1) and the closing block (closed Voting section).
@@ -162,7 +166,7 @@ describe('governance route audit', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Add Option' }));
         // Options are numbered from 1 in the form.
         expect(screen.getByLabelText('Option 3')).toBeTruthy();
-        fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[2]);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove option 3' }));
         expect(screen.queryByLabelText('Option 3')).toBeNull();
 
         fillPoll('0');
@@ -286,18 +290,20 @@ describe('governance route audit', () => {
 
         fireEvent.change(screen.getByLabelText('Escrow to fund the call (XCHAIN)'), { target: { value: '2.00' } });
         fireEvent.click(screen.getByRole('button', { name: /^Create poll$/i }));
-        expect(await screen.findByText(/prepares the transaction for your offline signer/)).toBeTruthy();
-        expect(await screen.findByText('3 XCHAIN')).toBeTruthy();
-        expect(screen.getByText('2 XCHAIN')).toBeTruthy();
-        expect(screen.getByText('244')).toBeTruthy();
-        expect(screen.getByText('Maximum selections').nextElementSibling).toHaveTextContent('1');
+        expect(await screen.findByText(/Another phone signs for this wallet: this prepares the transaction for it/)).toBeTruthy();
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Create poll for VOTE holders: Ship it?');
+        expect(confirmFactValue('Creation deposit')).toHaveTextContent('3 XCHAIN');
+        expect(confirmFactValue('Callback escrow')).toHaveTextContent('2 XCHAIN');
+        expect(confirmFactValue('End block')).toHaveTextContent('244');
+        expect(confirmFactValue('Maximum selections')).toHaveTextContent('1');
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByLabelText('Creation deposit (XCHAIN)')).toHaveValue('3.00');
         expect(screen.getByLabelText('Escrow to fund the call (XCHAIN)')).toHaveValue('2.00');
 
         fireEvent.click(screen.getByRole('button', { name: /^Create poll$/i }));
-        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction: Create Poll' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
             actionData: expect.objectContaining({
                 params: expect.objectContaining({ DEPOSIT: '3', GAS_ESCROW: '2' }),
@@ -325,7 +331,7 @@ describe('governance route audit', () => {
         expect(screen.getByLabelText('Tally mode')).toHaveValue('approval');
     });
 
-    it('admits only one watcher poll build from batched submit events', async () => {
+    it('admits only one watcher poll build from batched Approve clicks', async () => {
         const never = new Promise(() => {});
         const buildActionPsbtRequest = vi.fn(() => never);
         const messaging = messagingWith({
@@ -338,12 +344,11 @@ describe('governance route audit', () => {
         await screen.findByDisplayValue(ADDRESS.address);
         fillPoll();
         fireEvent.click(await screen.findByRole('button', { name: /^Create poll$/i }));
-        const submit = await screen.findByRole('button', { name: 'Create Unsigned Transaction: Create Poll' });
-        const form = submit.closest('form');
+        const approve = await screen.findByRole('button', { name: 'Approve' });
 
         act(() => {
-            form.requestSubmit();
-            form.requestSubmit();
+            fireEvent.click(approve);
+            fireEvent.click(approve);
         });
 
         expect(buildActionPsbtRequest).toHaveBeenCalledOnce();
@@ -398,6 +403,44 @@ describe('governance route audit', () => {
         expect(clear.querySelector('svg')).not.toBeNull();
         expect(screen.queryByRole('button', { name: 'Review' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull();
+    });
+
+    it('shows the From picker icon locked on a clear, with the reason', async () => {
+        mount(DelegateVoteForm, {
+            walletId: 'wallet-1', chainId: CHAIN, mode: 'clear',
+            clear: { tick: 'VOTE', delegate: DELEGATE, address: ADDRESS.address }, onBack() {},
+        });
+        await screen.findByDisplayValue(ADDRESS.address);
+        openSection('From');
+        const from = screen.getByLabelText('From address');
+        expect(from).toHaveAttribute('readonly');
+        const picker = screen.getByRole('button', { name: 'Choose source address' });
+        expect(picker).toHaveAttribute('aria-disabled', 'true');
+        expect(picker).toHaveAttribute('title', "The delegation's own address signs this clear");
+        // Locked, not hidden: clicking it opens no picker page.
+        fireEvent.click(picker);
+        expect(screen.getByLabelText('From address')).toBeInTheDocument();
+    });
+
+    it('draws a lone memo without its own label row and counts in the Memo header', async () => {
+        mount(DelegateVoteForm, { walletId: 'wallet-1', chainId: CHAIN, onBack() {} });
+        await screen.findByDisplayValue(ADDRESS.address);
+        openSection('Memo');
+        const section = document.querySelector('[data-form-section="memo"]');
+        const memo = screen.getByRole('textbox', { name: 'Memo' });
+        expect(section.contains(memo)).toBe(true);
+        // "Memo" shows once, as the section title: no field label, no ? tip.
+        expect(within(section).getAllByText('Memo')).toHaveLength(1);
+        expect(section.querySelector('label')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'About Memo' })).toBeNull();
+        const header = section.querySelector('[data-form-section-toggle]');
+        const count = header.querySelector('[data-section-count]');
+        expect(count).toHaveTextContent('0 / 250');
+        expect(header.textContent.indexOf('Optional')).toBeLessThan(header.textContent.indexOf('0 / 250'));
+        fireEvent.change(memo, { target: { value: 'keep my vote' } });
+        expect(count).toHaveTextContent('12 / 250');
+        expect(memo).toHaveAttribute('maxLength', '250');
+        expect(memo.getAttribute('aria-describedby')).toContain(count.firstElementChild.id);
     });
 
     it('validates the source address and governance token before delegation compose', async () => {
@@ -475,24 +518,23 @@ describe('governance route audit', () => {
         }, messaging);
         await screen.findByDisplayValue(ADDRESS.address);
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
-        openSection('Network fee');
-        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
-
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '' } });
+        openSection('Speed and Fees');
+        await typeCustomRate('');
         fireEvent.click(screen.getByRole('button', { name: /^Delegate votes$/i }));
-        expect(await screen.findAllByText('Enter a custom fee rate.')).toHaveLength(1);
+        expect(await screen.findAllByText('Enter a custom network fee.')).toHaveLength(1);
 
-        for (const rate of ['0', '-1']) {
-            fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: rate } });
+        for (const [rate, message] of [
+            ['0', 'Custom fee rate must be greater than zero.'],
+            ['-1', 'Enter a valid non-negative network fee amount.'],
+        ]) {
+            await typeCustomRate(rate);
             fireEvent.click(screen.getByRole('button', { name: /^Delegate votes$/i }));
-            expect(await screen.findAllByText('Custom fee rate must be greater than zero.')).toHaveLength(1);
+            expect(await screen.findAllByText(message)).toHaveLength(1);
         }
+        // The one editor takes a fee, so a rate with more than 8 decimals cannot
+        // be typed; FeeSelector.test covers that message.
 
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1.123456789' } });
-        fireEvent.click(screen.getByRole('button', { name: /^Delegate votes$/i }));
-        expect(await screen.findAllByText('Custom fee rate can have at most 8 decimal places.')).toHaveLength(1);
-
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1001' } });
+        await typeCustomRate('1001');
         fireEvent.click(screen.getByRole('button', { name: /^Delegate votes$/i }));
         expect(await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).toHaveLength(1);
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
@@ -512,17 +554,17 @@ describe('governance route audit', () => {
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '  keep my vote  ' } });
         fireEvent.click(screen.getByRole('button', { name: /^Delegate votes$/i }));
 
-        expect((await screen.findByText('Token')).nextElementSibling.textContent).toBe('VoTe');
-        expect(screen.getByText(/prepares the transaction for your offline signer/)).toBeTruthy();
-        expect(screen.getByLabelText(DELEGATE)).toBeTruthy();
-        expect(screen.getByText('Memo').nextElementSibling.textContent).toBe('keep my vote');
+        expect(await screen.findByTestId('confirm-sentence')).toHaveTextContent(`Delegate VoTe voting power to ${DELEGATE}`);
+        expect(screen.getByText(/Another phone signs for this wallet: this prepares the transaction for it/)).toBeTruthy();
+        expect(confirmFactValue('Delegate to')).toHaveTextContent(DELEGATE);
+        expect(confirmFactValue('Memo')).toHaveTextContent('keep my vote');
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByLabelText('Delegate to address')).toHaveValue(`  ${DELEGATE}  `);
         expect(screen.getByLabelText('Memo')).toHaveValue('  keep my vote  ');
 
         fireEvent.click(screen.getByRole('button', { name: /^Delegate votes$/i }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Create Unsigned Transaction: Delegate Votes' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
         expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
             actionData: {
                 action: 'VOTE',
@@ -562,7 +604,7 @@ describe('governance route audit', () => {
         expect(screen.getByLabelText('Memo')).toHaveValue('');
     });
 
-    it('admits only one watcher delegation build from batched submit events', async () => {
+    it('admits only one watcher delegation build from batched Approve clicks', async () => {
         const never = new Promise(() => {});
         const buildActionPsbtRequest = vi.fn(() => never);
         const messaging = messagingWith({
@@ -575,12 +617,11 @@ describe('governance route audit', () => {
         await screen.findByDisplayValue(ADDRESS.address);
         fireEvent.change(screen.getByLabelText('Delegate to address'), { target: { value: DELEGATE } });
         fireEvent.click(await screen.findByRole('button', { name: /^Delegate votes$/i }));
-        const submit = await screen.findByRole('button', { name: 'Create Unsigned Transaction: Delegate Votes' });
-        const form = submit.closest('form');
+        const approve = await screen.findByRole('button', { name: 'Approve' });
 
         act(() => {
-            form.requestSubmit();
-            form.requestSubmit();
+            fireEvent.click(approve);
+            fireEvent.click(approve);
         });
 
         expect(buildActionPsbtRequest).toHaveBeenCalledOnce();
@@ -610,11 +651,15 @@ describe('governance route audit', () => {
         }, messaging);
 
         expect(await screen.findByText('Ship it?')).toBeTruthy();
-        // A decided yes/no poll states its outcome in the result card.
-        expect(document.querySelector('[data-poll-outcome]')?.textContent).toBe('Approved');
-        expect(screen.getAllByText('0: Yes')).toHaveLength(2);
-        expect(screen.getByText('42 weight')).toBeTruthy();
+        // A decided yes/no poll states its outcome first on Result.
+        const result = screen.getByRole('tabpanel', { name: 'Result' });
+        expect(within(result).getByRole('note')).toHaveTextContent('Approved');
+        expect(screen.getAllByText('0: Yes')).toHaveLength(1);
+        expect(screen.getByText('42 weight, 3 voters')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Vote' })).toBeNull();
+        // Details names the winning option too.
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(screen.getByText('0: Yes', { selector: 'dd' })).toBeTruthy();
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
@@ -641,15 +686,28 @@ describe('governance route audit', () => {
             walletId: 'wallet-1', chainId: CHAIN, pollIndex: 7, onBack() {},
         }, messaging);
 
-        expect(await screen.findByText('10 blocks remaining')).toBeTruthy();
-        expect(await screen.findByRole('button', { name: 'Change Vote' })).toBeTruthy();
-        expect(screen.getByLabelText('0: Yes')).not.toBeChecked();
-        expect(screen.getByLabelText('1: No')).toBeChecked();
-        expect(screen.getByText(/A direct vote overrides any standing VOTE delegation/)).toBeTruthy();
+        // The latest ballot is named under the choice list; the rows stay
+        // buttons, since a later vote replaces it until the close.
+        expect(await screen.findByText('You voted: 1: No')).toBeTruthy();
+        expect(screen.queryByText('You voted: 0: Yes')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Vote for Yes' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Vote for No' })).toBeEnabled();
         expect(screen.getByText(/latest confirmed vote from this address replaces its earlier vote/)).toBeTruthy();
+        // G121: the read-only votes and voters line carries no help tip, so
+        // the delegation rule is not on the poll page itself.
+        expect(screen.queryByText(/A direct vote overrides any standing VOTE delegation/)).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(screen.getByText('10 blocks remaining')).toBeTruthy();
         expect(messaging.governanceVotes).toHaveBeenCalledWith({
             chainId: CHAIN, query: ADDRESS.address, type: 'address',
         });
+
+        // The delegation rule is the help of the editable ballot: Cast Vote's
+        // Change opens the choice editor, whose help tip states it.
+        fireEvent.click(screen.getAllByRole('tab')[0]);
+        fireEvent.click(screen.getByRole('button', { name: 'Vote for No' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Change your choice' }));
+        expect(await screen.findByText(/A direct vote overrides any standing VOTE delegation/)).toBeTruthy();
     });
 
     it('closes the editor at a passed end block and loads finalized results', async () => {
@@ -672,10 +730,14 @@ describe('governance route audit', () => {
             walletId: 'wallet-1', chainId: CHAIN, pollIndex: 9, onBack() {},
         }, messaging);
 
-        expect(await screen.findByText('Awaiting finalization')).toBeTruthy();
-        expect(screen.getByText('Voting closed')).toBeTruthy();
-        expect(await screen.findByText('25 weight')).toBeTruthy();
+        // The hero's status chip, then Result's verdict, both say so.
+        expect(await screen.findAllByText('Awaiting finalization')).toHaveLength(2);
+        expect(document.querySelector('[data-outcome-chip="status"]')).toHaveTextContent('Awaiting finalization');
+        expect(await screen.findByText('25 weight, 2 voters')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Vote' })).toBeNull();
+        expect(screen.queryByRole('tab', { name: 'Vote' })).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(screen.getByText('Voting closed', { selector: 'dd' })).toBeTruthy();
         expect(messaging.governancePollResults).toHaveBeenCalledWith({ chainId: CHAIN, pollIndex: 9 });
     });
 
@@ -726,14 +788,18 @@ describe('governance route audit', () => {
             walletId: 'wallet-1', chainId: CHAIN, pollIndex: 8, onBack() {},
         }, messaging);
 
+        // The Yes row opens Cast Vote with the split shares open, Yes at 1.
+        const yes = await screen.findByRole('button', { name: 'Vote for Yes' });
+        await waitFor(() => expect(yes).toBeEnabled());
+        fireEvent.click(yes);
         const share = await screen.findByLabelText('0: Yes');
-        await waitFor(() => expect(messaging.governanceVotes).toHaveBeenCalled());
+        expect(share).toHaveValue('1');
         fireEvent.change(share, { target: { value: '0' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Vote' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign Vote' }));
         expect(await screen.findByText('Each split share must be a positive plain number.')).toBeTruthy();
 
-        fireEvent.change(share, { target: { value: 'not-a-number' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Vote' }));
+        fireEvent.change(screen.getByLabelText('0: Yes'), { target: { value: 'not-a-number' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Sign Vote' }));
         expect(await screen.findByText('Each split share must be a positive plain number.')).toBeTruthy();
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
@@ -755,12 +821,16 @@ describe('governance route audit', () => {
         mount(PollDetail, {
             walletId: 'wallet-1', chainId: CHAIN, pollIndex: 8, onBack() {},
         }, messaging);
-        fireEvent.click(await screen.findByLabelText('0: Yes'));
+        const yes = await screen.findByRole('button', { name: 'Vote for Yes' });
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Vote' }));
+        // The Yes row opens Cast Vote; Sign Vote checks the address's balance.
+        fireEvent.click(yes);
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign Vote' }));
 
-        expect(await screen.findByText('This address must hold some VOTE to vote.')).toBeTruthy();
+        expect(await screen.findAllByText('This address must hold some VOTE to vote.')).toHaveLength(2);
+        // The error belongs to From, which reopens to show the address.
+        expect(screen.getByRole('button', { name: /^From\b/, expanded: true })).toBeTruthy();
         expect(messaging.composeVoteForConfirm).not.toHaveBeenCalled();
     });
 
@@ -780,16 +850,23 @@ describe('governance route audit', () => {
             walletId: 'wallet-1', chainId: CHAIN, pollIndex: 8, onBack() {},
         }, messaging);
 
-        fireEvent.click(await screen.findByLabelText('0: Yes'));
-        fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'Fund it' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Vote' }));
+        const yes = await screen.findByRole('button', { name: 'Vote for Yes' });
+        await waitFor(() => expect(yes).toBeEnabled());
+        fireEvent.click(yes);
+        fireEvent.change(await screen.findByLabelText('Memo'), { target: { value: 'Fund it' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Sign Vote' }));
 
         // The review lists the vote's fields; the repeated summary sentence is gone.
         expect(await screen.findByText('Fund it')).toBeTruthy();
-        expect(screen.getByText('Network fee').nextElementSibling).toHaveTextContent('BTC');
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent('BTC');
+        // Back walks the review to Cast Vote, keeping the memo and the
+        // choice, then Cast Vote to the poll's choice list.
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
-        expect(screen.getByLabelText('0: Yes')).toBeChecked();
+        expect(screen.getByRole('heading', { name: 'Cast Vote' })).toBeTruthy();
         expect(screen.getByLabelText('Memo')).toHaveValue('Fund it');
+        expect([...document.querySelectorAll('[data-poll-chosen] li')].map((li) => li.textContent)).toEqual(['0: Yes']);
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(screen.getByRole('button', { name: 'Vote for Yes' })).toBeTruthy();
     });
 
     it('shows the poll-list empty state after a successful empty read', async () => {
@@ -880,12 +957,12 @@ describe('governance route audit', () => {
                 }),
             }));
 
-            expect(await screen.findByText('25 blocks remaining')).toBeTruthy();
-            expect(screen.getByLabelText(`0: ${longOption}`)).toBeTruthy();
-            expect(screen.getByRole('button', { name: 'Vote' })).toBeTruthy();
-            expect(screen.getByRole('form', { name: 'Vote' }).contains(
-                screen.getByRole('button', { name: 'Vote' }),
-            )).toBe(true);
+            // The long choice is its own row, and the row is the vote action.
+            const row = await screen.findByRole('button', { name: `Vote for ${longOption}` });
+            expect(row.textContent).toContain(longOption);
+            expect(screen.getByRole('tabpanel', { name: 'Vote' }).contains(row)).toBe(true);
+            fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+            expect(screen.getByText('25 blocks remaining')).toBeTruthy();
         } finally {
             if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
         }
@@ -916,13 +993,15 @@ describe('governance route audit', () => {
                 }),
             }));
 
-            expect(await screen.findByText('987654321012345 weight')).toBeTruthy();
-            expect(screen.getByText('17 voters')).toBeTruthy();
-            // One stacked bar carries every option's share.
-            const bar = screen.getByRole('img', { name: new RegExp(`^0: ${longOption} 100%`) });
-            const segments = bar.querySelectorAll('[data-percent]');
-            expect(segments).toHaveLength(2);
-            expect(segments[0]).toHaveAttribute('data-percent', '100');
+            expect(await screen.findByText('987,654,321,012,345 weight, 17 voters')).toBeTruthy();
+            // Each final result row carries its share and a bar of it.
+            const results = screen.getByRole('region', { name: 'Final Results' });
+            const rows = [...results.querySelectorAll('li')];
+            expect(rows.map((row) => row.textContent)).toEqual([
+                `0: ${longOption}Winner100%987,654,321,012,345 weight, 17 voters`,
+                '1: No0%123 weight, 2 voters',
+            ]);
+            expect(rows.map((row) => row.querySelector('[aria-hidden="true"] > span')?.style.width)).toEqual(['100%', '0%']);
         } finally {
             if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
         }

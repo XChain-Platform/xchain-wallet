@@ -103,7 +103,7 @@ describe('list route keyboard flows', () => {
                     messages: [], addresses: [], errors: [],
                 }),
             },
-            primaryName: 'New Message',
+            primaryName: 'New message',
             props: (onPrimary) => ({ activeAccountId: 'account-1', onCompose: onPrimary }),
         });
     });
@@ -115,7 +115,7 @@ describe('list route keyboard flows', () => {
                 getAddressesByChain: vi.fn().mockResolvedValue({}),
                 getListsForSource: vi.fn().mockResolvedValue({ data: [] }),
             },
-            primaryName: 'Create List',
+            primaryName: 'Create list',
             props: (onPrimary) => ({ onCreateList: onPrimary, onOpenList: vi.fn() }),
         });
     });

@@ -8,18 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useId } from 'react';
-import { InfoTip } from '../../../ui/InfoTip.jsx';
-import switchStyles from '../../../ui/Switch.module.css';
-import { t } from '../../../i18n/index.js';
-import '../../../i18n/locales/en/ui.js';
-import styles from './GiveGet.module.css';
+import { OptionSwitch, OptionSwitchList } from '../../../ui/OptionSwitchList.jsx';
+import { KeyIcon } from '../../../ui/icons/index.jsx';
 
 /**
- * One ownership on/off switch for a Give/Get side. Drawn with the
- * shared Switch's track and thumb, but the label and its ? help sit outside
- * any <label> wrapper so tapping the help never flips the switch. The fixed
- * explanation lives in the help tip; nothing static sits under the label.
+ * One ownership on/off option for a Give/Get side (G118): a one-row card with
+ * a key icon, the label and a switch on the right. The shared Switch keeps the
+ * label's ? help outside the labelled text, so tapping the help never flips the
+ * switch. The fixed explanation lives in the help tip; nothing static sits
+ * under the label.
  *
  * @param {object} props
  * @param {string} props.label
@@ -30,31 +27,17 @@ import styles from './GiveGet.module.css';
  * @param {string} [props.id]
  */
 export function OwnershipToggle({ label, help, checked, onChange, disabled = false, id }) {
-    const autoId = useId();
-    const inputId = id || `own-${autoId.replace(/:/g, '')}`;
     return (
-        <div className={styles.toggleRow}>
-            <div className={styles.toggleCopy}>
-                <span className={styles.toggleLabelRow}>
-                    <label className={styles.toggleLabel} htmlFor={inputId}>{label}</label>
-                    {help ? <InfoTip label={help} aria={t('ui.field.about', { label })} /> : null}
-                </span>
-            </div>
-            <span className={`${switchStyles.hitArea} ${styles.toggleSwitch}`}>
-                <input
-                    id={inputId}
-                    className={switchStyles.input}
-                    type="checkbox"
-                    role="switch"
-                    aria-checked={checked}
-                    checked={checked}
-                    disabled={disabled}
-                    onChange={(e) => onChange(e.target.checked)}
-                />
-                <span className={switchStyles.track} aria-hidden="true">
-                    <span className={switchStyles.thumb} />
-                </span>
-            </span>
-        </div>
+        <OptionSwitchList data-ownership-toggle="">
+            <OptionSwitch
+                id={id}
+                icon={<KeyIcon />}
+                label={label}
+                help={help || undefined}
+                checked={checked}
+                disabled={disabled}
+                onChange={(e) => onChange(e.target.checked)}
+            />
+        </OptionSwitchList>
     );
 }

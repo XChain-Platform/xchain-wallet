@@ -11,6 +11,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 
 afterEach(() => {
     cleanup();
@@ -51,7 +52,7 @@ describe('MarketsList paging', () => {
         await screen.findByText('TOKEN0');
         // The Show list sits in the title line's filter; Popular is its default.
         fireEvent.click(screen.getByRole('button', { name: 'Filter markets' }));
-        fireEvent.change(screen.getByLabelText('Show'), { target: { value: 'all' } });
+        selectOption(screen.getByLabelText('Show markets'), 'all');
         expect(screen.getAllByRole('listitem')).toHaveLength(25);
 
         // Expand to the second page, then change the asset. The expanded rows

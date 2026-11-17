@@ -77,13 +77,9 @@ function openingTags(source, name) {
 // A submit that is not the form's forward action. Keyed by file and variant text.
 const NOT_A_MAIN_ACTION = {
     'packages/core/src/shared/components/OpenOrdersPanel.jsx|danger': 'cancels open orders, a destructive action',
-    'packages/core/src/shared/components/PlaceOrderPanel.jsx|{sideTone}': 'the order ticket takes the buy or sell side colour',
-    'packages/core/src/shared/routes/CallbackForm.jsx|{isWatcherMode ? \'primary\' : \'danger\'}': 'destructive for a signing wallet, forward for a watcher',
-    'packages/core/src/shared/routes/DestroyForm.jsx|{isWatcherMode ? \'primary\' : \'danger\'}': 'destroys an asset, destructive for a signing wallet',
-    'packages/core/src/shared/routes/SweepForm.jsx|{isWatcherMode ? \'primary\' : \'danger\'}': 'sweeps a key off the wallet, destructive for a signing wallet',
-    'packages/core/src/shared/routes/OracleForm.jsx|{needsTypedConfirm ? \'danger\' : \'primary\'}': 'danger while the typed confirmation is required',
     'packages/core/src/shared/routes/DispenserDetail.jsx|danger': 'closes a dispenser, a destructive action',
-    'packages/core/src/shared/routes/DispenserExplorer.jsx|ghost': 'the magnifier inside the search field, not a form action',
+    'packages/core/src/shared/components/settings/ThisWalletSection.jsx|danger': // G125 (2026-11-15): the final button that permanently removes a wallet is red, with its icon. Remove wallet only.
+    'removes the wallet from this device, a destructive action',
 };
 
 describe('every submit Button is green or a listed exception', () => {

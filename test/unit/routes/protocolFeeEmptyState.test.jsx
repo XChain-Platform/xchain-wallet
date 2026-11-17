@@ -56,7 +56,8 @@ async function settle() {
 }
 
 function protocolFeeRow() {
-    const root = document.querySelector('[data-fees-card]');
+    // The Speed and Fees section's Protocol fee line (no nested fees card).
+    const root = document.querySelector('[data-fees-row="protocol"]');
     expect(root).not.toBeNull();
     return root.textContent;
 }
@@ -66,17 +67,19 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
+// A new list is never shared and only sharing or editing a shared list pays a
+// protocol fee, so an empty List form already knows its fee: Free.
 describe.each([
-    ['AirdropForm', <AirdropForm walletId="w" initialChainId={CHAIN} onBack={() => {}} />],
-    ['DividendForm', <DividendForm walletId="w" initialChainId={CHAIN} onBack={() => {}} />],
-    ['ListCreateForm', <ListCreateForm walletId="w" chainId={CHAIN} initialType="2" onBack={() => {}} />],
-])('%s empty', (_name, element) => {
-    it('reads Calculating, never Priced at review', async () => {
+    ['AirdropForm', <AirdropForm walletId="w" initialChainId={CHAIN} onBack={() => {}} />, 'Calculating'],
+    ['DividendForm', <DividendForm walletId="w" initialChainId={CHAIN} onBack={() => {}} />, 'Calculating'],
+    ['ListCreateForm', <ListCreateForm walletId="w" chainId={CHAIN} initialType="2" onBack={() => {}} />, 'Free'],
+])('%s empty', (_name, element, expected) => {
+    it(`reads ${expected}, never Priced at review`, async () => {
         vi.useFakeTimers();
         mount(element);
         await settle();
         const text = protocolFeeRow();
-        expect(text).toContain('Calculating');
+        expect(text).toContain(expected);
         expect(text).not.toContain('Priced at review');
     });
 });

@@ -110,8 +110,9 @@ async function mountSweep({
         container,
         submit: () => container.querySelector('button[type="submit"]'),
         destination: () => labelledInput(container, 'Destination address'),
-        memo: () => labelledInput(container, 'Memo'),
-        category: (text) => within(container).getByRole('checkbox', { name: new RegExp(text) }),
+        // The lone memo has no label row; its accessible name is Memo.
+        memo: () => container.querySelector('[data-form-section="memo"] textarea[aria-label="Memo"]'),
+        category: (text) => within(container).getByRole('switch', { name: new RegExp(text) }),
         button: (label) => container.querySelector(`button[aria-label="${label}"]`),
         /** Text of every rendered alert, joined. Cheap and dump-free. */
         alerts: () => Array.from(container.querySelectorAll('[role="alert"]'))
@@ -179,6 +180,7 @@ async function mountGatedSweep() {
         ]),
         listGatedKeys: () => Promise.resolve([{ keyHash: 'a'.repeat(64) }]),
         copyGatedKeysToWallet: () => Promise.resolve({ copied: 1, skipped: 0 }),
+        gatedContentScan: vi.fn().mockResolvedValue({}),
     };
     const messaging = new Proxy(target, {
         get(t, prop) {
@@ -200,7 +202,7 @@ async function mountGatedSweep() {
             }),
         ),
     );
-    return { container, missingHash };
+    return { container, missingHash, messaging };
 }
 
 /** The <input> whose <label> text matches, without a role-tree scan. */
@@ -227,6 +229,25 @@ describe('SweepForm form-level errors (D-58)', () => {
         expect(within(q.container).queryByRole('button', { name: /^About Token balances/ })).toBeNull();
     });
 
+    it('shows each What to sweep option as a switch row with a leading icon in one card', async () => {
+        const q = await mountSweep();
+
+        const list = q.container.querySelector('[data-sweep-what-list]');
+        expect(list).toBeTruthy();
+        const switches = within(list).getAllByRole('switch');
+        expect(switches).toHaveLength(5);
+        expect(within(list).queryAllByRole('checkbox')).toHaveLength(0);
+        for (const input of switches) {
+            const row = input.closest('label');
+            expect(row.querySelector('svg')).toBeTruthy();
+            expect(row.querySelector('[aria-hidden="true"] svg')).toBeTruthy();
+        }
+        // Protocol defaults: balances and ownerships on, the force-closes off.
+        expect(q.category('Token balances').checked).toBe(true);
+        expect(q.category('Token ownerships').checked).toBe(true);
+        expect(q.category('Open orders').checked).toBe(false);
+    });
+
     it('keeps network-kind text out of a regtest validation error', async () => {
         const chainId = 'bitcoin-regtest';
         const source = { ...SOURCE, id: 'regtest-source', address: 'mkHS9ne12qx9pS9VojpwU5xtRd4T7X7ZUt' };
@@ -242,7 +263,7 @@ describe('SweepForm form-level errors (D-58)', () => {
         expect(q.container).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 
-    it('says a malformed destination once, under the field only', async () => {
+    it('says a malformed destination in the top summary and under the field', async () => {
         const q = await mountSweep();
 
         fireEvent.change(q.destination(), { target: { value: 'not-an-address' } });
@@ -250,7 +271,8 @@ describe('SweepForm form-level errors (D-58)', () => {
 
         await waitFor(() => expect(q.alerts()).toMatch(/not a valid Bitcoin address/i));
         const copies = q.container.textContent.split('is not a valid Bitcoin address').length - 1;
-        expect(copies).toBe(1);
+        expect(copies).toBe(2);
+        expect(q.destination()).toHaveAttribute('aria-invalid', 'true');
     });
 
     it('an empty destination errors with the reason instead of a dead button', async () => {
@@ -351,6 +373,22 @@ describe('SweepForm destination spelling', () => {
 });
 
 describe('SweepForm gated key details', () => {
+    it('keeps Recover Keys enabled and reports a missing scan password', async () => {
+        const { container, messaging } = await mountGatedSweep();
+        await waitFor(() => expect(container.textContent).toContain('GATED: 1/2 unlock keys in the vault - missing'));
+        fireEvent.click(within(container).getByRole('button', { name: /^Gated-Content Keys/ }));
+
+        const recover = within(container).getByRole('button', { name: 'Recover Keys' });
+        expect(recover).not.toBeDisabled();
+        fireEvent.click(recover);
+
+        await waitFor(() => expect(container.querySelector('[data-form-errors]'))
+            .toHaveTextContent('Enter the wallet password to scan.'));
+        expect(labelledInput(container, 'Wallet password (key recovery scan)'))
+            .toHaveAttribute('aria-invalid', 'true');
+        expect(messaging.gatedContentScan).not.toHaveBeenCalled();
+    });
+
     it('lists every missing unlock key hash', async () => {
         const { container, missingHash } = await mountGatedSweep();
 
@@ -441,9 +479,9 @@ describe('SweepForm preview and navigation states', () => {
         await waitFor(() => {
             const hint = Array.from(q.container.querySelectorAll('p'))
                 .find((node) => node.textContent.includes('Nothing is in the selected categories'));
+            // U57: only the live line stays; the snapshot fact is the What to sweep tip.
             expect(hint.textContent.replace(/\s+/g, ' ').trim()).toBe(
-                'Nothing is in the selected categories right now. The counts are a snapshot; '
-                + 'the sweep moves whatever the address holds when it confirms.',
+                'Nothing is in the selected categories right now.',
             );
         });
     });
@@ -563,7 +601,7 @@ describe('SweepForm preview and navigation states', () => {
         fireEvent.click(q.submit());
 
         await waitFor(() => {
-            expect(q.container.textContent).toContain('Review Sweep');
+            expect(q.container.querySelector('[data-testid="confirm-modal"]')).not.toBeNull();
         });
         fireEvent.click(q.button('Back to previous screen'));
 

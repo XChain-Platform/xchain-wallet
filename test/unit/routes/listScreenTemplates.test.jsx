@@ -16,7 +16,7 @@ describe('list screen templates', () => {
     });
 
     it('uses the shared list row for stake choices and the shared market card for betting choices', () => {
-        expect(stakeNewSource).toMatch(/<ListRow\b/);
+        expect(stakeNewSource).toMatch(/<ActionListItem\b/);
         expect(betFeedsSource).toMatch(/<BetMarketCard\b/);
         expect(betFeedsSource).toMatch(/<ListPage\b/);
         expect(betFeedsSource).not.toMatch(/className=\{rowStyles\.entry\}/);
@@ -29,11 +29,14 @@ describe('list screen templates', () => {
         expect(sendPickerSource).toMatch(/<ListPage\b/);
 
         expect(multisigShareSource).toMatch(/<FormPage\b/);
-        expect(multisigShareSource).toMatch(/<FormSection\b/);
+        expect(multisigShareSource).toMatch(/<PageHeader\b/);
+        expect(multisigShareSource).not.toMatch(/<FormSection\b/);
         // The signer choice is a fragment inside its parent's form: one
-        // RadioGroup with the intro as its help tip, no page of its own.
+        // themed icon dropdown (G44) with the intro as its help tip, no page
+        // of its own and no radio list.
         expect(signerSelectSource).not.toMatch(/<FormPage\b/);
-        expect(signerSelectSource).toMatch(/<RadioGroup\b/);
+        expect(signerSelectSource).toMatch(/<IconSelect\b/);
+        expect(signerSelectSource).not.toMatch(/<RadioGroup\b/);
         // The co-signer policy editor is a fragment inside its parent's form:
         // its collapsible sections join the parent FormPage's flow instead of
         // opening a page of their own.

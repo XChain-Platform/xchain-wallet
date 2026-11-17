@@ -6,6 +6,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import { useTablistKeys } from '../../../packages/core/src/shared/keyboard/useTablistKeys.js';
 
 let messaging;
@@ -27,12 +28,16 @@ vi.mock('@xchain-wallet/core', async (importOriginal) => {
 });
 
 // The price chart behind the market card is a Sparkline.
-vi.mock('../../../packages/core/src/shared/components/Sparkline.jsx', () => ({
-    Sparkline: () => {
-        if (widgetFailure.current === 'chart') throw new Error('market chart failed');
-        return React.createElement('div', null, 'Chart panel');
-    },
-}));
+vi.mock('../../../packages/core/src/shared/components/Sparkline.jsx', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        Sparkline: () => {
+            if (widgetFailure.current === 'chart') throw new Error('market chart failed');
+            return React.createElement('div', null, 'Chart panel');
+        },
+    };
+});
 
 vi.mock('../../../packages/core/src/shared/components/OrderbookPanel.jsx', () => ({
     OrderbookPanel: ({ onPickPrice }) => {
@@ -291,9 +296,10 @@ describe('MarketView market state', () => {
         const filter = screen.getByRole('button', { name: 'Filter markets' });
         filter.focus();
         fireEvent.click(filter);
-        const show = screen.getByLabelText('Show');
+        // The select carries no visible label; its options read "Show ...".
+        const show = screen.getByLabelText('Show markets');
         expect(show).toHaveValue('popular');
-        fireEvent.change(show, { target: { value: 'all' } });
+        selectOption(show, 'all');
         expect(show).toHaveValue('all');
 
         const lastRow = await screen.findByRole('button', { name: 'Open FFF market' });

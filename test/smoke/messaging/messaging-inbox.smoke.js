@@ -127,11 +127,15 @@ assert.ok(/toAddress: selectedCounterparty/.test(src) && /message: t,/.test(src)
     'the reply prefill carries the recipient and the typed body');
 assert.ok(/fixedEncryption: threadEncryption/.test(src) && /threadEncryption\b/.test(src),
     'the reply locks the conversation encryption method onto the form');
-assert.ok(/<Input[\s\S]*?className=\{local\.composerInput\}/.test(src)
-    && /<Button type="submit"[\s\S]*?aria-label="Send message"/.test(src),
-    'composer pairs the shared message Input with a shared send Button');
-assert.ok(/<Button type="submit"[\s\S]*?aria-label="Send message"/.test(src),
-    'the shared composer send Button is labelled and submits the form (Enter or click)');
+// G95: the reply field spans the full width with no send button; Enter or
+// the keyboard's Send key submits the form.
+const composerSrc = src.slice(src.indexOf('function ThreadComposer'));
+assert.ok(/<form className=\{local\.composer\} onSubmit=\{handleSubmit\}>\s*<Input[\s\S]*?className=\{local\.composerInput\}/.test(composerSrc)
+    && /enterKeyHint="send"/.test(composerSrc),
+    'composer is the shared message Input in a form that sends on Enter');
+assert.ok(/aria-label="Reply, press Enter to send"/.test(composerSrc)
+    && !/<Button type="submit"/.test(composerSrc.slice(0, composerSrc.indexOf('</form>'))),
+    'the composer field is labelled with how to send, and carries no send button');
 assert.ok(!/function SendConfirm\b/.test(src) && !/messaging\.messageAction\s*\(/.test(src),
     'the bespoke SendConfirm screen is gone; ComposeMessage is the single send surface');
 assert.ok(!/>\s*Reply\s*</.test(src),

@@ -12,7 +12,7 @@
  * Chrome cannot display the notification.
  *
  * @param {typeof globalThis.chrome | undefined} chromeApi
- * @param {{ now?: () => number, logger?: Pick<Console, 'error'> }} [deps]
+ * @param {{ now?: () => number, logger?: Pick<Console, 'error'>, getSettings?: () => (object | undefined | Promise<object | undefined>) }} [deps]
  */
 export function createChromeNotifier(chromeApi = globalThis.chrome, deps = {}) {
     const now = deps.now ?? Date.now;
@@ -21,6 +21,14 @@ export function createChromeNotifier(chromeApi = globalThis.chrome, deps = {}) {
 
     return async ({ kind, title, body }) => {
         if (!chromeApi?.notifications?.create || !chromeApi?.runtime?.getURL) return false;
+
+        // Settings > Notifications > Desktop notifications: false mutes the OS
+        // surface (true or unset shows it; Chrome grants extension
+        // notifications at install). A muted notification counts as handled so
+        // producers do not retry it. A failed read (vault locked) shows it.
+        let settings;
+        try { settings = typeof deps.getSettings === 'function' ? await deps.getSettings() : undefined; } catch { settings = undefined; }
+        if (settings?.notifications?.desktop === false) return true;
 
         try {
             await chromeApi.notifications.create(

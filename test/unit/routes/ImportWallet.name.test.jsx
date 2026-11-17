@@ -31,14 +31,14 @@ describe('ImportWallet wallet name', () => {
     it('refuses a name that draws no mark', () => {
         const importMnemonic = submitPhrase('​​​');
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Wallet name must include a visible character.');
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Wallet name must include a visible character.');
         expect(importMnemonic).not.toHaveBeenCalled();
     });
 
     it('refuses a name past the shared length cap', () => {
         const importMnemonic = submitPhrase('N'.repeat(65));
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Wallet name must be 64 characters or fewer.');
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Wallet name must be 64 characters or fewer.');
         expect(importMnemonic).not.toHaveBeenCalled();
     });
 
@@ -58,11 +58,13 @@ describe('ImportWallet wallet name', () => {
 
     it('clears the name error when the name is edited', () => {
         submitPhrase('N'.repeat(65));
-        expect(screen.getByRole('alert')).toBeTruthy();
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toBeTruthy();
+        expect(screen.getByLabelText('Wallet name')).toHaveAttribute('aria-invalid', 'true');
 
         fireEvent.change(screen.getByLabelText('Wallet name'), { target: { value: 'Savings' } });
 
         expect(screen.queryByText(/Wallet name must/)).toBeNull();
+        expect(screen.getByLabelText('Wallet name')).not.toHaveAttribute('aria-invalid', 'true');
     });
 
     it('applies the same rule on the private key lane', () => {
@@ -80,7 +82,7 @@ describe('ImportWallet wallet name', () => {
         fireEvent.change(screen.getByLabelText(/^Confirm/), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Wallet name must be 64 characters or fewer.');
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Wallet name must be 64 characters or fewer.');
         expect(importMnemonic).not.toHaveBeenCalled();
     });
 });

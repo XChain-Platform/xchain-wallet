@@ -68,34 +68,48 @@ const LANDING_GROUPS = [
     'Wallets',
     'Security',
     'Backup and Recovery',
-    'Privacy',
+    'Privacy and Sites',
     'Appearance',
     'Notifications',
     'Network and Fees',
-    'Connected Sites',
-    'Donations',
     'Advanced',
 ];
 
+// Appearance and Network and Fees are lists of rows (G08); their inline
+// controls sit on the one-setting pages those rows open.
 const INLINE_GROUP_PAGES = [
-    ['g-appearance', ['Appearance', 'Language & region']],
-    ['g-network', ['Network']],
+    ['g-appearance', ['Theme', 'Language', 'Hide small balances']],
+    ['g-network', ['Network', 'Fee strategy']],
     ['g-notifications', ['Notifications']],
+    // Privacy and Sites changes each setting on its row (2026-11-13).
+    ['g-privacy', ['Tor routing', 'Clipboard auto-clear', 'Connected sites', 'Reset privacy settings']],
+    // Theme, Language and Fiat Currency are pages of their own (2026-11-14).
+    ['appearance-theme', ['Theme']],
+    ['appearance-language', ['Language']],
+    ['appearance-currency', ['Fiat Currency']],
+    ['display-number-format', ['Number Format', 'Sample']],
+    ['network-active', ['Network']],
 ];
 
 const DRILLDOWN_SECTIONS = [
     // The This wallet page is no longer listed; its password part is the Security page's first row.
     ['security-password', 'Wallet Password', () => screen.getByRole('button', { name: /Change/ })],
-    ['display', 'Display', () => screen.getByRole('button', { name: 'Reset to Defaults' })],
-    ['privacy', 'Privacy', () => screen.getByRole('spinbutton', { name: 'Clipboard auto-clear seconds' })],
-    ['safety', 'Safety', () => screen.getByRole('button', { name: 'Activate' })],
+    // Display's lists are the Tokens page; its switches sit on Appearance rows.
+    ['display-tokens', 'Tokens', () => screen.findByRole('button', { name: 'Add watched token' })],
+    // The old Privacy page opens Privacy and Sites, where clipboard is a dropdown.
+    ['privacy', 'Privacy and Sites', () => screen.getByRole('combobox', { name: 'Clipboard auto-clear' })],
+    // The old Safety page opens Security; Panic mode is a chevron row to its own page.
+    ['safety', 'Security', () => screen.findByRole('button', { name: /^Panic mode/ })],
     ['backup', 'Backup', () => screen.getByRole('button', { name: 'Export…' })],
-    ['fees', 'Fees', () => screen.getByRole('combobox', { name: 'Bitcoin fee strategy' })],
-    ['network-endpoints', 'Network & Endpoints', () => screen.getAllByRole('textbox', { name: 'Explorer URL' })[0]],
-    ['connected-sites', 'Connected Sites', () => screen.findByRole('button', { name: 'Disconnect' })],
-    ['ads', 'Automatic Donation System', () => screen.getByRole('switch', { name: 'Turn on Automatic Donation System' })],
-    ['developer', 'Developer Mode', () => screen.getByRole('switch', { name: 'Turn on developer mode' })],
-    ['about', 'About', () => screen.getByRole('button', { name: 'Copy Diagnostics' })],
+    // Fees and Network endpoints list one row per network (G117); the
+    // network pages below hold the controls.
+    ['fees', 'Fees', () => screen.getByRole('button', { name: /^Bitcoin/ })],
+    ['network-endpoints', 'Network & Endpoints', () => screen.getAllByRole('button', { name: /^Bitcoin/ })[0]],
+    ['connected-sites', 'Connected Sites', () => screen.findByRole('list', { name: 'Allowed sites' })],
+    ['ads', 'Automatic Donations', () => screen.getByRole('combobox', { name: 'Per transaction' })],
+    // The old Developer page opens Advanced > Developer options.
+    ['developer', 'Developer Options', () => screen.findByRole('switch', { name: 'Show variant popover' })],
+    ['about', 'About', () => screen.getByRole('button', { name: /^Copy diagnostics/ })],
 ];
 
 function pending() {
@@ -234,19 +248,21 @@ describe('Settings at a 320px viewport', () => {
         }
     });
 
-    it('keeps the donation address and onboarding choices readable without forced word breaks', () => {
+    it('keeps the donation page and onboarding choices readable without forced word breaks', () => {
         settings = seedSettingsForChains(settings, defaultRegistry(), ['bitcoin-mainnet']);
         const { container } = renderSettings('ads');
-        // Shipped chains carry their real DONATE1 address, so the field shows it
-        // read-only instead of the not-yet-available placeholder.
-        const address = screen.getByDisplayValue('1Donate1GERVKPW6GFQcnGeTa8dgL6Abyp');
-        expect(address).toHaveAttribute('readonly');
-        expect(container).toContainElement(address);
-        expect(screen.queryByDisplayValue('Not available yet.')).toBeNull();
-        // The word-count choice is the kit RadioGroup; its option copy wraps instead of overflowing.
+        // One wallet-wide setting: the header's rule and the three inline
+        // choices fit a 320px phone, with no per-network address fields.
+        expect(screen.getByTestId('ads-hero')).toHaveTextContent('$0.05 per transaction');
+        expect(screen.getByRole('combobox', { name: 'Donate to' })).toHaveTextContent('Protocol');
+        expect(screen.queryByDisplayValue('1Donate1GERVKPW6GFQcnGeTa8dgL6Abyp')).toBeNull();
+        expectNoFixedWidthOverflow(container);
+        // Radio option copy (wallet mode) wraps instead of overflowing; the
+        // word-count choice is now the shared IconSelect (G44), with no
+        // route-local radio box left in CreateWallet.
         expect(radioGroupCss).toMatch(/\.option\s*\{[^}]*minmax\(0, 1fr\)/s);
         expect(radioGroupCss).toMatch(/\.label\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
-        expect(createWalletCss).toMatch(/\.wordCountRow\s*\{[^}]*min-width:\s*0;/s);
+        expect(createWalletCss).not.toMatch(/\.wordCountRow/);
         expect(warningCardCss).toMatch(/\.paragraph\s*\{[^}]*text-align:\s*start;[^}]*hyphens:\s*none;/s);
     });
 
@@ -255,11 +271,9 @@ describe('Settings at a 320px viewport', () => {
         const reload = vi.fn();
         messaging.setActiveNetwork = vi.fn().mockResolvedValue({ settings: { activeNetwork: 'testnet' } });
         writeLastView('wallet-1', 'contacts');
-        renderSettings('g-network', { messaging, reload });
+        renderSettings('network-active', { messaging, reload });
 
-        fireEvent.change(screen.getByRole('combobox', { name: 'Active network' }), {
-            target: { value: 'testnet' },
-        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Select Testnet' }));
         fireEvent.click(screen.getByRole('button', { name: 'Switch network' }));
 
         await waitFor(() => expect(reload).toHaveBeenCalledOnce());
@@ -277,23 +291,68 @@ describe('Settings at a 320px viewport', () => {
         },
     );
 
+    it('opens a network page from the Fees list, keeps its controls in 320px, and Back returns to the list', async () => {
+        const { container } = renderSettings('fees');
+        const row = document.querySelector('[data-network-row="bitcoin-mainnet"] button');
+        expect(row).toHaveTextContent('Custom rate');
+        expect(screen.queryByRole('combobox', { name: 'Bitcoin fee strategy' })).toBeNull();
+
+        fireEvent.click(row);
+
+        expect(screen.getByRole('heading', { name: 'Bitcoin' })).toBeVisible();
+        expect(screen.getByRole('combobox', { name: 'Bitcoin fee strategy' })).toBeVisible();
+        expect(screen.getByRole('textbox', { name: 'Bitcoin custom fee rate' })).toBeVisible();
+        expectNoFixedWidthOverflow(container);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to settings' }));
+
+        expect(screen.getByRole('heading', { name: 'Fees' })).toBeVisible();
+        expect(document.querySelector('[data-network-row="bitcoin-mainnet"]')).not.toBeNull();
+        expect(screen.queryByRole('combobox', { name: 'Bitcoin fee strategy' })).toBeNull();
+    });
+
+    it('opens a network page from the Network endpoints list, keeps its controls in 320px, and Back returns', async () => {
+        const { container } = renderSettings('network-endpoints');
+        const row = document.querySelector('[data-network-row="bitcoin-mainnet"] button');
+        expect(row).toHaveTextContent('Default endpoint');
+        expect(screen.queryAllByRole('textbox', { name: 'Explorer URL' })).toHaveLength(0);
+
+        fireEvent.click(row);
+
+        expect(screen.getByRole('textbox', { name: 'Explorer URL' })).toBeVisible();
+        expect(screen.getByRole('textbox', { name: 'Hub URL' })).toBeVisible();
+        expectNoFixedWidthOverflow(container);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to settings' }));
+
+        expect(screen.getByRole('heading', { name: 'Network & Endpoints' })).toBeVisible();
+        expect(screen.queryAllByRole('textbox', { name: 'Explorer URL' })).toHaveLength(0);
+    });
+
     it('keeps destructive actions rendered in narrow sections', async () => {
         // Removing a wallet moved to Wallet Details; Settings no longer carries it.
         renderSettings('security-password');
         expect(screen.queryByRole('button', { name: 'Remove…' })).toBeNull();
         cleanup();
 
-        renderSettings('safety');
-        expect(screen.getByRole('button', { name: 'Activate' })).toBeVisible();
+        // Panic mode's red Confirm sits on its own page, opened from its row.
+        renderSettings('security-panic');
+        expect(screen.getByRole('button', { name: 'Confirm 24-Hour Freeze' })).toBeVisible();
         cleanup();
 
+        // A site's Disconnect and Block Site sit on its detail, opened from its row.
         renderSettings('connected-sites');
+        fireEvent.click((await screen.findByText('Example wallet app')).closest('button'));
         expect(await screen.findByRole('button', { name: 'Disconnect' })).toBeVisible();
-        expect(screen.getAllByRole('button', { name: 'Block' })[0]).toBeVisible();
+        expect(screen.getByRole('button', { name: 'Block Site' })).toBeVisible();
         cleanup();
 
-        renderSettings('developer');
-        expect(await screen.findByRole('button', { name: 'Remove custom network fork-regtest' })).toBeVisible();
+        // Custom networks joined Test Networks (operator picks 2026-11-14): the
+        // old page id lands there, the network's row and Add Network visible;
+        // Remove sits on the network's own page.
+        renderSettings('developer-custom-chains');
+        expect(await screen.findByRole('button', { name: /^Fork Regtest/ })).toBeVisible();
+        expect(screen.getByRole('button', { name: /^Add Network/ })).toBeVisible();
     });
 
     it('keeps equal contact actions together in a wrapping row at 360px', async () => {

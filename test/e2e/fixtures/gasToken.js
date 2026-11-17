@@ -36,6 +36,7 @@ import {
     expectConfirmModal, approveConfirm, mintXchain, openFromAddress,
 } from './regtest.js';
 import { selectNamedChain } from './crossChain.js';
+import { pickOption } from './pickOption.js';
 import {
     createWallet, openPaletteCommand, LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY,
 } from './wallet.js';
@@ -215,7 +216,7 @@ async function openBitcoinAdvancedAction(page, action) {
     await openPaletteCommand(page, 'Advanced action');
     const main = page.getByRole('main');
     await selectNamedChain(main, 'Network', rail(BTC_COIN).label);
-    await page.getByLabel('Action', { exact: true }).selectOption(action);
+    await pickOption(page.getByLabel('Action', { exact: true }), action);
     return main;
 }
 
@@ -248,7 +249,7 @@ async function mintAndLockOnBitcoin(page, source, destination, amount) {
 
     const bridge = gasBridgeParams(REGTEST_COIN, destination, amount);
     await openBitcoinAdvancedAction(page, 'XBRIDGE');
-    await page.getByLabel('Format version', { exact: true }).selectOption(bridge.VERSION);
+    await pickOption(page.getByLabel('Format version', { exact: true }), bridge.VERSION);
     for (const field of ['DEST_COIN', 'DEST_ADDRESS', 'AMOUNT']) {
         await page.getByRole('textbox', { name: field, exact: true }).fill(bridge[field]);
     }

@@ -16,6 +16,10 @@
 import { getRecentShellErrors } from './errorCapture.js';
 import { memoizeRetryablePromise } from './retryablePromise.js';
 
+// The web host installs createWebNotifyAdapter for delivered sounds and sound
+// previews. This capability follows the platform, not the viewport layout.
+export const supportsNotificationSoundPlayback = true;
+
 const loadHostBridge = memoizeRetryablePromise(() => import('./hostBridge.js'));
 
 // An arrow binding exported by name: the host route-table test reads a
@@ -53,6 +57,18 @@ export async function unlockWallet(password, opts) {
 export async function lockWallet() {
     const { lockWalletLocal } = await loadHostBridge();
     return lockWalletLocal();
+}
+
+/** Locked screen (PC-16 Phase B): is auto pay still paying, for how many orders, up to how much. */
+export async function lockedAutopayStatus() {
+    const { getLockedAutopayStatus } = await loadHostBridge();
+    return getLockedAutopayStatus();
+}
+
+/** Locked screen Stop for auto pay; no password. */
+export async function stopLockedAutopay() {
+    const { stopLockedAutopay: stop } = await loadHostBridge();
+    return stop();
 }
 
 /**
@@ -98,6 +114,36 @@ export async function importBackupFresh(opts) {
     return importBackupLocal(opts);
 }
 
+/**
+ * Forgot Password (operator ruling 2026-11-16): which ways back this device
+ * offers, with the vault closed.
+ * @returns {Promise<{ hasWallet: boolean, phraseReset: boolean }>}
+ */
+export async function recoveryStatus() {
+    const { recoveryStatusLocal } = await loadHostBridge();
+    return recoveryStatusLocal();
+}
+
+/**
+ * Reset the unlock password with one wallet's recovery phrase, erasing
+ * nothing, then unlock with the new password.
+ * @param {{ phrase: string, newPassword: string }} opts
+ */
+export async function resetPasswordWithPhrase(opts) {
+    const { resetPasswordWithPhraseLocal } = await loadHostBridge();
+    return resetPasswordWithPhraseLocal(opts);
+}
+
+/**
+ * Prove a backup file would restore without touching the vault.
+ * @param {{ fileContent: string, password: string, walletPassword?: string }} opts
+ * @returns {Promise<{ verified: true, walletName: string, belongsToVault: boolean }>}
+ */
+export async function verifyBackupForRestore(opts) {
+    const { verifyBackupForRestoreLocal } = await loadHostBridge();
+    return verifyBackupForRestoreLocal(opts);
+}
+
 export function listWallets() {
     return /** @type {any} */ (sendMessage('wallet.list'));
 }
@@ -110,6 +156,43 @@ export function changePassword(opts) {
 /** @param {object} opts */
 export function addImportedWallet(opts) {
     return /** @type {any} */ (sendMessage('wallet.add.import', opts));
+}
+
+/**
+ * Add a hardware wallet (keys stay on the device) to the open vault.
+ *
+ * @param {{ name: string, device: { vendor: string, model: string, deviceIdentifier: string, firmwareVersion: string | null },
+ *   accounts: Array<{ chainId: string, accountIndex: number, address: string, publicKey: string, derivationPath: string, addressType: string }> }} opts
+ * @returns {Promise<{ wallet: object, signer: object, accounts: object[], addresses: object[] }>}
+ */
+export function addHardwareWallet(opts) {
+    return /** @type {any} */ (sendMessage('wallet.hardware.add', opts));
+}
+
+/**
+ * Create a fresh vault holding one hardware wallet. Like `createWallet` this
+ * runs before any host exists, so it calls the bridge's local creator (the
+ * twin of the extension and desktop pre-host `wallet.create.hardware`).
+ *
+ * @param {{ password: string, name: string, device: object, accounts: object[] }} opts
+ * @returns {Promise<{ wallet: object, signer: object, accounts: object[], addresses: object[] }>}
+ */
+export async function createHardwareWallet(opts) {
+    const { createHardwareWalletLocal } = await loadHostBridge();
+    return createHardwareWalletLocal(opts);
+}
+
+/**
+ * Balances for addresses a hardware wallet reported before it is saved. The
+ * connect flow asks before a vault exists on a fresh install, so this is a
+ * local call (the twin of `wallet.hardware.balances`), not a host message.
+ *
+ * @param {{ items: Array<{ chainId: string, address: string }> }} opts
+ * @returns {Promise<Array<{ chainId: string, address: string, balance: string, fiat: string | null }>>}
+ */
+export async function hardwareBalances(opts) {
+    const { hardwareBalancesLocal } = await loadHostBridge();
+    return hardwareBalancesLocal(opts);
 }
 
 /** @param {{ token: string }} opts */
@@ -230,6 +313,11 @@ export function verifyAction(req) {
 /** @param {string} walletId @param {string} [accountId] */
 export function getAddressesByChain(walletId, accountId) {
     return /** @type {any} */ (sendMessage('addresses.byChain', { walletId, accountId }));
+}
+
+/** Every wallet's public addresses in one read: { [walletId]: string[] }. */
+export function getAddressesByWallet() {
+    return /** @type {Promise<Record<string, string[]>>} */ (sendMessage('addresses.byWallet', {}));
 }
 
 /** @param {string} walletId @param {string} chainId @param {string} [accountId] */
@@ -1378,6 +1466,27 @@ export function getAddressHistory(req) {
 }
 
 /**
+ * One page of up to 20 addresses' token history, newest first, each action
+ * with its per-address balance effects (explorer POST /history). Home's value
+ * chart pages it by `before` (the previous page's next_cursor).
+ *
+ * @param {{ chainId: string, addresses: string[], before?: string, since?: number, until?: number, limit?: number }} req
+ */
+export function getWalletHistoryBatch(req) {
+    return /** @type {any} */ (sendMessage('history.walletBatch', req));
+}
+
+/**
+ * One page of up to 20 addresses' native coin history (explorer POST
+ * /native_history, the UTXO tracker's own answer), paged by `cursor`.
+ *
+ * @param {{ chainId: string, addresses: string[], cursor?: string, from_height?: number, from_time?: number, to_time?: number, limit?: number }} req
+ */
+export function getNativeHistoryBatch(req) {
+    return /** @type {any} */ (sendMessage('history.nativeBatch', req));
+}
+
+/**
  * Unconfirmed (mempool) actions touching `address` as either party, in the
  * explorer's own vocabulary: `{tx_hash, source, action, data, first_seen,
  * destinations[]}`. Resolves `[]` rather than rejecting when the chain's
@@ -1840,6 +1949,8 @@ export function coinpayActionHw(opts) { return /** @type {any} */ (sendMessage('
 export function buildCoinpayPsbtRequest(opts) { return /** @type {any} */ (sendMessage('action.coinpay.psbt', opts)); }
 /** @param {{ chainId: string, address: string, opts?: object }} req */
 export function getCoinpayObligationsForAddress(req) { return /** @type {any} */ (sendMessage('coinpays.obligationsForAddress', req)); }
+/** @param {{ obligations: Array<{ chainId: string, address: string, orderMatchActionIndex: string, coinAmount: unknown, coinTicker?: string }> }} req */
+export function getCoinpayMatchSides(req) { return /** @type {any} */ (sendMessage('coinpays.matchSides', req)); }
 /** @param {{ chainId: string, address: string, opts?: object }} req */
 export function getCoinpaysForAddress(req) { return /** @type {any} */ (sendMessage('coinpays.forAddress', req)); }
 // PC-16 CoinPay auto-pay: consent records, exposure, armed/disarmed status.
@@ -2057,6 +2168,11 @@ export function deleteConnectedSite(req) {
  */
 export function restoreConnectedSite(req) {
     return /** @type {any} */ (sendMessage('sites.restore', req));
+}
+
+/** Live sign-request throttle: limits plus each site's used count and wait. */
+export function getSignThrottleStatus() {
+    return /** @type {Promise<{ burst: number, windowMs: number, sites: Array<{ origin: string, used: number, waitMs: number }> }>} */ (sendMessage('sites.throttleStatus'));
 }
 
 // §12 / G009: origin blocklist.

@@ -36,19 +36,42 @@ const messages = {
     'market.priceChartLabel': '{pair} price chart',
     'market.priceLabel': '{pair} price',
     'market.myOrders': 'My orders',
+    // The Market page's header filter and explorer button (operator 2026-11-13).
+    'market.filter.label': 'Filter market',
+    // The search placeholder, Open and Filled reuse routes.addressList.search,
+    // settings.developer.open and components.openOrdersPanel.filled.
+    'market.filter.searchBook': 'Search the book by price or size',
+    'market.filter.searchTrades': 'Search trades by price, amount or transaction',
+    'market.filter.searchOrders': 'Search your orders by price, amount or transaction',
+    'market.filter.orderStatus': 'Order status',
+    'market.filter.allOrders': 'All orders',
+    'market.filter.noMatches': 'No rows match the search.',
+    'market.filter.noOrders': 'No orders on this market yet.',
+    'market.openOnExplorer': 'Open this market on the explorer',
+    'market.listRegion': 'Markets',
+    'market.resizeList': 'Resize the market list',
+    'market.resizeListHint': 'Drag to resize the market list, or press Enter to reset.',
     'market.trade.title': 'Trade {pair}',
     'market.trade.loadFailed': "Couldn't load the {list}.",
     'market.trade.orThe': ' or the ',
-    'market.trade.prices': 'Prices',
-    'market.trade.last': 'Last',
-    'market.trade.bestBid': 'Best bid',
-    'market.trade.bestAsk': 'Best ask',
-    'market.trade.mode': 'Trade mode',
     'market.trade.buying': 'Buying',
     'market.trade.selling': 'Selling',
     // The swap ticket's chip names; a pair can hold the network coin, so they say asset.
     'market.trade.payAsset': 'Pay asset',
     'market.trade.getAsset': 'Get asset',
+    // The Trade page's one action and the summary line above it, in every mode.
+    'market.trade.placeOrder': 'Place Order',
+    'market.trade.pillBuy': 'BUY',
+    'market.trade.pillSell': 'SELL',
+    'market.trade.summarySwapBuy': 'Buying {amount} for {value}',
+    'market.trade.summarySwapSell': 'Selling {amount} for {value}',
+    'market.trade.summaryLimitBuy': 'Buying {amount} at {price} each, for {value}',
+    'market.trade.summaryLimitSell': 'Selling {amount} at {price} each, for {value}',
+    'market.trade.summaryMarketBuy': 'Buying {amount} now at the best ask, for about {value}',
+    'market.trade.summaryMarketSell': 'Selling {amount} now at the best bid, for about {value}',
+    // The Market price field's hint: the side's best quote fills at once.
+    'market.trade.bestAskFillsNow': 'Best ask, fills now',
+    'market.trade.bestBidFillsNow': 'Best bid, fills now',
 };
 
 addEnglish(messages);

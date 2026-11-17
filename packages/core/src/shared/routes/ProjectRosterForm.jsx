@@ -11,8 +11,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Network, From and the fee selector come from the standard
 // FromSection and FeeSection.
-import { AddressText, Button, ChainBadge, FormNotice, FormPage, InfoTip, Input, ListPage, ListRow, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
-import inputStyles from '../../ui/Input.module.css';
+import { AddressText, Button, ChainBadge, FormNotice, FormPage, Input, ListPage, ListRow, PageHeader, Screen, StatusMessage, Textarea, useFormErrors } from '@xchain-wallet/core/ui';
+import { classifyTickItems } from '../utils/listTickItems.js';
 // The Wallet Form Standard frame.
 import {
     FeeSection,
@@ -20,6 +20,7 @@ import {
     FormFrame,
     FormSection,
     FromSection,
+    MemoSection,
     useFormSections,
 } from '../components/formStandard/index.js';
 import * as Icon from '../../ui/icons/index.jsx';
@@ -59,12 +60,16 @@ import {
     utf8ByteLength,
 } from '../../flows/listMetaInput.js';
 import { TokenPicker } from './TokenPicker.jsx';
+import { TickItemsEditor } from '../components/TickItemsEditor.jsx';
+import { FileField } from '../components/FileField.jsx';
+import { useDropZone } from '../hooks/useDropZone.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/projectRoster.js';
-import '../../i18n/locales/en/ui.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/send.js';
 import rosterStyles from './ProjectRosterForm.module.css';
+import { listActionSize, listActionSizeError } from '../utils/listActionSize.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -97,6 +102,22 @@ function sameTickSet(a, b) {
 function setMetaField(next, current) {
     if (next === current) return '';
     return next === '' ? '-' : next;
+}
+
+// One LIST edit as a BATCH command, in the wire order list.md gives:
+// format 1 is VERSION|EDIT|LIST_ACTION_INDEX|MEMO|...ITEM (the memo before
+// the items) and format 5 is VERSION|LIST_ACTION_INDEX|NAME|DESCRIPTION|MEMO.
+// Every field is free of `|` and `;`: the name, description and memo are
+// refused with either before a save, and tickers never hold them. The
+// strings match the SDK BatchBuilder's: format 1 keeps an empty MEMO slot
+// (the items follow it), format 5 drops its trailing empty fields.
+function listCommandString(params) {
+    if (params.VERSION === '5') {
+        const fields = ['LIST', '5', params.LIST_ACTION_INDEX, params.NAME || '', params.DESCRIPTION || '', params.MEMO || ''];
+        while (fields.length > 3 && fields[fields.length - 1] === '') fields.pop();
+        return fields.join('|');
+    }
+    return ['LIST', '1', params.EDIT, params.LIST_ACTION_INDEX, params.MEMO || '', ...params.ITEM].join('|');
 }
 
 // Protocol coin tickers for the LINK serialization (same map as
@@ -187,8 +208,13 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
     // Whether this network takes LIST v4/v5 (name and description).
     const [metaSupported, setMetaSupported] = useState(/** @type {boolean | null} */ (null));
 
-    // The member tokens as rows, picked from the token picker.
-    const [members, setMembers] = useState(/** @type {string[]} */ ([]));
+    // The member tokens as the text box holds them, one per line; the token
+    // picker appends a line.
+    const [ticksText, setTicksText] = useState('');
+    const [tickStatus, setTickStatus] = useState({});
+    const [ticksFile, setTicksFile] = useState(
+        /** @type {{ name: string, before: string, after: string } | null} */ (null),
+    );
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     // The list's own name and description (LIST v4/v5 NAME and DESCRIPTION).
     const [listName, setListName] = useState('');
@@ -199,10 +225,11 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
     // The standard sections' open state, held here so it survives
-    // the address picker page. Only the Tokens section starts open. Each
+    // the address picker page. Only the Tokens section starts open; List
+    // Details (name and description) is optional and starts closed. Each
     // Review attempt bumps the counter, so the section holding the refusal
     // reopens even after the user closed it.
-    const formSections = useFormSections({ from: false, tokens: true, memo: false, fee: false });
+    const formSections = useFormSections({ from: false, tokens: true, details: false, memo: false, fee: false });
     const [reviewAttempt, setReviewAttempt] = useState(0);
     const [feeRefused, setFeeRefused] = useState(false);
 
@@ -211,13 +238,49 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
         ('compose'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // The refusal the token box shows on itself (outlined red).
+    const [tokensError, setTokensError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    const reviewErrors = useFormErrors();
     const [listTxid, setListTxid] = useState(/** @type {string | null} */ (null));
     const [listActionIndex, setListActionIndex] = useState(/** @type {string | null} */ (null));
     const [linkTxid, setLinkTxid] = useState(/** @type {string | null} */ (null));
     const [waitElapsed, setWaitElapsed] = useState(0);
     const [queuedLeg, setQueuedLeg] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+
+    // Match token-list creation exactly: CSV and TXT contents are appended to
+    // the token box, then classifyTickItems supplies validation, de-duplication
+    // and the preview. Removing an untouched upload restores the prior text.
+    const rosterUploadDisabled = !prefilled || (
+        rosterChecked
+        && Array.isArray(currentRoster?.members)
+        && currentRoster.members.length > 0
+        && Number(currentRoster?.total) > currentRoster.members.length
+    );
+    const ticksFileName = ticksFile && ticksFile.after === ticksText ? ticksFile.name : '';
+    const ticksDrop = useDropZone({
+        accept: ['.csv', '.txt', 'text/csv', 'text/plain'],
+        readAs: 'text',
+        disabled: rosterUploadDisabled,
+        onError: (message) => setFormError(message),
+        onFile: ({ file, content }) => {
+            if (rosterUploadDisabled) return;
+            const text = (typeof content === 'string' ? content : '').replace(/^﻿/, '').trim();
+            const next = ticksText.trim() ? `${ticksText}\n${text}` : text;
+            setTicksText(next);
+            setTicksFile({ name: file?.name || 'Tickers file', before: ticksText, after: next });
+            setFormError(null);
+            setTokensError(null);
+        },
+    });
+
+    function clearTicksFile() {
+        if (ticksFile && ticksFile.after === ticksText) setTicksText(ticksFile.before);
+        setTicksFile(null);
+        setFormError(null);
+        setTokensError(null);
+    }
 
     // The active map is best-effort: a host without `getActiveAddresses`, or
     // one whose call fails, still yields a usable form (newest-HD fallback).
@@ -279,7 +342,7 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
         setCurrentRoster(null);
         setRosterChecked(false);
         setRosterLoadError(null);
-        setMembers([]);
+        setTicksText('');
         setListName('');
         setListDescription('');
         setPrefilled(false);
@@ -362,7 +425,7 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
         if (prefilled || !rosterChecked || !listDetailChecked) return;
         const rows = Array.isArray(currentRoster?.members) ? currentRoster.members : [];
         const ticks = rows.map((m) => (m && typeof m.tick === 'string' ? m.tick : null)).filter(Boolean);
-        setMembers(ticks);
+        setTicksText(ticks.join('\n'));
         setListName(listDetail?.name || '');
         setListDescription(listDetail?.description || '');
         setPrefilled(true);
@@ -487,6 +550,11 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
     const submitLink = useConfirmSubmit({
         ...confirmDispatch, software: 'linkAction', hardware: 'linkActionHw',
     });
+    // An owner's edit with more than one LIST command goes out as one BATCH,
+    // on the same host path the Batch composer signs.
+    const submitBatch = useConfirmSubmit({
+        ...confirmDispatch, software: 'advancedAction', hardware: 'advancedActionHw',
+    });
 
     function sourceDescriptor() {
         return {
@@ -499,7 +567,8 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
         };
     }
 
-    const memberTicks = members;
+    const rosterItems = useMemo(() => classifyTickItems(ticksText), [ticksText]);
+    const memberTicks = rosterItems.valid;
     const hasRoster = rosterChecked && Array.isArray(currentRoster?.members) && currentRoster.members.length > 0;
     // The explorer returns at most a page of members while `total` counts
     // them all; republishing the loaded page would drop the rest.
@@ -518,14 +587,29 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
     const tokensChanged = !hasRoster || !sameTickSet(memberTicks, originalTicks);
     const metaChanged = showMeta && hasRoster
         && (trimmedName !== originalName || trimmedDescription !== originalDescription);
-    // LIST v5 is accepted only from the list's current owner; any other
-    // signer republishes the list and links it instead.
+    // A list edit (format 1 add or remove, format 5 name and description) is
+    // accepted only from the list's owner; any other signer republishes the
+    // list and links it instead.
     const ownsList = Boolean(listDetail?.owner && fromAddress?.address
         && listDetail.owner === fromAddress.address);
-    /** @type {'publish' | 'meta' | 'none'} */
-    const saveKind = tokensChanged ? 'publish'
-        : metaChanged ? (ownsList && rosterListIndex ? 'meta' : 'publish')
-            : 'none';
+    // The tokens this save adds to and removes from the linked list.
+    const memberKeys = new Set(memberTicks.map((memberTick) => memberTick.toUpperCase()));
+    const originalKeys = new Set(originalTicks.map((orig) => orig.toUpperCase()));
+    const addedTicks = hasRoster ? memberTicks.filter((memberTick) => !originalKeys.has(memberTick.toUpperCase())) : [];
+    const removedTicks = hasRoster ? originalTicks.filter((orig) => !memberKeys.has(orig.toUpperCase())) : [];
+    // How a save goes out:
+    //   create  - no list yet: the LIST, then the LINK to the project token
+    //   edit    - the owner changes the linked list: ONE transaction of list
+    //             edits naming it (the indexer chains every edit to the
+    //             list's root and the roster reads the newest), no new LINK
+    //   publish - a signer that does not own the list: the whole list as a
+    //             new LIST, then a LINK to it
+    //   none    - nothing changed
+    /** @type {'create' | 'edit' | 'publish' | 'none'} */
+    const saveKind = !hasRoster ? 'create'
+        : !tokensChanged && !metaChanged ? 'none'
+            : ownsList && rosterListIndex ? 'edit'
+                : 'publish';
     // LIST v4 carries the name and description with the tokens; with
     // neither (or on a network without list metadata) the list is v0.
     const withMeta = showMeta && (trimmedName !== '' || trimmedDescription !== '');
@@ -540,38 +624,77 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
         TYPE: '1',
         ITEM: memberTicks,
     }), [withMeta, trimmedName, trimmedDescription, memberTicks]);
-    const metaParams = useMemo(() => ({
-        VERSION: '5',
-        LIST_ACTION_INDEX: rosterListIndex || '',
-        NAME: setMetaField(trimmedName, originalName),
-        DESCRIPTION: setMetaField(trimmedDescription, originalDescription),
-        MEMO: memo.trim(),
-    }), [rosterListIndex, trimmedName, originalName, trimmedDescription, originalDescription, memo]);
+    const actionSize = useMemo(() => listActionSize(listParams), [listParams]);
+    // The owner's edit as LIST commands on the linked list, in the order the
+    // indexer applies them: EDIT 1 adds, EDIT 2 removes, then format 5 for a
+    // new name or description. Each names the linked list; the indexer
+    // resolves it to the list's root and builds on the newest membership, so
+    // the commands compose in one transaction. The memo rides the first.
+    const editCommands = [];
+    if (saveKind === 'edit') {
+        const trimmedMemo = memo.trim();
+        const listIndex = rosterListIndex || '';
+        if (addedTicks.length > 0) {
+            editCommands.push({
+                VERSION: '1', EDIT: '1', LIST_ACTION_INDEX: listIndex,
+                ...(trimmedMemo ? { MEMO: trimmedMemo } : {}),
+                ITEM: addedTicks,
+            });
+        }
+        if (removedTicks.length > 0) {
+            editCommands.push({
+                VERSION: '1', EDIT: '2', LIST_ACTION_INDEX: listIndex,
+                ...(trimmedMemo && editCommands.length === 0 ? { MEMO: trimmedMemo } : {}),
+                ITEM: removedTicks,
+            });
+        }
+        if (metaChanged) {
+            editCommands.push({
+                VERSION: '5',
+                LIST_ACTION_INDEX: listIndex,
+                NAME: setMetaField(trimmedName, originalName),
+                DESCRIPTION: setMetaField(trimmedDescription, originalDescription),
+                MEMO: editCommands.length === 0 ? trimmedMemo : '',
+            });
+        }
+    }
+    // One command goes out as the LIST itself; more than one (an add and a
+    // remove, or a token change with new details) as one BATCH of them.
+    const editAction = editCommands.length === 0 ? null
+        : editCommands.length === 1 ? { action: 'LIST', params: editCommands[0] }
+            : { action: 'BATCH', params: { VERSION: '0', COMMAND: editCommands.map(listCommandString).join(';') } };
+    const editIsDetailsOnly = editCommands.length === 1 && editCommands[0].VERSION === '5';
 
     function addMember(sel) {
         const next = String(sel?.tick || '').trim();
         setTokenPickerOpen(false);
         if (!next) return;
         if (sel?.chainId && sel.chainId !== chainId) {
-            setFormError(t('projectRoster.otherNetwork', { network: descriptor?.displayName || chainId }));
+            refuseTokens(t('projectRoster.otherNetwork', { network: descriptor?.displayName || chainId }));
             return;
         }
-        if (memberTicks.some((existing) => existing.toUpperCase() === next.toUpperCase())) {
-            setFormError(t('projectRoster.duplicate', { tick: next }));
+        const onList = ticksText.split(/[\n,]+/).some((entry) => entry.trim().toUpperCase() === next.toUpperCase());
+        if (onList) {
+            refuseTokens(t('projectRoster.duplicate', { tick: next }));
             return;
         }
         setFormError(null);
-        setMembers((prev) => [...prev, next]);
+        setTokensError(null);
+        // The picked ticker goes on a new line of the text box.
+        setTicksText((prev) => (prev.trim() === '' ? next : `${prev.replace(/\s+$/, '')}\n${next}`));
     }
 
-    function removeMember(index) {
-        setFormError(null);
-        setMembers((prev) => prev.filter((_, i) => i !== index));
+    // A refusal that belongs to the token box: the notice at the top and the
+    // box itself outlined red, both cleared on the next change.
+    function refuseTokens(message) {
+        setFormError(message);
+        setTokensError(message);
     }
 
     function handleReviewList(event) {
         event.preventDefault();
         setReviewAttempt((n) => n + 1);
+        setTokensError(null);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         setFeeRefused(Boolean(feeStop));
         if (feeStop) { setFormError(feeStop.formError); return; }
@@ -595,8 +718,12 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
             setFormError(t('projectRoster.fixDetails'));
             return;
         }
+        if (rosterItems.invalid.length > 0) {
+            refuseTokens(`These don't look like token names: ${rosterItems.invalid.join(', ')}`);
+            return;
+        }
         if (memberTicks.length === 0) {
-            setFormError(t('projectRoster.noTokensRefusal'));
+            refuseTokens(t('projectRoster.noTokensRefusal'));
             return;
         }
         if (saveKind === 'none') {
@@ -605,6 +732,11 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
         }
         if (saveKind === 'publish' && rosterTruncated) {
             setFormError(t('projectRoster.truncatedRefusal'));
+            return;
+        }
+        const sizeError = listActionSizeError(actionSize);
+        if (sizeError) {
+            refuseTokens(sizeError);
             return;
         }
         if (memo && /[|;]/.test(memo)) {
@@ -616,9 +748,9 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
             setFormError(memoTooLong);
             return;
         }
-        if (saveKind === 'meta') {
+        if (saveKind === 'edit') {
             setFormError(null);
-            handleSaveMeta();
+            handleSaveEdit();
             return;
         }
         if (!issueActionIndex) {
@@ -644,27 +776,38 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
         };
     }
 
-    // One transaction: LIST v5 SET META on the list the LINK already pins.
-    // The confirm page is the review, so it opens straight from the form.
-    async function handleSaveMeta() {
-        if (submitting) return;
+    // One transaction: the owner's edit of the list the LINK already pins
+    // (a LIST, or a BATCH of LIST commands), with no new LINK. The confirm
+    // page is the review, so it opens straight from the form.
+    async function handleSaveEdit() {
+        if (submitting || !editAction) return;
         setSubmitError(null);
         const from = sourceDescriptor();
-        const params = metaParams;
+        const { action, params } = editAction;
         try {
             const res = await actionConfirm.run({
                 chainId,
                 from,
-                actionData: { action: 'LIST', params },
+                actionData: { action, params },
                 encoderOpts: legEncoderOpts(),
-                onApprove: (prebuiltPsbt) => submitList({
-                    walletId,
-                    chainId,
-                    from,
-                    params,
-                    ...legEncoderOpts(),
-                    prebuiltPsbt,
-                }),
+                onApprove: (prebuiltPsbt) => (action === 'BATCH'
+                    ? submitBatch({
+                        walletId,
+                        chainId,
+                        from,
+                        action,
+                        params,
+                        ...legEncoderOpts(),
+                        prebuiltPsbt,
+                    })
+                    : submitList({
+                        walletId,
+                        chainId,
+                        from,
+                        params,
+                        ...legEncoderOpts(),
+                        prebuiltPsbt,
+                    })),
             });
             if (res?.queued) { setQueuedLeg(res); return; }
             const txid = res?.txid || res?.broadcast?.txid;
@@ -688,8 +831,13 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
     async function handleSignList(event) {
         event.preventDefault();
         if (submitting) return;
-        if (!hw && (!signerReady && password.length === 0)) return;
+        if (!hw && !signerReady && password.length === 0) {
+            setSubmitError(null);
+            reviewErrors.validate({ 'project-roster-password': 'Enter your wallet password.' });
+            return;
+        }
         if (hw && hwStatus !== 'available') return;
+        reviewErrors.reset();
         setSubmitError(null);
         const from = sourceDescriptor();
         const params = listParams;
@@ -736,8 +884,13 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
     async function handleSignLink(event) {
         event.preventDefault();
         if (submitting || !listActionIndex || !issueActionIndex) return;
-        if (!hw && (!signerReady && password.length === 0)) return;
+        if (!hw && !signerReady && password.length === 0) {
+            setSubmitError(null);
+            reviewErrors.validate({ 'project-roster-password': 'Enter your wallet password.' });
+            return;
+        }
         if (hw && hwStatus !== 'available') return;
+        reviewErrors.reset();
         setSubmitError(null);
         const from = sourceDescriptor();
         const params = {
@@ -813,14 +966,14 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
     if (isWatcherMode) {
         return wrap(
             <ListPage>
-                <h2 className={styles.successTitle}>Not available in watcher mode</h2>
+                <h2 className={styles.successTitle}>Not available when another phone signs</h2>
                 <p className={styles.hint}>
                     Publishing an official-token list is a two-phase action:
                     the wallet broadcasts the list, waits for it to be
                     indexed, then broadcasts the link that makes it official.
-                    A watcher-mode wallet can't observe the list landing
-                    on-chain, so this flow can't be split across an
-                    air-gapped boundary today.
+                    A wallet that another phone signs for can't watch the
+                    list land on-chain, so this flow can't be split across
+                    two phones today.
                 </p>
             </ListPage>,
         );
@@ -855,13 +1008,15 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
 
     if (actionConfirm.open) {
         // One leg is in flight: the roster list, its link to the token, or
-        // the list details saved from the form.
+        // the owner's edit of the linked list saved from the form.
         const rosterSummary = {
             verb: stage === 'review-link'
                 ? t('components.confirmSummary.verbLinkList')
                 : stage === 'review-list'
                     ? t('components.confirmSummary.verbCreateList')
-                    : t('components.confirmSummary.verbUpdateListDetails'),
+                    : editIsDetailsOnly
+                        ? t('components.confirmSummary.verbUpdateListDetails')
+                        : t('components.confirmSummary.verbEditList'),
             ...(tick ? { ticker: String(tick).toUpperCase() } : {}),
             direction: 'none',
             chainId,
@@ -873,6 +1028,7 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
                 summary={rosterSummary}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -904,9 +1060,13 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
         return wrap(
             <ListPage>
                 <h2 className={styles.successTitle}>{t('projectRoster.savedTitle')}</h2>
-                <p className={styles.successLabel}>{t('projectRoster.metaTransaction')}</p>
+                <p className={styles.successLabel}>
+                    {editIsDetailsOnly ? t('projectRoster.metaTransaction') : t('projectRoster.updateTransaction')}
+                </p>
                 <code className={styles.txid}>{metaTxid}</code>
-                <p className={styles.hint}>{t('projectRoster.savedHint', { tick })}</p>
+                <p className={styles.hint}>
+                    {editIsDetailsOnly ? t('projectRoster.savedHint', { tick }) : t('projectRoster.updatedHint', { tick })}
+                </p>
                 <div className={styles.actions}>
                     <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
@@ -975,6 +1135,7 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
                 demoGuard={demoGuard}
                 label="Review official token list"
                 onSubmit={handleSignList}
+                errors={reviewErrors}
                 status={hw && submitError ? (
                     <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
@@ -989,7 +1150,7 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
                             variant="success"
                             icon={<Icon.UploadIcon />}
                             loading={submitting}
-                            disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                            aria-disabled={hw && hwStatus !== 'available' ? 'true' : undefined}
                         >
                             Publish List
                         </Button>
@@ -1052,6 +1213,7 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
                     }}
                     onStatusChange={onHwStatusChange}
                     passwordRef={passwordRef}
+                    passwordFieldId="project-roster-password"
                     submitError={submitError}
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
@@ -1066,6 +1228,7 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
                 demoGuard={demoGuard}
                 label="Review official token link"
                 onSubmit={handleSignLink}
+                errors={reviewErrors}
                 status={hw && submitError ? (
                     <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
@@ -1075,7 +1238,7 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
                         variant="success"
                         icon={<Icon.LinkIcon />}
                         loading={submitting}
-                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        aria-disabled={hw && hwStatus !== 'available' ? 'true' : undefined}
                     >
                         Make It Official
                     </Button>
@@ -1123,6 +1286,7 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
                     }}
                     onStatusChange={onHwStatusChange}
                     passwordRef={passwordRef}
+                    passwordFieldId="project-roster-password"
                     submitError={submitError}
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
@@ -1175,38 +1339,72 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
         : feeRefused ? 'fee'
             : /memo/i.test(formError) ? 'memo'
                 : /signing address|current owner/i.test(formError) ? 'from'
-                    : 'tokens';
+                    : formError === t('projectRoster.fixDetails') ? 'details'
+                        : 'tokens';
     const revealFor = (id) => (errorSection === id ? reviewAttempt : 0);
     const noSourceOnChain = !((addressesByChain?.[chainId]) || []).length;
     // Closed-section summaries.
-    const tokensSummary = [
-        trimmedName || null,
-        memberTicks.length
-            ? `${memberTicks.length} token${memberTicks.length === 1 ? '' : 's'}`
-            : 'None yet',
-    ].filter(Boolean).join(' · ');
-    // One line under the fields saying how many transactions the save is.
-    const planText = !prefilled ? null
-        : !hasRoster ? t('projectRoster.planCreate')
-            : saveKind === 'meta' ? t('projectRoster.planMeta')
-                : saveKind === 'publish' && !tokensChanged ? t('projectRoster.planMetaNotOwner')
-                    : saveKind === 'publish' ? t('projectRoster.planRepublish')
-                        : null;
+    const tokensSummary = memberTicks.length
+        ? t('projectRoster.tokenCount', { count: memberTicks.length })
+        : t('projectRoster.noTokensSummary');
+    // "None", the same closed summary as the Memo section beside it.
+    const detailsSummary = trimmedName || t('send.advanced.none');
+
+    // Where the save stands, above the action. A first list is two
+    // transactions (the list, then the link to the project token); a linked
+    // list shows both done; the owner's update of a linked list is one
+    // transaction on that same list, so it shows one step and never reads as
+    // linking again. Only a signer that does not own the list publishes it
+    // anew and links it (two steps, with the reason in the Tokens section).
+    /** @type {Array<{ id: string, done: boolean, label: string }> | null} */
+    const steps = !prefilled ? null
+        : saveKind === 'create' || saveKind === 'publish' ? [
+            { id: 'list', done: false, label: t('projectRoster.steps.saveList') },
+            { id: 'link', done: false, label: t('projectRoster.steps.link', { tick }) },
+        ]
+            : saveKind === 'edit' ? [
+                { id: 'list', done: false, label: editIsDetailsOnly ? t('projectRoster.steps.updateDetails') : t('projectRoster.steps.updateList') },
+            ]
+                : [
+                    { id: 'list', done: true, label: t('projectRoster.steps.saved') },
+                    { id: 'link', done: true, label: t('projectRoster.steps.linked', { tick }) },
+                ];
+    const stepsLine = steps ? (
+        <ol className={rosterStyles.steps} aria-label={t('projectRoster.steps.label')} data-roster-steps="">
+            {steps.map((step, index) => (
+                <li
+                    key={step.id}
+                    className={`${rosterStyles.step} ${step.done ? rosterStyles.stepDone : ''}`.trim()}
+                    data-step-state={step.done ? 'done' : 'todo'}
+                >
+                    <span className={rosterStyles.stepMarker} aria-hidden="true">
+                        {step.done ? <Icon.CheckIcon /> : steps.length > 1 ? index + 1 : <Icon.SaveIcon />}
+                    </span>
+                    <span className={rosterStyles.stepLabel}>{step.label}</span>
+                </li>
+            ))}
+        </ol>
+    ) : null;
 
     // The standard order: From (closed) holds Network and the owner address;
-    // List (open) the name, description and token rows; then Memo and the one
-    // Network fee row, which prices every transaction the save makes.
+    // Official Tokens (open) the token rows; List Details (closed, optional)
+    // the name and description; then Memo and the one Network fee row, which
+    // prices every transaction the save makes. The step line sits above the
+    // one action.
     return wrap(
         <FormFrame
             demoGuard={demoGuard}
             label="Project tokens"
             onSubmit={handleReviewList}
-            status={formError || issuerEligibility.error ? (
-                <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
-            ) : null}
+            status={[
+                stepsLine,
+                formError || issuerEligibility.error ? (
+                    <StatusMessage variant="error">{formError || issuerEligibility.error}</StatusMessage>
+                ) : null,
+            ]}
             action={(
                 <FormAction
-                    icon={hasRoster ? <Icon.SaveIcon /> : <Icon.PlusIcon />}
+                    icon={hasRoster ? <Icon.SaveIcon /> : <Icon.LinkIcon />}
                     loading={submitting}
                     disabled={issuerEligibility.pending || !!issuerEligibility.error || submitting}
                 >
@@ -1257,21 +1455,73 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
             >
             {!prefilled ? (
                 <p className={styles.hint}>{t('projectRoster.loadingList')}</p>
-            ) : (
-                <p className={styles.hint}>
-                    {hasRoster ? t('projectRoster.currentList') : t('projectRoster.noListYet')}
-                </p>
-            )}
-            {/* The list's name and description come first, then its tokens.
-                Both are optional and LIST v4/v5 carry them, so a network
-                without list metadata hides them. */}
+            ) : null}
+            {metaSupported === false ? (
+                <FormNotice variant="status" title="Tokens only">
+                    {t('projectRoster.metaUnsupported')}
+                </FormNotice>
+            ) : null}
+            <TickItemsEditor
+                value={ticksText}
+                onChange={(value) => { setTicksText(value); setFormError(null); setTokensError(null); }}
+                items={rosterItems}
+                chainId={chainId}
+                chainLabel={descriptor?.displayName || chainId}
+                listCoin={coinTicker}
+                messaging={messaging}
+                onOpenPicker={() => { setFormError(null); setTokensError(null); setTokenPickerOpen(true); }}
+                status={tickStatus}
+                onStatusChange={setTickStatus}
+                help={t('projectRoster.tokensHelp', { tick })}
+                error={tokensError || undefined}
+                readOnly={!prefilled || rosterTruncated}
+                pickerDisabled={!prefilled || rosterTruncated}
+                pickerIcon={<Icon.PlusIcon />}
+                pickerLabel={t('projectRoster.addToken')}
+                fileField={(
+                    <FileField
+                        label={t('routes.listCreate.tickersFile')}
+                        help={t('routes.listCreate.tickersFileHelp')}
+                        optional
+                        inputLabel={t('routes.listCreate.tickersFileInput')}
+                        fileName={ticksFileName}
+                        drop={ticksDrop}
+                        onClear={clearTicksFile}
+                        disabled={!prefilled || rosterTruncated}
+                    />
+                )}
+            />
+            {rosterTruncated ? (
+                <FormNotice variant="warning" title="Full list unavailable">
+                    {t('projectRoster.truncated', { total: Number(currentRoster.total), loaded: currentRoster.members.length })}
+                </FormNotice>
+            ) : null}
+            {/* Only the list's owner can edit it; anyone else who owns the
+                project publishes it anew and links that, which this says. */}
+            {saveKind === 'publish' ? (
+                <FormNotice variant="status" title="New official list">
+                    {t('projectRoster.notOwnerRepublish', { tick })}
+                </FormNotice>
+            ) : null}
+            </FormSection>
+            {/* The list's name and description: optional, and carried only by
+                LIST v4/v5, so a network without list metadata leaves the
+                section out. Inside an optional section the fields drop their
+                own Optional tags. */}
             {showMeta ? (
-                <>
+                <FormSection
+                    id="details"
+                    title={t('projectRoster.detailsSection')}
+                    icon={Icon.DocumentIcon}
+                    optional
+                    {...formSections.bind('details')}
+                    revealKey={revealFor('details')}
+                    summary={detailsSummary}
+                >
                     <Input
                         label={t('projectRoster.listName')}
-                        optional
                         help={t('projectRoster.listNameHelp', { tick })}
-                        hint={t('projectRoster.byteCount', { used: utf8ByteLength(trimmedName), max: LIST_META_NAME_MAX_BYTES })}
+                        counter={t('projectRoster.byteCount', { used: utf8ByteLength(trimmedName), max: LIST_META_NAME_MAX_BYTES })}
                         error={nameError || undefined}
                         value={listName}
                         onChange={(e) => { setListName(e.target.value); setFormError(null); }}
@@ -1279,92 +1529,24 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
                     />
                     <Textarea
                         label={t('routes.manageToken.description')}
-                        optional
                         help={t('projectRoster.descriptionHelp')}
-                        hint={t('projectRoster.byteCount', { used: utf8ByteLength(trimmedDescription), max: LIST_META_DESCRIPTION_MAX_BYTES })}
+                        counter={t('projectRoster.byteCount', { used: utf8ByteLength(trimmedDescription), max: LIST_META_DESCRIPTION_MAX_BYTES })}
                         error={descriptionError || undefined}
                         value={listDescription}
                         onChange={(e) => { setListDescription(e.target.value); setFormError(null); }}
                         rows={2}
                     />
-                </>
+                </FormSection>
             ) : null}
-            {metaSupported === false ? (
-                <p className={styles.hint}>{t('projectRoster.metaUnsupported')}</p>
-            ) : null}
-            {/* The token rows are not one input, so their label row is drawn
-                here with the same help tip a field label carries. */}
-            <div className={inputStyles.labelRow}>
-                <span id="roster-tokens-label" className={inputStyles.label}>{t('components.tickItemsEditor.tokens')}</span>
-                <InfoTip
-                    className={inputStyles.labelHelp}
-                    label={t('projectRoster.tokensHelp', { tick })}
-                    aria={t('ui.field.about', { label: t('components.tickItemsEditor.tokens') })}
-                />
-            </div>
-            {memberTicks.length > 0 ? (
-                <div className={rosterStyles.rosterList} role="list" aria-labelledby="roster-tokens-label">
-                    {memberTicks.map((memberTick, index) => (
-                        <ListRow
-                            role="listitem"
-                            key={memberTick.toLowerCase()}
-                            leading={<TickerIcon tick={memberTick} chainId={chainId} size={28} />}
-                            title={memberTick}
-                            trailing={(
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    icon={<Icon.TrashIcon />}
-                                    aria-label={t('projectRoster.removeToken', { tick: memberTick })}
-                                    disabled={rosterTruncated}
-                                    onClick={() => removeMember(index)}
-                                >
-                                    {t('projectRoster.removeTokenButton')}
-                                </Button>
-                            )}
-                        />
-                    ))}
-                </div>
-            ) : (
-                prefilled ? <p className={styles.hint}>{t('projectRoster.noTokens')}</p> : null
-            )}
-            {rosterTruncated ? (
-                <FormNotice variant="warning">
-                    {t('projectRoster.truncated', { total: Number(currentRoster.total), loaded: currentRoster.members.length })}
-                </FormNotice>
-            ) : null}
-            <div className={styles.actions}>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    icon={<Icon.PlusIcon />}
-                    disabled={!prefilled || rosterTruncated}
-                    onClick={() => { setFormError(null); setTokenPickerOpen(true); }}
-                >
-                    {t('projectRoster.addToken')}
-                </Button>
-            </div>
-            {planText ? <p className={styles.hint}>{planText}</p> : null}
-            </FormSection>
-            <FormSection
-                id="memo"
-                title="Memo"
-                icon={Icon.MessageIcon}
-                optional
+            {/* Memo holds only the memo: the section title names the field
+                and carries its count. */}
+            <MemoSection
                 {...formSections.bind('memo')}
                 revealKey={revealFor('memo')}
-                summary={memo.trim() || 'None'}
-            >
-                <Input
-                    label="Memo"
-                    maxLength={MAX_MEMO_LENGTH}
-                    help="An optional public note stored on the chain with this save: on the link when the list is published, or on the name and description change."
-                    value={memo}
-                    onChange={(e) => setMemo(e.target.value)}
-                    autoComplete="off"
-                />
-            </FormSection>
+                maxLength={MAX_MEMO_LENGTH}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+            />
         </FormFrame>,
     );
 }

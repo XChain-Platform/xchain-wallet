@@ -14,14 +14,25 @@
     min-width: 0;
 }
 
-/* Wide screens: the card and Buy / Sell beside the tabs and their panel,
-   as a two-column layout. */
-@media (min-width: 834px) {
-    .layout {
-        display: grid;
-        grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-        align-items: start;
-        gap: var(--xc-space-4);
+/* A wide page: the card and Buy / Sell beside the tabs and their panel, as a
+   two-column layout. The page's own width decides, not the viewport's, since
+   the sidebar takes part of the window; 750px of page is the iPad 834 width
+   with its icon rail. The DEX's right panel never takes this class, so the
+   market there is always one column, as on a phone. A browser without
+   container queries keeps one column. */
+@supports (container-type: inline-size) and (width: 1cqw) {
+    .page.page {
+        container-type: inline-size;
+    }
+
+    @container (min-width: 750px) {
+        .layoutResponsive {
+            display: grid;
+            grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+            align-items: start;
+            /* The columns sit 8px apart, the page's one spacing step. */
+            gap: var(--xc-space-2);
+        }
     }
 }
 
@@ -104,18 +115,20 @@
     min-width: 0;
 }
 
-.ordersSwitch {
-    width: 100%;
-}
-
-.segLabel {
-    display: inline-flex;
+/* Filter, then open-on-explorer, 8px apart: in the page header, or in the
+   DEX's right panel on their own line above the market's card. */
+.headerControls {
+    display: flex;
     align-items: center;
     gap: var(--xc-space-2);
 }
 
-.segLabel svg {
-    width: 16px;
-    height: 16px;
-    flex: 0 0 auto;
+.panelToolbar {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* The icon-only explorer button keeps its icon centred, as on Token detail. */
+.explorerButton > span {
+    display: inline-flex;
 }

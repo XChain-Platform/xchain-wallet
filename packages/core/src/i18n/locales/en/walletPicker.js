@@ -25,6 +25,10 @@ const messages = {
     'walletPicker.bip39': 'BIP39',
     'walletPicker.passphraseNeeded': ' · needs its passphrase at unlock',
     'walletPicker.unnamed': 'Unnamed wallet',
+    'walletPicker.filter': 'Filter wallets',
+    'walletPicker.searchLabel': 'Search wallets',
+    'walletPicker.noMatchTitle': 'No matching wallets',
+    'walletPicker.noMatchBody': 'Matching wallets appear here after you change the search.',
     'walletPicker.accountCount': '{count, plural, one {# account} other {# accounts}}',
 };
 

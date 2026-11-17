@@ -101,30 +101,39 @@ describe('onboarding and Home layout guards', () => {
         // follows the card instead of the bottom of a tall window.
         expect(wideLicense).toMatch(/form\.licenseForm > \[data-form-stack\]\s*\{[^}]*flex:\s*0 1 auto;/s);
         expect(onboardingSource).toMatch(/label="License Agreement"\s+fill\s+fullWidth\s+className=\{styles\.licenseForm\}/);
-        // At every width, phones included, the card wraps its text and the
-        // checkbox and Accept follow it directly (U48); the panel only shrinks
-        // and scrolls on a screen too short for the whole text. It never
-        // fills the free height to pin Accept to the bottom.
+        // On phone and popup widths the terms panel takes all the remaining
+        // height (operator ruling, supersedes U48); from 834px it stops at its
+        // content height, as asserted above.
         const licenseScrollBase = onboardingCss.match(/(?:^|\n)\.licenseScroll\s*\{[^}]*\}/)?.[0] ?? '';
-        expect(licenseScrollBase).toMatch(/flex:\s*0 1 auto/);
-        expect(licenseScrollBase).not.toMatch(/flex:\s*1 1 auto/);
+        expect(licenseScrollBase).toMatch(/flex:\s*1 1 auto/);
         expect(wideLicense).not.toMatch(/flex:\s*1 1 auto/);
-        expect(onboardingSource).toContain('label="Wallet setup"');
+        expect(onboardingSource).toContain('label="Wallet Setup"');
         expect(onboardingSource).toContain('title="License Agreement"');
         expect(onboardingSource).toContain('data-onboarding-welcome-header=""');
         expect(onboardingCss).toMatch(/\.welcomeHeader\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/s);
+        const cardBreakpoint = onboardingCss.match(/@media \(min-width: 600px\) \{[\s\S]*?\n\}/)?.[0] ?? '';
+        expect(cardBreakpoint).toMatch(/form\.welcomeForm\s*\{[^}]*min-height:\s*auto;/s);
+        expect(cardBreakpoint).not.toMatch(/form\.welcomeForm\s*\{[^}]*flex(?:-grow)?:/s);
+        expect(cardBreakpoint).toMatch(/div\.carouselForm\s*\{[^}]*height:\s*auto;/s);
+        expect(cardBreakpoint).toMatch(/div\.carouselForm > \[data-form-stack\]\s*\{[^}]*flex:\s*0 1 auto;/s);
+        // Import Wallet uses the shared intrinsic-height card and never opts
+        // into FormPage's fill-height mode.
+        expect(importWalletSource).not.toMatch(/<FormPage[\s\S]{0,320}?\sfill(?:\s|=)/);
         expect(onboardingCss).not.toMatch(/min\(\s*40%\s*,\s*140px\s*\)/);
         expect(onboardingSource.match(/stackedActions/g)).toHaveLength(2);
         expect(createWalletSource).not.toContain('<header className={headClass}>');
-        expect(createWalletSource.match(/aria-current="step">Step [123] of 3/g)).toHaveLength(4);
+        // G01: the step count rides in the PageHeader subtitle, once for every stage.
+        expect(createWalletSource).toMatch(/subtitle=\{stepKey \? <span aria-current="step">/);
+        expect(createWalletSource).not.toMatch(/progress=\{/);
         expect(importWalletSource).not.toContain('<header className={headClass}>');
         expect(importWalletSource).toContain('titleRef={headingRef}');
-        expect(carouselSource).toContain('<div className={styles.skipRow}>{skipAction}</div>');
+        expect(carouselSource).not.toContain('skipRow');
         expect(carouselSource).toContain('<div className={styles.nav}>{navigation}</div>');
         expect(carouselCss).toMatch(/\.frameViewport\s*\{[^}]*flex:\s*1 1 auto;[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/s);
-        expect(carouselCss).toMatch(/\.skipRow\s*\{[^}]*flex:\s*0 0 auto;/s);
+        expect(carouselCss).not.toMatch(/\.skipRow/);
+        expect(carouselCss).not.toMatch(/\.navFinal/);
         expect(carouselCss).toMatch(/\.nav\s*\{[^}]*flex:\s*0 0 auto;/s);
-        expect(carouselCss).toMatch(/\.actions\s*\{[^}]*flex:\s*0 0 auto;/s);
+        expect(carouselCss).toMatch(/\.actionsRow\s*\{[^}]*flex:\s*0 0 auto;/s);
         expect(lockedSource).toContain('<FormPage');
     });
 
@@ -142,13 +151,13 @@ describe('onboarding and Home layout guards', () => {
             /<Button\s+variant="primary"\s+block\s+onClick=\{handleAcceptLicense\}/,
         );
         expect(onboardingCss).toMatch(
-            /\.licenseActions > button\s*\{[^}]*width:\s*100%;/s,
+            /\.licenseActions > button\s*\{[^}]*width:\s*auto;/s,
         );
         expect(onboardingCss).toMatch(
-            /@media \(min-width: 600px\)[\s\S]*?\.licenseActions\s*\{[^}]*justify-content:\s*flex-end;[^}]*\}[\s\S]*?\.licenseActions > button\s*\{[^}]*width:\s*auto;/,
+            /\.licenseActions\s*\{[^}]*justify-content:\s*flex-end;/s,
         );
         expect(onboardingCss).toMatch(
-            /@media \(min-width: 834px\)[\s\S]*?\.licenseControls\s*\{[^}]*flex-direction:\s*row;[^}]*align-items:\s*center;[^}]*justify-content:\s*space-between;/,
+            /\.licenseControls\s*\{[^}]*flex-direction:\s*row;[^}]*align-items:\s*center;[^}]*justify-content:\s*space-between;/s,
         );
     });
 
@@ -177,15 +186,21 @@ describe('onboarding and Home layout guards', () => {
             'packages/core/src/shared/components/AdsNotice.module.css',
             'utf8',
         );
-        // The list is a shared card that flattens inside the wide form card; an
-        // inline surface would draw a box in a box there.
+        // The explanation is the static info Notice inside this FormPage.
         expect(adsNoticeSource).not.toMatch(/border|background|borderRadius/);
-        expect(adsNoticeCss).toMatch(/\.list\s*\{[^}]*composes:\s*card from '\.\.\/\.\.\/ui\/Card\.module\.css'/s);
+        expect(adsNoticeSource).toMatch(/<Notice[\s\S]*tone="info"[\s\S]*role=\{null\}[\s\S]*title=\{t\('adsNotice\.subtitle'\)\}/);
+        expect(adsNoticeSource).not.toMatch(/WarningCard|WarningLine|<ul\b/);
+        expect(adsNoticeCss).not.toMatch(/composes:\s*card/);
+        expect(adsNoticeCss).toMatch(/\.form\s*\{[^}]*--xc-form-gap:\s*var\(--xc-space-2\)/s);
+        expect(adsNoticeSource).toContain('className={styles.form}');
         expect(adsNoticeSource).toMatch(/<Button[^>]*\bblock\b/s);
-        // Both routes hold it in a FormPage, so neither draws it bare and off centre.
+        // The donation notice is FormPage body content and Continue is its
+        // action row, so both share the wide form card and its 8px gap.
+        expect(adsNoticeSource).toMatch(/<FormPage[\s\S]*actions=\{\([\s\S]*<Button[\s\S]*\)\}[\s\S]*<Notice[\s\S]*<\/FormPage>/);
+        expect(adsNoticeSource).not.toMatch(/margin|styles\.actions/);
         const importAds = importWalletSource.slice(importWalletSource.indexOf('if (adsNotice) {'));
-        expect(importAds.slice(0, importAds.indexOf('<AdsNotice'))).toContain('<FormPage');
         expect(importAds.slice(0, importAds.indexOf('</Screen>'))).not.toContain('ListPage');
-        expect(createWalletSource).toMatch(/<FormPage[^>]*>\s*\{noticeBody\}/s);
+        expect(importAds.slice(0, importAds.indexOf('</Screen>'))).toContain('<AdsNotice');
+        expect(createWalletSource).toMatch(/<AdsNotice[^>]*onContinue=\{onCreated\}/s);
     });
 });

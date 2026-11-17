@@ -11,8 +11,10 @@
 // Text helpers for the one-line summaries of closed form sections.
 
 /**
- * An address shortened for a section summary, "bc1q...7c1c" (first four and
- * last four), as the standard's drawings write it. Short values pass through.
+ * An address shortened to a fixed "bc1q...7c1c" (first four and last four),
+ * for plain text only (a title or a log line). A summary on screen uses
+ * SummaryAddress instead (G99: whole when the line has room, cut in the
+ * middle only as much as it needs). Short values pass through.
  *
  * @param {string | null | undefined} address
  * @returns {string}

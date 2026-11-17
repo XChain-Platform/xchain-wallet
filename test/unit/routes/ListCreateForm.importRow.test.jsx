@@ -63,7 +63,7 @@ describe('ListCreateForm import actions', () => {
         expect(screen.getByRole('button', { name: 'Choose a file' })).toBeInTheDocument();
 
         // Add from contacts keeps its own wrapping row under the file field.
-        const contacts = screen.getByRole('button', { name: /^Add From Contacts$/ });
+        const contacts = screen.getByRole('button', { name: /^Add from Contacts$/ });
         expect(contacts.parentElement.className).toMatch(/importActions/);
         expect(contacts.parentElement.className).not.toMatch(/fromLine/);
         expect(contacts.parentElement.previousElementSibling).toBe(fileField);

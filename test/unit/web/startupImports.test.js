@@ -49,7 +49,8 @@ const deferredRoutes = [
     'AirdropForm',
     'TokenAdminForm',
     'AddressList',
-    'ManageToken',
+    // ManageToken is gone from the shell: the manage-token route draws the
+    // lazy TokenDetail (G12), asserted below.
     'PsbtSignForm',
     'MessagingInbox',
     'AddAccountForm',
@@ -62,7 +63,8 @@ const deferredRoutes = [
     'ScanRoute',
     'ContractsList',
     'ContractDetail',
-    'ContractStakeForm',
+    // The one Staking form (contract and validator staking routes).
+    'StakingForm',
     'DeployContractForm',
     'ExecuteContractForm',
     'ContractFundsForm',
@@ -80,6 +82,13 @@ describe('web startup imports', () => {
 
     it('does not load MenuRoute', () => {
         expect(appSource).not.toContain('MenuRoute');
+    });
+
+    it('draws the token page through the lazy TokenDetail and never imports ManageToken', () => {
+        expect(appSource).toContain(
+            "const TokenDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/TokenDetail.jsx'), 'TokenDetail');",
+        );
+        expect(appSource).not.toContain('shared/routes/ManageToken.jsx');
     });
 
     it.each(['CreateWallet', 'ImportWallet', 'PairPartnerWallet'])(
@@ -207,11 +216,12 @@ describe('web startup imports', () => {
         expect(appSource).not.toContain('resetNetworkFilterWallets');
 
         expect(appSource.match(/onSelect=\{handleMenuSelect\}/g)).toHaveLength(2);
-        expect(appSource).toContain("if (view === unlockedView) {");
+        expect(appSource).toContain("if (view === unlockedView && !nav.canGoBack) {");
         expect(appSource).toContain('if (main) main.scrollTop = 0;');
-        // A tab-bar root starts the history over; every other menu row is a
-        // push, so Back from it returns to the page the user was on.
-        expect(appSource).toContain('if (TAB_BAR_DESTINATIONS.includes(view)) resetNav(view);');
+        // Every menu, sidebar and tab row opens its page as a root (G06): the
+        // history starts over on it, so it shows no Back.
+        expect(appSource).not.toContain('TAB_BAR_DESTINATIONS.includes');
+        expect(appSource).toMatch(/opens its page as a root[\s\S]{0,120}?palette\.navigate\(view\);/);
         expect(appSource).not.toContain('ROUTE_NAV_SECTIONS');
 
         expect(appSource).toContain('setSendPrefill(null);');

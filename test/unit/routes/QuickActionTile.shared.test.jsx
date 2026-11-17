@@ -8,10 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Home and token detail draw their quick actions with one shared tile: every
-// tile in either row carries the shared tile class and the shared icon slot,
-// in a demo wallet and in a watch-only wallet alike, and neither screen's own
-// stylesheet keeps a tile rule of its own.
+// Home draws no quick action tile row, and token detail draws its actions as
+// the shared action list (G101), in a demo wallet and in a watch-only wallet
+// alike; neither screen's own stylesheet keeps a tile rule of its own.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,6 +24,7 @@ import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import tileStyles from '../../../packages/core/src/ui/QuickActionTile.module.css';
+import listRowStyles from '../../../packages/core/src/ui/ListRow.module.css';
 
 vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({
     useReachability: () => ({
@@ -121,16 +121,18 @@ function mountTokenDetail(settings) {
     );
 }
 
-// Token detail's Actions tab (the selected tab on open) holds the action
-// tiles; every one is the shared square tile with the shared icon slot.
-async function expectSharedTiles(names) {
+// Token detail's Actions tab (the selected tab on open) holds the shared
+// action list (G101): every action is a kit list row with the tinted icon
+// square, never a square tile.
+async function expectActionListRows(ids) {
     await waitFor(() => expect(document.querySelector('button[data-action-id]')).not.toBeNull());
-    const tiles = Array.from(document.querySelectorAll('button[data-action-id]'));
-    expect(tiles.map((tile) => tile.textContent.trim())).toEqual(expect.arrayContaining(names));
-    for (const tile of tiles) {
-        expect(tile, tile.textContent).toHaveClass(tileStyles.tile);
-        expect(tile, tile.textContent).toHaveClass(tileStyles.square);
-        expect(tile.querySelector(`.${tileStyles.icon}`), tile.textContent).not.toBeNull();
+    const rows = Array.from(document.querySelectorAll('button[data-action-id]'));
+    expect(rows.map((row) => row.getAttribute('data-action-id'))).toEqual(expect.arrayContaining(ids));
+    for (const row of rows) {
+        expect(row, row.textContent).toHaveClass(listRowStyles.row);
+        expect(row, row.textContent).not.toHaveClass(tileStyles.tile);
+        expect(row.closest('ul[role="list"]'), row.textContent).not.toBeNull();
+        expect(row.querySelector('[aria-hidden="true"][data-tone] svg'), row.textContent).not.toBeNull();
     }
 }
 
@@ -140,22 +142,16 @@ const MODES = [
 ];
 
 describe('shared quick-action tile', () => {
-    it.each(MODES)('draws every Home quick action with the shared tile in %s', async (_label, setup) => {
+    it.each(MODES)('draws no Home quick action tile row in %s', async (_label, setup) => {
         mountHome(setup());
-        const group = await screen.findByRole('group', { name: 'Quick actions' });
-        await within(group).findByRole('button', { name: 'Send' });
-        const tiles = within(group).getAllByRole('button');
-        // More keeps the full "More actions" name as its accessible label.
-        expect(tiles.map((tile) => tile.textContent.trim())).toEqual(['Send', 'Receive', 'Exchange', 'More']);
-        for (const tile of tiles) {
-            expect(tile, tile.textContent).toHaveClass(tileStyles.tile);
-            expect(tile.querySelector(`.${tileStyles.icon}`), tile.textContent).not.toBeNull();
-        }
+        await screen.findAllByRole('tablist');
+        expect(screen.queryByRole('group', { name: 'Quick actions' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Exchange' })).toBeNull();
     });
 
-    it.each(MODES)('draws every token detail Actions tab tile with the shared tile in %s', async (_label, setup) => {
+    it.each(MODES)('draws every token detail Actions tab action as an action list row in %s', async (_label, setup) => {
         mountTokenDetail(setup());
-        await expectSharedTiles(['Send', 'Receive']);
+        await expectActionListRows(['send', 'receive']);
     });
 
     it('keeps no tile rule in either screen stylesheet', () => {

@@ -9,6 +9,7 @@ import {
     createWallet,
     openFromSection,
 } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -172,7 +173,7 @@ async function fillBatch(page) {
     await expect(network).toHaveAttribute('aria-label', /Bitcoin/);
 
     const first = step(1);
-    await picker(first, 'Action').selectOption('SEND');
+    await pickOption(picker(first, 'Action'), 'SEND');
     await params(first).fill(JSON.stringify({
         VERSION: '0', TICK: 'XCHAIN', AMOUNT: '2', DESTINATION: BATCH_RECIPIENTS[0],
     }));
@@ -180,7 +181,7 @@ async function fillBatch(page) {
     await main.getByRole('button', { name: '+ Add action', exact: true }).click();
     const second = step(2);
     await expect(second).toBeVisible();
-    await picker(second, 'Action').selectOption('SEND');
+    await pickOption(picker(second, 'Action'), 'SEND');
     await params(second).fill(JSON.stringify({
         VERSION: '0', TICK: 'XCHAIN', AMOUNT: '3', DESTINATION: BATCH_RECIPIENTS[1],
     }));

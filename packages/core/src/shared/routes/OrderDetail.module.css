@@ -1,0 +1,30 @@
+/* The Order detail page: the header card, then the Actions | Details |
+   Matches toggle. Details stacks the setting row and the facts card. */
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-inline-size: 0;
+}
+
+.details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-inline-size: 0;
+}
+
+/* The auto-pay switch as a setting row in its own card. */
+.setting {
+    composes: card from '../../ui/Card.module.css';
+}
+
+/* The facts rows are Swap Details' own (components/SwapViews.module.css). */
+
+/* The Matches section: the Matches tab's panel. */
+.matches {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-inline-size: 0;
+}

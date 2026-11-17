@@ -64,6 +64,7 @@
 
 import { spawn } from 'node:child_process';
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -179,14 +180,18 @@ async function publishLabels(page) {
     const main = page.getByRole('main');
     await main.getByRole('button', { name: /^Backup/ }).first().click();
 
-    const open = main.getByRole('button', { name: 'Publish Now…', exact: true });
-    await expect(open, 'the Backup section offers no "Publish now…" action').toBeVisible({ timeout: 30_000 });
+    // The Publish labels page opens straight on its form (no Publish Now button).
+    const open = main.getByRole('button', { name: /^Publish labels on-chain\b/ }).first();
+    await expect(open, 'Backup and Recovery offers no "Publish labels on-chain" row').toBeVisible({ timeout: 30_000 });
     await open.click();
 
     const chain = page.getByLabel('Publish network');
     await expect(chain, 'the publish form has no chain picker').toBeVisible({ timeout: 30_000 });
-    await chain.selectOption(REGTEST_CHAIN_ID);
-    await page.getByLabel('Wallet password').fill(PASSWORD);
+    await pickOption(chain, REGTEST_CHAIN_ID);
+    // An unlocked session publishes with its pooled signer and asks no
+    // password (2026-11-14); fill it only when the form shows it.
+    const password = page.getByLabel('Wallet password');
+    if (await password.count()) await password.fill(PASSWORD);
     await page.getByRole('button', { name: 'Publish', exact: true }).click();
 
     await expect(main.getByText('✓ Labels published'), 'the publish never reported success')

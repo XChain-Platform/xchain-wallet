@@ -6,6 +6,8 @@
 import { useEffect, useState } from 'react';
 // The wallet tile saved by Edit wallet (colour, image, shape).
 import { readWalletTile, tileRadius, WALLET_TILE_EVENT, walletTileText } from '../utils/walletTile.js';
+// The look Edit Contact stores on the contact record.
+import { contactAvatarSeed, readContactLook } from '../utils/contactLook.js';
 import styles from './WalletIdentity.module.css';
 
 export const WALLET_TONES = [
@@ -171,6 +173,44 @@ export function WalletIdentity({ wallet, label = '', namePrefix = '', active = f
                 className={`${styles.avatar} ${active ? styles.active : ''}`.trim()}
             />
             <span className={styles.name}>{namePrefix}{name}</span>
+        </span>
+    );
+}
+
+/** The colour a contact with no saved colour shows, picked from its seed. */
+export function contactDefaultTone(contact) {
+    return WALLET_TONES[walletIdentityTone(contactAvatarSeed(contact))];
+}
+
+/**
+ * A contact's identity tile: the IdentityAvatar View Contact always drew
+ * (initials, the seed-picked colour), with the look Edit Contact saved on the
+ * record laid over it (colour, shape, image). Contacts list rows, View
+ * Contact, its Edit form and the Messaging rows and thread header all draw
+ * it, so they show one look.
+ *
+ * @param {object} props
+ * @param {{ id?: string, name?: string, avatarSeed?: string, look?: object } | null} props.contact
+ * @param {'header'|'list'|'hero'} [props.context]
+ * @param {string} [props.className]
+ */
+export function ContactAvatar({ contact, context = 'list', className = '' }) {
+    const look = readContactLook(contact);
+    const avatar = (
+        <IdentityAvatar
+            name={contact?.name}
+            seed={contactAvatarSeed(contact)}
+            context={context}
+            tone={look.colour || undefined}
+            src={look.image}
+            className={className}
+        />
+    );
+    // No saved shape: the token default (a circle), exactly as before.
+    if (!look.shape) return avatar;
+    return (
+        <span aria-hidden="true" data-contact-shape={look.shape} style={{ '--xc-avatar-shape': tileRadius(look.shape), display: 'inline-flex', flex: '0 0 auto' }}>
+            {avatar}
         </span>
     );
 }

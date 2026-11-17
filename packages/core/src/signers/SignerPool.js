@@ -38,6 +38,7 @@
 import { PassphraseMismatchError, unlockWalletRecord } from '../flows/unlockWallet.js';
 import { encryptWalletPassphrase } from '../crypto/walletBlob.js';
 import { kdfParamsEqual } from '../crypto/kdf.js';
+import { isHardwareWallet } from '../flows/hardwareWallet.js';
 
 /**
  * @typedef {Object} PopulateSummary
@@ -50,6 +51,8 @@ import { kdfParamsEqual } from '../crypto/kdf.js';
  * @property {string[]} passphraseCaptureNeeded  legacy passphrase wallets the password opened but that hold no
  *                                           stored passphrase yet, and none was supplied: the capture step's queue
  * @property {string[]} passphraseCaptureNames   display names for the capture list, in the same order
+ * @property {string[]} hardware             hardware wallets (format 'hardware'): no seed to unlock, so never
+ *                                           pooled; their device signs through the signer bridge instead
  */
 
 /**
@@ -144,12 +147,18 @@ export class SignerPool {
         /** @type {PopulateSummary} */
         const summary = {
             pooled: [], skipped: [], passphraseMatched: [], passphraseMismatch: [], passphraseMismatchNames: [],
-            passphraseCaptureNeeded: [], passphraseCaptureNames: [],
+            passphraseCaptureNeeded: [], passphraseCaptureNames: [], hardware: [],
         };
         const session = this._session;
         const wallets = await vault.wallets.list();
         if (this._session !== session) return summary;
         for (const w of wallets) {
+            // Nothing to unlock: the keys are on the device. Left out before
+            // any KDF round so a hardware wallet never costs unlock time.
+            if (isHardwareWallet(w)) {
+                summary.hardware.push(w.id);
+                continue;
+            }
             const token = this._beginMutation(w.id);
             // A stored passphrase (§15.6) makes the password the only secret this
             // needs, so the wallets left out here are the legacy records that

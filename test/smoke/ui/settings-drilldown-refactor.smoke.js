@@ -46,7 +46,8 @@ for (const id of expectedDrills) {
     assert.ok(idx >= 0, `section id:${id} present`);
     const block = src.slice(idx, idx + 800);
     assert.match(block, /kind:\s*'internal-drill'/, `${id} is internal-drill`);
-    assert.match(block, /summary:/, `${id} carries a summary string`);
+    // About rows open pages of their own (Titled Sections, 2026-11-15), so it has no state summary.
+    if (id !== 'about') assert.match(block, /summary:/, `${id} carries a summary string`);
 }
 
 // Account switching lives inside the This wallet sub-page; the top level has
@@ -95,7 +96,7 @@ assert.match(src, /offByDefault\.filter\(\(k\) => p\[k\] === true\)\.length/, 'p
 assert.match(src, /strategy === 'custom'/, 'fees summary detects custom strategy');
 // endpoints: counts custom flag
 assert.match(src, /Object\.values\(eps\)\.filter\(\(e\) => e\?\.custom\)\.length/, 'endpoints summary counts custom overrides');
-// ads: sums lifetimeDonatedSats across chains
-assert.match(src, /lifetimeDonatedSats/, 'ads summary aggregates lifetimeDonatedSats');
+// ads: the wallet-wide per-transaction amount, or Off at None
+assert.match(src, /function adsSummary\(settings\) \{[\s\S]{0,300}isAdsOn\(settings\)[\s\S]{0,200}ads\.perTransaction/, 'ads summary states the per-transaction amount');
 
 console.log('settings-drilldown-refactor smoke OK');

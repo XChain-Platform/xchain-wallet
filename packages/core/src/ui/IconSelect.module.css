@@ -8,6 +8,9 @@
     --xc-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
     --xc-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
     --xc-control-hit-inset: -2px 0;
+    /* G112: the option icon and the chevron sit in square slots (tokens.css). */
+    --icon-select-icon-inset: var(--xc-field-icon-inset-md);
+    --icon-select-glyph-inset: var(--xc-field-glyph-inset-md);
     position: relative;
     width: 100%;
     display: flex;
@@ -24,6 +27,8 @@
     --xc-control-padding-x: var(--xc-control-pad-x-sm, var(--xc-control-pad-x));
     --xc-control-font-size: var(--xc-control-font-sm, var(--xc-control-font));
     --xc-control-hit-inset: -6px 0;
+    --icon-select-icon-inset: var(--xc-field-icon-inset-sm);
+    --icon-select-glyph-inset: var(--xc-field-glyph-inset-sm);
 }
 
 .md {
@@ -32,6 +37,8 @@
     --xc-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
     --xc-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
     --xc-control-hit-inset: -2px 0;
+    --icon-select-icon-inset: var(--xc-field-icon-inset-md);
+    --icon-select-glyph-inset: var(--xc-field-glyph-inset-md);
 }
 
 .lg {
@@ -40,6 +47,8 @@
     --xc-control-padding-x: var(--xc-control-pad-x-lg, var(--xc-control-pad-x));
     --xc-control-font-size: var(--xc-control-font-lg, var(--xc-control-font));
     --xc-control-hit-inset: 0;
+    --icon-select-icon-inset: var(--xc-field-icon-inset-lg);
+    --icon-select-glyph-inset: var(--xc-field-glyph-inset-lg);
 }
 
 .label {
@@ -70,11 +79,12 @@
     width: 100%;
     display: flex;
     align-items: center;
-    gap: var(--xc-space-2);
+    gap: var(--xc-field-icon-gap);
     height: var(--xc-control-height);
     min-height: var(--xc-control-height);
     padding: 0 var(--xc-control-pad-x);
-    padding: 0 var(--xc-control-padding-x);
+    padding-block: 0;
+    padding-inline: var(--xc-control-padding-x) calc(var(--icon-select-glyph-inset) - var(--xc-field-border));
     font-size: var(--xc-control-font);
     font-size: var(--xc-control-font-size);
     background: var(--xc-surface);
@@ -96,13 +106,20 @@
     display: flex;
     justify-content: flex-start;
     min-height: var(--xc-control-height);
-    padding: 0 var(--xc-control-padding-x);
+    padding-block: 0;
+    padding-inline: var(--xc-control-padding-x) calc(var(--icon-select-glyph-inset) - var(--xc-field-border));
     border: 1px solid var(--xc-border-strong);
     font-size: var(--xc-control-font-size);
     font-weight: 400;
     line-height: normal;
     text-align: start;
     transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
+}
+
+/* G112: with an option icon showing, the icon sits as far from the start
+   edge as from the top and bottom; the label follows one icon gap after it. */
+.wrap .trigger.leadIcon {
+    padding-inline-start: calc(var(--icon-select-icon-inset) - var(--xc-field-border));
 }
 
 .trigger:hover:not(:disabled) {
@@ -193,11 +210,19 @@
 
 /* Popover */
 
+/* The open list (operator ruling 2026-11-14) is at least as wide as the
+   trigger and as wide as its longest option, never wider than the viewport
+   less a gutter; IconSelect.jsx turns it to the trigger's end edge or above
+   the trigger (.popoverEnd, .popoverUp) when it would run past the viewport. */
 .popover {
     position: absolute;
     top: calc(100% + 4px);
     inset-inline-start: 0;
-    inset-inline-end: 0;
+    inset-inline-end: auto;
+    min-width: 100%;
+    width: max-content;
+    max-width: calc(100vw - 32px);
+    box-sizing: border-box;
     z-index: var(--xc-z-dropdown);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border);
@@ -205,6 +230,48 @@
     box-shadow: var(--xc-shadow-md);
     max-height: 320px;
     overflow-y: auto;
+}
+
+.popoverEnd {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+}
+
+.popoverUp {
+    top: auto;
+    bottom: calc(100% + 4px);
+}
+
+/* Every option reads in full in the open list: a label longer than the
+   widest list the viewport allows wraps instead of trailing off. */
+.popover .labelText,
+.popover .sub {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+/* Every option's label laid out invisibly inside the closed trigger, so the
+   trigger keeps the width of its longest choice whichever one is shown. */
+.sizer {
+    display: flex;
+    flex-direction: column;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.sizerItem {
+    display: block;
+    height: 0;
+    font-weight: 400;
+    white-space: nowrap;
+}
+
+.sizerItem::before {
+    content: attr(data-label);
 }
 
 .list {
@@ -222,6 +289,8 @@
     align-items: center;
     gap: var(--xc-space-2);
     padding: 8px 12px;
+    font-family: inherit;
+    font-size: var(--xc-control-font-size);
     cursor: pointer;
     color: var(--xc-text);
     text-align: start;
@@ -238,6 +307,30 @@
 
 .itemActive {
     background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
+}
+
+/* A disabled option stays listed, as in a native select, but reads as unavailable. */
+.itemDisabled,
+.itemDisabled:hover {
+    background: transparent;
+    color: var(--xc-control-disabled-text);
+    cursor: not-allowed;
+}
+
+.itemDisabled .labelText {
+    color: var(--xc-control-disabled-text);
+}
+
+/* Select marks a field error on the trigger the way Input marks its control:
+   its own error adds .invalid, a caller's aria-invalid marks it the same. */
+.wrap .trigger.invalid,
+.wrap .trigger[aria-invalid='true'] {
+    border-color: var(--xc-danger);
+}
+
+.wrap .trigger.invalid:focus-visible,
+.wrap .trigger[aria-invalid='true']:focus-visible {
+    box-shadow: 0 0 0 3px var(--xc-danger-bg);
 }
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give

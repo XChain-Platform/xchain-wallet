@@ -3,16 +3,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Bet Markets' My bets tab: every bet across ALL of the wallet's addresses,
-// pending first, with outcome, stake, placing address and settled block. The
-// loader is shared with the market cards, which read it for "You bet" chips.
+// The wallet's bets for Bet Markets: one loader for every bet across ALL of
+// the wallet's addresses, and the card chip that names this wallet's stake.
+// Bet Markets' My bets tab is the All list narrowed to the markets these bets
+// sit in (operator ruling 2026-11-13), so there is no separate bets renderer.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { EmptyState, ListRow, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
-import { outcomeLabelsOf, outcomePhrase, safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { addDecimals } from './BetMarketCard.jsx';
-import styles from '../routes/IssueTokenForm.module.css';
 
 function extractRows(resp) {
     if (!resp) return [];
@@ -21,21 +19,11 @@ function extractRows(resp) {
     return [];
 }
 
-function unwrap(resp) {
-    if (!resp) return null;
-    if (Array.isArray(resp)) return resp[0] || null;
-    if (Array.isArray(resp.data)) return resp.data[0] || null;
-    if (resp.data && typeof resp.data === 'object') return resp.data;
-    return resp;
-}
-
-// Same ceiling as My Bets: one market read per distinct market, capped.
-const MAX_MARKET_READS = 25;
-
 /**
  * Every bet this wallet has placed, across all of its addresses (address
  * aggregated for the same reason My Bets is: payouts credit the placing
- * address, and a sweep does not move a bet escrow).
+ * address, and a sweep does not move a bet escrow). One read per address,
+ * never one per market.
  *
  * Takes the page's own address read (`byChain`) instead of asking for the
  * wallet's addresses a second time; null means that read is still pending.
@@ -105,167 +93,28 @@ export function useWalletBets({ byChain, messaging }) {
 }
 
 /**
- * The card chip for this wallet's live stake in one market, or null.
- * Rejected bets staked nothing, so they never count.
+ * The one short summary for this wallet's live stake in one market, or null:
+ * "You bet 15 XCHAIN", the total staked, amount and asset only (operator
+ * ruling 2026-11-13). Staked in more than one asset, it names the first and
+ * adds "+1 more". Rejected bets staked nothing, so they never count as a
+ * stake; a market holding only rejected bets says so, since the user paid
+ * fees for them and may come looking. Sums only the bet rows already loaded.
  */
 export function yourBetText(bets, market) {
     if (!Array.isArray(bets) || bets.length === 0) return null;
     const mine = bets.filter((b) => b.bet_status !== 'invalid');
-    if (mine.length === 0) return null;
-    const outcomes = [...new Set(mine.map((b) => String(b.outcome)))];
-    if (outcomes.length > 1) return `You bet on ${outcomes.length} outcomes`;
-    const labels = outcomeLabelsOf(market);
-    const label = safeOutcomeLabel(labels[Number(outcomes[0])]) || `outcome ${outcomes[0]}`;
-    const tick = mine[0].tick || market?.tick || '';
-    const total = addDecimals(mine.map((b) => b.amount));
-    return `You bet ${formatDecimalAmount(total)} ${tick} on ${label}`.replace(/\s+/g, ' ');
-}
-
-function statusLabel(status) {
-    if (status === 'open') return 'Pending resolution';
-    if (status === 'won') return 'Won';
-    if (status === 'lost') return 'Lost';
-    if (status === 'refunded') return 'Refunded';
-    if (status === 'invalid') return 'Rejected by the network';
-    return status ? String(status) : 'Unknown';
-}
-
-function statusColor(status) {
-    if (status === 'won') return { bg: 'color-mix(in srgb, var(--xc-success) 18%, transparent)', fg: 'var(--xc-success)' };
-    if (status === 'lost' || status === 'invalid') return { bg: 'var(--xc-danger-bg)', fg: 'var(--xc-danger-text)' };
-    if (status === 'refunded') return { bg: 'var(--xc-bg-muted)', fg: 'var(--xc-text-muted)' };
-    return { bg: 'var(--xc-accent-primary)', fg: 'var(--xc-on-accent)' };
-}
-
-/**
- * @param {object} props
- * @param {any[] | null} props.rows
- * @param {string | null} props.error
- * @param {() => void} props.onRetry
- * @param {any} props.messaging
- * @param {(chainId: string, feedIndex: string | number) => void} [props.onOpenMarket]
- */
-export function BetMyBetsPanel({ rows, error, onRetry, messaging, onOpenMarket }) {
-    const [labelsByMarket, setLabelsByMarket] = useState(/** @type {Record<string, string[]>} */ ({}));
-
-    // Bet rows name their outcome by index only; one market read per distinct
-    // market fills in its label, best-effort and capped as on My Bets.
-    useEffect(() => {
-        if (!rows || rows.length === 0) return undefined;
-        if (typeof messaging?.betFeed !== 'function') return undefined;
-        let cancelled = false;
-        const wanted = [];
-        const seen = new Set();
-        let asked = Object.keys(labelsByMarket).length;
-        for (const b of rows) {
-            const idx = b.feed_action_index;
-            if (idx === undefined || idx === null) continue;
-            const key = `${b.chainId}:${idx}`;
-            if (seen.has(key) || Object.hasOwn(labelsByMarket, key)) continue;
-            if (asked >= MAX_MARKET_READS) break;
-            seen.add(key);
-            wanted.push({ key, chainId: b.chainId, feedIndex: idx });
-            asked += 1;
-        }
-        if (wanted.length === 0) return undefined;
-        Promise.all(wanted.map((w) => Promise.resolve()
-            .then(() => messaging.betFeed({ chainId: w.chainId, feedIndex: w.feedIndex }))
-            .then((r) => ({ key: w.key, labels: outcomeLabelsOf(unwrap(r)) }))
-            .catch(() => ({ key: w.key, labels: [] }))))
-            .then((results) => {
-                if (cancelled) return;
-                const next = {};
-                for (const r of results) next[r.key] = r.labels;
-                setLabelsByMarket((prev) => ({ ...prev, ...next }));
-            })
-            .catch(() => { /* labels are an annotation; the index still renders */ });
-        return () => { cancelled = true; };
-    }, [rows, messaging, labelsByMarket]);
-
-    if (error && (!rows || rows.length === 0)) {
-        return (
-            <StatusMessage variant="error" recovery={{ label: 'Try Again', onAction: onRetry }}>
-                {error}
-            </StatusMessage>
-        );
+    if (mine.length === 0) return 'Your bet was rejected by the network';
+    const byTick = new Map();
+    for (const b of mine) {
+        const tick = b.tick || market?.tick || '';
+        if (!byTick.has(tick)) byTick.set(tick, []);
+        byTick.get(tick).push(b.amount);
     }
-    if (!rows) {
-        return (
-            <div role="status" aria-label="Loading bets">
-                <Skeleton.List rows={5} />
-            </div>
-        );
-    }
-    if (rows.length === 0) {
-        return <EmptyState title="No bets yet" body="Bets placed from this wallet appear here." />;
-    }
-
-    const openCount = rows.filter((r) => r.bet_status === 'open').length;
-    const pendingRows = rows.filter((r) => r.bet_status === 'open');
-    const pastRows = rows.filter((r) => r.bet_status !== 'open');
-
-    const betRow = (b) => {
-        const c = statusColor(b.bet_status);
-        const clickable = onOpenMarket && b.feed_action_index !== undefined && b.feed_action_index !== null;
-        const backed = outcomePhrase(labelsByMarket[`${b.chainId}:${b.feed_action_index}`], b.outcome);
-        return (
-            <ListRow
-                key={`${b.chainId}:${b.action_index}`}
-                onClick={clickable ? () => onOpenMarket(b.chainId, b.feed_action_index) : undefined}
-                className={styles.listCard}
-                style={{ marginTop: 0 }}
-                title={`Market #${String(b.feed_action_index)}`}
-                subtitle={(
-                    <>
-                        <span className={`${styles.hint} ${styles.betLongText}`} style={{ display: 'block' }}>
-                            {b.bet_status === 'invalid'
-                                ? <>Would have backed {backed} for {String(b.amount)} {b.tick || ''} · nothing was staked, but the fees were spent</>
-                                : <>Backed {backed} · staked {String(b.amount)} {b.tick || ''}</>}
-                        </span>
-                        <span className={`${styles.hint} ${styles.betLongText}`} style={{ display: 'block' }}>from {b.owner}</span>
-                        {b.bet_status !== 'open' && b.settled_block !== undefined && b.settled_block !== null ? (
-                            <span className={styles.hint} style={{ display: 'block' }}>Settled in block {String(b.settled_block)}</span>
-                        ) : null}
-                    </>
-                )}
-                trailing={(
-                    <span style={{ background: c.bg, color: c.fg, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-                        {statusLabel(b.bet_status)}
-                    </span>
-                )}
-            />
-        );
-    };
-
-    return (
-        <>
-            {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
-            <p className={styles.hint}>
-                {rows.length} bet{rows.length === 1 ? '' : 's'} across all of your addresses
-                {openCount ? `, ${openCount} still waiting on a result` : ''}.
-            </p>
-            {pendingRows.length > 0 ? (
-                <section>
-                    <SectionHeader title="Pending resolution" />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {pendingRows.map(betRow)}
-                    </div>
-                </section>
-            ) : null}
-            {pastRows.length > 0 ? (
-                <section>
-                    <SectionHeader title="Past bets" />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {pastRows.map(betRow)}
-                    </div>
-                </section>
-            ) : null}
-            <p className={styles.hint}>
-                There is no claim transaction. When a market resolves, the protocol credits winnings
-                or refunds automatically to the address that placed the bet. Sweeping an address moves
-                its spendable balance but not its bets, so a payout can still land on an address you
-                have already swept.
-            </p>
-        </>
-    );
+    // The market's own asset leads when the wallet staked in it.
+    const mainTick = byTick.has(market?.tick) ? market.tick : byTick.keys().next().value;
+    const tick = mainTick;
+    const amounts = byTick.get(mainTick);
+    const total = addDecimals(amounts);
+    const more = byTick.size > 1 ? ` +${byTick.size - 1} more` : '';
+    return `You bet ${formatDecimalAmount(total)} ${tick}${more}`.replace(/\s+/g, ' ').trim();
 }

@@ -88,7 +88,7 @@ async function checkControls(page, pass) {
 
     await test.step(`${pass} / IconSelect triggers`, async () => {
         await gotoSection(page, 'Messaging');
-        await main.getByRole('button', { name: 'New Conversation' }).click();
+        await page.getByRole('button', { name: 'New message', exact: true }).click();
         await expectVisibleEdge('encryption select', main.getByRole('button', { name: /^Encryption:/ }), { surface: true });
         await openFromSection(main);
         await expectVisibleEdge('compose network field', main.getByRole('button', { name: /^Network:/ }), { surface: true });

@@ -16,13 +16,20 @@ describe.each(shells)('%s account routes', (file) => {
     const source = readFileSync(file, 'utf8');
 
     it('activates a newly created account and returns to Home', () => {
-        expect(source).toMatch(/onCreated=\{\(account\) => \{\s+if \(account\?\.id\) handleSwitchAccount\(account\.id\);\s+setUnlockedView\('home'\);/);
+        // The signer list is read again between the two, so a hardware
+        // wallet's record gains the identity of a network the account added.
+        expect(source).toMatch(/onCreated=\{\(account\) => \{\s+if \(account\?\.id\) handleSwitchAccount\(account\.id\);\s+setSignerListKey\(\(n\) => n \+ 1\);\s+setUnlockedView\('home'\);/);
     });
 
     it('carries the account record into rename and returns canceled adds to the picker', () => {
         expect(source).toContain('setAccountRenameTarget(account);');
         expect(source).toContain('walletId={activeWalletId}');
         expect(source).toMatch(/<AddAccountForm[\s\S]*?onBack=\{goBack\}/);
+    });
+
+    it('opens the address list from the Settings My Addresses row and returns through the history', () => {
+        expect(source).toMatch(/onOpenAddresses=\{\s*activeWalletId \? \(\) => \{\s*setSettingsInitialSection\('g-wallets'\);\s*setAddressDetailTarget\(null\);\s*setUnlockedView\('addresses'\);/);
+        expect(source).toMatch(/<AddressList[\s\S]*?onBack=\{goBack\}[\s\S]*?selectedAddress=\{addressDetailTarget\}[\s\S]*?onDetailBack=\{goBack\}/);
     });
 
     it('returns a Settings-opened picker to Settings through the history', () => {

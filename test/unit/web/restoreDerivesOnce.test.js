@@ -45,6 +45,10 @@ vi.mock('../../../packages/core/src/crypto/kdf.js', async (importOriginal) => {
         deriveMasterKeyAsync: async (password, params) => {
             actual.validateKdfParams(params);
             const key = fakeKey(password, params, actual.base64ToBytes);
+            // The recovery-phrase wrap (flows/phraseRecovery.js) derives from
+            // the restored wallet's words, off the reply path; it is not a
+            // password derivation, so it is not counted here.
+            if (password.startsWith('xchain-wallet:recovery-phrase:')) return key;
             state.issued.push(key);
             state.passwords.push(password);
             return key;

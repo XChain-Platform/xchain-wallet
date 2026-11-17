@@ -31,18 +31,22 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvider.jsx';
+import { selectOption } from '../helpers/selectOption.js';
 import { publishWalletModes, resetWalletModes } from '../../packages/core/src/shared/hooks/useWalletMode.js';
 
 import { BroadcastForm } from '../../packages/core/src/shared/routes/BroadcastForm.jsx';
 import { CreatePollForm } from '../../packages/core/src/shared/routes/CreatePollForm.jsx';
 import { DelegateVoteForm } from '../../packages/core/src/shared/routes/DelegateVoteForm.jsx';
-import { DelegationActionForm } from '../../packages/core/src/shared/routes/DelegationActionForm.jsx';
+// The staking routes render the one Staking form on their target and action.
+import {
+    ContractStakeRoute as ContractStakeForm,
+    NetworkDelegationRoute as DelegationActionForm,
+    NetworkPositionRoute as StakingActionForm,
+    NetworkStakeRoute as StakeForm,
+} from '../helpers/stakingFormRoutes.jsx';
 import { DividendForm } from '../../packages/core/src/shared/routes/DividendForm.jsx';
 import { IssueTokenForm } from '../../packages/core/src/shared/routes/IssueTokenForm.jsx';
-import { StakeForm } from '../../packages/core/src/shared/routes/StakeForm.jsx';
-import { StakingActionForm } from '../../packages/core/src/shared/routes/StakingActionForm.jsx';
 import { ContractFundsForm } from '../../packages/core/src/shared/routes/ContractFundsForm.jsx';
-import { ContractStakeForm } from '../../packages/core/src/shared/routes/ContractStakeForm.jsx';
 import { CreateBetFeedForm } from '../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
 import { CreateOrderForm } from '../../packages/core/src/shared/routes/CreateOrderForm.jsx';
 import { ControllerBindForm } from '../../packages/core/src/shared/routes/ControllerBindForm.jsx';
@@ -148,6 +152,11 @@ function recordingMessaging({ walletMode = 'full', ...overrides } = {}) {
         // cooldown, so the target metadata has to be a real shape.
         getContractByActionIndex: () => Promise.resolve({
             row: { cooldown_blocks: 144, slash_destination: null },
+            // ExecuteContractForm picks its method from the declared list.
+            abi: {
+                version: 1,
+                methods: { transfer: { params: [] }, fundLoan: { params: [] } },
+            },
         }),
         // AdvancedActionsForm's action picker is populated from the host.
         listActions: () => Promise.resolve(['BROADCAST', 'SEND']),
@@ -208,7 +217,7 @@ async function drainMicrotasks(rounds = 12) {
 }
 
 function expectAccessibleFormControls(container) {
-    const controls = container.querySelectorAll('input:not([type="hidden"]), select, textarea');
+    const controls = container.querySelectorAll('input:not([type="hidden"]), select, [data-xc-select], textarea');
     for (const control of controls) {
         expect(control).toHaveAccessibleName();
         const descriptionIds = (control.getAttribute('aria-describedby') || '')
@@ -230,11 +239,11 @@ function expectAccessibleFormControls(container) {
  * @param {object} spec
  * @param {import('react').ComponentType<any>} spec.Form
  * @param {object} spec.props
- * @param {string} spec.actionLabel   the software-path primary button label
+ * @param {string|null} spec.actionLabel   the software-path primary button label, or null when a preceding step opens Confirm Standard
  * @param {(utils: any) => void} [spec.fill]
  * @param {Array<(utils: any) => void>} [spec.steps]   extra interactions, each flushed on its own (picker screens need a render between clicks)
  */
-async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [], hw = false, afterClick = null }) {
+async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [], hw = false, afterClick = null, approveCount = 1 }) {
     const { messagingOverrides, ...formProps } = props;
     // The same drive, sourced from a paired device instead of an HD
     // key. Auto-select only picks `source === 'hd'`, so the hardware address
@@ -274,12 +283,18 @@ async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [],
 
     expectAccessibleFormControls(utils.container);
 
-    const button = utils.getByRole('button', { name: actionLabel });
-    expect(button.disabled, `"${actionLabel}" button is enabled`).toBe(false);
-    await domAct(async () => {
-        fireEvent.click(button);
-        await drainMicrotasks();
-    });
+    // Some flows, such as Airdrop's recipient review, now open the shared
+    // Confirm Standard directly. Other forms still need their main action
+    // clicked first.
+    if (!utils.container.querySelector('[data-testid="confirm-modal"]')) {
+        if (!actionLabel) throw new Error('the preceding step did not open Confirm Standard');
+        const button = utils.getByRole('button', { name: actionLabel });
+        expect(button.disabled, `"${actionLabel}" button is enabled`).toBe(false);
+        await domAct(async () => {
+            fireEvent.click(button);
+            await drainMicrotasks();
+        });
+    }
     if (afterClick) {
         await domAct(async () => {
             afterClick(utils);
@@ -287,23 +302,29 @@ async function driveThroughConfirm({ Form, props, actionLabel, fill, steps = [],
         });
     }
 
-    // #40, asserted here rather than per form ON PURPOSE: every test in this
-    // file drives a different form through this one helper, so the From row is
-    // pinned across all of them at once and a form added later cannot ship
-    // without it. The address is the one the drive signs with, software or
-    // device, so a blank or wrong row fails rather than passing as "present".
-    const sourceRow = utils.container.querySelector('[data-testid="confirm-source"]');
-    expect(sourceRow, 'the confirm page names the spender (#40)').toBeTruthy();
-    expect(sourceRow.querySelector('[title]')?.getAttribute('title'))
-        .toBe(HD_ADDRESS.address);
+    const confirm = utils.container.querySelector('[data-testid="confirm-modal"]');
+    expect(confirm, 'the action opens Confirm Standard').toBeTruthy();
+    expect(confirm.querySelector('[data-testid="confirm-sentence"]')).toBeTruthy();
+    expect(utils.getByRole('button', { name: 'Reject' })).toBeTruthy();
+    expect(utils.getByRole('button', { name: 'Approve' })).toBeTruthy();
 
-    await domAct(async () => {
-        const approve = Array.from(utils.container.querySelectorAll('button'))
-            .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
-        if (!approve) throw new Error('no enabled Approve button on the confirm page');
-        fireEvent.click(approve);
-        await drainMicrotasks();
-    });
+    for (let round = 0; round < approveCount; round += 1) {
+        // Airdrop has two G127 pages in sequence: recipient data approval,
+        // then approval of the composed LIST or AIRDROP transaction.
+        // eslint-disable-next-line no-await-in-loop
+        await domAct(async () => {
+            const approve = Array.from(utils.container.querySelectorAll('button'))
+                .find((b) => /approve/i.test(b.textContent || '') && !b.disabled);
+            if (!approve) throw new Error('no enabled Approve button on the confirm page');
+            fireEvent.click(approve);
+            await drainMicrotasks(30);
+        });
+        if (round + 1 < approveCount) {
+            expect(utils.getByTestId('confirm-sentence')).toBeTruthy();
+            expect(utils.getByRole('button', { name: 'Reject' })).toBeTruthy();
+            expect(utils.getByRole('button', { name: 'Approve' })).toBeTruthy();
+        }
+    }
 
     return { calls, utils };
 }
@@ -322,7 +343,10 @@ function expectSingleEncode(calls, { action, params, submitMethod }) {
 }
 
 const setValue = (utils, label, value) => {
-    fireEvent.change(utils.getByLabelText(label), { target: { value } });
+    const control = utils.getByLabelText(label);
+    // Dropdowns are the themed Select: pick the option rather than typing a value.
+    if (control.hasAttribute('data-xc-select')) selectOption(control, value);
+    else fireEvent.change(control, { target: { value } });
 };
 
 async function mountFilledForm({ Form, props, steps = [], fill }) {
@@ -644,7 +668,8 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             steps: [
                 (utils) => setValue(utils, 'Method', 'fundLoan'),
                 openFormSection('Deposit'),
-                openTokenField('Deposit:'),
+                // The Deposit section's field is labelled Token.
+                openTokenField('Token:'),
                 pickToken('XCHAIN'),
             ],
             fill: (utils) => setValue(utils, /^Deposit amount/, '10'),
@@ -677,7 +702,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         for (const step of [
             (u) => setValue(u, 'Method', 'fundLoan'),
             openFormSection('Deposit'),
-            openTokenField('Deposit:'),
+            openTokenField('Token:'),
             pickToken('XCHAIN'),
             (u) => fireEvent.click(u.getByRole('button', { name: 'Call Contract' })),
         ]) {
@@ -688,6 +713,53 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         expect(calls.some((c) => c.method === 'composeForConfirm' || c.method === 'buildBatchCommand')).toBe(false);
     });
 
+    it('the Staking form toggle switches a contract stake to UNSTAKE v1 on the contract wire', async () => {
+        const { calls } = await driveThroughConfirm({
+            Form: ContractStakeForm,
+            props: { contractActionIndex: '5' },
+            steps: [(u) => fireEvent.click(u.getByRole('radio', { name: 'Unstake' }))],
+            actionLabel: 'Unstake',
+            // Amount left blank: the full staked balance, legacy no-AMOUNT bytes.
+            fill: (utils) => setValue(utils, 'Signing Key', 'e'.repeat(64)),
+        });
+        expectSingleEncode(calls, {
+            action: 'UNSTAKE',
+            params: {
+                VERSION: '1',
+                SIGNING_PUBKEY: 'e'.repeat(64),
+                TARGET_CONTRACT_INDEX: '5',
+                TICK: 'XCHAIN',
+            },
+            submitMethod: 'contractStakeAction',
+        });
+        const compose = calls.find((c) => c.method === 'composeForConfirm');
+        expect(compose.args.actionData.params.AMOUNT).toBeUndefined();
+        expect(calls.find((c) => c.method === 'contractStakeAction').args.mode).toBe('unstake');
+    });
+
+    it('the Staking form Action switches a network stake to DELEGATE v0 on the validator wire', async () => {
+        const { calls } = await driveThroughConfirm({
+            Form: StakeForm,
+            props: {},
+            steps: [
+                (u) => fireEvent.click(u.getByRole('button', { name: 'Action: Stake' })),
+                (u) => {
+                    // Only the network's own five actions are offered.
+                    expect(u.getAllByRole('option').map((o) => o.textContent))
+                        .toEqual(['Stake', 'Unstake', 'Claim', 'Delegate', 'Revoke']);
+                    fireEvent.click(u.getByRole('option', { name: 'Delegate' }));
+                },
+            ],
+            actionLabel: 'Delegate Signing Key',
+            fill: (utils) => setValue(utils, 'New signing pubkey', 'c'.repeat(64)),
+        });
+        expectSingleEncode(calls, {
+            action: 'DELEGATE',
+            params: { VERSION: '0', NEW_SIGNING_PUBKEY: 'c'.repeat(64) },
+            submitMethod: 'delegateAction',
+        });
+    });
+
     it('ContractStakeForm composes STAKE v3 and signs the prebuilt PSBT', async () => {
         const { calls } = await driveThroughConfirm({
             Form: ContractStakeForm,
@@ -695,7 +767,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             actionLabel: 'Stake',
             fill: (utils) => {
                 // `tick` defaults to XCHAIN, the gas token.
-                setValue(utils, 'Signing public key', 'd'.repeat(64));
+                setValue(utils, 'Signing Key', 'd'.repeat(64));
                 setValue(utils, /^Amount/, '3');
             },
         });
@@ -759,7 +831,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             props: {},
             actionLabel: 'Sign Action',
             fill: (utils) => {
-                fireEvent.change(utils.getByLabelText('Action'), { target: { value: 'BROADCAST' } });
+                selectOption(utils.getByLabelText('Action'), 'BROADCAST');
             },
         });
         const submit = expectSingleEncode(calls, {
@@ -780,12 +852,12 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const approveButton = (utils) => Array.from(utils.container.querySelectorAll('button'))
             .find((button) => /approve/i.test(button.textContent || ''));
 
-        it('keeps Approve disabled for DESTROY until DESTROY is typed', async () => {
+        it('holds Approve for DESTROY until DESTROY is typed, saying why on a tap (G130)', async () => {
             const { utils } = await mountFilledForm({
                 Form: AdvancedActionsForm,
                 props: fieldsFor(['TICK', 'AMOUNT']),
                 fill: (u) => {
-                    fireEvent.change(u.getByLabelText('Action'), { target: { value: 'DESTROY' } });
+                    selectOption(u.getByLabelText('Action'), 'DESTROY');
                 },
             });
             await domAct(async () => { await drainMicrotasks(); });
@@ -793,22 +865,33 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             setValue(utils, 'AMOUNT', '5');
             await clickAction(utils, 'Sign Action');
 
-            expect(approveButton(utils).disabled).toBe(true);
+            // Approve keeps its colour; a tap before the word is typed is
+            // answered at the top of the page instead of signing.
+            const held = async () => {
+                expect(approveButton(utils).disabled).toBe(false);
+                await domAct(async () => {
+                    fireEvent.click(approveButton(utils));
+                    await drainMicrotasks();
+                });
+                expect(utils.getByTestId('confirm-blocked').textContent).toBe('Finish the step above Approve, then approve.');
+            };
+            await held();
             await domAct(async () => {
                 setValue(utils, 'Type "DESTROY" to confirm', 'destroy');
                 await drainMicrotasks();
             });
-            expect(approveButton(utils).disabled).toBe(true);
+            await held();
             await domAct(async () => {
                 setValue(utils, 'Type "DESTROY" to confirm', ' DESTROY ');
                 await drainMicrotasks();
             });
-            expect(approveButton(utils).disabled).toBe(true);
+            await held();
             await domAct(async () => {
                 setValue(utils, 'Type "DESTROY" to confirm', 'DESTROY');
                 await drainMicrotasks();
             });
             expect(approveButton(utils).disabled).toBe(false);
+            expect(utils.queryByTestId('confirm-blocked')).toBeNull();
         });
 
         it('asks for no typed word on an action that can be undone', async () => {
@@ -816,7 +899,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                 Form: AdvancedActionsForm,
                 props: fieldsFor([]),
                 fill: (u) => {
-                    fireEvent.change(u.getByLabelText('Action'), { target: { value: 'BROADCAST' } });
+                    selectOption(u.getByLabelText('Action'), 'BROADCAST');
                 },
             });
             await clickAction(utils, 'Sign Action');
@@ -876,9 +959,11 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             fireEvent.click(utils.getByRole('button', { name: 'Issue Token' }));
             await drainMicrotasks();
         });
-        // Watcher mode reviews the decoded ISSUE, then builds the unsigned transaction.
+        // Watcher mode uses the same Confirm Standard, then builds the unsigned transaction.
+        expect(utils.getByTestId('confirm-sentence')).toHaveTextContent('Issue');
+        expect(utils.getByRole('button', { name: 'Reject' })).toBeTruthy();
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Create Transaction for Signing' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Approve' }));
             await drainMicrotasks();
         });
 
@@ -898,7 +983,8 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: AirdropForm,
             props: { initialChainId: CHAIN, initialTick: 'JDOG' },
-            actionLabel: /^Sign address list/,
+            actionLabel: null,
+            approveCount: 2,
             steps: [
                 (utils) => {
                     setValue(utils, /^Per-recipient amount/, '5');
@@ -944,7 +1030,8 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                     }]),
                 },
             },
-            actionLabel: /^Sign airdrop/,
+            actionLabel: null,
+            approveCount: 2,
         });
         expectSingleEncode(calls, {
             action: 'AIRDROP',
@@ -981,7 +1068,8 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                     }]),
                 },
             },
-            actionLabel: /^Sign airdrop/,
+            actionLabel: null,
+            approveCount: 2,
         });
         const submit = expectSingleEncode(calls, { action: 'AIRDROP', submitMethod: 'airdropAction' });
         const compose = calls.find((c) => c.method === 'composeForConfirm');
@@ -1040,7 +1128,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: SellOwnershipForm,
             props: { tick: 'JDOG', messagingOverrides: OWNED_JDOG },
-            actionLabel: 'List Name for Sale',
+            actionLabel: 'List Ownership for Sale',
             fill: (utils) => setValue(utils, /^Price/, '5'),
         });
         expectSingleEncode(calls, {
@@ -1064,7 +1152,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
                 },
             },
             steps: [
-                (utils) => fireEvent.change(utils.getByLabelText('Action'), { target: { value: 'SEND' } }),
+                (utils) => selectOption(utils.getByLabelText('Action'), 'SEND'),
                 (utils) => fireEvent.click(utils.getByRole('button', { name: 'Review 1 Transaction' })),
             ],
             actionLabel: 'Sign Batch',
@@ -1089,7 +1177,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
             await drainMicrotasks();
         });
         for (const step of [
-            (u) => fireEvent.change(u.getByLabelText('Action'), { target: { value: 'SEND' } }),
+            (u) => selectOption(u.getByLabelText('Action'), 'SEND'),
             (u) => fireEvent.click(u.getByRole('button', { name: 'Review 1 Transaction' })),
         ]) {
             // eslint-disable-next-line no-await-in-loop
@@ -1252,10 +1340,11 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         const { calls } = await driveThroughConfirm({
             Form: PollDetail,
             props: { pollIndex: 7 },
-            actionLabel: 'Vote',
+            actionLabel: 'Sign Vote',
+            // The Yes row opens Cast Vote with Yes chosen, whose Sign Vote
+            // leads to the confirm screen.
             fill: (utils) => {
-                // Approval mode: tick the first option.
-                fireEvent.click(utils.getByRole('checkbox', { name: '0: Yes' }));
+                fireEvent.click(utils.getByRole('button', { name: 'Vote for Yes' }));
             },
         });
 
@@ -1645,8 +1734,16 @@ function expectFailureBesideAction(utils, spec, shown, hidden) {
     const message = utils.getByText(shown);
     const action = utils.getByRole('button', { name: spec.actionLabel });
     // The failure shows in the form's one status slot, just above the action,
-    // never a box inside a section or another form's.
-    expect(action.closest('form').querySelector('[data-form-status]')).toContainElement(message);
+    // never a box inside a section or another form's. A Form Standard form on
+    // the form error standard (Issue, Dispenser: `form.fail`) lists it in its
+    // one error notice at the top of the page instead (G23 as revised by the
+    // Notice Standard, G120).
+    const errorNotice = message.closest('[data-form-errors]');
+    if (errorNotice) {
+        expect(errorNotice).toHaveAttribute('data-tone', 'danger');
+    } else {
+        expect(action.closest('form').querySelector('[data-form-status]')).toContainElement(message);
+    }
     expect(utils.container.textContent || '').not.toContain(hidden);
     spec.expectValues(utils);
 }
@@ -1674,7 +1771,7 @@ describe.each(PROTOCOL_FAILURE_FORMS)('$name form submit failures', (spec) => {
         expectFailureBesideAction(utils, spec, reason, 'Encoder RPC error');
 
         await clickAction(utils, spec.actionLabel);
-        expect(utils.container.querySelector('[data-testid="confirm-source"]')).toBeTruthy();
+        expect(utils.container.querySelector('[data-testid="confirm-facts"]')).toBeTruthy();
         expect(compose).toHaveBeenCalledTimes(2);
         await clickAction(utils, 'Reject');
     });

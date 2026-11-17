@@ -137,7 +137,7 @@ describe('main screen rendering', () => {
         expectVisibleCopyResolved(view.container);
     });
 
-    it('offers the first action from an empty Contacts screen', async () => {
+    it('offers Add contact from the title bar of an empty Contacts screen', async () => {
         const messaging = {
             listContacts: vi.fn().mockResolvedValue([]),
         };
@@ -150,7 +150,7 @@ describe('main screen rendering', () => {
         );
 
         expect(await screen.findByText('Saved contacts label addresses across the inbox and history.')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
         expect(screen.getByRole('heading', { name: 'New Contact' })).toBeTruthy();
         expectEveryButtonNamed(view.container);
         expectVisibleCopyResolved(view.container);

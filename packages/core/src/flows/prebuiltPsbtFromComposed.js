@@ -35,9 +35,20 @@ export function prebuiltPsbtFromComposed(composed) {
         // refuses the commit unsigned if either did not arrive.
         revealPsbt: composed.revealPsbt || null,
         envelope: composed.envelope || null,
-        // The donation verdict these bytes actually carry, so the submit path
-        // books from compose time rather than a fresh settings snapshot.
-        adsDonation: { included: !!composed.adsPlan?.canSubmit },
+        // The donation verdict these bytes actually carry, with the fiat amount
+        // and currency it settles, so the submit path books from compose time
+        // rather than a fresh settings snapshot. `reservationId` is the review
+        // claim the compose took on the queue, which the submit takes over.
+        adsDonation: composed.adsPlan?.canSubmit
+            ? {
+                included: true,
+                fiat: composed.adsPlan.donationFiat ?? null,
+                currency: composed.adsPlan.currency ?? null,
+                ...(typeof composed.adsPlan.reservationId === 'string' && composed.adsPlan.reservationId
+                    ? { reservationId: composed.adsPlan.reservationId }
+                    : {}),
+            }
+            : { included: false, fiat: null, currency: null },
         // The encoder's compression report for these exact bytes, so the
         // success screen can state the size actually stored on chain.
         compression: composed.compression || null,

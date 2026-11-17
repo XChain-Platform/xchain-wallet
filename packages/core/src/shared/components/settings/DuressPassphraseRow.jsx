@@ -52,11 +52,14 @@ import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
 import '../../../i18n/locales/en/verifySignature.js';
 
-export function DuressPassphraseRow() {
+// `direct` is the Duress passphrase page of its own: with no passphrase set it
+// lands straight on the form (no Set button first, no Cancel; Back leaves).
+export function DuressPassphraseRow({ direct = false } = {}) {
     const { messaging } = useMessaging();
     const [configured, setConfigured] = useState(isDuressConfigured());
     const [saveStatus, setSaveStatus] = useState(getDuressSaveStatus);
-    const [showForm, setShowForm] = useState(false);
+    const [showFormState, setShowForm] = useState(false);
+    const showForm = showFormState || (direct && !configured);
     const [currentPassword, setCurrentPassword] = useState('');
     const [pass, setPass] = useState('');
     const [confirm, setConfirm] = useState('');
@@ -166,7 +169,7 @@ export function DuressPassphraseRow() {
                             {t('settings.duress.configuredEnteringThisPassphraseOn')}
                         </span>
                     </div>
-                    <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={<Icon.XIcon />} onClick={handleClear}>
+                    <Button ref={swap.target} type="button" size="sm" variant="secondary" icon={<Icon.XIcon />} onClick={handleClear}>
                         {t('settings.biometric.disable')}
                     </Button>
                 </div>
@@ -179,7 +182,7 @@ export function DuressPassphraseRow() {
             <SettingsInlineForm
                 error={error}
                 recovery={retryRef.current ? { label: t('common.tryAgain'), onAction: retryRef.current } : undefined}
-                onCancel={cancelForm}
+                onCancel={direct ? undefined : cancelForm}
                 cancelDisabled={busy}
             >
                 <FormPage
@@ -230,22 +233,27 @@ export function DuressPassphraseRow() {
                         aria-label={t('settings.duress.confirmDuressPassphrase')}
                     />
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--xc-space-2)' }}>
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            icon={<Icon.XIcon />}
-                            onClick={cancelForm}
-                            disabled={busy}
-                        >
-                            {t('common.cancel')}
-                        </Button>
+                        {direct ? null : (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                icon={<Icon.XIcon />}
+                                onClick={cancelForm}
+                                disabled={busy}
+                            >
+                                {t('common.cancel')}
+                            </Button>
+                        )}
                         <Button
                             type="submit"
-                            size="sm"
+                            size={direct ? 'md' : 'sm'}
+                            block={direct}
                             variant="success"
                             icon={<Icon.SaveIcon />}
-                            disabled={busy || currentPassword.length === 0 || pass.length === 0 || confirm.length === 0}
+                            // G130: never disabled for missing input; the press
+                            // names what is missing (attemptSet's messages).
+                            disabled={busy}
                         >
                             {busy ? t('verifySignature.verifying') : t('settings.safety.savePassphrase')}
                         </Button>
@@ -264,7 +272,7 @@ export function DuressPassphraseRow() {
                     {t('settings.duress.aSecondPasswordThatIf')}
                 </span>
             </div>
-            <Button ref={swap.target} type="button" size="sm" variant="ghost" style={COMPACT_CONTROL} icon={<Icon.KeyIcon />} onClick={() => setShowForm(true)}>
+            <Button ref={swap.target} type="button" size="sm" variant="secondary" style={COMPACT_CONTROL} icon={<Icon.KeyIcon />} onClick={() => setShowForm(true)}>
                 {t('settings.duress.set')}
             </Button>
         </div>

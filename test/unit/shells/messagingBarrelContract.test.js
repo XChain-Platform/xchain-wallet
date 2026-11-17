@@ -36,6 +36,16 @@ const { webSend, desktopSend, popupSend, webLocals } = vi.hoisted(() => {
         createWalletLocal: vi.fn(),
         importMnemonicLocal: vi.fn(),
         importBackupLocal: vi.fn(),
+        // PC-16 Phase B: the Locked screen's auto pay status and Stop.
+        getLockedAutopayStatus: vi.fn(),
+        stopLockedAutopay: vi.fn(),
+        // A first hardware wallet: created, and its balances read, before any host exists.
+        createHardwareWalletLocal: vi.fn(),
+        hardwareBalancesLocal: vi.fn(),
+        // Forgot Password (operator ruling 2026-11-16), with the vault closed.
+        recoveryStatusLocal: vi.fn(),
+        resetPasswordWithPhraseLocal: vi.fn(),
+        verifyBackupForRestoreLocal: vi.fn(),
     };
     return {
         webSend: vi.fn(),
@@ -79,6 +89,10 @@ const TRANSPORT_RE_EXPORTS = new Set(['sendMessage', 'getSessionStatus']);
 // message name to compare against the other shells.
 const WEB_LOCAL_HELPERS = new Set([
     'unlockWallet', 'lockWallet', 'createWallet', 'importMnemonic', 'importBackupFresh',
+    'lockedAutopayStatus', 'stopLockedAutopay',
+    'createHardwareWallet', 'hardwareBalances',
+    // Forgot Password (operator ruling 2026-11-16): pre-host on the other shells.
+    'recoveryStatus', 'resetPasswordWithPhrase', 'verifyBackupForRestore',
 ]);
 
 // One argument fixture, passed to every helper in every position. Carrying

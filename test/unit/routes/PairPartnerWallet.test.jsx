@@ -6,26 +6,22 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Behavioural test for the §20.5 watcher <-> signer pairing lane.
+// Behavioural test for the §20.5 two-phone pairing lane, "Use another phone
+// as a signer" in Settings, Advanced.
 //
 // Drives the real component through role -> seed -> exchange -> done and
 // asserts the wiring that the flow-level unit test cannot see: that the
-// picked role reaches the host on every pairing request (the payload's
-// mode is what the partner's complement check reads), that the imported
-// walletId is threaded through, and that a failed pairing surfaces the
-// host's reason instead of silently advancing.
-//
-// Also pins the Onboarding entry point: the fourth lane only renders when
-// the shell wires `onPairPartner`.
+// shared phrase is ADDED to the open vault under its own password, that the
+// picked role reaches the host on every pairing request (the payload's mode
+// is what the partner's complement check reads), that the added walletId is
+// threaded through, and that a failed pairing surfaces the host's reason
+// instead of silently advancing.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act, within } from '@testing-library/react';
 import React from 'react';
 import { PairPartnerWallet } from '../../../packages/core/src/shared/routes/PairPartnerWallet.jsx';
-import pairStyles from '../../../packages/core/src/shared/routes/PairPartnerWallet.module.css';
-import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import {
     buildPairingPayload,
@@ -37,6 +33,9 @@ import { setNativeQrScanner } from '../../../packages/core/src/ui/nativeQrScanne
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const LEGACY_PHRASE = 'explode gaze wolf admit nice charm except three any guitar into color';
 const PASSWORD = 'correct-horse-battery';
+const PAGE_TITLE = 'Phone Signer';
+const WATCHER_ROLE = /^Sign on another phone/;
+const SIGNER_ROLE = /^Make this phone the signer/;
 const PARTNER_CODE = encodePairingPayload(buildPairingPayload({
     walletMode: 'signer',
     label: 'Cold signer',
@@ -52,7 +51,8 @@ const PARTNER_CODE = encodePairingPayload(buildPairingPayload({
 
 function mkMessaging(overrides = {}) {
     return {
-        importMnemonic: vi.fn(async () => ({ wallet: { id: 'w-1' } })),
+        addImportedWallet: vi.fn(async () => ({ wallet: { id: 'w-1' } })),
+        importMnemonic: vi.fn(async () => ({ wallet: { id: 'w-first-run' } })),
         pairingPayloadRequest: vi.fn(async () => ({
             encoded: 'XCW-PAIR:ZmFrZQ',
             payload: { keys: [{ chainId: 'bitcoin-mainnet', keyId: 'ab'.repeat(32) }] },
@@ -82,14 +82,18 @@ function fill(labelRe, value) {
     fireEvent.change(screen.getByLabelText(labelRe, { selector: 'input, textarea' }), { target: { value } });
 }
 
+// Fills the phrase step: the shared phrase and the open vault's password.
+function fillSeed(phrase = PHRASE) {
+    fill(/Shared recovery phrase/i, phrase);
+    fill(/^Wallet password$/i, PASSWORD);
+}
+
 // Walk role -> seed -> exchange. Returns once the exchange stage's own
 // payload fetch has settled.
-async function reachExchange(messaging, roleButtonRe = /pair a signer/i) {
+async function reachExchange(messaging, roleButtonRe = WATCHER_ROLE) {
     mount(messaging);
     fireEvent.click(screen.getByRole('button', { name: roleButtonRe }));
-    fill(/Shared recovery phrase/i, PHRASE);
-    fill(/^Password for this device$/i, PASSWORD);
-    fill(/Confirm password/i, PASSWORD);
+    fillSeed();
     await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
     });
@@ -120,48 +124,56 @@ function fakeNativeScanner() {
 async function openPartnerScanner() {
     fireEvent.click(screen.getByRole('button', { name: /Scan the other wallet's QR/i }));
     await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /Scan With Camera/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Scan with Camera/ }));
     });
 }
 
 describe('PairPartnerWallet: role stage', () => {
     it('opens with the overview and keeps each role description with its button', () => {
         mount(mkMessaging());
+        // G01: the step count is the header subtitle, before the overview.
         const step = screen.getByText('Step 1 of 4');
-        const overview = screen.getByText('You are pairing an online wallet with an offline one.');
+        expect(step).toHaveAttribute('aria-current', 'step');
+        const overview = screen.getByText('You are pairing this phone with a second phone that keeps the keys offline.');
         expect(step.compareDocumentPosition(overview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(overview).toHaveClass(pairStyles.fullWidthText);
+        const overviewNotice = overview.closest('[data-tone="info"]');
+        expect(overviewNotice).toHaveTextContent('How Pairing Works');
 
-        const watcher = screen.getByRole('button', { name: /This device watches\. Pair a signer/i });
-        expect(watcher.nextElementSibling).toHaveTextContent(
-            'This device stays online. It holds no keys that can sign, builds transactions, and shows balances.',
+        const watcher = screen.getByRole('button', { name: WATCHER_ROLE });
+        expect(watcher).toHaveTextContent(
+            'This phone stays online. It holds no keys that can sign, builds transactions, and shows balances.',
         );
-        expect(watcher.nextElementSibling).toHaveClass(pairStyles.fullWidthText);
-        const signer = screen.getByRole('button', { name: /This device signs\. Pair a watcher/i });
-        expect(signer.nextElementSibling).toHaveTextContent(
-            'This device stays offline. It holds the recovery phrase and signs transactions the watcher builds.',
+        const signer = screen.getByRole('button', { name: SIGNER_ROLE });
+        expect(signer).toHaveTextContent(
+            'This phone stays offline. It holds the recovery phrase and signs transactions the other phone builds.',
         );
-        expect(signer.nextElementSibling).toHaveClass(pairStyles.fullWidthText);
+        expect(screen.getByRole('list', { name: 'Phone signer roles' })).toContainElement(watcher);
+        expect(within(watcher.closest('li')).queryAllByRole('button')).toHaveLength(1);
         expect(screen.getByText(/Write the recovery phrase down once/)).toBeInTheDocument();
+    });
+
+    it('uses no offline signer, watcher or watch-only wording', () => {
+        const { container } = mount(mkMessaging());
+        expect(container.textContent).not.toMatch(/offline signer|watcher|watch-only/i);
+        fireEvent.click(screen.getByRole('button', { name: SIGNER_ROLE }));
+        expect(container.textContent).not.toMatch(/offline signer|watcher|watch-only/i);
     });
 
     it('renders every forward action as a successful icon button', async () => {
         const messaging = mkMessaging();
         mount(messaging);
 
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        fireEvent.click(screen.getByRole('button', { name: WATCHER_ROLE }));
         const continueButton = screen.getByRole('button', { name: 'Continue' });
         expect(continueButton).toHaveClass(buttonStyles.success);
         expect(continueButton.querySelector('svg')).not.toBeNull();
 
-        fill(/Shared recovery phrase/i, PHRASE);
-        fill(/^Password for this device$/i, PASSWORD);
-        fill(/Confirm password/i, PASSWORD);
+        fillSeed();
         await act(async () => {
             fireEvent.click(continueButton);
         });
 
-        const pairButton = screen.getByRole('button', { name: 'Pair a Signer' });
+        const pairButton = screen.getByRole('button', { name: 'Pair the Signer Phone' });
         expect(pairButton).toHaveClass(buttonStyles.success);
         expect(pairButton.querySelector('svg')).not.toBeNull();
         fill(/Paste the other wallet's code/i, PARTNER_CODE);
@@ -176,26 +188,27 @@ describe('PairPartnerWallet: role stage', () => {
 
     it('offers both halves of the pair', () => {
         mount(mkMessaging());
-        expect(screen.getByRole('button', { name: /This device watches\. Pair a signer/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /This device signs\. Pair a watcher/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: WATCHER_ROLE })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: SIGNER_ROLE })).toBeInTheDocument();
     });
 
-    it('titles the role screen Pair an offline signer', () => {
+    it('uses a short Title Case page title', () => {
         mount(mkMessaging());
-        expect(screen.getByRole('heading', { name: 'Pair an Offline Signer' })).toBeInTheDocument();
-        expect(screen.queryByText(/Pair a partner wallet/i)).toBeNull();
+        expect(screen.getByRole('heading', { name: PAGE_TITLE })).toBeInTheDocument();
+        expect(screen.queryByText(/Pair an offline signer/i)).toBeNull();
     });
 
-    it('titles the screen for the picked role', () => {
-        mount(mkMessaging());
-        fireEvent.click(screen.getByRole('button', { name: /pair a watcher/i }));
-        expect(screen.getByText('Pair a Watcher')).toBeInTheDocument();
+    it('keeps the page title after a role is picked and names the partner on the pair button', async () => {
+        await reachExchange(mkMessaging(), SIGNER_ROLE);
+        expect(screen.getByRole('heading', { name: PAGE_TITLE })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Pair the Other Phone' })).toBeInTheDocument();
+        expect(screen.getByText("Other phone's code")).toBeInTheDocument();
     });
 
     it('reports progress through the pairing steps', () => {
         mount(mkMessaging());
         expect(screen.getByText('Step 1 of 4')).toHaveAttribute('aria-current', 'step');
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        fireEvent.click(screen.getByRole('button', { name: WATCHER_ROLE }));
         expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
     });
 
@@ -213,103 +226,122 @@ describe('PairPartnerWallet: role stage', () => {
 });
 
 describe('PairPartnerWallet: seed stage', () => {
+    it('asks for the open wallet password once, with no new password or confirm field', () => {
+        mount(mkMessaging());
+        fireEvent.click(screen.getByRole('button', { name: WATCHER_ROLE }));
+        expect(screen.getByRole('note')).toHaveTextContent('Shared Phrase');
+        expect(screen.getByLabelText(/^Wallet password$/i)).toHaveAttribute('type', 'password');
+        expect(screen.queryByLabelText(/Confirm password/i)).toBeNull();
+        expect(screen.queryByLabelText(/Password for this device/i)).toBeNull();
+    });
+
     it('rejects a phrase with the wrong word count before touching the host', () => {
         const messaging = mkMessaging();
         mount(messaging);
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
-        fill(/Shared recovery phrase/i, 'abandon abandon about');
-        fill(/^Password for this device$/i, PASSWORD);
-        fill(/Confirm password/i, PASSWORD);
+        fireEvent.click(screen.getByRole('button', { name: WATCHER_ROLE }));
+        fillSeed('abandon abandon about');
         fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
-        expect(screen.getByRole('alert')).toHaveTextContent(/got 3/);
-        expect(messaging.importMnemonic).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(/got 3/);
+        expect(messaging.addImportedWallet).not.toHaveBeenCalled();
     });
 
-    it('rejects mismatched passwords before touching the host', () => {
+    it('asks for the wallet password before touching the host', () => {
         const messaging = mkMessaging();
         mount(messaging);
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        fireEvent.click(screen.getByRole('button', { name: WATCHER_ROLE }));
         fill(/Shared recovery phrase/i, PHRASE);
-        fill(/^Password for this device$/i, PASSWORD);
-        fill(/Confirm password/i, 'something-else');
         fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
-        expect(screen.getByRole('alert')).toHaveTextContent(/do not match/i);
-        expect(messaging.importMnemonic).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Enter your wallet password.');
+        expect(messaging.addImportedWallet).not.toHaveBeenCalled();
     });
 
     it('refuses a phrase that only the legacy format accepts', () => {
         const messaging = mkMessaging();
         mount(messaging);
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
-        fill(/Shared recovery phrase/i, LEGACY_PHRASE);
-        fill(/^Password for this device$/i, PASSWORD);
-        fill(/Confirm password/i, PASSWORD);
+        fireEvent.click(screen.getByRole('button', { name: WATCHER_ROLE }));
+        fillSeed(LEGACY_PHRASE);
 
         fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
 
-        expect(screen.getByRole('alert')).toHaveTextContent(/From FreeWallet/);
-        expect(messaging.importMnemonic).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(/Choose FreeWallet/);
+        expect(messaging.addImportedWallet).not.toHaveBeenCalled();
     });
 
-    it('imports the shared phrase and requests this wallet\'s pairing code', async () => {
+    it('adds the shared phrase to the open vault and requests this wallet\'s pairing code', async () => {
         const messaging = mkMessaging();
         await reachExchange(messaging);
 
-        expect(messaging.importMnemonic).toHaveBeenCalledWith(
+        expect(messaging.addImportedWallet).toHaveBeenCalledWith(
             // §20: the picked role is the new wallet's own mode.
             expect.objectContaining({ mnemonic: PHRASE, password: PASSWORD, format: 'bip39', walletMode: 'watcher' }),
         );
+        // The vault is open, so the first-run import is never used.
+        expect(messaging.importMnemonic).not.toHaveBeenCalled();
         // The role rides along on the request: the host persists walletMode
         // in the same call that reads the keys, so a payload can never
         // advertise a mode the wallet is not in.
         expect(messaging.pairingPayloadRequest).toHaveBeenCalledWith(
-            expect.objectContaining({ walletId: 'w-1', walletMode: 'watcher' }),
+            expect.objectContaining({ walletId: 'w-1', walletMode: 'watcher', password: PASSWORD }),
         );
     });
 
-    it('surfaces an import failure instead of advancing', async () => {
-        const messaging = mkMessaging({
-            importMnemonic: vi.fn(async () => { throw new Error('vault is busy'); }),
-        });
+    it('adds the signer half in signer mode', async () => {
+        const messaging = mkMessaging();
+        await reachExchange(messaging, SIGNER_ROLE);
+        expect(messaging.addImportedWallet).toHaveBeenCalledWith(
+            expect.objectContaining({ walletMode: 'signer' }),
+        );
+    });
+
+    it('reports a shell that cannot add a wallet', async () => {
+        const messaging = mkMessaging({ addImportedWallet: undefined });
         await reachExchange(messaging);
-        expect(screen.getByRole('alert')).toHaveTextContent(/vault is busy/);
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Adding a wallet is not available in this shell.');
+        expect(messaging.importMnemonic).not.toHaveBeenCalled();
         expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
     });
 
-    it('explains a refused concurrent import', async () => {
+    it('surfaces an add failure instead of advancing', async () => {
         const messaging = mkMessaging({
-            importMnemonic: vi.fn(async () => {
+            addImportedWallet: vi.fn(async () => { throw new Error('vault is busy'); }),
+        });
+        await reachExchange(messaging);
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(/vault is busy/);
+        expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
+    });
+
+    it('explains a refused concurrent add', async () => {
+        const messaging = mkMessaging({
+            addImportedWallet: vi.fn(async () => {
                 throw Object.assign(new Error('stale write'), { name: 'VaultConflictError' });
             }),
         });
         await reachExchange(messaging);
-        expect(screen.getByRole('alert')).toHaveTextContent(
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(
             'This wallet changed in another window. Nothing was lost. Reload to see the latest, then try again.',
         );
         expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
     });
 
-    it('hides a flow-prefixed precondition behind the import failure copy', async () => {
+    it('hides a flow-prefixed precondition behind the add failure copy', async () => {
         const messaging = mkMessaging({
-            importMnemonic: vi.fn(async () => { throw new Error('importMnemonic: password is required'); }),
+            addImportedWallet: vi.fn(async () => { throw new Error('importMnemonic: password is required'); }),
         });
         await reachExchange(messaging);
-        expect(screen.getByRole('alert')).toHaveTextContent('Could not import the recovery phrase.');
-        expect(screen.getByRole('alert')).not.toHaveTextContent(/importMnemonic:/);
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Could not add the recovery phrase as a wallet.');
+        expect(screen.getByRole('alert', { name: 'Form errors' })).not.toHaveTextContent(/importMnemonic:/);
     });
 
-    it.each(['', '    '])('imports under the default name when the name field holds %j', async (typed) => {
+    it.each(['', '    '])('adds under the default name when the name field holds %j', async (typed) => {
         const messaging = mkMessaging();
         mount(messaging);
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
-        fill(/Wallet name/i, typed);
-        fill(/Shared recovery phrase/i, PHRASE);
-        fill(/^Password for this device$/i, PASSWORD);
-        fill(/Confirm password/i, PASSWORD);
+        fireEvent.click(screen.getByRole('button', { name: WATCHER_ROLE }));
+        fill(/^Wallet name$/i, typed);
+        fillSeed();
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
         });
-        expect(messaging.importMnemonic).toHaveBeenCalledWith(
+        expect(messaging.addImportedWallet).toHaveBeenCalledWith(
             expect.objectContaining({ name: 'Paired Wallet' }),
         );
         expect(messaging.pairingPayloadRequest).toHaveBeenCalledWith(
@@ -318,70 +350,37 @@ describe('PairPartnerWallet: seed stage', () => {
     });
 
     it.each([
-        ['a named refusal', Object.assign(new Error('A wallet already exists. Unlock or reset first.'), { name: 'WalletExistsError' })],
-        ['a refusal passed as its message', new Error('A wallet already exists. Unlock or reset first.')],
-    ])('offers the existing wallet\'s unlock and clears the typed secrets after %s', async (_label, refusal) => {
-        const messaging = mkMessaging({ importMnemonic: vi.fn(async () => { throw refusal; }) });
-        const onBack = vi.fn();
-        const onPaired = vi.fn();
-        mount(messaging, { onBack, onPaired });
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
-        fill(/Shared recovery phrase/i, PHRASE);
-        fill(/^Password for this device$/i, PASSWORD);
-        fill(/Confirm password/i, PASSWORD);
-        await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
-        });
-
-        expect(screen.getByRole('alert')).toHaveTextContent('This device already has a wallet');
-        expect(screen.getByLabelText(/Shared recovery phrase/i, { selector: 'textarea' })).toHaveValue('');
-        expect(screen.getByLabelText(/^Password for this device$/i)).toHaveValue('');
-        expect(screen.getByLabelText(/Confirm password/i)).toHaveValue('');
-        expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
-        expect(onPaired).toHaveBeenCalledOnce();
-        fireEvent.click(screen.getByRole('button', { name: /back/i }));
-        expect(onPaired).toHaveBeenCalledTimes(2);
-        expect(onBack).not.toHaveBeenCalled();
-    });
-
-    it.each([
         ['an invisible name', '​​​', 'Wallet name must include a visible character.'],
         ['an over-long name', 'N'.repeat(65), 'Wallet name must be 64 characters or fewer.'],
-    ])('refuses %s before importing the shared phrase', async (_label, typed, message) => {
+    ])('refuses %s before adding the shared phrase', async (_label, typed, message) => {
         const messaging = mkMessaging();
         mount(messaging);
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
-        fill(/Wallet name/i, typed);
-        fill(/Shared recovery phrase/i, PHRASE);
-        fill(/^Password for this device$/i, PASSWORD);
-        fill(/Confirm password/i, PASSWORD);
+        fireEvent.click(screen.getByRole('button', { name: WATCHER_ROLE }));
+        fill(/^Wallet name$/i, typed);
+        fillSeed();
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
         });
-        expect(screen.getByRole('alert')).toHaveTextContent(message);
-        expect(messaging.importMnemonic).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(message);
+        expect(messaging.addImportedWallet).not.toHaveBeenCalled();
     });
 
-    it('imports a name of exactly 64 characters', async () => {
+    it('adds a name of exactly 64 characters', async () => {
         const messaging = mkMessaging();
         mount(messaging);
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
-        fill(/Wallet name/i, 'N'.repeat(64));
-        fill(/Shared recovery phrase/i, PHRASE);
-        fill(/^Password for this device$/i, PASSWORD);
-        fill(/Confirm password/i, PASSWORD);
+        fireEvent.click(screen.getByRole('button', { name: WATCHER_ROLE }));
+        fill(/^Wallet name$/i, 'N'.repeat(64));
+        fillSeed();
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
         });
-        expect(messaging.importMnemonic).toHaveBeenCalledWith(expect.objectContaining({ name: 'N'.repeat(64) }));
+        expect(messaging.addImportedWallet).toHaveBeenCalledWith(expect.objectContaining({ name: 'N'.repeat(64) }));
     });
 
     it('refuses to continue when the shell returns no wallet id', async () => {
-        const messaging = mkMessaging({ importMnemonic: vi.fn(async () => ({})) });
+        const messaging = mkMessaging({ addImportedWallet: vi.fn(async () => ({})) });
         await reachExchange(messaging);
-        expect(screen.getByRole('alert')).toHaveTextContent(/no wallet id/i);
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(/no wallet id/i);
         expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
     });
 });
@@ -392,12 +391,17 @@ describe('PairPartnerWallet: exchange stage', () => {
         const codeBox = screen.getByText('XCW-PAIR:ZmFrZQ');
         expect(codeBox).toBeInTheDocument();
         expect(codeBox).toContainElement(screen.getByRole('button', { name: 'Copy Pairing Code' }));
+        const notice = screen.getByRole('note');
+        expect(notice).toHaveTextContent('Public Codes');
+        expect(notice.compareDocumentPosition(codeBox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /Pairing codes contain public keys only/ })).toBeNull();
+        expect(screen.getByText("Signer phone's code")).toBeInTheDocument();
     });
 
     // A default wallet has three mainnet chains and a ~1900-character
     // pairing code, which is past what one QR frame can carry. The lane used to
-    // answer that by drawing NO QR and telling the user to copy text - across an
-    // air gap, which is the one thing that has no clipboard. It now chunks.
+    // answer that by drawing NO QR and telling the user to copy text - between
+    // two phones, which is the one thing that has no shared clipboard. It now chunks.
     it('chunks a long code across frames instead of dropping the QR', async () => {
         const long = `XCW-PAIR:${'A'.repeat(1900)}`;
         await reachExchange(mkMessaging({
@@ -422,8 +426,8 @@ describe('PairPartnerWallet: exchange stage', () => {
     it('requires a partner code before calling the host', async () => {
         const messaging = mkMessaging();
         await reachExchange(messaging);
-        fireEvent.click(screen.getByRole('button', { name: 'Pair a Signer' }));
-        expect(screen.getByRole('alert')).toHaveTextContent(/Paste or scan/i);
+        fireEvent.click(screen.getByRole('button', { name: 'Pair the Signer Phone' }));
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(/Paste or scan/i);
         expect(messaging.pairPartnerRequest).not.toHaveBeenCalled();
     });
 
@@ -431,9 +435,9 @@ describe('PairPartnerWallet: exchange stage', () => {
         const messaging = mkMessaging();
         await reachExchange(messaging);
         fill(/Paste the other wallet's code/i, 'https://example.test/not-a-pairing-code');
-        fireEvent.click(screen.getByRole('button', { name: 'Pair a Signer' }));
-        expect(screen.getByRole('alert')).toHaveTextContent(/invalid or incomplete/i);
-        expect(screen.getByLabelText(/Paste the other wallet's code/i)).toHaveAttribute('aria-invalid', 'true');
+        fireEvent.click(screen.getByRole('button', { name: 'Pair the Signer Phone' }));
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(/invalid or incomplete/i);
+        expect(screen.getByLabelText(/Paste the other wallet's code/i, { selector: 'textarea' })).toHaveAttribute('aria-invalid', 'true');
         expect(messaging.pairPartnerRequest).not.toHaveBeenCalled();
     });
 
@@ -443,11 +447,11 @@ describe('PairPartnerWallet: exchange stage', () => {
         await openPartnerScanner();
 
         act(() => { state.onValue('https://example.test/not-a-pairing-code'); });
-        expect(screen.getByRole('alert')).toHaveTextContent(/invalid or incomplete/i);
-        expect(screen.getByRole('button', { name: /Scan With Camera/i })).toBeInTheDocument();
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(/invalid or incomplete/i);
+        expect(screen.getByRole('button', { name: /Scan with Camera/ })).toBeInTheDocument();
 
         act(() => { state.onValue(PARTNER_CODE); });
-        expect(screen.getByLabelText(/Paste the other wallet's code/i)).toHaveValue(PARTNER_CODE);
+        expect(screen.getByLabelText(/Paste the other wallet's code/i, { selector: 'textarea' })).toHaveValue(PARTNER_CODE);
         expect(screen.queryByText(/invalid or incomplete/i)).not.toBeInTheDocument();
     });
 
@@ -463,7 +467,7 @@ describe('PairPartnerWallet: exchange stage', () => {
         for (const frame of frames.slice(1)) {
             act(() => { state.onValue(frame); });
         }
-        expect(screen.getByLabelText(/Paste the other wallet's code/i)).toHaveValue(PARTNER_CODE);
+        expect(screen.getByLabelText(/Paste the other wallet's code/i, { selector: 'textarea' })).toHaveValue(PARTNER_CODE);
         expect(screen.queryByText(/Pairing frames received:/i)).not.toBeInTheDocument();
     });
 
@@ -473,7 +477,7 @@ describe('PairPartnerWallet: exchange stage', () => {
         await reachExchange(messaging);
         fill(/Paste the other wallet's code/i, frames.join('\n'));
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Pair a Signer' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Pair the Signer Phone' }));
         });
         expect(messaging.pairPartnerRequest).toHaveBeenCalledWith(
             expect.objectContaining({ partner: PARTNER_CODE }),
@@ -485,8 +489,8 @@ describe('PairPartnerWallet: exchange stage', () => {
         const frames = encodeXcwChunks(new TextEncoder().encode(PARTNER_CODE), { chunkBytes: 64 });
         await reachExchange(messaging);
         fill(/Paste the other wallet's code/i, frames[0]);
-        fireEvent.click(screen.getByRole('button', { name: 'Pair a Signer' }));
-        expect(screen.getByRole('alert')).toHaveTextContent(`received 1 of ${frames.length} frames`);
+        fireEvent.click(screen.getByRole('button', { name: 'Pair the Signer Phone' }));
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(`received 1 of ${frames.length} frames`);
         expect(messaging.pairPartnerRequest).not.toHaveBeenCalled();
     });
 
@@ -495,7 +499,7 @@ describe('PairPartnerWallet: exchange stage', () => {
         await reachExchange(messaging);
         fill(/Paste the other wallet's code/i, `  ${PARTNER_CODE}  `);
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Pair a Signer' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Pair the Signer Phone' }));
         });
         expect(messaging.pairPartnerRequest).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -504,6 +508,7 @@ describe('PairPartnerWallet: exchange stage', () => {
                 partner: PARTNER_CODE,
             }),
         );
+        expect(screen.getByRole('status')).toHaveTextContent('Phones Paired');
         expect(screen.getByRole('status')).toHaveTextContent(/same recovery phrase/i);
         expect(screen.getByText(/Matching networks: bitcoin-mainnet/)).toBeInTheDocument();
     });
@@ -517,10 +522,10 @@ describe('PairPartnerWallet: exchange stage', () => {
         await reachExchange(messaging);
         fill(/Paste the other wallet's code/i, PARTNER_CODE);
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Pair a Signer' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Pair the Signer Phone' }));
         });
-        expect(screen.getByRole('alert')).toHaveTextContent(/different recovery phrases/);
-        expect(screen.getByRole('button', { name: 'Pair a Signer' })).toBeInTheDocument();
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(/different recovery phrases/);
+        expect(screen.getByRole('button', { name: 'Pair the Signer Phone' })).toBeInTheDocument();
     });
 
     it('shows a refusal without the flow name in front of it', async () => {
@@ -532,20 +537,18 @@ describe('PairPartnerWallet: exchange stage', () => {
         await reachExchange(messaging);
         fill(/Paste the other wallet's code/i, PARTNER_CODE);
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Pair a Signer' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Pair the Signer Phone' }));
         });
-        expect(screen.getByRole('alert')).not.toHaveTextContent(/pairPartner:/);
+        expect(screen.getByRole('alert', { name: 'Form errors' })).not.toHaveTextContent(/pairPartner:/);
     });
 
-    it('lands through onPaired when Back leaves after the phrase was imported', async () => {
+    it('lands through onPaired when Back leaves after the phrase was added', async () => {
         const messaging = mkMessaging();
         const onBack = vi.fn();
         const onPaired = vi.fn();
         mount(messaging, { onBack, onPaired });
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
-        fill(/Shared recovery phrase/i, PHRASE);
-        fill(/^Password for this device$/i, PASSWORD);
-        fill(/Confirm password/i, PASSWORD);
+        fireEvent.click(screen.getByRole('button', { name: WATCHER_ROLE }));
+        fillSeed();
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
         });
@@ -557,23 +560,15 @@ describe('PairPartnerWallet: exchange stage', () => {
     it('fires onPaired from the confirmation screen', async () => {
         const messaging = mkMessaging();
         const onPaired = vi.fn();
-        render(
-            React.createElement(
-                MessagingProvider,
-                { shell: 'web', messaging },
-                React.createElement(PairPartnerWallet, { onPaired }),
-            ),
-        );
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
-        fill(/Shared recovery phrase/i, PHRASE);
-        fill(/^Password for this device$/i, PASSWORD);
-        fill(/Confirm password/i, PASSWORD);
+        mount(messaging, { onPaired });
+        fireEvent.click(screen.getByRole('button', { name: WATCHER_ROLE }));
+        fillSeed();
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
         });
         fill(/Paste the other wallet's code/i, PARTNER_CODE);
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Pair a Signer' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Pair the Signer Phone' }));
         });
         fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
         expect(onPaired).toHaveBeenCalled();
@@ -582,18 +577,15 @@ describe('PairPartnerWallet: exchange stage', () => {
     it('steps Back from the phrase step to the role step and clears the typed secrets', () => {
         const onBack = vi.fn();
         mount(mkMessaging(), { onBack });
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
-        fill(/Shared recovery phrase/i, PHRASE);
-        fill(/^Password for this device$/i, PASSWORD);
-        fill(/Confirm password/i, PASSWORD);
+        fireEvent.click(screen.getByRole('button', { name: WATCHER_ROLE }));
+        fillSeed();
         fireEvent.click(screen.getByRole('button', { name: /back/i }));
 
         expect(onBack).not.toHaveBeenCalled();
         expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: /pair a watcher/i }));
+        fireEvent.click(screen.getByRole('button', { name: SIGNER_ROLE }));
         expect(screen.getByLabelText(/Shared recovery phrase/i, { selector: 'textarea' })).toHaveValue('');
-        expect(screen.getByLabelText(/^Password for this device$/i)).toHaveValue('');
-        expect(screen.getByLabelText(/Confirm password/i)).toHaveValue('');
+        expect(screen.getByLabelText(/^Wallet password$/i)).toHaveValue('');
         fireEvent.click(screen.getByRole('button', { name: /back/i }));
         fireEvent.click(screen.getByRole('button', { name: /back/i }));
         expect(onBack).toHaveBeenCalledOnce();
@@ -603,16 +595,14 @@ describe('PairPartnerWallet: exchange stage', () => {
         const messaging = mkMessaging();
         const onBack = vi.fn();
         mount(messaging, { onBack });
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
-        fill(/Shared recovery phrase/i, PHRASE);
-        fill(/^Password for this device$/i, PASSWORD);
-        fill(/Confirm password/i, PASSWORD);
+        fireEvent.click(screen.getByRole('button', { name: WATCHER_ROLE }));
+        fillSeed();
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
         });
         fill(/Paste the other wallet's code/i, PARTNER_CODE);
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Pair a Signer' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Pair the Signer Phone' }));
         });
         fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
         expect(onBack).toHaveBeenCalledOnce();
@@ -622,33 +612,5 @@ describe('PairPartnerWallet: exchange stage', () => {
         const messaging = mkMessaging({ pairingPayloadRequest: undefined });
         await reachExchange(messaging);
         expect(screen.getByRole('alert')).toHaveTextContent(/not available in this shell/i);
-    });
-});
-
-describe('Onboarding: pairing lane entry point', () => {
-    function mountOnboarding(props = {}) {
-        globalThis.localStorage.setItem('xc:licenseAcceptedAt', new Date().toISOString());
-        globalThis.localStorage.setItem('xc:licenseAcceptedVersion', LICENSE_VERSION);
-        globalThis.localStorage.setItem('xc:onboardingExplainerSeenAt', new Date().toISOString());
-        return render(
-            React.createElement(
-                MessagingProvider,
-                { shell: 'web', messaging: {} },
-                React.createElement(Onboarding, { onCreate() {}, onImport() {}, ...props }),
-            ),
-        );
-    }
-
-    it('offers the pairing lane when the shell wires it', () => {
-        const onPairPartner = vi.fn();
-        mountOnboarding({ onPairPartner });
-        const btn = screen.getByRole('button', { name: /Pair an Offline Signer/i });
-        fireEvent.click(btn);
-        expect(onPairPartner).toHaveBeenCalled();
-    });
-
-    it('hides the lane in a shell that does not wire it', () => {
-        mountOnboarding();
-        expect(screen.queryByRole('button', { name: /Pair an Offline Signer/i })).not.toBeInTheDocument();
     });
 });

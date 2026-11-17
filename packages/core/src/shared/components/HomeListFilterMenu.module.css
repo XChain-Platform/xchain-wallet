@@ -2,6 +2,11 @@
     /* The touch control height in every shell, matching the framed
        tab row beside it (Tabs.module.css) and the app bar. */
     --xc-control-h-md: 44px;
+    /* The G112 field-icon insets resolve on :root from the root height, so
+       the panel's fields (search, sort) re-derive them from this one. */
+    --xc-field-icon-inset-md: calc((var(--xc-control-h-md) - var(--xc-control-icon-md)) / 2);
+    --xc-field-glyph-inset-md: calc((var(--xc-control-h-md) - var(--xc-icon-md)) / 2);
+    --xc-field-action-inset-md: calc((var(--xc-control-h-md) - var(--xc-tap-min)) / 2);
     position: relative;
     flex: 0 0 auto;
 }

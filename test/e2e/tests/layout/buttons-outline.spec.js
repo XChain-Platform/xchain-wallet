@@ -80,7 +80,7 @@ for (const viewport of VIEWPORTS) {
         await page.goto('/');
         await dismissIntroCarousel(page);
         await record('welcome');
-        for (const name of ['Import wallet', 'From FreeWallet']) {
+        for (const name of ['Import wallet', 'Import FreeWallet']) {
             const opener = page.getByRole('button', { name }).first();
             if (await opener.count() === 0) continue;
             await opener.click();

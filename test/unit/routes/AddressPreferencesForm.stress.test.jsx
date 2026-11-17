@@ -124,16 +124,15 @@ function clickReview() {
 }
 
 async function continueToConfirm(target) {
-    await screen.findByRole('form', { name: 'Review preferences' });
-    const button = screen.getByRole('button', { name: /Continue to Confirmation|Build Unsigned Transaction/ });
+    await screen.findByTestId('confirm-modal');
+    const button = screen.getByRole('button', { name: 'Approve' });
     fireEvent.click(button);
     await vi.waitFor(() => expect(target.composeForConfirm).toHaveBeenCalled());
     return target.composeForConfirm.mock.calls[0][0].actionData;
 }
 
 function reviewText() {
-    const form = screen.getByRole('form', { name: 'Review preferences' });
-    return form.textContent;
+    return screen.getByTestId('confirm-modal').textContent;
 }
 
 function expectWireShape(params) {
@@ -161,7 +160,7 @@ describe('AddressPreferencesForm input', () => {
             const { target } = mount();
             await typeMemo(value);
             clickReview();
-            expect(await screen.findByRole('form', { name: 'Review preferences' })).toBeTruthy();
+            expect(await screen.findByTestId('confirm-modal')).toBeTruthy();
             expect(reviewText()).toContain(value);
             const actionData = await continueToConfirm(target);
             expect(actionData.action).toBe('ADDRESS');
@@ -185,7 +184,7 @@ describe('AddressPreferencesForm input', () => {
             await typeMemo(value);
             clickReview();
             expect(await screen.findByText(message)).toBeTruthy();
-            expect(screen.queryByRole('form', { name: 'Review preferences' })).toBeNull();
+            expect(screen.queryByTestId('confirm-modal')).toBeNull();
             expect(target.getAddressPreferences).toHaveBeenCalledTimes(1);
             expect(target.composeForConfirm).not.toHaveBeenCalled();
         });
@@ -195,7 +194,7 @@ describe('AddressPreferencesForm input', () => {
         const { target } = mount();
         await typeMemo('   hello world   ');
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
+        await screen.findByTestId('confirm-modal');
         expect(screen.getByText('hello world')).toBeTruthy();
         const actionData = await continueToConfirm(target);
         expect(actionData.params.MEMO).toBe('hello world');
@@ -205,7 +204,7 @@ describe('AddressPreferencesForm input', () => {
         const { target } = mount();
         const memo = await typeMemo('line one\nline two\r\nthree');
         clickReview();
-        const reviewOpen = await screen.findByRole('form', { name: 'Review preferences' }).catch(() => null);
+        const reviewOpen = await screen.findByTestId('confirm-modal').catch(() => null);
         if (!reviewOpen) {
             expect(target.composeForConfirm).not.toHaveBeenCalled();
             return;
@@ -243,8 +242,11 @@ describe('AddressPreferencesForm input', () => {
         pick(DISPENSER_FIELD, 'Anyone');
         await typeMemo('all set');
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
-        expect(screen.getByText('Destroy the fee (reduces supply) - CHANGED')).toBeTruthy();
+        await screen.findByTestId('confirm-modal');
+        expect(screen.getByText('Destroy the fee (reduces supply) - changed')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
+        expect(screen.getByTestId('confirm-summary-notice')).toHaveTextContent('All three preferences');
+        expect(screen.queryByText(/Estimate unavailable/)).toBeNull();
         const actionData = await continueToConfirm(target);
         expect(actionData.params).toEqual({
             FEE_PREFERENCE: '1', REQUIRE_MEMO: '1', DISPENSER_PREFERENCE: '2', MEMO: 'all set',
@@ -277,14 +279,14 @@ describe('AddressPreferencesForm races', () => {
         fireEvent.click(review);
         fireEvent.click(review);
         expect(target.getAddressPreferences).toHaveBeenCalledTimes(2);
-        await screen.findByRole('form', { name: 'Review preferences' });
-        const button = screen.getByRole('button', { name: /Continue to Confirmation/ });
+        await screen.findByTestId('confirm-modal');
+        const button = screen.getByRole('button', { name: 'Approve' });
         fireEvent.click(button);
         fireEvent.click(button);
         await vi.waitFor(() => expect(target.composeForConfirm).toHaveBeenCalled());
         await act(async () => { await Promise.resolve(); });
         expect(target.composeForConfirm).toHaveBeenCalledTimes(1);
-        expect(screen.getAllByRole('form', { name: 'Review preferences' })).toHaveLength(1);
+        expect(screen.getAllByTestId('confirm-modal')).toHaveLength(1);
     });
 
     it('a field changed while Review reads the baseline is the value review shows and compose writes', async () => {
@@ -295,8 +297,8 @@ describe('AddressPreferencesForm races', () => {
         clickReview();
         pick(FEE_FIELD, 'Destroy (reduces supply)');
         await act(async () => { held.resolve(DEFAULTS); await held.promise; });
-        await screen.findByRole('form', { name: 'Review preferences' });
-        expect(screen.getByText('Destroy the fee (reduces supply) - CHANGED')).toBeTruthy();
+        await screen.findByTestId('confirm-modal');
+        expect(screen.getByText('Destroy the fee (reduces supply) - changed')).toBeTruthy();
         const actionData = await continueToConfirm(target);
         expect(actionData.params.FEE_PREFERENCE).toBe('1');
     });
@@ -316,9 +318,9 @@ describe('AddressPreferencesForm races', () => {
             await typeMemo(late);
             await act(async () => { held.resolve(DEFAULTS); await held.promise; });
             expect(await screen.findByText(message)).toBeTruthy();
-            expect(screen.queryByRole('form', { name: 'Review preferences' })).toBeNull();
+            expect(screen.queryByTestId('confirm-modal')).toBeNull();
             // No continue button exists outside review, so nothing can compose.
-            expect(screen.queryByRole('button', { name: /Continue to Confirmation|Build Unsigned Transaction/ })).toBeNull();
+            expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
             expect(target.composeForConfirm).not.toHaveBeenCalled();
         });
     }
@@ -331,16 +333,16 @@ describe('AddressPreferencesForm races', () => {
         const view = render(element(target, ADDRESS));
         await screen.findByRole('button', { name: /^Update preferences$/i });
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
+        await screen.findByTestId('confirm-modal');
         view.rerender(element(target, OTHER));
         await act(async () => { await Promise.resolve(); });
-        const reviewOpen = screen.queryByRole('form', { name: 'Review preferences' });
+        const reviewOpen = screen.queryByTestId('confirm-modal');
         if (reviewOpen) {
             // Still in review: it must name the new address and compose must
             // send from the address the review names. The review shortens an
             // address to its head and tail, so the tail is what it shows.
             expect(reviewText()).toContain('Destroy the fee');
-            const button = screen.getByRole('button', { name: /Continue to Confirmation/ });
+            const button = screen.getByRole('button', { name: 'Approve' });
             fireEvent.click(button);
             await vi.waitFor(() => expect(target.composeForConfirm).toHaveBeenCalled());
             const call = target.composeForConfirm.mock.calls[0][0];
@@ -363,7 +365,7 @@ describe('AddressPreferencesForm network reads', () => {
         });
         expect(await screen.findByText('HTTP 500')).toBeTruthy();
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
+        await screen.findByTestId('confirm-modal');
         expect(target.getAddressPreferences).toHaveBeenCalledTimes(2);
         const actionData = await continueToConfirm(target);
         expect(actionData.params).toEqual({ FEE_PREFERENCE: '1', REQUIRE_MEMO: '1', DISPENSER_PREFERENCE: '2' });
@@ -379,7 +381,7 @@ describe('AddressPreferencesForm network reads', () => {
         expect(await screen.findByText(/Could not re-check the current on-chain values: timeout/)).toBeTruthy();
         expect(target.composeForConfirm).not.toHaveBeenCalled();
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
+        await screen.findByTestId('confirm-modal');
     });
 
     for (const [name, value] of [['null', null], ['a string', '<html>'], ['an array', []]]) {
@@ -436,7 +438,7 @@ describe('AddressPreferencesForm lifecycle', () => {
         const view = render(element(target));
         await typeMemo('before lock');
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
+        await screen.findByTestId('confirm-modal');
         // A lock replaces the route; unlock mounts it fresh.
         view.unmount();
         const again = render(element(target));
@@ -444,7 +446,7 @@ describe('AddressPreferencesForm lifecycle', () => {
         expect(target.composeForConfirm).not.toHaveBeenCalled();
         const before = target.getAddressPreferences.mock.calls.length;
         clickReview();
-        await screen.findByRole('form', { name: 'Review preferences' });
+        await screen.findByTestId('confirm-modal');
         expect(target.getAddressPreferences.mock.calls.length).toBe(before + 1);
         expect(screen.queryByText('before lock')).toBeNull();
         again.unmount();
@@ -461,7 +463,7 @@ describe('AddressPreferencesForm lifecycle', () => {
         await act(async () => { held.resolve(ALL_SET); await held.promise; });
         render(element(target));
         await screen.findByRole('button', { name: /^Update preferences$/i });
-        expect(screen.queryByRole('form', { name: 'Review preferences' })).toBeNull();
+        expect(screen.queryByTestId('confirm-modal')).toBeNull();
         expect(target.composeForConfirm).not.toHaveBeenCalled();
     });
 });

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useRef, useState } from 'react';
-import { AddressText, Checkbox, InfoTip } from '@xchain-wallet/core/ui';
+import { AddressText, Checkbox } from '@xchain-wallet/core/ui';
 import styles from './DerivationPathCrossCheck.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
@@ -86,13 +86,7 @@ export function DerivationPathCrossCheck({
             <dl className={styles.grid}>
                 <dt className={styles.label}>{t('signerSelect.title')}</dt>
                 <dd className={styles.value}>{signerName}</dd>
-                <dt className={styles.label}>
-                    {t('multisig.share.derivationPath')}
-                    <InfoTip
-                        aria={t('components.derivationPathCrossCheck.derivationPathHelpLabel')}
-                        label={t('components.derivationPathCrossCheck.locatesThisAccountWithinYour')}
-                    />
-                </dt>
+                <dt className={styles.label}>{t('multisig.share.derivationPath')}</dt>
                 <dd className={styles.value}><code className={styles.path}>{path}</code></dd>
                 <dt className={styles.label}>{t('verifySignature.address')}</dt>
                 <dd className={styles.value}><AddressText address={address} /></dd>
@@ -114,6 +108,7 @@ export function DerivationPathCrossCheck({
                 <Checkbox
                     className={styles.confirmRow}
                     label={t('components.derivationPathCrossCheck.iVeVerifiedThePath', { deviceLabel })}
+                    help={t('components.derivationPathCrossCheck.verifiedHelp')}
                     checked={confirmed}
                     onChange={handleToggle}
                 />

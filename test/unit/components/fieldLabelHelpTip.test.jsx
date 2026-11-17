@@ -46,7 +46,8 @@ const FIELD_CASES = [
     {
         name: 'Select',
         label: 'Network',
-        selector: 'select',
+        // Select renders the themed dropdown trigger, never a native select (ruling G96).
+        selector: '[data-xc-select]',
         help: 'Choose the network for this transaction.',
         renderField: (props = {}) => (
             <Select label="Network" optional defaultValue="mainnet" {...props}>

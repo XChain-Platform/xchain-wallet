@@ -97,7 +97,7 @@ vi.mock('../../../packages/core/src/shared/components/ActionConfirmScreen.jsx', 
 
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
 
-const NOTICE = 'Auto-pay runs inside this wallet: a match is paid only while the wallet is open and unlocked.';
+const NOTICE = 'Auto pay runs inside this wallet: a match is paid while the wallet is open, even when it\'s locked.';
 
 function form() {
     return <CreateOrderForm walletId="wallet-1" onBack={vi.fn()} />;
@@ -105,13 +105,13 @@ function form() {
 
 async function renderWithNativeGive() {
     const utils = render(form());
-    await screen.findByDisplayValue('mSourceAddress');
+    await screen.findAllByDisplayValue('mSourceAddress');
     // The form opens giving a token for the coin; the flip makes the coin
     // the give side, which is the one auto-pay can arm.
     fireEvent.click(screen.getByRole('button', { name: 'Flip give and get' }));
     // The auto-pay switch sits in the optional Order Terms section, closed at first.
     fireEvent.click(screen.getByRole('button', { name: /Order Terms/ }));
-    expect(screen.getByRole('switch', { name: 'Enable auto-pay' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Auto pay' })).toBeChecked();
     return utils;
 }
 
@@ -152,9 +152,25 @@ describe('CreateOrderForm auto-pay notice', () => {
 
     it('carries no notice once auto-pay is switched off', async () => {
         const utils = await renderWithNativeGive();
-        fireEvent.click(screen.getByRole('switch', { name: 'Enable auto-pay' }));
+        fireEvent.click(screen.getByRole('switch', { name: 'Auto pay' }));
         openConfirm(utils);
         expect(state.confirmProps.summary?.notice).toBeUndefined();
+    });
+
+    // G120: the exposure note is a static note under the Auto pay switch, so
+    // flipping the switch never shows or hides it.
+    it('keeps the exposure note under Auto pay whether the switch is on or off', async () => {
+        await renderWithNativeGive();
+        const note = await screen.findByText(/auto pay could send\s+at most the combined amounts/);
+        const card = note.closest('[data-autopay-exposure-note]');
+        expect(card).toBeTruthy();
+        const toggle = screen.getByRole('switch', { name: 'Auto pay' });
+        fireEvent.click(toggle);
+        expect(toggle).not.toBeChecked();
+        expect(document.querySelector('[data-autopay-exposure-note]')).toBe(card);
+        fireEvent.click(toggle);
+        expect(toggle).toBeChecked();
+        expect(document.querySelector('[data-autopay-exposure-note]')).toBe(card);
     });
 
     it('carries no notice outside the web wallet, which keeps a background watcher', async () => {

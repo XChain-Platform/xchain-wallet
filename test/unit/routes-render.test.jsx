@@ -89,6 +89,7 @@ import { MessagingProvider } from '../../packages/core/src/shared/MessagingProvi
 import { publishWalletModes } from '../../packages/core/src/shared/hooks/useWalletMode.js';
 import { MintForm } from '../../packages/core/src/shared/routes/MintForm.jsx';
 import { DestroyForm } from '../../packages/core/src/shared/routes/DestroyForm.jsx';
+import { ORDER_KIND } from '../../packages/core/src/shared/routes/OrderActionPanel.jsx';
 import { createDefaultSettings } from '../../packages/core/src/schemas/settings.js';
 import {
     formatSmokeSummary,
@@ -166,7 +167,12 @@ const routeModules = import.meta.glob([
     // Split-out pieces of History.jsx are not routes; History.jsx renders them.
     '!../../packages/core/src/shared/routes/HistoryDetailCard.jsx',
     '!../../packages/core/src/shared/routes/HistoryEntryRow.jsx',
+    // ActionDetail.jsx renders this body with the entry it resolved.
+    '!../../packages/core/src/shared/routes/ActionDetailView.jsx',
     '!../../packages/core/src/shared/routes/HistoryShared.jsx',
+    // AddressList.jsx renders this View Address body with the row it selected;
+    // AddressDetail.test.jsx covers it with real props.
+    '!../../packages/core/src/shared/routes/AddressDetail.jsx',
 ]);
 
 // Layer 1 messaging: every property access yields a function returning a
@@ -245,7 +251,61 @@ const ROUTE_PROPS = {
         pools: [],
         bets: [],
     },
+    // My Orders' row, the Order detail body and its Edit and Cancel form are
+    // fed the order MyOrdersView or OrderDetail resolved; they read it on
+    // their first line.
+    'OrderRow.jsx': { item: orderItemFixture(), status: 'open' },
+    'OrderDetailBody.jsx': { item: orderItemFixture(), status: 'open', explorerUrl: null },
+    // OrderDetail hands the form its messaging as a prop, not through context;
+    // its reads stay pending, so a probe click never reaches the confirm page
+    // with an empty compose result.
+    'OrderActionPanel.jsx': {
+        type: 'cancel',
+        item: orderItemFixture(),
+        chainAddresses: [],
+        variant: 'popup',
+        messaging: new Proxy({}, { get: () => () => new Promise(() => {}) }),
+    },
+    // The shared Edit and Cancel frame both panels above draw; fed the
+    // order kind as OrderActionPanel hands it, so a direct probe draws the
+    // same Cancel Order form.
+    'TradeOwnerActionForm.jsx': {
+        kind: ORDER_KIND,
+        type: 'cancel',
+        item: orderItemFixture(),
+        chainAddresses: [],
+        variant: 'popup',
+        messaging: new Proxy({}, { get: () => () => new Promise(() => {}) }),
+    },
 };
+
+// One open, partly filled XCHAIN for BTC order this wallet placed.
+function orderItemFixture() {
+    const address = props.address;
+    return {
+        chainId: 'bitcoin-mainnet',
+        key: 'bitcoin-mainnet:1',
+        owner: { id: 'addr-1', address },
+        cancelledKeys: new Set(),
+        row: {
+            action_index: '1',
+            source: address,
+            status: 'valid',
+            give_tick: 'XCHAIN',
+            give_coin: '',
+            give_amount: '1000',
+            give_ownership: 0,
+            get_tick: '',
+            get_coin: 'BTC',
+            get_amount: '0.004',
+            get_ownership: 0,
+            tx_hash: 'a'.repeat(64),
+            expiration: 1893456000,
+            timestamp: 1763000000,
+        },
+        fill: { status: 'open', giveRemaining: '380', expiration: 1893456000 },
+    };
+}
 
 // Layer 1 (initial render): the crash sits on a module-level import or
 // singleton, so `is not a function` is a real defect, not prop noise.
@@ -595,7 +655,7 @@ async function mountActionForm(Form, { walletMode } = {}) {
     return { utils, calls };
 }
 
-// Drive a single-action form through the legacy review stage to submit,
+// Drive a single-action form through Confirm Standard to submit,
 // returning the recorded dispatches.
 //
 // slice 5: this path is now reached ONLY by watcher mode, which
@@ -608,15 +668,21 @@ async function driveActionFormToSubmit(Form, { walletMode, confirm } = {}) {
 
     const actionLabel = Form === MintForm ? 'Mint' : 'Destroy';
 
-    // Action -> review stage.
+    // Action -> Confirm Standard.
     await domAct(async () => {
         fireEvent.click(utils.getByRole('button', { name: actionLabel }));
         await drainMicrotasks();
     });
 
     expect(utils.getByText(
-        'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+        'Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
     )).toBeTruthy();
+    const standardConfirm = utils.queryByTestId('confirm-modal');
+    if (Form === DestroyForm) {
+        expect(standardConfirm).toBeTruthy();
+        expect(utils.getByTestId('confirm-sentence')).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Reject' })).toBeTruthy();
+    }
 
     // Typed-confirmation gate (DestroyForm), if present.
     if (confirm) {
@@ -629,13 +695,21 @@ async function driveActionFormToSubmit(Form, { walletMode, confirm } = {}) {
         }
     }
 
-    // Submit the review form via its (single) enabled submit button.
+    // Migrated routes use Approve. Mint's watcher adapter still uses its
+    // unsigned-transaction submit action and remains covered here until its
+    // separate Confirm Standard migration lands.
     await domAct(async () => {
-        const submitBtn = Array.from(utils.container.querySelectorAll('button'))
-            .filter((b) => b.type === 'submit' && !b.disabled)
-            .pop();
-        if (!submitBtn) throw new Error('no enabled submit button in review stage');
-        fireEvent.click(submitBtn);
+        if (standardConfirm) {
+            const approve = utils.getByTestId('confirm-approve');
+            if (approve.disabled) throw new Error('Approve is disabled on the confirm page');
+            fireEvent.click(approve);
+        } else {
+            const submitBtn = Array.from(utils.container.querySelectorAll('button'))
+                .filter((b) => b.type === 'submit' && !b.disabled)
+                .pop();
+            if (!submitBtn) throw new Error('no enabled unsigned-transaction action');
+            fireEvent.click(submitBtn);
+        }
         await drainMicrotasks();
     });
 

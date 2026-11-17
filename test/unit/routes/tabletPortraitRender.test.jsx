@@ -131,13 +131,12 @@ describe('primary routes at 768x1024', () => {
             hostMessaging,
         );
 
-        const actions = await screen.findByRole('group', { name: 'Quick actions' });
+        await screen.findAllByRole('tablist');
         expectRailNavigation(view.container);
         expectListPage(view.container);
-        // A demo wallet shows the same quick actions as a real one; this shell wires Exchange and no actions menu.
-        expect(within(actions).getAllByRole('button').map((button) => button.textContent.trim()))
-            .toEqual(['Send', 'Receive', 'Exchange']);
-        expect(screen.getByRole('button', { name: 'Exchange' })).toBeInTheDocument();
+        // Home has no quick action row; the rail holds Send and Receive.
+        expect(screen.queryByRole('group', { name: 'Quick actions' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Exchange' })).toBeNull();
     });
 
     it('renders Send in the shared form card with rail navigation', async () => {
@@ -207,7 +206,7 @@ describe('primary routes at 768x1024', () => {
 
         expectRailNavigation(view.container);
         expectListPage(view.container);
-        expect(screen.getByRole('searchbox', { name: 'Search settings' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Filter settings' })).toBeInTheDocument();
     });
 
     it('locks the portrait sizing rules to cards, list lanes, and the scrollbar gutter', () => {
@@ -217,7 +216,7 @@ describe('primary routes at 768x1024', () => {
         expect(screenCss).toMatch(/\.body\s*\{[^}]*overflow-y:\s*auto/s);
         expect(screenCss).toMatch(/@supports \(scrollbar-gutter: stable\)\s*\{\s*\.body\s*\{[^}]*scrollbar-gutter:\s*stable/s);
         expect(navCss).toMatch(/\.layout\[data-xc-tier='rail'\] \.sidebar\s*\{[^}]*flex:\s*0 0 64px/s);
-        expect(homeCss).toMatch(/\.quickActions\s*\{[^}]*grid-auto-columns:\s*minmax\(0, 5\.5rem\)/s);
+        expect(homeCss).not.toMatch(/\.quickActions/);
         expect(collectibleCss).toMatch(/@media \(min-width: 48rem\)[\s\S]*?\.grid\s*\{[^}]*minmax\(7\.5rem, 9rem\)/s);
     });
 });

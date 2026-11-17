@@ -112,7 +112,8 @@ assert.match(actionsSrc, /actionData: \{ action: 'BET', params \}/,
 
 {
     const src = read('packages', 'core', 'src', 'shared', 'routes', 'BetFeedDetail.jsx');
-    assert.match(src, /messaging\.composeBetForConfirm\(\{/,
+    // G98: the Advanced section's choices wrap the compose request.
+    assert.match(src, /messaging\.composeBetForConfirm\(withAdvancedOptions\(\{/,
         'BetFeedDetail composes through the BET builder route');
     assert.ok(src.includes("builder: 'placeBetParams'"), 'BetFeedDetail names the placeBetParams builder');
 
@@ -153,18 +154,24 @@ assert.match(actionsSrc, /actionData: \{ action: 'BET', params \}/,
 
     // Resolve is legal only between the deadline and the end of the refund
     // window, so the button is offered only where the chain would accept it
-    // rather than letting the user pay a fee for a rejected transaction.
-    assert.match(src, /canResolve\s*=\s*f\.feed_status === 'closed'/,
+    // rather than letting the user pay a fee for a rejected transaction. The
+    // rule is one exported function the console and the market page's owner
+    // Actions tab both ask.
+    assert.match(src, /canResolve:\s*status === 'closed'/,
         'OracleConsole only offers resolve once betting has closed');
-    assert.match(src, /Number\(f\.expire_at\) > nowSec/,
+    assert.match(src, /Number\(feed\?\.expire_at\) > nowSec/,
         'OracleConsole only offers resolve before the refund window ends');
+    const detailSrc = read('packages', 'core', 'src', 'shared', 'routes', 'BetFeedDetail.jsx');
+    assert.match(detailSrc, /oracleActionLegality\(ownerFeed, oracle\.nowSec\)/,
+        'the market page reuses the console legality rule rather than re-deriving it');
 }
 
 // --- 7. My bets aggregates across every address ------------------------
 
 {
-    // My bets is a Bet Markets tab: BetFeedsList reads the wallet's addresses
-    // once and BetMyBetsPanel's loader asks for each address's bets.
+    // My bets is a Bet Markets tab (the All list narrowed to the markets bet
+    // in): BetFeedsList reads the wallet's addresses once and the
+    // useWalletBets loader in BetMyBetsPanel.jsx asks for each address's bets.
     const list = read('packages', 'core', 'src', 'shared', 'routes', 'BetFeedsList.jsx');
     const panel = read('packages', 'core', 'src', 'shared', 'components', 'BetMyBetsPanel.jsx');
     // Address-aggregated, not active-address-scoped: bets are keyed to the
@@ -188,7 +195,8 @@ assert.match(decoderSrc, /function decodeBet\(/, 'the BET decoder exists');
 
 {
     const src = read('packages', 'core', 'src', 'shared', 'routes', 'CreateBetFeedForm.jsx');
-    assert.match(src, /messaging\.composeBetForConfirm\(\{/,
+    // G98: the Advanced section's choices wrap the compose request.
+    assert.match(src, /messaging\.composeBetForConfirm\(withAdvancedOptions\(\{/,
         'CreateBetFeedForm composes through the BET builder route');
     assert.ok(src.includes("builder: 'createMarketParams'"),
         'CreateBetFeedForm names the createMarketParams builder');
@@ -225,7 +233,8 @@ assert.match(decoderSrc, /function decodeBet\(/, 'the BET decoder exists');
 // submit an empty string.
 for (const route of ['BetFeedDetail', 'OracleConsole', 'CreateBetFeedForm']) {
     const src = read('packages', 'core', 'src', 'shared', 'routes', `${route}.jsx`);
-    assert.match(src, /import \{ ActionConfirmScreen \}/, `${route} imports the confirm page`);
+    // A route may also take the confirm screen's warnings card from it.
+    assert.match(src, /import \{ ActionConfirmScreen(?:, ActionWarningsCard)? \}/, `${route} imports the confirm page`);
     assert.match(src, /if \(actionConfirm\.open\)/, `${route} renders the confirm page it opens`);
     assert.match(src, /<ActionConfirmScreen/, `${route} renders ActionConfirmScreen`);
     assert.match(src, /passwordRef: passwordValueRef/,

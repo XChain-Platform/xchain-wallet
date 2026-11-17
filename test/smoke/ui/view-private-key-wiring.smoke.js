@@ -34,10 +34,14 @@ const routes = join(core, 'src', 'shared', 'routes');
 
 // The button copy lives in the English locale, read back in place of each t() call.
 const al = withEnglishCopy(readFileSync(join(routes, 'AddressList.jsx'), 'utf8'));
+// View Address (AddressDetail.jsx, rendered by AddressList) draws the tile.
+const detail = withEnglishCopy(readFileSync(join(routes, 'AddressDetail.jsx'), 'utf8'));
 assert.ok(/onShowPrivateKey/.test(al),
     'AddressList accepts an onShowPrivateKey prop');
-assert.ok(/Secret/.test(al),
-    'AddressList renders a "Secret" reveal affordance');
+assert.ok(/onShowSecret=\{\(\) => onShowPrivateKey\?\.\(selected\.record\)\}/.test(al),
+    'AddressList hands the record to the shell reveal screen, which keeps its password gate');
+assert.ok(/Secret/.test(detail),
+    'View Address renders a "Secret key" reveal affordance');
 // Multisig synthetic rows must NOT get the reveal button; the detail-view
 // gating expression (canSecret) requires selected.record AND !selected.multisig.
 assert.ok(/onShowPrivateKey\s*&&\s*selected\.record\s*&&\s*!selected\.multisig/.test(al),
@@ -46,8 +50,9 @@ assert.ok(/onShowPrivateKey\s*&&\s*selected\.record\s*&&\s*!selected\.multisig/.
 // that can never activate (the onReceive gating rule in the same file).
 // The handler gate is hoisted into canSecret, which also requires a record and
 // a non-multisig row (asserted above), so the button renders only under it.
-assert.ok(/\{canSecret \? \([\s\S]{0,600}?<span>Secret<\/span>/.test(al),
-    'AddressList renders the Secret button only when a handler was supplied');
+assert.ok(/canSecret=\{canSecret\}/.test(al)
+    && /\) : canSecret \? \([\s\S]{0,300}?onClick=\{onShowSecret\}[\s\S]{0,80}?Secret key/.test(detail),
+    'View Address renders the live Secret key tile only when a handler was supplied');
 
 // --- 2. Every shell imports + renders ViewPrivateKey --------------------
 

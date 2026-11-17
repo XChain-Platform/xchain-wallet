@@ -22,8 +22,8 @@
 // It mattered because the Subtoken template is the ONLY way to author a
 // subtoken at all - the Ticker field refuses a dot - so a grandchild was
 // uncreatable from the wallet rather than merely awkward. The template now
-// lives on the one Issue Token form (its Parent ticker field), which is what
-// these cases drive.
+// lives on the one Issue Token form (its Parent token field, a pick from the
+// tokens this wallet owns), which is what these cases drive.
 //
 // The parent field is a REFERENCE to something already on the ledger, which is
 // why D-168 widened it while leaving the child-name field alone. Both fields
@@ -43,6 +43,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 // The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
+import { ownedTokensFor, pickParentToken } from '../../helpers/issueParentPicker.js';
 
 const OWNER = 'bc1qownerownerownerownerownerownerownerow';
 const ADDRESSES = {
@@ -59,11 +60,14 @@ const ADDRESSES = {
 
 let messaging;
 
-function mountWizard() {
+function mountWizard(parent) {
     messaging = {
         getAddressesByChain: vi.fn().mockResolvedValue(ADDRESSES),
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
+        // The Parent token picker lists the case's parent as owned, so the
+        // grammar check at submit is what the refusal cases reach.
+        getOwnedTokens: ownedTokensFor(vi.fn, OWNER, [parent]),
         // Any parent is this wallet's; the full PARENT.CHILD tick is free.
         getTokenInfo: vi.fn(({ tick }) => Promise.resolve(
             tick.endsWith('.GRAND') ? {} : { creator: OWNER },
@@ -85,19 +89,18 @@ function mountWizard() {
 }
 
 /**
- * Pick the Subtoken template on the Issue Token form, then submit `parent` as
- * the parent ticker with a fixed child name.
+ * Pick the Subtoken template on the Issue Token form, choose `parent` on the
+ * Parent token picker, then submit with a fixed child name.
  *
  * Assertions read the form error off the screen afterwards. These values are
  * already uppercase: the subject here is the RULE, not any coercion.
  */
 async function submitParent(parent) {
-    mountWizard();
+    mountWizard(parent);
     fireEvent.click(await screen.findByRole('button', { name: /^Select template/ }));
     fireEvent.click(screen.getByRole('option', { name: /Subtoken/ }));
 
-    const parentField = await screen.findByLabelText('Parent ticker');
-    fireEvent.change(parentField, { target: { value: parent } });
+    await pickParentToken(parent);
     fireEvent.change(screen.getByLabelText('Subtoken name'), { target: { value: 'GRAND' } });
     fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
@@ -107,13 +110,13 @@ async function submitParent(parent) {
  * Any refusal this field can produce, so both directions assert on it.
  *
  * The rule lives in `shared/utils/tickerGrammar.js`, which names the field
- * and then the reason ("Parent ticker cannot start or end with a dot.",
- * "Parent ticker can only use ..."), so no single-sentence matcher covers
+ * and then the reason ("Parent token cannot start or end with a dot.",
+ * "Parent token can only use ..."), so no single-sentence matcher covers
  * every refusal. Anchored on the field noun plus the verb rather than on any
  * one reason: this test is about DEPTH, and it must not fail when a
  * different rule rewords itself.
  */
-const PARENT_RULE = /parent ticker (cannot|can only use|is required)/i;
+const PARENT_RULE = /parent token (cannot|can only use|is required)/i;
 
 async function composedTick() {
     await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
@@ -141,13 +144,15 @@ describe('Issue Token subtoken parent depth (D-168)', () => {
         // through would only move the refusal to a screen that costs a round
         // trip. The empty first segment is what the regex catches.
         await submitParent('.GAT530653');
-        expect(await screen.findByRole('alert')).toHaveTextContent(PARENT_RULE);
+        // The form error notice lists it; the Parent token field also says it
+        // under itself (the form error standard), so the notice is found by name.
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(PARENT_RULE);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('still refuses a trailing dot', async () => {
         await submitParent('GAT530653.');
-        expect(await screen.findByRole('alert')).toHaveTextContent(PARENT_RULE);
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(PARENT_RULE);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -155,7 +160,7 @@ describe('Issue Token subtoken parent depth (D-168)', () => {
         // `A..B` splits to an empty parent segment; the chain would read the
         // parent as `A.` and never find it.
         await submitParent('GAT..KID');
-        expect(await screen.findByRole('alert')).toHaveTextContent(PARENT_RULE);
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(PARENT_RULE);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

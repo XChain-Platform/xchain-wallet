@@ -119,7 +119,8 @@ describe('large wallet screens', () => {
         const startedAt = performance.now();
         const view = render(tree());
 
-        fireEvent.click(await screen.findByRole('tab', { name: 'Tokens' }));
+        // Balances opens on coins and tokens together (operator 2026-11-15).
+        await screen.findByRole('tab', { name: 'Balances' });
         await waitFor(() => {
             expect(view.container.querySelectorAll('[data-balance-key]').length).toBeGreaterThan(0);
         });

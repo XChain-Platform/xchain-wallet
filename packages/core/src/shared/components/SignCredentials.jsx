@@ -48,6 +48,7 @@ import '../../i18n/locales/en/components.js';
  * @param {(next: string) => void} [props.onPasswordChange]
  * @param {(state: { status: string, detail: string | null, refresh: () => void }) => void} [props.onStatusChange]
  * @param {React.Ref<HTMLInputElement>} [props.passwordRef]
+ * @param {string} [props.passwordFieldId] stable id used by a review form's error summary
  * @param {string | null} [props.submitError]
  * @param {boolean} [props.disabled]
  * @param {(opts: { signerId: string, chainId?: string }) => Promise<any>} [props.getSignerStatus]
@@ -64,6 +65,7 @@ export function SignCredentials({
     onPasswordChange,
     onStatusChange,
     passwordRef,
+    passwordFieldId,
     submitError,
     disabled,
     getSignerStatus,
@@ -128,6 +130,7 @@ export function SignCredentials({
         <PanicPasswordGate>
             <Input
                 ref={passwordRef}
+                id={passwordFieldId}
                 type="password"
                 label={t('common.password')}
                 help={t('components.messageConfirmScreen.requiredToSign')}

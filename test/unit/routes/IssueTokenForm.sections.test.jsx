@@ -6,6 +6,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
+
+// The Allow list and Block list fields are pickers (G114): a stand-in picker
+// offers list 41 for the allow list and 42 for the block list.
+vi.mock('../../../packages/core/src/shared/components/ListPickerScreen.jsx', async () => {
+    const ReactModule = await import('react');
+    return {
+        ListPickerScreen({ title, onSelect }) {
+            const index = /allow/i.test(title) ? '41' : '42';
+            return ReactModule.createElement(
+                'button',
+                { type: 'button', onClick: () => onSelect({ actionIndex: index, type: '2', memberCount: null }) },
+                `Pick list ${index}`,
+            );
+        },
+    };
+});
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import routeStyles from '../../../packages/core/src/shared/components/formStandard/formStandard.module.css';
@@ -70,7 +87,7 @@ describe('IssueTokenForm custom template sections', () => {
         const ids = headers.map((button) => button.parentElement.getAttribute('data-form-section'));
 
         // The standard order: From, Token (main), the optional
-        // sections, then Network fee.
+        // sections, then the shared Advanced section directly above Network fee.
         expect(ids).toEqual([
             'from',
             'token',
@@ -81,6 +98,7 @@ describe('IssueTokenForm custom template sections', () => {
             'lists',
             'callback',
             'ownership',
+            'advanced',
             'fee',
         ]);
         expect(headers.map((button) => button.querySelector(`.${routeStyles.sectionTitle}`).textContent)).toEqual([
@@ -93,7 +111,8 @@ describe('IssueTokenForm custom template sections', () => {
             'Allow and block lists',
             'Callback',
             'Transfer ownership',
-            'Network fee',
+            'Advanced',
+            'Speed and Fees',
         ]);
         // Irreversible sits in FormSection's tag slot, after Optional.
         const locks = headers[ids.indexOf('locks')];
@@ -113,9 +132,15 @@ describe('IssueTokenForm custom template sections', () => {
         expect(within(sectionHeader(container, 'publicMinting')).getByText('Not set')).toBeInTheDocument();
 
         const issueButton = screen.getByRole('button', { name: 'Issue Token' });
-        expect(issueButton).toBeDisabled();
+        // G22: the submit is enabled with Ticker empty; pressing it says what
+        // is missing and composes nothing.
+        expect(issueButton).not.toBeDisabled();
         expect(issueButton).toHaveClass(buttonStyles.success);
         expect(issueButton.querySelector('svg')).toBeInTheDocument();
+        fireEvent.click(issueButton);
+        expect((await screen.findAllByText('Ticker is required.')).length).toBeGreaterThan(0);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+        expect(sectionHeader(container, 'token')).toHaveAttribute('aria-expanded', 'true');
 
         const descriptionHeader = sectionHeader(container, 'description');
         fireEvent.click(descriptionHeader);
@@ -225,8 +250,11 @@ describe('IssueTokenForm custom template sections', () => {
         expect(within(headers[3]).getByText('7 locks on')).toBeInTheDocument();
 
         fireEvent.click(headers[4]);
-        fireEvent.change(screen.getByLabelText('Allow list'), { target: { value: '41' } });
-        fireEvent.change(screen.getByLabelText('Block list'), { target: { value: '42' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Allow list: None set' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick list 41' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Block list: None set' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick list 42' }));
+        expect(await screen.findByRole('button', { name: 'Block list: List #42' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
@@ -260,7 +288,7 @@ describe('IssueTokenForm custom template sections', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(
             'Max mint per transaction must be a positive number, or left blank for no limit.',
         );
         await waitFor(() => expect(publicMinting).toHaveAttribute('aria-expanded', 'true'));

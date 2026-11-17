@@ -97,6 +97,7 @@ const localizedRoutes = [
     'Receive.jsx',
     'Settings.jsx',
     'ActionDetail.jsx',
+    'ActionDetailView.jsx',
     'ActionsMenu.jsx',
     'AlertsRoute.jsx',
     'BridgeOriginBadge.jsx',
@@ -134,7 +135,6 @@ const PARTIAL_COPY_FILES = [
     '/routes/CoSignerPolicyEditor.jsx',
     '/routes/CoSignerProvision.jsx',
     '/routes/ContractFundsForm.jsx',
-    '/routes/ContractStakeForm.jsx',
     '/routes/ControllerBindForm.jsx',
     '/routes/CreateBetFeedForm.jsx',
     '/routes/CreateOrderForm.jsx',
@@ -142,7 +142,6 @@ const PARTIAL_COPY_FILES = [
     '/routes/CrossChainOrderForm.jsx',
     '/routes/CrossChainSwapForm.jsx',
     '/routes/DelegateVoteForm.jsx',
-    '/routes/DelegationActionForm.jsx',
     '/routes/DeployContractForm.jsx',
     '/routes/DestroyForm.jsx',
     '/routes/DispenserDetail.jsx',
@@ -150,8 +149,9 @@ const PARTIAL_COPY_FILES = [
     '/routes/DispenserForm.jsx',
     '/routes/DividendForm.jsx',
     '/routes/LinkForm.jsx',
+    // The one List form; its Edit, Share, Transfer and Fork bodies came from
+    // the four list action forms.
     '/routes/ListCreateForm.jsx',
-    '/routes/ListForkForm.jsx',
     '/routes/MarketsList.jsx',
     '/routes/MintForm.jsx',
     '/routes/MultisigSigningSession.jsx',
@@ -160,8 +160,8 @@ const PARTIAL_COPY_FILES = [
     '/routes/ParallelComposer.jsx',
     '/routes/SellOwnershipForm.jsx',
     '/routes/SleepForm.jsx',
-    '/routes/StakeForm.jsx',
-    '/routes/StakingActionForm.jsx',
+    // The one Staking form (contract and validator staking).
+    '/routes/StakingForm.jsx',
     '/routes/SwapForm.jsx',
     '/routes/SweepForm.jsx',
     '/routes/TokenAdminForm.jsx',
@@ -172,18 +172,16 @@ const PARTIAL_COPY_FILES = [
     '/components/BetMyBetsPanel.jsx',
     '/routes/AttachContentForm.jsx',
     '/routes/BetFeedDetail.jsx',
-    '/routes/ListRenameForm.jsx',
-    '/routes/ListShareForm.jsx',
-    '/routes/ListTransferForm.jsx',
     '/routes/MessagingInbox.jsx',
     '/routes/MultisigSendForm.jsx',
     '/routes/MyOrdersView.jsx',
+    // My Orders' Cancel and Edit form, moved out of MyOrdersView with its copy.
+    '/routes/OrderActionPanel.jsx',
     '/routes/MySwapsView.jsx',
     '/routes/OracleConsole.jsx',
     '/routes/PollDetail.jsx',
     '/routes/ProjectRosterForm.jsx',
     '/routes/PsbtSignForm.jsx',
-    '/routes/UnionListForm.jsx',
 ];
 
 describe('shipping JSX localization', () => {

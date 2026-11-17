@@ -37,9 +37,10 @@ it('titles a route with its heading in Title Case', () => {
     expect(titleOf('my-tokens')).toBe('XChain Wallet - My Tokens');
     expect(titleOf('mint-settings')).toBe('XChain Wallet - Mint Settings');
     expect(titleOf('pause-token')).toBe('XChain Wallet - Pause Token');
-    expect(titleOf('send-picker')).toBe('XChain Wallet - Send');
+    expect(titleOf('send-picker')).toBe('XChain Wallet - Asset');
     expect(titleOf('actions')).toBe('XChain Wallet - All Actions');
     expect(titleOf('parallel-compose')).toBe('XChain Wallet - Action Queue');
+    expect(titleOf('multisig-share')).toBe('XChain Wallet - Share Wallet as Cosigner');
     expect(titleOf('cosigner-accounts')).toBe('XChain Wallet - Agent Accounts');
     expect(titleOf('governance-polls')).toBe('XChain Wallet - Governance Polls');
     expect(titleOf('bet-markets')).toBe('XChain Wallet - Betting');
@@ -56,7 +57,10 @@ it('titles an onboarding step with the heading the step shows', () => {
     expect(documentTitleFor({ statusState: 'no-wallet', onboardingStep: 'welcome' }))
         .toBe('XChain Wallet - Welcome');
     expect(documentTitleFor({ statusState: 'no-wallet', onboardingStep: 'pair-partner' }))
-        .toBe('XChain Wallet - Pair an Offline Signer');
+        .toBe('XChain Wallet - Use Another Phone as a Signer');
+    // The pairing moved to Settings, Advanced, so the unlocked view has the same title.
+    expect(documentTitleFor({ statusState: 'unlocked', unlockedView: 'pair-partner' }))
+        .toBe('XChain Wallet - Use Another Phone as a Signer');
 
     const title = renderHook(() => useDocumentTitle({
         statusState: 'no-wallet',
@@ -123,7 +127,7 @@ it('titles screens with the heading the screen shows', () => {
     expect(titleOf('staking-dashboard')).toBe('XChain Wallet - Staking');
     expect(titleOf('markets')).toBe('XChain Wallet - Decentralized Exchange');
     expect(titleOf('market-activity')).toBe('XChain Wallet - Marketplace');
-    expect(titleOf('dispensers-list')).toBe('XChain Wallet - My Dispensers');
+    expect(titleOf('dispensers-list')).toBe('XChain Wallet - Dispensers');
     expect(titleOf('dispenser')).toBe('XChain Wallet - Create Dispenser');
     expect(titleOf('compose-message')).toBe('XChain Wallet - New Message');
     expect(titleOf('account-picker')).toBe('XChain Wallet - My Accounts');

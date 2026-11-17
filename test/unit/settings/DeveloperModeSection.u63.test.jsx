@@ -26,6 +26,9 @@ vi.mock('../../../packages/core/src/flows/regtestFaucet.js', () => ({
 const { DeveloperModeSection } = await import(
     '../../../packages/core/src/shared/components/settings/DeveloperModeSection.jsx'
 );
+const { AddNetworkPage, CustomNetworkFormPage, FaucetPage } = await import(
+    '../../../packages/core/src/shared/components/settings/TestNetworksPages.jsx'
+);
 
 function expectEveryActionButtonToHaveAnIcon() {
     const buttons = Array.from(document.querySelectorAll(`button.${buttonStyles.btn}`))
@@ -59,30 +62,45 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('DeveloperModeSection U57 and U63 controls', () => {
-    it('keeps the developer-off tool buttons icon-bearing', () => {
-        render(<DeveloperModeSection />);
+    it('opens each developer-off tool from a drill-in row with the chevron, not a grey button', () => {
+        const onNavigateToAdvanced = vi.fn();
+        render(<DeveloperModeSection onNavigateToAdvanced={onNavigateToAdvanced} onNavigateToActionQueue={() => {}} />);
 
         expect(screen.queryByText('Regtest faucet')).toBeNull();
-        expectEveryActionButtonToHaveAnIcon();
+        const row = screen.getByRole('button', { name: 'Open Advanced action' });
+        expect(row).not.toHaveClass(buttonStyles.btn);
+        expect(row.querySelector('[aria-hidden="true"] svg')).not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Open Action queue' })).toBeTruthy();
+        fireEvent.click(row);
+        expect(onNavigateToAdvanced).toHaveBeenCalledOnce();
     });
 
-    it('uses named success actions and icons throughout the developer-on forms', async () => {
-        settings = { ...settings, developerMode: true };
-        render(<DeveloperModeSection onNavigateToMint={() => {}} />);
+    it('leaves the tool rows to the Advanced page when asked', () => {
+        render(<DeveloperModeSection tools={false} onNavigateToAdvanced={() => {}} onNavigateToActionQueue={() => {}} />);
+        expect(screen.queryByRole('button', { name: /Advanced action/ })).toBeNull();
+    });
 
-        const faucetAction = screen.getByRole('button', { name: 'Get Test BTC' });
+    // The regtest faucet, activation and custom networks moved to the Test
+    // Networks pages (operator picks 2026-11-14); their actions keep the named
+    // green action with its icon.
+    it('uses named success actions and icons throughout the Test Networks forms', async () => {
+        settings = { ...settings, developerMode: true };
+        const view = render(<FaucetPage activeWallet={{ id: 'wallet-1' }} activeAccount={{ id: 'account-1' }} onNavigateToMint={() => {}} />);
+        const faucetAction = screen.getByRole('button', { name: 'Get Test Coins' });
         expect(faucetAction).toHaveClass(buttonStyles.success);
         expect(faucetAction.querySelector('svg')).not.toBeNull();
         expectEveryActionButtonToHaveAnIcon();
+        view.unmount();
 
-        fireEvent.click(screen.getAllByRole('button', { name: 'Activate…' })[0]);
-        const activationAction = screen.getByRole('button', { name: /^Activate / });
+        const picker = render(<AddNetworkPage activeWallet={{ id: 'wallet-1' }} />);
+        fireEvent.click(screen.getAllByRole('button', { name: /Activate with your password/ })[0]);
+        const activationAction = screen.getByRole('button', { name: 'Activate Network' });
         expect(activationAction).toHaveClass(buttonStyles.success);
-        expect(activationAction.textContent).not.toBe('Activate');
+        expect(activationAction.querySelector('svg')).not.toBeNull();
         expectEveryActionButtonToHaveAnIcon();
+        picker.unmount();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Add Custom Network…' }));
+        render(<CustomNetworkFormPage />);
         const addAction = screen.getByRole('button', { name: 'Add Network' });
         expect(addAction).toHaveClass(buttonStyles.success);
         expectEveryActionButtonToHaveAnIcon();
@@ -90,32 +108,43 @@ describe('DeveloperModeSection U57 and U63 controls', () => {
 
     it('puts field-specific help tips on directly rendered form fields', async () => {
         settings = { ...settings, developerMode: true };
-        render(<DeveloperModeSection />);
-
-        expect(screen.getByRole('button', { name: 'About Miner URL' })).toBeTruthy();
+        const view = render(<FaucetPage activeWallet={{ id: 'wallet-1' }} activeAccount={{ id: 'account-1' }} />);
         expect(screen.getByRole('button', { name: 'About Amount (BTC)' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: /^Miner/ }));
+        expect(screen.getByRole('button', { name: 'About Miner URL' })).toBeTruthy();
+        view.unmount();
 
-        fireEvent.click(screen.getAllByRole('button', { name: 'Activate…' })[0]);
-        expect(screen.getByRole('button', { name: /About .* activation password/ })).toBeTruthy();
+        const picker = render(<AddNetworkPage activeWallet={{ id: 'wallet-1' }} />);
+        fireEvent.click(screen.getAllByRole('button', { name: /Activate with your password/ })[0]);
+        expect(screen.getByRole('button', { name: 'About Wallet password' })).toBeTruthy();
+        picker.unmount();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Add Custom Network…' }));
-        expect(screen.getByRole('button', {
-            name: 'About Custom network descriptor JSON',
-        })).toBeTruthy();
+        render(<CustomNetworkFormPage />);
+        fireEvent.click(screen.getByRole('button', { name: /^Descriptor JSON/ }));
+        expect(screen.getByRole('button', { name: 'About Descriptor JSON' })).toBeTruthy();
     });
 
-    it('adds token spacing around phone-width tool actions', () => {
+    it('draws the tools as list rows, never the grey ghost button', () => {
         const component = readFileSync(
             'packages/core/src/shared/components/settings/DeveloperModeSection.jsx',
             'utf8',
         );
-        const css = readFileSync(
-            'packages/core/src/shared/components/settings/DeveloperModeSection.module.css',
-            'utf8',
-        );
 
-        expect(component.match(/className=\{styles\.toolAction\}/g)).toHaveLength(2);
-        expect(css).toMatch(/@media \(max-width: 480px\)[\s\S]*\.toolAction[\s\S]*margin-block:\s*var\(--xc-space-1\)/);
+        expect(component).not.toMatch(/className=\{styles\.toolAction\}/);
+        expect(component).not.toMatch(/variant="ghost"/);
+        // Advanced action, Action queue and the log console page.
+        expect(component.match(/<ListRow[\s\S]*?chevron/g)).toHaveLength(3);
+    });
+
+    it('opens the log console on its own page, never expanding it in place', () => {
+        settings = { ...settings, developerMode: true };
+        const onOpenLogs = vi.fn();
+        render(<DeveloperModeSection onOpenLogs={onOpenLogs} />);
+
+        expect(screen.queryByRole('button', { name: /^(Show|Hide)$/ })).toBeNull();
+        expect(document.querySelector('[aria-controls="settings-log-console"]')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /Logs and diagnostics console/ }));
+        expect(onOpenLogs).toHaveBeenCalledOnce();
+        expect(document.getElementById('settings-log-console')).toBeNull();
     });
 });

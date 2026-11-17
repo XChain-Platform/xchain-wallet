@@ -12,6 +12,7 @@ import { ToastHost } from '../../../packages/core/src/shared/components/ToastHos
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import { chooseHistoryMenuItem, historyMenuItem, historyMoreButton } from './historyMoreMenu.js';
 
 const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
 const ACCOUNT = { id: 'account-a', index: 0, walletId: WALLET.id };
@@ -200,16 +201,18 @@ describe('mobile refresh', () => {
         ));
 
         await waitFor(() => expect(document.querySelector('[data-history-key]')).not.toBeNull());
-        const refresh = screen.getByRole('button', { name: 'Refresh history' });
-        // A labelled kit button in the content actions row, not an icon in
-        // the page header.
-        expect(refresh).toHaveClass(buttonStyles.md);
-        expect(refresh).not.toHaveClass(buttonStyles.iconOnly);
-        expect(refresh.textContent).toBe('Refresh history');
-        expect(refresh.closest('[data-xc-page-actions]')).not.toBeNull();
-        fireEvent.click(refresh);
+        // Refresh sits in the ⋯ menu, an outlined icon button on the title
+        // line right of the filter (G02, G95 supersede the 2026-10-15
+        // content-actions-row ruling: nothing sits between the header and
+        // the list).
+        const more = historyMoreButton();
+        expect(more).toHaveClass(buttonStyles.md);
+        expect(more).toHaveClass(buttonStyles.iconOnly);
+        expect(more.closest('[data-history-header-actions]')).not.toBeNull();
+        expect(document.querySelector('[data-xc-page-actions]')).toBeNull();
+        chooseHistoryMenuItem('Refresh history');
 
-        const refreshing = screen.getByRole('button', { name: 'Refreshing history' });
+        const refreshing = historyMenuItem('Refreshing history');
         expect(refreshing).toBeDisabled();
         fireEvent.click(refreshing);
         expect(messaging.getAddressHistory).toHaveBeenCalledTimes(2);

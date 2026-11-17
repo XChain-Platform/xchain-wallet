@@ -12,6 +12,14 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import {
+    EXPORT_ITEM,
+    MORE_ACTIONS,
+    REFRESH_ITEM,
+    chooseHistoryMenuItem,
+    historyMenuItem,
+    historyMoreButton,
+} from './historyMoreMenu.js';
 
 const CHAIN = 'litecoin-regtest';
 const ADDRESS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -53,12 +61,14 @@ afterEach(() => {
 });
 
 describe('History buttons carry icons', () => {
-    it('gives Export and the export dialog actions icons, with the dialog Export green', async () => {
+    it('gives ⋯, its Export and Refresh items, and the export dialog actions icons, with the dialog Export green', async () => {
         mountHistory([row(1)]);
-        const trigger = await screen.findByRole('button', { name: 'Export…' });
-        await waitFor(() => expect(trigger).toBeEnabled());
-        expect(hasIcon(trigger)).toBe(true);
-        fireEvent.click(trigger);
+        await screen.findByRole('button', { name: MORE_ACTIONS });
+        expect(hasIcon(historyMoreButton())).toBe(true);
+        await waitFor(() => expect(historyMenuItem(EXPORT_ITEM)).toBeEnabled());
+        expect(hasIcon(historyMenuItem(EXPORT_ITEM))).toBe(true);
+        expect(hasIcon(historyMenuItem(REFRESH_ITEM))).toBe(true);
+        chooseHistoryMenuItem(EXPORT_ITEM);
         const dialog = await screen.findByRole('dialog', { name: 'Export history' });
         const confirm = within(dialog).getByRole('button', { name: 'Export' });
         expect(hasIcon(confirm)).toBe(true);
@@ -70,7 +80,7 @@ describe('History buttons carry icons', () => {
     // separate Clear search button is retired; there is no button left to carry an icon.
     it('no longer draws a separate Clear search button', async () => {
         mountHistory([row(1)]);
-        await screen.findByRole('button', { name: 'Export…' });
+        await waitFor(() => expect(document.querySelector('[data-history-key]')).not.toBeNull());
         // The search box lives in the title-bar filter, so open the filter first.
         fireEvent.click(screen.getByRole('button', { name: 'History filters' }));
         const search = await screen.findByLabelText('Search history');

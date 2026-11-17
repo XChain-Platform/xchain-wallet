@@ -14,6 +14,14 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { quoteMaxSendable, insufficientFundsQuote } from '../../../packages/core/src/flows/maxSendable.js';
+import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+
+// A fixed coin price: a due $5.00 queue is 0.00005 coin = 5,000 sats.
+vi.mock('../../../packages/core/src/flows/priceLookup.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    refreshFiatRates: vi.fn(async () => ({ updated: [] })),
+    getFiatRate: vi.fn(() => ({ rate: 100000, stale: false, chainCoin: 'bitcoin', fiatCurrency: 'USD' })),
+}));
 
 const BALANCE = 50_000_000;
 const REAL_FEE = 924;
@@ -61,13 +69,15 @@ function makeHarness({
         },
         actions: { createAction: vi.fn(() => ({ actionString: 'x', action: 'SEND', version: 0 })) },
     };
+    const defaults = createDefaultSettings();
     const settings = ads
-        ? { ads: { enabled: true, perChain: { btc: ads } } }
-        : { ads: { enabled: false, perChain: {} } };
+        ? { ...defaults, ads: { ...defaults.ads, ...ads } }
+        : { ...defaults, ads: { ...defaults.ads, perTransaction: '0' } };
     return {
         sdk,
         sdkRegistry: { get: () => sdk },
-        chainRegistry: { get: () => ({ coin, networkKind: 'regtest', adsDonationAddress: 'donateHere' }) },
+        // Mainnet: only a mainnet send carries the automatic donation.
+        chainRegistry: { get: () => ({ coin, networkKind: 'mainnet', adsDonationAddress: 'donateHere' }) },
         vault: { settings: { get: async () => settings } },
     };
 }
@@ -151,21 +161,21 @@ describe('quoteMaxSendable', () => {
         expect(h.sdk.encoder.getUTXOs).not.toHaveBeenCalled();
     });
 
-    it('leaves room for the outputs the compose pipeline adds on top of the payment', async () => {
-        const donation = 5_000;
+    // A due automatic donation never shrinks Max: a send of everything cannot
+    // also cover the donation, so it goes out without it (§36, ruling
+    // 2026-11-14) and the queue waits for a send that can.
+    it('prices Max without a due donation the sweep could not also cover', async () => {
         const h = makeHarness({
             createTx: encoderThatRefuses(),
-            ads: {
-                accumulatedSats: donation, triggerAmountSats: 1_000, perTxAmountSats: 1,
-                lifetimeTxCount: 0, lifetimeDonatedSats: 0,
-            },
+            ads: { queued: '5', sendAt: '5' },
         });
         const quote = await quoteMaxSendable(ARGS(h));
-        expect(quote.otherOutputSats).toBe(String(donation));
-        expect(quote.maxSats).toBe(String(BALANCE - REAL_FEE - donation));
-        // Still exact: payment + donation + fee is the whole balance.
-        expect(BigInt(quote.maxSats) + BigInt(quote.otherOutputSats) + BigInt(quote.feeSats))
-            .toBe(BigInt(BALANCE));
+        // The probe asked once with the 5,000 sat donation and once without.
+        const calls = h.sdk.encoder.createTx.mock.calls.map((c) => c[0].customOutputs.map((o) => o.address));
+        expect(calls).toEqual([['dst-address', 'donateHere'], ['dst-address']]);
+        expect(quote.otherOutputSats).toBe('0');
+        expect(quote.maxSats).toBe(String(BALANCE - REAL_FEE));
+        expect(BigInt(quote.maxSats) + BigInt(quote.feeSats)).toBe(BigInt(BALANCE));
     });
 
     it('trusts the encoder\'s own input total over the balance API, so a lagging balance cannot strand coin', async () => {

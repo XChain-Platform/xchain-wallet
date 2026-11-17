@@ -47,7 +47,6 @@ export const RESUMABLE_VIEWS = Object.freeze([
     'staking-dashboard',
     'contracts-list',
     'lists',
-    'shared-lists',
     'dispensers-list',
     'dispenser-explorer',
     'token-detail',

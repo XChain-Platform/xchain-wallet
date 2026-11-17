@@ -34,6 +34,7 @@ vi.mock('lightweight-charts', () => ({ createChart: chartHarness.createChart }))
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketChart } from '../../../packages/core/src/shared/components/MarketChart.jsx';
+import { selectOption, selectOptionValues } from '../../helpers/selectOption.js';
 
 afterEach(() => {
     cleanup();
@@ -80,7 +81,7 @@ describe('MarketChart states and timeframes', () => {
         ]));
 
         const timeframe = screen.getByRole('combobox', { name: 'Chart timeframe' });
-        expect(Array.from(timeframe.options, (option) => option.value)).toEqual([
+        expect(selectOptionValues(timeframe)).toEqual([
             '1m', '5m', '15m', '1h', '4h', '1d', '1w', '30d', '60d', '90d',
         ]);
 
@@ -90,7 +91,7 @@ describe('MarketChart states and timeframes', () => {
             ]);
         });
 
-        fireEvent.change(timeframe, { target: { value: '1m' } });
+        selectOption(timeframe, '1m');
         await waitFor(() => {
             expect(chartHarness.setData).toHaveBeenLastCalledWith([
                 { time: 60, value: 0.01 },

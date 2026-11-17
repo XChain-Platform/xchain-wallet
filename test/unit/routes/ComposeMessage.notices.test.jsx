@@ -88,6 +88,25 @@ afterEach(() => {
 });
 
 describe('ComposeMessage notices lead the page', () => {
+    it('marks empty message fields and composes nothing', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const composeMessageForConfirm = vi.fn();
+        mount(messagingFor({ composeMessageForConfirm }));
+        await settle();
+        const send = screen.getByRole('button', { name: /Send message/i });
+        const recipient = screen.getByLabelText('Address');
+        const message = screen.getByLabelText('Message', { selector: 'textarea' });
+
+        expect(send).toBeEnabled();
+        fireEvent.click(send);
+
+        expect(composeMessageForConfirm).not.toHaveBeenCalled();
+        expect(recipient).toHaveAttribute('aria-invalid', 'true');
+        expect(message).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getAllByText(/Enter a recipient/i).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/Write a message/i).length).toBeGreaterThan(0);
+    });
+
     it('shows the plain-text confirmation above the form and keeps its controls working', async () => {
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
         const scrolled = [];

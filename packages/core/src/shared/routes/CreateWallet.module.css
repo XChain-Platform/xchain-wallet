@@ -22,8 +22,8 @@
     line-height: 1.3;
 }
 
+/* The phrase, hint, checkbox and button share one stack on the space-2 gap. */
 .phraseStack,
-.confirmActions,
 .quizActions {
     display: flex;
     flex-direction: column;
@@ -31,54 +31,21 @@
     gap: var(--xc-space-2);
 }
 
+/* The shared Checkbox keeps a 44px row, which left blank space above and
+   below its box on top of the stack gap. This row keeps the WCAG 2.5.8 tap
+   floor instead, so the button sits one small step under it. Two classes
+   outrank the Checkbox module's single-class min-height in any bundle order. */
+.phraseStack .confirmRow {
+    min-height: var(--xc-tap-min);
+}
+
+
 .confirmRow input[type="checkbox"] {
     /* 2px optically aligns the native checkbox with its first text line. */
     margin-top: 2px;
 }
 
 .confirmRow > span {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-.wordCountRow {
-    composes: card from '../../ui/Card.module.css';
-    margin: var(--xc-space-3) 0 0;
-    min-width: 0;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-}
-
-/* The kit legend is full width, so as a rendered legend it sat in the top
-   border and erased all of it but the two corners. Floated, it is an
-   ordinary first item inside the box and the hairline stays whole. */
-.wordCountRow > legend {
-    float: left;
-    margin-block-end: 0;
-}
-
-.advancedRow {
-    margin: var(--xc-space-3) 0 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-}
-
-.advancedToggle {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    cursor: pointer;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-}
-
-.advancedToggle > span {
     min-width: 0;
     overflow-wrap: anywhere;
 }

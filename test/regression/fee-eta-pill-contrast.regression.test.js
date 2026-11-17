@@ -24,9 +24,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const css = readFileSync(join(here, '..', '..', 'packages', 'core', 'src', 'ui', 'FeeSelector.module.css'), 'utf8');
 
 describe('regression/fee-eta-pill-contrast', () => {
-    it('[REGRESSION P2] the Normal ETA pill text uses the warning text token', () => {
-        const rule = postcss.parse(css).nodes.find((n) => n.type === 'rule' && n.selector === '.etaNormal');
-        const color = rule.nodes.find((n) => n.type === 'decl' && n.prop === 'color');
-        expect(color.value).toBe('var(--xc-warning-text)');
+    it('[REGRESSION P2] the opened fee section has no ETA pill above the slider, so no pill rule remains', () => {
+        const selectors = postcss.parse(css).nodes.filter((n) => n.type === 'rule').map((n) => n.selector);
+        expect(selectors).not.toContain('.etaNormal');
+        expect(selectors).not.toContain('.headerEta');
     });
 });

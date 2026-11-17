@@ -19,7 +19,8 @@ const styles = Object.fromEntries(files.map((file) => [
 ]));
 
 const rawPixelExceptions = {
-    'ActionsMenu.module.css': ['260px', '2px', '2px'],
+    // The 260px card-grid column left with .listFull when the Actions page moved to ActionList (G101).
+    'ActionsMenu.module.css': ['2px', '2px'],
     'AddAddressModal.module.css': [],
     'AddressList.wif.module.css': ['1px', '2px'],
     'ContractScreens.module.css': [],
@@ -28,12 +29,6 @@ const rawPixelExceptions = {
 
 describe('route CSS token coverage', () => {
     it('uses semantic tokens for route dimensions and typography', () => {
-        expect(styles['ActionsMenu.module.css']).toMatch(
-            /\.entryIcon\s*\{[^}]*width:\s*auto;[^}]*height:\s*auto/s,
-        );
-        expect(styles['ActionsMenu.module.css']).toMatch(
-            /\.entryIcon\s*>\s*svg\s*\{[^}]*width:\s*var\(--xc-icon-lg\);[^}]*height:\s*var\(--xc-icon-lg\)/s,
-        );
         expect(styles['ActionsMenu.module.css']).toMatch(
             /\.statusPill\s*\{[^}]*border-radius:\s*var\(--xc-radius-pill\);[^}]*font-size:\s*var\(--xc-text-xs\)/s,
         );
@@ -80,7 +75,9 @@ describe('route CSS design tokens (pill radii and glyphs)', () => {
     it('uses the shared pill radius for pill-shaped route elements', () => {
         expect(rule(routeCss.ParallelComposer, '.statusPill'))
             .toMatch(/border-radius:\s*var\(--xc-radius-pill\)/);
-        expect(rule(routeCss.PollDetail, '.stackedBar'))
+        // The poll page's result bars are the shared outcome page's tracks.
+        const outcomeCss = readFileSync(resolve('packages/core/src/shared/components/outcomeDetail/OutcomeDetail.module.css'), 'utf8');
+        expect(rule(outcomeCss, '.track'))
             .toMatch(/border-radius:\s*var\(--xc-radius-pill\)/);
         expect(rule(routeCss.Send, '.toContactName'))
             .toMatch(/border-radius:\s*var\(--xc-radius-pill\)/);

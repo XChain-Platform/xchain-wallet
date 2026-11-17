@@ -25,6 +25,7 @@ const messages = {
     'alerts.search': 'Search notifications',
     'alerts.filter': 'Filter notifications',
     'alerts.filterType': 'Notification type',
+    'alerts.filterTypeHelp': 'Shows only the notifications you tick: unread ones, or one or more kinds such as payments or security.',
     'alerts.matches': '{count} notifications match',
     'alerts.type.all': 'All types',
     'alerts.type.payments': 'Payments',

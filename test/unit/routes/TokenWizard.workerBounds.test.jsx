@@ -19,6 +19,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 // The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
+import { ownedTokensFor, pickParentToken } from '../../helpers/issueParentPicker.js';
 
 const CHAIN = 'bitcoin-regtest';
 const WALLET = 'w-wizard-worker';
@@ -269,11 +270,12 @@ describe('Issue Token parent ownership between submits', () => {
         // The first compose loses the worker, so the form stays for a retry.
         const messaging = mountWizard({
             getTokenInfo,
+            getOwnedTokens: ownedTokensFor(vi.fn, OWNER, ['PARENT']),
             composeForConfirm: vi.fn().mockRejectedValue(new Error(DISCONNECT)),
             buildActionPsbtRequest: vi.fn().mockResolvedValue({ psbt: 'aa00' }),
         });
         await reachForm('Subtoken');
-        fireEvent.change(screen.getByLabelText('Parent ticker'), { target: { value: 'PARENT' } });
+        await pickParentToken('PARENT');
         fireEvent.change(nameField(), { target: { value: 'CHILD' } });
         fireEvent.change(supplyField(), { target: { value: '100' } });
         fireEvent.submit(issueForm());

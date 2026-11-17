@@ -48,7 +48,7 @@ describe('notification inbox types', () => {
         expect(notificationType(kind)).toBe(type);
     });
 
-    it('keeps the payment title and body and starts unread', () => {
+    it('stores the short three-line payment copy and starts unread', () => {
         const alert = notificationToAlert({
             kind: 'coinpay-required',
             title: 'Coin payment due',
@@ -59,8 +59,9 @@ describe('notification inbox types', () => {
         expect(alert).toEqual({
             id: 'notification:coinpay-required:42',
             type: 'payments',
+            label: 'Payment due',
             title: 'Coin payment due',
-            message: 'An order was matched and needs a coin payment.',
+            message: 'Pay before the window closes',
             at: 1000,
             read: false,
         });

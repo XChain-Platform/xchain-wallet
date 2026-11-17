@@ -260,12 +260,11 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             await expect(identity).toContainText(META_NAME);
             await expect(identity).toContainText(META_VERSION);
 
-            // Drive the SDK-backed helper rather than skipping to submit: a
-            // source the validator rejects can never deploy, so a green
-            // validation is the cheap precondition that keeps a later failure
-            // meaningful.
-            await main.getByRole('button', { name: 'Validate Code' }).click();
-            await expect(main.getByText('Syntax OK.')).toBeVisible({ timeout: 30_000 });
+            // Wait for the SDK-backed check the form runs once typing pauses
+            // rather than skipping to submit: a source the validator rejects
+            // can never deploy, so a green validation is the cheap
+            // precondition that keeps a later failure meaningful.
+            await expect(main.getByTestId('deploy-code-status')).toContainText(/^✓Valid, .+ of 64 KB/, { timeout: 30_000 });
 
             await main.getByLabel('Gas limit').fill(DEPLOY_GAS);
             await main.getByRole('button', { name: 'Publish', exact: true }).click();
@@ -360,7 +359,9 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             await expect(page.getByRole('heading', { name: rowLabel, exact: true }).first())
                 .toBeVisible({ timeout: 30_000 });
 
-            await page.getByRole('button', { name: 'Call method', exact: true }).click();
+            // Call by name ends the Contract Functions list on the Actions tab;
+            // its name carries the description too.
+            await page.getByRole('button', { name: /^Call by name\b/ }).click();
 
             // No ABI is declared, so the form is in its manual lane: a free-text
             // method name and pipe-delimited params. `inc` takes none.

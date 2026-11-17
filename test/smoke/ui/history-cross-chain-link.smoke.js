@@ -77,13 +77,13 @@ assert.ok(/cur\.link\.linkActionIndex[\s\S]*===[\s\S]*prev\.link\.linkActionInde
 assert.ok(/🔗/.test(historySrc) && /Cross-chain only/.test(historySrc),
     'History exposes the 🔗 badge and "Cross-chain only" filter chip');
 
-// 5. Dual-side DetailCard renders peer info on row click.
-assert.ok(/function DetailCard\(\{ entry, peerCache, chainTip, indexerWatermark, walletId,?[^}]*\}\)/.test(historySrc),
-    'DetailCard accepts entry + peerCache + chainTip + indexerWatermark + walletId');
-assert.ok(/peerCache\[peerKey\]/.test(historySrc),
-    'DetailCard reads the peer entry from the cache');
-assert.ok(/peerCacheKey\(/.test(historySrc),
-    'DetailCard uses peerCacheKey to look up the peer');
+// 5. The peer's raw action showed only in the detail card's Raw data view,
+//    which the shared Actions | Details toggle dropped (operator ruling
+//    2026-11-13), so the card reads no peer entry.
+assert.ok(/function DetailCard\(\{ entry, chainTip, walletId,?[^}]*\}\)/.test(historySrc),
+    'DetailCard accepts entry + chainTip + walletId');
+assert.ok(!/peerCache\[peerKey\]/.test(historySrc),
+    'DetailCard reads no peer entry');
 
 // 6. Spec citation present in the file header so a future contributor
 //    knows which section to consult before edits.

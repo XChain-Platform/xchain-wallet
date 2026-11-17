@@ -24,7 +24,7 @@
 //   - Accent color (per spec §35.1 only "when brand is finalized"); no row renders until it exists.
 
 import { useState } from 'react';
-import { Select } from '@xchain-wallet/core/ui';
+import { Icon, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import {
@@ -33,19 +33,35 @@ import {
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
 
-const THEME_OPTIONS = /** @type {const} */ ([
+export const THEME_OPTIONS = /** @type {const} */ ([
     { value: 'system', label: 'System default' },
     { value: 'light', label: 'Light' },
     { value: 'dark', label: 'Dark' },
 ]);
 
-const REDUCED_MOTION_OPTIONS = /** @type {const} */ ([
-    { value: 'auto', label: 'Follow system' },
-    { value: 'always', label: 'Always reduce' },
-    { value: 'never', label: 'Never reduce' },
+// Short names under the "Reduce motion" title (On reduces always, Off never,
+// System follows the device), so the row's dropdown fits beside its title on
+// a 360px phone and at large text (2026-11-15 wall check).
+export const REDUCED_MOTION_OPTIONS = /** @type {const} */ ([
+    { value: 'auto', label: 'System' },
+    { value: 'always', label: 'On' },
+    { value: 'never', label: 'Off' },
 ]);
 
-export function AppearanceSection() {
+/** The Theme row's current value as its option reads. */
+export function themeLabel(value) {
+    return THEME_OPTIONS.find((opt) => opt.value === (value || 'system'))?.label ?? THEME_OPTIONS[0].label;
+}
+
+/** The Reduced motion row's current value as its option reads. */
+export function reducedMotionLabel(value) {
+    return REDUCED_MOTION_OPTIONS.find((opt) => opt.value === (value || 'auto'))?.label ?? REDUCED_MOTION_OPTIONS[0].label;
+}
+
+// `only` renders one control ('theme' or 'motion') for its own Settings page;
+// with no `only` both rows render.
+export function AppearanceSection({ only = null } = {}) {
+    const show = (part) => !only || only === part;
     const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
@@ -77,30 +93,48 @@ export function AppearanceSection() {
     return (
         <div style={STACK}>
             {saveError ? <Status text={saveError} tone="error" /> : null}
-            <SettingsFieldRow
-                label={t('settings.appearance.theme')}
-            >
-                <Select
-                    value={settings.theme}
-                    onChange={(e) => onThemeChange(e.target.value)}
+            {show('theme') ? (
+                <SettingsFieldRow
+                    label={t('settings.appearance.theme')}
+                    help={t('settings.help.appearance.theme')}
                 >
-                    {THEME_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                </Select>
-            </SettingsFieldRow>
-            <SettingsFieldRow
-                label={t('settings.appearance.reducedMotion')}
-            >
-                <Select
-                    value={settings.reducedMotion ?? 'auto'}
-                    onChange={(e) => onReducedMotionChange(e.target.value)}
+                    <Select
+                        value={settings.theme}
+                        onChange={(e) => onThemeChange(e.target.value)}
+                    >
+                        {THEME_OPTIONS.map((opt) => (
+                            <Select.Option
+                                key={opt.value}
+                                value={opt.value}
+                                icon={opt.value === 'light' ? <Icon.EyeIcon /> : opt.value === 'dark' ? <Icon.EyeOffIcon /> : <Icon.GearIcon />}
+                            >
+                                {opt.label}
+                            </Select.Option>
+                        ))}
+                    </Select>
+                </SettingsFieldRow>
+            ) : null}
+            {show('motion') ? (
+                <SettingsFieldRow
+                    label={t('settings.appearance.reducedMotion')}
+                    help={t('settings.help.appearance.reducedMotion')}
                 >
-                    {REDUCED_MOTION_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                </Select>
-            </SettingsFieldRow>
+                    <Select
+                        value={settings.reducedMotion ?? 'auto'}
+                        onChange={(e) => onReducedMotionChange(e.target.value)}
+                    >
+                        {REDUCED_MOTION_OPTIONS.map((opt) => (
+                            <Select.Option
+                                key={opt.value}
+                                value={opt.value}
+                                icon={opt.value === 'always' ? <Icon.PauseIcon /> : opt.value === 'never' ? <Icon.PlayIcon /> : <Icon.GearIcon />}
+                            >
+                                {opt.label}
+                            </Select.Option>
+                        ))}
+                    </Select>
+                </SettingsFieldRow>
+            ) : null}
         </div>
     );
 }

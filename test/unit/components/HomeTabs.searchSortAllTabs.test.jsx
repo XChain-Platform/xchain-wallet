@@ -42,6 +42,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', () => ({
 
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
 import { sortDefiPositions } from '../../../packages/core/src/shared/utils/homeListFilter.js';
+import { openLegacyHomeTab } from '../../helpers/homeBalances.js';
 
 const descriptors = new Map([
     ['bitcoin-mainnet', { id: 'bitcoin-mainnet', coin: 'bitcoin', displayName: 'Zeta coin', color: '#111111', networkKind: 'mainnet' }],
@@ -126,8 +127,10 @@ function mount(props = {}) {
     return { ...view, onSelectEntry, onTokenQueryChange };
 }
 
+// Coins and Tokens are the Balances tab's Type now (operator 2026-11-15);
+// NFTs and DeFi are tabs.
 function openTab(name) {
-    fireEvent.click(screen.getByRole('tab', { name }));
+    openLegacyHomeTab(name);
 }
 
 // Balance rows carry their chain:tick key; collectible cards are named
@@ -161,6 +164,7 @@ afterEach(() => {
 describe('Home search on every tab', () => {
     it('filters Coins by coin name and by ticker', () => {
         const { rerender } = mount({ tokenQuery: 'alpha' });
+        openTab('Coins');
         expect(shownTicks()).toEqual(['LTC']);
         rerender(
             <HomeTabs chainRegistry={chainRegistry} balances={balances} walletId="wallet-search" networkFilter="all"
@@ -195,7 +199,18 @@ describe('Home search on every tab', () => {
     it('has no Activity tab, because History holds the same list', () => {
         mount();
         expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
-        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Coins', 'Tokens', 'NFTs', 'DeFi']);
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Balances', 'NFTs', 'DeFi']);
+    });
+
+    it.each([
+        ['All types', 'all', 'Search coins, tokens and NFTs'],
+        ['Coins', 'coins', 'Search coins'],
+        ['Tokens', 'tokens', 'Search tokens'],
+    ])('the Balances search box follows the %s Type', (label, type, copy) => {
+        mount();
+        openTab(type === 'all' ? 'All' : label);
+        const input = within(openPanel()).getByRole('searchbox', { name: `${copy} by name` });
+        expect(input.getAttribute('placeholder')).toMatch(new RegExp(`^${copy}`));
     });
 
     it.each([
@@ -226,6 +241,9 @@ describe('Home search on every tab', () => {
 describe('Home network filter on every tab', () => {
     it('keeps only the chosen network on each tab', () => {
         const { onSelectEntry } = mount({ networkFilter: 'litecoin' });
+        // Balances lists the coin, then its tokens.
+        expect(shownTicks()).toEqual(['LTC', 'LTCART', 'LTOK']);
+        openTab('Coins');
         expect(shownTicks()).toEqual(['LTC']);
         openTab('Tokens');
         expect(shownTicks()).toEqual(['LTCART', 'LTOK']);
@@ -246,6 +264,7 @@ describe('Home sort', () => {
 
     it('reorders Coins, Tokens and NFTs by name and by value from the panel', () => {
         mount({ walletId: 'wallet-sort-balances' });
+        openTab('Coins');
         expect(shownTicks()).toEqual(['LTC', 'DOGE', 'BTC']);
         chooseSort('Sort by value');
         expect(shownTicks()).toEqual(['BTC', 'LTC', 'DOGE']);

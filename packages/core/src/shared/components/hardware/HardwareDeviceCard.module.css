@@ -1,0 +1,76 @@
+/* The hardware wallet card: picture, name and status pill, centred. */
+.card {
+    composes: card from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-2);
+    text-align: center;
+    min-width: 0;
+}
+
+.picture {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--xc-space-8) * 2);
+    height: calc(var(--xc-space-8) * 2);
+    margin-block-start: var(--xc-space-2);
+}
+
+.logo {
+    width: calc(var(--xc-space-6) * 2);
+    height: calc(var(--xc-space-6) * 2);
+    object-fit: contain;
+}
+
+/* The vendor marks are black; dark themes draw them light. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-xc-theme="light"]) .logo {
+        filter: invert(1);
+    }
+}
+
+:root[data-xc-theme="dark"] .logo {
+    filter: invert(1);
+}
+
+.name {
+    font-size: var(--xc-text-lg);
+    font-weight: 600;
+    color: var(--xc-text);
+    overflow-wrap: anywhere;
+}
+
+.status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    padding: calc(var(--xc-space-1) / 2) var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    margin-block-end: var(--xc-space-1);
+}
+
+.status[data-tone="good"] {
+    color: var(--xc-success);
+    background: var(--xc-success-bg);
+}
+
+.status[data-tone="wait"] {
+    color: var(--xc-warning);
+    background: var(--xc-warning-bg);
+}
+
+.status[data-tone="off"] {
+    color: var(--xc-text-muted);
+    background: var(--xc-bg-muted);
+}
+
+.dot {
+    width: var(--xc-space-2);
+    height: var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: currentColor;
+}

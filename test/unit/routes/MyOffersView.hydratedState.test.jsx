@@ -97,12 +97,12 @@ describe('My orders reuses the hydrated lifecycle', () => {
             rows, detailMethod: 'getOrderDetail', listMethod: 'getOrdersForAddress', cancelsMethod: 'getOrderCancelsForAddress',
         });
         const utils = await open(MyOrdersView, messaging);
-        const list = utils.getByRole('list', { name: 'Open orders' });
+        const list = utils.getByRole('list', { name: 'Orders' });
         expect(within(list).getAllByRole('listitem')).toHaveLength(40);
         expect(reads).toEqual([]);
     });
 
-    it('files a hydrated filled order under Closed without a detail read', async () => {
+    it('shows a hydrated filled order as Filled without a detail read', async () => {
         const rows = [
             offerRow(2001, { status: 'open', give_remaining: '500', expiration: FUTURE, expiry_status: 'open' }),
             offerRow(2002, { status: 'filled', give_remaining: '0', expiration: FUTURE, expiry_status: 'open' }),
@@ -111,8 +111,9 @@ describe('My orders reuses the hydrated lifecycle', () => {
             rows, detailMethod: 'getOrderDetail', listMethod: 'getOrdersForAddress', cancelsMethod: 'getOrderCancelsForAddress',
         });
         const utils = await open(MyOrdersView, messaging);
-        const closed = utils.getByRole('list', { name: 'Closed orders' });
-        expect(within(closed).getByText(/#2002/)).toBeTruthy();
+        const list = utils.getByRole('list', { name: 'Orders' });
+        const filled = list.querySelector('[data-order-row$=":2002"]');
+        expect(within(filled).getByText('Filled')).toBeTruthy();
         expect(reads).toEqual([]);
     });
 
@@ -139,17 +140,23 @@ describe('My swaps reuses the hydrated lifecycle', () => {
             rows, detailMethod: 'getSwapDetail', listMethod: 'getSwapsForAddress', cancelsMethod: 'getSwapCancelsForAddress',
         });
         const utils = await open(MySwapsView, messaging);
-        const list = utils.getByRole('list', { name: 'Open swaps' });
+        const list = utils.getByRole('list', { name: 'Swaps' });
         expect(within(list).getAllByRole('listitem')).toHaveLength(30);
         expect(reads).toEqual([]);
     });
 
-    it('still reads the detail of a swap row without a lifecycle status', async () => {
+    // The swap feed overlays every row's state (swapsForAddress), and a page's
+    // reads never grow with its rows, so a row without a lifecycle status is
+    // read from its own fields; its details page reads the swap once.
+    it('reads no swap detail for a row without a lifecycle status either', async () => {
         const rows = [offerRow(6001, { status: 'open', expiration: FUTURE }), offerRow(6002)];
         const { messaging, reads } = harness({
             rows, detailMethod: 'getSwapDetail', listMethod: 'getSwapsForAddress', cancelsMethod: 'getSwapCancelsForAddress',
         });
-        await open(MySwapsView, messaging);
-        expect(reads).toEqual(['6002']);
+        const utils = await open(MySwapsView, messaging);
+        const list = utils.getByRole('list', { name: 'Swaps' });
+        expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+        expect(within(list.querySelector('[data-swap-row$=":6002"]')).getByText('Open')).toBeTruthy();
+        expect(reads).toEqual([]);
     });
 });

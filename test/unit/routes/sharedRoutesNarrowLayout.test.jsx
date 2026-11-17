@@ -7,6 +7,7 @@ import React from 'react';
 import { render } from '@testing-library/react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { ORDER_KIND } from '../../../packages/core/src/shared/routes/OrderActionPanel.jsx';
 import '../../../packages/core/src/ui/tokens.css';
 
 // jsdom has no canvas, and lightweight-charts cannot parse jsdom's default
@@ -34,7 +35,12 @@ const routeModules = import.meta.glob([
     // Split-out pieces of History.jsx are not routes; History.jsx renders them.
     '!../../../packages/core/src/shared/routes/HistoryDetailCard.jsx',
     '!../../../packages/core/src/shared/routes/HistoryEntryRow.jsx',
+    // ActionDetail.jsx renders this body with the entry it resolved.
+    '!../../../packages/core/src/shared/routes/ActionDetailView.jsx',
     '!../../../packages/core/src/shared/routes/HistoryShared.jsx',
+    // AddressList.jsx renders this View Address body with the row it selected;
+    // AddressDetail.test.jsx covers it with real props.
+    '!../../../packages/core/src/shared/routes/AddressDetail.jsx',
 ]);
 
 const routeEntries = Object.keys(routeModules)
@@ -93,6 +99,47 @@ const props = {
     onDone() {},
     onNavigate() {},
     onSelect() {},
+};
+
+// One open, partly filled XCHAIN for BTC order this wallet placed: the
+// order MyOrdersView or OrderDetail resolves and hands its row, its detail
+// body and its Edit and Cancel form, which read it on their first line.
+const orderItem = {
+    chainId: 'bitcoin-mainnet',
+    key: 'bitcoin-mainnet:1',
+    owner: props.addresses[0],
+    cancelledKeys: new Set(),
+    row: {
+        action_index: '1',
+        source: props.addresses[0].address,
+        status: 'valid',
+        give_tick: 'XCHAIN',
+        give_coin: '',
+        give_amount: '1000',
+        give_ownership: 0,
+        get_tick: '',
+        get_coin: 'BTC',
+        get_amount: '0.004',
+        get_ownership: 0,
+        tx_hash: 'a'.repeat(64),
+        expiration: 1893456000,
+        timestamp: 1763000000,
+    },
+    fill: { status: 'open', giveRemaining: '380', expiration: 1893456000 },
+};
+
+// Route-dir parts whose props have a shape the shared set does not supply.
+const FILE_PROPS = {
+    'OrderRow.jsx': { item: orderItem, status: 'open' },
+    'OrderDetailBody.jsx': { item: orderItem, status: 'open', explorerUrl: null },
+    // OrderDetail hands the form its messaging as a prop, not through context.
+    'OrderActionPanel.jsx': {
+        type: 'cancel', item: orderItem, chainAddresses: props.addresses, variant: 'popup', messaging: pendingMessaging,
+    },
+    // The shared Edit and Cancel frame, fed the order kind OrderActionPanel hands it.
+    'TradeOwnerActionForm.jsx': {
+        kind: ORDER_KIND, type: 'cancel', item: orderItem, chainAddresses: props.addresses, variant: 'popup', messaging: pendingMessaging,
+    },
 };
 
 async function resolveComponent(importer, file) {
@@ -254,7 +301,7 @@ describe.each(VIEWPORT_WIDTHS)('shared route layout at %ipx', (viewportWidth) =>
             const { container } = render(
                 <div data-testid="layout-viewport" style={{ width: `${viewportWidth}px` }}>
                     <MessagingProvider shell="web" messaging={pendingMessaging}>
-                        <Component {...props} />
+                        <Component {...props} {...FILE_PROPS[file]} />
                     </MessagingProvider>
                 </div>,
             );

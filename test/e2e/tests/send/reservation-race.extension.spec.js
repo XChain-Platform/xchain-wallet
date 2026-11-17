@@ -149,12 +149,10 @@ test.describe('two-window same-balance race (extension)', () => {
         await unlockAfterReload(second, PASSWORD);
         await composeTokenSend(second);
 
-        // The protection may present as a pre-flight warning, a fail
-        // verdict, or a blocked Approve; what must NOT happen is a clean
-        // "Looks good" on a payment the balance can no longer cover.
-        const chip = second.getByTestId('preflight-chip');
-        await expect(chip).toBeVisible();
-        await expect(chip, 'second window must not report a clean pass on an already-spent balance')
-            .not.toHaveText(/Looks good/i);
+        // The protection may present as a warning, a fail, an unchecked
+        // report, or a partial report. It must not disappear as a clean pass.
+        const warning = second.getByTestId('confirm-status');
+        await expect(warning, 'second window must not report a clean pass on an already-spent balance')
+            .toHaveAttribute('data-state', /^(warn|fail|notChecked|partial)$/);
     });
 });

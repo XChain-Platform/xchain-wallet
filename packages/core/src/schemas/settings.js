@@ -12,7 +12,7 @@
 // Stored SPARSE (§35.10): only deltas from the release defaults persist
 // (deflateSettings / inflateSettings); per-chain preference fields hold
 // null for "follow the release default" and resolve against the chain
-// descriptor (resolveFeeConfig / resolveAdsChainConfig, §36.6).
+// descriptor (resolveFeeConfig, §36.6).
 
 import {
     check,
@@ -27,14 +27,43 @@ import {
 } from './validate.js';
 import { WALLET_MODES, WALLET_MODE_DEFAULT } from './wallet.js';
 
-export const CURRENT_VERSION = 3;
+export const CURRENT_VERSION = 5;
 
 export const THEMES = /** @type {const} */ (['system', 'light', 'dark']);
 export const FEE_STRATEGIES = /** @type {const} */ (['low', 'normal', 'fast', 'custom']);
 export const REDUCED_MOTION_MODES = /** @type {const} */ (['auto', 'always', 'never']);
 export const BACKUP_REMINDER_CADENCES = /** @type {const} */ (['off', 'monthly', 'quarterly']);
+// The old coin-unit small-balance choices. Records that hold one still
+// validate, but nothing judges a row by them any more: the fiat amount below
+// replaced them (operator ruling 2026-11-14).
 export const SMALL_BALANCE_THRESHOLDS = /** @type {const} */ (['dust', '0.0001', '0.01', '1']);
 export const SMALL_BALANCE_THRESHOLD_DEFAULT = 'dust';
+// Hide small balances (operator ruling 2026-11-14): a row folds away when its
+// value in the display currency is under this amount. A record with no amount
+// (every record written before the ruling, whatever coin-unit choice it held)
+// reads as the default, so the old setting migrates on first read.
+export const SMALL_BALANCE_FIAT_DEFAULT = '1';
+export const SMALL_BALANCE_FIAT_MAX = '1000000';
+
+/** Whether `value` is a stored small-balance amount: positive, at most two decimals. */
+export function isSmallBalanceFiat(value) {
+    if (typeof value !== 'string' || !/^\d{1,7}(\.\d{1,2})?$/.test(value)) return false;
+    if (/^0\d/.test(value)) return false;
+    const n = Number(value);
+    return n > 0 && n <= Number(SMALL_BALANCE_FIAT_MAX);
+}
+
+/**
+ * The small-balance amount in the display currency: the stored one, or the
+ * default when none is stored or it is not a valid amount.
+ * @param {any} settings
+ * @returns {string}
+ */
+export function resolveSmallBalanceFiat(settings) {
+    const v = settings?.smallBalanceFiat;
+    return isSmallBalanceFiat(v) ? v : SMALL_BALANCE_FIAT_DEFAULT;
+}
+
 export const NUMBER_FORMATS = /** @type {const} */ (['full', 'trim', 'plain']);
 export const NUMBER_FORMAT_DEFAULT = 'full';
 
@@ -56,46 +85,65 @@ export { WALLET_MODES, WALLET_MODE_DEFAULT };
 export const NETWORKS = /** @type {const} */ (['mainnet', 'testnet', 'regtest']);
 export const NETWORK_DEFAULT = 'mainnet';
 
-// ADS default: single source of truth per §36. Flip this to false to
-// make ADS opt-in without touching call sites.
-//
-// The per-tx / trigger constants are the LAST-RESORT fallback (used for
-// user-added Developer Mode chains whose descriptors carry no
-// `adsDefaults`). The three built-in coins carry per-coin values in
-// each descriptor's `adsDefaults` block (§36.1): a "sat" is a
-// chain-specific base unit with wildly different value on BTC, LTC and
-// DOGE, so one flat number can't be right on all three. The fallback
-// values match Bitcoin's.
-//
-// Defaults are RESOLVED AT READ TIME, never copied into the stored
-// record: a per-chain field holding null (or absent) means "follow the
-// current release's default", so retuning a descriptor's `adsDefaults`
-// in a later release reaches every wallet whose user hasn't explicitly
-// overridden that field (§36.6). Use `resolveAdsChainConfig` to read.
-export const ADS_DEFAULT_ENABLED = true;
-export const ADS_DEFAULT_PER_TX_SATS = 1000;
-export const ADS_DEFAULT_TRIGGER_SATS = 25000;
+// Automatic donations (§36, operator ruling 2026-11-14): ONE wallet-wide
+// queue kept in fiat. Every mainnet transaction the wallet sends, on any chain,
+// adds `perTransaction` to `queued`; once `queued` reaches `sendAt`, the next
+// mainnet send that can cover it carries the whole queue as one donation
+// output, converted to that chain's coin at the current price, to the chosen
+// recipient's address for that network. Testnet and regtest sends neither add
+// nor pay. Amounts are plain decimal strings in `currency` so the arithmetic
+// never crosses a float; '0' per transaction is off.
+export const ADS_DEFAULT_PER_TRANSACTION = '0.05';
+export const ADS_DEFAULT_SEND_AT = '5';
+export const ADS_RECIPIENTS = /** @type {const} */ (['protocol', 'community', 'explorer']);
+export const ADS_DEFAULT_RECIPIENT = 'protocol';
+// The page's preset choices; any other value inside the bounds is a Custom one.
+export const ADS_PER_TRANSACTION_OPTIONS = Object.freeze(['0', '0.01', '0.05', '0.1', '0.25']);
+export const ADS_SEND_AT_OPTIONS = Object.freeze(['5', '10', '25', '50', '100']);
+// Custom bounds, in the queue's currency: a per-transaction amount above the
+// largest sensible tip, or a send-at so high the queue never pays, is a typo.
+export const ADS_PER_TRANSACTION_MAX = '10';
+export const ADS_SEND_AT_MIN = '1';
+export const ADS_SEND_AT_MAX = '10000';
 
-/**
- * Resolve a per-chain ADS state's effective amounts. Stored null/absent
- * fields follow the descriptor's `adsDefaults` (falling back to the
- * generic constants for user-added chains without one); a stored number
- * is an explicit user override and wins.
- *
- * @param {Partial<AdsChainState> | null | undefined} state
- * @param {{ adsDefaults?: { perTxAmountSats: number, triggerAmountSats: number } } | null | undefined} descriptor
- * @returns {{ perTxAmountSats: number, triggerAmountSats: number }}
- */
-export function resolveAdsChainConfig(state, descriptor) {
+const FIAT_INPUT_RE = /^\d+(\.\d{1,2})?$/;
+const DECIMAL_RE = /^\d+(\.\d+)?$/;
+
+// Exact compare of two plain decimal strings (null on a malformed side). The
+// schema keeps its own copy so it imports nothing from the UI helpers.
+function compareDecimals(a, b) {
+    if (!DECIMAL_RE.test(String(a)) || !DECIMAL_RE.test(String(b))) return null;
+    const [ai, af = ''] = String(a).split('.');
+    const [bi, bf = ''] = String(b).split('.');
+    const scale = Math.max(af.length, bf.length);
+    const x = BigInt(ai + af.padEnd(scale, '0'));
+    const y = BigInt(bi + bf.padEnd(scale, '0'));
+    return x === y ? 0 : x < y ? -1 : 1;
+}
+
+/** A per-transaction amount the page may store: 0 (off) up to the cap, two decimals at most. */
+export function isAdsPerTransaction(v) {
+    return typeof v === 'string' && FIAT_INPUT_RE.test(v) && compareDecimals(v, ADS_PER_TRANSACTION_MAX) <= 0;
+}
+
+/** A send-at threshold the page may store: inside the bounds, two decimals at most. */
+export function isAdsSendAt(v) {
+    return typeof v === 'string'
+        && FIAT_INPUT_RE.test(v)
+        && compareDecimals(v, ADS_SEND_AT_MIN) >= 0
+        && compareDecimals(v, ADS_SEND_AT_MAX) <= 0;
+}
+
+/** @returns {AdsSettings} */
+export function createDefaultAdsSettings(currency = 'USD') {
     return {
-        perTxAmountSats:
-            state?.perTxAmountSats ??
-            descriptor?.adsDefaults?.perTxAmountSats ??
-            ADS_DEFAULT_PER_TX_SATS,
-        triggerAmountSats:
-            state?.triggerAmountSats ??
-            descriptor?.adsDefaults?.triggerAmountSats ??
-            ADS_DEFAULT_TRIGGER_SATS,
+        perTransaction: ADS_DEFAULT_PER_TRANSACTION,
+        sendAt: ADS_DEFAULT_SEND_AT,
+        recipient: ADS_DEFAULT_RECIPIENT,
+        currency: typeof currency === 'string' && currency ? currency : 'USD',
+        queued: '0',
+        donated: '0',
+        donationCount: 0,
     };
 }
 
@@ -195,6 +243,46 @@ export function resolveUndoSendWindowSeconds(settings) {
     return resolveUndoSendSeconds(settings);
 }
 
+// New-recipient test send (operator ruling 2026-11-14): the threshold is an
+// amount in the display currency, '0' is Off, and the send form converts it
+// to the chain's units at check time with the wallet's price. The legacy
+// `grace.testSendThresholdSats` is kept only so older records still validate;
+// nothing reads it after the v4 -> v5 migration.
+export const TEST_SEND_FIAT_OFF = '0';
+export const TEST_SEND_FIAT_PRESETS = Object.freeze(['100', '1000', '10000', '100000']);
+export const TEST_SEND_FIAT_DEFAULT = '1000';
+// A custom amount: a whole or two-decimal amount, positive, at most a billion.
+export const TEST_SEND_FIAT_MAX = '1000000000';
+
+/** Whether `value` is a stored test-send fiat threshold ('0' or a plain amount). */
+export function isTestSendFiat(value) {
+    if (typeof value !== 'string' || !/^\d{1,10}(\.\d{1,2})?$/.test(value)) return false;
+    if (/^0\d/.test(value)) return false;
+    return Number(value) <= Number(TEST_SEND_FIAT_MAX);
+}
+
+/**
+ * The test-send threshold in the display currency, or null when it is Off
+ * (or not a valid amount, which reads as Off).
+ * @param {any} settings
+ * @returns {string | null}
+ */
+export function resolveTestSendFiat(settings) {
+    const v = settings?.grace?.testSendThresholdFiat;
+    if (!isTestSendFiat(v) || Number(v) <= 0) return null;
+    return v;
+}
+
+/**
+ * Lookalike address warnings (operator ruling 2026-11-14): on unless the
+ * person turned the switch off.
+ * @param {any} settings
+ * @returns {boolean}
+ */
+export function lookalikeWarningsEnabled(settings) {
+    return settings?.grace?.lookalikeWarnings !== false;
+}
+
 /**
  * @typedef {Object} SdkEndpoint
  * @property {string} explorerUrl
@@ -211,17 +299,20 @@ export function resolveUndoSendWindowSeconds(settings) {
  */
 
 /**
- * @typedef {Object} AdsChainState
- * @property {number | null} perTxAmountSats    null/absent = follow the release default (descriptor `adsDefaults`), §36.6
- * @property {number | null} triggerAmountSats  null/absent = follow the release default (descriptor `adsDefaults`), §36.6
- * @property {number} accumulatedSats
- * @property {number} lifetimeDonatedSats
- * @property {number} lifetimeTxCount
+ * @typedef {Object} AdsSettings
+ * @property {string} perTransaction   fiat added to the queue by every send; '0' = donations off
+ * @property {string} sendAt           fiat queue total that makes the next affordable send carry it
+ * @property {typeof ADS_RECIPIENTS[number]} recipient   whose address receives it (the registry's DONATE1, DONATE2, EXPLORER)
+ * @property {string} currency         the currency code every amount here is kept in
+ * @property {string} queued           fiat waiting to be donated
+ * @property {string} donated          fiat donated so far
+ * @property {number} donationCount    donations sent so far
+ * @property {{ id: string, fiat: string, currency: string, chainId: string, pendingTxId: string|null, at: number, review?: true }} [reserved]   present only while one pending send (or one open confirm screen, `review`) carries the payout; no other send carries it until that one settles or is released
  */
 
 /**
  * @typedef {Object} Settings
- * @property {3} schemaVersion
+ * @property {4} schemaVersion
  * @property {typeof THEMES[number]} theme
  * @property {typeof REDUCED_MOTION_MODES[number]} reducedMotion        v2: `auto` follows the OS `prefers-reduced-motion`; `always` forces reduce; `never` ignores the OS preference
  * @property {number} autolockMinutes
@@ -230,11 +321,11 @@ export function resolveUndoSendWindowSeconds(settings) {
  * @property {Record<string, SdkEndpoint>} sdkEndpoints
  * @property {Record<string, FeeSettings>} fees
  * @property {{ torRouting: boolean, changeAddressRotation: boolean, hideSmallBalances: boolean, blurOnBlur: boolean, labelsSurviveRestore: boolean, clipboardAutoClearSeconds?: number, hapticsEnabled?: boolean, alwaysRequireHwExplicitConfirm?: boolean, priceDataEnabled?: boolean, metadataFetchEnabled?: boolean }} privacy   v2: adds blurOnBlur (window-unfocus blur of sensitive data), labelsSurviveRestore (§19.5.2 on-chain label sync opt-in); clipboardAutoClearSeconds is optional v2-tolerant (0-600 inclusive, 0 = never clear, default 60, §17.7.1 / G028); hapticsEnabled is v2-tolerant (defaults true when absent, set false to suppress every `useHaptic` pulse alongside the OS-level reduced-motion preference, Cluster P FOLLOWUP 1); alwaysRequireHwExplicitConfirm is v2-tolerant (defaults false; when true the HW sign-screen cross-check confirm is required on every sign regardless of the risk classifier, Cluster N FOLLOWUP 3); formDraftTtlMs is v2-tolerant (defaults to 24h, allowed values are FORM_DRAFT_TTL_OPTIONS, Cluster P FOLLOWUP 6); priceDataEnabled is v2-tolerant (defaults true; when false the price oracle is disabled and the TokenDetail stats strip / chart hide for native coins, sends a request to a third-party API revealing wallet activity, hence the opt-out).
- * @property {{ enabled: boolean, perChain: Record<string, AdsChainState> }} ads
+ * @property {AdsSettings} ads   v4: one wallet-wide fiat queue (replaces v3's per-chain sats queues)
  * @property {{ txConfirmations: boolean, incomingReceipts: boolean, dispenserFills: boolean, orderFills: boolean, priceAlerts: boolean, messages?: boolean, governancePolls?: boolean, deadlines?: boolean, dispenserEscrow?: boolean, incomingPending?: boolean }} notifications   v2: adds messages (v2-tolerant, defaults true; notify when a watched address receives a MESSAGE action) and governancePolls (v2-tolerant, defaults true; notify when a new VOTE poll opens over a held token, binding polls flagged); incomingPending is v2-tolerant, defaults true; notify when a watched address has an INCOMING payment sitting in the mempool, before it confirms
  * @property {boolean} developerMode
  * @property {boolean} learnMode
- * @property {{ undoSendSeconds: number, undoSendEnabled?: boolean, testSendThresholdSats: number|string }} grace                       v2: adds testSendThresholdSats (large-amount confirmation gate; 0 = disabled)
+ * @property {{ undoSendSeconds: number, undoSendEnabled?: boolean, testSendThresholdSats: number|string, testSendThresholdFiat?: string, lookalikeWarnings?: boolean }} grace                       v2: adds testSendThresholdSats (large-amount confirmation gate; 0 = disabled); v5: testSendThresholdFiat replaces it (display currency, '0' = Off) and lookalikeWarnings (absent = on)
  * @property {{ enabled: boolean }} panicMode                                                                v2: duress-mode toggle; full §26.5 wiring lands later, the schema slot ships now so the Safety panel can flip it
  * @property {typeof BACKUP_REMINDER_CADENCES[number]} backupReminders                                       v2: backup-reminder cadence
  * @property {string[]} [pinnedTokens]                                                                       v2-tolerant: list of `chainId:tick` keys the user pinned to the top of the balance list (§27.3 / G072)
@@ -244,7 +335,8 @@ export function resolveUndoSendWindowSeconds(settings) {
  * @property {boolean} [hideUnknownTokens]                                                                   v3-tolerant: collapse held tokens without metadata or an explicit user relationship into the Hidden section
  * @property {boolean} [showPinAffordance]                                                                   v2-tolerant: when true, balance rows render a per-row star button to pin/unpin the token. Default false to keep the row UI clean; users who want quick pin access flip it in Settings > Display.
  * @property {boolean} [showHideAffordance]                                                                  v2-tolerant: when true, balance rows render a per-row hide affordance. Default false; the Settings > Display unhide list still works regardless.
- * @property {typeof SMALL_BALANCE_THRESHOLDS[number]} [smallBalanceThreshold]                               v3-tolerant: threshold used when privacy.hideSmallBalances is enabled. `dust` keeps the chain-aware relay/token heuristic; decimal values are whole asset units.
+ * @property {typeof SMALL_BALANCE_THRESHOLDS[number]} [smallBalanceThreshold]                               v3-tolerant: the old coin-unit small-balance threshold. Still validates so older records load; nothing reads it since smallBalanceFiat replaced it.
+ * @property {string} [smallBalanceFiat]                                                                     v5-tolerant: with privacy.hideSmallBalances on, a Home row worth less than this amount in the display currency folds away (operator ruling 2026-11-14). Absent reads as SMALL_BALANCE_FIAT_DEFAULT ('1').
  * @property {typeof NUMBER_FORMATS[number]} [numberFormat]                                                  v3-tolerant: balance amount presentation. `full` preserves asset precision, `trim` removes insignificant trailing zeros, and `plain` also omits digit grouping.
  * @property {{ bindings?: Record<string, string> }} [keyboard]                                              v2-tolerant: §34.1 keyboard-shortcut overrides. `bindings` maps a shortcut id from keyboard/shortcuts.js to a binding string ('mod+k' / '?' / 'g h'); unknown ids and invalid strings are ignored at resolve time (resolveBindings), so a stale override can't break dispatch.
  * @property {boolean} [verifyProofs]                                                                      v2-tolerant: when true (default), the wallet cryptographically verifies token balances + actions against quorum-signed SPV checkpoints and badges each row. Set false to skip the extra proof traffic. Seam for a future pinned validator set / trusted checkpoint.
@@ -289,10 +381,14 @@ export const FORM_DRAFT_TTL_OPTIONS = Object.freeze([
 // validation so a corrupt blob can't widen the window.
 export const AUTO_SIGN_LOCALHOST_OFF = 0;
 export const AUTO_SIGN_LOCALHOST_5M = 5 * 60 * 1000;
+export const AUTO_SIGN_LOCALHOST_10M = 10 * 60 * 1000;
 export const AUTO_SIGN_LOCALHOST_1H = 60 * 60 * 1000;
+// 10 minutes was added beside 5 minutes and 1 hour; every value stored before
+// stays valid and the ceiling stays 1 hour, so no migration is needed.
 export const AUTO_SIGN_LOCALHOST_OPTIONS = Object.freeze([
     AUTO_SIGN_LOCALHOST_OFF,
     AUTO_SIGN_LOCALHOST_5M,
+    AUTO_SIGN_LOCALHOST_10M,
     AUTO_SIGN_LOCALHOST_1H,
 ]);
 
@@ -353,10 +449,7 @@ export function createDefaultSettings() {
             priceDataEnabled: true,
             metadataFetchEnabled: true,
         },
-        ads: {
-            enabled: ADS_DEFAULT_ENABLED,
-            perChain: {},
-        },
+        ads: createDefaultAdsSettings('USD'),
         notifications: {
             txConfirmations: true,
             incomingReceipts: true,
@@ -375,6 +468,8 @@ export function createDefaultSettings() {
             undoSendSeconds: 5,
             undoSendEnabled: false,
             testSendThresholdSats: 0,
+            // v5: the threshold in the display currency; '0' is Off.
+            testSendThresholdFiat: TEST_SEND_FIAT_OFF,
         },
         panicMode: {
             enabled: false,
@@ -388,6 +483,7 @@ export function createDefaultSettings() {
         showPinAffordance: false,
         showHideAffordance: false,
         smallBalanceThreshold: SMALL_BALANCE_THRESHOLD_DEFAULT,
+        smallBalanceFiat: SMALL_BALANCE_FIAT_DEFAULT,
         numberFormat: NUMBER_FORMAT_DEFAULT,
         showFiatInHistory: false,
         quietHours: { ...QUIET_HOURS_DEFAULT },
@@ -404,24 +500,6 @@ export function createDefaultSettings() {
     };
 }
 
-/**
- * Fresh per-chain ADS state. The per-tx / trigger amounts start as null
- * ("follow the current release default", §36.6): only an explicit user
- * override in Settings writes a number. The counters are real state and
- * always stored.
- *
- * @returns {AdsChainState}
- */
-export function createDefaultAdsChainState() {
-    return {
-        perTxAmountSats: null,
-        triggerAmountSats: null,
-        accumulatedSats: 0,
-        lifetimeDonatedSats: 0,
-        lifetimeTxCount: 0,
-    };
-}
-
 const isSdkEndpoint = (v) =>
     isPlainObject(v) &&
     isString(v.explorerUrl) &&
@@ -430,21 +508,36 @@ const isSdkEndpoint = (v) =>
     isBoolean(v.custom);
 
 // Preference fields are nullable in v3: null/absent = follow the
-// release default (resolved via resolveFeeConfig / resolveAdsChainConfig
-// against the chain descriptor). Only user overrides store a value.
+// release default (resolved via resolveFeeConfig against the chain
+// descriptor). Only user overrides store a value.
 const isFeeSettings = (v) =>
     isPlainObject(v) &&
     (v.strategy == null || isOneOf(v.strategy, FEE_STRATEGIES)) &&
     (v.customSatsPerKb == null || isNonNegativeInteger(v.customSatsPerKb)) &&
     (v.rbfByDefault == null || isBoolean(v.rbfByDefault));
 
-const isAdsChainState = (v) =>
+const isAdsSettings = (v) =>
     isPlainObject(v) &&
-    (v.perTxAmountSats == null || isNonNegativeInteger(v.perTxAmountSats)) &&
-    (v.triggerAmountSats == null || isNonNegativeInteger(v.triggerAmountSats)) &&
-    isNonNegativeInteger(v.accumulatedSats) &&
-    isNonNegativeInteger(v.lifetimeDonatedSats) &&
-    isNonNegativeInteger(v.lifetimeTxCount);
+    isAdsPerTransaction(v.perTransaction) &&
+    isAdsSendAt(v.sendAt) &&
+    isOneOf(v.recipient, ADS_RECIPIENTS) &&
+    isNonEmptyString(v.currency) &&
+    typeof v.queued === 'string' && DECIMAL_RE.test(v.queued) &&
+    typeof v.donated === 'string' && DECIMAL_RE.test(v.donated) &&
+    isNonNegativeInteger(v.donationCount) &&
+    (v.reserved == null || isAdsReservationShape(v.reserved));
+
+// The claim one pending send holds on the due queue (flows/ads.js
+// reserveAdsPayout); absent while none is held.
+const isAdsReservationShape = (r) =>
+    isPlainObject(r) &&
+    isNonEmptyString(r.id) &&
+    typeof r.fiat === 'string' && DECIMAL_RE.test(r.fiat) &&
+    isNonEmptyString(r.currency) &&
+    isNonEmptyString(r.chainId) &&
+    (r.pendingTxId == null || isNonEmptyString(r.pendingTxId)) &&
+    Number.isFinite(r.at) && r.at >= 0 &&
+    (r.review === undefined || r.review === true);
 
 const isRecordOf = (v, predicate) => {
     if (!isPlainObject(v)) return false;
@@ -511,14 +604,7 @@ export function validateSettings(record) {
         'malformed',
     );
 
-    check(
-        errors,
-        'ads',
-        isPlainObject(r.ads) &&
-            isBoolean(r.ads.enabled) &&
-            isRecordOf(r.ads.perChain, isAdsChainState),
-        'malformed',
-    );
+    check(errors, 'ads', isAdsSettings(r.ads), 'malformed');
 
     check(
         errors,
@@ -538,7 +624,9 @@ export function validateSettings(record) {
             // v2-tolerant: older records predate the dispenserEscrow flag (PC-46).
             (r.notifications.dispenserEscrow == null || isBoolean(r.notifications.dispenserEscrow)) &&
             // v2-tolerant: older records predate the incomingPending flag (M3.2).
-            (r.notifications.incomingPending == null || isBoolean(r.notifications.incomingPending)),
+            (r.notifications.incomingPending == null || isBoolean(r.notifications.incomingPending)) &&
+            // Optional: the Desktop notifications switch. Absent means "follow the granted permission".
+            (r.notifications.desktop == null || isBoolean(r.notifications.desktop)),
         'malformed',
     );
 
@@ -552,7 +640,9 @@ export function validateSettings(record) {
             && (r.grace.undoSendEnabled === undefined || isBoolean(r.grace.undoSendEnabled))
             && (isNonNegativeInteger(r.grace.testSendThresholdSats)
                 || (typeof r.grace.testSendThresholdSats === 'string'
-                    && /^\d+$/.test(r.grace.testSendThresholdSats))),
+                    && /^\d+$/.test(r.grace.testSendThresholdSats)))
+            && (r.grace.testSendThresholdFiat === undefined || isTestSendFiat(r.grace.testSendThresholdFiat))
+            && (r.grace.lookalikeWarnings === undefined || isBoolean(r.grace.lookalikeWarnings)),
         'malformed',
     );
     check(
@@ -629,6 +719,14 @@ export function validateSettings(record) {
             'smallBalanceThreshold',
             isOneOf(r.smallBalanceThreshold, SMALL_BALANCE_THRESHOLDS),
             `must be one of ${SMALL_BALANCE_THRESHOLDS.join(', ')}`,
+        );
+    }
+    if (r.smallBalanceFiat !== undefined) {
+        check(
+            errors,
+            'smallBalanceFiat',
+            isSmallBalanceFiat(r.smallBalanceFiat),
+            `must be a positive amount with at most two decimals, up to ${SMALL_BALANCE_FIAT_MAX}`,
         );
     }
     if (r.numberFormat !== undefined) {
@@ -860,7 +958,7 @@ export function validateSettings(record) {
 // over `createDefaultSettings()`. A default retuned in a later release
 // therefore reaches every wallet whose user never overrode that field.
 //
-// Chain-keyed records (fees, ads.perChain, sdkEndpoints) are the one
+// Chain-keyed records (fees, sdkEndpoints) are the one
 // exception to plain diffing: their KEYS are load-bearing (they encode
 // which chains are active, see seedChainIds), so entries always survive
 // even when emptied to {}; only null preference fields inside them are
@@ -899,14 +997,6 @@ export function deflateSettings(full) {
         if (CHAIN_KEYED_FIELDS.includes(k)) {
             const entries = dropNullFieldsPerEntry(v);
             if (entries && Object.keys(entries).length > 0) out[k] = entries;
-            continue;
-        }
-        if (k === 'ads') {
-            const ads = {};
-            if (!deepEqual(v?.enabled, defaults.ads.enabled)) ads.enabled = v?.enabled;
-            const perChain = dropNullFieldsPerEntry(v?.perChain);
-            if (perChain && Object.keys(perChain).length > 0) ads.perChain = perChain;
-            if (Object.keys(ads).length > 0) out.ads = ads;
             continue;
         }
         const deflated = deflateValue(v, defaults[k]);
@@ -951,7 +1041,7 @@ function dropNullFieldsPerEntry(record) {
  * produce the full Settings record every reader sees. Stored values win;
  * one-level-deep objects merge; chain-keyed entries are taken verbatim
  * (their absent preference fields resolve later, against the chain
- * descriptor, via resolveFeeConfig / resolveAdsChainConfig).
+ * descriptor, via resolveFeeConfig).
  *
  * @param {Record<string, unknown> | null | undefined} stored
  * @returns {Settings}
@@ -962,13 +1052,8 @@ export function inflateSettings(stored) {
     const out = { ...defaults };
     for (const [k, v] of Object.entries(stored)) {
         if (v === undefined) continue;
-        if (isPlainObject(v) && isPlainObject(defaults[k]) && !CHAIN_KEYED_FIELDS.includes(k) && k !== 'ads') {
+        if (isPlainObject(v) && isPlainObject(defaults[k]) && !CHAIN_KEYED_FIELDS.includes(k)) {
             out[k] = { ...defaults[k], ...v };
-        } else if (k === 'ads') {
-            out.ads = {
-                enabled: v.enabled === undefined ? defaults.ads.enabled : v.enabled,
-                perChain: isPlainObject(v.perChain) ? v.perChain : {},
-            };
         } else {
             out[k] = v;
         }

@@ -13,6 +13,7 @@ import {
     test,
     createWallet,
 } from '../../fixtures/wallet.js';
+import { expectDropdownValue, pickOption } from '../../fixtures/pickOption.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -133,7 +134,7 @@ async function openCommand(page, name, optionName = new RegExp(`^${name}`)) {
 
 async function fillExternalHardware(row, cosigner) {
     await row.getByLabel('Name', { exact: true }).fill(cosigner.name);
-    await row.getByLabel('Origin', { exact: true }).selectOption('external-hardware');
+    await pickOption(row.getByLabel('Origin', { exact: true }), 'external-hardware');
     await row.getByLabel('Public key', { exact: true })
         .fill(cosigner.pubkey);
     await row.getByLabel('Master fingerprint', { exact: true })
@@ -181,7 +182,7 @@ test.describe('multisig flow', () => {
         const createForm = page.getByRole('form', { name: 'Create multisig' });
         await expect(createForm).toBeVisible();
 
-        await expect(createForm.getByLabel('Type', { exact: true })).toHaveValue('p2wsh-multisig');
+        await expectDropdownValue(createForm.getByLabel('Type', { exact: true }), 'p2wsh-multisig');
         await createForm.getByRole('button', {
             name: "Joining someone else's multisig? Share this wallet as a cosigner",
             exact: true,
@@ -213,7 +214,9 @@ test.describe('multisig flow', () => {
             });
         }
 
-        const local = createForm.getByRole('group', { name: 'Cosigner 1', exact: true });
+        // Each cosigner is a collapsible section, open while it is new.
+        const cosignerSection = (n) => createForm.locator('section[data-form-section^="cosigner-"]').nth(n - 1);
+        const local = cosignerSection(1);
         await local.getByRole('button', {
             name: 'Choose one of this wallet\'s addresses',
             exact: true,
@@ -226,14 +229,13 @@ test.describe('multisig flow', () => {
         await expect(local.getByLabel('Master fingerprint', { exact: true }))
             .toHaveValue(/^[0-9a-f]{8}$/i);
 
-        const second = createForm.getByRole('group', { name: 'Cosigner 2', exact: true });
+        const second = cosignerSection(2);
         await fillExternalHardware(second, EXTERNAL_COSIGNERS[0]);
         await createForm.getByRole('button', { name: 'Add Cosigner', exact: true }).click();
-        const third = createForm.getByRole('group', { name: 'Cosigner 3', exact: true });
+        const third = cosignerSection(3);
         await fillExternalHardware(third, EXTERNAL_COSIGNERS[1]);
-        await expect(createForm.getByRole('group', { name: 'Signatures required' }).locator('output'))
-            .toHaveText('2');
-        await expect(createForm).toContainText('of 3 cosigners');
+        await expect(createForm.getByRole('button', { name: 'Signatures required: 2 of 3', exact: true }))
+            .toBeVisible();
         await expect(createForm.getByRole('button', { name: 'Create Multisig', exact: true })).toBeEnabled();
 
         for (const viewport of VIEWPORTS) {
@@ -266,18 +268,18 @@ test.describe('multisig flow', () => {
         expect(session.threshold).toBe(2);
         expect(session.cosignerPubkeys).toHaveLength(3);
 
-        await openCommand(page, 'Multisig signing');
+        await openCommand(page, 'Multisig sessions');
         const sessions = page.getByRole('list', { name: 'Multisig sessions' });
         await expect(sessions).toBeVisible();
 
         for (const viewport of VIEWPORTS) {
             await test.step(`${viewport.name}: signing session`, async () => {
-                await expectScreen(page, viewport, 'Multisig signing sessions');
+                await expectScreen(page, viewport, 'Multisig Sessions');
                 const sessionRow = sessions.getByRole('button').filter({ hasText: ACTION_SUMMARY });
                 await expect(sessionRow).toHaveCount(1);
                 await sessionRow.click();
 
-                await expectScreen(page, viewport, 'Multisig signing');
+                await expectScreen(page, viewport, 'Multisig Signing');
                 await expect(page.getByRole('main')).toContainText(ACTION_SUMMARY);
                 await expect(page.getByLabel('Multisig signing progress')).toHaveText(
                     'Signatures collected: 0 of 2',

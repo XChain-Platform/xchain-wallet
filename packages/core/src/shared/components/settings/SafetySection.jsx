@@ -12,18 +12,22 @@
 //
 // Live rows:
 //   - Auto-lock timeout (minutes)
-//   - New-recipient test-send warning threshold (sats; 0 disables)
-//   - Always-on lookalike-address warnings
+//   - New-recipient test-send threshold (display currency; 0 disables)
+//   - Lookalike-address warnings switch (on unless turned off)
 //   - Undo-send: opt-in hold so a signed send can be cancelled before broadcast
 //   - Panic-mode activation and duress passphrase controls
 //   - Automatic backup-reminder status
 //
+// The Security group page draws these as rows (Settings.jsx); this section
+// renders one part on a page of its own (`only`), or every part.
 
 import { useState } from 'react';
-import { InfoTip, Input, Select } from '@xchain-wallet/core/ui';
+import { Icon, InfoTip, Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { isNativeShell } from '../../nativeShell.js';
 import { useMessaging } from '../../useMessaging.js';
+import { isTestSendFiat, lookalikeWarningsEnabled } from '../../../schemas/settings.js';
+import { normalizeTestSendAmount } from './SecurityPages.jsx';
 import {
     ROW,
     ROW_HINT,
@@ -32,6 +36,7 @@ import {
     STACK,
     SettingsLoadError,
     Status,
+    ToggleRow,
 } from './_settingsPrimitives.jsx';
 import { BiometricRow } from './BiometricRow.jsx';
 import { PanicModeRow } from './PanicModeRow.jsx';
@@ -41,17 +46,17 @@ import { DuressPassphraseRow } from './DuressPassphraseRow.jsx';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
 
-const AUTOLOCK_OPTIONS = /** @type {const} */ ([
+export const AUTOLOCK_OPTIONS = /** @type {const} */ ([
     { value: 1, label: '1 minute' },
     { value: 5, label: '5 minutes' },
     { value: 15, label: '15 minutes' },
     { value: 30, label: '30 minutes' },
     { value: 60, label: '1 hour' },
     { value: 240, label: '4 hours' },
-    { value: 0, label: 'Never (until tab close)' },
+    { value: 0, label: 'Never' },
 ]);
 
-function autolockOptionLabel(option, shell) {
+export function autolockOptionLabel(option, shell) {
     return option.value === 0 && (shell === 'desktop' || isNativeShell())
         ? t('settings.safety.neverUntilAppCloses')
         : option.label;
@@ -79,6 +84,9 @@ export function SafetySection({ only = null } = {}) {
     const autolockValue = AUTOLOCK_OPTIONS.some((o) => o.value === settings.autolockMinutes)
         ? settings.autolockMinutes
         : settings.autolockMinutes;
+    // The test-send threshold in the display currency ('0' is Off).
+    const currency = settings.fiatCurrency || 'USD';
+    const testSendFiat = isTestSendFiat(settings.grace?.testSendThresholdFiat) ? settings.grace.testSendThresholdFiat : '0';
 
     return (
         <div style={STACK}>
@@ -99,12 +107,12 @@ export function SafetySection({ only = null } = {}) {
                         aria-label={t('settings.safety.autoLockTimeout')}
                     >
                         {AUTOLOCK_OPTIONS.map((o) => (
-                            <option key={o.value} value={String(o.value)}>{autolockOptionLabel(o, shell)}</option>
+                            <Select.Option key={o.value} value={String(o.value)} icon={<Icon.LockIcon />}>{autolockOptionLabel(o, shell)}</Select.Option>
                         ))}
                         {!AUTOLOCK_OPTIONS.some((o) => o.value === settings.autolockMinutes) ? (
-                            <option value={String(settings.autolockMinutes)}>
+                            <Select.Option value={String(settings.autolockMinutes)} icon={<Icon.ClockIcon />}>
                                 {t('settings.safety.minutesCustom', { autolockMinutes: settings.autolockMinutes })}
-                            </option>
+                            </Select.Option>
                         ) : null}
                     </Select>
                 </div>
@@ -124,29 +132,30 @@ export function SafetySection({ only = null } = {}) {
                 </div>
                 <div data-settings-control="">
                     <Input
-                        key={String(settings.grace.testSendThresholdSats)}
+                        key={String(testSendFiat)}
                         type="text"
-                        inputMode="numeric"
+                        inputMode="decimal"
                         enterKeyHint="done"
                         autoComplete="off"
-                        defaultValue={settings.grace.testSendThresholdSats}
+                        defaultValue={testSendFiat}
                         onBlur={(e) => {
                             const raw = e.target.value.trim();
-                            if (!/^\d+$/.test(raw)) {
-                                setThresholdError('Enter a whole number of sats. Use 0 to turn the warning off.');
+                            // 0 turns the suggestion off; anything else is an amount.
+                            const threshold = /^0*(\.0*)?$/.test(raw) && raw !== '' ? '0' : normalizeTestSendAmount(raw);
+                            if (threshold === null) {
+                                setThresholdError(t('settings.security.testSendCustomError'));
                                 return;
                             }
                             setThresholdError(null);
-                            const threshold = raw.replace(/^0+(?=\d)/, '');
-                            update({ grace: { testSendThresholdSats: threshold } }).catch((err) => {
-                                setThresholdError('Could not save the test-send warning threshold. Try again.');
+                            update({ grace: { testSendThresholdFiat: threshold } }).catch((err) => {
+                                setThresholdError(t('settings.security.testSendSaveFailed'));
                                 // eslint-disable-next-line no-console
-                                console.error('grace.testSendThresholdSats update failed:', err);
+                                console.error('grace.testSendThresholdFiat update failed:', err);
                             });
                         }}
                         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                         placeholder={t('settings.safety.0NoWarning')}
-                        aria-label={t('settings.safety.testSendWarningThresholdSats')}
+                        aria-label={t('settings.safety.testSendWarningThresholdSats', { currency })}
                         aria-invalid={thresholdError ? 'true' : undefined}
                         aria-describedby={thresholdError ? 'test-send-threshold-error' : undefined}
                         style={{ width: 140, textAlign: 'right' }}
@@ -159,20 +168,25 @@ export function SafetySection({ only = null } = {}) {
             </>
             ) : null}
             {show('lookalike') ? (
-            <div style={ROW}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={ROW_TITLE}>{t('settings.safety.lookalikeAddressWarnings')}</span>
-                    <span style={ROW_HINT}>
-                        {t('settings.safety.theSendFormWarnsWhen')}
-                    </span>
-                </div>
-                <span style={ROW_LABEL}>{t('settings.safety.alwaysOn')}</span>
-            </div>
+            <ToggleRow
+                embedded
+                label={t('settings.safety.lookalikeAddressWarnings')}
+                hint={t('settings.security.lookalikeLine')}
+                help={t('settings.security.lookalikeHelp')}
+                checked={lookalikeWarningsEnabled(settings)}
+                onChange={(next) => {
+                    update({ grace: { lookalikeWarnings: next } }).catch((err) => {
+                        // eslint-disable-next-line no-console
+                        console.error('grace.lookalikeWarnings update failed:', err);
+                    });
+                }}
+            />
             ) : null}
             {show('undoSend') ? <UndoSendRow /> : null}
-            {show('biometric') ? <BiometricRow /> : null}
+            {/* On its own page (only set) a row lands straight on its form. */}
+            {show('biometric') ? <BiometricRow direct={only === 'biometric'} /> : null}
             {show('panic') ? <PanicModeRow /> : null}
-            {show('duress') ? <DuressPassphraseRow /> : null}
+            {show('duress') ? <DuressPassphraseRow direct={only === 'duress'} /> : null}
             {show('reminders') ? (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>

@@ -24,6 +24,11 @@ import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/re
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CreateWallet } from '../../../packages/core/src/shared/routes/CreateWallet.jsx';
 import { ImportWallet } from '../../../packages/core/src/shared/routes/ImportWallet.jsx';
+import {
+    backupEnvelopeText,
+    chooseBackupFile,
+    chooseRefusedBackupFile,
+} from '../../helpers/backupFileChoice.js';
 
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const PASSWORD = 'correct-horse-battery';
@@ -180,7 +185,7 @@ describe('onboarding persistence failures', () => {
         expect(importMnemonic.mock.calls[1][0].name).toBe('Rainy Day');
     });
 
-    it('shows plain copy for a corrupt backup and retries with its pasted contents', async () => {
+    it('shows plain copy for an unclassified backup failure and retries with the same file', async () => {
         const importBackupFresh = vi.fn()
             .mockRejectedValueOnce(new SyntaxError('Unexpected token } in JSON at position 41'))
             .mockResolvedValueOnce({ walletId: 'wallet-1' });
@@ -194,28 +199,38 @@ describe('onboarding persistence failures', () => {
                 />
             </MessagingProvider>,
         );
-        const backupContent = '{"encrypted":"backup-data"}';
-        fireEvent.change(screen.getByLabelText('Backup file contents'), {
-            target: { value: backupContent },
-        });
+        const backupContent = backupEnvelopeText();
+        await chooseBackupFile({ content: backupContent });
         fireEvent.change(screen.getByLabelText('Backup password'), { target: { value: PASSWORD } });
-        fireEvent.change(screen.getByLabelText('Password of the wallet in this backup'), {
-            target: { value: PASSWORD },
-        });
-        fireEvent.change(screen.getByLabelText('Password for this device'), {
-            target: { value: PASSWORD },
-        });
         fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
-            'That backup could not be restored. Check the backup file and try again.',
+            "That backup couldn't be restored. Check the backup file and try again.",
         );
         expect(screen.queryByText(/Unexpected token/)).toBeNull();
-        expect(screen.getByLabelText('Backup file contents')).toHaveValue(backupContent);
+        expect(screen.getByRole('region', { name: 'Chosen backup file' })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
         await waitFor(() => expect(importBackupFresh).toHaveBeenCalledTimes(2));
         expect(importBackupFresh.mock.calls[1][0].fileContent).toBe(backupContent);
+    });
+
+    it('refuses a corrupt file where it is chosen, before any password is sent', async () => {
+        const importBackupFresh = vi.fn();
+        render(
+            <MessagingProvider shell="web" messaging={{ importBackupFresh }}>
+                <ImportWallet
+                    onBack={() => {}}
+                    onImported={() => {}}
+                    mode="fresh"
+                    initialLane="backup"
+                />
+            </MessagingProvider>,
+        );
+        const alert = await chooseRefusedBackupFile('{"encrypted":"backup-data"', 'broken.xchain-wallet');
+        expect(alert).toHaveTextContent("That isn't a wallet backup file this app can read.");
+        expect(screen.queryByText(/Unexpected|JSON/)).toBeNull();
+        expect(importBackupFresh).not.toHaveBeenCalled();
     });
 
     it('explains a refused concurrent backup restore', async () => {
@@ -232,16 +247,8 @@ describe('onboarding persistence failures', () => {
                 />
             </MessagingProvider>,
         );
-        fireEvent.change(screen.getByLabelText('Backup file contents'), {
-            target: { value: '{"encrypted":"backup-data"}' },
-        });
+        await chooseBackupFile();
         fireEvent.change(screen.getByLabelText('Backup password'), { target: { value: PASSWORD } });
-        fireEvent.change(screen.getByLabelText('Password of the wallet in this backup'), {
-            target: { value: PASSWORD },
-        });
-        fireEvent.change(screen.getByLabelText('Password for this device'), {
-            target: { value: PASSWORD },
-        });
         fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
 
         expect(await screen.findByRole('alert')).toHaveTextContent(VAULT_CONFLICT_MESSAGE);
@@ -257,7 +264,7 @@ describe('the BIP39 passphrase InfoTip on import', () => {
                 <ImportWallet onBack={() => {}} onImported={() => {}} mode="fresh" />
             </MessagingProvider>,
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Extra passphrase help' }));
+        fireEvent.click(screen.getByRole('button', { name: 'About This wallet uses an extra passphrase' }));
         const tip = screen.getByRole('tooltip').textContent;
         expect(tip).toMatch(/stays behind your password here/i);
         expect(tip).toMatch(/hardware wallets request it on the device/i);

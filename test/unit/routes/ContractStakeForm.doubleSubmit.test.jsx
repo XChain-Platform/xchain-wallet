@@ -4,7 +4,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { ContractStakeForm } from '../../../packages/core/src/shared/routes/ContractStakeForm.jsx';
+// The contract-stake route: the one Staking form on a contract target.
+import { ContractStakeRoute as ContractStakeForm } from '../../helpers/stakingFormRoutes.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-regtest';
@@ -46,7 +47,7 @@ describe('ContractStakeForm submitted twice before the confirm page opens', () =
                 />
             </MessagingProvider>,
         );
-        const input = await screen.findByLabelText(/signing public key/i, { selector: 'input' });
+        const input = await screen.findByLabelText(/signing key$/i, { selector: 'input' });
         await waitFor(() => expect(input.value).toBe(KEY));
         // The standard From section labels the field "From address".
         await screen.findByLabelText('From address');

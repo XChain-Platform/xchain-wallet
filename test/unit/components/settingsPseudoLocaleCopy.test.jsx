@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { setLocale } from '../../../packages/core/src/i18n/index.js';
 
@@ -30,9 +30,7 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
 const { WalletModeField } = await import(
     '../../../packages/core/src/shared/components/WalletModeField.jsx'
 );
-const { NetworkEndpointsSection } = await import(
-    '../../../packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx'
-);
+const { EndpointsHarness: NetworkEndpointsSection } = await import('./networkRowHarness.jsx');
 
 beforeEach(async () => {
     messaging = {
@@ -48,11 +46,14 @@ afterEach(async () => {
 
 describe('settings copy goes through the dictionary', () => {
     it('wallet mode labels and hints are translated', () => {
-        render(<WalletModeField value="full" onChange={() => {}} />);
-        for (const text of ['Normal', 'Watch-only', 'Air-gapped signer']) {
-            expect(screen.getByText(new RegExp(`⟦${text}⟧`))).toBeTruthy();
+        const { container } = render(<WalletModeField value="full" onChange={() => {}} />);
+        // The modes are the themed dropdown's options, listed once it opens.
+        fireEvent.click(container.querySelector('button[aria-haspopup="listbox"]'));
+        for (const text of ['Normal', 'Signs on another phone', 'Signer for another phone']) {
+            // The picked mode shows in the trigger as well as the open list.
+            expect(screen.getAllByText(new RegExp(`⟦${text}⟧`)).length).toBeGreaterThan(0);
         }
-        expect(screen.getByText(/⟦Sign and send transactions on this device/)).toBeTruthy();
+        expect(screen.getAllByText(/⟦Sign and send transactions on this device/).length).toBeGreaterThan(0);
     });
 
     it('the registry refresh status line is translated', async () => {

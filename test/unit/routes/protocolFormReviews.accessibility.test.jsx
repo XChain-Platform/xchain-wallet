@@ -105,19 +105,24 @@ function mount(Component, walletMode, props = {}, overrides = {}) {
     return { ...result, messaging };
 }
 
-async function auditReview(container, name) {
+async function auditConfirm(container) {
+    expect(await screen.findByTestId('confirm-modal')).toBeTruthy();
+    expect(screen.getByTestId('confirm-sentence')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+    expect(screen.queryByText(/Estimate unavailable/i)).toBeNull();
+    await expectNoSeriousAxeViolations(container);
+}
+
+async function auditLegacyWatcherReview(container, name) {
     expect(await screen.findByRole('form', { name })).toBeTruthy();
     await expectNoSeriousAxeViolations(container);
 }
 
-async function auditConfirm(container) {
-    expect(await screen.findByTestId('confirm-modal')).toBeTruthy();
-    await expectNoSeriousAxeViolations(container);
-}
-
-async function eachReviewMode(open) {
+async function eachReviewMode(open, { watcherConfirm = true } = {}) {
     const watcher = await open('watcher');
-    await auditReview(watcher.container, watcher.reviewName);
+    if (watcherConfirm) await auditConfirm(watcher.container);
+    else await auditLegacyWatcherReview(watcher.container, watcher.reviewName);
     cleanup();
 
     const full = await open('full');
@@ -140,7 +145,7 @@ describe('protocol form review accessibility', () => {
             await waitFor(() => expect(mounted.messaging.getTokenInfo).toHaveBeenCalled(), { timeout: 3000 });
             await act(async () => { await mounted.messaging.getTokenInfo.mock.results.at(-1).value; });
             fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
-            return { ...mounted, reviewName: 'Review token issue' };
+            return mounted;
         });
     });
 
@@ -155,7 +160,7 @@ describe('protocol form review accessibility', () => {
             fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.01' } });
             fireEvent.click(screen.getByRole('button', { name: 'Create Dispenser' }));
             return { ...mounted, reviewName: 'Review dispenser' };
-        });
+        }, { watcherConfirm: false });
     });
 
     it('audits order review and confirm screens', async () => {
@@ -166,7 +171,7 @@ describe('protocol form review accessibility', () => {
             fireEvent.click(await screen.findByRole('button', { name: /^Select TOKEN on Bitcoin/ }));
             fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
             fireEvent.change(screen.getByLabelText(/^Get amount/), { target: { value: '0.001' } });            fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
-            return { ...mounted, reviewName: 'Review order' };
+            return mounted;
         });
     });
 
@@ -201,7 +206,7 @@ describe('protocol form review accessibility', () => {
             fireEvent.click(screen.getByRole('button', {
                 name: 'Create Poll',
             }));
-            return { ...mounted, reviewName: 'Review poll' };
+            return mounted;
         });
     });
 
@@ -213,7 +218,7 @@ describe('protocol form review accessibility', () => {
         fireEvent.change(await screen.findByRole('slider', { name: 'Duration' }), { target: { value: '4' } });
         fireEvent.change(screen.getByLabelText('Blocks'), { target: { value: '12' } });
         fireEvent.click(screen.getByRole('button', { name: 'Lock Address' }));
-        await auditReview(addressReview.container, 'Review lock address');
+        await auditConfirm(addressReview.container);
         cleanup();
         // A TOKEN record cached without an issuer must not answer the owner check.
         __clearTokenInfoCache();
@@ -249,9 +254,6 @@ describe('protocol form review accessibility', () => {
         fireEvent.change(screen.getByLabelText('Recipients'), { target: { value: RECIPIENT } });
         await waitFor(() => expect(screen.getByText(/1 valid address/)).toBeTruthy());
         fireEvent.click(screen.getByRole('button', { name: 'Review Recipients' }));
-        await auditReview(mounted.container, 'Review recipient list');
-
-        fireEvent.click(screen.getByRole('button', { name: /Sign address list/ }));
         await auditConfirm(mounted.container);
     });
 });

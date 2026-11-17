@@ -95,17 +95,16 @@ function fill(labelRe, value) {
 
 async function reachExchange() {
     mountWith({
-        importMnemonic: vi.fn(async () => ({ wallet: { id: 'w-1' } })),
+        addImportedWallet: vi.fn(async () => ({ wallet: { id: 'w-1' } })),
         pairingPayloadRequest: vi.fn(async () => ({
             encoded: 'XCW-PAIR:ZmFrZQ',
             payload: { keys: [{ chainId: 'bitcoin-mainnet', keyId: 'ab'.repeat(32) }] },
         })),
         pairPartnerRequest: vi.fn(async () => ({ verification: { ok: true, message: 'Paired.' } })),
     }, <PairPartnerWallet />);
-    fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Sign on another phone/ }));
     fill(/Shared recovery phrase/i, PHRASE);
-    fill(/^Password for this device$/i, PASSWORD);
-    fill(/Confirm password/i, PASSWORD);
+    fill(/^Wallet password$/i, PASSWORD);
     await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
     });
@@ -119,7 +118,7 @@ async function reachPasteInbox() {
     const sessionList = await screen.findByRole('list', { name: 'Multisig sessions' });
     fireEvent.click(within(sessionList).getByRole('button'));
     await screen.findByLabelText('Multisig signing progress');
-    fireEvent.click(screen.getByRole('button', { name: 'Import Cosigner Reply' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Import cosigner reply/ }));
 }
 
 /** Asserts the scan control is an icon-only button inside the field control. */
@@ -152,9 +151,9 @@ describe('Pair partner wallet: scan sits inside the code field', () => {
         expectInsideField(scan, textarea);
         expect(scan).toHaveAttribute('aria-pressed', 'false');
 
-        const pair = screen.getByRole('button', { name: 'Pair a Signer' });
+        const pair = screen.getByRole('button', { name: 'Pair the Signer Phone' });
         expect(pair.parentElement.contains(scan)).toBe(false);
-        expect(buttonNames(pair.parentElement)).toEqual(['Pair a Signer']);
+        expect(buttonNames(pair.parentElement)).toEqual(['Pair the Signer Phone']);
     });
 
     it('toggles the scanner, flips the accessible name and resets the frame collector', async () => {

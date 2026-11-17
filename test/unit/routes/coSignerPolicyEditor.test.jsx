@@ -15,6 +15,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { selectOption, selectOptionDetails } from '../../helpers/selectOption.js';
 import {
     emptyPolicyDraft,
     buildPolicyDraft,
@@ -298,9 +299,11 @@ describe('CoSignerPolicyEditor per-action limit actions', () => {
     it('offers the allowed actions in words, valued by protocol name', () => {
         render(<CoSignerPolicyEditor value={withLimit('SEND, ISSUE', '')} onChange={() => {}} />);
         const select = screen.getByLabelText('Action');
-        expect(select.tagName).toBe('SELECT');
-        expect([...select.options].map((o) => o.value)).toEqual(['', 'SEND', 'ISSUE']);
-        expect([...select.options].map((o) => o.textContent)).toEqual(['Choose an action', 'Send', 'Issue']);
+        // The shared themed dropdown, never a native select (ruling G96).
+        expect(select).toHaveAttribute('role', 'combobox');
+        const options = selectOptionDetails(select);
+        expect(options.map((o) => o.value)).toEqual(['', 'SEND', 'ISSUE']);
+        expect(options.map((o) => o.label)).toEqual(['Choose an action', 'Send', 'Issue']);
     });
 
     it('shows a stored stray key as flagged rather than silently as another option', () => {
@@ -315,7 +318,7 @@ describe('CoSignerPolicyEditor per-action limit actions', () => {
     it('writes the chosen protocol name back into the draft', () => {
         const onChange = vi.fn();
         render(<CoSignerPolicyEditor value={withLimit('SEND, ISSUE', '')} onChange={onChange} />);
-        fireEvent.change(screen.getByLabelText('Action'), { target: { value: 'ISSUE' } });
+        selectOption(screen.getByLabelText('Action'), 'ISSUE');
         expect(onChange).toHaveBeenCalledTimes(1);
         expect(onChange.mock.calls[0][0].maxPerAction[0].action).toBe('ISSUE');
     });
@@ -454,18 +457,20 @@ describe('CoSignerPolicyEditor field guidance and actions', () => {
         expect(screen.getAllByText('Optional', { selector: 'span' })).toHaveLength(7);
 
         for (const name of [
-            'Add limit',
-            'Add per-token rolling limit',
-            'Add threshold',
-            'Add recipient',
-            'Add output',
+            'Add Limit',
+            'Add Per-Token Rolling Limit',
+            'Add Threshold',
+            'Add Recipient',
+            'Add Output',
         ]) {
             const button = screen.getByRole('button', { name });
             expect(button.querySelector('svg')).not.toBeNull();
             expect(button).not.toHaveTextContent('+');
         }
+        // Every Remove is red (danger) with its icon.
         for (const button of screen.getAllByRole('button', { name: 'Remove' })) {
             expect(button.querySelector('svg')).not.toBeNull();
+            expect(button.className).toMatch(/danger/);
         }
     });
 });

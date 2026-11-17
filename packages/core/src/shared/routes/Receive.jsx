@@ -33,6 +33,8 @@ import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
+import { XChainExplorerIcon } from '../components/ExplorerFavicon.jsx';
 import { AddAddressModal } from './AddAddressModal.jsx';
 import {
     formatWithThousands,
@@ -43,7 +45,6 @@ import {
 import { pickDefaultChainId } from '../chainSelection.js';
 import { addressTypeLabel } from '../utils/addressTypeLabel.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
-import { unsupportedAddressTypeMessage } from '../utils/userFacingMessage.js';
 import { loadSupportedAddressTypes, offeredAddressType } from '../utils/supportedAddressTypes.js';
 import { Settings } from './Settings.jsx';
 import {
@@ -54,7 +55,6 @@ import {
 // Ahead of the route's own sheet, so the shared button base loads first and
 // the explorer link's rules follow it; a CSS-file composes would inline a
 // second copy of Button.module.css that re-applies .btn over other buttons.
-import buttonStyles from '../../ui/Button.module.css';
 import styles from './Receive.module.css';
 import qrStyles from '../../ui/QrDisplay.module.css';
 import { t } from '../../i18n/index.js';
@@ -200,7 +200,7 @@ function preferredAddressOfType(addresses, addressType, chainId, usageByKey) {
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} [props.accountId]   active BIP44 account; when set, scopes addresses + new-receive derivation to that account
- * @param {{ chainId?: string, tick?: string, kind?: string, displayName?: string, divisibility?: number | null, imageUrl?: string | null }} [props.prefill]
+ * @param {{ chainId?: string, tick?: string, kind?: string, displayName?: string, divisibility?: number | null, imageUrl?: string | null, address?: string }} [props.prefill]   address: open on this one of the chain's addresses instead of the newest
  *        Selection from ReceivePicker. `chainId` becomes the active
  *        chain; `tick` pre-fills the Token field unless it matches the
  *        chain's native ticker (no point encoding `?tick=BTC` on a
@@ -255,10 +255,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         /** @type {{ uri: string, dataUrl: string } | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    const [generating, setGenerating] = useState(false);
-    const [generateError, setGenerateError] = useState(/** @type {string | null} */ (null));
-    const generateRequestRef = useRef(0);
-    const generateBusyRef = useRef(false);
     const verifyRequestRef = useRef(0);
 
     const requestedChainId = prefill?.chainId || activeChainId;
@@ -315,7 +311,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         addressTypeRef.current = '';
         setRenderedQr(null);
         setLoadError(null);
-        setGenerateError(null);
         setNoAddresses(false);
         setMultisigs([]);
         setMultisigQrs({});
@@ -329,14 +324,10 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     }, [walletId, accountId, prefill?.chainId]);
 
     useEffect(() => {
-        generateRequestRef.current += 1;
-        generateBusyRef.current = false;
         verifyRequestRef.current += 1;
-        setGenerating(false);
     }, [receiveContextKey]);
 
     useEffect(() => () => {
-        generateRequestRef.current += 1;
         verifyRequestRef.current += 1;
     }, []);
 
@@ -424,8 +415,27 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                             addressUsageRef.current,
                         )
                         : null;
-                    setAddress(preferred || (typeSwapped ? null : newest));
-                    setAddressType(nextType);
+                    // An address handed in by the caller (the address detail's
+                    // Receive tile) wins over the newest pick, and counts as a
+                    // manual pick so the usage lookup does not swap it away.
+                    let requested = null;
+                    if (prefill?.address && prefill.chainId === activeChainId) {
+                        const known = swappedAddresses
+                            || chainsByWalletRef.current?.[activeChainId]
+                            || (await messaging.getAddressesByChain(walletId, accountId))?.[activeChainId]
+                            || [];
+                        requested = known.find((candidate) => candidate?.address === prefill.address) || null;
+                    }
+                    if (cancelled) return;
+                    if (requested) {
+                        addressManuallySelectedRef.current = true;
+                        addressTypeRef.current = requested.addressType || nextType;
+                        setAddress(requested);
+                        setAddressType(requested.addressType || nextType);
+                    } else {
+                        setAddress(preferred || (typeSwapped ? null : newest));
+                        setAddressType(nextType);
+                    }
                 }
             } catch {
                 if (!cancelled) {
@@ -437,7 +447,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         // reloadKey: a generate lands a new newest-index address on the
         // chain already selected, which the chain-list effect alone would
         // not pick up.
-    }, [walletId, accountId, activeChainId, messaging, reloadKey, receiveContextKey]);
+    }, [walletId, accountId, activeChainId, messaging, reloadKey, receiveContextKey, prefill?.address]);
 
     useEffect(() => {
         if (!activeChainId || !chainsByWallet || typeof messaging.getAddressHistory !== 'function') {
@@ -513,7 +523,8 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         // Every term is independent of the code's own size, so applying the
         // result never changes the next measurement.
         const fitToHeight = () => {
-            const copyRow = qrActionsRef.current?.firstElementChild;
+            // The Copy row is the action list's first row, not the whole list.
+            const copyRow = qrActionsRef.current?.querySelector('li') ?? qrActionsRef.current?.firstElementChild;
             const surfaceRect = surface.getBoundingClientRect?.();
             const copyRect = copyRow?.getBoundingClientRect?.();
             if (!surfaceRect || !copyRect) return null;
@@ -558,17 +569,15 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             observer?.disconnect();
             window.removeEventListener('resize', onWindowResize);
         };
-    }, [address?.id, activeChainId, loadError, generateError]);
+    }, [address?.id, activeChainId, loadError]);
 
-    // The error sits first in the page content, but New address and the device
-    // check are lower down: bring the error into view so a failed tap is not
-    // silent on a phone.
+    // The error sits first in the page content, but the device check is lower
+    // down: bring the error into view so a failed tap is not silent on a phone.
     const hwVerifyFailed = hwVerify.status === 'mismatch' || hwVerify.status === 'error';
     useEffect(() => {
-        if (!generateError && !hwVerifyFailed) return;
-        const id = generateError ? 'receive-generate-error' : 'receive-hw-verify-error';
-        document.getElementById(id)?.scrollIntoView?.({ block: 'nearest' });
-    }, [generateError, hwVerifyFailed]);
+        if (!hwVerifyFailed) return;
+        document.getElementById('receive-hw-verify-error')?.scrollIntoView?.({ block: 'nearest' });
+    }, [hwVerifyFailed]);
 
     const verifyOnDevice = useCallback(async () => {
         if (!hasReceiveAddress || !activeChainId) return;
@@ -862,53 +871,12 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
     const qrDataUrl = renderedQr?.uri === qrUri ? renderedQr.dataUrl : null;
 
-    const generateNewAddress = useCallback(async () => {
-        if (!activeChainId || !addressType || generateBusyRef.current) return;
-        if (typeof messaging.generateReceiveAddress !== 'function') {
-            setGenerateError('This app cannot create a new receive address.');
-            return;
-        }
-        const request = ++generateRequestRef.current;
-        const contextKey = receiveContextKey;
-        const chainId = activeChainId;
-        const requestedAddressType = addressType;
-        generateBusyRef.current = true;
-        setGenerating(true);
-        setGenerateError(null);
-        try {
-            const generated = await messaging.generateReceiveAddress({
-                walletId,
-                accountId,
-                chainId,
-                addressType: requestedAddressType,
-            });
-            if (generateRequestRef.current !== request || receiveContextRef.current !== contextKey) return;
-            addressManuallySelectedRef.current = true;
-            addressTypeRef.current = generated?.addressType || addressType;
-            setAddress(generated);
-            setAddressContextKey(contextKey);
-            setAddressType(generated?.addressType || requestedAddressType);
-            setChainsByWallet((current) => {
-                const chainAddresses = current?.[chainId] || [];
-                const withoutDuplicate = chainAddresses.filter((item) => item.id !== generated?.id);
-                return {
-                    ...(current || {}),
-                    [chainId]: [...withoutDuplicate, generated],
-                };
-            });
-        } catch (err) {
-            if (generateRequestRef.current !== request || receiveContextRef.current !== contextKey) return;
-            setGenerateError(
-                unsupportedAddressTypeMessage(err)
-                || 'Could not create a new receive address. Check your connection and try again.',
-            );
-        } finally {
-            if (generateRequestRef.current === request) {
-                generateBusyRef.current = false;
-                setGenerating(false);
-            }
-        }
-    }, [activeChainId, addressType, messaging, walletId, accountId, receiveContextKey]);
+    // New address is the same page the Addresses plus button opens (the
+    // in-page AddAddressModal, whose Back returns here), seeded with this
+    // Receive's chain so it is for the network the user is looking at.
+    const generateNewAddress = useCallback(() => {
+        setAddAddressOpen(true);
+    }, []);
 
     // QR image actions. Copy writes the rendered PNG when the clipboard can
     // accept images. Share always offers the payment request, and attaches
@@ -1011,7 +979,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     const header = (
         <PageHeader
             onBack={onBack}
-            backLabel={t('common.backToHome')}
             title={t('home.receive')}
         />
     );
@@ -1108,6 +1075,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 walletId={walletId}
                 accountId={accountId}
                 chainIds={Object.keys(chainsByWallet || {})}
+                initialChainId={activeChainId || undefined}
                 onClose={() => setAddAddressOpen(false)}
                 onGenerated={() => setReloadKey((k) => k + 1)}
             />
@@ -1120,8 +1088,6 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
             type="button"
             variant="secondary"
             onClick={generateNewAddress}
-            loading={generating}
-            disabled={generating}
             icon={<Icon.PlusIcon />}
             aria-label={t('receive.generateNewAddress')}
         >
@@ -1129,51 +1095,53 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         </Button>
     ) : null;
 
+    // The QR's actions are one ActionList under the code (G101): Copy, Share,
+    // the explorer and a new address, a row each with what it does. Copy and
+    // Share wait for the rendered code and say so while they wait.
     const qrActionsContent = hasReceiveAddress ? (
-        <div ref={qrActionsRef} className={`${qrStyles.actions} ${styles.qrActions}`}>
-            <Button
-                size="md"
-                variant="secondary"
-                onClick={copyQrImage}
-                disabled={!qrDataUrl}
-                icon={<Icon.CopyIcon />}
-                aria-label={canCopyImages ? t('receive.copyQrCode') : t('receive.copyPaymentLink')}
-            >
-                {/* Short labels so four buttons fit one row at 360px. */}
-                {t('common.copy')}
-            </Button>
-            <Button
-                size="md"
-                variant="secondary"
-                onClick={shareQrImage}
-                disabled={!qrDataUrl}
-                icon={<Icon.UploadIcon />}
-                aria-label={t('receive.shareQrPaymentLink')}
-            >
-                {t('multisig.signingLink.share')}
-            </Button>
-            {addressExplorerUrl ? (
-                <a
-                    className={`${buttonStyles.btn} ${buttonStyles.secondary} ${buttonStyles.md} ${styles.explorerLink}`}
-                    href={addressExplorerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={t('receive.viewAddressInBlockExplorer')}
-                >
-                    {/* The same icon and label spans as Button, so the link
-                        matches the other three. */}
-                    <span className={buttonStyles.icon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
-                    <span className={buttonStyles.label}>{t('receive.explore')}</span>
-                </a>
-            ) : null}
-            {generateAddressButton}
+        <div ref={qrActionsRef} className={styles.qrActions}>
+            <ActionList label={t('receive.qrActions')}>
+                <ActionListItem
+                    icon={<Icon.CopyIcon />}
+                    title={canCopyImages ? t('receive.copyQrCode') : t('receive.copyPaymentLink')}
+                    description={canCopyImages ? t('receive.copyQrCodeDescription') : t('receive.copyPaymentLinkDescription')}
+                    onClick={copyQrImage}
+                    disabled={!qrDataUrl}
+                    disabledReason={t('receive.waitingForQr')}
+                />
+                <ActionListItem
+                    icon={<Icon.UploadIcon />}
+                    title={t('receive.shareQrPaymentLink')}
+                    description={t('receive.shareQrPaymentLinkDescription')}
+                    onClick={shareQrImage}
+                    disabled={!qrDataUrl}
+                    disabledReason={t('receive.waitingForQr')}
+                />
+                {addressExplorerUrl ? (
+                    <ActionListItem
+                        icon={<XChainExplorerIcon />}
+                        title={t('receive.viewAddressInBlockExplorer')}
+                        description={t('receive.viewAddressInBlockExplorerDescription')}
+                        href={addressExplorerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    />
+                ) : null}
+                {descriptor && addressType ? (
+                    <ActionListItem
+                        icon={<Icon.PlusIcon />}
+                        title={t('receive.generateNewAddress')}
+                        description={t('receive.generateNewAddressDescription')}
+                        onClick={generateNewAddress}
+                    />
+                ) : null}
+            </ActionList>
         </div>
     ) : null;
 
     // One page-level error at a time, drawn as the first item of the page content
-    // (above the card when wide): the load failure, then a failed New address,
-    // then a hardware-wallet verification failure. The amount error stays under
-    // its field.
+    // (above the card when wide): the load failure, then a hardware-wallet
+    // verification failure. The amount error stays under its field.
     const hwVerifyNotice = isHwAddress
         ? (hwVerify.status === 'mismatch'
             ? `${t('receive.your')} ${hwDeviceLabel} ${t('receive.showedADifferentAddressDo')}`
@@ -1181,11 +1149,9 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
         : null;
     const pageNotice = loadError
         ? <StatusMessage variant="error">{loadError}</StatusMessage>
-        : generateError
-            ? <StatusMessage variant="error" id="receive-generate-error">{generateError}</StatusMessage>
-            : hwVerifyNotice
-                ? <StatusMessage variant="error" id="receive-hw-verify-error">{hwVerifyNotice}</StatusMessage>
-                : null;
+        : hwVerifyNotice
+            ? <StatusMessage variant="error" id="receive-hw-verify-error">{hwVerifyNotice}</StatusMessage>
+            : null;
 
     const body = (
         <>
@@ -1201,7 +1167,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
 
             {/* No Address type select; Receive uses the wallet's default
                 type (the newest address's type, else the chain default). */}
-            {!hasReceiveAddress && descriptor && addressType && !generating && !generateError ? (
+            {!hasReceiveAddress && descriptor && addressType ? (
                 <FormNotice variant="status">
                     {`${t('receive.thereIsNo')} ${addressTypeLabel(addressType)} ${t('receive.addressYetCreateOneTo')}`}
                 </FormNotice>
@@ -1231,10 +1197,12 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     <AddressField
                         size="md"
                         // Receive shows only what the user can change: the plain
-                        // Address label (never the address's own name), no help tip
-                        // and no tooltip. A tap still copies the address quietly; the
-                        // list icon is the one way to change the address and its chain.
+                        // Address label (never the address's own name) with its '?'
+                        // help (ruling 2026-11-13) and no tooltip. A tap still copies
+                        // the address quietly; the list icon is the one way to change
+                        // the address and its chain.
                         label={t('verifySignature.address')}
+                        help={t('receive.addressHelp')}
                         icon="addresses"
                         value={address.address}
                         readOnly
@@ -1251,28 +1219,27 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                     <TokenField
                         // The native coin or a token, so the field is Asset.
                         label={t('send.asset')}
+                        help={t('receive.assetHelp')}
                         placeholder={t('send.selectAsset')}
                         value={activeChainId ? { chainId: activeChainId, tick: reqTick || nativeTicker || '' } : null}
                         onOpenPicker={() => setTokenPickerOpen(true)}
                     />
-                    <div className={styles.amountEditor}>
-                        <AmountField
-                            size="md"
-                            optional
-                            amount={reqAmount}
-                            fiatAmount={fiatAmount}
-                            tick={reqTick.trim() || nativeTicker || ''}
-                            fiatRate={fiatRate}
-                            fiatCurrency={fiatCurrency}
-                            amountInputMode={amountInputMode}
-                            divisibility={requestDivisibility}
-                            onAmountFieldChange={onAmountFieldChange}
-                            toggleAmountInputMode={toggleAmountInputMode}
-                            inputRef={amountInputRef}
-                            error={amountError || undefined}
-                            help={t('receive.amountHelp')}
-                        />
-                    </div>
+                    <AmountField
+                        size="md"
+                        optional
+                        amount={reqAmount}
+                        fiatAmount={fiatAmount}
+                        tick={reqTick.trim() || nativeTicker || ''}
+                        fiatRate={fiatRate}
+                        fiatCurrency={fiatCurrency}
+                        amountInputMode={amountInputMode}
+                        divisibility={requestDivisibility}
+                        onAmountFieldChange={onAmountFieldChange}
+                        toggleAmountInputMode={toggleAmountInputMode}
+                        inputRef={amountInputRef}
+                        error={amountError || undefined}
+                        help={t('receive.amountHelp')}
+                    />
                     {qrActionsContent}
                 </div>
             ) : null}

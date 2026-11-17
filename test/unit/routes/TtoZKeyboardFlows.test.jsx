@@ -104,20 +104,24 @@ describe('T through Z route keyboard flows', () => {
         const kind = screen.getByRole('button', { name: /Coins and tokens/ });
         expect(tabStops(view.container)).toEqual([back, filter, search, network, kind, bitcoin]);
 
+        // The network filter opens the full-screen network list with focus on
+        // the current row (operator ruling 2026-11-13: never a dropdown).
         network.focus();
         fireEvent.keyDown(network, { key: 'ArrowDown' });
-        const allNetworks = await screen.findByRole('option', { name: /All networks/ });
+        const networkList = await screen.findByRole('dialog', { name: 'Network' });
+        const allNetworks = within(networkList).getByRole('button', { name: 'Select All networks' });
         await waitFor(() => expect(document.activeElement).toBe(allNetworks));
         fireEvent.keyDown(allNetworks, { key: 'Escape' });
-        expect(screen.queryByRole('listbox', { name: 'Networks' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).not.toBeInTheDocument();
         expect(document.activeElement).toBe(network);
 
         fireEvent.keyDown(network, { key: 'ArrowDown' });
-        await waitFor(() => expect(document.activeElement).toHaveAttribute('role', 'option'));
+        await waitFor(() => expect(document.activeElement).toHaveAttribute('data-network-option'));
         fireEvent.keyDown(document.activeElement, { key: 'ArrowDown' });
         expect(document.activeElement).toHaveAccessibleName(/Bitcoin/);
-        fireEvent.keyDown(document.activeElement, { key: 'Enter' });
-        expect(screen.queryByRole('listbox', { name: 'Networks' })).not.toBeInTheDocument();
+        // A native button turns Enter into a click.
+        fireEvent.click(document.activeElement);
+        expect(screen.queryByRole('dialog', { name: 'Network' })).not.toBeInTheDocument();
         expect(document.activeElement).toBe(network);
 
         // The asset kind choice is a listbox opened from the keyboard; Enter
@@ -216,10 +220,13 @@ describe('T through Z route keyboard flows', () => {
         const savings = screen.getByRole('button', { name: /^Savings/ });
         const add = screen.getByRole('button', { name: 'Add Wallet' });
 
-        // The plus sits on the title line, then each wallet row opens its page
-        // (no separate details or Manage buttons).
+        const filter = screen.getByRole('button', { name: 'Filter wallets' });
+
+        // The filter button and the plus sit on the title line, then each wallet
+        // row opens its page (no separate details or Manage buttons).
         expect(screen.queryByRole('button', { name: 'Manage Wallet' })).toBeNull();
-        expect(tabStops(view.container)).toEqual([back, add, primary, savings]);
+        expect(filter).toHaveAttribute('aria-expanded', 'false');
+        expect(tabStops(view.container)).toEqual([back, filter, add, primary, savings]);
 
         pressEnter(back);
         pressEnter(add);
@@ -259,9 +266,9 @@ describe('T through Z route keyboard flows', () => {
         );
 
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
-        const migrate = await screen.findByRole('button', { name: 'Upgrade recovery phrase' });
-        const rename = screen.getByRole('button', { name: 'Edit wallet' });
-        const exit = screen.getByRole('button', { name: 'Exit demo & wipe' });
+        const migrate = await screen.findByRole('button', { name: /^Upgrade recovery phrase/ });
+        const rename = screen.getByRole('button', { name: /^Edit wallet/ });
+        const exit = screen.getByRole('button', { name: /^Exit demo & wipe/ });
         const detailsTab = screen.getByRole('tab', { name: 'Details' });
         // The Actions tab is selected and is the tab stop; Details is one arrow away.
         const actionsTab = screen.getByRole('tab', { name: 'Actions' });

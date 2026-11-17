@@ -80,10 +80,14 @@ test.describe('Settings: change wallet password', () => {
         });
 
         await test.step('change the password in Settings', async () => {
-            const change = page.getByRole('main')
-                .getByRole('button', { name: 'Change…', exact: true });
-            await openSettingsSubpage(page, 'This wallet', change);
-            await change.click();
+            // Security > Wallet password opens straight on the form (no
+            // Change button first, no Cancel; Back leaves).
+            const passwordRow = page.getByRole('main')
+                .getByRole('button', { name: /^Wallet password\b/ }).first();
+            await openSettingsSubpage(page, 'Security', passwordRow);
+            await passwordRow.click();
+            await expect(page.getByLabel('Current wallet password', { exact: true }))
+                .toBeVisible({ timeout: 30_000 });
 
             // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
             await page.getByLabel('Current wallet password', { exact: true }).fill(OLD_PASSWORD);

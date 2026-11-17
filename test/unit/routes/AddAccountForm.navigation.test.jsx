@@ -33,6 +33,26 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
+describe('AddAccountForm flat layout', () => {
+    it('has no FormSection wrappers and lists the fields in order', () => {
+        const { container } = render(
+            <AddAccountForm walletId="wallet-1" onBack={() => {}} onCreated={() => {}} />,
+        );
+        expect(container.querySelector('[data-form-section-title]')).toBeNull();
+        expect(container.querySelector('[data-form-section-chevron]')).toBeNull();
+        const flat = container.querySelector('[data-flat-look-form]');
+        expect(flat).toBeTruthy();
+        const text = container.textContent;
+        // The header also reads "Add Account", so the action is the last match.
+        const order = ['Account name', 'Icon colour', 'Icon shape', 'Icon image'].map((s) => text.indexOf(s));
+        order.push(text.lastIndexOf('Add Account'));
+        expect(order.every((i) => i >= 0)).toBe(true);
+        expect([...order].sort((a, b) => a - b)).toEqual(order);
+        const tile = flat.firstElementChild;
+        expect(tile.compareDocumentPosition(screen.getByLabelText('Account name', { selector: 'input' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+});
+
 describe('AddAccountForm navigation', () => {
     it('renders a working Back control', () => {
         const onBack = vi.fn();
@@ -85,8 +105,16 @@ describe('AddAccountForm navigation', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Add Account' }));
 
-        expect(screen.getByText('An account named "SAVINGS" already exists.')).toBeTruthy();
+        const notice = screen.getByRole('alert', { name: 'Form errors' });
+        expect(notice).toHaveTextContent('An account named "SAVINGS" already exists.');
+        const field = screen.getByLabelText('Account name');
+        expect(field).toHaveAttribute('aria-invalid', 'true');
+        expect(notice.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(messaging.createAccount).not.toHaveBeenCalled();
+
+        fireEvent.change(field, { target: { value: 'Savings 2' } });
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(field).not.toHaveAttribute('aria-invalid', 'true');
     });
 
     it('passes the created account to its completion callback', async () => {

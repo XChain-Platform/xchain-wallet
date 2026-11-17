@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
+import { fact } from '../../helpers/detailFacts.js';
 
 vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', () => ({
     useFiatRate: () => ({ rate: 1, fiatCurrency: 'EUR' }),
@@ -88,9 +89,6 @@ describe('History amount formatting', () => {
         expect(amountRow.textContent).not.toContain('$');
 
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-        const amountRows = screen.getAllByRole('rowheader', { name: 'Amount' });
-        expect(amountRows).toHaveLength(2);
-        expect(amountRows[1].closest('tr').textContent)
-            .toContain('+9,007,199,254,740,993.01');
+        expect(fact('Amount').textContent).toContain('+9,007,199,254,740,993.01');
     });
 });

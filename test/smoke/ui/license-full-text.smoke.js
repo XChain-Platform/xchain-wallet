@@ -8,17 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §55 / Cluster J FOLLOWUP 5: full LICENSE.md text surfaced
-// in Settings → About.
+// Smoke for the bundled license copy and the external About license row.
 //
 // Pins:
 //   - packages/core/src/license.js exports LICENSE_TEXT.
 //   - LICENSE_TEXT matches the canonical LICENSE.md wording while storing
 //     each paragraph without editorial-width line breaks.
-//   - AboutSection imports LICENSE_TEXT, mounts a "Show full text" /
-//     "Hide full text" toggle next to the existing License DocLink,
-//     and renders the text as paragraphs with id="full-license-text"
-//     and aria-expanded / aria-controls wired to the toggle button.
+//   - About links to LICENSE.md externally and renders no document content.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -32,6 +28,11 @@ const wsRoot = join(here, '..', '..', '..');
 const licenseMd = readFileSync(join(wsRoot, 'LICENSE.md'), 'utf8');
 const aboutSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'settings', 'AboutSection.jsx'),
+    'utf8',
+);
+const licenseSrc = readFileSync(join(wsRoot, 'packages', 'core', 'src', 'license.js'), 'utf8');
+const settingsSrc = readFileSync(
+    join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Settings.jsx'),
     'utf8',
 );
 
@@ -64,35 +65,18 @@ assert.equal(
 
 // ─── 3. AboutSection wiring ────────────────────────────────────────────
 
+assert.doesNotMatch(aboutSrc, /from '\.\.\/\.\.\/\.\.\/license\.js'/, 'About imports no bundled license copy');
+assert.doesNotMatch(aboutSrc, /licenseOpen|aria-expanded/, 'About has no expand-in-place license toggle');
 assert.match(
     aboutSrc,
-    /import \{[^}]*LICENSE_TEXT[^}]*\} from '\.\.\/\.\.\/\.\.\/license\.js'/,
-    'AboutSection imports LICENSE_TEXT',
+    /title=\{t\('settings\.about\.license'\)\}[\s\S]+?docLinkProps\(LICENSE_FILE\)/,
+    'About links the License row to the repository file',
 );
-assert.match(
-    aboutSrc,
-    /text=\{LICENSE_SUMMARY\}/,
-    'AboutSection renders the plain-English LICENSE_SUMMARY',
-);
-assert.match(
-    aboutSrc,
-    /const \[licenseOpen, setLicenseOpen\] = useState\(false\)/,
-    'AboutSection tracks licenseOpen state',
-);
-assert.match(
-    aboutSrc,
-    /\{licenseOpen \? 'Hide Full Text' : 'Show Full Text'\}/,
-    'toggle button label flips on licenseOpen',
-);
-assert.match(
-    aboutSrc,
-    /aria-expanded=\{licenseOpen\}[\s\S]+?aria-controls="full-license-text"/,
-    'toggle button has aria-expanded + aria-controls',
-);
-assert.match(
-    aboutSrc,
-    /<LicenseParagraphs[\s\S]+?id="full-license-text"[\s\S]+?text=\{LICENSE_TEXT\}/,
-    'license paragraphs have the matching id and render LICENSE_TEXT',
-);
+assert.doesNotMatch(aboutSrc, /AboutLicensePage|full-license-text/, 'About has no in-app license page');
+assert.doesNotMatch(settingsSrc, /about-license|LicenseHeaderButton/, 'Settings has no license child route');
+
+// ─── 4. removed in-app helpers stay removed ────────────────────────────
+
+assert.doesNotMatch(licenseSrc, /export const LICENSE_(?:NOTICE|TERMS)/, 'in-app license helpers are removed');
 
 console.log('license-full-text smoke OK');

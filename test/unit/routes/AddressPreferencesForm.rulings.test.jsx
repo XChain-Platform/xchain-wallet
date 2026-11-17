@@ -67,7 +67,8 @@ describe('AddressPreferencesForm rulings', () => {
 
         fireEvent.click(header);
         expect(header).toHaveAttribute('aria-expanded', 'false');
-        expect(header).toHaveTextContent('bcrt...fs00');
+        // G99: the closed summary's address is the fitting AddressText.
+        expect(header.querySelector(`[aria-label="${ADDR_A.address}"]`)).not.toBeNull();
     });
 
     it('opens with Network, then Address, with tips and no disclosure box', async () => {
@@ -84,9 +85,12 @@ describe('AddressPreferencesForm rulings', () => {
         openSection(/^Incoming Sends/);
         openSection(/^Dispensers/);
         openSection(/^Memo/);
-        for (const name of ['About Address', 'About How the protocol fee is handled', 'About Require memo on incoming sends', 'About Who may open dispensers', 'About Memo']) {
+        for (const name of ['About Address', 'About How the protocol fee is handled', 'About Require memo on incoming sends', 'About Who may open dispensers']) {
             expect(screen.getByRole('button', { name })).toBeInTheDocument();
         }
+        // A memo alone in its Memo section has no label row and no tip (ruling).
+        expect(screen.queryByRole('button', { name: 'About Memo' })).toBeNull();
+        expect(screen.getByRole('textbox', { name: 'Memo' })).toBeInTheDocument();
     });
 
     it('keeps Memo and the network fee out of the Dispensers section', async () => {
@@ -98,9 +102,9 @@ describe('AddressPreferencesForm rulings', () => {
         const memo = screen.getByLabelText('Memo');
         expect(dispensers.contains(memo)).toBe(false);
         // Memo is its own optional section, and the network fee is the shared
-        // Network fee section; neither sits inside Dispensers.
+        // Fees section; neither sits inside Dispensers.
         expect(memo.closest('section')).toHaveAttribute('data-form-section', 'memo');
-        const feeToggle = screen.getByRole('button', { name: /^Network fee/ });
+        const feeToggle = screen.getByRole('button', { name: /^Speed and Fees/ });
         expect(dispensers.contains(feeToggle)).toBe(false);
         expect(screen.queryByRole('heading', { name: 'Memo and network fee' })).toBeNull();
     });

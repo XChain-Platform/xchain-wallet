@@ -53,11 +53,11 @@ describe('Wallet Details actions open pages for the wallet on screen', () => {
         const onOpenSettings = vi.fn();
         await renderDetails({ onExportBackup, onRemoveWallet, onOpenSettings });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Export Backup' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Export Backup/ }));
         expect(onExportBackup).toHaveBeenCalledTimes(1);
         expect(onExportBackup.mock.calls[0][0].id).toBe(CHOSEN.id);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Remove wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Remove wallet/ }));
         expect(onRemoveWallet).toHaveBeenCalledTimes(1);
         expect(onRemoveWallet.mock.calls[0][0].id).toBe(CHOSEN.id);
 
@@ -83,7 +83,17 @@ describe('<ExportWalletBackup>', () => {
         );
 
         expect(screen.getByRole('heading', { name: 'Export Backup' })).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
+        // The password fields are there at once: no intro card, no grey Export… button.
+        expect(screen.queryByRole('button', { name: 'Export…' })).toBeNull();
+        expect(screen.queryByText('Export encrypted backup')).toBeNull();
+        expect(screen.getByLabelText('Backup password')).toBeTruthy();
+        const logSpies = ['log', 'info', 'warn', 'error', 'debug'].map((k) => vi.spyOn(console, k).mockImplementation(() => {}));
+        fireEvent.change(screen.getByLabelText('Backup password'), { target: { value: 'short' } });
+        expect(screen.getByText(/at least 8 characters/i)).toBeTruthy();
+        fireEvent.change(screen.getByLabelText('Confirm backup password'), { target: { value: 'different' } });
+        expect(screen.getByText(/passwords don't match/i)).toBeTruthy();
+        // G130: Export Backup stays enabled; the mismatch is refused on the press.
+        expect(screen.getAllByRole('button', { name: /^export backup$/i }).find((b) => b.type === 'submit')).toBeEnabled();
         fireEvent.change(screen.getByLabelText('Backup password'), { target: { value: 'backup-secret' } });
         fireEvent.change(screen.getByLabelText('Confirm backup password'), { target: { value: 'backup-secret' } });
         // The prompt's submit button (its label's case follows the locale copy).
@@ -95,6 +105,10 @@ describe('<ExportWalletBackup>', () => {
 
         expect(exportBackupFile).toHaveBeenCalledTimes(1);
         expect(exportBackupFile.mock.calls[0][0].walletId).toBe(CHOSEN.id);
+        for (const spy of logSpies) {
+            expect(JSON.stringify(spy.mock.calls)).not.toContain('backup-secret');
+            spy.mockRestore();
+        }
     });
 
     it('hands the export to a tab when the host supplies one', () => {
@@ -106,7 +120,9 @@ describe('<ExportWalletBackup>', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
+        fireEvent.change(screen.getByLabelText('Backup password'), { target: { value: 'backup-secret' } });
+        fireEvent.change(screen.getByLabelText('Confirm backup password'), { target: { value: 'backup-secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Export Backup' }));
         expect(onExportInTab).toHaveBeenCalledTimes(1);
         expect(exportBackupFile).not.toHaveBeenCalled();
     });

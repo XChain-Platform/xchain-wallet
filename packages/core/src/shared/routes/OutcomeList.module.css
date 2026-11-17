@@ -1,0 +1,117 @@
+/* The bet market's outcome list: one flush list card, every outcome a padded
+   ListRow with a divider line above the next, the way the wallet's other
+   action lists are drawn (an icon in a tinted square, a title with a line
+   under it, a chevron). */
+.list {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.list > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+/* Each row takes its outcome's colour, which the mark fills with and the
+   share fill tints from. */
+.item[data-outcome-tone='yes'], .mark[data-outcome-tone='yes'] { --outcome-color: var(--xc-outcome-yes); }
+.item[data-outcome-tone='no'], .mark[data-outcome-tone='no'] { --outcome-color: var(--xc-outcome-no); }
+.item[data-outcome-tone='p0'], .mark[data-outcome-tone='p0'] { --outcome-color: var(--xc-outcome-1); }
+.item[data-outcome-tone='p1'], .mark[data-outcome-tone='p1'] { --outcome-color: var(--xc-outcome-2); }
+.item[data-outcome-tone='p2'], .mark[data-outcome-tone='p2'] { --outcome-color: var(--xc-outcome-3); }
+.item[data-outcome-tone='p3'], .mark[data-outcome-tone='p3'] { --outcome-color: var(--xc-outcome-4); }
+.item[data-outcome-tone='p4'], .mark[data-outcome-tone='p4'] { --outcome-color: var(--xc-outcome-5); }
+.item[data-outcome-tone='p5'], .mark[data-outcome-tone='p5'] { --outcome-color: var(--xc-outcome-6); }
+.item[data-outcome-tone='p6'], .mark[data-outcome-tone='p6'] { --outcome-color: var(--xc-outcome-7); }
+.item[data-outcome-tone='p7'], .mark[data-outcome-tone='p7'] { --outcome-color: var(--xc-outcome-8); }
+.item[data-outcome-tone='unknown'], .mark[data-outcome-tone='unknown'] { --outcome-color: var(--xc-outcome-unknown); }
+
+.item {
+    position: relative;
+    display: block;
+    min-width: 0;
+    isolation: isolate;
+}
+
+/* The outcome's share of the pool, drawn from the row's start edge in its
+   colour at low strength, behind the row's text. */
+.fill {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    max-width: 100%;
+    background: color-mix(in srgb, var(--outcome-color) 14%, transparent);
+    pointer-events: none;
+}
+
+/* The row fills its list item edge to edge; the card owns the corners. Its
+   press and hover tints stay see-through so the share fill shows under them. */
+.row.row {
+    position: relative;
+    /* Above the share fill, which comes first in the item and has no z-index. */
+    z-index: var(--xc-z-base);
+    border-radius: 0;
+    background: transparent;
+}
+
+.list .row.row:not(:disabled):hover,
+.list .row.row:not(:disabled):active {
+    background: color-mix(in srgb, var(--xc-text) 6%, transparent);
+}
+
+.list .row.row:disabled {
+    background: transparent;
+}
+
+/* The card clips its corners, so the focus ring is drawn inside the row. */
+.list .row.row:focus-visible {
+    outline-offset: -2px;
+}
+
+/* A long outcome name stays on one line. */
+.content > :first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The chance, bold and a step larger than the row's text. */
+.chance.chance {
+    max-width: none;
+    font-size: var(--xc-text-lg);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The outcome's mark: a white thumb or letter on the outcome's colour. */
+.mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--xc-control-h-md);
+    height: var(--xc-control-h-md);
+    flex: 0 0 auto;
+    border-radius: var(--xc-radius-md);
+    background: var(--outcome-color);
+    color: var(--xc-on-outcome);
+}
+
+.mark svg {
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
+}
+
+/* Activity's round mark. */
+.markRound {
+    border-radius: var(--xc-radius-pill);
+}
+
+.markLetter {
+    font-size: var(--xc-text-lg);
+    font-weight: 700;
+    line-height: 1;
+}

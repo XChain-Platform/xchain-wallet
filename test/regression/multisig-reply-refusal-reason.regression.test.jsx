@@ -94,7 +94,7 @@ async function importReply(active, pubkey) {
     const list = await screen.findByRole('list', { name: 'Multisig sessions' });
     fireEvent.click(within(list).getByRole('button'));
     await screen.findByLabelText('Multisig signing progress');
-    fireEvent.click(screen.getByRole('button', { name: 'Import Cosigner Reply' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Import cosigner reply/ }));
     fireEvent.change(screen.getByLabelText('Cosigner reply chunks'), {
         target: { value: replyChunks(active, pubkey) },
     });

@@ -49,11 +49,29 @@ describe('TileLookFields icon image', () => {
         expect(onImage).not.toHaveBeenCalled();
     });
 
-    it('shows Image set with X once an image is set, and X clears it', () => {
+    it('shows Image set with the field X to clear it and no separate button', () => {
         const onImage = mount('data:image/png;base64,AAAA');
         const field = screen.getByLabelText(/^Icon image/, { selector: 'input:not([type="file"])' });
         expect(field).toHaveValue('Image set');
+        expect(screen.queryByRole('button', { name: 'Replace Image' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Upload Image' })).toBeNull();
+        expect(screen.getByText('Remove the image to use a colour.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Remove image' }));
         expect(onImage).toHaveBeenCalledWith(null);
+    });
+
+    it('has no Upload Image button and no Remove while empty', () => {
+        mount();
+        expect(screen.queryByRole('button', { name: /upload image/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Remove image' })).toBeNull();
+        expect(screen.queryByText('Remove the image to use a colour.')).toBeNull();
+    });
+
+    it('clicking the field opens the file dialog', () => {
+        mount('data:image/png;base64,AAAA');
+        const input = screen.getByLabelText('Icon image file');
+        const click = vi.spyOn(input, 'click').mockImplementation(() => {});
+        fireEvent.click(screen.getByLabelText(/^Icon image/, { selector: 'input:not([type="file"])' }));
+        expect(click).toHaveBeenCalled();
     });
 });

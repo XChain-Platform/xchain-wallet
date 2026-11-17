@@ -79,8 +79,9 @@ async function mountSweep() {
         container,
         submit: () => container.querySelector('button[type="submit"]'),
         destination: () => labelledInput(container, 'Destination address'),
-        memo: () => labelledInput(container, 'Memo'),
-        category: (text) => within(container).getByRole('checkbox', { name: new RegExp(text) }),
+        // The lone memo has no label row; its accessible name is Memo.
+        memo: () => container.querySelector('[data-form-section="memo"] textarea[aria-label="Memo"]'),
+        category: (text) => within(container).getByRole('switch', { name: new RegExp(text) }),
     };
     await waitFor(() => {
         expect(q.destination()).toBeTruthy();
@@ -105,10 +106,10 @@ describe('SweepForm brings a refusal into view', () => {
 
     async function expectStatusInView(q, pattern) {
         await waitFor(() => {
-            const status = q.container.querySelector('[data-form-status]');
-            expect(status?.textContent).toMatch(pattern);
-            expect(document.activeElement).toBe(status);
-            expect(scrolled).toContain(status);
+            const summary = q.container.querySelector('[data-form-errors]');
+            expect(summary?.textContent).toMatch(pattern);
+            expect(document.activeElement).toBe(summary);
+            expect(scrolled).toContain(summary);
         });
     }
 
@@ -151,10 +152,10 @@ describe('SweepForm brings a refusal into view', () => {
         fireEvent.click(q.submit());
 
         await waitFor(() => {
-            const status = q.container.querySelector('[data-form-status]');
-            expect(status?.textContent).toMatch(/Destination is the source address itself/);
-            expect(document.activeElement).toBe(status);
-            expect(scrolled).toContain(status);
+            const summary = q.container.querySelector('[data-form-errors]');
+            expect(summary?.textContent).toMatch(/Destination is the source address itself/);
+            expect(document.activeElement).toBe(summary);
+            expect(scrolled).toContain(summary);
         });
     });
 
@@ -164,9 +165,6 @@ describe('SweepForm brings a refusal into view', () => {
         await waitFor(() => expect(q.destination().getAttribute('aria-invalid')).toBe('true'));
         fireEvent.click(q.submit());
 
-        await waitFor(() => {
-            expect(document.activeElement).toBe(q.destination());
-            expect(scrolled).toContain(q.destination());
-        });
+        await expectStatusInView(q, /This looks like a Litecoin address, not a Bitcoin address/);
     });
 });

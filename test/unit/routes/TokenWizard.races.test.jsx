@@ -19,6 +19,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 // The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
+import { ownedTokensFor, pickParentToken } from '../../helpers/issueParentPicker.js';
 
 const ADDRESSES = {
     'bitcoin-regtest': [{
@@ -48,6 +49,8 @@ function mountWizard(overrides = {}) {
         releaseReservation: vi.fn().mockResolvedValue({}),
         releaseEncoderInputs: vi.fn().mockResolvedValue({}),
         issueToken: vi.fn().mockResolvedValue({ txid: 'cd'.repeat(32) }),
+        // The Parent token picker's list of owned tokens.
+        getOwnedTokens: ownedTokensFor(vi.fn, ADDRESSES['bitcoin-regtest'][0].address, ['MINE', 'PARENT', 'THEIRS']),
         ...overrides,
     };
     render(React.createElement(
@@ -137,7 +140,7 @@ describe('Issue Token compose and sign races', () => {
         const getTokenInfo = vi.fn(({ tick }) => (tick === 'PARENT' ? lookup.promise : Promise.resolve({})));
         const messaging = mountWizard({ getTokenInfo });
         await fillForm({ template: 'Subtoken', name: 'CHILD' });
-        fireEvent.change(screen.getByLabelText('Parent ticker'), { target: { value: 'PARENT' } });
+        await pickParentToken('PARENT');
         fireEvent.submit(issueForm());
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'PARENT' })));
 
@@ -151,16 +154,16 @@ describe('Issue Token compose and sign races', () => {
         expect(screen.queryByTestId('confirm-approve')).toBeNull();
     });
 
-    it('does not compose a parent typed after the lookup started', async () => {
+    it('does not compose a parent picked after the lookup started', async () => {
         const lookup = deferred();
         const getTokenInfo = vi.fn(({ tick }) => (tick === 'MINE' ? lookup.promise : Promise.resolve({})));
         const messaging = mountWizard({ getTokenInfo });
         await fillForm({ template: 'Subtoken', name: 'CHILD' });
-        fireEvent.change(screen.getByLabelText('Parent ticker'), { target: { value: 'MINE' } });
+        await pickParentToken('MINE');
         fireEvent.submit(issueForm());
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith(expect.objectContaining({ tick: 'MINE' })));
 
-        fireEvent.change(screen.getByLabelText('Parent ticker'), { target: { value: 'THEIRS' } });
+        await pickParentToken('THEIRS');
         await act(async () => {
             lookup.resolve({ creator: ADDRESSES['bitcoin-regtest'][0].address });
         });

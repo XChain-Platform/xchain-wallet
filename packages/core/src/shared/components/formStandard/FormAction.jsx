@@ -15,12 +15,13 @@ import { Button } from '../../../ui/Button.jsx';
 /**
  * One full-width primary button with an icon. The label is a verb, never a
  * ticker ("Send", "Create Dispenser", "Open Market"). It submits the form by
- * default; FormPage gives a submit its green success treatment and the
- * demo guard disables it. The form's submit handler leads to the shared
- * confirm screen (ActionConfirmScreen).
+ * default; FormPage gives a submit its green success treatment, and in a
+ * demo wallet it swallows the submit and shows the guard's refusal. The
+ * form's submit handler leads to the shared confirm screen
+ * (ActionConfirmScreen).
  *
  * Pass it as FormFrame's `action`, never inside the body. FormPage looks for
- * a real Button element in its action row (green submit, demo disable), so
+ * a real Button element in its action row (green submit), so
  * FormFrame unwraps a FormAction element into the Button it renders; a submit
  * is drawn in the success colour here too, for a form that puts it straight
  * into FormPage's `actions`. A `type="button"` action (one that opens its

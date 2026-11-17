@@ -17,7 +17,14 @@ import { IssueTokenForm } from './IssueTokenForm.jsx';
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {string} [props.initialChainId]     Issue subtoken from a token: that token's network
+ * @param {string} [props.initialParentTick]  Issue subtoken from a token: the parent, prefilled
  */
-export function TokenWizard({ walletId, onBack }) {
-    return <IssueTokenForm walletId={walletId} onBack={onBack} />;
+export function TokenWizard({ walletId, onBack, initialChainId, initialParentTick }) {
+    return <IssueTokenForm
+        walletId={walletId}
+        onBack={onBack}
+        initialChainId={initialChainId}
+        initialParentTick={initialParentTick}
+    />;
 }

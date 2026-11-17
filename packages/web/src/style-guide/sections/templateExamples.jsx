@@ -13,7 +13,7 @@
 
 import { useState } from 'react';
 import {
-    Button, EmptyState, FormPage, FormSection, Icon, Input, ListPage, PageHeader,
+    Button, EmptyState, FormPage, FormSection, Icon, Input, ListPage, OptionSwitch, OptionSwitchList, PageHeader,
     Screen, SectionHeader, StatusMessage, Textarea,
 } from '@xchain-wallet/core/ui';
 import styles from './templateExamples.module.css';
@@ -68,6 +68,8 @@ export function ExampleFormScreen({ withError = false }) {
 
 /** A long form split into titled sections: Issue token. */
 export function ExampleSectionedFormScreen() {
+    const [divisible, setDivisible] = useState(true);
+    const [lockSupply, setLockSupply] = useState(false);
     return (
         <Screen variant="full" header={<PageHeader onBack={noop} title="Issue Token" />}>
             <PageGutterGuide />
@@ -87,12 +89,22 @@ export function ExampleSectionedFormScreen() {
                     <Input label="Supply" inputMode="decimal" placeholder="1000000" />
                 </FormSection>
                 <FormSection title="Settings">
-                    <label className={styles.check}>
-                        <input type="checkbox" defaultChecked /> Divisible (8 decimal places)
-                    </label>
-                    <label className={styles.check}>
-                        <input type="checkbox" /> Lock supply after issuance
-                    </label>
+                    <OptionSwitchList>
+                        <OptionSwitch
+                            icon={<Icon.CoinsIcon />}
+                            label="Divisible"
+                            description="Split into 8 decimal places"
+                            checked={divisible}
+                            onChange={(e) => setDivisible(e.target.checked)}
+                        />
+                        <OptionSwitch
+                            icon={<Icon.LockIcon />}
+                            label="Lock supply"
+                            description="No more can be issued after this"
+                            checked={lockSupply}
+                            onChange={(e) => setLockSupply(e.target.checked)}
+                        />
+                    </OptionSwitchList>
                 </FormSection>
                 <FormSection title="Description">
                     <Textarea label="Description" optional rows={2} placeholder="Shown on explorers" />

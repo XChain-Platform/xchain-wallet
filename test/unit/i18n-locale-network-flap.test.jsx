@@ -16,6 +16,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { selectOption } from '../helpers/selectOption.js';
 
 const chunk = {
     mode: 'ok',
@@ -135,9 +136,8 @@ describe('locale chunk offline', () => {
         chunk.mode = 'offline';
         render(<LanguageRegionSection />);
         const picker = screen.getByRole('combobox', { name: 'Language' });
-        await act(async () => {
-            fireEvent.change(picker, { target: { value: 'pseudo-rtl' } });
-        });
+        selectOption(picker, 'pseudo-rtl');
+        await act(async () => {});
         await waitFor(() => expect(chunk.calls).toBeGreaterThan(0));
         expect(update).not.toHaveBeenCalled();
         expectEnglishLtr();
@@ -149,14 +149,12 @@ describe('locale chunk offline', () => {
         chunk.mode = 'offline';
         render(<LanguageRegionSection />);
         const picker = screen.getByRole('combobox', { name: 'Language' });
-        await act(async () => {
-            fireEvent.change(picker, { target: { value: 'pseudo-rtl' } });
-        });
+        selectOption(picker, 'pseudo-rtl');
+        await act(async () => {});
         await screen.findByRole('alert');
         chunk.mode = 'ok';
-        await act(async () => {
-            fireEvent.change(picker, { target: { value: 'pseudo-rtl' } });
-        });
+        selectOption(picker, 'pseudo-rtl');
+        await act(async () => {});
         await waitFor(() => expect(update).toHaveBeenCalledWith({ language: 'pseudo-rtl' }));
         expect(getLocale()).toBe('pseudo-rtl');
         expect(document.documentElement.dir).toBe('rtl');
@@ -184,13 +182,11 @@ describe('out-of-order chunk loads', () => {
         chunk.mode = 'slow';
         render(<LanguageRegionSection />);
         const picker = screen.getByRole('combobox', { name: 'Language' });
-        await act(async () => {
-            fireEvent.change(picker, { target: { value: 'pseudo-rtl' } });
-        });
+        selectOption(picker, 'pseudo-rtl');
+        await act(async () => {});
         await chunkRequested();
-        await act(async () => {
-            fireEvent.change(picker, { target: { value: 'fr-test' } });
-        });
+        selectOption(picker, 'fr-test');
+        await act(async () => {});
         await act(async () => { release(); });
         await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
         expect(update).toHaveBeenCalledWith({ language: 'fr-test' });
@@ -204,13 +200,11 @@ describe('out-of-order chunk loads', () => {
         chunk.mode = 'slow-offline';
         render(<LanguageRegionSection />);
         const picker = screen.getByRole('combobox', { name: 'Language' });
-        await act(async () => {
-            fireEvent.change(picker, { target: { value: 'pseudo-rtl' } });
-        });
+        selectOption(picker, 'pseudo-rtl');
+        await act(async () => {});
         await chunkRequested();
-        await act(async () => {
-            fireEvent.change(picker, { target: { value: 'fr-test' } });
-        });
+        selectOption(picker, 'fr-test');
+        await act(async () => {});
         await act(async () => { release(); });
         await new Promise((resolve) => { setTimeout(resolve, 50); });
         expect(update).toHaveBeenCalledTimes(1);
@@ -265,9 +259,8 @@ describe('mid-form switch while the chunk is slow', () => {
 
         chunk.mode = 'slow';
         const picker = screen.getByRole('combobox', { name: 'Language' });
-        await act(async () => {
-            fireEvent.change(picker, { target: { value: 'pseudo-rtl' } });
-        });
+        selectOption(picker, 'pseudo-rtl');
+        await act(async () => {});
         await chunkRequested();
         // Still mid-load: nothing has flipped, and typing keeps working.
         expect(document.documentElement.dir).toBe('ltr');

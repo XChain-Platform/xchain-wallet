@@ -82,13 +82,18 @@ test.describe('keyboard shortcut residuals', () => {
         // screen (and its shortcut listener) has mounted, so wait for it.
         await expect(page.getByRole('list', { name: 'History' })).toBeAttached();
 
-        // A new wallet has no history rows, so the filters and the Export
-        // button are not rendered and neither shortcut has a target. History
+        // A new wallet has no history rows, so the search and the ⋯ menu's
+        // Export item are not rendered (Refresh stays) and neither shortcut has a target. History
         // with rows is covered by test/unit/routes/History.filters.test.jsx and
         // History.export.test.jsx, and the key bindings by
         // test/unit/keyboard/useScreenShortcuts.test.jsx.
         await expect(page.getByRole('searchbox', { name: 'Search history' })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: 'Export…' })).toHaveCount(0);
+        await page.getByRole('button', { name: 'More actions' }).click();
+        const moreMenu = page.getByRole('menu');
+        await expect(moreMenu.getByRole('menuitem', { name: 'Refresh history' })).toBeVisible();
+        await expect(moreMenu.getByRole('menuitem', { name: 'Export…' })).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(moreMenu).toHaveCount(0);
         await page.keyboard.press('/');
         await expect(page.getByRole('searchbox', { name: 'Search history' })).toHaveCount(0);
         await page.keyboard.press('e');

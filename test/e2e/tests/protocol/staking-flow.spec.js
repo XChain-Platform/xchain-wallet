@@ -124,7 +124,7 @@ async function fillNewStake(page, viewport) {
     // Validator staking opens the stake form directly on it.
     await expect(page.getByRole('form', { name: 'Stake XCHAIN' })).toBeVisible();
 
-    await expectScreenFits(page, 'Stake XCHAIN', `${viewport.name} new stake form`);
+    await expectScreenFits(page, 'Stake', `${viewport.name} new stake form`);
     await openFromSection(page.getByRole('main'));
     await expect(page.getByRole('button', { name: 'Network: Bitcoin' }))
         .toBeVisible();
@@ -132,8 +132,8 @@ async function fillNewStake(page, viewport) {
     const form = page.getByRole('form', { name: 'Stake XCHAIN' });
     await form.getByLabel('Signing public key', { exact: true }).fill(SIGNING_PUBLIC_KEY);
     await form.getByRole('textbox', { name: /^Amount/ }).fill(STAKE_AMOUNT);
-    await expect(form.getByRole('radio', { name: 'New stake', exact: true })).toBeChecked();
-    await expectScreenFits(page, 'Stake XCHAIN', `${viewport.name} completed stake form`);
+    await expect(form.getByRole('button', { name: 'Mode: New stake', exact: true })).toBeVisible();
+    await expectScreenFits(page, 'Stake', `${viewport.name} completed stake form`);
     return form;
 }
 
@@ -163,27 +163,34 @@ for (const viewport of VIEWPORTS) {
             await expect(page.getByRole('main').getByText('50,000 XCHAIN', { exact: true }))
                 .toBeVisible();
 
-            const actions = page.getByRole('group', { name: 'Stake actions' });
+            // The shared action list (G101): one row per action, all one height.
+            const actions = page.getByRole('list', { name: 'Stake actions' });
             await expectSameLineHeights([
-                actions.getByRole('button', { name: 'Claim', exact: true }),
-                actions.getByRole('button', { name: 'Unstake', exact: true }),
-                actions.getByRole('button', { name: 'Delegate', exact: true }),
-                actions.getByRole('button', { name: 'More', exact: true }),
+                actions.getByRole('button', { name: /^Claim\b/ }),
+                actions.getByRole('button', { name: /^Unstake\b/ }),
+                actions.getByRole('button', { name: /^Delegate\b/ }),
+                actions.getByRole('button', { name: /^Revoke\b/ }),
             ], `${viewport.name} stake actions`);
 
             await page.getByRole('button', { name: 'Back to staking' }).click();
             await expect(page.getByRole('heading', { name: 'Staking', exact: true })).toBeVisible();
         });
 
-        await test.step('new stake form stops at the demo note', async () => {
+        await test.step('new stake form refuses the demo press', async () => {
             await holdStakeBalanceLookup(page);
             const form = await fillNewStake(page, viewport);
-            // A demo wallet cannot move funds, so its stake form keeps its
-            // submit (Stake, or Review stake in watch-only mode) disabled under
-            // the demo note; the review is walked in a created wallet below.
-            await expect(form.getByRole('button', { name: /^(Stake|Review stake)$/ })).toBeDisabled();
-            await expect(page.getByRole('main').getByText(/Demo wallets can.t move funds/)).toBeVisible();
-            await expectScreenFits(page, 'Stake XCHAIN', `${viewport.name} demo stake note`);
+            // A demo wallet cannot move funds (G92): its submit (Stake, or
+            // Review Stake in watch-only mode) stays enabled with no notice
+            // beforehand, and pressing it is refused on the form itself; the
+            // review is walked in a created wallet below.
+            const demoNote = page.getByRole('main').getByText(/Demo wallets can.t move funds/);
+            const submit = form.getByRole('button', { name: /^(Stake|Review Stake)$/i });
+            await expect(submit).toBeEnabled();
+            await expect(demoNote).toHaveCount(0);
+            await submit.click();
+            await expect(demoNote).toBeVisible();
+            await expect(page.getByRole('heading', { name: 'Stake', exact: true })).toBeVisible();
+            await expectScreenFits(page, 'Stake', `${viewport.name} demo stake refusal`);
             await releaseStakeBalanceLookup(page);
         });
     });

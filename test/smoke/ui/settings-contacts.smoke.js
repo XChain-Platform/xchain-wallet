@@ -47,7 +47,7 @@ assert.match(src, /settings\.contacts\.importedSummary/, 'reports imported count
 
 // Settings.jsx wiring
 const settingsSrc = readFileSync(settingsPath, 'utf8');
-assert.match(settingsSrc, /import \{ ContactsSection \}/, 'Settings.jsx imports section');
+assert.match(settingsSrc, /import \{ ContactsExportPage, ContactsSection \}/, 'Settings.jsx imports section');
 const idx = settingsSrc.indexOf("id: 'contacts'");
 const block = settingsSrc.slice(idx, idx + 600);
 assert.match(block, /kind:\s*'panel'/);

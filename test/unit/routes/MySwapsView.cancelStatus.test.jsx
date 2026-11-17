@@ -7,14 +7,16 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 // A swap_cancels row only cancels its swap when the cancel action itself
-// is valid. An invalid SWAP cancel leaves the swap open with live buttons;
-// a cancel row with no status (older reader) is read as valid.
+// is valid. An invalid SWAP cancel leaves the swap open, its row chip Open
+// and Cancel offered on its details page; a cancel row with no status (older
+// reader) is read as valid.
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup, act as domAct, fireEvent, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MySwapsView, collectCancelledKeys } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
+import { SwapDetail } from '../../../packages/core/src/shared/routes/SwapDetail.jsx';
 
 const CHAIN = 'dogecoin-testnet';
 const OWN = 'ndDEAAyn7DcGeaQ6chBWH2vaSdYAXVGNhc';
@@ -38,7 +40,7 @@ function cancelRow(swapActionIndex, extra = {}) {
     return { action_index: '9000', swap_action_index: String(swapActionIndex), source: OWN, ...extra };
 }
 
-async function open(swaps, cancels, { swapsError = null, cancelsError = null } = {}) {
+function messagingFor(swaps, cancels, { swapsError = null, cancelsError = null } = {}) {
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
         getSwapsForAddress: () => swapsError
@@ -47,60 +49,95 @@ async function open(swaps, cancels, { swapsError = null, cancelsError = null } =
         getSwapCancelsForAddress: () => cancelsError
             ? Promise.reject(cancelsError)
             : Promise.resolve({ data: cancels }),
+        getSwapDetail: ({ actionIndex }) => Promise.resolve(
+            swaps.find((row) => row && typeof row === 'object' && row.action_index === String(actionIndex)) || null,
+        ),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
     };
-    const messaging = new Proxy(target, {
+    return new Proxy(target, {
         get(t, prop) { return prop in t ? t[prop] : () => Promise.resolve({}); },
     });
+}
+
+async function mount(element, messaging) {
     let utils;
     await domAct(async () => {
-        utils = render(React.createElement(MessagingProvider, { shell: 'web', messaging },
-            React.createElement(MySwapsView, { walletId: 'w', onBack() {} })));
+        utils = render(React.createElement(MessagingProvider, { shell: 'web', messaging }, element));
         for (let i = 0; i < 24; i += 1) await Promise.resolve();
     });
     return utils;
 }
 
+const open = (swaps, cancels, opts) => mount(
+    React.createElement(MySwapsView, { walletId: 'w', onBack() {} }),
+    messagingFor(swaps, cancels, opts),
+);
+
+const openDetail = (swaps, cancels, actionIndex) => mount(
+    React.createElement(SwapDetail, { walletId: 'w', chainId: CHAIN, actionIndex: String(actionIndex), onBack() {} }),
+    messagingFor(swaps, cancels),
+);
+
 afterEach(() => cleanup());
 
 describe('MySwapsView: cancel row status', () => {
-    it('shows a load error instead of a false empty state when the swap feed fails', async () => {
+    // G91: a failed read shows the plain empty state with no page error or
+    // Try Again; the reachability banner reports network trouble once.
+    it('shows the plain empty state, never a page error, when the swap feed fails', async () => {
         const utils = await open([], [], { swapsError: new Error('Swap explorer unavailable') });
 
-        expect(utils.getByText('Could not load your swaps. Try again.')).toBeTruthy();
+        expect(utils.getByText('No swaps yet')).toBeTruthy();
         expect(utils.queryByText('Swap explorer unavailable')).toBeNull();
-        expect(utils.queryByText('No swaps yet')).toBeNull();
+        expect(utils.queryByText('Could not load your swaps. Try again.')).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Try Again' })).toBeNull();
     });
 
-    it('does not offer cancel when the cancellation status feed fails', async () => {
+    it('lists nothing to act on when the cancellation status feed fails', async () => {
         const utils = await open(
             [swapRow(702)],
             [],
             { cancelsError: new Error('Cancel status unavailable') },
         );
 
-        expect(utils.getByText('Could not load your swaps. Try again.')).toBeTruthy();
+        expect(utils.getByText('No swaps yet')).toBeTruthy();
         expect(utils.queryByText('Cancel status unavailable')).toBeNull();
-        expect(utils.queryByRole('button', { name: 'Cancel' })).toBeNull();
+        expect(utils.queryByRole('list', { name: 'Swaps' })).toBeNull();
     });
 
     it('an invalid cancel row does not cancel the swap; it stays Open with Cancel offered', async () => {
         const utils = await open([swapRow(700)], [cancelRow(700, { status: 'invalid' })]);
-        const list = utils.queryByRole('list', { name: 'Open swaps' });
-        expect(list).not.toBeNull();
-        expect(utils.queryByRole('list', { name: 'Closed swaps' })).toBeNull();
-        const row = within(list).getByText('#700', { exact: false }).closest('li');
+        const list = utils.getByRole('list', { name: 'Swaps' });
+        const row = list.querySelector(`[data-swap-row="${CHAIN}:700"]`);
         expect(within(row).getByText('Open')).toBeTruthy();
-        expect(within(row).getByRole('button', { name: 'Cancel' })).toBeTruthy();
+        // The row holds no actions; Cancel is on the swap's details page.
+        expect(within(row).queryByRole('button', { name: 'Cancel Swap' })).toBeNull();
         expect(row).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
+        cleanup();
+
+        const detail = await openDetail([swapRow(700)], [cancelRow(700, { status: 'invalid' })], 700);
+        expect(detail.getByTestId('swap-detail-status')).toHaveTextContent('Open');
+        // G101: Cancel is a danger-toned action row that says what it returns.
+        const cancel = detail.getByRole('button', { name: /^Cancel swap/ });
+        expect(cancel).toHaveTextContent('Returns the 500 DOGESWAP still escrowed');
+        expect(cancel.getAttribute('data-tone')).toBe('danger');
     });
 
-    it('a valid cancel row files the swap under Closed as Cancelled', async () => {
+    it('a valid cancel row shows the swap as Cancelled with no Cancel', async () => {
         const utils = await open([swapRow(701)], [cancelRow(701, { status: 'valid' })]);
-        const list = utils.queryByRole('list', { name: 'Closed swaps' });
-        const row = within(list).getByText('#701', { exact: false }).closest('li');
-        expect(within(row).getByText('Cancelled')).toBeTruthy();
-        expect(within(row).queryByRole('button', { name: 'Cancel' })).toBeNull();
+        const row = utils.getByRole('list', { name: 'Swaps' }).querySelector(`[data-swap-row="${CHAIN}:701"]`);
+        expect(within(row).getByText('Closed')).toBeTruthy();
+        expect(within(row).queryByText('Cancelled')).toBeNull();
+        expect(row.querySelector('[data-fill-ring]').getAttribute('data-column')).toBe('fit');
+        // A cancelled swap's ring shows a cross on a grey ring.
+        const ring = row.querySelector('[data-fill-ring]');
+        expect(ring.getAttribute('data-mark')).toBe('cross');
+        expect(ring.getAttribute('data-tone')).toBe('muted');
+        cleanup();
+
+        const detail = await openDetail([swapRow(701)], [cancelRow(701, { status: 'valid' })], 701);
+        expect(detail.getByTestId('swap-detail-status')).toHaveTextContent('Closed');
+        expect(detail.queryByRole('button', { name: /^Cancel swap/ })).toBeNull();
+        expect(detail.queryByRole('button', { name: /^Edit swap/ })).toBeNull();
     });
 
     it('collectCancelledKeys skips invalid, keeps valid and status-less, and ignores foreign sources', () => {
@@ -117,14 +154,17 @@ describe('MySwapsView: cancel row status', () => {
     });
 
     it('shows plain copy and blocks a non-canonical swap action ID before compose', async () => {
-        const utils = await open([swapRow('007')], []);
-        const row = within(utils.getByRole('list', { name: 'Open swaps' }))
-            .getByText('#007', { exact: false }).closest('li');
+        const utils = await openDetail([swapRow('007')], [], '007');
 
-        fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+        fireEvent.click(utils.getByRole('button', { name: /^Cancel swap/ }));
 
         expect(utils.getByText('This swap has an invalid action ID and cannot be changed.')).toBeTruthy();
-        expect(utils.getByRole('button', { name: 'Cancel Swap' }).disabled).toBe(true);
+        // G22: the submit stays pressable; pressing it names the problem and composes nothing.
+        const submit = utils.getByRole('button', { name: 'Cancel Swap' });
+        expect(submit.disabled).toBe(false);
+        fireEvent.click(submit);
+        expect(utils.getAllByText('This swap has an invalid action ID and cannot be changed.').length).toBeGreaterThanOrEqual(1);
+        expect(utils.getByRole('button', { name: 'Cancel Swap' })).toBeTruthy();
     });
 
     it('keeps valid swaps usable when explorer arrays contain malformed rows', async () => {
@@ -134,7 +174,8 @@ describe('MySwapsView: cancel row status', () => {
         );
 
         expect(utils.queryByText('Could not load your swaps. Try again.')).toBeNull();
-        const list = utils.getByRole('list', { name: 'Open swaps' });
-        expect(within(list).getAllByText('#750', { exact: false })).toHaveLength(1);
+        const list = utils.getByRole('list', { name: 'Swaps' });
+        expect(list.querySelectorAll(`[data-swap-row="${CHAIN}:750"]`)).toHaveLength(1);
+        expect(within(list).getAllByText('Swap 500 DOGESWAP')).toHaveLength(1);
     });
 });

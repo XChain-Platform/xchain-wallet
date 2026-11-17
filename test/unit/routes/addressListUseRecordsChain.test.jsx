@@ -60,7 +60,7 @@ async function pressUse(messaging, onBack = () => {}) {
         </MessagingProvider>,
     );
     fireEvent.click(await screen.findByRole('button', { name: `View address ${ADDRESS}` }));
-    fireEvent.click(await screen.findByRole('button', { name: /Use/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Set active/ }));
 }
 
 describe('Addresses: Use records the last-used chain', () => {

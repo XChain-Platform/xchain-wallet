@@ -52,8 +52,8 @@ describe('MultisigSigningSession in watcher mode', () => {
             await drain();
         });
 
-        expect(utils.getByRole('button', { name: 'Export Signing Request' })).toBeTruthy();
-        expect(utils.queryByRole('button', { name: 'Sign With My Key' })).toBeNull();
+        expect(utils.getByRole('button', { name: /^Export signing request/ })).toBeTruthy();
+        expect(utils.queryByRole('button', { name: /^Sign with my key/i })).toBeNull();
         expect(utils.queryByLabelText(/Wallet password/i)).toBeNull();
         expect(utils.container.textContent).toContain('Watcher mode exports signing data');
         expect(messaging.signMultisigLocally).not.toHaveBeenCalled();

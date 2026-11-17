@@ -245,15 +245,20 @@ test.describe('BET across two wallets', () => {
             await gotoBettingHub(page);
             // Chain-scoped, not wallet-scoped: a market wallet B never created
             // must still be browsable from wallet B.
-            const row = page.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) });
+            const row = page.locator(`[data-market-index="${feedIndex}"]`);
             await expect(row,
                 `wallet B cannot see market #${feedIndex}, which wallet A created on the same chain`)
                 .toBeVisible({ timeout: 30_000 });
             await row.click();
 
             const main = page.getByRole('main');
-            await expect(main.getByRole('heading', { name: 'Place a bet' })).toBeVisible({ timeout: 30_000 });
-            await main.getByRole('button', { name: 'Yes', exact: true }).click();
+            // The outcome buttons are on the Bet tab; tapping one opens the
+            // Place Bet step with that outcome preselected, where the stake is.
+            await main.getByRole('tab', { name: 'Bet', exact: true }).click();
+            await expect(main.getByRole('list', { name: 'Outcome to back' })).toBeVisible({ timeout: 30_000 });
+            await main.getByRole('list', { name: 'Outcome to back' })
+                .getByRole('button', { name: /^Bet on Yes,/ }).click();
+            await expect(main.getByRole('form', { name: 'Place Bet' })).toBeVisible({ timeout: 30_000 });
             await main.getByLabel(/^Stake/).fill(STAKE);
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Place Bet', exact: true }).click();
@@ -263,7 +268,7 @@ test.describe('BET across two wallets', () => {
             // the fee is a hub setting, and on the coin lane there is no line.
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            const feeLine = page.getByTestId('confirm-protocol-fee');
+            const feeLine = page.getByTestId('confirm-fee-protocol');
             if (await feeLine.count() > 0) {
                 const said = await feeLine.innerText();
                 betFeeXchain = Number(said.match(/([\d.]+)\s*XCHAIN/)?.[1]);
@@ -321,8 +326,10 @@ test.describe('BET across two wallets', () => {
         await test.step('the My bets tab is scoped to the wallet that placed the bet', async () => {
             // Wallet B placed it, so wallet B lists it. The palette's My bets
             // opens Bet Markets on its My bets tab.
+            // My bets is the All list narrowed to the markets bet in (ruling
+            // 2026-11-13), so the market's card is what it lists.
             await openPaletteCommand(page, 'My bets');
-            await expect(page.getByRole('main').getByText(new RegExp(`#${feedIndex}\\b`)),
+            await expect(page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`),
                 'wallet B does not list a bet it placed').toBeVisible({ timeout: 30_000 });
 
             // Wallet A did not, so wallet A must not: a My bets tab that reads the
@@ -330,13 +337,13 @@ test.describe('BET across two wallets', () => {
             await switchToWallet(page, 'Oracle Wallet');
 
             await openPaletteCommand(page, 'My bets');
-            await expect(page.getByRole('main').getByText(new RegExp(`#${feedIndex}\\b`)),
+            await expect(page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`),
                 'wallet A lists a bet placed by a different wallet')
                 .toBeHidden({ timeout: 30_000 });
 
             // And the market IS wallet A's, so its oracle console still claims it.
             await openPaletteCommand(page, 'My markets');
-            await expect(page.getByRole('main').getByText(new RegExp(`#${feedIndex}\\b`)),
+            await expect(page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`),
                 'wallet A does not list the market it created').toBeVisible({ timeout: 30_000 });
         });
     });

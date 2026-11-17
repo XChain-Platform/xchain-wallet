@@ -58,7 +58,8 @@ function mount() {
 }
 
 function oversizePng() {
-    return new File([new Uint8Array(40_000)], 'huge.png', { type: 'image/png' });
+    // Past the Taproot envelope ceiling (about 381 KB) the form offers on Bitcoin.
+    return new File([new Uint8Array(400_000)], 'huge.png', { type: 'image/png' });
 }
 
 beforeEach(() => {
@@ -76,20 +77,21 @@ describe('AttachContentForm file field', () => {
     it('refuses a picked file far over the ceiling before reading it', async () => {
         mount();
         fireEvent.change(await screen.findByLabelText('Choose file to attach'), { target: { files: [oversizePng()] } });
-        expect(await screen.findByText(/That file is 40,000 bytes; with this title and memo the on-chain ceiling is [\d,]+ bytes\./))
+        // 400,000 bytes reads 390.7 KB (a file rounds up); the ceiling rounds down.
+        expect(await screen.findByText(/That file is 390\.7 KB; with this title and memo the on-chain ceiling is [\d.,]+ KB\./))
             .toBeInTheDocument();
         expect(reads.count).toBe(0);
     });
 
     it('takes a dropped file through the same checks as a picked one', async () => {
         mount();
-        const field = (await screen.findByLabelText(/^Artwork file \(up to [\d,]+ bytes\)$/)).closest('[data-file-field]');
+        const field = (await screen.findByLabelText(/^Artwork file \(up to [\d.,]+ KB\)$/)).closest('[data-file-field]');
         fireEvent.drop(field, { dataTransfer: { files: [oversizePng()] } });
-        expect(await screen.findByText(/That file is 40,000 bytes/)).toBeInTheDocument();
+        expect(await screen.findByText(/That file is 390\.7 KB/)).toBeInTheDocument();
         expect(reads.count).toBe(0);
 
         fireEvent.drop(field, { dataTransfer: { files: [new File(['x'], 'art.png', { type: 'image/png' })] } });
-        await waitFor(() => expect(screen.getByLabelText(/^Artwork file \(up to [\d,]+ bytes\)$/)).toHaveValue('art.png'));
+        await waitFor(() => expect(screen.getByLabelText(/^Artwork file \(up to [\d.,]+ KB\)$/)).toHaveValue('art.png'));
         expect(reads.count).toBe(1);
     });
 });

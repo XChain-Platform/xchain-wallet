@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { AddressList } from '../routes/AddressList.jsx';
+import { InPageScreen } from '../../ui/navHistory.js';
 import { coinFromChainId } from './BalanceList.jsx';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/routes.js';
@@ -59,22 +60,26 @@ export function OwnAddressPickerScreen({
     pickerActions,
     addressUsageByKey,
 }) {
+    // The picker opens over its form in place, so its Back (to the form)
+    // shows even when the form is a root page.
     return (
-        <AddressList
-            walletId={walletId}
-            accountId={accountId}
-            onBack={onBack}
-            pickerMode
-            title={title}
-            onPick={(address, pickedChainId) => {
-                if (pickedChainId && pickedChainId !== chainId) onChainChange?.(pickedChainId);
-                onPick(address);
-            }}
-            pickerActions={pickerActions}
-            addressUsageByKey={addressUsageByKey}
-            networkFilter={chainId ? coinFromChainId(chainId) : 'all'}
-            networkLocked={Boolean((lockNetwork || typeof onChainChange !== 'function') && chainId)}
-            pickerUnavailableReason={unavailableReason}
-        />
+        <InPageScreen>
+            <AddressList
+                walletId={walletId}
+                accountId={accountId}
+                onBack={onBack}
+                pickerMode
+                title={title}
+                onPick={(address, pickedChainId) => {
+                    if (pickedChainId && pickedChainId !== chainId) onChainChange?.(pickedChainId);
+                    onPick(address);
+                }}
+                pickerActions={pickerActions}
+                addressUsageByKey={addressUsageByKey}
+                networkFilter={chainId ? coinFromChainId(chainId) : 'all'}
+                networkLocked={Boolean((lockNetwork || typeof onChainChange !== 'function') && chainId)}
+                pickerUnavailableReason={unavailableReason}
+            />
+        </InPageScreen>
     );
 }

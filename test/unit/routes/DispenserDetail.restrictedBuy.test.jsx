@@ -121,9 +121,9 @@ function mount(dispenser, {
             }),
         ),
     );
-    // The page opens on its Details tab and shows only the chosen tab, so the
-    // buyer's view is the Buy tab: open it as soon as the tabs have rendered.
-    screen.findByRole('tab', { name: 'Buy' }).then((tab) => fireEvent.click(tab), () => {});
+    // Every viewer opens on Actions, so the buyer's view is the Buy page its
+    // first action row opens: open it as soon as the row has rendered.
+    screen.findByTestId('dispenser-buy-row').then((row) => fireEvent.click(row), () => {});
     return messaging;
 }
 
@@ -140,7 +140,7 @@ function buyButton() {
 
 async function expectSelectedPayerRefused() {
     expect(await screen.findByText(/selected paying address is not allowed/i)).toBeInTheDocument();
-    expect(buyButton()).toBeDisabled();
+    expect(buyButton()).toBeEnabled();
 }
 
 afterEach(() => cleanup());
@@ -323,12 +323,14 @@ describe('restricted dispenser, buyer view (D-148)', () => {
     it('reads zero list sentinels as none', async () => {
         mount(REMOVED_LISTS);
         await screen.findByText(/Pay to buy/);
-        // The list rows are on the Details tab.
-        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(document.body.textContent || '').not.toMatch(/restricted/i);
+        // The list rows are on the Details tab, back from the Buy page.
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
         const text = document.body.textContent || '';
         expect(text).not.toMatch(/list #0/i);
         expect(text).not.toMatch(/restricted/i);
-        expect(text).toMatch(/Allow listnone/);
-        expect(text).toMatch(/Block listnone/);
+        expect(text).toMatch(/Allow listNone set/);
+        expect(text).toMatch(/Block listNone set/);
     });
 });

@@ -45,6 +45,8 @@ import {
     setQueuedResultHandoff,
 } from '../utils/submitFailureMessage.js';
 import { holdAutoLock } from './autoLockGuard.js';
+import { isHwSignBack } from '../../signers/hardwareSession.js';
+import { clearArmedChoices, disarmAdvanced } from '../components/formStandard/advancedOptions.js';
 import { randomUUID } from '../../util/uuid.js';
 
 // Module-level singleton: only ONE confirm modal may be live per window.
@@ -183,6 +185,9 @@ export function useConfirmAction() {
     const [source, setSource] = useState(null);
 
     const teardown = useCallback(() => {
+        // The submit that armed a form's Advanced choices has ended, so no
+        // later action on the page composes with them.
+        disarmAdvanced();
         endActiveConfirm({ approved: approvalBeganRef.current, left: !mountedRef.current });
         if (abortRef.current) { try { abortRef.current.abort(); } catch { /* noop */ } }
         // Release any reservation this instance registered.
@@ -195,6 +200,8 @@ export function useConfirmAction() {
     const settleResolve = useCallback((value) => {
         const r = resolveRef.current;
         resolveRef.current = null; rejectRef.current = null;
+        // Approved: the form's Advanced choices were spent on this transaction.
+        clearArmedChoices();
         teardown();
         if (r) r(value);
     }, [teardown]);
@@ -558,6 +565,16 @@ export function useConfirmAction() {
             settleResolve(value);
             return value;
         } catch (err) {
+            // Back on the hardware sign page: nothing was signed, so the same
+            // Confirm page opens again with no error, ready for another Approve.
+            if (isHwSignBack(err)) {
+                updateMounted(() => {
+                    setError(null);
+                    setPhase('ready');
+                });
+                approvalBeganRef.current = false;
+                return { interrupted: true, reason: 'hardware-back' };
+            }
             const hardwareRetryError = retryableHardwareSigningError(err);
             if (hardwareRetryError) {
                 updateMounted(() => {

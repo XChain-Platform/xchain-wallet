@@ -76,7 +76,8 @@ describe('Receive form spacing', () => {
         expect(receive).toMatch(
             /styles\.qrSurface[\s\S]*?<AddressField[\s\S]*?\{qrActionsContent\}/,
         );
-        expect(receive).toMatch(/className=\{`\$\{qrStyles\.actions\} \$\{styles\.qrActions\}`\}/);
+        // The actions are one ActionList under the QR (G101), not QrDisplay's button row.
+        expect(receive).toMatch(/className=\{styles\.qrActions\}>\s*<ActionList\b/);
         expect(animatedQr).toMatch(
             /qrStyles\.frame[\s\S]*?qrStyles\.caption[\s\S]*?qrStyles\.actions/,
         );

@@ -118,7 +118,7 @@ describe('passiveCoSignForAccount validation', () => {
     it('throws for an unknown account', async () => {
         const { sdkRegistry } = mockSdkRegistry({ approved: false });
         await expect(passiveCoSignForAccount({ vault, chainRegistry, sdkRegistry, accountId: 'nope', password: 'p', request: { psbt: 'aa' } }))
-            .rejects.toThrow(/no co-signer account/);
+            .rejects.toThrow(/no cosigner account/);
     });
 });
 

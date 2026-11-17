@@ -35,8 +35,12 @@
     height: 1rem;
 }
 
-/* The card list measures its own width, so the desktop shell gets a
-   two-column grid while phones and the popup keep one column. */
+/* The card grid of All, My bets and My markets. As many cards as fit sit
+   side by side, 8px apart. A phone or the popup has room for one, which
+   then spans the row; min(100%, ...) keeps a narrow popup from overflowing.
+   The 290px floor also caps the cards near 440px with no gap-widening
+   max-width: a second column joins at 588px, a third at 886px, so the
+   widest a card gets with two or more columns is (885 - 8) / 2 = 438.5px. */
 .cardArea {
     width: 100%;
     min-width: 0;
@@ -53,19 +57,58 @@
     margin: 0;
     padding: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--xc-space-3);
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+    gap: var(--xc-space-2);
+}
+
+.marketList > * {
+    min-width: 0;
 }
 
 .marketList > li {
     display: flex;
-    min-width: 0;
 }
 
+/* The wide split turns the narrow card grid into the same inset row stack as
+   the side menu. The list scroller, not a card frame, owns the top 8px gap. */
+.marketList[data-xc-split-list] {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.marketList[data-xc-split-list] > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+.splitRow.splitRow {
+    width: calc(100% - (2 * var(--xc-space-2)));
+    margin-inline: var(--xc-space-2);
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    box-shadow: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .splitRow.splitRow:hover {
+        border-color: transparent;
+        background: color-mix(in srgb, var(--xc-text) 10%, transparent);
+    }
+}
+
+.splitRow.splitRow[aria-current='true'] {
+    background: color-mix(in srgb, var(--xc-accent-primary) 20%, transparent);
+    box-shadow: none;
+    font-weight: inherit;
+}
+
+/* A backstop for the arithmetic above: once two cards share a row, none
+   grows past 440px. */
 @supports (container-type: inline-size) and (width: 1cqw) {
-    @container (min-width: 760px) {
-        .marketList {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+    @container (min-width: 588px) {
+        .marketList > * {
+            max-width: 440px;
         }
     }
 }

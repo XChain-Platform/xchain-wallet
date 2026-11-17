@@ -88,7 +88,7 @@ describe('ParallelComposer confirmation', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Sign and Send Queue' }));
 
-        expect(await screen.findByText(`Row 1: ${message}`)).toBeTruthy();
+        expect((await screen.findAllByText(`Row 1: ${message}`)).length).toBeGreaterThan(0);
         expect(screen.getByRole('form', { name: 'Compose parallel actions' })).toBeTruthy();
         expect(screen.queryByRole('form', { name: 'Review parallel actions' })).toBeNull();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -115,7 +115,7 @@ describe('ParallelComposer confirmation', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Sign and Send Queue' }));
 
-        expect(await screen.findByText('Row 1: first is invalid')).toBeTruthy();
+        expect((await screen.findAllByText('Row 1: first is invalid')).length).toBeGreaterThan(0);
         expect(validateAction).toHaveBeenCalledTimes(2);
         expect(validateAction.mock.calls.map(([request]) => request.params.MARKER))
             .toEqual(['first', 'second']);
@@ -174,9 +174,9 @@ describe('ParallelComposer confirmation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Sign all' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
 
-        expect(await screen.findByText(
+        expect(await screen.findAllByText(
             'Row 1: QUOTE_HEIGHT has expired. Refresh it and try again.',
-        )).toBeTruthy();
+        )).toHaveLength(2);
         expect(screen.getByRole('form', { name: 'Compose parallel actions' })).toBeTruthy();
         expect(screen.getByRole('textbox', { name: 'Params (JSON object)' }).value)
             .toContain('bc1qdestination');
@@ -304,7 +304,11 @@ describe('ParallelComposer confirmation', () => {
 
         expect(await screen.findByText('Balance of TOKEN (1) does not cover the send total (2).'))
             .toBeTruthy();
-        expect(screen.getByTestId('confirm-approve')).toBeDisabled();
+        // G130: Approve keeps its colour; a tap says why at the top and
+        // signs nothing.
+        expect(screen.getByTestId('confirm-approve')).toBeEnabled();
+        fireEvent.click(screen.getByTestId('confirm-approve'));
+        expect(screen.getByTestId('confirm-blocked')).toBeTruthy();
         expect(messaging.advancedAction).not.toHaveBeenCalled();
     });
 

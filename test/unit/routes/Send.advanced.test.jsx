@@ -89,17 +89,25 @@ async function fillSend() {
     fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
     fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: '1' } });
-    fireEvent.click(screen.getByText('Advanced'));
+    fireEvent.click(screen.getByText('Advanced', { selector: '[data-form-section-title]' }));
 }
 
 afterEach(() => cleanup());
 
 describe('Send advanced choices', () => {
+    it('uses the one shared Advanced section, directly above Speed and Fees', async () => {
+        mount();
+        await screen.findByLabelText(/^To$/);
+        const ids = [...document.querySelectorAll('[data-form-section]')].map((n) => n.getAttribute('data-form-section'));
+        expect(ids.filter((id) => id === 'advanced')).toHaveLength(1);
+        expect(ids.slice(-2)).toEqual(['advanced', 'fee']);
+    });
+
     it('summarizes bulk-selected inputs, marks dust, and clears the selection', async () => {
         mount();
         fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.001' } });
-        fireEvent.click(screen.getByText('Advanced'));
+        fireEvent.click(screen.getByText('Advanced', { selector: '[data-form-section-title]' }));
         await waitFor(() => expect(screen.getByRole('switch', { name: 'Coin control enabled' })).not.toBeDisabled());
         fireEvent.click(screen.getByRole('switch', { name: 'Coin control enabled' }));
 
@@ -163,10 +171,12 @@ describe('Send advanced choices', () => {
             utxos: [UTXOS[0]],
         });
 
-        const review = await screen.findByLabelText('Advanced send choices');
+        // Every advanced choice is a row of the confirm page's facts card (G127).
+        const review = await screen.findByTestId('confirm-facts');
         expect(within(review).getByText('invoice 7')).toBeInTheDocument();
         expect(within(review).getByText('Allowed')).toBeInTheDocument();
         expect(within(review).getByText('1 selected input')).toBeInTheDocument();
-        expect(within(review).getByText(CHANGE)).toBeInTheDocument();
+        // The change address is cut in the middle; its title carries all of it.
+        expect(review.querySelector(`dd[title="${CHANGE}"]`)).not.toBeNull();
     });
 });

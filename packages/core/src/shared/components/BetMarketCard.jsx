@@ -7,6 +7,7 @@
 // the pools and what this wallet has on it. The whole card is one button that
 // opens the market's detail page.
 
+import { useId } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { safeOutcomeLabel, outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
@@ -27,46 +28,6 @@ const SEGMENT_COLORS = [
 ];
 // More outcomes than this fold the smallest into one "Other" slice.
 const MAX_LEGEND = 4;
-
-// Feed lifecycle -> chip tone. The stored status, never one recomputed from
-// the clock, so the chip says what the chain thinks.
-const STATUS_TONE = {
-    open: 'open',
-    closed: 'closed',
-    resolved: 'settled',
-    resolved_void: 'void',
-    cancelled: 'refunded',
-    expired: 'refunded',
-};
-
-/** Plain-language status (wallet audience rule: no protocol enums). */
-export function betStatusLabel(status) {
-    if (status === 'open') return 'Taking bets';
-    if (status === 'closed') return 'Betting closed';
-    if (status === 'resolved') return 'Settled';
-    if (status === 'resolved_void') return 'Void, refunded';
-    if (status === 'cancelled') return 'Cancelled, refunded';
-    if (status === 'expired') return 'Expired, refunded';
-    if (!status) return 'Unknown';
-    const words = String(status).trim().toLowerCase().replace(/[_-]+/g, ' ');
-    return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-function span(secs) {
-    const a = Math.abs(secs);
-    if (a < 3600) return `${Math.max(1, Math.round(a / 60))} min`;
-    if (a < 86400) return `${Math.round(a / 3600)} h`;
-    const d = Math.round(a / 86400);
-    return `${d} day${d === 1 ? '' : 's'}`;
-}
-
-/** "Closes in 3 days" / "Closed 2 h ago" from the stored deadline, or ''. */
-export function betWhenText(market, nowSec = Date.now() / 1000) {
-    const deadline = Number(market?.deadline);
-    if (!Number.isFinite(deadline) || deadline <= 0) return '';
-    if (deadline > nowSec) return `Closes in ${span(deadline - nowSec)}`;
-    return `Closed ${span(nowSec - deadline)} ago`;
-}
 
 // Exact decimal-string sum (pools are token amounts; no float drift in the
 // figure a user reads).
@@ -146,6 +107,7 @@ function pct(slice) {
 }
 
 function Donut({ slices, total, known }) {
+    // Drawn on an 84-unit box and shown at 64px (the compact card).
     const R = 34;
     const C = 2 * Math.PI * R;
     const live = slices.filter((s) => s.share > 0);
@@ -194,32 +156,36 @@ function Donut({ slices, total, known }) {
  * @param {() => void} props.onOpen
  * @param {string | null} [props.yourBet]    e.g. "You bet 10 XCHAIN on Yes"
  * @param {boolean} [props.yours]            this wallet runs the market
+ * @param {boolean} [props.selected]         shown in Bet Markets' wide detail panel
+ * @param {string} [props.className]
  */
-export function BetMarketCard({ market, onOpen, yourBet = null, yours = false }) {
-    const id = market?.action_index;
+export function BetMarketCard({ market, onOpen, yourBet = null, yours = false, selected = false, className }) {
+    const questionId = useId();
+    const detailId = useId();
     // Market text is attacker-authored on-chain data. React escapes markup,
     // and the display pass also exposes bidi controls instead of letting them
     // reorder the card.
     const question = neutralizeControlText(market?.label, { maxLength: 100 }) || '(untitled market)';
     const tick = neutralizeControlText(market?.tick, { maxLength: 24 }) || 'n/a';
-    const status = market?.feed_status;
-    const tone = STATUS_TONE[status] || 'other';
-    const when = betWhenText(market);
     const { slices, total, known } = betSlices(market);
     const pool = betPoolTotal(market);
+    // Only the question, the odds and the pool line (operator ruling
+    // 2026-11-13): no tile, market number, ticker caption, clock or status
+    // pill. The button is named by the question; the odds and the pool line
+    // are its description.
     return (
-        <button type="button" className={styles.card} onClick={onOpen}>
-            <span className={styles.top}>
-                <span className={styles.tile} aria-hidden="true"><Icon.DollarIcon /></span>
-                <span className={styles.topText}>
-                    {/* Markets carry no category, so the tile's caption is
-                        the market number and its token. */}
-                    <span className={styles.ref}>#{String(id)} · {tick}</span>
-                    {when ? <span className={styles.when}>{when}</span> : null}
-                </span>
-                <span className={`${styles.status} ${styles[`status_${tone}`] || ''}`}>{betStatusLabel(status)}</span>
-            </span>
-            <span className={styles.question}>{question}</span>
+        <button
+            type="button"
+            className={className ? `${styles.card} ${className}` : styles.card}
+            onClick={onOpen}
+            aria-current={selected ? 'true' : undefined}
+            aria-labelledby={questionId}
+            aria-describedby={detailId}
+            // The number is no longer drawn; scripts and specs find a market by it here.
+            data-market-index={market?.action_index == null ? undefined : String(market.action_index)}
+        >
+            <span id={questionId} className={styles.question}>{question}</span>
+            <span id={detailId} className={styles.detail}>
             <span className={styles.gauge}>
                 <Donut slices={slices} total={total} known={known} />
                 <span className={styles.legend}>
@@ -239,9 +205,12 @@ export function BetMarketCard({ market, onOpen, yourBet = null, yours = false })
                         <><strong>{formatDecimalAmount(pool)} {tick}</strong>&nbsp;{t('components.betMarketCard.pool')}</>
                     ) : <>{t('components.betMarketCard.poolOnPage')}</>}
                 </span>
-                {yourBet ? <span className={styles.chip}>{yourBet}</span> : null}
                 {yours ? <span className={`${styles.chip} ${styles.chipYours}`}>{t('components.betMarketCard.yourMarket')}</span> : null}
-                <span className={styles.chevron} aria-hidden="true"><Icon.ForwardIcon /></span>
+                <span className={styles.right}>
+                    {yourBet ? <span className={styles.chip} data-testid="bet-market-your-bet">{yourBet}</span> : null}
+                    <span className={styles.chevron} aria-hidden="true"><Icon.ForwardIcon /></span>
+                </span>
+            </span>
             </span>
         </button>
     );

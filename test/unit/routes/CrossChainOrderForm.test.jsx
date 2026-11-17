@@ -199,6 +199,19 @@ const setValue = (utils, label, value) => {
 const pickerName = (utils, label) => utils.getByRole('button', { name: new RegExp(`^${label}:`) })
     .getAttribute('aria-label');
 
+// Expiration is the icon dropdown (G44): open it, then pick the custom time,
+// each in its own act so the listbox renders before its option is clicked.
+async function pickCustomExpiry(utils) {
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('combobox', { name: /^Expiration/, hidden: true }));
+        await drainMicrotasks();
+    });
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('option', { name: 'Expire at a specific time', hidden: true }));
+        await drainMicrotasks();
+    });
+}
+
 // Closed sections keep their fields mounted but hidden; open one by its id
 // (from, order, options, ...) before querying its controls by role.
 async function openSection(utils, id) {
@@ -300,6 +313,7 @@ describe('CrossChainOrderForm', () => {
         await showFull(utils);
         await openSection(utils, 'from');
         await openSection(utils, 'options');
+        await openSection(utils, 'memo');
 
         for (const label of [
             'From address',
@@ -308,13 +322,21 @@ describe('CrossChainOrderForm', () => {
             'Get token',
             'Get amount',
             'Expiration',
-            'Memo',
+            'Expires',
         ]) {
             expect(utils.getByRole('button', { name: `About ${label}` })).toBeTruthy();
         }
+        // Memo is its own section with no label row or tip (operator 2026-11-13).
+        expect(utils.queryByRole('button', { name: 'About Memo' })).toBeNull();
+        expect(utils.getByRole('textbox', { name: 'Memo' })).toHaveAttribute('id', 'xorder-memo');
+        // Expires always shows, set by the 3 months default.
+        expect(utils.getByLabelText('Expires').value).not.toBe('');
         expect(utils.queryByText('How orders fill')).toBeNull();
         expect(utils.container.querySelector('details')).toBeNull();
-        expect(utils.getByText('Optional')).toBeTruthy();
+        // The Ownership, Order Terms, Memo and Advanced section header tags
+        // (Ownership shows in both input styles, operator 2026-11-13).
+        expect(utils.getAllByText('Optional')).toHaveLength(4);
+        // The memo count sits in the open Memo section's header.
         expect(utils.getByText('0 / 250')).toBeTruthy();
         expect(utils.container.textContent).not.toContain('(optional)');
     });
@@ -376,10 +398,10 @@ describe('CrossChainOrderForm', () => {
             fireEvent.click(watcher.utils.getByRole('button', { name: 'Place Order' }));
             await drainMicrotasks();
         });
-        const reviewAction = watcher.utils.getByRole('button', { name: 'Create Unsigned Transaction' });
+        const reviewAction = watcher.utils.getByRole('button', { name: 'Approve' });
         expect(reviewAction).toHaveClass(buttonStyles.success);
         expect(reviewAction.querySelector('svg')).toBeTruthy();
-        expect(watcher.utils.getByRole('button', { name: 'Edit' }).querySelector('svg')).toBeTruthy();
+        expect(watcher.utils.getByRole('button', { name: 'Reject' }).querySelector('svg')).toBeTruthy();
         expect(watcher.utils.container.querySelectorAll(`.${buttonStyles.success}`)).toHaveLength(1);
     });
 
@@ -497,10 +519,10 @@ describe('CrossChainOrderForm', () => {
             await drainMicrotasks();
         });
 
-        const form = utils.getByRole('button', { name: 'Create Unsigned Transaction' }).closest('form');
+        const approve = utils.getByRole('button', { name: 'Approve' });
         await domAct(async () => {
-            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            fireEvent.click(approve);
+            fireEvent.click(approve);
             await drainMicrotasks();
         });
         expect(builds).toBe(1);
@@ -561,17 +583,21 @@ describe('CrossChainOrderForm', () => {
         // A get token held on Dogecoin moves the get network to the give network.
         await pickGetTokenFromList(utils, 'OTHER');
         await fillPair(utils);
-        expect(utils.container.textContent).toMatch(/Give and get networks must differ/);
-        expect(utils.getByRole('button', { name: 'Place Order' }).disabled).toBe(true);
+        const place = utils.getByRole('button', { name: 'Place Order' });
+        expect(place).toBeEnabled();
+        fireEvent.click(place);
+        expect(utils.getByLabelText('Form errors')).toHaveTextContent(/Give and get networks must differ/);
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
     it('refuses a native coin on the requested side', async () => {
         const { utils, calls } = await mount({ initialChainId: DOGE });
         await pickGetToken(utils, 'BTC');
-        expect(utils.container.textContent).toMatch(/cannot get native BTC; ask for a token on the get network\./);
         expect(utils.container.textContent).not.toMatch(/escrowed for the federation/);
-        expect(utils.getByRole('button', { name: 'Place Order' }).disabled).toBe(true);
+        const place = utils.getByRole('button', { name: 'Place Order' });
+        expect(place).toBeEnabled();
+        fireEvent.click(place);
+        expect(utils.getByLabelText('Form errors')).toHaveTextContent(/cannot get native BTC/);
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
@@ -582,11 +608,12 @@ describe('CrossChainOrderForm', () => {
         await fillPair(utils);
         await showFull(utils);
         expect(utils.getByLabelText('Receive at').value).toBe('');
+        expect(utils.getByRole('button', { name: 'Place Order' })).toBeEnabled();
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Place Order' }));
             await drainMicrotasks();
         });
-        expect(utils.container.textContent).toMatch(/Receive address on .* is required/);
+        expect(utils.getByLabelText('Form errors')).toHaveTextContent(/Receive address on .* is required/);
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
@@ -616,9 +643,10 @@ describe('CrossChainOrderForm', () => {
 
         await domAct(async () => {
             setValue(utils, /^Give amount/, '6');
+            fireEvent.click(utils.getByRole('button', { name: 'Place Order' }));
             await drainMicrotasks();
         });
-        expect(utils.container.textContent).toContain('Give amount is above your available JDOG balance.');
+        expect(utils.getByLabelText('Form errors')).toHaveTextContent('Give amount is above your available JDOG balance.');
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
@@ -627,7 +655,8 @@ describe('CrossChainOrderForm', () => {
         await fillPair(utils);
 
         await pickGetToken(utils, '^0');
-        expect(utils.container.textContent).toContain("Get token can be a name, or ^ followed by the token's number (^123).");
+        fireEvent.click(utils.getByRole('button', { name: 'Place Order' }));
+        expect(utils.getByLabelText('Form errors')).toHaveTextContent("Get token can be a name, or ^ followed by the token's number (^123).");
 
         // Receive at is typed in the Full view; picking a get token clears its amount.
         await pickGetToken(utils, 'XCHAIN');
@@ -640,13 +669,19 @@ describe('CrossChainOrderForm', () => {
         });
         expect(utils.container.textContent).toContain('This is not a valid address.');
 
+        await pickCustomExpiry(utils);
+        // The specific time starts from the Expires shown; clearing it is the empty expiry.
+        expect(utils.getByLabelText('Expires').value).not.toBe('');
         await domAct(async () => {
+            setValue(utils, 'Expires', '');
             setValue(utils, 'Receive at', BTC_ADDRESS.address);
-            fireEvent.click(utils.getByLabelText('Expire at a specific time'));
             fireEvent.click(utils.getByRole('button', { name: 'Place Order' }));
             await drainMicrotasks();
         });
-        expect(utils.container.textContent).toContain('Pick an expiration date and time, or switch to the default window.');
+        expect(utils.container.textContent).toContain('Pick an expiration date and time, or choose a common term.');
+        // The refused review reopens Order Terms, the section holding the expiry.
+        expect(utils.container.querySelector('[data-form-section="options"] [data-form-section-toggle]'))
+            .toHaveAttribute('aria-expanded', 'true');
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
     });
 
@@ -664,13 +699,15 @@ describe('CrossChainOrderForm', () => {
             await drainMicrotasks();
         });
 
-        expect(utils.getByText(/prepares the transaction for your offline signer/)).toBeTruthy();
-        expect(utils.getByText('10 JDOG')).toBeTruthy();
-        expect(utils.getByText('20 XCHAIN')).toBeTruthy();
-        expect(utils.getByLabelText(BTC_ADDRESS.address)).toBeTruthy();
+        expect(utils.getByText(/Another phone signs for this wallet: this prepares the transaction for it/)).toBeTruthy();
+        expect(utils.getByTestId('confirm-modal')).toHaveAccessibleName(/20 XCHAIN for 10 JDOG/);
+        expect(utils.getByTestId('confirm-sentence')).toHaveTextContent('20 XCHAIN');
+        expect(utils.getByTitle(BTC_ADDRESS.address)).toBeTruthy();
         expect(utils.getByText('exact memo')).toBeTruthy();
-        expect(utils.getByText('Protocol fee')).toBeTruthy();
-        expect(utils.getByText(/paid in DOGE; the network fee is separate/i)).toBeTruthy();
+        expect(utils.getByTestId('confirm-facts')).toBeTruthy();
+        expect(utils.queryByText('Estimate unavailable')).toBeNull();
+        expect(utils.getByRole('button', { name: 'Reject' })).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Approve' })).toBeTruthy();
 
         fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
@@ -691,21 +728,21 @@ describe('CrossChainOrderForm', () => {
         const expiration = new Date(start + 60_000);
         const localExpiration = new Date(expiration.getTime() - expiration.getTimezoneOffset() * 60_000)
             .toISOString().slice(0, 16);
+        await pickCustomExpiry(utils);
         await domAct(async () => {
-            fireEvent.click(utils.getByLabelText('Expire at a specific time'));
             setValue(utils, 'Expires', localExpiration);
             fireEvent.click(utils.getByRole('button', { name: 'Place Order' }));
             await drainMicrotasks();
         });
-        expect(utils.getByRole('button', { name: 'Create Unsigned Transaction' })).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Approve' })).toBeTruthy();
 
         vi.spyOn(Date, 'now').mockReturnValue(start + 120_000);
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Create Unsigned Transaction' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Approve' }));
             await drainMicrotasks();
         });
 
-        expect(utils.getByText('Expiration must be a future date and time.')).toBeTruthy();
+        expect(utils.getAllByText('Expiration must be a future date and time.')).toHaveLength(2);
         expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -717,8 +754,8 @@ describe('CrossChainOrderForm', () => {
             .toISOString().slice(0, 16);
         const { utils, calls } = await mount({ initialChainId: DOGE });
         await fillPair(utils);
+        await pickCustomExpiry(utils);
         await domAct(async () => {
-            fireEvent.click(utils.getByLabelText('Expire at a specific time'));
             setValue(utils, 'Expires', localExpiration);
             fireEvent.click(utils.getByRole('button', { name: 'Place Order' }));
             await drainMicrotasks();
@@ -880,10 +917,10 @@ describe('CreateOrderForm state safety', () => {
             await drainMicrotasks();
         });
 
-        const form = utils.getByRole('button', { name: 'Create Unsigned Transaction' }).closest('form');
+        const approve = utils.getByRole('button', { name: 'Approve' });
         await domAct(async () => {
-            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            fireEvent.click(approve);
+            fireEvent.click(approve);
             await drainMicrotasks();
         });
         expect(builds).toBe(1);
@@ -922,5 +959,79 @@ describe('CreateOrderForm state safety', () => {
             rejectCompose(Object.assign(new Error('cancelled'), { reason: 'user-rejected' }));
             await drainMicrotasks();
         });
+    });
+});
+
+// Receive at is its own standard address field right under You get, in both
+// views, holding this wallet's address on the get chain until it is edited.
+describe('CrossChainOrderForm Receive at field', () => {
+    const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    it('sits right after You get in Quick, labelled Receive at, with the addresses icon', async () => {
+        const { utils } = await mount({ initialChainId: DOGE });
+        const field = utils.getByLabelText('Receive at');
+        expect(follows(utils.getByText('You get'), field)).toBe(true);
+        expect(utils.getByRole('button', { name: 'Choose receive address' })).toBeTruthy();
+        // The old read-only row is gone: one Receive at control, not two.
+        expect(utils.getAllByLabelText('Receive at')).toHaveLength(1);
+    });
+
+    it('sits after Get amount and before the rate in Full', async () => {
+        const { utils } = await mount({ initialChainId: DOGE });
+        await showFull(utils);
+        const field = utils.getByLabelText('Receive at');
+        expect(follows(utils.getByLabelText(/^Get amount/), field)).toBe(true);
+        expect(follows(field, utils.getByText('Enter both amounts to see the rate'))).toBe(true);
+    });
+
+    it('defaults to this wallet\'s address on the You get chain, per chain', async () => {
+        const onDoge = await mount({ initialChainId: DOGE });
+        expect(onDoge.utils.getByLabelText('Receive at').value).toBe(BTC_ADDRESS.address);
+        cleanup();
+        const onBtc = await mount({ initialChainId: BTC });
+        expect(onBtc.utils.getByLabelText('Receive at').value).toBe(DOGE_ADDRESS.address);
+    });
+
+    it('submits a custom receive address as GET_ADDRESS', async () => {
+        const custom = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+        const { utils, calls } = await mount({ initialChainId: DOGE });
+        await fillPair(utils);
+        await domAct(async () => {
+            setValue(utils, 'Receive at', custom);
+            await drainMicrotasks();
+        });
+        await placeAndApprove(utils);
+        const compose = calls.find((c) => c.method === 'composeForConfirm');
+        expect(compose.args.actionData.params.GET_ADDRESS).toBe(custom);
+    });
+
+    it('shows the field error for an address that is not valid on the You get chain', async () => {
+        const { utils, calls } = await mount({ initialChainId: DOGE });
+        await fillPair(utils);
+        await domAct(async () => {
+            setValue(utils, 'Receive at', 'not an address');
+            await drainMicrotasks();
+        });
+        // The field carries the error before submit; the enabled action repeats
+        // it in the top summary and still composes nothing.
+        expect(utils.getByLabelText('Receive at')).toHaveAttribute('aria-invalid', 'true');
+        expect(utils.getAllByText('This is not a valid address.')).toHaveLength(1);
+        const place = utils.getByRole('button', { name: 'Place Order' });
+        expect(place).toBeEnabled();
+        fireEvent.click(place);
+        expect(utils.getByLabelText('Form errors')).toHaveTextContent('This is not a valid address.');
+        expect(utils.getAllByText('This is not a valid address.')).toHaveLength(2);
+        expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
+    });
+
+    it('resets to the new chain\'s default when the You get chain changes', async () => {
+        const { utils } = await mount({ initialChainId: DOGE }, multiChainOverrides());
+        expect(utils.getByLabelText('Receive at').value).toBe(`newest-on-${BTC}`);
+        await domAct(async () => {
+            setValue(utils, 'Receive at', 'typed-by-user');
+            await drainMicrotasks();
+        });
+        await pickGetTokenFromList(utils, 'LTCTOK');
+        expect(utils.getByLabelText('Receive at').value).toBe('newest-on-litecoin-mainnet');
     });
 });

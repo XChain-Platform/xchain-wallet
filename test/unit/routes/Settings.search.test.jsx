@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
     Settings,
     SETTINGS_SEARCH_ROWS,
@@ -38,7 +38,12 @@ function mount(props = {}, loadedSettings = null) {
     );
 }
 
+// The search lives behind the title-bar filter button (G04, G95), so the
+// first search opens the panel and later ones reuse the open box.
 function searchFor(value) {
+    if (!screen.queryByRole('searchbox', { name: 'Search settings' })) {
+        fireEvent.click(screen.getByRole('button', { name: 'Filter settings' }));
+    }
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search settings' }), {
         target: { value },
     });
@@ -67,7 +72,8 @@ describe('Settings search', () => {
         }, 'mainnet');
         mount();
 
-        fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
+        // About is the first Settings section, its own row above the groups.
+        fireEvent.click(screen.getByRole('button', { name: /^About/ }));
 
         expect(screen.getByText('Balances updated')).toBeInTheDocument();
         expect(screen.getByText('5 minutes ago')).toBeInTheDocument();
@@ -79,8 +85,9 @@ describe('Settings search', () => {
 
         expect(screen.queryByText('Choose the theme and motion preference.')).toBeNull();
         expect(screen.queryByText('Choose the interface language and fiat currency.')).toBeNull();
-        expect(screen.getByText('Network, endpoints, fee strategy')).toBeTruthy();
-        expect(screen.getByText('Payments, orders, deadlines, quiet hours')).toBeTruthy();
+        expect(screen.getByText('Network, fee strategy, donations')).toBeTruthy();
+        expect(screen.getByText('Events, sounds, quiet hours, price alerts')).toBeTruthy();
+        expect(screen.getByText('Tor, connected sites, clipboard, data')).toBeTruthy();
         expect(screen.getByText('Wallet password, auto-lock, biometrics, send checks')).toBeTruthy();
     });
 
@@ -102,18 +109,24 @@ describe('Settings search', () => {
         ['network fee', 'Fee strategy', 'Network and Fees'],
         ['biometric unlock', 'Biometric unlock', 'Security'],
         ['lock wallet', 'Lock wallet', 'Advanced'],
-        ['network endpoint', 'Network and Fees', 'Preferences'],
-        ['connected site', 'Connected Sites', 'More'],
-        ['donation', 'Automatic Donation System', 'Donations'],
-        ['saved network filters', 'Saved network filters', 'Appearance'],
+        ['fee strategy', 'Network and Fees', 'Preferences'],
+        // Connected Sites joined Privacy, Donations joined Network and Fees (2026-11-13).
+        ['connected site', 'Connected sites', 'Privacy and Sites'],
+        ['connected site', 'Privacy and Sites', 'Account'],
+        ['donation', 'Automatic Donations', 'Network and Fees'],
+        // Renamed 2026-11-14; the old words still find it.
+        ['saved network filters', 'Clear remembered network filters', 'Appearance'],
+        ['remembered network filters', 'Clear remembered network filters', 'Appearance'],
+        ['reduce motion', 'Reduce motion', 'Appearance'],
         ['quiet hours', 'Quiet hours', 'Notifications'],
-        ['localhost auto sign', 'Cache password for localhost auto-sign', 'Advanced'],
+        ['localhost auto sign', 'Localhost auto-sign', 'Advanced'],
     ])('finds "%s" as %s under %s', (query, title, group) => {
         mount();
         searchFor(query);
 
         expect(resultRow(title, group), `${title} under ${group}`).toBeTruthy();
-        expect(screen.queryByText('About')).toBeNull();
+        // The About group matches "fee" through its own keywords, as it always did; it is titled About now.
+        expect(screen.queryByText('About XChain Wallet')).toBeNull();
     });
 
     it('shows the active wallet name on the Wallets page', () => {
@@ -138,9 +151,9 @@ describe('Settings search', () => {
 
     it.each([
         ['wallet', 'Wallets'],
-        ['network endpoint', 'Network and Fees'],
-        ['connected site', 'Connected Sites'],
-        ['donation', 'Donations'],
+        ['fee strategy', 'Network and Fees'],
+        ['connected site', 'Privacy and Sites'],
+        ['donation', 'Network and Fees'],
         ['localhost auto sign', 'Advanced'],
     ])('exposes the %s drilldown as the %s page', (query, groupTitle) => {
         mount();
@@ -171,9 +184,11 @@ describe('Settings search', () => {
         fireEvent.click(resultRow('Fee strategy', 'Network and Fees'));
 
         expect(await screen.findByRole('heading', { name: /Network and Fees/i })).toBeTruthy();
-        const match = await screen.findByText('Fee strategy', {
-            selector: '[data-settings-search-match="true"]',
-        });
+        // Network and Fees is a list of rows (G08): the match is the Fee
+        // strategy row, whose text starts with its title.
+        await waitFor(() => expect(document.querySelector('[data-settings-search-match="true"]')).toBeTruthy());
+        const match = document.querySelector('[data-settings-search-match="true"]');
+        expect(match.textContent).toMatch(/^Fee strategy/);
         expect(match.closest('[data-settings-search-highlight="true"]')).toBeTruthy();
     });
 
@@ -234,6 +249,37 @@ describe('Settings search', () => {
 
         expect(screen.getAllByRole('status').find((el) => /No settings match/.test(el.textContent)))
             .toHaveTextContent('No settings match "signer pairing".');
+    });
+
+    it('has no inline search field in the page body, only the header filter', () => {
+        mount();
+
+        expect(screen.queryByRole('searchbox', { name: 'Search settings' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Filter settings' })).toBeTruthy();
+        expect(screen.getByText('Backup and Recovery')).toBeTruthy();
+    });
+
+    it('opens the search from the header filter, filters the list and restores it when cleared or closed', () => {
+        mount();
+        fireEvent.click(screen.getByRole('button', { name: 'Filter settings' }));
+        const box = screen.getByRole('searchbox', { name: 'Search settings' });
+        expect(document.activeElement).toBe(box);
+
+        fireEvent.change(box, { target: { value: 'password' } });
+        expect(screen.getByRole('list', { name: 'Search results' })).toBeTruthy();
+        expect(screen.queryByRole('list', { name: 'Wallets' })).toBeNull();
+
+        fireEvent.change(box, { target: { value: '' } });
+        expect(screen.queryByRole('list', { name: 'Search results' })).toBeNull();
+        expect(screen.getByText('Advanced')).toBeTruthy();
+
+        fireEvent.change(box, { target: { value: 'password' } });
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('searchbox', { name: 'Search settings' })).toBeNull();
+        // Closing the panel keeps the typed query; clearing it restores the list.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter settings' }));
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search settings' }), { target: { value: '' } });
+        expect(screen.getByText('Advanced')).toBeTruthy();
     });
 
 });

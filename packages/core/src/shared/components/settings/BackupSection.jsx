@@ -51,22 +51,29 @@ import {
     ChainBadge,
     CopyButton,
     EmptyState,
+    FormErrorSummary,
     FormPage,
     FormSection,
     Icon,
     Input,
+    NetworkField,
+    Notice,
     PageNotice as Status,
     SectionHeader,
     Select,
+    StatusMessage,
     Textarea,
+    useFormErrors,
 } from '@xchain-wallet/core/ui';
 import { useBackHandler } from '../../../ui/backStack.js';
 import { useMessaging, screenVariantFor } from '../../useMessaging.js';
 import { DiagnosticDetails } from '../DiagnosticDetails.jsx';
+import { WarningCard, WarningLine } from '../WarningCard.jsx';
 import { ActionConfirmScreen } from '../ActionConfirmScreen.jsx';
 import { KeyQR } from '../KeyQR.jsx';
 import { isUserRejection, useActionConfirmFlow } from '../../hooks/useActionConfirmFlow.js';
 import { useSignerReady } from '../../hooks/useSignerReady.js';
+import { isHardwareWallet } from '../../../flows/hardwareWallet.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { submitFailureMessage } from '../../utils/submitFailureMessage.js';
 import { useLongOperationStatus } from '../../hooks/useLongOperationStatus.js';
@@ -111,6 +118,10 @@ function passwordStepFailure(err, fallback) {
 
 const PUBLISH_FAILED = 'Failed to publish labels.';
 
+// The host's refusal when a label step reached it with no password and no
+// pooled signer: the session's pool emptied after the page read it.
+const NO_SESSION_RE = /password is required|either `password` or `signer` is required/;
+
 /**
  * Plain copy for a label publish that failed. Copy a flow wrote for the user
  * still passes through; a refusal whose sentence the generic filter would hide
@@ -135,10 +146,31 @@ function publishStepFailure(err, chainId) {
  */
 // `only` renders one action (export, phrase, test, publish or
 // restore) on its own Settings page; null renders every action.
-export function BackupSection({ activeWallet, onExportInTab, only = null }) {
-    const show = (part) => !only || only === part;
+// `direct` (with `only`) lands that page straight on its form, with no intro
+// row first and no Cancel (Back leaves). Each such page is a plain Form
+// Standard page: its notes are one notice at the top of the form column
+// (G120, U15), then the fields, then the button, with no card around the
+// form on a phone. Every gate stays: the password steps, the blurred words,
+// the publish confirm screen.
+export function BackupSection({ activeWallet, onExportInTab, only = null, direct = false }) {
+    // A hardware wallet keeps its keys on the device: there is no seed to
+    // export, show or test against, and no seed key to publish or find labels
+    // under, so every part here is refused by the host and none shows for it.
+    const seedless = isHardwareWallet(activeWallet);
+    const show = (part) => (!only || only === part) && !seedless;
+    const directPart = direct ? only : null;
+    const phraseDirect = directPart === 'phrase';
+    const testDirect = directPart === 'test';
+    const publishDirect = directPart === 'publish';
+    const restoreDirect = directPart === 'restore';
     const { messaging, shell } = useMessaging();
     const signerReady = useSignerReady(activeWallet?.id);
+    // Publish labels and Check network open the seed with the pooled signer's
+    // master key while the session holds it, so their password field shows
+    // only with the pool empty (operator preference 2026-11-14). Set when the
+    // host says the pool emptied after the page read it.
+    const [labelPoolGone, setLabelPoolGone] = useState(false);
+    const labelAskPassword = !signerReady || labelPoolGone;
     const actionConfirm = useActionConfirmFlow({ messaging, walletId: activeWallet?.id || '' });
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState(/** @type {string | null} */ (null));
@@ -165,7 +197,9 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
     const activeWalletIdRef = useRef(activeWalletId);
     activeWalletIdRef.current = activeWalletId;
 
-    useProtectedScreen(revealStage !== 'idle');
+    // The direct Recovery phrase page rests on its password step, which is
+    // protected like the step an intro button used to open.
+    useProtectedScreen(revealStage !== 'idle' || phraseDirect);
 
     useEffect(() => {
         revealAttemptRef.current += 1;
@@ -438,8 +472,10 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
     async function runPublish({ chainId, password }) {
         // Require a chain with a source address for the FILE action.
         if (!chainId) { setPublishError('Choose a network with an address to publish labels.'); return; }
-        // Require the wallet credential before preparing encrypted labels.
-        if (!password) { setPublishError('Enter your wallet password to publish labels.'); return; }
+        // Require the wallet credential before preparing encrypted labels,
+        // unless the session's pooled signer opens the seed instead.
+        const sendPassword = labelAskPassword;
+        if (sendPassword && !password) { setPublishError('Enter your wallet password to publish labels.'); return; }
         if (typeof messaging?.prepareLabelsRequest !== 'function') {
             setPublishError('Label preparation is not wired in this shell yet.');
             return;
@@ -454,12 +490,12 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
         }
         setPublishStage('running');
         setPublishError(null);
-        setPublishPassword(password);
-        publishPasswordRef.current = password;
+        setPublishPassword(sendPassword ? password : '');
+        publishPasswordRef.current = sendPassword ? password : '';
         try {
             const preparation = await messaging.prepareLabelsRequest({
                 walletId: activeWallet.id,
-                password,
+                password: sendPassword ? password : undefined,
                 chainId,
             });
             setPublishPreparation(preparation);
@@ -470,7 +506,7 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
                 encoderOpts: preparation.encoderOpts,
                 onApprove: (prebuiltPsbt) => messaging.publishLabelsRequest({
                     walletId: activeWallet.id,
-                    password: publishPasswordRef.current,
+                    password: publishPasswordRef.current || undefined,
                     chainId: preparation.chainId,
                     preparation,
                     prebuiltPsbt,
@@ -485,7 +521,11 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
             // so its batch stays pending and the notice stays.
             if (!r?.queued) setAutoSync(null);
         } catch (err) {
-            if (!isUserRejection(err)) {
+            if (!sendPassword && !publishPasswordRef.current && NO_SESSION_RE.test(String(err?.message || ''))) {
+                // The pool emptied since the page read it: ask in place now.
+                setLabelPoolGone(true);
+                setPublishError('Enter your wallet password to publish labels.');
+            } else if (!isUserRejection(err)) {
                 setPublishError(publishStepFailure(err, chainId));
             }
             setPublishStage('form');
@@ -508,8 +548,8 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
      * §19.5.2 restore, on-demand half. No signature and no broadcast, so
      * this skips `actionConfirm` entirely: it is a read (fetch the FILE,
      * decrypt it against this wallet's own seed) and a vault write, not a
-     * transaction. `wallet.restoreLabels` derives the seed itself from the
-     * password and never returns it here.
+     * transaction. `wallet.restoreLabels` derives the seed itself, from the
+     * password or the pooled signer's master key, and never returns it here.
      */
     async function runRestore({ chainId, password }) {
         if (typeof messaging?.restoreLabelsRequest !== 'function') {
@@ -520,12 +560,17 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
             setRestoreError('No active wallet.');
             return;
         }
+        const sendPassword = labelAskPassword;
+        if (sendPassword && !password) {
+            setRestoreError('Enter your wallet password to check for backed-up contacts.');
+            return;
+        }
         setRestoreStage('running');
         setRestoreError(null);
         try {
             const r = await messaging.restoreLabelsRequest({
                 walletId: activeWallet.id,
-                password,
+                password: sendPassword ? password : undefined,
                 chainId,
             });
             // The result never says which chain it searched when nothing
@@ -534,7 +579,13 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
             setRestoreResult({ ...r, requestedChainId: chainId });
             setRestoreStage('result');
         } catch (err) {
-            setRestoreError(passwordStepFailure(err, 'Failed to check the network for backed-up contacts.'));
+            if (!sendPassword && NO_SESSION_RE.test(String(err?.message || ''))) {
+                // The pool emptied since the page read it: ask in place now.
+                setLabelPoolGone(true);
+                setRestoreError('Enter your wallet password to check for backed-up contacts.');
+            } else {
+                setRestoreError(passwordStepFailure(err, 'Failed to check the network for backed-up contacts.'));
+            }
             setRestoreStage('form');
         }
     }
@@ -551,9 +602,10 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
         // is unreadable without the seed. The panel that built it can.
         return (
             <div style={STACK}>
-                <div style={ROW_HINT} data-testid="publish-labels-encrypted-note">
-                    {t('settings.backup.yourLabelsAndContactsAre')}
-                </div>
+                {/* A note lives in the shared notice card, never as a loose paragraph. */}
+                <WarningCard data-testid="publish-labels-encrypted-note">
+                    <WarningLine>{t('settings.backup.yourLabelsAndContactsAre')}</WarningLine>
+                </WarningCard>
                 <ActionConfirmScreen
                     confirmAction={actionConfirm.confirmAction}
                     summary={{
@@ -579,6 +631,11 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
 
     return (
         <div className={styles.rows} style={STACK}>
+            {seedless ? (
+                <div style={ROW_HINT} data-testid="backup-hardware-note">
+                    {t('settings.backup.hardwareNothingToBackUp')}
+                </div>
+            ) : null}
             {!show('export') ? null : exportResult && !exportResult.confirmed ? (
                 <BackupDownloadConfirm
                     fileName={exportResult.fileName}
@@ -589,6 +646,18 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
                 <BackupExportResult
                     result={exportResult}
                     onDone={() => setExportResult(null)}
+                />
+            ) : direct ? (
+                <PasswordPrompt
+                    direct
+                    label={t('settings.backup.backupPassword')}
+                    busy={exporting}
+                    operationTime={exportTime}
+                    onCancel={cancelExport}
+                    // The popup closes when a download takes focus, so there the
+                    // export continues in a full tab (no password crosses over).
+                    onSubmit={(pw) => (onExportInTab ? onExportInTab() : onExport(pw))}
+                    error={exportError}
                 />
             ) : pendingPassword !== null ? (
                 <PasswordPrompt
@@ -615,12 +684,13 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
                 />
             )}
 
-            {!show('phrase') ? null : revealStage === 'password' ? (
+            {!show('phrase') ? null : revealStage === 'password' || (phraseDirect && !(revealStage === 'shown' && revealedWalletId === activeWalletId)) ? (
                 <UnlockPrompt
+                    direct={phraseDirect}
                     label={t('settings.backup.revealRecoveryPhrase')}
                     hint={t('settings.backup.enterYourWalletPasswordMake', { RECOVERY_PHRASE_WARNING })}
                     busy={revealing}
-                    onCancel={handleHideMnemonic}
+                    onCancel={phraseDirect ? undefined : handleHideMnemonic}
                     onSubmit={(pw) => onReveal(pw)}
                     error={revealError}
                 />
@@ -644,12 +714,13 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
                     onClick={() => { setRevealStage('password'); setRevealError(null); }}
                 />
             )}
-            {!show('test') ? null : dryRunStage === 'form' || dryRunStage === 'running' ? (
+            {!show('test') ? null : dryRunStage === 'form' || dryRunStage === 'running' || (testDirect && dryRunStage === 'idle') ? (
                 <DryRunForm
+                    direct={testDirect}
                     busy={dryRunStage === 'running'}
                     error={dryRunError}
                     walletFormat={activeWallet?.format}
-                    onCancel={resetDryRun}
+                    onCancel={testDirect ? undefined : resetDryRun}
                     onSubmit={runDryRun}
                 />
             ) : dryRunStage === 'result' ? (
@@ -668,7 +739,9 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
                     onClick={() => { setDryRunStage('form'); setDryRunError(null); }}
                 />
             )}
-            {show('publish') && autoSyncDue ? (
+            {/* The direct page is already the publish form, so a due batch is
+                a line in its notes, not a card with a second Publish button. */}
+            {show('publish') && autoSyncDue && !publishDirect ? (
                 <LabelSyncDueNotice
                     changeCount={autoSync?.batch?.changeCount ?? autoSync?.changeCount ?? 0}
                     disabled={!activeWallet}
@@ -676,18 +749,21 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
                     onDismiss={dismissAutoSync}
                 />
             ) : null}
-            {!show('publish') ? null : publishStage === 'form' || publishStage === 'running' ? (
+            {!show('publish') ? null : publishStage === 'form' || publishStage === 'running' || (publishDirect && publishStage === 'idle') ? (
                 <PublishLabelsForm
+                    direct={publishDirect}
+                    pendingChanges={publishDirect && autoSyncDue ? (autoSync?.batch?.changeCount ?? autoSync?.changeCount ?? 0) : 0}
                     walletId={activeWallet?.id}
                     busy={publishStage === 'running'}
                     error={publishError}
+                    askPassword={labelAskPassword}
                     password={publishPassword}
                     onPasswordChange={(value) => {
                         setPublishPassword(value);
                         publishPasswordRef.current = value;
                         if (publishError) setPublishError(null);
                     }}
-                    onCancel={resetPublish}
+                    onCancel={publishDirect ? undefined : resetPublish}
                     onSubmit={runPublish}
                 />
             ) : publishStage === 'result' ? (
@@ -704,12 +780,14 @@ export function BackupSection({ activeWallet, onExportInTab, only = null }) {
                     onClick={() => { setPublishStage('form'); setPublishError(null); }}
                 />
             )}
-            {!show('restore') ? null : restoreStage === 'form' || restoreStage === 'running' ? (
+            {!show('restore') ? null : restoreStage === 'form' || restoreStage === 'running' || (restoreDirect && restoreStage === 'idle') ? (
                 <RestoreLabelsForm
+                    direct={restoreDirect}
                     walletId={activeWallet?.id}
                     busy={restoreStage === 'running'}
                     error={restoreError}
-                    onCancel={resetRestore}
+                    askPassword={labelAskPassword}
+                    onCancel={restoreDirect ? undefined : resetRestore}
                     onSubmit={runRestore}
                 />
             ) : restoreStage === 'result' ? (
@@ -750,7 +828,7 @@ function LabelSyncDueNotice({ changeCount, disabled, onPublish, onDismiss }) {
             className={cardStyles.card}
         >
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onDismiss}>
+                <Button variant="secondary" size="sm" icon={<Icon.XIcon />} onClick={onDismiss}>
                     {t('extensionBanner.notNow')}
                 </Button>
                 <Button
@@ -771,7 +849,7 @@ function BackupRow({ label, hint, actionLabel, icon, disabled, onClick }) {
     return (
         <SettingsActionRow label={label} hint={hint}>
             <Button
-                variant="ghost"
+                variant="secondary"
                 size="sm"
                 className={styles.rowAction}
                 icon={icon}
@@ -790,19 +868,33 @@ function BackupRow({ label, hint, actionLabel, icon, disabled, onClick }) {
  * not asking for confirmation, since the user is entering an EXISTING
  * password rather than picking a new one.
  */
-function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
+function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit, direct = false }) {
     const [pw, setPw] = useState('');
+    // G130: the reveal button is never disabled for an empty password; the
+    // press marks the field and leads the form with the error summary.
+    const formErrors = useFormErrors();
     const submit = (event) => {
         event.preventDefault();
-        if (busy || pw.length === 0) return;
+        if (busy) return;
+        if (!formErrors.validate({ 'backup-reveal-password': pw.length === 0 ? t('locked.enterYourPassword') : null })) return;
         onSubmit(pw);
     };
     return (
         <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
             <Status text={error && error !== INCORRECT_PASSWORD ? error : null} tone="error" />
-            <FormPage onSubmit={submit} sectioned submitFromAnyField label={label}>
-                <FormSection title={label} description={hint}>
+            <FormPage onSubmit={submit} sectioned={!direct} submitFromAnyField label={label} errors={formErrors}>
+                {/* The direct page is a plain Form Standard page: one notice at
+                    the top of the form column (G120, U15) holding the warning
+                    and the page's note, then the field, then the button. */}
+                {direct ? (
+                    <Notice tone="danger" role="note" testId="reveal-phrase-note">
+                        <p>{RECOVERY_PHRASE_WARNING}</p>
+                        <p>{t('settings.backup.directPhraseNote')}</p>
+                    </Notice>
+                ) : null}
+                <FormSection title={direct ? undefined : label} description={direct ? undefined : hint}>
                     <Input
+                        id="backup-reveal-password"
                         type="password"
                         revealable
                         label={t('send.gated.passwordLabel')}
@@ -815,13 +907,16 @@ function UnlockPrompt({ label, hint, busy, error, onCancel, onSubmit }) {
                         error={error === INCORRECT_PASSWORD ? error : undefined}
                     />
                     <div className={styles.actions}>
-                        <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                        {onCancel ? (
+                            <Button variant="secondary" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                        ) : null}
                         <Button
                             type="submit"
                             variant="success"
-                            size="sm"
+                            size={direct ? 'md' : 'sm'}
+                            block={direct}
                             icon={<Icon.EyeIcon />}
-                            disabled={busy || pw.length === 0}
+                            disabled={busy}
                         >
                             {busy ? t('settings.backup.revealing') : t('settings.help.backup.revealPhrase')}
                         </Button>
@@ -873,7 +968,7 @@ function RevealedMnemonic({
                 this sheet is paper or the print path. data-secret marks both
                 for every screenshot mask. */}
             <Button
-                variant="ghost"
+                variant="secondary"
                 block
                 icon={null}
                 data-secret=""
@@ -906,7 +1001,7 @@ function RevealedMnemonic({
                 <>
                     <SectionHeader as="h3" title={t('settings.backup.passphrase25thWord')} />
                     <Button
-                        variant="ghost"
+                        variant="secondary"
                         block
                         icon={null}
                         data-secret=""
@@ -950,11 +1045,11 @@ function RevealedMnemonic({
             </div>
             <div className={`${styles.screenOnly} ${styles.actions}`}>
                 {!hidden ? (
-                    <Button variant="ghost" size="sm" icon={<Icon.PrinterIcon />} onClick={onPrint}>
+                    <Button variant="secondary" size="sm" icon={<Icon.PrinterIcon />} onClick={onPrint}>
                         {t('settings.backup.printRecoverySheet')}
                     </Button>
                 ) : null}
-                <Button variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>
+                <Button variant="secondary" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>
                     {t('common.done')}
                 </Button>
             </div>
@@ -966,7 +1061,7 @@ function RevealedMnemonic({
  * Dry-run restore form: paste mnemonic, pick format / passphrase /
  * gap limit, fire the comparison.
  */
-function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
+function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit, direct = false }) {
     // The form takes a whole recovery phrase in clear text, so it is
     // mnemonic entry under the screenGuard policy: no screenshot, no
     // recents thumbnail, for as long as the field is on screen.
@@ -983,10 +1078,16 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
     const gapLimitValid = /^\d+$/.test(gapLimit)
         && gapLimitNumber >= 1
         && gapLimitNumber <= 100;
-    const canSubmit = mn.trim().length > 0 && gapLimitValid && !busy;
+    // G130: Run Test is never disabled for missing input; the press marks
+    // each problem field and leads the form with the error summary.
+    const formErrors = useFormErrors();
     const submit = (event) => {
         event.preventDefault();
-        if (!canSubmit) return;
+        if (busy) return;
+        if (!formErrors.validate({
+            'backup-test-phrase': mn.trim().length === 0 ? t('settings.backup.enterThePhraseToTest') : null,
+            'backup-test-gap': gapLimitValid ? null : t('settings.backup.addressesToCheckMustBe'),
+        })) return;
         onSubmit({
             mnemonic: mn.trim(),
             format,
@@ -998,12 +1099,20 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
     return (
         <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
             <Status text={error} tone="error" />
-            <FormPage onSubmit={submit} sectioned label={t('settings.backup.testBackup')}>
+            <FormPage onSubmit={submit} sectioned={!direct} label={t('settings.backup.testBackup')} errors={formErrors}>
+                {/* The page is titled Test backup; its note is the info notice at
+                    the top of the form column (G120, U15). */}
+                {direct ? (
+                    <Notice tone="info" role="note" testId="test-backup-note">
+                        {t('settings.backup.enterTheRecoveryPhraseFrom', { value: gapLimitValid ? gapLimitNumber : 'selected' })}
+                    </Notice>
+                ) : null}
                 <FormSection
-                    title={t('settings.backup.testBackup')}
-                    description={t('settings.backup.enterTheRecoveryPhraseFrom', { value: gapLimitValid ? gapLimitNumber : 'selected' })}
+                    title={direct ? undefined : t('settings.backup.testBackup')}
+                    description={direct ? undefined : t('settings.backup.enterTheRecoveryPhraseFrom', { value: gapLimitValid ? gapLimitNumber : 'selected' })}
                 >
                     <Textarea
+                        id="backup-test-phrase"
                         label={t('settings.backup.recoveryPhraseToTest')}
                         help={t('settings.help.backup.testPhrase')}
                         autoFocus
@@ -1026,11 +1135,11 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
                                 onChange={(e) => setFormat(/** @type {any} */ (e.target.value))}
                                 aria-label={t('settings.backup.phraseFormat')}
                         >
-                                {/* Native options are the required children of the style guide Select. */}
-                                <option value="bip39">{t('settings.backup.standardBip39')}</option>
-                                <option value="counterwallet-legacy">{t('settings.backup.counterwalletLegacy')}</option>
+                                <Select.Option value="bip39" icon={<Icon.KeyIcon />}>{t('settings.backup.standardBip39')}</Select.Option>
+                                <Select.Option value="counterwallet-legacy" icon={<Icon.BookIcon />}>{t('settings.backup.counterwalletLegacy')}</Select.Option>
                         </Select>
                         <Input
+                                id="backup-test-gap"
                                 label={t('settings.backup.addressesToCheck2')}
                                 help={t('settings.help.backup.testGap')}
                                 type="number"
@@ -1064,13 +1173,16 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit }) {
                         <Status text={t('settings.backup.addressesToCheckMustBe')} tone="error" />
                     ) : null}
                     <div className={styles.actions}>
-                        <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                        {onCancel ? (
+                            <Button variant="secondary" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                        ) : null}
                         <Button
                             type="submit"
                             variant="success"
-                            size="sm"
+                            size={direct ? 'md' : 'sm'}
+                            block={direct}
                             icon={<Icon.VerifyIcon />}
-                            disabled={!canSubmit}
+                            disabled={busy}
                         >
                             {busy ? t('settings.backup.testing') : t('settings.backup.runTest')}
                         </Button>
@@ -1107,7 +1219,7 @@ function DryRunReport({ result, onDone }) {
                 />
             )}
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
+                <Button variant="secondary" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
             </div>
         </FormSection>
     );
@@ -1181,26 +1293,47 @@ function DryRunChainReport({ chain }) {
     );
 }
 
-function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onSubmit }) {
+function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onSubmit, direct = false }) {
     const [pw1, setPw1] = useState('');
     const [pw2, setPw2] = useState('');
     const passwordStrongEnough = pw1.length >= flowsLib.MIN_BACKUP_PASSWORD_LENGTH;
     const mismatch = pw2.length > 0 && pw1 !== pw2;
-    const canSubmit = passwordStrongEnough && pw2.length > 0 && pw1 === pw2 && !busy;
+    // G130: Export Backup is never disabled for missing input; the press marks
+    // each problem field and leads the form with the error summary.
+    const formErrors = useFormErrors();
     const submit = (event) => {
         event.preventDefault();
-        if (!canSubmit) return;
+        if (busy) return;
+        const tooShort = t('settings.backup.backupPasswordMustBeAt', { MIN_BACKUP_PASSWORD_LENGTH: flowsLib.MIN_BACKUP_PASSWORD_LENGTH });
+        if (!formErrors.validate({
+            'backup-export-password': pw1.length === 0
+                ? t('settings.backup.chooseABackupPassword')
+                : (passwordStrongEnough ? null : tooShort),
+            'backup-export-confirm': pw2.length === 0
+                ? t('settings.backup.confirmTheBackupPassword')
+                : (pw1 === pw2 ? null : t('settings.backup.backupPasswordsDoNotMatch')),
+        })) return;
         onSubmit(pw1);
     };
+    const Wrap = direct ? DirectWrap : SettingsInlineForm;
     return (
-        <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
+        <Wrap onCancel={onCancel} cancelDisabled={busy}>
             <Status text={error} tone="error" />
-            <FormPage onSubmit={submit} sectioned label={t('settings.backup.exportEncryptedBackup')}>
+            <FormPage onSubmit={submit} sectioned={!direct} label={t('settings.backup.exportEncryptedBackup')} errors={formErrors}>
+                {/* The direct page's explanation is the first block of the form: a
+                    shared info notice, bare on a phone and inside the one form card
+                    on wide widths, so the note, fields and button share one width. */}
+                {direct ? (
+                    <StatusMessage variant="info" testId="export-backup-note">
+                        {t('settings.backup.directExportNote')}
+                    </StatusMessage>
+                ) : null}
                 <FormSection
-                    title={t('settings.backup.exportEncryptedBackup')}
-                    description={hint}
+                    title={direct ? undefined : t('settings.backup.exportEncryptedBackup')}
+                    description={direct ? undefined : hint}
                 >
                     <Input
+                        id="backup-export-password"
                         label={label}
                         help={t('settings.help.backup.exportPassword')}
                         type="password"
@@ -1218,6 +1351,7 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
                         errorKey={pw1}
                     />
                     <Input
+                        id="backup-export-confirm"
                         type="password"
                         revealable
                         label={t('settings.backup.confirmBackupPassword')}
@@ -1240,21 +1374,29 @@ function PasswordPrompt({ label, hint, busy, operationTime, error, onCancel, onS
                         />
                     ) : null}
                     <div className={styles.actions}>
-                        <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel}>{t('common.cancel')}</Button>
+                        {direct ? null : (
+                            <Button variant="secondary" size="sm" icon={<Icon.XIcon />} onClick={onCancel}>{t('common.cancel')}</Button>
+                        )}
                         <Button
                             type="submit"
                             variant="success"
-                            size="sm"
+                            size={direct ? 'md' : 'sm'}
+                            block={direct}
                             icon={<Icon.DownloadIcon />}
-                            disabled={!canSubmit}
+                            disabled={busy}
                         >
                             {busy ? t('settings.backup.exporting') : t('settings.help.backup.exportBackup')}
                         </Button>
                     </div>
                 </FormSection>
             </FormPage>
-        </SettingsInlineForm>
+        </Wrap>
     );
+}
+
+/** Bare wrapper for the direct export page: no inline-form card or Cancel row. */
+function DirectWrap({ children }) {
+    return <div style={STACK}>{children}</div>;
 }
 
 function BackupExportResult({ result, onDone }) {
@@ -1316,7 +1458,7 @@ function BackupExportResult({ result, onDone }) {
             ) : null}
             <div className={styles.actions}>
                 <Button variant="success" size="sm" icon={<Icon.PlusIcon />} onClick={createPointer}>{t('settings.backup.createPointerQr')}</Button>
-                <Button variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
+                <Button variant="secondary" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
             </div>
         </FormSection>
     );
@@ -1332,7 +1474,7 @@ function BackupDownloadConfirm({ fileName, onConfirm, onCancel }) {
             <Status text={fileName} />
             <div style={ROW_HINT}>{t('settings.backup.checkThatTheFileIsInYourDownloads')}</div>
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel}>{t('common.cancel')}</Button>
+                <Button variant="secondary" size="sm" icon={<Icon.XIcon />} onClick={onCancel}>{t('common.cancel')}</Button>
                 <Button variant="success" size="sm" icon={<Icon.CheckIcon />} onClick={onConfirm}>{t('settings.backup.iSavedTheFile')}</Button>
             </div>
         </FormSection>
@@ -1380,7 +1522,9 @@ function describeBackup(fallbackWalletName, fileContent) {
  * surfaces chains where the FILE action can actually be broadcast,
  * then takes the wallet password and prepares the encrypted FILE payload.
  */
-function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, onCancel, onSubmit }) {
+// `askPassword` false: the session's pooled signer opens the seed, so the
+// form draws no password field (operator preference 2026-11-14).
+function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, onCancel, onSubmit, direct = false, pendingChanges = 0, askPassword = true }) {
     const { messaging } = useMessaging();
     const [chains, setChains] = useState(/** @type {string[] | null} */ (null));
     const [chainId, setChainId] = useState(/** @type {string} */ (''));
@@ -1411,13 +1555,11 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
     const loadingChains = chains === null;
     const canSubmit = !busy && !loadingChains;
 
-    return (
-        <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
-            <Status text={error && error !== INCORRECT_PASSWORD ? error : null} tone="error" />
+    const form = (
             <FormSection
-                title={t('settings.backup.publishLabelsOnChain')}
-                description={t('settings.backup.theLabelsContactsAreEncrypted')}
-                className={cardStyles.card}
+                title={direct ? undefined : t('settings.backup.publishLabelsOnChain')}
+                description={direct ? undefined : t('settings.backup.theLabelsContactsAreEncrypted')}
+                className={direct ? undefined : cardStyles.card}
             >
                 {chains === null ? (
                     <div style={ROW_HINT}>{t('settings.backup.loadingChains')}</div>
@@ -1429,37 +1571,40 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
                         role={chainsError ? 'alert' : 'status'}
                     />
                 ) : (
-                    <Select
+                    // The standard Network field and its full-screen list
+                    // (operator ruling 2026-11-13).
+                    <NetworkField
                         label={t('send.fields.chain')}
                         help={t('settings.help.backup.publishChain')}
                         value={chainId}
-                        onChange={(e) => setChainId(e.target.value)}
-                        aria-label={t('settings.backup.publishChain')}
-                    >
-                        {/* Native options are the required children of the style guide Select. */}
-                        {chains.map((cid) => (
-                            <option key={cid} value={cid}>{chainDisplayName(cid)}</option>
-                        ))}
-                    </Select>
+                        onChange={setChainId}
+                        chainIds={chains}
+                        chainRegistry={chainRegistry}
+                    />
                 )}
-                <Input
-                    type="password"
-                    revealable
-                    label={t('send.gated.passwordLabel')}
-                    help={t('settings.help.backup.publishPassword')}
-                    placeholder={t('send.gated.passwordLabel')}
-                    value={password}
-                    onChange={(e) => onPasswordChange(e.target.value)}
-                    autoFocus
-                    autoComplete="current-password"
-                    aria-label={t('send.gated.passwordLabel')}
-                    error={error === INCORRECT_PASSWORD ? error : undefined}
-                />
+                {askPassword ? (
+                    <Input
+                        type="password"
+                        revealable
+                        label={t('send.gated.passwordLabel')}
+                        help={t('settings.help.backup.publishPassword')}
+                        placeholder={t('send.gated.passwordLabel')}
+                        value={password}
+                        onChange={(e) => onPasswordChange(e.target.value)}
+                        autoFocus
+                        autoComplete="current-password"
+                        aria-label={t('send.gated.passwordLabel')}
+                        error={error === INCORRECT_PASSWORD ? error : undefined}
+                    />
+                ) : null}
                 <div className={styles.actions}>
-                    <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                    {onCancel ? (
+                        <Button variant="secondary" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                    ) : null}
                     <Button
                         variant="success"
-                        size="sm"
+                        size={direct ? 'md' : 'sm'}
+                        block={direct}
                         icon={<Icon.UploadIcon />}
                         onClick={() => onSubmit({ chainId, password })}
                         disabled={!canSubmit}
@@ -1468,6 +1613,24 @@ function PublishLabelsForm({ walletId, busy, error, password, onPasswordChange, 
                     </Button>
                 </div>
             </FormSection>
+    );
+
+    return (
+        <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
+            <Status text={error && error !== INCORRECT_PASSWORD ? error : null} tone="error" />
+            {direct ? (
+                // The direct page is a plain Form Standard page: its notes are one
+                // info notice at the top of the form column (G120, U15), then the
+                // fields, then the button. A div form keeps the button the only
+                // way to publish, as before (no Enter submit).
+                <FormPage as="div" label={t('settings.backup.publishLabelsOnChain')}>
+                    <Notice tone="info" role="note" testId="publish-labels-note">
+                        {pendingChanges > 0 ? <p>{t('settings.backup.labelChangeNotice', { count: pendingChanges })}</p> : null}
+                        <p>{t('settings.backup.theLabelsContactsAreEncrypted')}</p>
+                    </Notice>
+                    {form}
+                </FormPage>
+            ) : form}
         </SettingsInlineForm>
     );
 }
@@ -1491,7 +1654,7 @@ function PublishLabelsReport({ result, onDone }) {
                             : t('settings.backup.noTransactionIdCameBack')}
                     </div>
                     <div className={styles.actions}>
-                        <Button variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
+                        <Button variant="secondary" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
                     </div>
                 </FormSection>
             </div>
@@ -1513,7 +1676,7 @@ function PublishLabelsReport({ result, onDone }) {
             </dl>
             <div className={styles.actions}>
                 <CopyButton value={txid} label={t('common.copyTransactionId')} />
-                <Button variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
+                <Button variant="secondary" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
             </div>
         </FormSection>
     );
@@ -1526,7 +1689,9 @@ function PublishLabelsReport({ result, onDone }) {
  * a chain with nothing to publish from also never held a label-sync
  * publish to find.
  */
-function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
+// `askPassword` false: the session's pooled signer opens the seed, so the
+// form draws no password field (operator preference 2026-11-14).
+function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit, direct = false, askPassword = true }) {
     const { messaging } = useMessaging();
     const [chains, setChains] = useState(/** @type {string[] | null} */ (null));
     const [chainId, setChainId] = useState(/** @type {string} */ (''));
@@ -1555,15 +1720,23 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
         return () => { cancelled = true; };
     }, [walletId, messaging]);
 
-    const canSubmit = !!chainId && password.length > 0 && !busy;
+    // G130: Check for Contacts is never disabled for missing input; the press
+    // names what is missing at the top of the form and on the field.
+    const formErrors = useFormErrors();
+    const check = () => {
+        if (busy) return;
+        if (!formErrors.validate({
+            'form:restore-chain': chainId ? null : t('settings.backup.chooseANetwork'),
+            'backup-restore-password': askPassword && password.length === 0 ? t('locked.enterYourPassword') : null,
+        })) return;
+        onSubmit({ chainId, password });
+    };
 
-    return (
-        <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
-            <Status text={error && error !== INCORRECT_PASSWORD ? error : null} tone="error" />
+    const form = (
             <FormSection
-                title={t('settings.backup.checkChainForBackedUp')}
-                description={t('settings.backup.decryptsTheLabelsContactsFile')}
-                className={cardStyles.card}
+                title={direct ? undefined : t('settings.backup.checkChainForBackedUp')}
+                description={direct ? undefined : t('settings.backup.decryptsTheLabelsContactsFile')}
+                className={direct ? undefined : cardStyles.card}
             >
                 {chains === null ? (
                     <div style={ROW_HINT}>{t('settings.backup.loadingChains')}</div>
@@ -1575,45 +1748,77 @@ function RestoreLabelsForm({ walletId, busy, error, onCancel, onSubmit }) {
                         role={chainsError ? 'alert' : 'status'}
                     />
                 ) : (
-                    <Select
+                    // The standard Network field and its full-screen list
+                    // (operator ruling 2026-11-13).
+                    <NetworkField
                         label={t('send.fields.chain')}
                         help={t('settings.help.backup.restoreChain')}
                         value={chainId}
-                        onChange={(e) => setChainId(e.target.value)}
-                        aria-label={t('settings.backup.restoreChain')}
-                    >
-                        {/* Native options are the required children of the style guide Select. */}
-                        {chains.map((cid) => (
-                            <option key={cid} value={cid}>{chainDisplayName(cid)}</option>
-                        ))}
-                    </Select>
+                        onChange={setChainId}
+                        chainIds={chains}
+                        chainRegistry={chainRegistry}
+                    />
                 )}
-                <Input
-                    type="password"
-                    revealable
-                    label={t('send.gated.passwordLabel')}
-                    help={t('settings.help.backup.restorePassword')}
-                    placeholder={t('send.gated.passwordLabel')}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoFocus
-                    autoComplete="current-password"
-                    aria-label={t('send.gated.passwordLabel')}
-                    error={error === INCORRECT_PASSWORD ? error : undefined}
-                />
+                {askPassword ? (
+                    <Input
+                        id="backup-restore-password"
+                        type="password"
+                        revealable
+                        label={t('send.gated.passwordLabel')}
+                        help={t('settings.help.backup.restorePassword')}
+                        placeholder={t('send.gated.passwordLabel')}
+                        value={password}
+                        onChange={(e) => { setPassword(e.target.value); formErrors.clear('backup-restore-password'); }}
+                        autoFocus
+                        autoComplete="current-password"
+                        aria-label={t('send.gated.passwordLabel')}
+                        error={error === INCORRECT_PASSWORD ? error : formErrors.errorFor('backup-restore-password')}
+                        errorKey={formErrors.attempt}
+                    />
+                ) : null}
                 <div className={styles.actions}>
-                    <Button variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                    {onCancel ? (
+                        <Button variant="secondary" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+                    ) : null}
                     <Button
                         variant="success"
-                        size="sm"
+                        size={direct ? 'md' : 'sm'}
+                        block={direct}
                         icon={<Icon.SearchIcon />}
-                        onClick={() => onSubmit({ chainId, password })}
-                        disabled={!canSubmit}
+                        onClick={check}
+                        disabled={busy}
                     >
                         {busy ? t('settings.backup.checking') : t('settings.help.backup.checkForContacts')}
                     </Button>
                 </div>
             </FormSection>
+    );
+
+    return (
+        <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
+            <Status text={error && error !== INCORRECT_PASSWORD ? error : null} tone="error" />
+            {direct ? (
+                // The page carries the short title Restore Contacts (G01); the
+                // notice at the top of the form column (G120, U15) says in full
+                // what it does, then the Network field, then the button. A div
+                // form keeps the button the only way to check, as before.
+                <FormPage as="div" label={t('settings.backup.restoreContactsTitle')} errors={formErrors}>
+                    <Notice
+                        tone="info"
+                        role="note"
+                        testId="restore-contacts-note"
+                        title={t('settings.backup.checkChainForBackedUp')}
+                    >
+                        {t('settings.backup.decryptsTheLabelsContactsFile')}
+                    </Notice>
+                    {form}
+                </FormPage>
+            ) : (
+                <>
+                    <FormErrorSummary form={formErrors} />
+                    {form}
+                </>
+            )}
         </SettingsInlineForm>
     );
 }
@@ -1656,7 +1861,7 @@ function RestoreLabelsReport({ result, onDone }) {
     return (
         <FormSection title={restoreLabelsMessage(result)} className={cardStyles.card}>
             <div className={styles.actions}>
-                <Button variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
+                <Button variant="secondary" size="sm" icon={<Icon.CheckIcon />} onClick={onDone}>{t('common.done')}</Button>
             </div>
         </FormSection>
     );

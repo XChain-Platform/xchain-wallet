@@ -5,6 +5,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
@@ -162,11 +163,9 @@ describe('list first-load states', () => {
         expect(screen.queryByText(/Nothing staked yet/)).toBeNull();
     });
 
-    it('retries a failed list load without showing its empty state', async () => {
+    it('leaves a failed market load on its plain empty state (G91)', async () => {
         const messaging = {
-            getMarkets: vi.fn()
-                .mockRejectedValueOnce(new Error('transport detail'))
-                .mockResolvedValueOnce([]),
+            getMarkets: vi.fn().mockRejectedValueOnce(new Error('transport detail')),
             listWatchlistForWallet: vi.fn().mockResolvedValue([]),
         };
         mount(MarketsList, messaging, {
@@ -175,11 +174,12 @@ describe('list first-load states', () => {
             onOpenMarket: () => {},
         });
 
-        expect(await screen.findByText('Could not load markets. Try again.')).toBeInTheDocument();
-        expect(screen.queryByText('No markets for BTC')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
-        await waitFor(() => expect(messaging.getMarkets).toHaveBeenCalledTimes(2));
+        // The reachability banner reports network trouble once; the list adds
+        // no error line or Try Again of its own.
         expect(await screen.findByText('No markets for BTC')).toBeInTheDocument();
+        expect(screen.queryByText('Could not load markets. Try again.')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull();
+        expect(document.body.textContent).not.toContain('transport detail');
     });
 
     // My bets is a tab of Bet Markets (view 'bets').
@@ -190,11 +190,14 @@ describe('list first-load states', () => {
             .mockResolvedValueOnce([]);
         mount(BetFeedsList, {
             getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [{ address: ADDRESS }] }),
-            betFeeds: vi.fn().mockResolvedValue({ data: [] }),
+            // A market the wallet has not bet in, so the empty My bets list
+            // is the tab's own empty state, not the network's.
+            betFeeds: vi.fn().mockResolvedValue({ data: [{ action_index: '1', label: 'Q', outcomes: 'Yes,No', source: 'bc1qother' }] }),
             bets,
         }, { view: 'bets', onOpenMarket: () => {} });
 
-        expect(await screen.findByRole('status', { name: 'Loading bets' })).toBeInTheDocument();
+        // My bets waits on the wallet's bets under the list's own loading line.
+        expect(await screen.findByRole('status', { name: 'Loading betting markets' })).toBeInTheDocument();
         await act(async () => firstLoad.reject(new Error('private transport detail')));
         expect(await screen.findByText('Could not load bets for any of your addresses.')).toBeInTheDocument();
         expect(document.body).not.toHaveTextContent('private transport detail');
@@ -204,7 +207,9 @@ describe('list first-load states', () => {
         expect(await screen.findByText('No bets yet')).toBeInTheDocument();
     });
 
-    it('shows a busy state and retries a plain My orders failure', async () => {
+    // G91: a failed read shows the plain empty state; the reachability
+    // banner reports network trouble once, so the page adds no error or Try Again.
+    it('shows a busy state, then the plain empty state on a My orders failure', async () => {
         const firstLoad = deferred();
         const getAddressesByChain = vi.fn()
             .mockImplementationOnce(() => firstLoad.promise)
@@ -216,15 +221,13 @@ describe('list first-load states', () => {
 
         expect(screen.getByRole('status', { name: 'Loading orders' })).toBeInTheDocument();
         await act(async () => firstLoad.reject(new Error('private transport detail')));
-        expect(await screen.findByText('Could not load your orders. Try again.')).toBeInTheDocument();
-        expect(document.body).not.toHaveTextContent('private transport detail');
-
-        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
-        await waitFor(() => expect(getAddressesByChain).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('No orders yet')).toBeInTheDocument();
+        expect(document.body).not.toHaveTextContent('private transport detail');
+        expect(screen.queryByText('Could not load your orders. Try again.')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull();
     });
 
-    it('shows a busy state and retries a plain My swaps failure', async () => {
+    it('shows a busy state, then the plain empty state on a My swaps failure', async () => {
         const firstLoad = deferred();
         const getAddressesByChain = vi.fn()
             .mockImplementationOnce(() => firstLoad.promise)
@@ -236,12 +239,10 @@ describe('list first-load states', () => {
 
         expect(screen.getByRole('status', { name: 'Loading swaps' })).toBeInTheDocument();
         await act(async () => firstLoad.reject(new Error('private transport detail')));
-        expect(await screen.findByText('Could not load your swaps. Try again.')).toBeInTheDocument();
-        expect(document.body).not.toHaveTextContent('private transport detail');
-
-        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
-        await waitFor(() => expect(getAddressesByChain).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('No swaps yet')).toBeInTheDocument();
+        expect(document.body).not.toHaveTextContent('private transport detail');
+        expect(screen.queryByText('Could not load your swaps. Try again.')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull();
     });
 
 });
@@ -259,6 +260,7 @@ describe('filtered list empty states', () => {
         mount(ContactsList, { listContacts: vi.fn().mockResolvedValue([contact]) });
         await screen.findByText('Alice');
 
+        fireEvent.click(screen.getByRole('button', { name: 'Filter contacts' }));
         fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'missing' } });
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
 
@@ -318,12 +320,12 @@ describe('filtered list empty states', () => {
         // title-line filter menu.
         fireEvent.click(screen.getByRole('button', { name: 'Filter markets' }));
         fireEvent.change(screen.getByLabelText('Search markets'), { target: { value: 'missing' } });
-        fireEvent.change(screen.getByRole('combobox', { name: 'Show' }), { target: { value: 'all' } });
+        selectOption(screen.getByRole('combobox', { name: 'Show markets' }), 'all');
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Reset Filters' }));
         expect(screen.getByLabelText('Search markets')).toHaveValue('');
-        expect(screen.getByRole('combobox', { name: 'Show' })).toHaveValue('popular');
+        expect(screen.getByRole('combobox', { name: 'Show markets' })).toHaveValue('popular');
         expect(await screen.findByText('DOGE')).toBeInTheDocument();
     });
 

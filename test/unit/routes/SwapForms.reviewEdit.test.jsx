@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { openSection } from '../../helpers/openFormSections.js';
+import { networkFeeEditor } from '../../helpers/customNetworkFee.js';
 
 const pickerSelection = vi.hoisted(() => ({
     give: 'ALPHA',
@@ -126,7 +127,7 @@ function showFull() {
 }
 
 describe('swap review editing', () => {
-    it('keeps Memo and Receive at inside the closed Swap Terms section until it opens', async () => {
+    it('keeps Receive at inside the closed Swap Terms section, and Memo in its own section', async () => {
         render(
             <MessagingProvider shell="desktop" messaging={messaging()}>
                 <SwapForm walletId="w" onBack={() => {}} initialChainId={BTC} initialGiveTick="ALPHA" />
@@ -134,11 +135,13 @@ describe('swap review editing', () => {
         );
 
         const memo = await screen.findByLabelText('Memo');
+        const receiveAt = screen.getByLabelText('Receive at');
         const disclosure = screen.getByRole('button', { name: /^Swap Terms/ });
         const controlledId = disclosure.getAttribute('aria-controls');
 
         expect(memo).not.toBeVisible();
         expect(memo).toHaveAttribute('id', 'swap-memo');
+        expect(receiveAt).not.toBeVisible();
         expect(disclosure).toHaveAttribute('aria-expanded', 'false');
         expect(disclosure.querySelector('svg')).not.toBeNull();
         expect(screen.queryByText('Advanced options')).toBeNull();
@@ -146,9 +149,12 @@ describe('swap review editing', () => {
         fireEvent.click(disclosure);
         expect(disclosure).toHaveAttribute('aria-expanded', 'true');
         expect(document.getElementById(controlledId)).toBeVisible();
+        expect(receiveAt).toBeVisible();
+        // Memo is its own section (operator 2026-11-13), still closed.
+        expect(memo).not.toBeVisible();
+        fireEvent.click(screen.getByRole('button', { name: /^Memo/ }));
         expect(memo).toBeVisible();
         expect(getComputedStyle(memo).borderTopStyle).not.toBe('none');
-        expect(screen.getByLabelText('Receive at')).toBeVisible();
     });
 
     it('treats a tiny plain decimal as positive without floating-point underflow', async () => {
@@ -220,8 +226,12 @@ describe('swap review editing', () => {
         expect(await screen.findByText('This is not a valid address.')).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: BTC_ADDRESS.address } });
-        fireEvent.click(screen.getByLabelText('Expire at a specific time'));
-        expect(await screen.findByText('Pick an expiration date and time, or switch to the default window.'))
+        fireEvent.click(screen.getByRole('combobox', { name: /^Expiration/, hidden: true }));
+        fireEvent.click(screen.getByRole('option', { name: 'Expire at a specific time', hidden: true }));
+        // The specific time starts from the Expires shown; clearing it is the empty expiry.
+        expect(screen.getByLabelText('Expires')).not.toHaveValue('');
+        fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '' } });
+        expect(await screen.findByText('Pick an expiration date and time, or choose a common term.'))
             .toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
@@ -238,9 +248,9 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
         setAmount('Give amount (ALPHA)', '2');
         setAmount('Get amount (BETA)', '3');
-        await openSection('Network fee');
+        await openSection('Speed and Fees');
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '0' } });
+        fireEvent.change(networkFeeEditor(), { target: { value: '0' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
 
         expect(screen.getAllByText('Custom fee rate must be greater than zero.')).toHaveLength(1);
@@ -260,13 +270,12 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '3');
         fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
 
-        const edit = await screen.findByRole('button', { name: 'Edit' });
+        const reject = await screen.findByRole('button', { name: 'Reject' });
         expect(screen.getByText('1 ALPHA = 1.5 BETA')).toBeInTheDocument();
-        expect(screen.getByText(/The give side is escrowed until this offer is matched/)).toBeInTheDocument();
-        expect(screen.getByText('Give network')).toBeInTheDocument();
-        expect(screen.getByText('Get network')).toBeInTheDocument();
-        expect(screen.getByText('Protocol fee')).toBeInTheDocument();
-        fireEvent.click(edit);
+        expect(screen.getByTestId('confirm-fee-network')).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-facts')).toBeInTheDocument();
+        expect(screen.queryByText('Estimate unavailable')).toBeNull();
+        fireEvent.click(reject);
         expect(await screen.findByLabelText('Give amount (ALPHA)')).toHaveValue('2');
         expect(screen.getByLabelText('Get amount (BETA)')).toHaveValue('3');
     });
@@ -285,7 +294,7 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '3');
         fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
 
-        await screen.findByRole('button', { name: 'Edit' });
+        await screen.findByRole('button', { name: 'Reject' });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(await screen.findByLabelText('Give amount (ALPHA)')).toHaveValue('2');
         expect(screen.getByLabelText('Get amount (BETA)')).toHaveValue('3');
@@ -304,13 +313,14 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
         setAmount('Give amount (ALPHA)', '2');
         setAmount('Get amount (BETA)', '3');
-        fireEvent.click(screen.getByLabelText('Expire at a specific time'));
+        fireEvent.click(screen.getByRole('combobox', { name: /^Expiration/, hidden: true }));
+        fireEvent.click(screen.getByRole('option', { name: 'Expire at a specific time', hidden: true }));
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '2099-01-02T03:04' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
-        await screen.findByRole('button', { name: 'Create Unsigned Swap Transaction' });
+        await screen.findByRole('button', { name: 'Approve' });
 
         vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2099-01-02T03:05'));
-        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Swap Transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         expect(await screen.findByText('Expiration must be in the future.')).toBeInTheDocument();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -344,25 +354,25 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
         setAmount('Give amount (ALPHA)', '2');
         setAmount('Get amount (BETA)', '3');
-        fireEvent.click(screen.getByLabelText('Expire at a specific time'));
+        fireEvent.click(screen.getByRole('combobox', { name: /^Expiration/, hidden: true }));
+        fireEvent.click(screen.getByRole('option', { name: 'Expire at a specific time', hidden: true }));
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '2099-01-02T03:04' } });
         await openSection('Swap Terms');
         fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: `  ${BTC_RECIPIENT}  ` } });
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '  exact memo  ' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
 
-        const giveValue = await screen.findByText('2 ALPHA');
-        const details = giveValue.closest('dl');
-        expect(details).not.toBeNull();
-        expect(within(details).getByText('2 ALPHA')).toBeInTheDocument();
-        expect(within(details).getByText('3 BETA')).toBeInTheDocument();
+        const sentence = await screen.findByTestId('confirm-sentence');
+        expect(sentence).toHaveTextContent('2 ALPHA');
+        expect(sentence).toHaveTextContent('3 BETA');
+        const details = screen.getByTestId('confirm-facts');
         const expiration = String(Math.floor(Date.parse('2099-01-02T03:04') / 1000));
         expect(within(details).getByText(formatLocalDateTime(expiration))).toBeInTheDocument();
-        expect(within(details).getByLabelText(BTC_RECIPIENT)).toBeInTheDocument();
+        expect(within(details).getByTitle(BTC_RECIPIENT)).toBeInTheDocument();
         expect(within(details).getByText('exact memo')).toBeInTheDocument();
-        expect(within(details).getAllByText('None')).toHaveLength(2);
+        expect(screen.queryByText('Estimate unavailable')).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Swap Transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(buildActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
             actionData: expect.objectContaining({
                 params: expect.objectContaining({
@@ -395,14 +405,12 @@ describe('swap review editing', () => {
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '  exact memo  ' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
 
-        await screen.findByRole('button', { name: 'Edit' });
+        await screen.findByRole('button', { name: 'Reject' });
         expect(screen.getByText('1 ALPHA = 1.25 BETA')).toBeInTheDocument();
-        expect(screen.getByText('Give network')).toBeInTheDocument();
-        expect(screen.getByText('Get network')).toBeInTheDocument();
-        expect(screen.getByText('Protocol fee')).toBeInTheDocument();
-        expect(screen.getByLabelText(BTC_ADDRESS.address)).toBeInTheDocument();
+        expect(screen.getByTitle(BTC_ADDRESS.address)).toBeInTheDocument();
         expect(screen.getByText('exact memo')).toBeInTheDocument();
-        expect(screen.getByText(/Paid transaction fees are not refunded/)).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-fee-network')).toBeInTheDocument();
+        expect(screen.queryByText('Estimate unavailable')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
         expect(await screen.findByLabelText('Give amount (ALPHA)')).toHaveValue('4');
@@ -427,7 +435,7 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '5');
         fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
 
-        await screen.findByRole('button', { name: 'Edit' });
+        await screen.findByRole('button', { name: 'Reject' });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(await screen.findByLabelText('Give amount (ALPHA)')).toHaveValue('4');
         expect(screen.getByLabelText('Get amount (BETA)')).toHaveValue('5');
@@ -448,13 +456,14 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
         setAmount('Give amount (ALPHA)', '4');
         setAmount('Get amount (BETA)', '5');
-        fireEvent.click(screen.getByLabelText('Expire at a specific time'));
+        fireEvent.click(screen.getByRole('combobox', { name: /^Expiration/, hidden: true }));
+        fireEvent.click(screen.getByRole('option', { name: 'Expire at a specific time', hidden: true }));
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '2099-01-02T03:04' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
-        await screen.findByRole('button', { name: 'Create Unsigned Cross-Chain Swap Transaction' });
+        await screen.findByRole('button', { name: 'Approve' });
 
         vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2099-01-02T03:05'));
-        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Cross-Chain Swap Transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         expect(await screen.findByText('Expiration must be a future date and time.')).toBeInTheDocument();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -548,13 +557,14 @@ describe('swap review editing', () => {
         const expiration = new Date(start + 60_000);
         const localExpiration = new Date(expiration.getTime() - expiration.getTimezoneOffset() * 60_000)
             .toISOString().slice(0, 16);
-        fireEvent.click(screen.getByLabelText('Expire at a specific time'));
+        fireEvent.click(screen.getByRole('combobox', { name: /^Expiration/, hidden: true }));
+        fireEvent.click(screen.getByRole('option', { name: 'Expire at a specific time', hidden: true }));
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: localExpiration } });
         fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
-        await screen.findByRole('button', { name: 'Create Unsigned Cross-Chain Swap Transaction' });
+        await screen.findByRole('button', { name: 'Approve' });
 
         vi.spyOn(Date, 'now').mockReturnValue(start + 120_000);
-        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Cross-Chain Swap Transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
         expect(await screen.findByText('Expiration must be a future date and time.')).toBeInTheDocument();
         expect(screen.getByLabelText('Give amount (ALPHA)')).toHaveValue('1');
@@ -579,7 +589,8 @@ describe('swap review editing', () => {
         const expiration = new Date(start + 60_000);
         const localExpiration = new Date(expiration.getTime() - expiration.getTimezoneOffset() * 60_000)
             .toISOString().slice(0, 16);
-        fireEvent.click(screen.getByLabelText('Expire at a specific time'));
+        fireEvent.click(screen.getByRole('combobox', { name: /^Expiration/, hidden: true }));
+        fireEvent.click(screen.getByRole('option', { name: 'Expire at a specific time', hidden: true }));
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: localExpiration } });
         fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
         const approve = await screen.findByTestId('confirm-approve');
@@ -707,11 +718,10 @@ describe('swap review editing', () => {
         setAmount('Get amount (BETA)', '2');
         fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
 
-        const submit = await screen.findByRole('button', { name: 'Create Unsigned Cross-Chain Swap Transaction' });
-        const form = submit.closest('form');
+        const submit = await screen.findByRole('button', { name: 'Approve' });
         await act(async () => {
-            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            fireEvent.click(submit);
+            fireEvent.click(submit);
         });
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
 
@@ -761,8 +771,12 @@ describe('swap review editing', () => {
         expect(await screen.findByText('This is not a valid address.')).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: BTC_ADDRESS.address } });
-        fireEvent.click(screen.getByLabelText('Expire at a specific time'));
-        expect(await screen.findByText('Pick an expiration date and time, or switch to the default window.'))
+        fireEvent.click(screen.getByRole('combobox', { name: /^Expiration/, hidden: true }));
+        fireEvent.click(screen.getByRole('option', { name: 'Expire at a specific time', hidden: true }));
+        // The specific time starts from the Expires shown; clearing it is the empty expiry.
+        expect(screen.getByLabelText('Expires')).not.toHaveValue('');
+        fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '' } });
+        expect(await screen.findByText('Pick an expiration date and time, or choose a common term.'))
             .toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
         expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
@@ -781,9 +795,9 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Choose Select Get Token' }));
         setAmount('Give amount (ALPHA)', '2');
         setAmount('Get amount (BETA)', '3');
-        await openSection('Network fee');
+        await openSection('Speed and Fees');
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '0' } });
+        fireEvent.change(networkFeeEditor(), { target: { value: '0' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
 
         expect(screen.getAllByText('Custom fee rate must be greater than zero.')).toHaveLength(1);
@@ -806,8 +820,8 @@ describe('swap review editing', () => {
         fireEvent.click(screen.getByLabelText('Require the matcher to give that token\'s ownership instead of an amount'));
         fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
 
-        expect(await screen.findByText('ownership of ALPHA')).toBeInTheDocument();
-        expect(screen.getByText('ownership of BETA')).toBeInTheDocument();
+        expect(await screen.findByTestId('confirm-sentence')).toHaveTextContent('ownership of ALPHA');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('ownership of BETA');
     });
 
     it('validates each same-chain token amount against its own precision', async () => {
@@ -884,6 +898,6 @@ describe('swap review editing', () => {
         expect(screen.getByRole('region', { name: 'You get' })).toBeInTheDocument();
         expect(screen.queryByRole('region', { name: 'Timing and fees' })).toBeNull();
         expect(screen.getByRole('button', { name: /^Swap Terms/ })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /^Network fee/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Speed and Fees/ })).toBeInTheDocument();
     });
 });

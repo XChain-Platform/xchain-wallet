@@ -21,24 +21,25 @@ const VIEWPORTS = [
 // create or refresh action sits in the content, in the ListPage actions row,
 // or in the EmptyState when the list is empty (the demo wallet has no lists).
 const CONTENT_ACTION_ROUTES = [
-    { paletteName: 'Contacts', heading: 'Contacts', actionName: 'Add contact' },
-    { paletteName: 'Lists', heading: 'My lists', actionName: 'Create list' },
     { paletteName: 'Dispensers', heading: 'My dispensers', actionName: 'Create dispenser' },
     { paletteName: 'Messaging', heading: 'Messaging', actionName: 'New Conversation' },
-    { paletteName: 'History', heading: 'History', actionName: 'Refresh history' },
     { paletteName: 'Addresses', heading: 'Addresses', actionName: 'Add or import address' },
     { paletteName: 'Staking', heading: 'Staking', actionName: 'New Stake' },
     // An empty list offers Create from its empty state and a list with rows offers New from the actions row.
     { paletteName: 'My orders', heading: 'My orders', actionName: /^(Create an order|New order)$/ },
     { paletteName: 'My swaps', heading: 'My swaps', actionName: /^(Create a swap|New swap)$/ },
-    { paletteName: 'Payments due', heading: 'Payments due', actionName: 'Refresh Payments' },
     // Rename forms name their submit (U63).
     { open: 'wallet-rename', heading: 'Rename wallet', actionName: 'Rename wallet' },
     { open: 'account-rename', heading: 'Rename account', actionName: 'Rename account' },
 ];
 
+// List pages (G95): the filter icon, then the create plus at the far right.
 const HEADER_ACTION_ROUTES = [
     { paletteName: 'My tokens', heading: 'My tokens', actionName: 'Create token' },
+    { paletteName: 'Contacts', heading: 'Contacts', actionName: 'Add contact' },
+    { paletteName: 'Lists', heading: 'My Lists', actionName: 'Create list' },
+    // History: the filter, then the ⋯ menu (Export and Refresh) at the far right.
+    { paletteName: 'History', heading: 'History', actionName: 'More actions' },
 ];
 
 async function openPaletteRoute(page, route) {
@@ -115,8 +116,9 @@ async function expectHeaderActionIcon(page, route, viewport) {
     await expect(heading).toBeVisible();
 
     const pageHeader = heading.locator('..').locator('..');
+    // The plus sits at the far right; a filter icon may come before it.
     const trailingAction = pageHeader.locator(':scope > span:last-child button');
-    await expect(trailingAction).toHaveCount(1);
+    await expect(trailingAction.last()).toHaveAccessibleName(route.actionName);
 
     const action = pageHeader.getByRole('button', { name: route.actionName, exact: true });
     await expect(action).toHaveCount(1);

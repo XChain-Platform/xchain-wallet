@@ -9,7 +9,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { StakeDetail } from '../../../packages/core/src/shared/routes/StakeDetail.jsx';
 import { StakingList } from '../../../packages/core/src/shared/routes/StakingList.jsx';
-import { OperatorDashboard } from '../../../packages/core/src/shared/routes/OperatorDashboard.jsx';
 import { scalarRows } from '../../../packages/core/src/flows/stakingDashboard.js';
 
 afterEach(cleanup);
@@ -71,7 +70,11 @@ describe('staking screens given rows with object fields', () => {
         mount(<StakeDetail walletId="w" kind="validator" chainId={CHAIN} address={ADDRESS} onBack={() => {}} />);
 
         expect(await screen.findByRole('heading', { name: 'Validator Stake' })).toBeInTheDocument();
-        await waitFor(() => expect(screen.getByText('Pending rewards')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('Claimable')).toBeInTheDocument());
+        for (const name of ['Rewards', 'Details', 'Actions']) {
+            fireEvent.click(screen.getByRole('tab', { name }));
+            expect(screen.getByRole('heading', { name: 'Validator Stake' })).toBeInTheDocument();
+        }
     });
 
     it('keeps the contract detail standing on every tab', async () => {
@@ -82,12 +85,5 @@ describe('staking screens given rows with object fields', () => {
             fireEvent.click(screen.getByRole('tab', { name }));
             expect(screen.getByRole('heading', { name: 'Contract #7 Stake' })).toBeInTheDocument();
         }
-    });
-
-    it('keeps the operator dashboard standing', async () => {
-        mount(<OperatorDashboard walletId="w" chainId={CHAIN} address={ADDRESS} onBack={() => {}} />);
-
-        expect(await screen.findByRole('heading', { name: 'Operator Dashboard' })).toBeInTheDocument();
-        await waitFor(() => expect(screen.getByText('Staking status')).toBeInTheDocument());
     });
 });

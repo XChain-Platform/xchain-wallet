@@ -10,6 +10,7 @@ import { ContractConsentPanel } from '@xchain-wallet/core/shared/components/Cont
 import { OwnerWithdrawWarning } from '@xchain-wallet/core/shared/components/OwnerWithdrawWarning.jsx';
 import { DemoExitConfirm } from '@xchain-wallet/core/shared/components/DemoExitConfirm.jsx';
 import { DraftDiscardButton } from '@xchain-wallet/core/shared/components/DraftDiscardButton.jsx';
+import { DraftNotice } from '@xchain-wallet/core/shared/components/DraftNotice.jsx';
 import { NativeFeeToggle } from '@xchain-wallet/core/shared/components/NativeFeeToggle.jsx';
 import { FeesCard } from '@xchain-wallet/core/shared/components/FeesCard.jsx';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
@@ -180,22 +181,29 @@ export function DraftAndExitSection() {
     return (
         <Section
             id="draft-exit"
-            title="Draft discard and demo exit"
-            tag="CANONICAL · DraftDiscardButton / DemoExitConfirm"
-            kicker="The two ways out of unfinished or sample state: a link-style button that drops a saved draft, and the destructive confirmation that deletes the demo wallet."
+            title="Draft restore and demo exit"
+            tag="CANONICAL · DraftNotice / DemoExitConfirm"
+            kicker="Saved form input is offered in one top notice with a Restore action and a discard X. Demo exit remains a destructive confirmation."
         >
             <Guidance
-                what={<><code>DraftDiscardButton</code> is a small <code>Button variant="link"</code> with a caller-supplied accessible label. <code>DemoExitConfirm</code> is a danger <code>ConfirmModal</code> whose message states what is deleted and what is not.</>}
-                when={<>Draft: a form that restored saved input. Demo exit: every user-triggered way out of the demo wallet.</>}
+                what={<><code>DraftNotice</code> is the G120 info notice for a saved form draft. Restore spans the notice inner width, while its X deletes the draft and hides the notice. <code>DemoExitConfirm</code> is a danger <code>ConfirmModal</code> whose message states what is deleted and what is not.</>}
+                when={<>Draft: the top of every form that offers saved input. Demo exit: every user-triggered way out of the demo wallet.</>}
                 whenNot={<>Real wallets: removing one is its own flow with a recovery check.</>}
-                doRule={<>✓ Reuse the shared demo message so every exit says the same thing</>}
-                dontRule={<>✗ Discard a draft without a visible control</>}
-                supersedes={<>Source: <code>DraftDiscardButton.jsx</code>, <code>DemoExitConfirm.jsx</code> in <code>shared/components</code>.</>}
+                doRule={<>✓ Use the X to discard the saved draft</>}
+                dontRule={<>✗ Build draft actions locally or put the notice below fields</>}
+                supersedes={<>Source: <code>DraftNotice.jsx</code>, <code>DemoExitConfirm.jsx</code> in <code>shared/components</code>. <code>DraftDiscardButton</code> remains documented for older callers.</>}
             />
             <Markup>
-{`<DraftDiscardButton onClick={discard} label="Discard the saved draft">Discard draft</DraftDiscardButton>
+{`<DraftNotice onRestore={restore} onDiscard={discard}>
+    Your unfinished payment was saved as a draft. Restore it to continue. Nothing was sent.
+</DraftNotice>
 <DemoExitConfirm busy={false} error={null} onConfirm={exit} onCancel={stay} />`}
             </Markup>
+            <LiveExample label="DraftNotice">
+                <DraftNotice onRestore={noop} onDiscard={noop}>
+                    Your unfinished payment was saved as a draft. Restore it to continue. Nothing was sent.
+                </DraftNotice>
+            </LiveExample>
             <LiveExample label="DraftDiscardButton">
                 <DraftDiscardButton onClick={noop} label="Discard the saved draft">Discard draft</DraftDiscardButton>
             </LiveExample>

@@ -89,13 +89,16 @@ function homeCallSiteProps(src, shell) {
         .map((m) => m[1]);
     // Vacuity guard: a regex that silently stops matching would make every
     // assertion below pass over an empty list. Every shell passes at least
-    // the wallet id and the core navigation handlers.
+    // the wallet id and the core navigation handlers. The floor went from 15
+    // to 12 when Home dropped its Send, Swap, Actions and resume-card props
+    // (those moved to the header, the wallet menu and the bell); desktop now
+    // passes 13.
     assert.ok(
-        props.length >= 15,
+        props.length >= 12,
         `${shell}: parsed only ${props.length} <Home> props. The call site changed `
         + 'shape; fix this parser rather than letting the comparison pass vacuously.',
     );
-    for (const required of ['activeWalletId', 'onSend', 'onReceive', 'onHistory']) {
+    for (const required of ['activeWalletId', 'onReceive', 'onExchange', 'onHistory']) {
         assert.ok(
             props.includes(required),
             `${shell}: parser lost the known-present '${required}' prop`,

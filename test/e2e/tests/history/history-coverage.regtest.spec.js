@@ -121,6 +121,7 @@ import { randomBytes } from 'node:crypto';
 import {
     createWallet, expect, gotoSection, mainButton, openIssueSection, openPaletteCommand, test,
 } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
@@ -617,7 +618,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
         const mintTick = async (amount) => {
             await openPaletteCommand(page, 'Advanced action');
             await selectVenueChain(page);
-            await page.getByLabel('Action', { exact: true }).selectOption('MINT');
+            await pickOption(page.getByLabel('Action', { exact: true }), 'MINT');
             await page.getByRole('textbox', { name: 'TICK', exact: true }).fill(tick);
             await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
             await page.getByRole('button', { name: 'Sign action' }).click();

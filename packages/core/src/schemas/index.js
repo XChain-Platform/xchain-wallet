@@ -38,6 +38,7 @@ export { createAccount, validateAccount } from './account.js';
 export { createAddress, validateAddress } from './address.js';
 export { createContact, validateContact } from './contact.js';
 export { createConnectedSite, validateConnectedSite } from './connectedSite.js';
+export { isSiteIconDataUrl, sanitizeSiteIcon } from './siteIcon.js';
 export { validateMultisigConfig, buildMultisigConfig } from './multisigConfig.js';
 export {
     createMultisigSigningSession,
@@ -48,13 +49,12 @@ export {
 } from './multisigSigningSession.js';
 export {
     createDefaultSettings,
-    createDefaultAdsChainState,
+    createDefaultAdsSettings,
     validateSettings,
     inflateSettings,
     deflateSettings,
-    resolveAdsChainConfig,
     resolveFeeConfig,
-    ADS_DEFAULT_ENABLED,
+    ADS_RECIPIENTS,
 } from './settings.js';
 export { createPendingTx, validatePendingTx } from './pendingTx.js';
 export { createSignerRecord, validateSignerRecord, SIGNER_KINDS } from './signer.js';

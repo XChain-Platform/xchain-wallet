@@ -1,37 +1,15 @@
-.summaryLabel {
-    composes: detailsLabel from './IssueTokenForm.module.css';
+/* The execute-callback facts card: the shared FactRows card with every label and
+   value held to one line. The label column sizes to its text (capped at 60% of
+   the card) and the value takes the rest; a value too long for 360 px or text
+   scale 1.3 truncates with an ellipsis and carries its full text in a title. */
+.facts {
+    grid-template-columns: fit-content(60%) minmax(0, 1fr);
 }
 
-.summaryValue {
-    composes: detailsValue from './IssueTokenForm.module.css';
-}
-
-/* Stretch both cells to the grid row so each divider spans one level line. */
-@media (min-width: 834px) {
-    .summaryLabel,
-    .summaryValue {
-        align-self: stretch;
-        display: flex;
-        align-items: center;
-    }
-
-    .summaryValue {
-        justify-content: flex-end;
-    }
-}
-
-/* The callback card on the form keeps 8px to the fields around it;
-   the form's gap is taken back on both sides. */
-.formPreview {
-    margin-block: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
-    /* The callback's figures (pays holders, allowed from block,
-       holders to pay, total payout) sit together in one rounded card. */
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-card-radius, var(--xc-radius-md));
-    background: var(--xc-surface);
-}
-
-.formPreview > dl {
-    margin: 0;
+.facts > dt,
+.facts > dd {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    overflow-wrap: normal;
 }

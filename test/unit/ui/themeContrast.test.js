@@ -120,6 +120,7 @@ const controlBorders = [
     '--xc-control-border',
     '--xc-control-border-hover',
     '--xc-control-selected',
+    '--xc-switch-on',
     '--xc-control-focus-ring',
     '--xc-control-disabled-border',
 ];
@@ -217,9 +218,10 @@ describe('theme token contrast', () => {
     });
 
     it('uses the disabled-state tokens instead of component opacity', () => {
-        expect(css).toMatch(/:where\(input, select, textarea, button\):disabled\s*\{[^}]*opacity:\s*var\(--xc-disabled-opacity\)\s*!important/s);
+        // Disabled fields use the shared tokens; buttons never look disabled (G130).
+        expect(css).toMatch(/:where\(input, select, textarea\):disabled\s*\{[^}]*opacity:\s*var\(--xc-disabled-opacity\)\s*!important/s);
         expect(css).toMatch(/filter:\s*saturate\(var\(--xc-disabled-saturation\)\)/);
-        expect(buttonCss).toMatch(/\.btn:disabled\s*\{[^}]*opacity:\s*var\(--xc-disabled-opacity\)/s);
+        expect(buttonCss).not.toMatch(/\.btn:disabled\s*\{/);
         expect(resolveToken(light, '--xc-disabled-opacity')).toBe('1');
         expect(buttonCss).toMatch(/\.success\s*\{[^}]*color:\s*var\(--xc-on-success\)/s);
     });

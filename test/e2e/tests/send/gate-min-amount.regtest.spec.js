@@ -189,7 +189,9 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
         let publishTxid;
         await test.step('the publish form never offers the unlock-threshold field on this chain', async () => {
             await openPaletteCommand(issuer, 'Publish file');
-            await issuer.getByRole('radio', { name: /Encrypted & token-gated/ }).click();
+            // Publish as is the themed dropdown (G119).
+            await issuer.getByRole('button', { name: /^Publish as: / }).click();
+            await issuer.getByRole('option', { name: /^Encrypted & token-gated/ }).click();
             // PublishFileForm pins role="listitem" on this owned-token row (it
             // sits inside a role="list" container), so it answers to
             // 'listitem', not 'button', in the accessibility tree. A listitem

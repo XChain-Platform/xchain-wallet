@@ -16,7 +16,6 @@ import {
     CopyButton,
     Input,
     AddressCombobox,
-    AddressField,
     ChainBadge,
     AddressText,
     // FeeSelector renders inside the standard FeeSection.
@@ -28,9 +27,8 @@ import {
     Icon,
     InfoTip,
     StatusMessage,
-    FormErrorSummary,
-    Checkbox,
-    Switch,
+    useFormErrors,
+    Tabs,
     // Network and From come from the standard FromSection.
 } from '@xchain-wallet/core/ui';
 import {
@@ -49,11 +47,11 @@ import {
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
 import { buildRecentDestinations } from '../../flows/recentDestinations.js';
 import { addressValidationError, detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { neutralizeControlText, ZERO_WIDTH } from '../utils/textHardening.js';
 import { findLookalike } from '../utils/lookalike.js';
-import { titleCase } from '../utils/titleCase.js';
 import { checkPasteIntegrity } from '../utils/pasteIntegrity.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import {
@@ -62,9 +60,12 @@ import {
     submitFailureMessage,
 } from '../utils/submitFailureMessage.js';
 import { t } from '../../i18n/index.js';
+import { revealFormStatus } from '../../ui/FormErrorSummary.jsx';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/scan.js';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/confirmStandard.js';
+import '../../i18n/locales/en/demo.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/home.js';
 import '../../i18n/locales/en/firstPaint.js';
@@ -73,20 +74,22 @@ import '../../i18n/locales/en/ui.js';
 import '../../i18n/locales/en/undoSend.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
-import { useDeveloperMode } from '../hooks/useDeveloperMode.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { activeNetworkLabel } from '../utils/activeNetworkSwitch.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
+import { isHwSignBack } from '../../signers/hardwareSession.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { UndoSendToast } from '../components/UndoSendToast.jsx';
 import { PanicFreezeNotice, PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { panicRefusalMessage } from '../safety/panicNotice.js';
 import {
+    lookalikeWarningsEnabled,
     resolveFeeConfig,
     resolvePreflightPrivacy,
+    resolveTestSendFiat,
 } from '../../schemas/settings.js';
 import { createUndoSendRequest, isUndoSendCancellation } from '../../flows/undoSend.js';
 import { checkRecipientNovelty } from '../../flows/recipientNovelty.js';
@@ -94,7 +97,30 @@ import { classifySignRisk } from '../../flows/signRiskClassifier.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { exitDemoWallet } from '../utils/demoGraduation.js';
 import { DemoExitConfirm } from '../components/DemoExitConfirm.jsx';
-import { MAX_SEND_LEGS, summarizeSendLegs, totalsByTick } from '../../flows/sendLegs.js';
+import { summarizeSendLegs, totalsByTick } from '../../flows/sendLegs.js';
+import {
+    addRecipient as addMultiRecipient,
+    MAX_MULTI_RECIPIENTS,
+    newRecipientId,
+    parseRecipientText,
+    recipientListFitError,
+    recipientsToText,
+    recipientTotalsText,
+    removeRecipient as removeMultiRecipient,
+    updateRecipient as updateMultiRecipient,
+    validateRecipient,
+    withoutByteOrderMark,
+} from '../../flows/multiSendRecipients.js';
+import { AdvancedRecipientText, MultiRecipientList } from '../components/MultiSendRecipients.jsx';
+import { ConfirmDecisionFooter, ConfirmStandard } from '../components/ConfirmStandard.jsx';
+import {
+    confirmStatus,
+    confirmWarning,
+    feeFacts,
+    multiSendSentence,
+    recipientFacts,
+} from '../utils/confirmStandardModel.js';
+import '../../i18n/locales/en/confirmStandard.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { Settings } from './Settings.jsx';
 import { MultisigSendForm } from './MultisigSendForm.jsx';
@@ -227,12 +253,10 @@ import { coinToFiatExact, fiatToCoin } from '../../flows/priceLookup.js';
 import { useTickFiatRate } from '../hooks/useFiatRate.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
-import { BalanceChanges } from '../components/BalanceChanges.jsx';
-import { RawPsbtViewer } from '../components/RawPsbtViewer.jsx';
 import { useToast } from '../components/ToastHost.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
-import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
+import { DraftNotice } from '../components/DraftNotice.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 // The standard token chooser, in place of a big coin icon hero.
 import { TokenField } from '../components/TokenField.jsx';
@@ -257,6 +281,7 @@ import {
 import {
     formatWithThousands,
     formatDisplayAmount,
+    groupDecodedAmounts,
     sumDecimalStrings,
     countNonCommaBefore,
     indexAfterNonCommaCount,
@@ -275,15 +300,20 @@ import styles from './Send.module.css';
 // Send is the reference form of the Wallet Form Standard; its
 // sections, fee row, status slot and action come from the shared frame.
 import {
+    advancedKey,
+    COIN_CONTROL_ROW_LIMIT,
     FeeSection,
     FormAction,
     FormFrame,
     FormSection,
     FromSection,
-    summaryAddress,
+    MemoSection,
+    selectedUtxosOf,
+    joinSummaryParts,
+    summaryLineWithAddress,
+    useAdvancedEntry,
     useFormSections,
 } from '../components/formStandard/index.js';
-import { selectedNetworkFee } from '../../flows/feesCard.js';
 import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { pendingTxToEntry } from '../utils/pendingHistory.js';
 import { classifyEntryStatusWithoutMempool } from '../utils/historyFilter.js';
@@ -309,14 +339,18 @@ const USER_CANCEL_RE = /cancel|reject|denied/i;
 // How long the first balance check may hold the Send form back.
 const FIRST_BALANCE_GATE_MS = 1500;
 
-// Coin control lists at most this many inputs. A tracker answer can carry
-// tens of thousands of rows, and one checkbox per row held the main thread
-// for seconds; Select all still takes every input, listed or not.
-export const COIN_CONTROL_ROW_LIMIT = 200;
+// Coin control lists at most this many inputs (the shared Advanced section
+// owns the list); re-exported for the tests that read it from here.
+export { COIN_CONTROL_ROW_LIMIT };
+// The form's id, which also keys its Advanced choices.
+const SEND_FORM_ID = 'send-form';
 const chainRegistry = registryLib.defaultRegistry();
 // The single-send Token field reuses the recipient token picker
 // state; this sentinel marks the picker as open for the first recipient.
 const PRIMARY_TOKEN_PICKER = '__primary__';
+// The same picker state, open for one of Multi's recipient editors.
+const MULTI_TOKEN_PICKER = '__multi__';
+const MULTI_ADD_TOKEN_PICKER = '__multi_add__';
 
 // Descriptor.coin is the long-form coin name ('bitcoin' / 'litecoin' /
 // 'dogecoin'); the user-facing native ticker is the short symbol the SDK
@@ -332,8 +366,9 @@ function nativeTickerFor(descriptor) {
 
 function hasMeaningfulSendDraft(values) {
     if (!values || typeof values !== 'object') return false;
-    if ([values.toAddress, values.amount, values.memo]
+    if ([values.toAddress, values.amount, values.memo, values.advancedText]
         .some((value) => String(value || '').trim().length > 0)) return true;
+    if (Array.isArray(values.multiRecipients) && values.multiRecipients.length > 0) return true;
 
     const tick = String(values.tick || '').trim().toUpperCase();
     if (!tick) return false;
@@ -343,16 +378,31 @@ function hasMeaningfulSendDraft(values) {
     return tick !== nativeTickerFor(descriptor);
 }
 
-function utxoKey(utxo) {
-    return `${utxo?.txid || ''}:${utxo?.vout ?? ''}`;
-}
-
-function utxoAmount(utxo, descriptor) {
-    try {
-        return decimalStringFromSats(BigInt(utxo?.value ?? 0), descriptor);
-    } catch {
-        return String(utxo?.value ?? '0');
+// The Multi list a saved draft holds: its own list when it was saved from
+// the Multi or Advanced tab, else the first recipient plus the extra rows a
+// draft from before the tabs kept. Nothing is cut to the cap here; an
+// over-long list is refused with the limit when the user presses Send.
+function restoredRecipients(values) {
+    const text = (value) => (typeof value === 'string' ? value : '');
+    if ((values?.sendMode === 'multi' || values?.sendMode === 'advanced') && Array.isArray(values.multiRecipients)) {
+        return values.multiRecipients.flatMap((row) => (
+            row && typeof row.id === 'string'
+                ? [{ id: row.id, to: text(row.to), tick: text(row.tick).toUpperCase(), amount: text(row.amount) }]
+                : []
+        ));
     }
+    const legs = Array.isArray(values?.extraLegs) ? values.extraLegs.filter((leg) => leg && typeof leg.id === 'string') : [];
+    if (legs.length === 0) return [];
+    const firstTick = text(values.tick).toUpperCase();
+    return [
+        { id: newRecipientId(), to: text(values.toAddress), tick: firstTick, amount: text(values.amount) },
+        ...legs.map((leg) => ({
+            id: leg.id,
+            to: text(leg.to),
+            tick: (values.perRecipientToken === true && text(leg.tick).trim() ? text(leg.tick) : firstTick).toUpperCase(),
+            amount: text(leg.amount),
+        })),
+    ];
 }
 
 function utxoValueSats(utxo) {
@@ -362,11 +412,6 @@ function utxoValueSats(utxo) {
     } catch {
         return null;
     }
-}
-
-function utxoOutpoint(utxo) {
-    const txid = String(utxo?.txid || 'Unknown transaction');
-    return <><AddressText address={txid} size="sm" />:{utxo?.vout ?? '?'}</>;
 }
 
 // Validate the destination against the chain the SEND will be broadcast on.
@@ -479,8 +524,21 @@ function pastedSecretKind(text, detected, chainRegistry) {
  *        True while the shell holds a payment link; the result says so.
  * @param {(sessionId?: string) => void} [props.onSessionStarted]
  *        Opens the multisig signing tracker after creating a spend session.
+ * @param {string} [props.title]
+ *        Header title of the form, for a page that hosts this form under its
+ *        own name (an agent account's Fund page). Review keeps its own title.
+ * @param {import('react').ReactNode} [props.formLead]
+ *        Shown above the form's sections, below the signing-freeze notice
+ *        (the agent address QR on the Fund page).
+ * @param {string} [props.draftView]
+ *        Draft slot of this form; a hosted form keeps its own so its typed
+ *        values never show as the plain Send page's unfinished draft.
+ * @param {string} [props.presetTo]
+ *        The destination the hosting page sets (the agent address on its Fund
+ *        page). While To still holds it, it is not the user's input: alone it
+ *        saves no draft and Back asks nothing. Other openers' prefills stay input.
  */
-export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory, onReceive, onHoldLinks, linkWaiting = false, onSessionStarted }) {
+export function Send({ walletId, accountId, onBack, prefill = null, onDone, onChangeAsset, onViewHistory, onReceive, onHoldLinks, linkWaiting = false, onSessionStarted, title = null, formLead = null, draftView = 'send', presetTo = '' }) {
     const { messaging, shell } = useMessaging();
     // A demo wallet probes nothing; its fixtures never touch a network.
     const { overall: reachabilityOverall, refresh: recheckReachability } = useReachability({
@@ -515,7 +573,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // Unlocked software session signs without a password.
     const signerReady = useSignerReady(walletId);
     const variant = screenVariantFor(shell);
-    const { developerMode } = useDeveloperMode();
     const { settings } = useSettings();
     // This wallet's own mode (§20); the form waits until it is known. Watcher
     // mode composes unsigned PSBTs, so balance empty states never replace it.
@@ -526,8 +583,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         walletModeKnown: walletModeReady,
     } = useWalletMode(walletId);
     // A demo wallet holds fixture balances and cannot move funds: the form
-    // opens at once with an inline note instead of waiting on a balance read.
+    // opens at once instead of waiting on a balance read, and Send refuses
+    // when pressed. No notice warns in advance; the user knows it is a demo.
     const isDemo = isDemoWallet(walletId);
+    const [demoRefused, setDemoRefused] = useState(false);
     const [demoExitConfirmOpen, setDemoExitConfirmOpen] = useState(false);
     const [demoExitBusy, setDemoExitBusy] = useState(false);
     const [demoExitError, setDemoExitError] = useState(/** @type {string | null} */ (null));
@@ -676,11 +735,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // so the defaulting effect below re-defaults on a chain switch (where the
     // picked address does not exist) but never overwrites a deliberate choice.
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
-    const [changeAddressPickerOpen, setChangeAddressPickerOpen] = useState(false);
     // The standard sections' open state, held here so it survives the
     // picker pages (each an early return below). From starts closed, Payment
     // open, the rest closed.
-    const formSections = useFormSections({ from: false, payment: true, memo: false, advanced: false, fee: false });
+    const formSections = useFormSections({ from: false, payment: true, memo: false, fee: false });
     const [pickedSourceChain, setPickedSourceChain] = useState(
         /** @type {string | null} */ (null),
     );
@@ -715,16 +773,37 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // PC-52: additional recipients. The fields above stay the FIRST recipient
     // (so every single-send affordance - contacts, paste checks, fiat entry,
     // Max, the gated-content rails - keeps working untouched), and these rows
-    // are the extra legs of a SEND v1/v2. `perRecipientToken` reveals a tick
-    // field per row, which is what moves the action from v1 to v2; without it
-    // every leg carries the token chosen above.
+    // are the extra legs of a SEND v1/v2. `perRecipientToken` lets each row
+    // carry its own tick, which is what moves the action from v1 to v2.
+    // Only the Multi and Advanced tabs fill them, from their recipient list
+    // (see the projection below); the Single tab sends one leg.
     const [extraLegs, setExtraLegs] = useState(
         /** @type {Array<{ id: string, to: string, amount: string, tick: string }>} */ ([]),
     );
     const [perRecipientToken, setPerRecipientToken] = useState(false);
-    const [recipientErrors, setRecipientErrors] = useState(
-        /** @type {Record<string, { to?: string, amount?: string, tick?: string }>} */ ({}),
+    // The Payment section's Single, Multi and Advanced tabs. Multi keeps a
+    // list built one recipient at a time; Advanced keeps the typed or
+    // uploaded `address,asset,amount` lines. Switching carries the
+    // recipients across; Advanced text is regenerated from the list only
+    // when the list was edited after the text was read, so lines Multi could
+    // not take are never dropped by a switch.
+    const [sendMode, setSendMode] = useState(/** @type {'single' | 'multi' | 'advanced'} */ ('single'));
+    const [multiRecipients, setMultiRecipients] = useState(
+        /** @type {Array<{ id: string, to: string, tick: string, amount: string }>} */ ([]),
     );
+    const [multiDraft, setMultiDraft] = useState(
+        /** @type {{ editingId: string, to: string, tick: string, amount: string, errors?: Record<string, string> } | null} */ (null),
+    );
+    const [multiAddDraft, setMultiAddDraft] = useState(
+        /** @type {{ editingId: null, to: string, tick: string, amount: string, errors?: Record<string, string> } | null} */ (null),
+    );
+    const [advancedText, setAdvancedText] = useState('');
+    const [advancedFileName, setAdvancedFileName] = useState('');
+    const [advancedFileError, setAdvancedFileError] = useState(/** @type {string | null} */ (null));
+    // Line errors show under the box once a submit has failed, and leave
+    // when the text changes.
+    const [advancedChecked, setAdvancedChecked] = useState(false);
+    const multiListEditedRef = useRef(false);
     const [validationAttempt, setValidationAttempt] = useState(0);
     const [tokenPickerRecipientId, setTokenPickerRecipientId] = useState(
         /** @type {string | null} */ (null),
@@ -740,7 +819,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
-    const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // The form error standard: Review validates every field into this map, the notice at
+    // the top lists the problems, and each field clears its own entry when it changes.
+    const form = useFormErrors();
     // Inline error on the To field, e.g. a wrong-chain destination address.
     const [toError, setToError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
@@ -768,6 +849,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const reviewPageRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const reviewHeadingRef = useRef(/** @type {HTMLHeadingElement | null} */ (null));
 
+    // The To as the user's own input: empty while it still holds the hosting
+    // page's presetTo, so that preset alone neither saves a draft nor makes
+    // Back ask to discard. Without presetTo this is just the To.
+    const presetToAddress = typeof presetTo === 'string' ? presetTo.trim() : '';
+    const typedToAddress = presetToAddress && toAddress.trim() === presetToAddress ? '' : toAddress;
+
     // §37 / G125: form-draft persistence. Persists only the user-visible
     // composition fields; password / mnemonic / passphrase NEVER touch
     // localStorage. The hook is keyed by walletId so a from-seed restore
@@ -780,7 +867,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         ? Number(settings.privacy.formDraftTtlMs)
         : undefined;
     const draftNetwork = settings ? getActiveNetwork(settings) : null;
-    const draft = useFormDraft({ view: 'send', walletId, network: draftNetwork, ttlMs: formDraftTtlMs });
+    const draft = useFormDraft({ view: draftView, walletId, network: draftNetwork, ttlMs: formDraftTtlMs });
     // A stored draft waits for an explicit Restore. A fresh form starts
     // saving immediately so an auto-lock unmount cannot erase typed values.
     const [draftPending, setDraftPending] = useState(
@@ -816,13 +903,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             fiatCurrency: settings?.fiatCurrency || 'USD',
             extraLegs,
             perRecipientToken,
+            sendMode,
+            multiRecipients,
+            advancedText,
         };
-        if (hasMeaningfulSendDraft(values)) draft.save(values);
+        // A hosting page's presetTo (an agent's Fund page) is not the user's
+        // input, so it alone saves no draft.
+        if (hasMeaningfulSendDraft({ ...values, toAddress: typedToAddress })) draft.save(values);
         else draft.clear();
     }, [
         stage, draftPending, draft, chainId, fromAddressId, pickedSourceChain,
-        toAddress, tick, amount, memo, amountInputMode, fiatAmount, extraLegs,
-        perRecipientToken, settings?.fiatCurrency,
+        toAddress, typedToAddress, tick, amount, memo, amountInputMode, fiatAmount, extraLegs,
+        perRecipientToken, settings?.fiatCurrency, sendMode, multiRecipients, advancedText,
     ]);
     const restoreDraft = useCallback(() => {
         const v = draft.load();
@@ -842,33 +934,40 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setAmountInputMode(v.amountInputMode);
         }
         if (typeof v.fiatAmount === 'string' && sameFiat) setFiatAmount(v.fiatAmount);
-        if (Array.isArray(v.extraLegs)) {
-            setExtraLegs(v.extraLegs.slice(0, MAX_SEND_LEGS - 1).flatMap((leg) => (
-                leg && typeof leg.id === 'string'
-                    ? [{
-                        id: leg.id,
-                        to: typeof leg.to === 'string' ? leg.to : '',
-                        amount: typeof leg.amount === 'string' ? leg.amount : '',
-                        tick: typeof leg.tick === 'string' ? leg.tick : '',
-                    }]
-                    : []
-            )));
+        const restored = restoredRecipients(v);
+        if (v.sendMode === 'advanced' && typeof v.advancedText === 'string') {
+            // The text comes back as typed, bad lines included; the list
+            // stands as it was so a switch to Multi shows it.
+            setMultiRecipients(restored);
+            setAdvancedText(v.advancedText);
+            multiListEditedRef.current = false;
+            setSendMode('advanced');
+        } else if (v.sendMode === 'multi' || restored.length > 1) {
+            // A draft saved before the tabs kept its extra recipients as
+            // rows under the first; they open as Multi's list, all of them.
+            setMultiRecipients(restored);
+            if (typeof v.advancedText === 'string') setAdvancedText(v.advancedText);
+            multiListEditedRef.current = true;
+            setSendMode('multi');
         }
-        if (typeof v.perRecipientToken === 'boolean') setPerRecipientToken(v.perRecipientToken);
         setDraftPending(true);
     }, [draft, cancelMax, settings?.fiatCurrency]);
-    const dismissDraft = useCallback(() => {
+    const discardSavedDraft = useCallback(() => {
         draft.clear();
         setDraftPending(true);
     }, [draft]);
     const hasRealInput = useMemo(() => (
-        [toAddress, amount, memo, fiatAmount, password]
+        [typedToAddress, amount, memo, fiatAmount, password]
             .some((value) => String(value || '').trim().length > 0)
         || (tick.trim().length > 0
             && tick.trim().toUpperCase() !== nativeTickerFor(chainId ? chainRegistry.get(chainId) : null))
         || extraLegs.some((leg) => [leg.to, leg.amount, leg.tick]
             .some((value) => String(value || '').trim().length > 0))
-    ), [toAddress, amount, memo, fiatAmount, password, tick, chainId, extraLegs]);
+        || multiRecipients.length > 0
+        || advancedText.trim().length > 0
+        || Boolean(multiDraft && [multiDraft.to, multiDraft.amount].some((value) => String(value || '').trim()))
+        || Boolean(multiAddDraft && [multiAddDraft.to, multiAddDraft.amount].some((value) => String(value || '').trim()))
+    ), [typedToAddress, amount, memo, fiatAmount, password, tick, chainId, extraLegs, multiRecipients, advancedText, multiDraft, multiAddDraft]);
     const stageRef = useRef(stage);
     stageRef.current = stage;
     const leaveGuard = useFormLeaveGuard({
@@ -992,13 +1091,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         };
     }, [refreshContacts]);
 
-    // Contacts UX state: picker open/close and the post-send save form.
-    const [contactsPickerOpen, setContactsPickerOpen] = useState(false);
-    const openContactsPicker = useCallback(async () => {
+    // Contacts UX state: which recipient opened the picker, plus the post-send save form.
+    const [contactsPickerTarget, setContactsPickerTarget] = useState(
+        /** @type {'single' | 'edit' | 'add' | null} */ (null),
+    );
+    const openContactsPicker = useCallback(async (target) => {
         // Read immediately before showing rows so edits made in another shell
         // cannot leave the picker on its mount-time snapshot.
         await refreshContacts({ warn: true });
-        setContactsPickerOpen(true);
+        setContactsPickerTarget(target);
     }, [refreshContacts]);
     const [contactSaveStage, setContactSaveStage] = useState(
         /** @type {'idle' | 'editing' | 'saving' | 'saved'} */ ('idle'),
@@ -1094,9 +1195,23 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }, [chainId]);
 
     const handlePickContact = useCallback((entry) => {
-        handlePickRecipient(entry);
-        setContactsPickerOpen(false);
-    }, [handlePickRecipient]);
+        if (contactsPickerTarget === 'single') {
+            handlePickRecipient(entry);
+        } else {
+            const address = String(entry?.address || '');
+            const selectedDescriptor = chainId ? chainRegistry.get(chainId) : null;
+            const error = destinationAddressError(address, selectedDescriptor);
+            const setDraft = contactsPickerTarget === 'edit' ? setMultiDraft : setMultiAddDraft;
+            setDraft((current) => {
+                if (!current) return current;
+                const errors = { ...(current.errors || {}) };
+                if (error) errors.to = error;
+                else delete errors.to;
+                return error ? { ...current, errors } : { ...current, to: address, errors };
+            });
+        }
+        setContactsPickerTarget(null);
+    }, [chainId, contactsPickerTarget, handlePickRecipient]);
 
 
     // §29.5 smart paste: BIP21 URI pre-fills amount/token/memo;
@@ -1191,7 +1306,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (chainChanged) {
                     setExtraLegs([]);
                     setPerRecipientToken(false);
-                    setRecipientErrors({});
                 } else if (!perRecipientToken) {
                     setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
                 }
@@ -1252,7 +1366,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (chainChanged) {
                     setExtraLegs([]);
                     setPerRecipientToken(false);
-                    setRecipientErrors({});
                 } else if (!perRecipientToken) {
                     setExtraLegs((rows) => rows.map((row) => ({ ...row, amount: '' })));
                 }
@@ -1311,7 +1424,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // the autocomplete candidate set (contacts + recent send history).
     // Surfaces a warning when the user is about to send to an address
     // that is one or two characters off from a known one.
+    // Settings > Security > Lookalike address warnings turns this off
+    // (operator ruling 2026-11-14); it is on unless switched off.
+    const lookalikeOn = lookalikeWarningsEnabled(settings);
     const lookalikeWarning = useMemo(() => {
+        if (!lookalikeOn) return null;
         const trimmed = toAddress.trim();
         if (!trimmed) return null;
         const hit = findLookalike({ address: trimmed, candidates: suggestions });
@@ -1321,12 +1438,46 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             : 'an address you have sent to before';
         const pct = Math.round(hit.score * 100);
         return `Looks ${pct}% similar to ${sourceLabel}: ${hit.match.address}. Double-check this is the address you mean.`;
-    }, [toAddress, suggestions]);
+    }, [lookalikeOn, toAddress, suggestions]);
+
+    // §29.2 Max + §29.3 fiat toggle.
+    // Fiat rate for the approximate-value preview + the optional fiat-entry mode.
+    // Oracle-primary with CoinGecko fallback (§45); the
+    // fallback is gated on the privacy.priceDataEnabled setting.
+    const fiatCurrency = settings?.fiatCurrency || 'USD';
+    // The amount may be a token while the network fee is always paid in the
+    // chain coin. Resolve them separately so a token with no market shows no
+    // fiat preview, while a token with its own oracle or DEX rate uses that
+    // rate and retains its source label in AmountField.
+    const amountFiatRate = useTickFiatRate({
+        chainCoin: !isDemo && chainId ? chainRegistry.get(chainId)?.coin : null,
+        tick,
+        nativeTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null),
+        fiatCurrency,
+        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
+        enabled: chainRegistry.get(chainId || '')?.networkKind === 'mainnet',
+    });
+
+    // The new-recipient test-send threshold is an amount in the display
+    // currency (operator ruling 2026-11-14), converted to the chain's base
+    // units at check time with the amount's own native price. With no price
+    // there is nothing to compare, so the suggestion is skipped silently.
+    const testSendThresholdFiat = resolveTestSendFiat(settings);
+    const testSendThresholdUnits = useMemo(() => {
+        if (!testSendThresholdFiat) return null;
+        const desc = chainId ? chainRegistry.get(chainId) : null;
+        const nativeTicker = nativeTickerFor(desc);
+        if (!desc || !nativeTicker || tick.trim().toUpperCase() !== nativeTicker) return null;
+        // A native tick, so this is the coin's own rate.
+        if (!amountFiatRate) return null;
+        const coin = fiatToCoin(testSendThresholdFiat, amountFiatRate, nativeDecimalsFor(desc));
+        if (coin === null) return null;
+        const units = exactSatsBigIntFromDecimalString(coin, desc);
+        return units !== null && units > 0n ? units : null;
+    }, [testSendThresholdFiat, chainId, tick, amountFiatRate]);
 
     const primaryRecipientNovelty = useMemo(() => {
-        const thresholdText = String(settings?.grace?.testSendThresholdSats ?? '0').trim();
-        const threshold = /^\d+$/.test(thresholdText) ? BigInt(thresholdText) : 0n;
-        if (threshold <= 0n) return null;
+        if (testSendThresholdUnits === null) return null;
         const dest = toAddress.trim();
         const desc = chainId ? chainRegistry.get(chainId) : null;
         if (!dest || !desc?.coin) return null;
@@ -1338,22 +1489,20 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             contacts,
             historyRows,
         });
-    }, [settings, toAddress, tick, chainId, contacts, historyRows]);
+    }, [testSendThresholdUnits, toAddress, tick, chainId, contacts, historyRows]);
 
     // §21.4 test-send gate. Active when:
-    //   - threshold > 0 (Settings → Safety → Test-send warning)
+    //   - a fiat threshold is set (Settings > Security > New-recipient test
+    //     send) and the wallet holds a price to convert it with
     //   - the send is a native-coin send (tick matches descriptor.coin
-    //     uppercased; the threshold is denominated in sats and only
-    //     translates cleanly for native sends; tick/token threshold is
-    //     a future fiat-aware affordance)
-    //   - amountSats exceeds the threshold
+    //     uppercased; only the coin has the price the threshold converts at)
+    //   - the amount in base units exceeds the converted threshold
     //   - recipient is novel (not in contacts on this chain, no past SEND
     //     to it from any of the wallet's addresses on this chain)
     //   - user hasn't already acknowledged this address in the session
     const testSendGate = useMemo(() => {
-        const thresholdText = String(settings?.grace?.testSendThresholdSats ?? '0').trim();
-        const threshold = /^\d+$/.test(thresholdText) ? BigInt(thresholdText) : 0n;
-        if (threshold <= 0n) return null;
+        const threshold = testSendThresholdUnits;
+        if (threshold === null) return null;
         const dest = toAddress.trim();
         if (!dest) return null;
         const desc = chainId ? chainRegistry.get(chainId) : null;
@@ -1371,13 +1520,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             threshold,
             ticker: nativeTicker,
         };
-    }, [settings, toAddress, tick, amount, chainId, primaryRecipientNovelty, testedThisSession]);
+    }, [testSendThresholdUnits, toAddress, tick, amount, chainId, primaryRecipientNovelty, testedThisSession]);
 
-    // §29.2 Max + §29.3 fiat toggle.
-    // Fiat rate for the approximate-value preview + the optional fiat-entry mode.
-    // Oracle-primary with CoinGecko fallback (§45); the
-    // fallback is gated on the privacy.priceDataEnabled setting.
-    const fiatCurrency = settings?.fiatCurrency || 'USD';
     const isNativeSend = useMemo(() => {
         const desc = chainId ? chainRegistry.get(chainId) : null;
         const nativeTicker = nativeTickerFor(desc);
@@ -1405,43 +1549,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // Per-token totals, so the form can show what the whole send costs rather
     // than only the first row's amount.
     const sendTotals = useMemo(() => totalsByTick(sendLegs), [sendLegs]);
-    const addRecipient = useCallback(() => {
-        setExtraLegs((prev) => (prev.length + 1 >= MAX_SEND_LEGS ? prev : [
-            ...prev,
-            // Date.now alone collides when two rows are added in the same tick.
-            { id: `leg-${Date.now()}-${prev.length}`, to: '', amount: '', tick: '' },
-        ]));
-    }, []);
-    const updateRecipient = useCallback((id, patch) => {
-        setExtraLegs((prev) => prev.map((leg) => (leg.id === id ? { ...leg, ...patch } : leg)));
-        setRecipientErrors((prev) => {
-            const current = prev[id];
-            if (!current) return prev;
-            const nextForRow = { ...current };
-            for (const field of Object.keys(patch)) {
-                const fixed = field === 'amount'
-                    ? isPositiveDecimalAmount(patch[field])
-                    : field === 'to'
-                        ? String(patch[field] || '').trim().length > 0
-                        : true;
-                if (fixed) delete nextForRow[field];
-            }
-            const next = { ...prev };
-            if (Object.keys(nextForRow).length > 0) next[id] = nextForRow;
-            else delete next[id];
-            return next;
-        });
-    }, []);
-    const removeRecipient = useCallback((id) => {
-        setExtraLegs((prev) => prev.filter((leg) => leg.id !== id));
-        setRecipientErrors((prev) => {
-            if (!prev[id]) return prev;
-            const next = { ...prev };
-            delete next[id];
-            return next;
-        });
-        setTokenPickerRecipientId((current) => (current === id ? null : current));
-    }, []);
     // A native tick pays real outputs instead of writing an action, so it has
     // no multi-recipient form (flows/sendLegs.js refuses it, and the refusal is
     // mirrored here so the user learns it at compose time rather than at sign
@@ -1484,34 +1591,19 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             + `${minimum} ${ticker}.`;
     }, [isNativeSend, chainId, amount, tick]);
 
-    // Retract the refusal the moment the amount stops being dust. `formError` is
-    // otherwise only cleared by the next submit, so raising the amount to a legal one
-    // left the old "too small to send" sentence sitting under a form that was now
-    // fine. Matched by identity against what the guard itself pushed, so an unrelated
-    // error occupying the slot is never cleared out from under the user.
-    const dustErrorRef = useRef(/** @type {string | null} */ (null));
-    useEffect(() => {
-        if (dustBlock) return;
-        // Read the ref BEFORE clearing it: React invokes a functional updater
-        // during the next render, by which point the field would already be null
-        // and every comparison against it would fail.
-        const pushed = dustErrorRef.current;
-        dustErrorRef.current = null;
-        setFormError((prev) => (prev !== null && prev === pushed ? null : prev));
-    }, [dustBlock]);
+    // A value the code sets (Max, a payment link, a picker, a paste) never fires a field's
+    // change handler, so a field whose value moves drops its own entry from the error map
+    // here. Typing already clears through the kit fields; this covers the rest, and it also
+    // retracts the dust refusal the moment the amount stops being dust.
+    const clearFormError = form.clear;
+    useEffect(() => { clearFormError('send-destination'); }, [toAddress, clearFormError]);
+    useEffect(() => { clearFormError('send-token'); }, [tick, clearFormError]);
+    useEffect(() => { clearFormError('send-amount'); }, [amount, clearFormError]);
+    useEffect(() => { clearFormError('send-memo'); }, [memo, clearFormError]);
+    useEffect(() => { clearFormError('send-from'); }, [fromAddressId, clearFormError]);
 
-    // The amount may be a token while the network fee is always paid in the
-    // chain coin. Resolve them separately so a token with no market shows no
-    // fiat preview, while a token with its own oracle or DEX rate uses that
-    // rate and retains its source label in AmountField.
-    const amountFiatRate = useTickFiatRate({
-        chainCoin: !isDemo && chainId ? chainRegistry.get(chainId)?.coin : null,
-        tick,
-        nativeTicker: nativeTickerFor(chainId ? chainRegistry.get(chainId) : null),
-        fiatCurrency,
-        allowCoingeckoFallback: settings?.privacy?.priceDataEnabled !== false,
-        enabled: chainRegistry.get(chainId || '')?.networkKind === 'mainnet',
-    });
+    // The amount's fiat rate (amountFiatRate) is resolved above the test-send
+    // gate, which converts its fiat threshold with it.
     // The confirm page's cost card prices the fee as the other forms' do.
     const { formatNativeFee: formatConfirmFeeFiat } = useFeeFiat({
         chainId: chainId || undefined,
@@ -1564,16 +1656,25 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         setAmountInputMode('coin');
         setExtraLegs([]);
         setPerRecipientToken(false);
-        setRecipientErrors({});
+        // Multi's rows were checked against the old network's addresses and
+        // assets, so they go with it, and the notice says so; the Advanced
+        // text stays and is checked again on Send.
+        const hadRecipients = multiRecipients.length > 0;
+        setMultiRecipients([]);
+        setMultiDraft(null);
+        setMultiAddDraft(null);
+        multiListEditedRef.current = false;
         if (toAddress.trim() && destinationAddressError(toAddress, nextDescriptor)) setToAddress('');
         setToError(null);
         setPastedRecipient(null);
         setPasteHint(null);
         setPasteWarning(null);
-        setAssetSwitchNotice(hadAmount
-            ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
-            : null);
-    }, [chainId, amount, extraLegs, toAddress, cancelMax]);
+        setAssetSwitchNotice(hadRecipients
+            ? 'Network changed. The recipients and network fee were reset because their addresses and assets belong to the old network.'
+            : hadAmount
+                ? 'Network changed. The amount and network fee were reset because they may not be valid on the new network.'
+                : null);
+    }, [chainId, amount, extraLegs, toAddress, cancelMax, multiRecipients]);
 
     const amountInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
@@ -1821,60 +1922,24 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         };
     }, [chainId, fromAddress?.address, messaging, result, stage]);
 
-    const [coinControlEnabled, setCoinControlEnabled] = useState(false);
-    const [availableUtxos, setAvailableUtxos] = useState(/** @type {any[]} */ ([]));
-    const [utxoLoadState, setUtxoLoadState] = useState(
-        /** @type {'idle'|'loading'|'ready'|'error'} */ ('idle'),
-    );
-    const [selectedUtxoKeys, setSelectedUtxoKeys] = useState(
-        /** @type {Set<string>} */ (() => new Set()),
-    );
-    const [changeAddressId, setChangeAddressId] = useState('');
-
-    useEffect(() => {
-        setCoinControlEnabled(false);
-        setSelectedUtxoKeys(new Set());
-        setChangeAddressId('');
-        if (isDemo || !chainId || !fromAddress || typeof messaging.getAddressUtxos !== 'function') {
-            setAvailableUtxos([]);
-            setUtxoLoadState('idle');
-            return undefined;
-        }
-        let cancelled = false;
-        setUtxoLoadState('loading');
-        messaging.getAddressUtxos(chainId, fromAddress.address)
-            .then((resultValue) => {
-                if (cancelled) return;
-                const rows = Array.isArray(resultValue)
-                    ? resultValue
-                    : (Array.isArray(resultValue?.utxos) ? resultValue.utxos : []);
-                setAvailableUtxos(rows);
-                setUtxoLoadState('ready');
-            })
-            .catch(() => {
-                if (cancelled) return;
-                setAvailableUtxos([]);
-                setUtxoLoadState('error');
-            });
-        return () => { cancelled = true; };
-    }, [chainId, fromAddress?.id, fromAddress?.address, messaging, isDemo]);
-
-    const selectedUtxos = useMemo(
-        () => availableUtxos.filter((utxo) => selectedUtxoKeys.has(utxoKey(utxo))),
-        [availableUtxos, selectedUtxoKeys],
-    );
+    // Fee bumping, coin control and the change address live in the shared
+    // Advanced section (FeeSection draws it above Speed and Fees). Its
+    // choices are kept per network and source address, so a new source
+    // starts from the defaults, and Send reads them here for compose and
+    // for the review rows.
+    const advancedEntry = useAdvancedEntry(advancedKey({
+        formKey: SEND_FORM_ID,
+        chainId,
+        address: fromAddress?.address,
+    }));
+    const coinControlEnabled = advancedEntry.shown.coins && advancedEntry.coinControl;
+    const selectedUtxos = useMemo(() => selectedUtxosOf(advancedEntry), [advancedEntry]);
     const selectedUtxoTotalSats = useMemo(
         () => selectedUtxos.reduce((total, utxo) => total + (utxoValueSats(utxo) ?? 0n), 0n),
         [selectedUtxos],
     );
-    const changeAddress = useMemo(
-        () => (addressesByChain?.[chainId] || []).find((address) => address.id === changeAddressId) || null,
-        [addressesByChain, chainId, changeAddressId],
-    );
-    const automaticChangeLabel = settings?.privacy?.changeAddressRotation === true && signerReady
-        ? 'Fresh address (change rotation)'
-        : (fromAddress?.address || 'Source address');
-    const changeAddressLabel = changeAddress?.address || automaticChangeLabel;
+    const chosenChange = advancedEntry.shown.change ? advancedEntry.change : '';
+    const changeAddress = useMemo(() => (chosenChange ? { address: chosenChange } : null), [chosenChange]);
     const coinControlLabel = coinControlEnabled
         ? `${selectedUtxos.length} selected input${selectedUtxos.length === 1 ? '' : 's'}`
         : 'Automatic input selection';
@@ -1892,12 +1957,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 summary: summarizeSendLegs(sendLegs),
                 details: sendLegs.map((leg, i) => ({
                     label: `Recipient ${i + 1}`,
-                    value: `${leg.amount} ${leg.tick.toUpperCase()} to ${leg.to}`,
+                    value: `${formatWithThousands(leg.amount) || leg.amount} ${leg.tick.toUpperCase()} to ${leg.to}`,
                 })),
                 warnings: [],
             };
         }
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action: 'SEND',
             params: {
                 TICK: tick.trim(),
@@ -1907,7 +1972,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             },
             chainId: chainId || undefined,
             chainRegistry,
-        });
+        }));
     }, [stage, tick, amount, toAddress, memo, chainId, isMultiSend, sendLegs]);
 
     // §21.2 balance-change preview. Fetched on entering review against
@@ -2138,26 +2203,16 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     ? dispenserNotice.summaries.map((line) => <p key={line}>{line}</p>)
                     : dispenserNotice.summary}
             </StatusMessage>
-            {dispenserNotice.warnings.length > 0 ? (
-                <StatusMessage variant="warning" role="alert">
-                    {dispenserNotice.warnings.map((w) => <p key={w}>{w}</p>)}
-                </StatusMessage>
-            ) : null}
         </div>
     ) : null;
-    // On the review form the same state is one notice above the card: the
-    // summary leads, and any refusal warning raises it to a warning.
-    const dispenserReviewNotice = dispenserNotice ? (
-        <FormNotice
-            variant={dispenserNotice.warnings.length > 0 ? 'warning' : 'status'}
-            role={dispenserNotice.warnings.length > 0 ? 'alert' : undefined}
-            lines={[...(dispenserNotice.summaries || [dispenserNotice.summary]), ...dispenserNotice.warnings]}
-        />
-    ) : null;
-
     async function handleGatedScan(event) {
         event.preventDefault();
-        if (gatedScanBusyRef.current || gatedScanPassword.length === 0) return;
+        if (gatedScanBusyRef.current) return;
+        // G130: Recover stays enabled; an empty password is said on the field.
+        if (gatedScanPassword.length === 0) {
+            setGatedScanError(t('locked.enterYourPassword'));
+            return;
+        }
         const seq = gatedProbeSeq.current;
         gatedScanBusyRef.current = true;
         setGatedScanBusy(true);
@@ -2257,19 +2312,17 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         }
     }, [chainId, chainFeeSettings]);
 
-    // §44.3 RBF toggle. The per-send preference seeds from the chain's
-    // resolved fee config; the encoder turns `rbf` into BIP125 input
-    // sequence numbers (sequence < 0xfffffffe).
-    const [rbfEnabled, setRbfEnabled] = useState(true);
-    // Clamp the flag to the descriptor's declared capability (DOGE declares false; no descriptor means no RBF)
+    // §44.3 RBF toggle, in the shared Advanced section. The per-send
+    // preference seeds from the chain's resolved fee config (§35.10: resolved
+    // even with no stored entry, so a chain switch always reseeds) until the
+    // user flips it; the encoder turns `rbf` into BIP125 input sequence
+    // numbers (sequence < 0xfffffffe). Clamped to the descriptor's declared
+    // capability (DOGE declares false; no descriptor means no RBF).
+    const rbfByDefault = chainId
+        ? resolveFeeConfig(settings?.fees?.[chainId], chainRegistry.get(chainId)).rbfByDefault
+        : false;
     const rbfSupported = descriptor?.feeStrategy?.rbfSupported === true;
-    const rbfForSend = rbfSupported && rbfEnabled;
-    useEffect(() => {
-        if (!chainId) return;
-        // §35.10: resolve even with no stored entry, so a chain switch always reseeds
-        const { rbfByDefault } = resolveFeeConfig(settings?.fees?.[chainId], chainRegistry.get(chainId));
-        setRbfEnabled(rbfByDefault);
-    }, [chainId, settings]);
+    const rbfForSend = rbfSupported && (advancedEntry.rbf ?? rbfByDefault);
 
     // Step 4 of §44: async fetcher probes the shell's messaging
     // layer for an SDK-backed `estimateFee` method; falls back to the
@@ -2412,6 +2465,253 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         return decoderLib.balancesFromSdk(previewBalances.sdkShape)
             .find((balance) => String(balance.tick || '').toUpperCase() === nativeTicker) || null;
     }, [previewBalances.sdkShape]);
+
+    // Multi and Advanced. A recipient row or an Advanced line must name an
+    // address on this network, a token (the coin pays its own output and has
+    // no multi-recipient form), one this address holds once the balances are
+    // known, and an amount within that token's decimal places.
+    const recipientRules = useMemo(() => {
+        const shape = previewBalances.sdkShape;
+        const held = shape && !previewBalances.loading && !previewBalances.error
+            ? new Set(decoderLib.balancesFromSdk(shape).map((balance) => String(balance.tick || '').toUpperCase()))
+            : null;
+        return {
+            addressError: (address) => destinationAddressError(address, descriptor),
+            nativeTicker: nativeTickerFor(descriptor),
+            isHeld: held ? (heldTick) => held.has(heldTick) : null,
+            decimalsFor: shape ? (heldTick) => heldDivisibility(shape, heldTick) : null,
+        };
+    }, [descriptor, previewBalances.sdkShape, previewBalances.loading, previewBalances.error]);
+    const advancedParsed = useMemo(
+        () => parseRecipientText(advancedText, recipientRules),
+        [advancedText, recipientRules],
+    );
+    // A balances refresh re-reads the text into a new array with the same
+    // recipients; keeping the old one means nothing is re-projected, so a
+    // ticked hardware cross-check (reset whenever the legs change) stays.
+    const advancedListRef = useRef({ key: '', list: [] });
+    const advancedRecipients = useMemo(() => {
+        const key = recipientsToText(advancedParsed.recipients);
+        if (key !== advancedListRef.current.key) advancedListRef.current = { key, list: advancedParsed.recipients };
+        return advancedListRef.current.list;
+    }, [advancedParsed]);
+    const activeRecipients = sendMode === 'multi'
+        ? multiRecipients
+        : (sendMode === 'advanced' ? advancedRecipients : null);
+    // One transaction's ceiling, said before review and never met by
+    // splitting or dropping recipients.
+    const recipientFitError = activeRecipients
+        ? recipientListFitError(activeRecipients, isNativeSend ? '' : memo.trim())
+        : null;
+
+    // The list is projected onto the first-recipient fields and the extra
+    // legs, so validation, compose, the confirm screen, watch-only review and
+    // hardware signing run exactly as they do for any send with legs.
+    const projectedRef = useRef(false);
+    const projectRecipients = useCallback((list) => {
+        const [first, ...rest] = list;
+        cancelMax();
+        setAmountInputMode('coin');
+        setFiatAmount('');
+        setPastedRecipient(null);
+        setToError(null);
+        setPasteHint(null);
+        setPasteWarning(null);
+        setToAddress(first ? first.to : '');
+        if (first) setTick(first.tick);
+        setAmount(first ? first.amount : '');
+        setExtraLegs(rest.map((row) => ({ id: row.id, to: row.to, tick: row.tick, amount: row.amount })));
+        setPerRecipientToken(rest.length > 0);
+    }, [cancelMax]);
+    useEffect(() => {
+        if (!activeRecipients) { projectedRef.current = false; return; }
+        // Entering an empty tab leaves Single's fields alone until a
+        // recipient exists, so going back to Single loses nothing.
+        if (activeRecipients.length === 0 && !projectedRef.current) return;
+        projectedRef.current = true;
+        projectRecipients(activeRecipients);
+    }, [activeRecipients, projectRecipients]);
+    // The legs Send would compose are exactly the list on screen, leg for leg.
+    // Anything that wrote the hidden first-recipient fields behind the list
+    // breaks this, and Send then re-projects instead of composing.
+    const legsMatchList = useCallback((list) => (
+        sendLegs.length === list.length
+        && list.every((row, index) => sendLegs[index].to === row.to
+            && sendLegs[index].tick.toUpperCase() === row.tick
+            && sendLegs[index].amount === row.amount)
+    ), [sendLegs]);
+
+    // A change to the list or the text, or a tab switch, takes the list's
+    // entries (and each bad line or row) out of the form's error notice; the
+    // next Send checks again (G120).
+    const formErrorMap = form.errors;
+    const clearFormEntry = form.clear;
+    const clearListEntries = useCallback(() => {
+        for (const key of Object.keys(formErrorMap || {})) {
+            if (key === 'send-multi-list' || key === 'send-advanced-text'
+                || key.startsWith('form:advanced-line-') || key.startsWith('form:multi-row-')) {
+                clearFormEntry(key);
+            }
+        }
+    }, [formErrorMap, clearFormEntry]);
+
+    // Single's recipient, when it is a complete token payment, opens as the
+    // first row of an empty list.
+    const singleAsRecipients = useCallback(() => {
+        const row = { to: toAddress, tick, amount };
+        return Object.keys(validateRecipient(row, recipientRules)).length === 0
+            ? [{ id: newRecipientId(), to: toAddress.trim(), tick: tick.trim().toUpperCase(), amount: String(amount).trim() }]
+            : [];
+    }, [toAddress, tick, amount, recipientRules]);
+    const switchSendMode = useCallback((next) => {
+        if (next === sendMode) return;
+        let list = multiRecipients;
+        if (sendMode === 'advanced' && next === 'multi') {
+            list = advancedParsed.recipients.map((row) => ({ ...row, id: newRecipientId() }));
+            setMultiRecipients(list);
+            multiListEditedRef.current = false;
+        } else if (sendMode === 'single' && list.length === 0 && !(next === 'advanced' && advancedText.trim())) {
+            list = singleAsRecipients();
+            if (list.length > 0) {
+                setMultiRecipients(list);
+                multiListEditedRef.current = true;
+            }
+        }
+        if (next === 'advanced' && (multiListEditedRef.current || !advancedText.trim())) {
+            setAdvancedText(recipientsToText(list));
+            multiListEditedRef.current = false;
+        }
+        if (next === 'single') {
+            // Single keeps the first recipient in To, Asset and Amount.
+            setExtraLegs([]);
+            setPerRecipientToken(false);
+        }
+        setAdvancedChecked(false);
+        setMultiDraft(null);
+        setMultiAddDraft(null);
+        clearListEntries();
+        setSendMode(next);
+    }, [sendMode, multiRecipients, advancedParsed, advancedText, singleAsRecipients, clearListEntries]);
+
+    const multiMaxFor = useCallback((heldTick) => {
+        const shape = previewBalances.sdkShape;
+        if (!shape) return null;
+        const balance = decoderLib.balancesFromSdk(shape)
+            .find((entry) => String(entry.tick || '').toUpperCase() === heldTick);
+        return balance ? exactTokenMaxAmount(balance.amount) : null;
+    }, [previewBalances.sdkShape]);
+    const startAddRecipient = useCallback(() => {
+        // A new row starts on the asset the last one used.
+        const lastTick = multiRecipients.length > 0 ? multiRecipients[multiRecipients.length - 1].tick : '';
+        setMultiAddDraft({ editingId: null, to: '', tick: lastTick, amount: '', errors: {} });
+    }, [multiRecipients]);
+    const toggleEditRecipient = useCallback((id) => {
+        const row = multiRecipients.find((item) => item.id === id);
+        if (!row) return;
+        setMultiDraft((current) => (current?.editingId === id
+            ? null
+            : { editingId: id, to: row.to, tick: row.tick, amount: row.amount, errors: {} }));
+    }, [multiRecipients]);
+    const changeMultiDraft = useCallback((patch) => {
+        setMultiDraft((current) => {
+            if (!current) return current;
+            const errors = { ...(current.errors || {}) };
+            for (const key of Object.keys(patch)) delete errors[key];
+            return { ...current, ...patch, errors };
+        });
+    }, []);
+    const changeMultiAddDraft = useCallback((patch) => {
+        setMultiAddDraft((current) => {
+            if (!current) return current;
+            const errors = { ...(current.errors || {}) };
+            for (const key of Object.keys(patch)) delete errors[key];
+            return { ...current, ...patch, errors };
+        });
+    }, []);
+    const commitMultiDraft = useCallback(() => {
+        if (!multiDraft) return;
+        const errors = validateRecipient(multiDraft, recipientRules);
+        if (Object.keys(errors).length > 0) {
+            setMultiDraft({ ...multiDraft, errors });
+            return;
+        }
+        setMultiRecipients((list) => updateMultiRecipient(list, multiDraft.editingId, multiDraft));
+        multiListEditedRef.current = true;
+        setMultiDraft(null);
+        clearListEntries();
+    }, [multiDraft, recipientRules, clearListEntries]);
+    const commitMultiAddDraft = useCallback(() => {
+        if (!multiAddDraft) return;
+        const errors = validateRecipient(multiAddDraft, recipientRules);
+        if (Object.keys(errors).length > 0) {
+            setMultiAddDraft({ ...multiAddDraft, errors });
+            return;
+        }
+        setMultiRecipients((list) => addMultiRecipient(list, multiAddDraft));
+        multiListEditedRef.current = true;
+        setMultiAddDraft(null);
+        clearListEntries();
+    }, [multiAddDraft, recipientRules, clearListEntries]);
+    const removeMultiRow = useCallback((id) => {
+        setMultiRecipients((list) => removeMultiRecipient(list, id));
+        multiListEditedRef.current = true;
+        setMultiDraft((current) => (current?.editingId === id ? null : current));
+        clearListEntries();
+    }, [clearListEntries]);
+
+    const changeAdvancedText = useCallback((text) => {
+        setAdvancedText(text);
+        setAdvancedChecked(false);
+        setAdvancedFileError(null);
+        multiListEditedRef.current = false;
+        clearListEntries();
+    }, [clearListEntries]);
+    const advancedFileTextRef = useRef('');
+    // A file fills the box only when every line is a recipient; otherwise the
+    // box keeps what it had and the file field names the bad lines.
+    const loadAdvancedFile = useCallback(({ name, text }) => {
+        const parsed = parseRecipientText(text, recipientRules);
+        const label = name || 'The file';
+        if (parsed.errors.length > 0) {
+            setAdvancedFileName('');
+            setAdvancedFileError(`${label} was not loaded: ${parsed.errors.length === 1 ? 'one line is' : `${parsed.errors.length} lines are`} not a recipient. `
+                + parsed.errors.map((entry) => entry.message).join(' '));
+            return;
+        }
+        if (parsed.recipients.length === 0) {
+            setAdvancedFileName('');
+            setAdvancedFileError(`${label} has no recipient lines.`);
+            return;
+        }
+        const content = withoutByteOrderMark(String(text)).replace(/\r\n?/g, '\n').trim();
+        advancedFileTextRef.current = content;
+        setAdvancedText(content);
+        setAdvancedFileName(name || 'CSV file');
+        setAdvancedFileError(null);
+        setAdvancedChecked(false);
+        multiListEditedRef.current = false;
+        clearListEntries();
+    }, [recipientRules, clearListEntries]);
+    const clearAdvancedFile = useCallback(() => {
+        // The file's lines leave the box only while it still holds them unedited.
+        if (advancedText === advancedFileTextRef.current) setAdvancedText('');
+        advancedFileTextRef.current = '';
+        setAdvancedFileName('');
+        setAdvancedFileError(null);
+    }, [advancedText]);
+    const advancedLineErrors = advancedChecked && advancedParsed.errors.length > 0
+        ? advancedParsed.errors.map((entry) => entry.message).join(' ')
+        : null;
+    // The count as the lines are typed, or why they cannot go as one
+    // transaction (the limit, the size, the balance) before review.
+    const advancedNoteWarns = sendMode === 'advanced' && Boolean(recipientFitError || amountBalanceError);
+    const advancedNote = sendMode !== 'advanced'
+        ? null
+        : (recipientFitError
+            || amountBalanceError
+            || (advancedParsed.recipients.length > 0
+                ? `${advancedParsed.recipients.length} of ${MAX_MULTI_RECIPIENTS} recipients: ${recipientTotalsText(advancedParsed.recipients).join(' + ')}.`
+                : null));
 
     const [otherAddressHasTick, setOtherAddressHasTick] = useState(
         /** @type {boolean | null} */ (null),
@@ -2627,11 +2927,11 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             const nativeSats = nativeAmount ? exactSatsBigIntFromDecimalString(nativeAmount) : null;
             if (feeSats != null && nativeSats != null && nativeSats < feeSats) {
                 note = `Max sends the full ${tick.trim().toUpperCase()} balance without spending it on fees. `
-                    + `This address has ${nativeAmount} ${nativeTicker}, below the estimated ${feeAmount} `
+                    + `This address has ${formatWithThousands(nativeAmount)} ${nativeTicker}, below the estimated ${formatWithThousands(feeAmount)} `
                     + `${nativeTicker} network fee.`;
             } else {
                 note = `Max sends the full ${tick.trim().toUpperCase()} balance and keeps the native coin `
-                    + `separate for the network fee${feeAmount ? ` (estimated ${feeAmount} ${nativeTicker})` : ''}.`;
+                    + `separate for the network fee${feeAmount ? ` (estimated ${formatWithThousands(feeAmount)} ${nativeTicker})` : ''}.`;
             }
         }
         if (requestId !== maxRequestRef.current) return;
@@ -2651,7 +2951,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const maxContext = [
         chainId || '', fromAddress?.address || '', toAddress.trim(), tick.trim().toUpperCase(),
         feePerKb ?? 'default', rbfForSend ? 'rbf' : 'final', changeAddress?.address || '',
-        coinControlEnabled ? [...selectedUtxoKeys].sort().join(',') : 'all',
+        coinControlEnabled ? [...advancedEntry.selectedKeys].sort().join(',') : 'all',
     ].join('|');
 
     const onMax = useCallback(() => {
@@ -2667,177 +2967,143 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         applyMax();
     }, [maxActive, maxContext, applyMax]);
 
-    // PC-52: the simulator models ONE leg. For a multi-recipient send of a
-    // single token that is still exact (the source-side delta is the sum, and
-    // the indexer consolidates by destination|tick), so the preview runs on the
-    // total. Across several tokens it would model only one of them, which is
-    // worse than no preview: that case says so instead (see the review stage).
-    const multiTickPreviewGap = isMultiSend && sendTotals.length > 1;
-    const previewResult = useMemo(() => {
-        if (stage !== 'review' && stage !== 'submitting') return null;
-        if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape) {
-            return null;
-        }
-        if (multiTickPreviewGap) return null;
-        const feeStr = feeEstimate?.coinAmount || '0';
-        return decoderLib.simulateAction({
-            action: 'SEND',
-            params: {
-                TICK: tick.trim(),
-                AMOUNT: isMultiSend ? sendTotals[0].amount : String(amount).trim(),
-                DESTINATION: toAddress.trim(),
-                MEMO: memo.trim() || undefined,
-            },
-            balances: decoderLib.balancesFromSdk(previewBalances.sdkShape),
-            // Fee from the static placeholder table (§44.2 cluster
-            // wires the real selector). The simulator emits the fee
-            // row with the value provided here; surfaces marked
-            // "(placeholder)" in the BalanceChanges renderer when
-            // confidence is low.
-            feeEstimate: feeStr,
-            chainId: chainId || undefined,
-            chainRegistry,
-        });
-    }, [
-        stage, tick, amount, toAddress, memo, chainId, previewBalances, feeEstimate,
-        isMultiSend, sendTotals, multiTickPreviewGap,
-    ]);
-
     function handleReview(event) {
         event.preventDefault();
-        if (isDemo || networkOffline || maxUnavailable) return;
+        // A demo wallet never composes; the press answers with the refusal.
+        if (isDemo) { setDemoRefused(true); return; }
+        // G130: Send is never disabled. Offline, the tap brings the form's
+        // offline notice into view and focuses it (one notice, never two); a
+        // Max that found nothing to send names it on the amount.
+        if (networkOffline) {
+            if (!revealFormStatus(event.currentTarget)) form.validate({ 'form:offline': t('send.offline.bodyNoCache') });
+            return;
+        }
+        if (maxUnavailable) {
+            form.validate({ 'send-amount': maxNote || t('send.max.nothingToSend') });
+            return;
+        }
         setValidationAttempt((attempt) => attempt + 1);
+        // Every check runs, one message per field (the first failing rule), so the notice at
+        // the top lists every problem at once. Keys are field ids; 'form:' keys have no field.
+        const problems = {};
         if (!chainId || !fromAddress) {
-            setFormError('Choose the address to send from.');
-            return;
+            problems['send-from'] = 'Choose the address to send from.';
         }
-        if (!toAddress.trim()) {
-            const message = 'Enter a recipient address.';
-            setFormError(message);
-            return;
-        }
-        const addressError = destinationAddressError(toAddress, descriptor);
-        if (addressError) {
-            setToError(addressError);
-            setFormError(addressError);
-            return;
-        }
-        if (!tick.trim()) {
-            setFormError('Choose a token.');
-            return;
-        }
-        const amt = String(amount).trim();
-        if (!isPositiveDecimalAmount(amt)) {
-            setFormError('Amount must be a positive number.');
-            return;
-        }
-        // The field refuses typed digits past the asset's decimal places, but a payment link
-        // fills it directly; compose keeps only the places the asset has, so the payment
-        // would carry less than the field shows.
-        const amountDecimalLimit = sourceBalance?.divisibility
-            ?? (isNativeSend ? nativeDecimalsFor(descriptor) : null);
-        if (Number.isInteger(amountDecimalLimit)
-            && (amt.split('.')[1] || '').length > amountDecimalLimit) {
-            setFormError(`Amount can have at most ${amountDecimalLimit} decimal places.`);
-            return;
-        }
-        // A native amount past 2^53 base units cannot be carried as a safe integer, so compose
-        // would drop it and the tamper check would report an output the user never approved.
-        if (isNativeSend) {
-            const sats = exactSatsBigIntFromDecimalString(amt, descriptor);
-            if (sats !== null && sats > BigInt(Number.MAX_SAFE_INTEGER)) {
-                setFormError('Amount is too large to send.');
-                return;
+        const listFieldId = sendMode === 'advanced' ? 'send-advanced-text' : 'send-multi-list';
+        const multiRowProblems = sendMode === 'multi'
+            ? multiRecipients.flatMap((row, index) => {
+                const rowErrors = validateRecipient(row, recipientRules);
+                const first = rowErrors.to || rowErrors.tick || rowErrors.amount;
+                return first ? [`Recipient ${index + 1}: ${first}`] : [];
+            })
+            : [];
+        if (sendMode === 'single') {
+            const addressError = toAddress.trim() ? destinationAddressError(toAddress, descriptor) : null;
+            if (!toAddress.trim()) {
+                problems['send-destination'] = 'Enter a recipient address.';
+            } else if (addressError) {
+                setToError(addressError);
+                problems['send-destination'] = addressError;
             }
+            if (!tick.trim()) {
+                problems['send-token'] = 'Choose a token.';
+            }
+            const amt = String(amount).trim();
+            // The field refuses typed digits past the asset's decimal places, but a payment link
+            // fills it directly; compose keeps only the places the asset has, so the payment
+            // would carry less than the field shows.
+            const amountDecimalLimit = sourceBalance?.divisibility
+                ?? (isNativeSend ? nativeDecimalsFor(descriptor) : null);
+            if (!isPositiveDecimalAmount(amt)) {
+                problems['send-amount'] = 'Amount must be a positive number.';
+            } else if (Number.isInteger(amountDecimalLimit)
+                && (amt.split('.')[1] || '').length > amountDecimalLimit) {
+                problems['send-amount'] = `Amount can have at most ${amountDecimalLimit} decimal places.`;
+            } else if (isNativeSend) {
+                // A native amount past 2^53 base units cannot be carried as a safe integer, so compose
+                // would drop it and the tamper check would report an output the user never approved.
+                const sats = exactSatsBigIntFromDecimalString(amt, descriptor);
+                if (sats !== null && sats > BigInt(Number.MAX_SAFE_INTEGER)) {
+                    problems['send-amount'] = 'Amount is too large to send.';
+                }
+            }
+            if (!problems['send-amount'] && amountBalanceError) problems['send-amount'] = amountBalanceError;
+        } else if (sendMode === 'advanced' && advancedParsed.errors.length > 0) {
+            // Each bad line is its own entry in the notice; the box carries the
+            // first entry's red outline and lists every line under it.
+            setAdvancedChecked(true);
+            advancedParsed.errors.forEach((entry, index) => {
+                problems[index === 0 ? listFieldId : `form:advanced-line-${entry.line}`] = entry.message;
+            });
+        } else if (sendMode === 'multi' && (multiAddDraft || multiDraft)) {
+            if (multiAddDraft) problems[listFieldId] = 'Add or cancel the recipient you started.';
+            if (multiDraft) {
+                problems[multiAddDraft ? 'form:multi-edit-draft' : listFieldId]
+                    = 'Update or collapse the recipient you are editing.';
+            }
+        } else if ((activeRecipients || []).length === 0) {
+            problems[listFieldId] = sendMode === 'advanced'
+                ? 'Enter at least one recipient line: address, asset, amount.'
+                : 'Add at least one recipient.';
+        } else if (sendMode === 'multi' && multiRowProblems.length > 0) {
+            // A row is checked again here with what is known now: one added
+            // before the balances loaded, one restored from a draft, or one
+            // left from another From address can fail a rule it skipped.
+            multiRowProblems.forEach((message, index) => {
+                problems[index === 0 ? listFieldId : `form:multi-row-${index}`] = message;
+            });
+        } else if (recipientFitError) {
+            problems[listFieldId] = recipientFitError;
+        } else if (amountBalanceError) {
+            // Every row passed its own checks; what is left is the list as a
+            // whole against the balance.
+            problems[listFieldId] = amountBalanceError;
+        } else if (!legsMatchList(activeRecipients)) {
+            // Something wrote the hidden first-recipient fields behind the
+            // list: put the list back and say so, never compose the drift.
+            projectRecipients(activeRecipients);
+            problems[listFieldId] = 'The recipients were refreshed. Check them and press Send again.';
         }
-        if (amountBalanceError) return;
-        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        const feeStop = problems['send-amount'] || problems['send-token']
+            || (sendMode !== 'single' && problems[listFieldId])
+            ? null
+            : customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeEstimate });
+        // A stop with no message is one the Fees field already shows itself; it still holds Review.
+        if (feeStop?.formError) problems['form:fee'] = feeStop.formError;
         // Refuse a below-dust amount BEFORE composing. Enter also submits this
         // form, so the inline warning alone would not be enough (same reasoning as the
-        // test-send gate below).
-        if (dustBlock) {
-            dustErrorRef.current = dustBlock;
-            setFormError(dustBlock);
-            return;
-        }
+        // test-send gate below). Only Single can send the coin.
+        if (sendMode === 'single' && !problems['send-amount'] && dustBlock) problems['send-amount'] = dustBlock;
         if (/[|;]/.test(memo)) {
-            setFormError(t('send.memoForbiddenChars'));
-            return;
-        }
-        if (memoTooLong) {
-            setFormError(memoTooLong);
-            return;
+            problems['send-memo'] = t('send.memoForbiddenChars');
+        } else if (memoTooLong) {
+            problems['send-memo'] = memoTooLong;
         }
         if (coinControlEnabled && selectedUtxos.length === 0) {
-            setFormError('Choose at least one payment input.');
-            return;
+            problems['form:inputs'] = 'Choose at least one payment input.';
         }
-        // PC-52: the extra recipients get the same checks the first one gets.
-        // A bad address here is the same unspendable-output mistake, and it
-        // would otherwise only surface as a compose failure after the modal
-        // opened.
-        if (nativeMultiSendBlock) {
-            setFormError(nativeMultiSendBlock);
-            return;
-        }
-        const nextRecipientErrors = {};
-        for (let i = 0; i < extraLegs.length; i += 1) {
-            const leg = extraLegs[i];
-            const label = `Recipient ${i + 2}`;
-            const rowErrors = {};
-            if (!leg.to.trim()) {
-                rowErrors.to = `${label}: address is required.`;
-            } else {
-                const legAddressError = destinationAddressError(leg.to, descriptor);
-                if (legAddressError) rowErrors.to = `${label}: ${legAddressError}`;
-            }
-            const legAmount = String(leg.amount).trim();
-            // The row sends its own token only while per-recipient tokens are on, the
-            // rule sendLegs applies; the network refuses an amount past that token's places.
-            const legTick = ((perRecipientToken && leg.tick.trim()) ? leg.tick : tick).trim().toUpperCase();
-            const legDecimalLimit = previewBalances.sdkShape
-                ? heldDivisibility(previewBalances.sdkShape, legTick)
-                : undefined;
-            if (!isPositiveDecimalAmount(legAmount)) {
-                rowErrors.amount = `${label}: amount must be a positive number.`;
-            } else if (Number.isInteger(legDecimalLimit)
-                && (legAmount.split('.')[1] || '').length > legDecimalLimit) {
-                rowErrors.amount = `${label}: amount can have at most ${legDecimalLimit} decimal places.`;
-            }
-            if (Object.keys(rowErrors).length > 0) nextRecipientErrors[leg.id] = rowErrors;
-        }
-        setRecipientErrors(nextRecipientErrors);
-        if (Object.keys(nextRecipientErrors).length > 0) {
-            setFormError(null);
-            return;
-        }
+        // PC-52: the extra recipients come only from Multi and Advanced, whose
+        // rows passed the same address, asset and amount checks the first
+        // recipient gets when they were added or read. The coin never reaches
+        // a list; this refusal stays as the guard behind that rule.
+        if (nativeMultiSendBlock) problems['form:multisend'] = nativeMultiSendBlock;
         // PC-26: no unlock key held for a gated tick = the network would
         // reject the send anyway; stop it here with the recovery path
         // visible instead of surfacing a compose error later.
         if (gatedInfo?.state === 'blocked') {
-            setFormError(
-                `${tick.trim().toUpperCase()} includes protected content, but this wallet has none of its unlock keys. `
-                + 'Recover the keys below before sending.',
-            );
-            return;
+            problems['form:gated'] = `${tick.trim().toUpperCase()} includes protected content, but this wallet has none of its unlock keys. `
+                + 'Recover the keys below before sending.';
         }
-        if (gatedMultiSendBlock) {
-            setFormError(gatedMultiSendBlock);
-            return;
+        if (gatedMultiSendBlock) problems['form:gatedMultisend'] = gatedMultiSendBlock;
+        // §21.4: an un-acknowledged test-send warning stops the send here.
+        // Send is never disabled (G130), and a form submits on Enter too; the
+        // whole value of this gate is that it cannot be walked past by accident.
+        // It judges a payment that is otherwise valid, so it speaks last.
+        if (testSendGate && Object.keys(problems).length === 0) {
+            problems['form:testSend'] = 'This is your first payment to this address. Send a small test first, '
+                + 'or choose "Continue with the full amount" above.';
         }
-        // §21.4: an un-acknowledged test-send warning stops the
-        // send here, not just on the disabled button. The button is the
-        // visible control, but a form submits on Enter too, and the whole
-        // value of this gate is that it cannot be walked past by accident.
-        if (testSendGate) {
-            setFormError(
-                'This is your first payment to this address. Send a small test first, '
-                + 'or choose "Continue with the full amount" above.',
-            );
-            return;
-        }
-        setFormError(null);
+        if (!form.validate(problems) || feeStop) return;
         // slice 1: with the flag on, sends go straight to the
         // single-encode confirm modal instead of the legacy review stage.
         // brought hardware in with them; watcher still branches.
@@ -2890,11 +3156,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             recipientNovel: hasNovelSendRecipient,
             multisig: false, // Send.jsx is single-sig; multisig flow is separate.
             settings: {
-                testSendThresholdSats: settings?.grace?.testSendThresholdSats ?? '0',
+                // The fiat threshold in this send's base units; 0 (no
+                // large-amount band) when it is Off or there is no price.
+                testSendThresholdSats: String(testSendThresholdUnits ?? 0n),
                 alwaysRequireHwExplicitConfirm: settings?.privacy?.alwaysRequireHwExplicitConfirm === true,
             },
         });
-    }, [isHwSource, fromAddress?.source, chainId, tick, amount, hasNovelSendRecipient, settings]);
+    }, [isHwSource, fromAddress?.source, chainId, tick, amount, hasNovelSendRecipient, settings, testSendThresholdUnits]);
     // Reset the confirm state whenever the requirement flips on, so a
     // user can't carry a stale "yes" through a recipient/amount change.
     // Editing ANY recipient row counts as that change (PC-52).
@@ -3047,7 +3315,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             draftDiscardedRef.current = false;
             if (isUndoSendCancellation(err)) {
                 clearUndoHold();
-                setFormError(null);
+                form.reset();
                 setPassword('');
                 setStage('form');
                 showToast({ message: 'Transaction cancelled.' });
@@ -3099,16 +3367,38 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         feeTiers,
     ]);
 
+    // Why the review's Approve cannot send yet, or null. Approve never looks
+    // disabled (G130): a tap that cannot go ahead says why at the top of the
+    // review (G129) and sends nothing.
+    function sendReviewBlock() {
+        if (networkOffline) return { cause: 'offline', text: t('confirmStandard.blocked.offline') };
+        if (testSendGate) return { cause: 'test_send', text: t('confirmStandard.blocked.testSend') };
+        if (isWatcherMode) return null;
+        if (isHwSource) {
+            if (hwStatus !== 'available') return { cause: 'device', text: t('confirmStandard.blocked.device') };
+            // Cluster N FOLLOWUP 3: the risk classifier demands an explicit
+            // cross-check confirm and the user hasn't ticked the box.
+            if (signRisk.requireExplicitConfirm && !hwExplicitConfirmed) {
+                return { cause: 'device_confirm', text: t('confirmStandard.blocked.deviceConfirm') };
+            }
+            return null;
+        }
+        if (!signerReady && password.length === 0) return { cause: 'password_required', text: t('confirmStandard.blocked.password') };
+        return null;
+    }
+
     async function handleSubmit(event) {
         event.preventDefault();
-        if (networkOffline || stage === 'submitting' || submitInFlightRef.current) return;
-        if (!isWatcherMode) {
-            if (!isHwSource && !signerReady && password.length === 0) return;
-            if (isHwSource && hwStatus !== 'available') return;
-            // Cluster N FOLLOWUP 3: block submit if the risk classifier
-            // demands an explicit cross-check confirm and the user
-            // hasn't checked the box.
-            if (isHwSource && signRisk.requireExplicitConfirm && !hwExplicitConfirmed) return;
+        if (stage === 'submitting' || submitInFlightRef.current) return;
+        const blocked = sendReviewBlock();
+        if (blocked) {
+            setSubmitError(blocked.text);
+            setSubmitErrorCause(blocked.cause);
+            const reviewForm = document.getElementById('send-review-form');
+            const scroller = reviewForm?.closest('main');
+            if (scroller) scroller.scrollTop = 0;
+            if (blocked.cause === 'password_required') passwordRef.current?.focus?.({ preventScroll: true });
+            return;
         }
         submitInFlightRef.current = true;
         holdIncomingLinks();
@@ -3169,6 +3459,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             const rawMsg = err?.message || '';
             const isUserCancel = !isBadPassword && USER_CANCEL_RE.test(rawMsg);
             if (!mountedRef.current) return;
+            // Back on the hardware sign page returns to the review, not the form.
+            if (isHwSignBack(err)) {
+                setSubmitError(null);
+                setSubmitErrorCause(null);
+                setStage('review');
+                return;
+            }
             if (isUserCancel) {
                 // §30.5: user-initiated cancel returns to the composing
                 // form with a dismissible "Transaction cancelled." toast.
@@ -3225,8 +3522,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 ? () => { setSubmitError(null); setPassword(''); setStage('form'); }
                 : leaveGuard.guardedOnBack}
             backDisabled={stage === 'submitting'}
-            backLabel={stage === 'review' ? t('send.backToEdit') : t('common.backToHome')}
-            title={stage === 'review' || stage === 'submitting' ? t('send.review') : t('send.title')}
+            // Back returns to whichever page opened Send (G06), so it names no page.
+            backLabel={stage === 'review' ? t('send.backToEdit') : undefined}
+            title={stage === 'review' || stage === 'submitting' ? t('common.confirm') : (title || t('send.title'))}
             titleRef={stage === 'review' ? reviewHeadingRef : undefined}
         />
     );
@@ -3261,7 +3559,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // where it belongs: the whole point is to intervene before the user
     // commits, and it is the last screen every send path passes through.
     const testSendGateBanner = testSendGate ? (
-        <StatusMessage variant="info" role="alert" lead={t('send.testGate.title')}>
+        <StatusMessage variant="info" role="alert" title={t('send.testGate.title')}>
             <p className={styles.testSendBody}>
                 {t('send.testGate.body', {
                     amount: decimalStringFromSats(BigInt(testSendGate.amountSats), descriptor),
@@ -3288,14 +3586,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             </div>
         </StatusMessage>
     ) : null;
-    const unusualSendWarningBlock = unusualSendWarnings.length > 0 ? (
-        <StatusMessage variant="warning" role="alert" testId="send-unusual-warnings">
-            {unusualSendWarnings.map((warning) => (
-                <p key={warning}>{warning}</p>
-            ))}
-        </StatusMessage>
-    ) : null;
-
     if (!walletModeReady) {
         return wrap(<ListPage><p className={styles.hint}>{t('common.loading')}</p></ListPage>);
     }
@@ -3467,13 +3757,31 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         const sendSummary = {
             verb: t('send.title'),
             amount: isMultiSend ? '' : sendAmount,
-            ticker: sendTick,
+            // Several assets have no one icon to show.
+            ticker: isMultiSend && sendTotals.length > 1 ? '' : sendTick,
             chainId,
             direction: 'out',
             address: fromAddress?.address,
             recipient: isMultiSend ? undefined : (toAddress.trim() || undefined),
+            // A multi-recipient send names its high-level count in the hero;
+            // the facts card has one exact summary row per asset.
+            ...(isMultiSend ? {
+                target: `${sendLegs.length} recipients`,
+                recipients: sendLegs.map((leg) => ({ to: leg.to, tick: leg.tick.toUpperCase(), amount: leg.amount })),
+                totals: recipientTotalsText(sendLegs),
+            } : {}),
             changes: sendChanges,
             networkFee: feeEstimate?.coinAmount ? { amount: String(feeEstimate.coinAmount), ticker: nativeTick } : undefined,
+            // The advanced choices the user made, as facts card rows (G127):
+            // a default (automatic inputs, change back to the source, no fee
+            // bumping) is not a detail that matters for this send. A decoded
+            // Memo row, when the host sends one, wins over this one.
+            facts: [
+                ...(trimmedMemo ? [{ label: t('send.memo'), value: trimmedMemo }] : []),
+                ...(rbfForSend ? [{ label: t('send.advanced.feeBumping'), value: t('send.advanced.allowed') }] : []),
+                ...(coinControlEnabled ? [{ label: t('send.advanced.coinControl'), value: coinControlLabel }] : []),
+                ...(changeAddress?.address ? [{ label: t('send.advanced.changeAddress'), value: changeAddress.address, address: true }] : []),
+            ],
         };
         return (
             <ActionConfirmScreen
@@ -3507,19 +3815,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 getSignerStatus={messaging.getSignerStatus}
                 hwRequireExplicitConfirm={signRisk.requireExplicitConfirm}
                 hwRequireExplicitConfirmReason={signRisk.reason}
-                // K6: memo, fee bumping, coin control and change address are
-                // review detail, so they sit under Technical details.
-                technicalDetails={(
-                    <dl className={styles.advancedReviewList} aria-label={t('send.advanced.label')}>
-                        <DetailRow label={t('send.memo')} value={trimmedMemo || t('send.advanced.none')} />
-                        <DetailRow label={t('send.advanced.feeBumping')} value={rbfForSend ? t('send.advanced.allowed') : t('send.advanced.notAllowed')} />
-                        <DetailRow label={t('send.advanced.coinControl')} value={coinControlLabel} />
-                        <DetailRow label={t('send.advanced.changeAddress')} value={changeAddressLabel} />
-                    </dl>
-                )}
+                extraWarnings={[
+                    ...unusualSendWarnings,
+                    ...(dispenserNotice?.warnings || []),
+                ]}
+                warningTestId={unusualSendWarnings.length > 0 ? 'send-unusual-warnings' : undefined}
                 extraCredentials={(
                     <>
-                        {unusualSendWarningBlock}
                         {dispenserNoticeBlock}
                         <UndoSendToast
                             status={undoHoldActive ? undoSendStatus : 'idle'}
@@ -3546,7 +3848,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 settings,
             })
             : null;
-        const sentAmount = amount && tick ? `${amount} ${tick}` : null;
+        const sentAmount = amount && tick ? `${formatWithThousands(amount) || amount} ${tick}` : null;
         const recipient = toAddress || null;
         const sendAnother = () => {
             cancelMax();
@@ -3554,14 +3856,21 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             setAmount('');
             setFiatAmount('');
             setToAddress('');
+            // A new payment starts on Single with no list behind it, so no
+            // sent recipient is carried into the next send.
+            setExtraLegs([]);
+            setPerRecipientToken(false);
+            setMultiRecipients([]);
+            setMultiDraft(null);
+            setMultiAddDraft(null);
+            setAdvancedText('');
+            setAdvancedFileName('');
+            multiListEditedRef.current = false;
+            setSendMode('single');
             setResult(null);
             setContactSaveStage('idle');
             setContactName('');
             setContactSaveError(null);
-            // previewResult is a derived useMemo (no setter): clearing the
-            // amount/destination above already recomputes it. The old
-            // setPreviewResult(null) call referenced a non-existent setter and
-            // threw a ReferenceError the moment "Send another" was tapped.
         };
         const canSaveRecipient = Boolean(txid && toAddress && desc?.coin && !matchedContact);
         const saveRecipient = async (event) => {
@@ -3711,18 +4020,20 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             ) : null}
                         </div>
                     ) : null}
-                    {onViewHistory && txid ? (
-                        // M2.4: honest expectation-setting for the merged entry
-                        // this button opens. It exists right away (the wallet's
-                        // own pending record), but the decoder polls its node on
-                        // a 60s cadence with caches behind that, so the network
-                        // side of the row can lag broadcast by up to ~85s with
-                        // nothing wrong. Saying so here means a still-"awaiting
-                        // network" row does not read as a bug the moment History
-                        // opens.
-                        <p className={styles.successHint}>{t('send.success.viewInHistoryHint')}</p>
-                    ) : null}
                 </div>
+                {onViewHistory && txid ? (
+                    // M2.4: honest expectation-setting for the merged entry
+                    // View in History opens. It exists right away (the wallet's
+                    // own pending record), but the decoder polls its node on
+                    // a 60s cadence with caches behind that, so the network
+                    // side of the row can lag broadcast by up to ~85s with
+                    // nothing wrong. A note is a WarningCard, never a loose
+                    // paragraph, and sits outside the success card (no card
+                    // in a card).
+                    <WarningCard data-send-history-note="">
+                        <WarningLine>{t('send.success.viewInHistoryHint')}</WarningLine>
+                    </WarningCard>
+                ) : null}
                 {contactSaveStage === 'editing' || contactSaveStage === 'saving' ? (
                     <form className={styles.saveRecipient} onSubmit={saveRecipient}>
                         <Input
@@ -3796,7 +4107,89 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        const softwareSignLabel = t('send.review.sign');
+        const nativeTick = nativeTickerFor(descriptor) || '';
+        const reviewRecipients = sendLegs.map((leg) => ({
+            to: leg.to,
+            tick: leg.tick.toUpperCase(),
+            amount: leg.amount,
+        }));
+        const reviewFeeAmount = feeEstimate?.coinAmount
+            ? String(feeEstimate.coinAmount)
+            : null;
+        const reviewFeeFiat = reviewFeeAmount
+            ? formatConfirmFeeFiat(reviewFeeAmount)
+            : null;
+        const reviewFees = [{
+            key: 'network',
+            label: t('send.networkFee'),
+            amount: reviewFeeAmount,
+            ticker: nativeTick,
+            fiat: reviewFeeFiat,
+        }];
+        // No Total block (G127 revised 2026-11-16): the sentence says what
+        // leaves the wallet and the network fee is its own row.
+        const reviewFacts = [
+            ...recipientFacts(reviewRecipients, chainId),
+            ...(fromAddress?.address ? [{
+                key: 'from',
+                label: t('send.fields.from'),
+                value: fromAddress.address,
+                address: true,
+                testId: 'confirm-source',
+            }] : []),
+            ...(trimmedMemo ? [{ key: 'memo', label: t('send.memo'), value: trimmedMemo }] : []),
+            ...(rbfForSend ? [{
+                key: 'fee-bumping',
+                label: t('send.advanced.feeBumping'),
+                value: t('send.advanced.allowed'),
+            }] : []),
+            ...(coinControlEnabled ? [{
+                key: 'coin-control',
+                label: t('send.advanced.coinControl'),
+                value: coinControlLabel,
+            }] : []),
+            ...(changeAddress?.address ? [{
+                key: 'change-address',
+                label: t('send.advanced.changeAddress'),
+                value: changeAddress.address,
+                address: true,
+            }] : []),
+            ...((dispenserNotice?.summaries || (dispenserNotice?.summary
+                ? [dispenserNotice.summary]
+                : [])).map((value, index) => ({
+                key: `dispenser-${index}`,
+                label: t('confirmStandard.facts'),
+                value,
+                testId: index === 0 ? 'send-dispenser-notice' : undefined,
+            }))),
+            ...feeFacts(reviewFees),
+        ];
+        const reviewWarning = confirmWarning({
+            decodedWarnings: decoded?.warnings || [],
+            extraWarnings: [
+                pasteWarning,
+                lookalikeWarning,
+                ...unusualSendWarnings,
+                ...(dispenserNotice?.warnings || []),
+            ].filter(Boolean),
+            testId: unusualSendWarnings.length > 0 ? 'send-unusual-warnings' : undefined,
+        });
+        // This review builds or signs without a network pre-flight, so a
+        // token send says it was not checked; a plain coin send has nothing
+        // for the indexer to check and makes no claim either way.
+        const reviewStatus = confirmStatus({ report: null, applies: !isNativeSend });
+        const reviewTick = tick.trim().toUpperCase();
+        const reviewSentence = isMultiSend
+            ? multiSendSentence({
+                totals: sendTotals.map((total) => `${formatDisplayAmount(String(total.amount))} ${String(total.tick).toUpperCase()}`),
+            }, reviewRecipients)
+            : t('confirmStandard.sentence.sendTo', { amount: formatDisplayAmount(String(amount)), tick: reviewTick });
+        const rejectReview = () => {
+            if (stage === 'submitting') return;
+            setSubmitError(null);
+            setPassword('');
+            setStage('form');
+        };
         return wrap(
             <FormPage
                 id="send-review-form"
@@ -3806,7 +4199,10 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     <StatusMessage
                         variant="error"
                         recovery={
-                            submitErrorCause === 'insufficient_funds' && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
+                            // Max fills Single's one amount; on Multi or Advanced it
+                            // would rewrite the first recipient behind its row.
+                            sendMode === 'single' && submitErrorCause === 'insufficient_funds'
+                                && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
                                 ? { label: t('send.useMax'), onAction: () => { setStage('form'); onMax(); } }
                                 : undefined
                         }
@@ -3823,154 +4219,85 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         </StatusMessage>
                     </>
                 ) : null, testSendGateBanner]}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        icon={<Icon.SendIcon />}
-                        loading={stage === 'submitting'}
-                        disabled={
-                            networkOffline
-                            || !!testSendGate
-                            || (isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? (hwStatus !== 'available'
-                                        || (signRisk.requireExplicitConfirm && !hwExplicitConfirmed))
-                                    : (!signerReady && password.length === 0))
-                        }
-                        title={networkOffline ? t('send.offline.title') : undefined}
-                    >
-                        {isWatcherMode
-                            ? t('send.title')
-                            : t('send.review.submitAction', { label: softwareSignLabel })}
-                    </Button>
-                )}
             >
-                <p className={styles.summary}>{decoded?.summary}</p>
-                {dispenserReviewNotice}
-                <BalanceChanges
-                    result={previewResult}
-                    loading={previewBalances.loading}
-                    error={previewBalances.error}
-                    chainCoin={descriptor?.networkKind === 'mainnet' ? descriptor.coin : null}
-                    nativeTicker={nativeTickerFor(descriptor)}
-                    fiatCurrency={fiatCurrency}
-                    allowCoingeckoFallback={settings?.privacy?.priceDataEnabled !== false}
-                />
-                {multiTickPreviewGap ? (
-                    <FieldNote variant="info">
-                        {t('send.review.multiTokenPreview')}
-                    </FieldNote>
-                ) : null}
-                <details className={styles.details}>
-                    <summary className={styles.detailsToggle}>
-                        {t('send.review.details', { count: 6 + (decoded?.details?.length || 0) })}
-                    </summary>
-                    <dl className={styles.detailsList}>
-                        {descriptor ? (
-                            <>
-                                <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
-                                <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
-                            </>
-                        ) : null}
-                        <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
-                        <dd className={styles.detailsValue}>
-                            <AddressText address={fromAddress.address} highlight />
-                        </dd>
-                        {(decoded?.details || []).map((d) => (
-                            <DetailRow
-                                key={d.label}
-                                label={d.label}
-                                value={
-                                    d.label === 'Destination' && typeof d.value === 'string'
-                                        ? <AddressText address={d.value} highlight />
-                                        : d.value
-                                }
-                            />
-                        ))}
-                        <DetailRow label={t('send.memo')} value={trimmedMemo || t('send.advanced.none')} />
-                        <DetailRow label={t('send.advanced.feeBumping')} value={rbfForSend ? t('send.advanced.allowed') : t('send.advanced.notAllowed')} />
-                        <DetailRow label={t('send.advanced.coinControl')} value={coinControlLabel} />
-                        <DetailRow label={t('send.advanced.changeAddress')} value={changeAddressLabel} />
-                    </dl>
-                </details>
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-                {unusualSendWarnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={unusualSendWarnings} />
-                ) : null}
-                <RawPsbtViewer
-                    developerMode={developerMode}
-                    actionFields={isMultiSend ? {
-                        action: 'SEND',
-                        // Mirrors the LEGS shape the host sends to the SDK, so
-                        // developer mode shows the action that is actually
-                        // composed rather than a one-recipient stand-in.
-                        LEGS: sendLegs.map((leg) => `${leg.amount} ${leg.tick.toUpperCase()} -> ${leg.to}`).join(' | '),
-                        ...(memo.trim() ? { MEMO: memo.trim() } : {}),
-                    } : {
-                        action: 'SEND',
-                        TICK: tick.trim(),
-                        AMOUNT: String(amount).trim(),
-                        DESTINATION: toAddress.trim(),
-                        ...(memo.trim() ? { MEMO: memo.trim() } : {}),
-                    }}
-                />
-                {isWatcherMode ? (
-                    <>
-                        <p className={styles.hint}>
-                            {t('common.watcherBuildsUnsigned')}
-                        </p>
-                        {isHwSource ? (
-                            <FormNotice variant="status">
-                                {t('send.watcherHardware', {
-                                    device: fromAddress.source === 'trezor'
-                                        ? t('send.device.trezor')
-                                        : t('send.device.ledger'),
-                                })}
-                            </FormNotice>
-                        ) : null}
-                    </>
-                ) : isHwSource ? (
-                    <HwSignBlock
-                        signerKind={fromAddress.source}
-                        signerName={fromAddress.signerLabel || (fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger')}
-                        path={fromAddress.derivationPath || ''}
-                        address={fromAddress.address}
-                        chainId={chainId}
-                        getStatus={(opts) => messaging.getSignerStatus({
-                            signerId: fromAddress.signerId,
-                            chainId: opts?.chainId ?? chainId,
-                        })}
-                        onStatusChange={onHwStatusChange}
-                        signerInfo={hwSignerInfo}
-                        requireExplicitConfirm={signRisk.requireExplicitConfirm}
-                        requireExplicitConfirmReason={signRisk.reason}
-                        onConfirmedChange={setHwExplicitConfirmed}
-                    />
-                ) : signerReady ? (
-                    // State a self-armed freeze without exposing a duress-armed freeze.
-                    <SigningReadyNote />
-                ) : (
-                    <PanicPasswordGate>
-                        <Input
-                            ref={passwordRef}
-                            type="password"
-                            label={t('common.password')}
-                            help={t('send.passwordHint')}
-                            value={password}
-                            onChange={(e) => {
-                                setPassword(e.target.value);
-                                if (submitError) { setSubmitError(null); setSubmitErrorCause(null); }
-                            }}
-                            autoComplete="current-password"
-                            disabled={stage === 'submitting'}
+                <ConfirmStandard
+                    label={t('send.reviewLabel')}
+                    status={reviewStatus}
+                    mark={!isMultiSend && chainId && reviewTick ? (
+                        <TickerIcon chainId={chainId} tick={reviewTick} context="hero" />
+                    ) : null}
+                    icon="send"
+                    sentence={reviewSentence}
+                    address={isMultiSend ? null : toAddress.trim()}
+                    chainName={descriptor?.displayName || ''}
+                    facts={reviewFacts}
+                    warning={reviewWarning}
+                >
+                    {isWatcherMode ? (
+                        <>
+                            <p className={styles.hint}>
+                                {t('common.watcherBuildsUnsigned')}
+                            </p>
+                            {isHwSource ? (
+                                <FormNotice variant="status">
+                                    {t('send.watcherHardware', {
+                                        device: fromAddress.source === 'trezor'
+                                            ? t('send.device.trezor')
+                                            : t('send.device.ledger'),
+                                    })}
+                                </FormNotice>
+                            ) : null}
+                        </>
+                    ) : isHwSource ? (
+                        <HwSignBlock
+                            signerKind={fromAddress.source}
+                            signerName={fromAddress.signerLabel || (fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger')}
+                            path={fromAddress.derivationPath || ''}
+                            address={fromAddress.address}
+                            chainId={chainId}
+                            getStatus={(opts) => messaging.getSignerStatus({
+                                signerId: fromAddress.signerId,
+                                chainId: opts?.chainId ?? chainId,
+                            })}
+                            onStatusChange={onHwStatusChange}
+                            signerInfo={hwSignerInfo}
+                            requireExplicitConfirm={signRisk.requireExplicitConfirm}
+                            requireExplicitConfirmReason={signRisk.reason}
+                            onConfirmedChange={setHwExplicitConfirmed}
                         />
-                    </PanicPasswordGate>
-                )}
+                    ) : signerReady ? (
+                        // State a self-armed freeze without exposing a duress-armed freeze.
+                        <SigningReadyNote />
+                    ) : (
+                        <PanicPasswordGate>
+                            <Input
+                                ref={passwordRef}
+                                type="password"
+                                label={t('common.password')}
+                                help={t('send.passwordHint')}
+                                value={password}
+                                onChange={(e) => {
+                                    setPassword(e.target.value);
+                                    if (submitError) { setSubmitError(null); setSubmitErrorCause(null); }
+                                }}
+                                autoComplete="current-password"
+                                disabled={stage === 'submitting'}
+                                error={submitErrorCause === 'password_required' && !password
+                                    ? t('confirmStandard.blocked.passwordField')
+                                    : undefined}
+                            />
+                        </PanicPasswordGate>
+                    )}
+                </ConfirmStandard>
             </FormPage>,
+            <ConfirmDecisionFooter
+                onReject={rejectReview}
+                // Always live (G130): handleSubmit says why at the top of the
+                // review when it cannot send yet.
+                onApprove={() => document.getElementById('send-review-form')?.requestSubmit()}
+                rejectDisabled={stage === 'submitting'}
+                approveLoading={stage === 'submitting'}
+            />,
         );
     }
 
@@ -4033,41 +4360,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         );
     }
 
-    if (changeAddressPickerOpen) {
-        return (
-            <OwnAddressPickerScreen
-                variant={variant}
-                title={titleCase(t('send.advanced.changeAddress'))}
-                walletId={walletId}
-                chainId={chainId}
-                lockNetwork
-                pickerActions={[{
-                    key: 'automatic-change',
-                    label: t('send.advanced.automaticChange', { address: automaticChangeLabel }),
-                    onSelect: () => {
-                        setChangeAddressId('');
-                        setChangeAddressPickerOpen(false);
-                    },
-                }]}
-                onPick={(address) => {
-                    setChangeAddressId(address.id);
-                    setChangeAddressPickerOpen(false);
-                }}
-                onBack={() => setChangeAddressPickerOpen(false)}
-            />
-        );
-    }
-
-    // Contacts picker: rendered in place of the form when the user taps the
-    // contacts icon in the To field. Selecting a row fills the To field and
-    // returns to the form with all other state intact.
-    if (contactsPickerOpen) {
+    // Contacts picker: rendered in place of the form when the user taps a To
+    // field's contacts icon. The target keeps Single, Add and Edit drafts apart.
+    if (contactsPickerTarget) {
         return (
             <ContactsPickerScreen
                 contacts={contacts}
                 variant={variant}
                 onPick={handlePickContact}
-                onBack={() => setContactsPickerOpen(false)}
+                onBack={() => setContactsPickerTarget(null)}
             />
         );
     }
@@ -4100,28 +4401,24 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         );
     }
 
-    if (tokenPickerRecipientId) {
-        const recipientIndex = extraLegs.findIndex((leg) => leg.id === tokenPickerRecipientId);
+    // Multi's add-recipient Token field: tokens on this network only, since
+    // the coin pays its own output and has no multi-recipient form, so the
+    // page is titled Token (G60).
+    if (tokenPickerRecipientId === MULTI_TOKEN_PICKER || tokenPickerRecipientId === MULTI_ADD_TOKEN_PICKER) {
         return (
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title={t('send.recipient.selectToken', { number: recipientIndex + 2 })}
+                accountId={accountId}
+                title={t('send.fields.token')}
                 networkFilter={coinFromChainId(chainId)}
+                chainIdFilter={chainId || undefined}
                 kindFilter="tokens"
                 kindLocked
                 onSelect={(selection) => {
-                    const picked = String(selection.tick || '').toUpperCase();
-                    const row = extraLegs.find((leg) => leg.id === tokenPickerRecipientId);
-                    const current = (row?.tick.trim() || tick.trim()).toUpperCase();
-                    // An amount belongs to the token it was typed for, whose decimal places may differ.
-                    const clearAmount = picked !== current && Boolean(row?.amount);
-                    updateRecipient(tokenPickerRecipientId, clearAmount
-                        ? { tick: picked, amount: '' }
-                        : { tick: picked });
-                    if (clearAmount) {
-                        setAssetSwitchNotice('Token changed. The amount was cleared because the new token may use different decimal places.');
-                    }
+                    const patch = { tick: String(selection.tick || '').toUpperCase() };
+                    if (tokenPickerRecipientId === MULTI_ADD_TOKEN_PICKER) changeMultiAddDraft(patch);
+                    else changeMultiDraft(patch);
                     setTokenPickerRecipientId(null);
                 }}
                 onBack={() => setTokenPickerRecipientId(null)}
@@ -4131,137 +4428,82 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
 
     // stage === 'form'
     const draftBanner = hasMeaningfulSendDraft(draft.load()) && !draftPending ? (
-        <StatusMessage
-            variant="status"
-            recovery={{ label: t('send.draft.restore'), onAction: restoreDraft }}
+        <DraftNotice
+            onRestore={restoreDraft}
+            onDiscard={discardSavedDraft}
+            restoreLabel={t('send.draft.restore')}
         >
             {t('send.draft.unfinished')}
-            <DraftDiscardButton onClick={dismissDraft} label={t('send.draft.discardLabel')}>
-                {t('send.draft.discard')}
-            </DraftDiscardButton>
-        </StatusMessage>
+        </DraftNotice>
     ) : null;
-    const sendFormErrors = [];
-    if (formError) {
-        let id;
-        let label;
-        // The empty-To message ("Enter a recipient address.") links
-        // to To as well, so its section reopens on Send like any field error.
-        if (toError || /destination address|recipient address/i.test(formError)) {
-            id = 'send-destination';
-            label = t('send.fields.to');
-        } else if (/address to send from/i.test(formError)) {
-            // A missing source links to the From address and opens From.
-            id = 'send-from';
-            label = 'From address';
-        } else if (/token ticker/i.test(formError)) {
-            id = 'send-token';
-            // The field is labelled Asset (coin or token).
-            label = 'Asset';
-        } else if (/amount|dust/i.test(formError)) {
-            id = 'send-amount';
-            label = t('send.fields.amount');
-        } else if (/memo/i.test(formError)) {
-            id = 'send-memo';
-            label = t('send.memo');
-        }
-        sendFormErrors.push({ id, label, message: formError });
-    }
-    for (let i = 0; i < extraLegs.length; i += 1) {
-        const leg = extraLegs[i];
-        const errors = recipientErrors[leg.id];
-        if (errors?.to) {
-            sendFormErrors.push({
-                id: `send-recipient-${leg.id}-to`,
-                label: t('send.recipient.addressLabel', { number: i + 2 }),
-                message: errors.to,
-            });
-        }
-        if (errors?.amount) {
-            sendFormErrors.push({
-                id: `send-recipient-${leg.id}-amount`,
-                label: t('send.recipient.amountLabel', { number: i + 2 }),
-                message: errors.amount,
-            });
-        }
-    }
     // Section helpers. A section holding an error gets a key that
     // changes on every Send attempt, so it reopens even after being closed.
-    const sendFormErrorIds = new Set(sendFormErrors.map((entry) => entry.id).filter(Boolean));
+    // The error map's keys are the failing field ids (From, To, Asset, Amount, Memo,
+    // each extra recipient's address and amount) plus 'form:' keys with no field.
+    const sendFormErrorIds = new Set(Object.keys(form.errors));
     const sectionErrorKey = (hasError) => (hasError ? validationAttempt + 1 : 0);
-    // Closed-section summaries and the fee totals of the standard frame.
+    // Closed-section summaries of the standard frame; the Fees section writes its own.
     const tickUpper = tick.trim().toUpperCase();
     const nativeTick = nativeTickerFor(descriptor) || '';
     const multiTotals = extraLegs.length > 0 && sendTotals.length > 0 && !nativeMultiSendBlock;
     const amountSummary = multiTotals
         ? sendTotals.map((item) => `${formatWithThousands(item.amount)} ${item.tick}`).join(' + ')
-        : (amount ? `${amount} ${tickUpper}`.trim() : tickUpper);
-    const toSummary = toAddress.trim()
-        ? `to ${summaryAddress(toAddress)}${extraLegs.length > 0 ? ` +${extraLegs.length}` : ''}`
-        : '';
-    const paymentSummary = [amountSummary, toSummary].filter(Boolean).join(' ') || null;
-    const advancedSummary = [
-        rbfSupported ? (rbfForSend ? 'RBF on' : 'RBF off') : null,
-        coinControlEnabled ? `${selectedUtxos.length} coins chosen` : 'auto coins',
-    ].filter(Boolean).join(', ');
-    const networkFeeAmount = selectedNetworkFee({ tiers: feeTiers, value: feePick, customEstimate: feeEstimate })
-        || (feeEstimate?.coinAmount != null ? String(feeEstimate.coinAmount) : null);
-    // Amount, Network fee and, when both are in the same coin, Total.
-    const feeTotals = (() => {
-        if (!networkFeeAmount) return [];
-        const rows = [];
-        if (amountSummary && (amount || multiTotals)) {
-            rows.push({ key: 'amount', label: t('send.fields.amount'), value: amountSummary });
-        }
-        rows.push({ key: 'network', label: t('send.networkFee'), value: `${networkFeeAmount} ${nativeTick}`.trim() });
-        const sameCoin = isNativeSend && amount && !multiTotals && tickUpper === nativeTick;
-        if (sameCoin) {
-            const total = sumDecimalStrings([amount, networkFeeAmount]);
-            if (total) rows.push({ key: 'total', label: 'Total', value: `${total} ${nativeTick}`, strong: true });
-        }
-        return rows;
-    })();
+        : (amount ? `${formatWithThousands(amount) || amount} ${tickUpper}`.trim() : tickUpper);
+    const toSummary = sendMode !== 'single' && extraLegs.length > 0
+        ? `to ${extraLegs.length + 1} recipients`
+        : toAddress.trim()
+            ? <>{summaryLineWithAddress(t, 'send.summary.toAddress', 'address', toAddress)}{extraLegs.length > 0 ? ` +${extraLegs.length}` : ''}</>
+            : '';
+    const paymentSummary = joinSummaryParts([amountSummary, toSummary], ' ') || null;
     const paymentHasError = Boolean(toError || amountBalanceError
         || [...sendFormErrorIds].some((id) => id === 'send-destination' || id === 'send-amount'
-            || id === 'send-token' || String(id).startsWith('send-recipient-')));
+            || id === 'send-token' || id === 'send-multi-list' || id === 'send-advanced-text'
+            || String(id).startsWith('form:advanced-line-')));
     return wrap(
         <FormFrame
-            id="send-form"
+            id={SEND_FORM_ID}
+            walletId={walletId}
             label={t('send.title')}
             onSubmit={handleReview}
+            errors={form}
+            // An amount refusal (over the balance, empty, malformed) offers the
+            // one-click fix on the error notice, as the old summary did: Use
+            // max fills the largest amount that fits, and its amount change
+            // clears the entry, so the action leaves with it.
+            errorAction={form.errorFor('send-amount')
+                && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
+                ? { label: t('send.useMax'), onAction: onMax, icon: <Icon.MaxIcon /> }
+                : undefined}
             onChangeCapture={() => {
-                if (formError) setFormError(null);
                 if (submitError) setSubmitError(null);
                 if (submitFieldError) setSubmitFieldError(null);
             }}
             /*
               * State the signing freeze at the TOP of the form, so a duress observer
               * never watches a transaction get composed first. Duress-armed freezes
-              * render nothing here, by design. It stays above the sections.
+              * render nothing here, by design. It stays above the sections, and
+              * above a hosting page's own lead (the Fund page's QR).
               */
-            lead={!isWatcherMode ? <PanicFreezeNotice key={panicNoticeKey} surface="send" /> : null}
-            status={[isDemo ? (
+            lead={(draftBanner || formLead || !isWatcherMode) ? (
+                <>
+                    {draftBanner}
+                    {!isWatcherMode ? <PanicFreezeNotice key={panicNoticeKey} surface="send" /> : null}
+                    {formLead}
+                </>
+            ) : null}
+            status={[isDemo ? (demoRefused ? (
                 <StatusMessage
-                    variant="info"
+                    variant="error"
+                    testId="demo-guard-refusal"
                     recovery={{
                         label: t('send.demo.createRealWallet'),
                         onAction: () => { setDemoExitError(null); setDemoExitConfirmOpen(true); },
                     }}
                 >
-                    {t('send.demo.blocked')}
+                    {t('demo.guard.blocked')}
                 </StatusMessage>
-            ) : submitError ? (
+            ) : null) : submitError ? (
                 <StatusMessage variant="error">{submitError}</StatusMessage>
-            ) : sendFormErrors.length > 0 ? (
-                <FormErrorSummary
-                    errors={sendFormErrors}
-                    focusKey={validationAttempt}
-                    recovery={
-                        /amount/i.test(formError || '') && sourceBalance && parseFloat(sourceBalance.amount || '0') > 0
-                            ? { label: t('send.useMax'), onAction: onMax }
-                            : undefined
-                    }
-                />
             ) : networkOffline ? (
                 <>
                     {/* This notice is the page's one offline message, so the
@@ -4271,7 +4513,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         {t(previewBalances.sdkShape ? 'send.offline.body' : 'send.offline.bodyNoCache')}
                     </StatusMessage>
                 </>
-            ) : null, testSendGateBanner, draftBanner, requestMessage ? (
+            ) : null, testSendGateBanner, requestMessage ? (
                 <StatusMessage variant="status">
                     {t('send.paymentRequestMessage')} <span data-testid="payment-request-message">
                         {requestMessage}
@@ -4282,7 +4524,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 <FormAction
                     icon={<Icon.SendIcon />}
                     loading={confirmAction.composing}
-                    disabled={isDemo || networkOffline || !!testSendGate || maxUnavailable || !!amountBalanceError}
                     title={networkOffline ? t('send.offline.title') : undefined}
                 >
                     {t('send.title')}
@@ -4347,10 +4588,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     value={feePick}
                     onChange={setFeePick}
                     customEstimate={feeEstimate}
-                    etaMinutes={Number.isFinite(feeEstimate?.etaMinutes) ? feeEstimate.etaMinutes : undefined}
                     error={submitFieldError?.field === 'fee' ? submitFieldError.message : null}
                     revealKey={sectionErrorKey(submitFieldError?.field === 'fee')}
-                    totals={feeTotals}
+                    formErrorKey="form:fee"
+                    // Send always states fee bumping, seeded from Settings,
+                    // and shows the change its chosen coins leave.
+                    advanced={{ rbfDefault: rbfByDefault, coinsNote: coinControlChange }}
                 />
             )}
         >
@@ -4362,9 +4605,70 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 revealKey={sectionErrorKey(paymentHasError)}
                 summary={paymentSummary}
             >
+            {/* Single, Multi or Advanced, directly above what it switches (G41). */}
+            <Tabs
+                id="send-mode"
+                aria-label={t('send.mode.label')}
+                items={[
+                    { id: 'single', label: t('send.mode.single'), icon: <Icon.UserIcon />, controls: 'send-mode-panel' },
+                    { id: 'multi', label: t('send.mode.multi'), icon: <Icon.UsersIcon />, controls: 'send-mode-panel' },
+                    { id: 'advanced', label: t('send.advanced'), icon: <Icon.DocumentIcon />, controls: 'send-mode-panel' },
+                ]}
+                value={sendMode}
+                onChange={switchSendMode}
+            />
+            <div
+                id="send-mode-panel"
+                role="tabpanel"
+                aria-labelledby={`send-mode-tab-${sendMode}`}
+                className={styles.sendModePanel}
+            >
+            {/* What a network or token change reset, in whichever tab is open. */}
             {assetSwitchNotice ? (
                 <FormNotice variant="status">{assetSwitchNotice}</FormNotice>
             ) : null}
+            {sendMode === 'multi' ? (
+                <MultiRecipientList
+                    chainId={chainId}
+                    recipients={multiRecipients}
+                    editDraft={multiDraft}
+                    addDraft={multiAddDraft}
+                    onEditDraftChange={changeMultiDraft}
+                    onAddDraftChange={changeMultiAddDraft}
+                    onStartAdd={startAddRecipient}
+                    onToggleEdit={toggleEditRecipient}
+                    onCommitEdit={commitMultiDraft}
+                    onCommitAdd={commitMultiAddDraft}
+                    onCancelAdd={() => setMultiAddDraft(null)}
+                    onRemove={removeMultiRow}
+                    onOpenTokenPicker={(target) => setTokenPickerRecipientId(
+                        target === 'add' ? MULTI_ADD_TOKEN_PICKER : MULTI_TOKEN_PICKER,
+                    )}
+                    onOpenContactsPicker={openContactsPicker}
+                    divisibilityFor={recipientRules.decimalsFor || undefined}
+                    maxFor={multiMaxFor}
+                    // The limit and the balance speak while the list is
+                    // built, as the Single amount field's balance check does.
+                    error={form.errorFor('send-multi-list')
+                        || (multiDraft || multiAddDraft ? null : (recipientFitError || amountBalanceError))}
+                />
+            ) : null}
+            {sendMode === 'advanced' ? (
+                <AdvancedRecipientText
+                    text={advancedText}
+                    onTextChange={changeAdvancedText}
+                    coin={descriptor?.coin}
+                    fileName={advancedFileName}
+                    onFileText={loadAdvancedFile}
+                    onClearFile={clearAdvancedFile}
+                    onFileError={(message) => { setAdvancedFileName(''); setAdvancedFileError(message); }}
+                    fileError={advancedFileError}
+                    error={advancedLineErrors}
+                    countLine={advancedNote}
+                    overLimit={advancedNoteWarns}
+                />
+            ) : null}
+            {sendMode === 'single' ? (<>
             <AddressCombobox
                 size="md"
                 id="send-destination"
@@ -4386,7 +4690,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 suggestions={suggestions}
                 onSuggestionSelect={handlePickRecipient}
                 hint={pasteHint || undefined}
-                onIconClick={openContactsPicker}
+                onIconClick={() => openContactsPicker('single')}
                 placeholder={t('send.destination.placeholder')}
                 error={toError || undefined}
             />
@@ -4460,111 +4764,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 <p className={styles.balanceHint} role="status">{maxNote}</p>
             ) : null}
             {/* Say it while the amount field still has focus, not only on Send.
-                Suppressed once Send has already pushed the same sentence into formError,
+                Suppressed once Send has already put the same sentence in the error map,
                 so the user is not shown it twice. */}
-            {dustBlock && formError !== dustBlock ? (
+            {dustBlock && form.errorFor('send-amount') !== dustBlock ? (
                 <FieldNote variant="warning" role="alert">{dustBlock}</FieldNote>
             ) : null}
-            {/* PC-52: extra recipients. Each row is another leg of the SAME
-                transaction (SEND v1, or v2 when the rows carry their own
-                token), so the recipients share one network fee instead of
-                paying one each. Native coin is excluded: it moves value in a
-                real output, which has no multi-leg action form. */}
-            {extraLegs.length > 0 ? (
-                <div className={styles.recipientRows}>
-                    {extraLegs.map((leg, i) => {
-                        const rowTick = ((perRecipientToken && leg.tick.trim())
-                            ? leg.tick
-                            : tick).trim().toUpperCase();
-                        const rowBalance = previewBalances.sdkShape
-                            ? decoderLib.balancesFromSdk(previewBalances.sdkShape)
-                                .find((balance) => balance.tick === rowTick)
-                            : null;
-                        const rowMaxAmount = rowBalance
-                            ? exactTokenMaxAmount(rowBalance.amount)
-                            : null;
-                        return (
-                            <div key={leg.id} className={styles.recipientRow}>
-                            <div className={styles.recipientRowHead}>
-                                <span className={styles.recipientRowLabel}>{t('send.recipient.heading', { number: i + 2 })}</span>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    icon={<Icon.TrashIcon />}
-                                    onClick={() => removeRecipient(leg.id)}
-                                    aria-label={t('send.recipient.removeLabel', { number: i + 2 })}
-                                >
-                                    {t('send.recipient.remove')}
-                                </Button>
-                            </div>
-                            {/* Each repeated control carries a row-qualified
-                                accessible name so assistive technology can tell
-                                which recipient is being edited. */}
-                            <AddressCombobox
-                                id={`send-recipient-${leg.id}-to`}
-                                label={t('send.fields.to')}
-                                help={t('send.destination.help')}
-                                aria-label={t('send.recipient.addressLabel', { number: i + 2 })}
-                                value={leg.to}
-                                onChange={(e) => updateRecipient(leg.id, { to: e.target.value })}
-                                suggestions={suggestions}
-                                placeholder={t('send.destination.placeholder')}
-                                errorKey={validationAttempt}
-                                error={recipientErrors[leg.id]?.to
-                                    || (leg.to.trim() && destinationAddressError(leg.to, descriptor)
-                                        ? destinationAddressError(leg.to, descriptor)
-                                        : undefined)}
-                            />
-                            {perRecipientToken ? (
-                                <AssetIconPicker
-                                    label={t('send.recipient.tokenLabel', { number: i + 2 })}
-                                    chainId={chainId}
-                                    tick={(leg.tick.trim() || tick.trim()).toUpperCase()}
-                                    onOpen={() => setTokenPickerRecipientId(leg.id)}
-                                    error={recipientErrors[leg.id]?.tick}
-                                    help={t('send.recipient.tokenHelp')}
-                                />
-                            ) : null}
-                            <AmountField
-                                id={`send-recipient-${leg.id}-amount`}
-                                label={t('send.recipient.amountLabel', { number: i + 2 })}
-                                amount={leg.amount}
-                                tick={rowTick}
-                                help={t('send.amount.help')}
-                                divisibility={previewBalances.sdkShape
-                                    ? heldDivisibility(previewBalances.sdkShape, rowTick)
-                                    : undefined}
-                                onAmountFieldChange={(value) => updateRecipient(leg.id, { amount: value })}
-                                onMax={rowMaxAmount
-                                    ? () => updateRecipient(leg.id, { amount: rowMaxAmount })
-                                    : undefined}
-                                maxDisabled={!rowMaxAmount}
-                                error={recipientErrors[leg.id]?.amount}
-                            />
-                            </div>
-                        );
-                    })}
-                    <Switch
-                        className={styles.rbfRow}
-                        label={t('send.recipient.differentToken')}
-                        description={t('send.recipient.differentTokenOff', {
-                            token: tick.trim().toUpperCase() || t('send.recipient.tokenAbove'),
-                        })}
-                        aria-label={t('send.recipient.differentToken')}
-                        help={t('send.recipient.differentTokenHelp')}
-                        checked={perRecipientToken}
-                        onChange={(e) => setPerRecipientToken(e.target.checked)}
-                    />
-                    {sendTotals.length > 0 && !nativeMultiSendBlock ? (
-                        <p className={styles.hint}>
-                            {t('send.recipient.total', {
-                                total: sendTotals.map((item) => `${formatWithThousands(item.amount)} ${item.tick}`).join(' + '),
-                                count: sendLegs.length,
-                            })}
-                        </p>
-                    ) : null}
-                </div>
-            ) : null}
+            </>) : null}
+            </div>
             {sourceLacksTick ? (
                 <FormNotice variant="warning" role="alert">{sourceLacksTick}</FormNotice>
             ) : null}
@@ -4573,23 +4779,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             ) : null}
             {gatedMultiSendBlock ? (
                 <FormNotice variant="warning" role="alert">{gatedMultiSendBlock}</FormNotice>
-            ) : null}
-            {/* Hidden for a native send (no multi-leg form exists) and at the
-                cap, where another row could not be composed anyway. */}
-            {!isNativeSend && extraLegs.length + 1 < MAX_SEND_LEGS ? (
-                <Button
-                    type="button"
-                    variant="secondary"
-                    icon={<Icon.PlusIcon />}
-                    onClick={addRecipient}
-                >
-                    {t('send.recipient.add')}
-                </Button>
-            ) : null}
-            {extraLegs.length + 1 >= MAX_SEND_LEGS ? (
-                <p className={styles.hint}>
-                    {t('send.recipient.maximum', { count: MAX_SEND_LEGS })}
-                </p>
             ) : null}
             {gatedInfo && gatedInfo.state === 'ready' ? (
                 <FormNotice variant="status">
@@ -4637,7 +4826,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                                 variant="secondary"
                                 icon={<Icon.RefreshIcon />}
                                 loading={gatedScanBusy}
-                                disabled={gatedScanBusy || gatedScanPassword.length === 0}
                                 onClick={handleGatedScan}
                             >
                                 {t('send.gated.recover')}
@@ -4651,212 +4839,21 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 which the chain rejects for a native tick, so the input would do nothing.
                 Token sends keep it, as its own optional section. */}
             {isNativeSend ? null : (
-                <FormSection
-                    id="memo"
-                    title={t('send.memo')}
-                    icon={Icon.MessageIcon}
-                    optional
+                // The section holds only the memo: its title names the field
+                // and carries its count.
+                <MemoSection
                     {...formSections.bind('memo')}
                     revealKey={sectionErrorKey(sendFormErrorIds.has('send-memo') || Boolean(memoTooLong))}
-                    summary={memo.trim() ? memo.trim() : t('send.advanced.none')}
-                >
-                        <Input
-                            id="send-memo"
-                            label={t('send.memo')}
-                            maxLength={MAX_MEMO_LENGTH}
-                            value={memo}
-                            onChange={(e) => setMemo(e.target.value)}
-                            autoComplete="off"
-                            help={t('send.memo.help')}
-                            error={memoTooLong || (/[|;]/.test(memo) ? t('send.memoForbiddenChars') : undefined)}
-                        />
-                </FormSection>
+                    inputId="send-memo"
+                    maxLength={MAX_MEMO_LENGTH}
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
+                    error={memoTooLong || (/[|;]/.test(memo) ? t('send.memoForbiddenChars') : undefined)}
+                />
             )}
-            {/* Advanced is an optional closed section in the standard
-                style: fee bumping, coin control, then the change address. */}
-            <FormSection
-                id="advanced"
-                title={t('send.advanced')}
-                icon={Icon.GearIcon}
-                optional
-                {...formSections.bind('advanced')}
-                summary={advancedSummary}
-            >
-                {/* §44.3 per-send RBF toggle. Default seeds from
-                    settings.fees[chainId].rbfByDefault (see the effect
-                    above); the live value flows into the send payload as
-                    `rbf: rbfForSend`, off and disabled where the chain has no RBF. */}
-                <Switch
-                    className={styles.rbfRow}
-                    label={(
-                        <>
-                            {t('send.rbf.label')}
-                            <InfoTip
-                                aria={t('send.rbf.helpLabel')}
-                                label={t('send.rbf.help')}
-                            />
-                        </>
-                    )}
-                    description={rbfSupported
-                        ? t('send.rbf.enabledHint')
-                        : t('send.rbf.unsupported', {
-                            chain: t('send.rbf.thisChain'),
-                        })}
-                    aria-label={t('send.rbf.label')}
-                    checked={rbfForSend}
-                    disabled={!rbfSupported}
-                    onChange={(e) => setRbfEnabled(e.target.checked)}
-                />
-                <Switch
-                    className={styles.rbfRow}
-                    label={(
-                        <>
-                            <span aria-hidden="true">{t('send.advanced.coinControl')}</span>
-                            <span id="send-coin-control-enabled-label" className="sr-only">
-                                {t('send.advanced.coinControlEnabled')}
-                            </span>
-                        </>
-                    )}
-                    description={utxoLoadState === 'loading'
-                        ? t('send.advanced.loadingInputs')
-                        : utxoLoadState === 'ready'
-                            ? t('send.advanced.coinControlReady')
-                            : t('send.advanced.coinControlUnavailable')}
-                    aria-label={t('send.advanced.coinControlEnabled')}
-                    aria-labelledby="send-coin-control-enabled-label"
-                    help={t('send.advanced.coinControlHelp')}
-                    checked={coinControlEnabled}
-                    disabled={utxoLoadState !== 'ready'}
-                    onChange={(e) => setCoinControlEnabled(e.target.checked)}
-                />
-                {coinControlEnabled ? (
-                    <fieldset className={styles.coinControlList}>
-                        <legend>
-                            {t('send.advanced.inputs')}
-                            <InfoTip
-                                aria={t('ui.field.about', { label: t('send.advanced.inputs') })}
-                                label={t('send.advanced.inputsHelp')}
-                            />
-                        </legend>
-                        <div className={styles.coinControlToolbar}>
-                            <span>{t('send.advanced.availableCount', { count: availableUtxos.length })}</span>
-                            <span className={styles.coinControlActions}>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    icon={<Icon.CheckIcon />}
-                                    disabled={availableUtxos.length === 0
-                                        || selectedUtxos.length === availableUtxos.length}
-                                    onClick={() => setSelectedUtxoKeys(
-                                        new Set(availableUtxos.map((utxo) => utxoKey(utxo))),
-                                    )}
-                                >
-                                    {t('send.advanced.selectAll')}
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    icon={<Icon.TrashIcon />}
-                                    disabled={selectedUtxos.length === 0}
-                                    onClick={() => setSelectedUtxoKeys(new Set())}
-                                >
-                                    {t('common.clear')}
-                                </Button>
-                            </span>
-                        </div>
-                        {availableUtxos.length > 0 ? (
-                            <div className={styles.coinControlRows}>
-                                {availableUtxos.slice(0, COIN_CONTROL_ROW_LIMIT).map((utxo) => {
-                                    const key = utxoKey(utxo);
-                                    const valueSats = utxoValueSats(utxo);
-                                    const dustFloor = dustThresholdForCoin(descriptor?.coin);
-                                    const isDust = valueSats !== null && dustFloor !== null
-                                        && valueSats < BigInt(dustFloor);
-                                    return (
-                                        <Checkbox
-                                            key={key}
-                                            className={styles.coinControlRow}
-                                            checked={selectedUtxoKeys.has(key)}
-                                            onChange={(e) => setSelectedUtxoKeys((current) => {
-                                                const next = new Set(current);
-                                                if (e.target.checked) next.add(key);
-                                                else next.delete(key);
-                                                return next;
-                                            })}
-                                            label={(
-                                                <span className={styles.coinControlValue}>
-                                                    <span>
-                                                        {utxoAmount(utxo, descriptor)} {nativeTickerFor(descriptor)}
-                                                        {isDust ? (
-                                                            <span
-                                                                className={styles.coinControlDust}
-                                                                title={t('send.advanced.dustTitle', { sats: formatWithThousands(String(dustFloor)) })}
-                                                            >
-                                                                {t('send.advanced.dust')}
-                                                            </span>
-                                                        ) : null}
-                                                    </span>
-                                                    <small>{utxoOutpoint(utxo)}</small>
-                                                </span>
-                                            )}
-                                        />
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <EmptyState title={t('send.advanced.noInputsTitle')} titleAs="p" body={t('send.advanced.noInputs')} />
-                        )}
-                        {availableUtxos.length > COIN_CONTROL_ROW_LIMIT ? (
-                            <p>
-                                {t('send.advanced.rowsCapped', {
-                                    shown: COIN_CONTROL_ROW_LIMIT,
-                                    count: availableUtxos.length,
-                                })}
-                            </p>
-                        ) : null}
-                        <dl
-                            className={styles.coinControlSummary}
-                            aria-label={t('send.advanced.summaryLabel')}
-                            aria-live="polite"
-                        >
-                            <div>
-                                <dt>{t('send.advanced.selectedTotal')}</dt>
-                                <dd>
-                                    {decimalStringFromSats(selectedUtxoTotalSats, descriptor)}{' '}
-                                    {nativeTickerFor(descriptor)}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt>{t('send.advanced.approxChange')}</dt>
-                                <dd>{coinControlChange}</dd>
-                            </div>
-                        </dl>
-                    </fieldset>
-                ) : null}
-                <AddressField
-                    label={t('send.advanced.changeAddress')}
-                    icon="addresses"
-                    value={changeAddress?.address || ''}
-                    placeholder={t('send.advanced.automaticChange', { address: automaticChangeLabel })}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setChangeAddressPickerOpen(true)}
-                    iconLabel={t('send.advanced.changeAddress')}
-                    help={t('send.advanced.changeHint')}
-                />
-            </FormSection>
+            {/* Advanced (fee bumping, coin control, change address) is the
+                shared section FeeSection draws directly above Speed and Fees. */}
         </FormFrame>,
-    );
-}
-
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
     );
 }
 

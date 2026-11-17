@@ -72,7 +72,7 @@ test.describe('onboarding', () => {
 
         // Mnemonic display stage
         await revealRecoveryPhrase(page);
-        await page.getByLabel(/saved my recovery phrase/i).check();
+        await page.getByRole('checkbox', { name: /saved my recovery phrase/i }).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
 
         // Deliberately wrong words: the wallet must not be created.
@@ -106,7 +106,7 @@ test.describe('onboarding', () => {
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Import wallet' }).click();
 
-        // Import takes a known-good phrase to the Automatic Donation System
+        // Import takes a known-good phrase to the Automatic Donations
         // notice, and Continue from there to an unlocked wallet.
         await page.getByLabel('Recovery phrase', { exact: true }).fill(KNOWN_BIP39);
         await page.getByLabel('Wallet name', { exact: true }).fill('Imported E2E');
@@ -117,8 +117,8 @@ test.describe('onboarding', () => {
         // Asserted rather than tolerated: this is the golden path, and a
         // helper that quietly no-opped would let the notice disappear.
         await expect(
-            page.getByRole('heading', { name: 'Automatic Donation System', exact: true }),
-            'an import did not end on the Automatic Donation System notice',
+            page.getByRole('heading', { name: 'Automatic Donations', exact: true }),
+            'an import did not end on the Automatic Donations notice',
         ).toBeVisible({ timeout: 90_000 });
         await acknowledgeImportNotice(page);
 

@@ -125,9 +125,13 @@ describe('swap form submit safety', () => {
         await fillSwap();
         expect(screen.getAllByText('Swapping needs a network connection.')).toHaveLength(1);
         const review = screen.getByRole('button', { name: 'Create Swap' });
-        expect(review).toBeDisabled();
+        // G130: enabled offline; the press is refused and the one offline
+        // notice is brought into view and focused, never repeated.
+        expect(review).toBeEnabled();
         fireEvent.submit(review.closest('form'));
         expect(composeForConfirm).not.toHaveBeenCalled();
+        expect(screen.getAllByText('Swapping needs a network connection.')).toHaveLength(1);
+        expect(document.activeElement?.matches('[data-form-status]')).toBe(true);
     });
 
     it('stops preparing and shows one plain error when composition rejects', async () => {
@@ -159,7 +163,7 @@ describe('swap form submit safety', () => {
     it('locks and de-duplicates SellOwnershipForm while its price composes', async () => {
         await expectOneLockedCompose({
             children: <SellOwnershipForm walletId="w" onBack={() => {}} chainId={BTC} tick="ALPHA" />,
-            actionName: /^List name for sale$/i,
+            actionName: /^List ownership for sale$/i,
             fill: async () => {
                 const price = await screen.findByLabelText(/^Price/);
                 fireEvent.change(price, { target: { value: '5' } });
@@ -190,10 +194,9 @@ describe('swap form submit safety', () => {
         );
         await fillSwap();
         fireEvent.click(screen.getByRole('button', { name: 'Create Swap' }));
-        const action = await screen.findByRole('button', { name: 'Create Unsigned Swap Transaction' });
-        const form = action.closest('form');
-        fireEvent.submit(form);
-        fireEvent.submit(form);
+        const action = await screen.findByRole('button', { name: 'Approve' });
+        fireEvent.click(action);
+        fireEvent.click(action);
 
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
     });
@@ -210,11 +213,10 @@ describe('swap form submit safety', () => {
         );
         const price = await screen.findByLabelText(/^Price/);
         fireEvent.change(price, { target: { value: '5' } });
-        fireEvent.click(screen.getByRole('button', { name: /^List name for sale$/i }));
-        const action = await screen.findByRole('button', { name: /Create Unsigned Transaction/ });
-        const form = action.closest('form');
-        fireEvent.submit(form);
-        fireEvent.submit(form);
+        fireEvent.click(screen.getByRole('button', { name: /^List ownership for sale$/i }));
+        const action = await screen.findByRole('button', { name: 'Approve' });
+        fireEvent.click(action);
+        fireEvent.click(action);
 
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
     });

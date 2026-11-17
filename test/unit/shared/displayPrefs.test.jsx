@@ -36,7 +36,7 @@ import {
     REDUCED_MOTION_ATTR,
 } from '../../../packages/core/src/ui/reducedMotion.js';
 import { LearnNote } from '../../../packages/core/src/shared/components/LearnNote.jsx';
-import { BalanceList, isSmallBalanceRow } from '../../../packages/core/src/shared/components/BalanceList.jsx';
+import { BalanceList, isSmallBalanceRow, smallBalanceKeys } from '../../../packages/core/src/shared/components/BalanceList.jsx';
 
 const root = () => document.documentElement;
 
@@ -195,8 +195,12 @@ describe('LearnNote', () => {
         applySettingsRootAttributes({ learnMode: true });
         render(<LearnNote variant={variant} chainLabel={chainLabel} />);
         const note = screen.getByTestId('learn-note');
-        const body = note.querySelector('p');
+        // The Notice Standard: an info Notice (bold title, then the help
+        // sentence), static page content, so not a live region.
+        const body = note.querySelector('[data-learn-note-body]');
+        expect(note).toHaveAttribute('data-tone', 'info');
         expect(note).not.toHaveAttribute('role');
+        expect(note.querySelector('[data-notice-dismiss]')).toHaveAccessibleName('Dismiss learn note');
         expect(body.textContent.match(/[.!?](?=\s|$)/g)).toHaveLength(1);
         expect(note.textContent).toContain(expected);
         const learnMore = screen.getByRole('link', { name: 'Learn more' });
@@ -281,47 +285,59 @@ describe('tokens.css theme + motion switches', () => {
 });
 
 describe('hide small balances', () => {
-    const nativeRow = (chainId, quantity) => ({
-        chainId, tick: 'X', kind: 'native', quantity, divisibility: 8,
+    // The rule judges value in the display currency (operator ruling 2026-11-14).
+    const nativeRow = (chainId, quantity, fiatRate = null) => ({
+        chainId, tick: 'X', kind: 'native', quantity, divisibility: 8, fiatRate,
     });
-    const tokenRow = (quantity, divisibility = 8) => ({
-        chainId: 'bitcoin-mainnet', tick: 'SPAM', kind: 'token', quantity, divisibility,
+    const tokenRow = (quantity, divisibility = 8, fiatRate = null) => ({
+        chainId: 'bitcoin-mainnet', tick: 'SPAM', kind: 'token', quantity, divisibility, fiatRate,
     });
 
-    it('treats an empty coin row as dust, the case the user actually hits', () => {
+    it('treats an empty coin row as small, the case the user actually hits', () => {
         // The reported symptom: LTC and DOGE listed at 0.00000000 with
-        // "Hide small balances" ON.
+        // "Hide small balances" ON. Zero is small even with no price.
         expect(isSmallBalanceRow(nativeRow('litecoin-mainnet', '0'))).toBe(true);
         expect(isSmallBalanceRow(nativeRow('dogecoin-mainnet', '0'))).toBe(true);
     });
 
-    it('uses a per-chain threshold for non-empty coin rows', () => {
-        expect(isSmallBalanceRow(nativeRow('bitcoin-mainnet', '545'))).toBe(true);
-        expect(isSmallBalanceRow(nativeRow('bitcoin-mainnet', '546'))).toBe(false);
-        expect(isSmallBalanceRow(nativeRow('dogecoin-mainnet', '999999'))).toBe(true);
-        expect(isSmallBalanceRow(nativeRow('dogecoin-mainnet', '1000000'))).toBe(false);
+    it('folds a row worth less than the amount and keeps one worth the amount or more', () => {
+        // 0.00001 BTC at 90,000 is 0.90; 0.0000112 BTC is 1.008.
+        expect(isSmallBalanceRow(nativeRow('bitcoin-mainnet', '1000', 90000), '1')).toBe(true);
+        expect(isSmallBalanceRow(nativeRow('bitcoin-mainnet', '1120', 90000), '1')).toBe(false);
+        // Exactly the amount is not under it.
+        expect(isSmallBalanceRow(tokenRow('100000000', 8, 1), '1')).toBe(false);
+        expect(isSmallBalanceRow(tokenRow('99999999', 8, 1), '1')).toBe(true);
     });
 
-    it('keeps a real balance visible', () => {
-        expect(isSmallBalanceRow(nativeRow('bitcoin-mainnet', '100000000'))).toBe(false);
-        expect(isSmallBalanceRow(tokenRow('100000000'))).toBe(false);
+    it('judges every divisibility by value, an indivisible token included', () => {
+        expect(isSmallBalanceRow(tokenRow('1', 0, 0.5), '1')).toBe(true);
+        expect(isSmallBalanceRow(tokenRow('1', 0, 650), '1')).toBe(false);
+        expect(isSmallBalanceRow(tokenRow('9', 3, 100), '1')).toBe(true);
+        expect(isSmallBalanceRow(tokenRow('10', 3, 100), '1')).toBe(false);
     });
 
-    it('never calls an indivisible token dust, however small the count', () => {
-        // One unit of an indivisible token is one whole thing, usually an NFT.
-        expect(isSmallBalanceRow(tokenRow('1', 0))).toBe(false);
+    it('never calls a row with no price small by value', () => {
+        // Hide unknown tokens governs these; a tiny unpriced balance stays listed.
+        expect(isSmallBalanceRow(tokenRow('1'))).toBe(false);
+        expect(isSmallBalanceRow(nativeRow('bitcoin-mainnet', '1'))).toBe(false);
+        // Home's token lists draw an unpriced token with a zero rate.
+        expect(isSmallBalanceRow(tokenRow('1', 8, 0))).toBe(false);
+        expect(isSmallBalanceRow(tokenRow('1', 8, Number.NaN))).toBe(false);
     });
 
-    it('calls a sub-ten-thousandth of a divisible token dust', () => {
-        expect(isSmallBalanceRow(tokenRow('9999'))).toBe(true);
-        expect(isSmallBalanceRow(tokenRow('10000'))).toBe(false);
+    it('keeps pending, escrowed and unread rows listed however little they are worth', () => {
+        expect(isSmallBalanceRow({ ...tokenRow('1', 8, 1), escrowed: true }, '1')).toBe(false);
+        expect(isSmallBalanceRow({ ...nativeRow('bitcoin-mainnet', '1', 90000), pendingQuantity: '5' }, '1')).toBe(false);
+        expect(isSmallBalanceRow({ ...nativeRow('bitcoin-mainnet', '0', 90000), unavailable: 'all' }, '1')).toBe(false);
     });
 
-    it('applies the selected whole-unit threshold exactly across divisibilities', () => {
-        expect(isSmallBalanceRow(nativeRow('bitcoin-mainnet', '999999'), '0.01')).toBe(true);
-        expect(isSmallBalanceRow(nativeRow('bitcoin-mainnet', '1000000'), '0.01')).toBe(false);
-        expect(isSmallBalanceRow(tokenRow('9', 3), '0.01')).toBe(true);
-        expect(isSmallBalanceRow(tokenRow('10', 3), '0.01')).toBe(false);
+    it('lists the small keys less the pinned ones', () => {
+        const rows = [
+            { ...tokenRow('1', 8, 1), tick: 'A' },
+            { ...tokenRow('1', 8, 1), tick: 'B' },
+            { ...tokenRow('100000000000', 8, 1), tick: 'C' },
+        ];
+        expect([...smallBalanceKeys(rows, '1', new Set(['bitcoin-mainnet:B']))]).toEqual(['bitcoin-mainnet:A']);
     });
 
     const listRows = [
@@ -361,15 +377,16 @@ describe('hide small balances', () => {
         expect(screen.getByTestId('small-balances-toggle').textContent).toBe('Show 1 small balance');
     });
 
-    it('applies the selected threshold and amount format to rendered rows', () => {
+    it('applies the selected amount and number format to rendered rows', () => {
         render(
             <BalanceList
                 rows={[
                     { chainId: 'bitcoin-mainnet', tick: 'BTC', kind: 'native', displayName: 'Bitcoin', quantity: '123450000000', divisibility: 8, fiatRate: null },
-                    { chainId: 'litecoin-mainnet', tick: 'LTC', kind: 'native', displayName: 'Litecoin', quantity: '999999', divisibility: 8, fiatRate: null },
+                    // 0.00999999 LTC at 90 is about 0.90, under 5.
+                    { chainId: 'litecoin-mainnet', tick: 'LTC', kind: 'native', displayName: 'Litecoin', quantity: '999999', divisibility: 8, fiatRate: 90 },
                 ]}
                 hideSmallBalances
-                smallBalanceThreshold="0.01"
+                smallBalanceFiat="5"
                 numberFormat="trim"
             />,
         );

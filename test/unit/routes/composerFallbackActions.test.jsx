@@ -12,9 +12,27 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
+// The own-address picker stands in as one tap that switches to Litecoin and
+// picks its address (Batch's per-transaction Network and From). No Parallel
+// case here opens a picker.
+vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx', () => ({
+    OwnAddressPickerScreen: ({ onChainChange, onPick }) => (
+        <button
+            type="button"
+            onClick={() => {
+                onChainChange?.('litecoin-mainnet');
+                onPick({ id: 'address-2', address: 'bc1qfallbackfromaddress00000000000000000000', source: 'hd' });
+            }}
+        >
+            Pick Litecoin source
+        </button>
+    ),
+}));
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ParallelComposer } from '../../../packages/core/src/shared/routes/ParallelComposer.jsx';
 import { BatchComposerForm } from '../../../packages/core/src/shared/routes/BatchComposerForm.jsx';
+import { selectOption, selectOptionValues } from '../../helpers/selectOption.js';
 import {
     AUTHORABLE_ACTIONS,
     BTC_EXCLUSIVE_ACTIONS,
@@ -45,10 +63,10 @@ function messagingWith(listActions, chainId) {
 
 // Read the option values of the first "Action" picker, blank option dropped.
 async function actionOptions() {
-    // The kit Select labels its native select, so the label names the combobox.
+    // The kit Select labels its themed trigger, so the label names the combobox.
     const select = await screen.findByRole('combobox', { name: 'Action' });
-    await waitFor(() => expect(select.querySelectorAll('option').length).toBeGreaterThan(1));
-    return [...select.querySelectorAll('option')].map((o) => o.value).filter(Boolean);
+    await waitFor(() => expect(selectOptionValues(select).length).toBeGreaterThan(1));
+    return selectOptionValues(select).filter(Boolean);
 }
 
 function mountParallel(listActions, chainId) {
@@ -122,12 +140,15 @@ describe('BatchComposerForm fallback action list', () => {
         );
         await actionOptions();
         const pick = (name) => screen.getByRole('combobox', { name });
-        fireEvent.change(pick('Action'), { target: { value: 'COLLECT' } });
-        // Open the closed From section, then the Network field, and choose Litecoin.
-        fireEvent.click(screen.getByRole('button', { name: /^From/, expanded: false }));
-        fireEvent.click(screen.getByRole('button', { name: /^Network: / }));
-        fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
+        selectOption(pick('Action'), 'COLLECT');
+        // Batch picks a transaction's network with its From: open the
+        // transaction's From row and pick the Litecoin address.
+        fireEvent.click(screen.getByRole('button', { name: 'Change the network and From address of transaction 1' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick Litecoin source' }));
         expect(await screen.findByText(/is not available on/)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Review 1 Transaction' }).disabled).toBe(true);
+        const action = screen.getByRole('button', { name: 'Review 1 Transaction' });
+        expect(action.disabled).toBe(false);
+        fireEvent.click(action);
+        expect(screen.queryByTestId('confirm-modal')).toBeNull();
     });
 });

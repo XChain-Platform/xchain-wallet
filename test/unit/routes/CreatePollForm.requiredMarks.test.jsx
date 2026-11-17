@@ -86,6 +86,8 @@ describe('Create poll: red required fields on press', () => {
         expect(screen.queryByText(/Poll details/i)).toBeNull();
         const titles = [...document.querySelectorAll('[data-form-section-title]')].map((el) => el.textContent);
         expect(titles.slice(0, 2)).toEqual(['From', 'Poll']);
+        // The shared Advanced section sits directly above Speed and Fees.
+        expect(titles.slice(-2)).toEqual(['Advanced', 'Speed and Fees']);
         expect(sectionToggle('Poll')).toHaveAttribute('aria-expanded', 'true');
         expect(sectionToggle('Voting')).toHaveAttribute('aria-expanded', 'false');
     });

@@ -8,8 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Button, EmptyState, Icon, IconSelect, ListPage, ListRow, PageHeader, Screen, Skeleton, Tabs } from '@xchain-wallet/core/ui';
+import { InPageScreen } from '@xchain-wallet/core/ui/navHistory.js';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -18,6 +19,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
@@ -42,11 +44,16 @@ import { BEHIND_CHART_FILL, BEHIND_CHART_STROKE, ChartRangeTabs, RANGES as CHART
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import heroStyles from '../components/TotalBalanceHero.module.css';
 import homeTabsStyles from '../components/HomeTabs.module.css';
-import receivePickerStyles from './TokenPicker.module.css';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { readActiveAccount } from '../utils/activeAccountMemory.js';
 import { chainReadFailed } from '../utils/walletBalanceShape.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
+import {
+    LIST_DETAIL_MIN_WIDTH,
+    ListDetailSplit,
+    listDetailStyles,
+    useWideContent,
+} from '../components/PanelSplit.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
 const ACTIVITY_PAGE_SIZE = 50;
@@ -109,6 +116,12 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     const variant = screenVariantFor(shell);
     const tabsId = useId();
     const chartPanelId = useId();
+    const [layoutRef, wideContent] = useWideContent(LIST_DETAIL_MIN_WIDTH, true);
+    const twoPanel = wideContent;
+    const marketPickedRef = useRef(false);
+    const [marketQuery, setMarketQuery] = useState('');
+    const [marketNetwork, setMarketNetwork] = useState('all');
+    const [marketKind, setMarketKind] = useState(/** @type {'all' | 'coins' | 'tokens'} */ ('all'));
 
     // Live registry read (re-rendered on every descriptor mutation), so a
     // synced chain reaches the market picker without a restart. Scoped to
@@ -133,13 +146,17 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         () => (defaultChainId ? [defaultChainId, ...chains.filter((id) => id !== defaultChainId)] : chains),
         [chains, defaultChainId],
     );
+    const marketCoinFamilies = useMemo(() => {
+        const seen = new Set(chains.map(coinFromChainId).filter(Boolean));
+        const ordered = ['bitcoin', 'litecoin', 'dogecoin'].filter((coin) => seen.has(coin));
+        for (const coin of seen) if (!ordered.includes(coin)) ordered.push(coin);
+        return ordered;
+    }, [chains]);
 
     const { offline, recheck } = useNetworkOffline({ walletId });
     const [selected, setSelected] = useState(FEATURED_MARKET);
     const [picking, setPicking] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [loadError, setLoadError] = useState(false);
-    const [reload, setReload] = useState(0);
     const [offers, setOffers] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [sales, setSales] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
     const [dexOrders, setDexOrders] = useState(/** @type {Array<{chainId: string, row: any}> | null} */ (null));
@@ -156,6 +173,31 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     // The Trade page shown in place (no shell routes one from here).
     const [localTrade, setLocalTrade] = useState(/** @type {any} */ (null));
     const [rangeId, setRangeId] = useState(defaultRangeId());
+
+    const chooseMarket = useCallback((sel) => {
+        marketPickedRef.current = true;
+        setSelected({
+            tick: sel.tick,
+            chainId: sel.chainId,
+            displayName: sel.displayName,
+            imageUrl: sel.imageUrl,
+        });
+        setTab('offers');
+    }, []);
+    const chooseFirstMarket = useCallback((sel) => {
+        if (marketPickedRef.current) return;
+        setSelected((current) => (
+            current.tick === sel.tick && current.chainId === sel.chainId
+                ? current
+                : {
+                    tick: sel.tick,
+                    chainId: sel.chainId,
+                    displayName: sel.displayName,
+                    imageUrl: sel.imageUrl,
+                }
+        ));
+        setTab('offers');
+    }, []);
 
     const tick = (selected.tick || '').toUpperCase();
 
@@ -183,7 +225,6 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         const marketKey = `${walletId || ''}:${tick}:${chains.join(',')}`;
         const hasCachedRows = loadedMarketKeyRef.current === marketKey;
         setLoading(true);
-        setLoadError(false);
         if (!hasCachedRows) {
             setOffers(null);
             setSales(null);
@@ -270,11 +311,10 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             setDexOrders(uniqueRows(ordersBatches.flat(), marketRowIdentity));
             setDexSwaps(uniqueRows(swapsBatches.flat().sort(byTimeDesc), marketRowIdentity));
             if (!failed) loadedMarketKeyRef.current = marketKey;
-            setLoadError(failed);
             setLoading(false);
         });
         return () => { cancelled = true; };
-    }, [tick, walletId, messaging, chains, reload, offline]);
+    }, [tick, walletId, messaging, chains, offline]);
 
     // A Mode B offer carries no price on this lane; it comes from its oracle.
     const oracleFeedsFor = useOracleFeeds(messaging, offers);
@@ -295,7 +335,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
             })
             .catch(() => { /* the card leaves the line out */ });
         return () => { cancelled = true; };
-    }, [messaging, walletId, accountId, tick, chains, reload]);
+    }, [messaging, walletId, accountId, tick, chains]);
 
     // One Offers list, the card's coin and its price points.
     const offerEntries = useMemo(
@@ -350,48 +390,91 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     // Sub-view: tapping the token on the card opens the shared picker to
     // switch markets. 'receive' purpose enables cross-chain token discovery
     // so the user can view a market for a token they don't hold.
-    if (picking) {
+    if (picking && !twoPanel) {
         return (
             <TokenPicker
                 purpose="receive"
                 walletId={walletId}
                 accountId={accountId}
+                tokenQuery={marketQuery}
+                onTokenQueryChange={setMarketQuery}
+                networkFilter={marketNetwork}
+                onNetworkFilterChange={setMarketNetwork}
+                kindFilter={marketKind}
+                onKindFilterChange={setMarketKind}
                 title="Select a Market"                backLabel="Back to marketplace"
                 onBack={() => setPicking(false)}
                 onSelect={(sel) => {
-                    setSelected({
-                        tick: sel.tick,
-                        chainId: sel.chainId,
-                        displayName: sel.displayName,
-                        imageUrl: sel.imageUrl,
-                    });
-                    setTab('offers');
+                    chooseMarket(sel);
                     setPicking(false);
                 }}
             />
         );
     }
 
-    if (localTrade) {
+    if (localTrade && !twoPanel) {
+        // Trade opens over the activity page in place: its Back returns here,
+        // so it shows even when this page is a root.
         return (
-            <MarketTrade
-                walletId={walletId}
-                chainId={localTrade.chainId}
-                tick1={tick}
-                tick2={localTrade.tick2}
-                side={localTrade.side}
-                mode={localTrade.mode}
-                price={localTrade.price}
-                onBack={() => setLocalTrade(null)}
-            />
+            <InPageScreen>
+                <MarketTrade
+                    walletId={walletId}
+                    chainId={localTrade.chainId}
+                    tick1={tick}
+                    tick2={localTrade.tick2}
+                    side={localTrade.side}
+                    mode={localTrade.mode}
+                    price={localTrade.price}
+                    onBack={() => setLocalTrade(null)}
+                />
+            </InPageScreen>
         );
     }
 
+    const handleMarketSearchKeyDown = (event) => {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Enter') return;
+        const results = Array.from(document.getElementById('xc-token-picker-results')
+            ?.querySelectorAll('button[aria-label^="Select "]') || []);
+        const result = event.key === 'ArrowUp' ? results.at(-1) : results[0];
+        if (!result) return;
+        event.preventDefault();
+        if (event.key === 'Enter') result.click();
+        else result.focus();
+    };
+    const marketFilter = (
+        <ListFilterMenu
+            query={marketQuery}
+            onQueryChange={setMarketQuery}
+            active={marketKind !== 'all'}
+            label="Filter markets"
+            searchPlaceholder="Search coins or tokens..."
+            searchLabel="Search coins or tokens"
+            chainRegistry={chainRegistry}
+            coinFamilies={marketCoinFamilies}
+            networkFilter={marketNetwork}
+            onNetworkFilterChange={setMarketNetwork}
+            onSearchKeyDown={handleMarketSearchKeyDown}
+            resultsId={twoPanel ? 'xc-token-picker-results' : undefined}
+        >
+            <IconSelect
+                size="md"
+                aria-label="Asset kind"
+                value={marketKind}
+                onChange={setMarketKind}
+                options={[
+                    { value: 'all', label: 'Coins and tokens', icon: <Icon.TokenListIcon /> },
+                    { value: 'coins', label: 'Coins', icon: <Icon.CoinsIcon /> },
+                    { value: 'tokens', label: 'Tokens', icon: <Icon.TokenIcon /> },
+                ]}
+            />
+        </ListFilterMenu>
+    );
     const header = (
         <PageHeader
             onBack={onBack}
             backLabel="Back"
-            title={`${tick} Marketplace` /* the token's own market */}
+            title="Marketplace"
+            trailing={marketFilter}
         />
     );
 
@@ -404,34 +487,47 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     const heroCard = (
         <div className={`${homeTabsStyles.heroStack} ${homeTabsStyles.heroStackWithChart}`}>
             <section className={`${heroStyles.hero} ${styles.hero}`} aria-label={`${tick} market`}>
-                <Button
-                    type="button"
-                    className={styles.tokenButton}
-                    onClick={() => setPicking(true)}
-                    aria-label={`Change market (currently ${selected.displayName || tick})`}
-                    icon={null}
-                >
-                    <span className={styles.tokenButtonContent}>
+                {twoPanel ? (
+                    <div className={styles.tokenIdentity}>
                         <TickerIcon chainId={iconChainId} tick={tick} size={44} />
                         <span className={styles.tokenText}>
-                            <span className={styles.tokenName}>
-                                {tick}
-                                <span className={styles.tokenChevron} aria-hidden="true"><Icon.ChevronDownIcon /></span>
-                            </span>
+                            <span className={styles.tokenName}>{tick}</span>
                             <span className={styles.tokenSub}>Buy, sell and swap {tick}</span>
                         </span>
-                    </span>
-                </Button>
+                    </div>
+                ) : (
+                    <Button
+                        type="button"
+                        className={styles.tokenButton}
+                        onClick={() => setPicking(true)}
+                        aria-label={`Change market (currently ${selected.displayName || tick})`}
+                        icon={null}
+                    >
+                        <span className={styles.tokenButtonContent}>
+                            <TickerIcon chainId={iconChainId} tick={tick} size={44} />
+                            <span className={styles.tokenText}>
+                                <span className={styles.tokenName}>
+                                    {tick}
+                                    <span className={styles.tokenChevron} aria-hidden="true"><Icon.ChevronDownIcon /></span>
+                                </span>
+                                <span className={styles.tokenSub}>Buy, sell and swap {tick}</span>
+                            </span>
+                        </span>
+                    </Button>
+                )}
+                {/* The change pill sits above the main figure, as on Home's card (G10). */}
+                {rangeMove ? (
+                    <div className={styles.move}>
+                        <span className={pillClass} aria-label={`${range.label} change: ${rangeMove.label}`}>
+                            {rangeMove.text}
+                        </span>
+                    </div>
+                ) : null}
                 <div className={`${heroStyles.amount} ${styles.price}`} aria-label={heroPrice !== null ? `${priceText} ${heroQuote || ''} per ${tick}` : 'No price yet'}>
                     <span className={heroStyles.amountValue}>{priceText}</span>
                     {heroPrice !== null && heroQuote ? <span className={heroStyles.amountCode}>{heroQuote}</span> : null}
                 </div>
                 <div className={styles.heroMeta}>
-                    {rangeMove ? (
-                        <span className={pillClass} aria-label={`${range.label} change: ${rangeMove.label}`}>
-                            {rangeMove.text}
-                        </span>
-                    ) : null}
                     {holdings !== null ? (
                         <span className={styles.holdings}>
                             <Icon.WalletIcon />
@@ -480,20 +576,12 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
         { id: 'trades', label: 'Trades', icon: <Icon.LineChartIcon /> },
     ];
 
-    return (
-        <Screen variant={variant} header={header}>
-            <ListPage
-                className={styles.page}
-                notices={loadError ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={{ label: 'Try Again', onAction: () => setReload((value) => value + 1) }}
-                    >
-                        Some marketplace activity could not be loaded.
-                    </StatusMessage>
-                ) : null}
-            >
-                <div className={styles.layout}>
+    const marketplacePage = (
+        /* A failed read leaves each list on its plain empty state: the
+           app's reachability banner reports network trouble once, so the
+           page adds no error or Try Again of its own (G91). */
+        <ListPage className={styles.page} data-marketplace-detail="">
+            <div className={styles.layout}>
                     <div className={styles.column}>
                         {heroCard}
                         {/* Buy opens the cheapest offer, Sell the Trade page on the
@@ -529,31 +617,15 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                     </div>
 
                     <div className={styles.column}>
-                        <div
-                            className={`${receivePickerStyles.kindSegments} ${styles.panelTabs}`}
-                            role="tablist"
+                        <Tabs
+                            id={tabsId}
+                            className={styles.panelTabs}
                             aria-label="Marketplace lists"
-                        >
-                            {tabs.map((opt) => {
-                                const active = tab === opt.id;
-                                return (
-                                    <Button
-                                        key={opt.id}
-                                        id={`${tabsId}-tab-${opt.id}`}
-                                        type="button"
-                                        role="tab"
-                                        aria-selected={active}
-                                        aria-controls={`${tabsId}-panel`}
-                                        tabIndex={active ? 0 : -1}
-                                        className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''} ${styles.panelTab}`}
-                                        onClick={() => setTab(/** @type {any} */ (opt.id))}
-                                        icon={opt.icon}
-                                    >
-                                        {opt.label}
-                                    </Button>
-                                );
-                            })}
-                        </div>
+                            items={tabs}
+                            value={tab}
+                            onChange={(id) => setTab(/** @type {any} */ (id))}
+                            panelId={`${tabsId}-panel`}
+                        />
 
                         <div
                             id={`${tabsId}-panel`}
@@ -577,12 +649,9 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                 {tab === 'offers' && offerEntries !== null ? (
                                     <ListCard
                                         label="Offers"
-                                        title="Offers, cheapest first"
-                                        count={`${offerEntries.length} open`}
-                                        explain={`Dispensers sell ${tick} at a fixed price; orders buy or sell it on the exchange.`}
                                     >
                                         {offerEntries.length === 0 ? (
-                                            loadError ? null : <EmptyState title="No open offers" body={<>Open dispensers and orders for {tick} appear here.</>} titleAs="p" />
+                                            <EmptyState title="No open offers" body={<>Open dispensers and orders for {tick} appear here.</>} titleAs="p" />
                                         ) : (
                                             /* Safari needs an explicit list role because this class removes list styling. */
                                             <ul className={styles.list} role="list">
@@ -610,12 +679,9 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                 {tab === 'swaps' && dexSwaps !== null ? (
                                     <ListCard
                                         label="Recent DEX swaps"
-                                        title="Recent swaps"
-                                        count={`${dexSwaps.length} recent`}
-                                        explain={`Completed swaps on the exchange that traded ${tick}.`}
                                     >
                                         {dexSwaps.length === 0 ? (
-                                            loadError ? null : <EmptyState title="No recent DEX swaps" body={<>Recent swaps involving {tick} appear here.</>} titleAs="p" />
+                                            <EmptyState title="No recent DEX swaps" body={<>Recent swaps involving {tick} appear here.</>} titleAs="p" />
                                         ) : (
                                             /* Safari needs an explicit list role because this class removes list styling. */
                                             <ul className={styles.list} role="list">
@@ -638,12 +704,9 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                 {tab === 'trades' && tradeRows !== null ? (
                                     <ListCard
                                         label="Recent trades"
-                                        title="Recent trades"
-                                        count={`${tradeRows.length} recent`}
-                                        explain={`Recent dispenser sales of ${tick}, newest first. Exchange swaps are on the Swaps tab.`}
                                     >
                                         {tradeRows.length === 0 ? (
-                                            loadError ? null : <EmptyState title="No recent trades" body={<>Recent dispenser sales of {tick} appear here.</>} titleAs="p" />
+                                            <EmptyState title="No recent trades" body={<>Recent dispenser sales of {tick} appear here.</>} titleAs="p" />
                                         ) : (
                                             /* Safari needs an explicit list role because this class removes list styling. */
                                             <ul className={styles.list} role="list">
@@ -665,8 +728,68 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                             </div>
                         </div>
                     </div>
+            </div>
+        </ListPage>
+    );
+
+    if (!twoPanel) {
+        return (
+            <Screen variant={variant} header={header}>
+                <div ref={layoutRef} className={listDetailStyles.layoutRoot} data-list-detail="list">
+                    {marketplacePage}
                 </div>
-            </ListPage>
+            </Screen>
+        );
+    }
+
+    const selectedKey = selected.chainId ? `${selected.chainId}:${selected.tick}` : null;
+    const picker = (
+        <TokenPicker
+            embedded
+            purpose="receive"
+            walletId={walletId}
+            accountId={accountId}
+            tokenQuery={marketQuery}
+            onTokenQueryChange={setMarketQuery}
+            networkFilter={marketNetwork}
+            onNetworkFilterChange={setMarketNetwork}
+            kindFilter={marketKind}
+            onKindFilterChange={setMarketKind}
+            selectedKey={selectedKey}
+            splitRows
+            onFirstOption={chooseFirstMarket}
+            onSelect={chooseMarket}
+        />
+    );
+    const detail = localTrade ? (
+        <InPageScreen>
+            <MarketTrade
+                walletId={walletId}
+                chainId={localTrade.chainId}
+                tick1={tick}
+                tick2={localTrade.tick2}
+                side={localTrade.side}
+                mode={localTrade.mode}
+                price={localTrade.price}
+                onBack={() => setLocalTrade(null)}
+            />
+        </InPageScreen>
+    ) : marketplacePage;
+
+    return (
+        <Screen variant={variant} header={header} bodyClassName={listDetailStyles.twoPanelBody}>
+            <ListDetailSplit
+                measureRef={layoutRef}
+                storageKey="marketplace"
+                resizeLabel="Resize the marketplace list"
+                resizeHint="Drag to resize the marketplace list, or press Enter to reset."
+                layoutName="marketplace"
+                list={picker}
+                listLabel="Marketplace markets"
+                detail={detail}
+                detailLabel={`${tick} marketplace`}
+                detailBusy={loading}
+            />
         </Screen>
     );
 }
@@ -675,23 +798,24 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
 // it, and the icon's accessible name says it), so identical rows from two
 // chains still read differently to a screen reader.
 
-/** One tab's list as a card: its title and count, a plain line, the rows. */
-function ListCard({ label, title, count, explain, children }) {
+/**
+ * One tab's list as a card: just the rows, with no title or count row above
+ * them (operator ruling 2026-11-14); the active tab already names the list.
+ * No loose explainer line: a note belongs in a WarningCard.
+ */
+function ListCard({ label, children }) {
     return (
         <section className={styles.listCard} aria-label={label}>
-            <div className={styles.listHead}>
-                <h2 className={styles.listTitle}>{title}</h2>
-                <span className={styles.listCount}>{count}</span>
-            </div>
-            <p className={styles.listExplain}>{explain}</p>
             {children}
         </section>
     );
 }
 
 /**
- * One Offers row: price per token, a Dispenser or Order tag, how much is
- * available, and its Buy or Sell button. A dispenser with no coin price shows
+ * One Offers row, two lines with the price on the right: the Dispenser or
+ * Order kind over how much is available, then the unit price in green (Buy)
+ * or red (Sell) with its arrow, and a chevron. The row itself is the tap
+ * target; it holds no Buy or Sell button. A dispenser with no coin price shows
  * its label (oracle, fiat or stale) in place of the price.
  */
 function OfferRow({ entry, tick, onAction, oracleFeedsFor }) {
@@ -718,36 +842,37 @@ function OfferRow({ entry, tick, onAction, oracleFeedsFor }) {
         ? dispenserRateLabel(row, oracleFeedsFor(chainId, row))
         : null;
     const actionLabel = action === 'buy' ? 'Buy' : 'Sell';
+    const kindLabel = kind === 'dispenser' ? 'Dispenser' : 'Order';
+    const priced = unit !== null && Boolean(quote);
+    const side = action === 'buy' ? 'buy' : 'sell';
+    // The whole row is the control (G111): it opens what the old Buy or Sell
+    // button opened. Its name carries the side, the price, the amount and any
+    // lot terms, which the compact row leaves out of sight.
+    const rowName = `${actionLabel}: ${title}, ${kindLabel}${amount ? `, ${amount}` : ''}${terms ? `, ${terms}` : ''}`;
     return (
         <ListRow
             className={styles.row}
             leading={<TickerIcon chainId={chainId} tick={tick} size={32} />}
-            title={title}
-            subtitle={(
-                <span className={styles.offerMeta}>
-                    <span className={`${styles.tag} ${kind === 'dispenser' ? styles.tagDispenser : styles.tagOrder}`}>
-                        {kind === 'dispenser' ? <DispenserGlyph /> : <Icon.TokenListIcon />}
-                        {kind === 'dispenser' ? 'Dispenser' : 'Order'}
-                    </span>
-                    {amount ? <span>{amount}</span> : null}
-                    {terms ? <span>{terms}</span> : null}
+            title={(
+                <span className={styles.offerKind}>
+                    {kind === 'dispenser' ? <DispenserGlyph /> : <Icon.TokenListIcon />}
+                    {kindLabel}
                 </span>
             )}
-            trailing={onAction ? (
-                <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className={styles.rowAction}
-                    icon={action === 'buy' ? <BuyGlyph /> : <SellGlyph />}
-                    onClick={onAction}
-                    aria-label={`${actionLabel}: ${title}${terms ? `, ${terms}` : ''}`}
-                >
-                    {actionLabel}
-                </Button>
-            ) : undefined}
+            subtitle={amount || undefined}
+            trailing={(
+                <span className={styles.offerPrice} data-side={side} data-offer-price="">
+                    <span className={styles.offerPriceMain}>
+                        {side === 'buy' ? <BuyGlyph /> : <SellGlyph />}
+                        {priced ? tidyQuotePrice(unit) : title}
+                    </span>
+                    {priced ? <span className={styles.offerPriceUnit}>{quote} each</span> : null}
+                </span>
+            )}
             trailingClassName={styles.rowTrailing}
-            chevron={false}
+            chevron={Boolean(onAction)}
+            onClick={onAction || undefined}
+            aria-label={onAction ? rowName : undefined}
         />
     );
 }

@@ -26,9 +26,8 @@ const expectedLocalDeclarations = new Map(Object.entries({
     'shared/components/TxStatusTimeline.module.css': ['1'],
     'shared/routes/AddressList.module.css': ['200'],
     'shared/routes/ContactsList.module.css': ['100'],
-    'shared/routes/DispenserDetail.module.css': ['20'],
-    'shared/routes/History.module.css': ['20', '20'],
-    'shared/routes/StakeDetail.module.css': ['20'],
+    // The History card's More menu (the second 20) went with its ActionList (G101).
+    'shared/routes/History.module.css': ['20'],
     // The kit Checkbox stacks its transparent native input over the painted box.
     'ui/Checkbox.module.css': ['1'],
 }));

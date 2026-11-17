@@ -86,7 +86,8 @@ async function mount(opts) {
     await domAct(async () => {
         utils = render(
             <MessagingProvider shell="web" messaging={messagingFor(opts)}>
-                <OracleForm walletId="w" onBack={() => {}} initialChainId="bitcoin-mainnet" />
+                {/* The Token field takes no typed text (G122), so the ticker arrives at mount. */}
+                <OracleForm walletId="w" onBack={() => {}} initialChainId="bitcoin-mainnet" initialTick="PEPECASH" />
             </MessagingProvider>,
         );
         await drainMicrotasks();
@@ -100,11 +101,11 @@ async function step(fn) {
 
 /** Fills the form, opens the watcher review and builds the transaction. */
 async function publish(utils) {
-    await step(() => fireEvent.change(utils.getByLabelText(/^Token ticker/), { target: { value: 'PEPECASH' } }));
+    expect(utils.getByRole('button', { name: /^Token: PEPECASH on / })).toBeTruthy();
     await step(() => fireEvent.change(utils.getByLabelText(/^Price of one/), { target: { value: '0.05' } }));
     await step(() => fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i })));
-    const build = utils.getByRole('button', { name: 'Create Unsigned Transaction' });
-    await step(() => fireEvent.submit(build.closest('form')));
+    const build = utils.getByRole('button', { name: 'Approve' });
+    await step(() => fireEvent.click(build));
 }
 
 /** The element whose text matches, searched among the given tags. */

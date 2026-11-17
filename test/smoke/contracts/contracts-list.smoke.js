@@ -133,8 +133,8 @@ assert.ok(
     'ContractsList does not build its explanatory sentences out of action labels',
 );
 assert.ok(
-    /Contract calls that don&apos;t move funds aren&apos;t listed/.test(listSrc),
-    'ContractsList says in plain words that fund-neutral calls are not listed yet',
+    !/Contract calls that don&apos;t move funds aren&apos;t listed/.test(listSrc),
+    'ContractsList no longer carries the fund-neutral calls note under the Interactions tab',
 );
 assert.ok(
     /Published contracts appear here after you publish one\./.test(listSrc),

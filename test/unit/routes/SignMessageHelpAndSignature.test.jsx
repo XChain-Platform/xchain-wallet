@@ -63,9 +63,11 @@ describe('Sign message help tips and signed state', () => {
         // The signing address sits in the closed "Signing with"
         // section (Wallet Form Standard); open it so its help tip shows.
         fireEvent.click(screen.getByRole('button', { name: /^Signing with/, expanded: false }));
-        for (const name of ['Signing address', 'Message', 'Signature', 'Password']) {
+        for (const name of ['Signing address', 'Message', 'Password']) {
             expect(screen.getByRole('button', { name: `About ${name}` }), name).toBeInTheDocument();
         }
+        // The signature box is read-only output: no help icon (G121).
+        expect(screen.queryByRole('button', { name: 'About Signature' })).toBeNull();
     });
 
     it('shows the signed text in the Message font size with a copy control, and empties on edit or address switch', async () => {

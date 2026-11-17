@@ -93,8 +93,8 @@ async function mount() {
         });
     }
     vi.useRealTimers();
-    // The page opens on Details and shows only the chosen tab: the buy form is on Buy.
-    fireEvent.click(await screen.findByRole('tab', { name: 'Buy' }));
+    // Every viewer opens on Actions; a buyer's first row opens the Buy page.
+    fireEvent.click(await screen.findByTestId('dispenser-buy-row'));
     await screen.findByText(/250 MEMEVALID available/);
     return { messaging, view };
 }

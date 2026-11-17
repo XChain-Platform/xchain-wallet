@@ -87,8 +87,11 @@ async function expectLiveQuote(messaging, actionData) {
         source: SOURCE,
         actionData,
     }), { timeout: 3000 });
-    expect(await screen.findByText('0.064 XCHAIN')).toBeInTheDocument();
-    expect(screen.getByText(/\+ 0\.064 XCHAIN/)).toBeInTheDocument();
+    // The Fees section's Protocol fee line shows the live quote; the Total
+    // lives on the confirm screen, never in the form.
+    await waitFor(() => expect(document.querySelector('[data-fees-row="protocol"]'))
+        .toHaveTextContent('0.064 XCHAIN'), { timeout: 3000 });
+    expect(document.querySelector('[data-fees-row="total"]')).toBeNull();
 }
 
 describe('live fee quotes for issue and dispenser forms', () => {
@@ -163,7 +166,9 @@ describe('live fee quotes for issue and dispenser forms', () => {
             messaging,
         );
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
+        // Close is a row of the Actions tab's action list (G101); its name
+        // carries its description, so it is matched by its leading title.
+        fireEvent.click(await screen.findByRole('button', { name: /^Close(?! Dispenser$)/ }));
         await expectLiveQuote(messaging, {
             action: 'DISPENSER',
             params: { VERSION: '1', DISPENSER_ACTION_INDEX: '2868' },
@@ -264,6 +269,9 @@ describe('live fee quotes for issue and dispenser forms', () => {
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'NEW' } });
         fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '100' } });
 
-        await waitFor(() => expect(screen.getAllByText('Priced at review')).toHaveLength(2));
+        // The Protocol fee line says so; no Total row repeats it in the form.
+        await waitFor(() => expect(document.querySelector('[data-fees-row="protocol"]'))
+            .toHaveTextContent('Priced at review'));
+        expect(screen.getAllByText('Priced at review')).toHaveLength(1);
     });
 });

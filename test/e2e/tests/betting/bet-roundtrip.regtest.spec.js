@@ -446,12 +446,12 @@ test.describe('BET round trip on regtest', () => {
             expect(generated.length, 'a second address exists to bet from').toBeGreaterThan(0);
 
             await page.getByRole('button', { name: `View address ${generated[0]}` }).click();
-            await page.getByRole('group', { name: 'Address actions' })
-                .getByRole('button', { name: 'Use' }).click();
+            await page.getByRole('list', { name: 'Actions', exact: true })
+                .getByRole('button', { name: 'Set active' }).click();
             // Same in-flight-write race as the one documented at the bettor
             // activation below: Use awaits the write before navigating, so
             // anything that navigates on its own before then gets overridden.
-            await expect(page.getByRole('group', { name: 'Address actions' }),
+            await expect(page.getByRole('list', { name: 'Actions', exact: true }),
                 'Use never completed, so the active-address write is still in flight')
                 .toBeHidden({ timeout: 30_000 });
 
@@ -527,13 +527,13 @@ test.describe('BET round trip on regtest', () => {
         await test.step('make the bettor the active address, and check it took', async () => {
             await openPaletteCommand(page, 'Addresses');
             await page.getByRole('button', { name: `View address ${punter}` }).click();
-            const actions = page.getByRole('group', { name: 'Address actions' });
+            const actions = page.getByRole('list', { name: 'Actions', exact: true });
             await expect(actions, 'the address screen did not open').toBeVisible({ timeout: 30_000 });
             // The address screen offers Use only on an address that is not the
             // chain's active one already. The form picker above can have made the
             // bettor active, in which case there is nothing to press and the
             // "Active" badge check below is the precondition that matters.
-            const use = actions.getByRole('button', { name: 'Use' });
+            const use = actions.getByRole('button', { name: 'Set active' });
             if (await use.count() > 0) {
                 await use.click();
 
@@ -547,7 +547,7 @@ test.describe('BET round trip on regtest', () => {
                 // failure screenshot showing HOME, which is the whole tell.
                 // Leaving the detail screen IS the write having completed, so that
                 // is what gets waited on rather than a timeout.
-                await expect(page.getByRole('group', { name: 'Address actions' }),
+                await expect(page.getByRole('list', { name: 'Actions', exact: true }),
                     'Use never completed, so the active-address write is still in flight')
                     .toBeHidden({ timeout: 30_000 });
 
@@ -569,7 +569,7 @@ test.describe('BET round trip on regtest', () => {
             // 20 seconds later, which measured 25 ms past a 30 s click budget in
             // CI. The row is waited for on a budget that covers one throttled
             // retry before it is clicked.
-            const market = page.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) });
+            const market = page.locator(`[data-market-index="${feedIndex}"]`);
             await expect(market, `the betting hub never listed market #${feedIndex}`)
                 .toBeVisible({ timeout: 120_000 });
             await market.click();
@@ -580,10 +580,16 @@ test.describe('BET round trip on regtest', () => {
             // getByRole("heading", { name: "Place a bet" }) matches nothing and
             // waits out the whole budget. This is the §3.10 screen fact the
             // SWEEP spec recorded, hit again here.
-            const yes = main.getByRole('button', { name: 'Yes', exact: true });
+            // The market opens on Details; the outcome buttons are on the Bet
+            // tab, and tapping one opens the Place Bet step with the stake.
+            await main.getByRole('tab', { name: 'Bet', exact: true }).click();
+            const yes = main.getByRole('list', { name: 'Outcome to back' })
+                .getByRole('button', { name: /^Bet on Yes,/ });
             await expect(yes, 'the place-bet surface did not open').toBeVisible({ timeout: 30_000 });
 
             await yes.click();
+            await expect(main.getByRole('form', { name: 'Place Bet' }), 'tapping the outcome did not open Place Bet')
+                .toBeVisible({ timeout: 30_000 });
             await main.getByLabel(/^Stake/).fill(STAKE);
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Place Bet', exact: true }).click();
@@ -646,25 +652,37 @@ test.describe('BET round trip on regtest', () => {
             // Back to the oracle address: only the feed's source may resolve.
             await openPaletteCommand(page, 'Addresses');
             await page.getByRole('button', { name: `View address ${oracle}` }).click();
-            await page.getByRole('group', { name: 'Address actions' })
-                .getByRole('button', { name: 'Use' }).click();
+            await page.getByRole('list', { name: 'Actions', exact: true })
+                .getByRole('button', { name: 'Set active' }).click();
             // Third site of the same in-flight-write race, and the most costly
             // if it fires: "My markets" lists by the ACTIVE address, so an
             // unfinished switch shows the oracle's console empty and the
             // failure reads as the market having vanished.
-            await expect(page.getByRole('group', { name: 'Address actions' }),
+            await expect(page.getByRole('list', { name: 'Actions', exact: true }),
                 'Use never completed, so the active-address write is still in flight')
                 .toBeHidden({ timeout: 30_000 });
 
             await openPaletteCommand(page, 'My markets');
+            // My markets is the All list narrowed to this wallet's markets
+            // (ruling 2026-11-13), so it keeps All's Status filter, which
+            // opens on Taking bets; this market has closed.
+            await page.getByRole('button', { name: 'Filter bet markets' }).click();
+            await page.getByRole('combobox', { name: 'Status' }).click();
+            await page.getByRole('option', { name: 'All markets' }).click();
 
             const main = page.getByRole('main');
             // This list reads the shared explorer too, so it gets the hub's
             // throttled-retry budget.
-            await expect(main.getByText(new RegExp(`#${feedIndex}\\b`)),
+            const card = main.locator(`[data-market-index="${feedIndex}"]`);
+            await expect(card,
                 `My markets never listed market #${feedIndex}`).toBeVisible({ timeout: 120_000 });
-            await main.getByRole('button', { name: 'Resolve', exact: true }).first().click();
-            await main.getByRole('button', { name: 'Yes', exact: true }).click();
+            // The oracle posts the result from the market page's owner Actions tab.
+            await card.click();
+            await main.getByRole('tab', { name: 'Actions', exact: true }).click();
+            // An action list row (G101): its name is the title, then the description.
+            await main.getByRole('button', { name: /^Post result/ }).click();
+            await main.getByRole('group', { name: 'Winning outcome' })
+                .getByRole('button', { name: 'Yes', exact: true }).click();
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Publish Result', exact: true }).click();
             await approveConfirm(page);

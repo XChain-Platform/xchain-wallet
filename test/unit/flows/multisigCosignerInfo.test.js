@@ -134,6 +134,6 @@ describe('getMultisigCosignerInfo', () => {
             walletId: 'w-1',
             addressId: 'addr-1',
             signer: unlockedSigner(),
-        })).rejects.toThrow(/imported or watch-only/);
+        })).rejects.toThrow(/an imported key, a hardware wallet address or an address another phone signs for has no master fingerprint/);
     });
 });

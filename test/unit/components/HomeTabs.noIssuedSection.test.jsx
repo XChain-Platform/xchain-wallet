@@ -13,7 +13,7 @@
 // tab has no "Issued by you" section and does not read owned tokens for one.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('../../../packages/core/src/shared/components/PortfolioChart.jsx', () => ({
     PortfolioChart: () => null,
@@ -22,6 +22,7 @@ vi.mock('../../../packages/core/src/shared/components/PortfolioChart.jsx', () =>
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
+import { showHomeBalances } from '../../helpers/homeBalances.js';
 
 const balances = {
     'bitcoin-mainnet': [{
@@ -53,12 +54,15 @@ function mount(settings) {
     return messaging;
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    globalThis.localStorage?.clear();
+});
 
 describe('HomeTabs Tokens tab', () => {
     it('lists held tokens only, with no issued-by-you section or owned-token read', async () => {
         const messaging = mount({ fiatCurrency: 'USD' });
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
 
         expect((await screen.findAllByText('HELD')).length).toBeGreaterThan(0);
         expect(screen.queryByText('ISSUEDONLY')).toBeNull();
@@ -69,7 +73,7 @@ describe('HomeTabs Tokens tab', () => {
 
     it('reads owned tokens only for the unknown-token filter, and still lists no issued token', async () => {
         const messaging = mount({ fiatCurrency: 'USD', hideUnknownTokens: true });
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
 
         await waitFor(() => expect(messaging.getOwnedTokens).toHaveBeenCalled());
         // Let the owned-token read land before checking it added no row.

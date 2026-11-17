@@ -13,6 +13,7 @@ import {
     dismissIntroCarousel, expect, gotoSection, nav, test, unlockedShell,
 } from '../fixtures/wallet.js';
 import { enterDemoWallet } from '../fixtures/responsive.js';
+import { pickOption } from '../fixtures/pickOption.js';
 import { createSweep, measureRulings } from './sweep.js';
 
 const OUT_ROOT = process.env.SWEEP_OUT
@@ -118,11 +119,18 @@ function pseudo(name) {
 
 async function enablePseudoRtl(page) {
     await gotoSection(page, 'Settings');
-    await page.getByRole('main').getByRole('button', { name: /^Developer mode/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Advanced\b/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Developer mode\b/ }).click();
     const dev = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
     if (!(await dev.isChecked())) { await dev.click(); await expect(dev).toBeChecked(); }
-    await page.getByRole('button', { name: 'Back to settings' }).click();
-    await page.getByLabel('Language', { exact: true }).selectOption('pseudo-rtl');
+    // Back twice: row page to the Advanced group page, then to the index.
+    const back = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
+    await back.click();
+    await back.click();
+    // Language is a row on the Appearance group page.
+    await page.getByRole('main').getByRole('button', { name: /^Appearance\b/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Language\b/ }).click();
+    await pickOption(page.getByLabel('Language', { exact: true }), 'pseudo-rtl');
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 }
 

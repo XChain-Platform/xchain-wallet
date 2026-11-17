@@ -11,6 +11,10 @@ import {
     FullLayoutWithNav,
     LeftNav,
 } from '../../../packages/core/src/shared/components/LeftNav.jsx';
+import {
+    SIDE_MENU_FALLBACK_WIDTH_PX,
+    SIDE_MENU_MAX_EXTRA_PX,
+} from '../../../packages/core/src/shared/hooks/useSideMenu.js';
 import { FormPage } from '../../../packages/core/src/ui/FormPage.jsx';
 import { ListPage } from '../../../packages/core/src/ui/ListPage.jsx';
 import layoutStyles from '../../../packages/core/src/shared/components/LeftNav.module.css';
@@ -113,16 +117,19 @@ describe.each(DESKTOP_WIDTHS)('desktop shell route rendering at %ipx', (width) =
 
         expect(shell.querySelector(`.${route.contentClass}`)).not.toBeNull();
 
-        const sidebarWidth = lengthInPixels(
-            ruleBodies(layoutCss, '.sidebar'),
-            /flex:\s*0 0\s*(\d+(?:\.\d+)?)(px|rem)/,
-        );
+        // G100: the full side menu is as wide as its widest row (no layout
+        // engine here, so the shell's fallback default stands in) and a drag
+        // adds at most SIDE_MENU_MAX_EXTRA_PX; the content column must fit
+        // beside the widest menu the user can make.
+        expect(ruleBodies(layoutCss, ".layout[data-xc-side-menu='full'] > .sidebar")
+            .some((rule) => /width:\s*max-content/.test(rule))).toBe(true);
+        expect(shell).toHaveAttribute('data-xc-side-menu', 'full');
+        const sidebarWidth = SIDE_MENU_FALLBACK_WIDTH_PX + SIDE_MENU_MAX_EXTRA_PX;
         const contentRules = ruleBodies(route.contentCss, route.contentSelector);
         const contentWidth = lengthInPixels(
             contentRules,
             /max-width:\s*(\d+(?:\.\d+)?)(px|rem)/,
         );
-        expect(sidebarWidth).toBe(220);
         expect(contentWidth).toBe(route.maxWidth);
         expect(contentRules.some((rule) => /width:\s*100%/.test(rule))).toBe(true);
         expect(contentRules.some((rule) => /margin(?:-inline)?:[^;]*auto/.test(rule))).toBe(true);

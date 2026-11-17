@@ -21,14 +21,12 @@ import {
     ChainBadge,
     AddressText,
     Icon,
-    InfoTip,
     StatusMessage,
     AddressField,
-    FormErrorSummary,
-    Select,
-    RadioGroup,
-    OptionalPill,
+    useFormErrors,
 } from '@xchain-wallet/core/ui';
+import { ExpirationFields, expirationParam, expirationWithinFreePeriod } from '../components/expirationChoice.jsx';
+import { ListField } from '../components/ListField.jsx';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -38,6 +36,7 @@ import {
     GiveGetQuick,
     RateLine,
     useGiveGetView,
+    ViewSwitch,
 } from '../components/giveGet/index.js';
 // And the Wallet Form Standard frame: From first, the Dispenser
 // section open, Dispenser terms closed, one Network fee row, one action.
@@ -49,8 +48,6 @@ import {
     FromSection,
     joinSummary,
 } from '../components/formStandard/index.js';
-import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
-import { formatCoinBaseUnits } from '../../flows/feesCard.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { tickerForDescriptor } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -76,6 +73,7 @@ import {
     decimalQuotientFloor,
     divideDecimalStrings,
     formatWithThousands,
+    groupDecodedAmounts,
     normalizeLocalizedDecimal,
     tokenAmountPrecisionError,
 } from '../utils/amountFormat.js';
@@ -90,10 +88,14 @@ import styles from './IssueTokenForm.module.css';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
+import { FiatCurrencyField } from '../components/FiatCurrencyField.jsx';
+import { FiatCurrencyPicker } from '../components/FiatCurrencyPicker.jsx';
+import { PROTOCOL_FIAT_CODES } from '../utils/fiatCurrencies.js';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { isValidFiatAmount } from '../utils/fiatAmountFormat.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { pickedListText } from '../utils/listLabel.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { useFeeFiat } from '../hooks/useFeeFiat.js';
@@ -111,7 +113,7 @@ import {
     recallUnusedDispenserAddress,
     forgetUnusedDispenserAddress,
 } from '../utils/unusedDispenserAddress.js';
-import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
+import { DraftNotice } from '../components/DraftNotice.jsx';
 import { useDispenserPriceFloor, PRICE_BELOW_FLOOR_ERROR } from '../hooks/useDispenserPriceFloor.js';
 import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import {
@@ -138,8 +140,8 @@ function isPositiveDecimal(value) {
 // ORACLE_ADDRESS); Mode 2 uses a user oracle (ORACLE_ADDRESS). For
 // the initial form we expose the optional ORACLE_ADDRESS + FIAT_CODE
 // fields under "Advanced options" so the §40.7.1 primary flow stays
-// uncluttered.
-const FIAT_CODES = ['USD', 'CAD', 'AUD', 'MXN', 'GBP', 'JPY', 'CNY', 'CHF', 'BRL', 'INR', 'EUR', 'KRW'];
+// uncluttered. The codes are the protocol's 12 (shared with the oracle form).
+const FIAT_CODES = PROTOCOL_FIAT_CODES;
 
 
 // datetime-local string -> Unix seconds. DISPENSER EXPIRATION is a
@@ -151,13 +153,18 @@ function localInputToUnix(localStr) {
     return Math.floor(ms / 1000);
 }
 
-// Unix seconds -> the datetime-local string the Expires input takes, in local
-// time, since that is what localInputToUnix reads it back as.
-function unixToLocalInput(unix) {
-    const d = new Date(Number(unix) * 1000);
-    if (Number.isNaN(d.getTime())) return '';
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+// The Expiration modes the form and a saved draft accept.
+const EXPIRATION_MODES = ['default', '6m', '9m', '1y', 'custom'];
+
+// Every mode but 'default' (3 months, sent as no EXPIRATION) carries the
+// Expires time, which must be a valid time in the future.
+function expirationValidationError(mode, input, nowSec = Math.floor(Date.now() / 1000)) {
+    if (mode === 'default') return null;
+    const raw = String(input || '').trim();
+    if (!raw) return 'Pick an expiration date and time, or choose a common term.';
+    const unix = localInputToUnix(raw);
+    if (!unix || unix <= nowSec) return 'Expiration must be in the future.';
+    return null;
 }
 
 // existingAddressId for a reopened dispenser's address when the wallet holds
@@ -191,24 +198,6 @@ const DISPENSER_DRAFT_TEXT_FIELDS = [
     'giveAmount', 'escrow', 'triggerPrice', 'oracleAddress', 'fiatAmount',
     'getTick', 'getTokenAmount', 'expInput', 'allowListIdx', 'blockListIdx', 'outsideAddress',
 ];
-
-// The field a Create refusal names, by its copy. One reader for the
-// error summary and for the effect that opens the field's Give/Get section.
-function dispenserErrorTargetFor(formError) {
-    const text = formError || '';
-    if (/give amount/i.test(text)) return { id: 'dispenser-give', label: 'Give amount' };
-    if (/Escrow/i.test(text)) return { id: 'dispenser-escrow', label: 'Escrow amount' };
-    if (/positive token amount/i.test(text)) return { id: 'dispenser-payment-amount', label: 'Payment amount' };
-    if (/Payment token|token buyers pay/i.test(text)) return { id: 'dispenser-payment-token', label: 'Payment token' };
-    if (/trigger price/i.test(text)) return { id: 'dispenser-trigger-price', label: 'Trigger price' };
-    if (/Oracle address/i.test(text)) return { id: 'dispenser-oracle', label: 'Oracle address' };
-    if (/Fiat amount/i.test(text)) return { id: 'dispenser-fiat-amount', label: 'Fiat amount' };
-    if (/fiat currency/i.test(text)) return { id: 'dispenser-fiat-code', label: 'Fiat currency' };
-    if (/Expiration/i.test(text)) return { id: 'dispenser-expiration', label: 'Expiration' };
-    if (/dispenser address/i.test(text)) return { id: 'dispenser-address', label: 'Dispenser address' };
-    if (/Token ticker/i.test(text)) return { id: 'dispenser-token', label: 'Token' };
-    return undefined;
-}
 
 // Which standard section holds each field the error summary links
 // to: the Dispenser section (give and get terms) or Dispenser terms.
@@ -328,14 +317,20 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         skip: payWith !== 'token' || !getTick.trim(),
     });
     const [getTokenAmount, setGetTokenAmount] = useState(reopen?.getTokenAmount || '');
-    // Every form starts on the default window, a reopen included: the indexer fills a concrete
+    // Every form starts on 3 months, a reopen included: the indexer fills a concrete
     // EXPIRATION into every dispenser, so a reopened one's expiration is usually the old default
-    // window's leftover deadline, not a time its creator chose. It stays prefilled for the custom
-    // choice.
-    const [expMode, setExpMode] = useState(/** @type {'default' | 'custom'} */ ('default'));
-    const [expInput, setExpInput] = useState(reopen?.expiration ? unixToLocalInput(reopen.expiration) : '');
+    // window's leftover deadline, not a time its creator chose. The presets fill expInput, which
+    // Expires shows; 'default' keeps it empty, since it sends no EXPIRATION.
+    const [expMode, setExpMode] = useState(/** @type {'default' | '6m' | '9m' | '1y' | 'custom'} */ ('default'));
+    const [expInput, setExpInput] = useState('');
     const [allowListIdx, setAllowListIdx] = useState(reopen?.allowList || '');
     const [blockListIdx, setBlockListIdx] = useState(reopen?.blockList || '');
+    // Member counts of the picked lists, shown in the list fields when the picker knows them.
+    const [allowListCount, setAllowListCount] = useState(/** @type {number | null} */ (null));
+    const [blockListCount, setBlockListCount] = useState(/** @type {number | null} */ (null));
+    // The picked lists' names, so the fields show a name (G114).
+    const [allowListPick, setAllowListPick] = useState(/** @type {{ index: string, name: unknown } | null} */ (null));
+    const [blockListPick, setBlockListPick] = useState(/** @type {{ index: string, name: unknown } | null} */ (null));
     const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
     // SOURCE address's balance of `ticker` (coin-scale string), backing
     // the escrow AmountField's Max button + "available" footer. Null
@@ -377,6 +372,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     // "Buyers pay with" is the Get side's asset picker page (native coin or
     // any token on this chain).
     const [payPickerOpen, setPayPickerOpen] = useState(false);
+    // The Fiat currency field's picker page (G122).
+    const [fiatPickerOpen, setFiatPickerOpen] = useState(false);
     // The Quick | Full view and section open state live above every early
     // return, so pickers and the confirm screen never reset them. Only
     // Dispenser starts open (terms too, on a reopen with fiat or oracle terms).
@@ -385,6 +382,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             from: false,
             dispenser: true,
             options: Boolean(reopen?.fiatCode || reopen?.oracleAddress),
+            lists: false,
             fee: false,
         },
     });
@@ -415,7 +413,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
-    const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // The form error standard: Review validates every field into one map keyed by field
+    // id, the notice at the top lists the problems, each failing field is outlined, and a
+    // field drops its own entry when it changes. 'form' holds a failure that names no field
+    // (the network refusing); 'form:...' keys are problems with no field of their own.
+    const formErrors = useFormErrors();
     const [validationAttempt, setValidationAttempt] = useState(0);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
@@ -425,32 +427,61 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     const routeIdentityRef = useRef('');
     routeIdentityRef.current = `${walletId}\u0000${activeAccountId || ''}\u0000${chainId || ''}`;
 
+    // A value the code sets (Max, a picker, a restored draft, a switch turning a lane on or
+    // off) fires no field change handler, so each field's entry leaves here when its value
+    // moves. Only the entries of the fields that changed go; the rest stay until fixed.
+    const watchedValues = {
+        'form:source': `${chainId}|${fromAddressId}`,
+        'dispenser-token': ticker,
+        'dispenser-give': giveAmount,
+        'dispenser-escrow': escrow,
+        'dispenser-payment-token': `${payWith}|${getTick}`,
+        'dispenser-payment-amount': `${payWith}|${getTokenAmount}`,
+        'dispenser-trigger-price': `${payWith}|${triggerPrice}`,
+        'dispenser-oracle': oracleAddress,
+        'dispenser-fiat-amount': fiatAmount,
+        'dispenser-fiat-code': fiatCode,
+        'dispenser-expiration': `${expMode}|${expInput}`,
+        'dispenser-address': `${addressMode}|${existingAddressId}|${outsideAddress}`,
+        'form:lists': `${allowListIdx}|${blockListIdx}`,
+    };
+    const watchedRef = useRef(watchedValues);
+    const feePickRef = useRef(feePick);
+    const payFeeRef = useRef(payFeeInNativeCoin);
+    const clearFormError = formErrors.clear;
     useEffect(() => {
-        setFormError(null);
-    }, [
-        chainId, fromAddressId, ticker, giveAmount, escrow, payWith, getTick,
-        getTokenAmount, triggerPrice, oracleAddress, fiatCode, fiatAmount,
-        expMode, expInput, allowListIdx, blockListIdx, addressMode,
-        existingAddressId, outsideAddress, feePick, payFeeInNativeCoin,
-    ]);
+        let changed = false;
+        for (const [id, value] of Object.entries(watchedValues)) {
+            if (watchedRef.current[id] !== value) { clearFormError(id); changed = true; }
+        }
+        if (feePickRef.current !== feePick || payFeeRef.current !== payFeeInNativeCoin) {
+            clearFormError('form:fee');
+            changed = true;
+        }
+        feePickRef.current = feePick;
+        payFeeRef.current = payFeeInNativeCoin;
+        if (changed) clearFormError('form');
+        watchedRef.current = watchedValues;
+    });
 
     // A Create refusal links to its field by id. The Quick cards
     // mount none of those ids but the escrow's, so a refusal naming any other
     // field opens Full with that field's section open; in Full a closed
-    // section opens. Either way the summary's link lands on a visible field.
+    // section opens. Either way the notice's link lands on a visible field.
     useEffect(() => {
-        if (!formError || !validationAttempt) return;
-        const target = dispenserErrorTargetFor(formError);
-        const section = target ? DISPENSER_ERROR_SECTION[target.id] : null;
-        if (!section) return;
-        if (giveGetView.view === 'quick') {
-            // The escrow sits in the Quick card, so its section opens in place.
-            if (target.id === 'dispenser-escrow') giveGetView.setSectionOpen('dispenser', true);
-            else giveGetView.openOptions(section);
-        } else if (!giveGetView.sections[section]) {
-            giveGetView.setSectionOpen(section, true);
+        if (!formErrors.attempt) return;
+        const ids = Object.keys(formErrors.errors).filter((id) => DISPENSER_ERROR_SECTION[id]);
+        for (const id of ids) {
+            const section = DISPENSER_ERROR_SECTION[id];
+            if (giveGetView.view === 'quick') {
+                // The escrow sits in the Quick card, so its section opens in place.
+                if (id === 'dispenser-escrow') giveGetView.setSectionOpen('dispenser', true);
+                else giveGetView.openOptions(section);
+            } else if (!giveGetView.sections[section]) {
+                giveGetView.setSectionOpen(section, true);
+            }
         }
-    }, [formError, validationAttempt]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [formErrors.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Cluster P FOLLOWUP 5: form-draft persistence. Persists every
     // user-visible composition field (chain / source / give terms /
@@ -519,7 +550,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         if (v.payWith === 'coin' || v.payWith === 'token') setPayWith(v.payWith);
         if (typeof v.getTick === 'string') setGetTick(v.getTick);
         if (typeof v.getTokenAmount === 'string') setGetTokenAmount(v.getTokenAmount);
-        if (v.expMode === 'default' || v.expMode === 'custom') setExpMode(v.expMode);
+        if (EXPIRATION_MODES.includes(v.expMode)) setExpMode(v.expMode);
         if (typeof v.expInput === 'string') setExpInput(v.expInput);
         if (typeof v.allowListIdx === 'string') setAllowListIdx(v.allowListIdx);
         if (typeof v.blockListIdx === 'string') setBlockListIdx(v.blockListIdx);
@@ -533,7 +564,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         if (typeof v.outsideAddress === 'string') setOutsideAddress(v.outsideAddress);
         setDraftPending(true);
     }, [draft]);
-    const dismissDraft = useCallback(() => {
+    const discardSavedDraft = useCallback(() => {
         draft.clear();
         setDraftPending(true);
     }, [draft]);
@@ -690,9 +721,10 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     });
     // Retract the Review refusal once the price clears the floor; any other
     // error in the slot is left alone.
+    const triggerRefusal = formErrors.errors['dispenser-trigger-price'];
     useEffect(() => {
-        if (!priceNotes.block) setFormError((prev) => (prev === PRICE_BELOW_FLOOR_ERROR ? null : prev));
-    }, [priceNotes.block]);
+        if (!priceNotes.block && triggerRefusal === PRICE_BELOW_FLOOR_ERROR) clearFormError('dispenser-trigger-price');
+    }, [priceNotes.block, triggerRefusal, clearFormError]);
     const fromAddress = useMemo(() => {
         if (!chainId || !fromAddressId || !addressesByChain) return null;
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
@@ -865,12 +897,17 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     const summaryLine = useMemo(() => {
         const tick = ticker.trim() || 'TOKEN';
-        const per = giveAmount.trim() || '?';
-        const esc = escrow.trim() || '?';
+        // The line is read, not typed: its figures group ("250,000").
+        const shown = (value) => {
+            const text = String(value ?? '').trim();
+            return text ? (formatWithThousands(text) || text) : '?';
+        };
+        const per = shown(giveAmount);
+        const esc = shown(escrow);
         if (payWith === 'token') {
             const paymentTick = getTick.trim() || 'TOKEN';
-            const paymentAmount = getTokenAmount.trim() || '?';
-            const fillsNote = fillsEstimate !== null ? ` The dispenser holds about ${fillsEstimate} fills.` : '';
+            const paymentAmount = shown(getTokenAmount);
+            const fillsNote = fillsEstimate !== null ? ` The dispenser holds about ${shown(fillsEstimate)} fills.` : '';
             return `You will lock ${esc} ${tick}. Each time someone sends ${paymentAmount} ${paymentTick}, they will receive ${per} ${tick}.${fillsNote}`;
         }
         if (oracleAddress.trim() && fiatCode) {
@@ -880,11 +917,11 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             return `You will lock ${esc} ${tick}. Each fill sends ${per} ${tick} at the oracle-priced ${fiatCode} rate. If this oracle charges a usage fee, you pay it once, now, from this transaction.`;
         }
         if (fiatAmount.trim() && fiatCode) {
-            return `You will lock ${esc} ${tick}. Each fill sends ${per} ${tick} when someone pays ${fiatAmount} ${fiatCode}.`;
+            return `You will lock ${esc} ${tick}. Each fill sends ${per} ${tick} when someone pays ${shown(fiatAmount)} ${fiatCode}.`;
         }
-        const trig = triggerPrice.trim() || '?';
+        const trig = shown(triggerPrice);
         const coin = coinTicker || 'coin';
-        const fillsNote = fillsEstimate !== null ? ` The dispenser holds about ${fillsEstimate} fills.` : '';
+        const fillsNote = fillsEstimate !== null ? ` The dispenser holds about ${shown(fillsEstimate)} fills.` : '';
         return `You will lock ${esc} ${tick}. Each time someone sends ${trig} ${coin}, they will receive ${per} ${tick}.${fillsNote}`;
     }, [ticker, giveAmount, escrow, payWith, getTick, getTokenAmount, triggerPrice, oracleAddress, fiatCode, fiatAmount, coinTicker, fillsEstimate]);
 
@@ -948,10 +985,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
         // PC-20: EXPIRATION (Unix wall-clock, 'default' omits it) + the
         // allow/block access lists.
-        if (expMode === 'custom' && expInput.trim()) {
-            const unix = localInputToUnix(expInput.trim());
-            if (unix) p.EXPIRATION = String(unix);
-        }
+        const expiration = expirationParam(expMode, expInput);
+        if (expiration) p.EXPIRATION = expiration;
         if (allowListIdx) p.ALLOW_LIST = allowListIdx;
         if (blockListIdx) p.BLOCK_LIST = blockListIdx;
 
@@ -963,7 +998,6 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         const oracle = oracleAddress.trim();
         const fiat = fiatAmount.trim();
         const trigger = triggerPrice.trim();
-        const customExpiration = expMode === 'custom' ? localInputToUnix(expInput.trim()) : null;
         const addressReady = addressMode === 'current'
             || (addressMode === 'new' && (Boolean(dispenserGetAddress?.address) || !canDeriveGetAddress))
             || (addressMode === 'existing' && Boolean(existingAddress))
@@ -1006,8 +1040,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             && compareDecimalStrings(escrowAmount, give) !== -1
             && !exceedsBalance(escrowAmount, sourceTickBalance)
             && paymentReady
-            && (expMode !== 'custom'
-                || Boolean(customExpiration && customExpiration > Math.floor(Date.now() / 1000)))
+            && !expirationValidationError(expMode, expInput)
             && !listInBothSlots({ allowList: allowListIdx, blockList: blockListIdx })
             && addressReady;
         return ready ? { action: 'DISPENSER', params: actionParams } : null;
@@ -1016,7 +1049,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         outsideFormatError, outsideVerdict, payWith, getTick, getTokenAmount, paymentTokenInfo,
         descriptor, fiatCode, coinTicker, priceNotes.block, chainId, sourceAddress, ticker,
         giveTokenInfo, sourceTickBalance, allowListIdx, blockListIdx, actionParams]);
-    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+    const { quote: protocolFeeQuote, pending: protocolFeePending, waiting: protocolFeeWaiting } = useProtocolFeeQuote({
         messaging,
         chainId,
         source: sourceAddress?.address,
@@ -1025,162 +1058,122 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action: 'DISPENSER',
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
-        });
+        }));
     }, [stage, actionParams, chainId]);
 
     async function handleReview(event) {
         event.preventDefault();
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        // A refused custom fee opens the Network fee section that holds it.
-        if (feeStop) { setFormError(feeStop.formError); giveGetView.setSectionOpen('fee', true); return; }
         setValidationAttempt((attempt) => attempt + 1);
         if (reviewInFlightRef.current || derivingGetAddress || actionConfirm.composing) return;
-        if (!chainId || !fromAddress) {
-            setFormError('Pick a source address first.');
-            return;
+        // Every check runs, one message per field (its first failing rule), so the notice
+        // at the top lists everything to fix at once. Keys are field ids; 'form:' keys
+        // have no field of their own.
+        const problems = {};
+        const note = (key, message) => { if (message && !problems[key]) problems[key] = message; };
+        if (!chainId || !fromAddress) note('form:source', 'Pick a source address first.');
+        // A refused custom fee opens the Network fee section that holds it. A stop with no
+        // message is one the Fees field already shows itself; it still holds Create.
+        if (feeStop) {
+            giveGetView.setSectionOpen('fee', true);
+            note('form:fee', feeStop.formError);
         }
-        if (!ticker.trim()) {
-            setFormError('Token ticker is required.');
-            return;
-        }
-        const tickerError = tickerReferenceError(ticker);
-        if (tickerError) {
-            setFormError(tickerError);
-            return;
-        }
+        note('dispenser-token', !ticker.trim() ? 'Token ticker is required.' : tickerReferenceError(ticker));
         const ga = giveAmount.trim();
-        if (!isPositiveDecimal(ga)) {
-            setFormError('Per-fill give amount must be a positive number.');
-            return;
-        }
-        const givePrecisionError = tokenAmountPrecisionError(ga, {
-            divisibility: giveTokenInfo?.divisibility,
-            tick: ticker,
-            noun: 'Per-fill give amount',
-        });
-        if (givePrecisionError) {
-            setFormError(givePrecisionError);
-            return;
-        }
+        note('dispenser-give', !isPositiveDecimal(ga)
+            ? 'Per-fill give amount must be a positive number.'
+            : tokenAmountPrecisionError(ga, {
+                divisibility: giveTokenInfo?.divisibility,
+                tick: ticker,
+                noun: 'Per-fill give amount',
+            }));
         const esc = escrow.trim();
         if (!isPositiveDecimal(esc)) {
-            setFormError('Escrow amount must be a positive number.');
-            return;
-        }
-        const escrowPrecisionError = tokenAmountPrecisionError(esc, {
-            divisibility: giveTokenInfo?.divisibility,
-            tick: ticker,
-            noun: 'Escrow amount',
-        });
-        if (escrowPrecisionError) {
-            setFormError(escrowPrecisionError);
-            return;
-        }
-        if (compareDecimalStrings(esc, ga) === -1) {
-            setFormError('Escrow is smaller than a single fill; the dispenser would never dispense.');
-            return;
-        }
-        if (exceedsBalance(esc, sourceTickBalance)) {
-            setFormError(
-                `This address holds only ${formatWithThousands(sourceTickBalance)} ${ticker.trim()}. `
-                + 'Enter an escrow amount at or below that balance.',
-            );
-            return;
+            note('dispenser-escrow', 'Escrow amount must be a positive number.');
+        } else {
+            note('dispenser-escrow', tokenAmountPrecisionError(esc, {
+                divisibility: giveTokenInfo?.divisibility,
+                tick: ticker,
+                noun: 'Escrow amount',
+            }));
+            if (isPositiveDecimal(ga) && compareDecimalStrings(esc, ga) === -1) {
+                note('dispenser-escrow', 'Escrow is smaller than a single fill; the dispenser would never dispense.');
+            }
+            if (exceedsBalance(esc, sourceTickBalance)) {
+                note(
+                    'dispenser-escrow',
+                    `This address holds only ${formatWithThousands(sourceTickBalance)} ${ticker.trim()}. `
+                    + 'Enter an escrow amount at or below that balance.',
+                );
+            }
         }
         const oracle = oracleAddress.trim();
         const fa = fiatAmount.trim();
         const trig = triggerPrice.trim();
         if (payWith === 'token') {
-            if (!getTick.trim()) { setFormError('Enter the token buyers pay with.'); return; }
-            const paymentTickerError = tickerReferenceError(getTick, { noun: 'Payment token' });
-            if (paymentTickerError) { setFormError(paymentTickerError); return; }
-            if (!isPositiveDecimal(getTokenAmount)) {
-                setFormError('Enter a positive token amount buyers pay per fill.'); return;
-            }
-            const paymentPrecisionError = tokenAmountPrecisionError(getTokenAmount, {
-                divisibility: paymentTokenInfo?.divisibility,
-                tick: getTick,
-                noun: 'Payment amount',
-            });
-            if (paymentPrecisionError) { setFormError(paymentPrecisionError); return; }
+            note('dispenser-payment-token', !getTick.trim()
+                ? 'Enter the token buyers pay with.'
+                : tickerReferenceError(getTick, { noun: 'Payment token' }));
+            note('dispenser-payment-amount', !isPositiveDecimal(getTokenAmount)
+                ? 'Enter a positive token amount buyers pay per fill.'
+                : tokenAmountPrecisionError(getTokenAmount, {
+                    divisibility: paymentTokenInfo?.divisibility,
+                    tick: getTick,
+                    noun: 'Payment amount',
+                }));
         } else {
             if (!oracle && !fa && !trig) {
-                setFormError('Set a trigger price, or enable fiat / oracle pricing under Dispenser terms.');
-                return;
+                note('dispenser-trigger-price', 'Set a trigger price, or enable fiat / oracle pricing under Dispenser terms.');
             }
             if (oracle) {
                 const oracleFormatError = outsideAddressError(oracle, descriptor);
-                if (oracleFormatError) { setFormError(`Oracle address: ${oracleFormatError}`); return; }
-                if (!fiatCode) {
-                    setFormError('Oracle pricing needs a fiat currency. Pick one under Dispenser terms.');
-                    return;
-                }
+                if (oracleFormatError) note('dispenser-oracle', `Oracle address: ${oracleFormatError}`);
+                if (!fiatCode) note('dispenser-fiat-code', 'Oracle pricing needs a fiat currency. Pick one under Dispenser terms.');
             }
-            if (fa && !fiatCode) {
-                setFormError('Fiat pricing needs a fiat currency. Pick one under Dispenser terms.');
-                return;
-            }
+            if (fa && !fiatCode) note('dispenser-fiat-code', 'Fiat pricing needs a fiat currency. Pick one under Dispenser terms.');
             if (fiatCode && !oracle && !fa) {
-                setFormError('Enter a fiat amount, add an oracle address, or set Priced in fiat to none.');
-                return;
+                note('dispenser-fiat-amount', 'Enter a fiat amount, add an oracle address, or set Fiat currency to none.');
             }
             if (fa && !isValidFiatAmount(fa)) {
-                setFormError('Fiat amount can have at most 2 decimal places, like 12.34 or 3.');
-                return;
+                note('dispenser-fiat-amount', 'Fiat amount can have at most 2 decimal places, like 12.34 or 3.');
             }
             if (!oracle && trig && !isPositiveDecimal(trig)) {
-                setFormError('Trigger price must be a positive number.');
-                return;
+                note('dispenser-trigger-price', 'Trigger price must be a positive number.');
             }
-            const triggerPrecisionError = !oracle && trig
-                ? tokenAmountPrecisionError(trig, {
+            if (!oracle && trig) {
+                note('dispenser-trigger-price', tokenAmountPrecisionError(trig, {
                     divisibility: descriptor?.nativeDecimals ?? 8,
                     tick: coinTicker,
                     noun: 'Trigger price',
-                })
-                : null;
-            if (triggerPrecisionError) {
-                setFormError(triggerPrecisionError);
-                return;
+                }));
             }
-            if (priceNotes.block) {
-                setFormError(PRICE_BELOW_FLOOR_ERROR);
-                return;
-            }
+            if (priceNotes.block) note('dispenser-trigger-price', PRICE_BELOW_FLOOR_ERROR);
         }
-        if (expMode === 'custom') {
-            const raw = expInput.trim();
-            if (!raw) { setFormError('Pick an expiration date and time, or use the default window.'); return; }
-            const unix = localInputToUnix(raw);
-            if (!unix || unix <= Math.floor(Date.now() / 1000)) { setFormError('Expiration must be in the future.'); return; }
-        }
+        note('dispenser-expiration', expirationValidationError(expMode, expInput));
         if (listInBothSlots({ allowList: allowListIdx, blockList: blockListIdx })) {
-            setFormError(listInBothSlotsMessage(allowListIdx));
-            return;
+            note('form:lists', listInBothSlotsMessage(allowListIdx));
         }
         if (addressMode === 'existing' && !existingAddress) {
-            setFormError('Pick an existing dispenser address, or choose a new one.');
-            return;
+            note('dispenser-address', 'Pick an existing dispenser address, or choose a new one.');
         }
         if (addressMode === 'other') {
             // An outside address must be present, well formed, and accepted.
             if (!outsideTrimmed) {
-                setFormError('Enter the dispenser address, or pick one of your own.');
-                return;
+                note('dispenser-address', 'Enter the dispenser address, or pick one of your own.');
+            } else if (outsideFormatError) {
+                note('dispenser-address', outsideFormatError);
+            } else if (!outsideVerdict) {
+                note('dispenser-address', 'Still checking whether this address accepts your dispenser.');
+            } else if (!outsideVerdict.allowed) {
+                note('dispenser-address', outsideVerdict.message);
             }
-            if (outsideFormatError) { setFormError(outsideFormatError); return; }
-            if (!outsideVerdict) {
-                setFormError('Still checking whether this address accepts your dispenser.');
-                return;
-            }
-            if (!outsideVerdict.allowed) { setFormError(outsideVerdict.message); return; }
         }
-        setFormError(null);
+        if (!formErrors.validate(problems) || feeStop) return;
         reviewInFlightRef.current = true;
         const routeIdentity = routeIdentityRef.current;
         // §16: the dedicated dispenser sub-address (GET_ADDRESS) for mode
@@ -1217,7 +1210,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             }
         } catch (err) {
             if (routeIdentity === routeIdentityRef.current && actionParams === actionParamsRef.current) {
-                setFormError(err?.message || 'Could not derive a dispenser address.');
+                formErrors.fail(err?.message || 'Could not derive a dispenser address.');
             }
         } finally {
             setDerivingGetAddress(false);
@@ -1300,7 +1293,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             if (isUserRejection(err)) return;
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
-            setFormError(submitFailureMessage(err, {
+            formErrors.fail(submitFailureMessage(err, {
                 chainId,
                 coinTicker,
                 mandatory: nativeFeeMandatory,
@@ -1312,8 +1305,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     async function handleSubmit(event) {
         event.preventDefault();
         if (submitInFlightRef.current || stage === 'submitting') return;
-        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
+        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) {
+            formErrors.validate({ 'dispenser-password': 'Enter your wallet password.' });
+            return;
+        }
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        formErrors.reset();
         submitInFlightRef.current = true;
         const routeIdentity = routeIdentityRef.current;
         setStage('submitting');
@@ -1390,6 +1387,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
 
         const header = (
         <PageHeader
+            nested={stage === 'review'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : leaveGuard.guardedOnBack}
@@ -1447,7 +1445,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     <p className={styles.hint}>Broadcast complete.</p>
                 )}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={leaveGuard.guardedOnBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={leaveGuard.guardedOnBack}>Done</Button>
                 </div>
             </ListPage>,
         );
@@ -1461,6 +1459,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 demoGuard={demoGuard}
                 label="Review dispenser"
                 onSubmit={handleSubmit}
+                errors={formErrors}
                 status={(isWatcherMode || hw) && submitError ? (
                     <StatusMessage
                         variant="error"
@@ -1475,12 +1474,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         variant="primary"
                         icon={<Icon.SignIcon />}
                         loading={stage === 'submitting'}
-                        disabled={
-                            stage === 'submitting'
-                            || (!isWatcherMode && (hw
-                                ? hwStatus !== 'available'
-                                : (!signerReady && password.length === 0)))
-                        }
+                        aria-disabled={!isWatcherMode && hw && hwStatus !== 'available' ? 'true' : undefined}
                     >
                         {isWatcherMode ? 'Create Unsigned Transaction' : 'Sign'}
                     </Button>
@@ -1548,6 +1542,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         }}
                         onStatusChange={onHwStatusChange}
                         passwordRef={passwordRef}
+                        passwordFieldId="dispenser-password"
                         submitError={submitError}
                         disabled={stage === 'submitting'}
                         getSignerStatus={messaging.getSignerStatus}
@@ -1591,7 +1586,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             setExistingAddressId(rec.id);
                             setAddressPickerOpen(false);
                         } catch (err) {
-                            setFormError(err?.message || 'Could not generate a dispenser address.');
+                            formErrors.fail(err?.message || 'Could not generate a dispenser address.');
                             setAddressPickerOpen(false);
                         } finally {
                             setPickerGenerating(false);
@@ -1670,6 +1665,24 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         );
     }
 
+    // The Fiat currency picker page: the protocol's fiats, plus a first row
+    // that clears the choice, since a coin-paid dispenser names no currency.
+    if (fiatPickerOpen) {
+        return (
+            <FiatCurrencyPicker
+                variant={variant}
+                codes={FIAT_CODES}
+                value={fiatCode}
+                noneOption={{ label: 'None, coin-paid', description: 'Each fill is priced in the coin amount above' }}
+                onSelect={(code) => {
+                    setFiatCode(code);
+                    setFiatPickerOpen(false);
+                }}
+                onBack={() => setFiatPickerOpen(false)}
+            />
+        );
+    }
+
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
@@ -1688,6 +1701,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 summary={openSummary}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                         + (feeFiat ? ` (${feeFiat})` : '')
@@ -1697,6 +1711,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 onPasswordChange={setPassword}
                 formatNativeFee={formatNativeFee}
                 formatProtocolFee={formatProtocolFee}
+                formatFeeTotal={feeFiatFormat.formatFeeTotal}
                 // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
                 hwSource={hw ? sourceAddress : null}
@@ -1727,7 +1742,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 filterType="2"
                 title={listPickerFor === 'allow' ? 'Choose Allow-List' : 'Choose Block-List'}
                 onSelect={(row) => {
-                    if (listPickerFor === 'allow') setAllowListIdx(row.actionIndex); else setBlockListIdx(row.actionIndex);
+                    const pick = { index: String(row.actionIndex), name: row.name };
+                    if (listPickerFor === 'allow') { setAllowListIdx(row.actionIndex); setAllowListCount(row.memberCount ?? null); setAllowListPick(pick); }
+                    else { setBlockListIdx(row.actionIndex); setBlockListCount(row.memberCount ?? null); setBlockListPick(pick); }
                     setListPickerFor(null);
                 }}
                 onBack={() => setListPickerFor(null)}
@@ -1756,22 +1773,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }
 
     const draftBanner = draft.hasDraft() && !draftPending ? (
-        <StatusMessage
-            variant="status"
-            recovery={{ label: 'Restore', onAction: restoreDraft }}
+        <DraftNotice
+            onRestore={restoreDraft}
+            onDiscard={discardSavedDraft}
         >
             Your unfinished dispenser draft was saved. Restore it to continue. Nothing was submitted.
-            <DraftDiscardButton onClick={dismissDraft} label="Discard saved draft">
-                Discard
-            </DraftDiscardButton>
-        </StatusMessage>
+        </DraftNotice>
     ) : null;
-
-    // The same field-by-copy reader the section-opening effect uses.
-    const dispenserErrorTarget = dispenserErrorTargetFor(formError);
-    const dispenserErrors = formError
-        ? [{ ...dispenserErrorTarget, message: formError }]
-        : [];
 
     // Every field below is built once and placed in whichever view
     // (Quick or Full) is open; the values live in this form's state, so they
@@ -1825,7 +1833,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }
     const rateLine = <RateLine text={rateText} />;
 
-    // One line naming every non-default term, else the defaults.
+    // Dispenser Terms reads the address, any fiat or oracle pricing, then the
+    // expiry ("3 months" or "Expires <time>"); Lists names the lists set, else "None".
     const termsParts = [];
     termsParts.push({
         new: 'New dispenser address',
@@ -1835,13 +1844,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     }[addressMode] || 'New dispenser address');
     if (payWith === 'coin' && oracleAddress.trim()) termsParts.push(`Oracle${fiatCode ? ` ${fiatCode}` : ''}`);
     else if (payWith === 'coin' && fiatCode) termsParts.push(`Priced in ${fiatCode}`);
-    if (expMode === 'custom') {
-        const unix = localInputToUnix(expInput.trim());
-        termsParts.push(expInput.trim() && unix ? `Expires ${expInput.trim().replace('T', ' ')}` : 'Custom expiry');
-    }
-    if (allowListIdx) termsParts.push(`Allow-list #${allowListIdx}`);
-    if (blockListIdx) termsParts.push(`Block-list #${blockListIdx}`);
+    if (expMode === 'default') termsParts.push('3 months');
+    else termsParts.push(expirationParam(expMode, expInput) ? `Expires ${expInput.trim().replace('T', ' ')}` : 'Custom expiry');
     const termsSummary = termsParts.join(' · ');
+    const listsParts = [];
+    if (allowListIdx) listsParts.push(`Allow list #${allowListIdx}`);
+    if (blockListIdx) listsParts.push(`Block list #${blockListIdx}`);
+    const listsSummary = listsParts.length ? listsParts.join(' · ') : 'None';
     // The fee summary comes from the standard Network fee section.
 
     const noSourceNotice = fromAddress ? null : (
@@ -1869,7 +1878,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                         setTriggerPrice(priceNotes.bundle.getAmount);
                     }}
                 >
-                    {`Sell ${priceNotes.bundle.giveAmount} Per Fill at ${priceNotes.bundle.getAmount} ${coinTicker}`}
+                    {`Sell ${formatWithThousands(priceNotes.bundle.giveAmount)} Per Fill at ${formatWithThousands(priceNotes.bundle.getAmount)} ${coinTicker}`}
                 </Button>
             ) : null}
         >
@@ -1941,7 +1950,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             }}
             get={{
                 label: 'You get per fill',
-                help: payWithHelp,
+                // Where buyers send payment is static help, so it sits in the
+                // '?' tip rather than a line under the card (U57).
+                help: `${payWithHelp} Buyers send it to the dispenser address.`,
                 asset: payAsset,
                 assetLabel: 'Buyers pay with',
                 assetPlaceholder: t('send.selectAsset'),
@@ -1953,9 +1964,8 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 onAmountChange: priceInput(payWith === 'coin' ? setTriggerPrice : setGetTokenAmount),
                 amountLabel: payWith === 'coin' ? 'Trigger price' : t('dispenserForm.paymentAmountPerFill'),
                 disabled: oracleLane,
-                footNote: oracleLane
-                    ? 'The oracle sets the native coin price when each fill occurs.'
-                    : 'Buyers send this to the dispenser address.',
+                // State text only: it says why the held card has no price.
+                footNote: oracleLane ? 'The oracle sets the native coin price when each fill occurs.' : null,
             }}
             notice={(
                 // The no-source notice sits in the From section; the
@@ -2032,12 +2042,14 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
     );
 
     // The address verdict and the D-161 allow-list warning can hold
-    // Create, so they stay in sight while the Dispenser terms section that
-    // holds their fields is closed: the status slot just above the action.
-    const closedTermsNotes = !sections.options && ((addressMode === 'other' && (outsideVerdictLoading || outsideVerdict)) || allowListWarningNode) ? (
+    // Create, so each stays in sight while the section that holds its field
+    // (Dispenser Terms, Lists) is closed: the status slot just above the action.
+    const closedAddressNotes = !sections.options && addressMode === 'other' && (outsideVerdictLoading || outsideVerdict);
+    const closedListNotes = !sections.lists && Boolean(allowListWarningNode);
+    const closedTermsNotes = closedAddressNotes || closedListNotes ? (
         <>
-            {addressMode === 'other' ? outsideVerdictNotes : null}
-            {allowListWarningNode}
+            {closedAddressNotes ? outsideVerdictNotes : null}
+            {closedListNotes ? allowListWarningNode : null}
         </>
     ) : null;
 
@@ -2090,21 +2102,16 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             they show while buyers pay with the coin. */}
                         {payWith === 'coin' ? (
                             <>
-                                <Select
+                                {/* G122: the Fiat currency field and its picker
+                                    page; empty means coin-paid. */}
+                                <FiatCurrencyField
                                     id="dispenser-fiat-code"
-                                    label="Priced in fiat"
                                     optional
                                     help="Price each fill in a fiat currency instead of a fixed coin amount; validators convert it at the current rate."
                                     value={fiatCode}
-                                    onChange={(e) => setFiatCode(e.target.value)}
-                                >
-                                    {/* Native options supply Select choices because the kit has no option primitive. */}
-                                    <option value="">(none, coin-paid)</option>
-                                    {FIAT_CODES.map((c) => (
-                                        /* Native options supply Select choices because the kit has no option primitive. */
-                                        <option key={c} value={c}>{c}</option>
-                                    ))}
-                                </Select>
+                                    placeholder="None, coin-paid"
+                                    onOpenPicker={() => setFiatPickerOpen(true)}
+                                />
                                 <Input
                                     id="dispenser-fiat-amount"
                                     label="Fiat amount"
@@ -2131,42 +2138,45 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             </>
                         ) : null}
 
-                        <RadioGroup
-                            legend="Expiration"
-                            help="By default the dispenser stays open for the network's standard window. Pick a time to close it sooner or later."
+                        {/* A choice among a few named options is the icon dropdown (G44);
+                            Expires always shows and follows it (operator 2026-11-13). */}
+                        <ExpirationFields
+                            id="dispenser-expiration"
                             name="disp-exp"
-                            value={expMode}
-                            onChange={setExpMode}
-                            options={[
-                                { value: 'default', label: 'Default window' },
-                                { value: 'custom', label: 'Expire at a specific time' },
-                            ]}
+                            mode={expMode}
+                            input={expInput}
+                            // '3 months' sends no EXPIRATION, so it keeps no time: a
+                            // preset picked and put back leaves no draft behind.
+                            onChange={(mode, input) => { setExpMode(mode); setExpInput(mode === 'default' ? '' : input); }}
+                            help="By default the dispenser stays open for 3 months. Pick a longer term, or a time to close it sooner or later."
+                            expiresHelp="The date and time the dispenser closes. Set by the Expiration choice, or pick a time to expire at a specific time."
                         />
-                        {expMode === 'custom' ? (
-                            <Input
-                                id="dispenser-expiration"
-                                label="Expires"
-                                type="datetime-local"
-                                help="The date and time the dispenser closes. It must be in the future."
-                                value={expInput}
-                                onChange={(e) => setExpInput(e.target.value)}
-                            />
-                        ) : null}
+                    </>
+    );
 
-                        {/* Clear carries the trash icon, as on Swap (every button has an icon). */}
-                        <div className={styles.choiceGroup}>
-                            <p className={styles.choiceGroupLabel}>Restrict who can buy <OptionalPill /> <InfoTip aria="About restricting buyers" label="An allow-list lets only the listed addresses buy. A block-list refuses the listed addresses." /></p>
-                            <div className={styles.choiceButtons}>
-                                <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('allow')}>
-                                    {allowListIdx ? `Allow-List #${allowListIdx}` : 'Set Allow-List'}
-                                </Button>
-                                {allowListIdx ? <Button variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setAllowListIdx('')}>Clear</Button> : null}
-                                <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('block')}>
-                                    {blockListIdx ? `Block-List #${blockListIdx}` : 'Set Block-List'}
-                                </Button>
-                                {blockListIdx ? <Button variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => setBlockListIdx('')}>Clear</Button> : null}
-                            </div>
-                        </div>
+    // The Lists section: who may buy from the dispenser.
+    const listsBody = (
+                    <>
+                        {/* Allow and block lists are picker fields like Token, never grey buttons
+                            (the order and swap forms' pattern); the clear action sits inside the field. */}
+                        <ListField
+                            label="Allow list"
+                            help="Only addresses on this list can buy from the dispenser. Pick an address list you published in My Lists."
+                            placeholder="None set"
+                            valueText={allowListIdx ? `${pickedListText(allowListIdx, allowListPick)}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}` : null}
+                            onOpenPicker={() => setListPickerFor('allow')}
+                            onClear={() => { setAllowListIdx(''); setAllowListCount(null); }}
+                            clearLabel="Clear allow list"
+                        />
+                        <ListField
+                            label="Block list"
+                            help="Addresses on this list cannot buy from the dispenser. Pick an address list you published in My Lists."
+                            placeholder="None set"
+                            valueText={blockListIdx ? `${pickedListText(blockListIdx, blockListPick)}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}` : null}
+                            onOpenPicker={() => setListPickerFor('block')}
+                            onClear={() => { setBlockListIdx(''); setBlockListCount(null); }}
+                            clearLabel="Clear block list"
+                        />
 
                         {/* D-161: "Restrict who can buy" is the reading that causes the
                             mistake - the chain checks this dispenser's own address against
@@ -2174,13 +2184,20 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                             than at review, so the fix (pick another list, or clear it) is
                             one click away from the warning. While this
                             section is closed it shows above it instead. */}
-                        {sections.options ? allowListWarningNode : null}
+                        {sections.lists ? allowListWarningNode : null}
                     </>
     );
 
     // Form Standard open state comes from the same Give/Get view state;
     // `main` flags Dispenser as the main section (data-form-main).
     const bind = (id) => ({ open: Boolean(sections[id]), onOpenChange: (open) => giveGetView.setSectionOpen(id, open), main: id === 'dispenser' });
+    // Which section holds an error, so each review attempt reopens it (the
+    // standard's revealKey); a Create refusal naming a terms field counts too.
+    const termsHasError = Boolean(expirationValidationError(expMode, expInput)
+        || (addressMode === 'other' && outsideFormatError)
+        || Object.keys(formErrors.errors).some((id) => DISPENSER_ERROR_SECTION[id] === 'options'));
+    const listsHasError = listInBothSlots({ allowList: allowListIdx, blockList: blockListIdx });
+    const revealOn = (hasError) => (hasError ? validationAttempt : 0);
     const dispenserSummary = joinSummary(
         tickTrim
             ? `${giveAmount.trim() ? `${formatWithThousands(giveAmount.trim())} ` : ''}${tickTrim.toUpperCase()} per fill`
@@ -2189,25 +2206,20 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
             ? `oracle priced${fiatCode ? ` in ${fiatCode}` : ''}`
             : (priceAmount.trim() ? `for ${priceAmount.trim()} ${payTickUpper}` : null),
     ).replace(', for ', ' for ');
-    const payInNative = payFeeInNativeCoin || nativeFeeMandatory;
 
     return wrap(
         <FormFrame
             demoGuard={demoGuard}
             label="Create dispenser"
             onSubmit={handleReview}
-            onChangeCapture={() => { if (formError) setFormError(null); }}
-            // The Quick | Full switch leads the form, 8px above From;
-            // both views render the same state.
-            view={view}
-            onViewChange={setView}
-            viewLabel="Dispenser form view"
-            status={[<FormErrorSummary key="errors" errors={dispenserErrors} focusKey={validationAttempt} />, draftBanner, closedTermsNotes]}
+            errors={formErrors}
+            lead={draftBanner}
+            status={closedTermsNotes}
             action={(
                 <FormAction
                     icon={<Icon.PlusIcon />}
                     loading={derivingGetAddress || actionConfirm.composing}
-                    disabled={derivingGetAddress || actionConfirm.composing || outsideBlocked}
+                    aria-disabled={outsideBlocked ? 'true' : undefined}
                 >
                     Create Dispenser
                 </FormAction>
@@ -2228,11 +2240,12 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     // Only when this network truly has no address; a
                     // render before the source is picked must not open From for good.
                     missing={(addressesByChain?.[chainId] || []).length === 0 ? noSourceNotice : null}
+                    formErrorKey="form:source"
                 />
             )}
             fee={(
-                // The one Network fee section: the existing selector
-                // and fees card (network, protocol fee and the pay-in-coin switch).
+                // The one Fees section: the speed slider, the network and
+                // protocol fee lines and the pay-in-coin switch.
                 <FeeSection
                     {...bind('fee')}
                     chainId={chainId}
@@ -2241,10 +2254,13 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                     value={feePick}
                     onChange={setFeePick}
                     customEstimate={feeCustomEstimate}
-                    protocolSummary={protocolFeeSummary(protocolFeeQuote, protocolFeePending, payInNative, coinTicker)}
+                    formErrorKey="form:fee"
                     fees={{
                         quote: protocolFeeQuote,
                         pending: protocolFeePending,
+                        waiting: protocolFeeWaiting,
+                        // A dispenser inside the free period costs no protocol fee.
+                        free: expirationWithinFreePeriod(expMode, expInput),
                         fiat: feeFiatFormat,
                         nativeFeeProps: {
                             checked: payFeeInNativeCoin,
@@ -2257,6 +2273,9 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
         >
             {/* The main section, open: what the dispenser sells and for what. */}
             <FormSection id="dispenser" title="Dispenser" icon={Icon.PlusIcon} {...bind('dispenser')} summary={dispenserSummary}>
+                {/* One form either way (operator 2026-11-13): Quick | Full only
+                    restyles this section's inputs. */}
+                <ViewSwitch value={view} onChange={setView} label="Dispenser input style" inSection />
                 {view === 'quick' ? quickView() : (
                     <>
                         {fullDispenserFields}
@@ -2265,24 +2284,29 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 )}
             </FormSection>
             {/* Dispenser terms, closed; in Quick it expands in place. */}
-            <FormSection id="options" title="Dispenser Terms" icon={Icon.GearIcon} {...bind('options')} summary={termsSummary}>
+            <FormSection
+                id="options"
+                title="Dispenser Terms"
+                icon={Icon.GearIcon}
+                {...bind('options')}
+                revealKey={revealOn(termsHasError)}
+                summary={termsSummary}
+            >
                 {termsBody}
+            </FormSection>
+            <FormSection
+                id="lists"
+                title="Lists"
+                icon={Icon.ListIcon}
+                optional
+                {...bind('lists')}
+                revealKey={revealOn(listsHasError)}
+                summary={listsSummary}
+            >
+                {listsBody}
             </FormSection>
         </FormFrame>,
     );
-}
-
-// The protocol fee joins the Network fee row's summary, as the
-// standard asks of forms with a protocol fee. Nothing while it is unknown.
-function protocolFeeSummary(quote, pending, payInNative, coinTicker) {
-    if (pending) return undefined;
-    const fee = normalizeProtocolFee(quote);
-    if (!fee.known || fee.free) return undefined;
-    if (payInNative) {
-        const native = formatCoinBaseUnits(quote?.requiredFeeSats);
-        return native ? `${native} ${coinTicker} protocol fee` : undefined;
-    }
-    return fee.amount ? `${fee.amount} XCHAIN protocol fee` : undefined;
 }
 
 function DetailRow({ label, value }) {

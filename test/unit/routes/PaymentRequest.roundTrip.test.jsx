@@ -192,7 +192,7 @@ async function pasteRequestIntoSend(descriptor, request) {
     // Advanced section that holds the memo.
     fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
     fireEvent.click(await screen.findByRole('button', { name: /^Select ROUNDTRIP on / }));
-    fireEvent.click(await screen.findByText('Advanced'));
+    fireEvent.click(await screen.findByText('Advanced', { selector: '[data-form-section-title]' }));
     expect(screen.getByLabelText('Memo')).toHaveValue(LABEL);
 }
 

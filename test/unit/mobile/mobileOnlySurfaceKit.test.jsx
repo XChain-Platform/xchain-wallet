@@ -116,7 +116,7 @@ describe('mobile-only surfaces use the shared kit', () => {
         const native = render(<QrScanner onFrame={() => {}} alt="Scan a QR code" />);
 
         expect(screen.getByTestId('qr-scanner-native')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Scan With Camera' })).toHaveClass(
+        expect(screen.getByRole('button', { name: 'Scan with Camera' })).toHaveClass(
             buttonStyles.btn,
             buttonStyles.md,
         );
@@ -161,9 +161,10 @@ describe('mobile-only surfaces use the shared kit', () => {
         };
         render(withMessaging(<Receive walletId="wallet-1" accountId="account-1" />, messaging));
 
-        const trigger = await screen.findByRole('button', { name: 'Share QR payment link' });
-        await waitFor(() => expect(trigger).toBeEnabled());
-        expect(trigger).toHaveClass(buttonStyles.btn, buttonStyles.md);
+        const trigger = await screen.findByRole('button', { name: /^Share QR payment link/ });
+        // Share is a kit ActionList row (G101), which waits with aria-disabled.
+        await waitFor(() => expect(trigger).not.toHaveAttribute('aria-disabled'));
+        expect(trigger.closest('ul[role="list"]')).not.toBeNull();
         fireEvent.click(trigger);
         await waitFor(() => expect(share).toHaveBeenCalledOnce());
     });

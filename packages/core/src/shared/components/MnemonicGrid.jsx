@@ -16,6 +16,14 @@ import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/importWallet.js';
 import '../../i18n/locales/en/settings.js';
 
+// Made-up filler for the concealed grid: fixed, never derived from the phrase
+// and on no BIP39 list, so the blurred cells hold nothing worth reading. The
+// mixed lengths only make the blur look like a grid of words.
+export const PLACEHOLDER_WORDS = Object.freeze([
+    'lorem', 'ipsum', 'dolor', 'amet', 'consec', 'adipis',
+    'elitus', 'tempor', 'incidi', 'labore', 'magnam', 'aliqua',
+]);
+
 /**
  * Read-only mnemonic display per §19.2. Keeps the phrase concealed until the
  * user explicitly reveals it, then renders numbered words for transcription.
@@ -29,8 +37,12 @@ import '../../i18n/locales/en/settings.js';
  * @param {object} props
  * @param {string} props.mnemonic
  * @param {'small' | 'full'} [props.variant]
+ * @param {() => void} [props.onRevealRequest] host takes over Reveal (for example to check a password first)
+ * @param {boolean} [props.revealDisabled]
+ * @param {boolean} [props.revealLoading]
+ * @param {boolean} [props.hideRevealAction] the host draws its own Reveal button; the concealed area itself then asks the host to reveal when tapped (needs onRevealRequest)
  */
-export function MnemonicGrid({ mnemonic, variant = 'full', startRevealed = false, onRevealedChange }) {
+export function MnemonicGrid({ mnemonic, variant = 'full', startRevealed = false, onRevealedChange, onRevealRequest, revealDisabled = false, revealLoading = false, hideRevealAction = false }) {
     // A recovery phrase on screen is a copy of the wallet: hold the screen
     // guard for as long as the grid is mounted, whatever screen hosts it.
     useProtectedScreen();
@@ -63,22 +75,45 @@ export function MnemonicGrid({ mnemonic, variant = 'full', startRevealed = false
                     ))}
                 </ol>
             ) : (
-                <>
-                    <ol id={contentId} className={`${gridClass} ${styles.concealedGrid}`} aria-hidden="true">
-                        {words.map((_, i) => <li key={i} className={styles.concealedCell} />)}
+                // Concealed, the box is named for what it hides; its blurred
+                // cells are aria-hidden filler. A group, not an image, so a
+                // Reveal button inside it stays reachable.
+                <div role="group" aria-label={t('importWallet.recoveryPhraseHidden')}>
+                    <ol
+                        id={contentId}
+                        className={`${gridClass} ${styles.concealedGrid}${hideRevealAction ? ` ${styles.concealedTappable}` : ''}`}
+                        aria-hidden="true"
+                        data-concealed-area=""
+                        // Keyboard and screen-reader users reach Reveal through the host's button.
+                        onClick={hideRevealAction && typeof onRevealRequest === 'function' ? () => { if (!revealLoading) onRevealRequest(); } : undefined}
+                    >
+                        {/* Same cell markup, numbering and classes as the revealed
+                            words, so the box keeps its size; each cell holds a
+                            placeholder word, never the phrase, and every word and
+                            number is blurred past reading. Only the count comes from the prop. */}
+                        {words.map((_, i) => (
+                            <li key={i} className={styles.cell}>
+                                <span className={styles.index} aria-hidden="true">{i + 1}.</span>
+                                <span className={styles.word} aria-hidden="true">{PLACEHOLDER_WORDS[i % PLACEHOLDER_WORDS.length]}</span>
+                            </li>
+                        ))}
                     </ol>
+                    {hideRevealAction ? null : (
                     <div className={styles.revealAction}>
                         <Button
                             variant="secondary"
                             size="sm"
                             aria-controls={contentId}
                             aria-expanded="false"
-                            onClick={() => setRevealedKey(mnemonicKey)}
+                            disabled={revealDisabled}
+                            loading={revealLoading}
+                            onClick={() => (typeof onRevealRequest === 'function' ? onRevealRequest() : setRevealedKey(mnemonicKey))}
                         >
                             {t('settings.backup.revealRecoveryPhraseAction')}
                         </Button>
                     </div>
-                </>
+                    )}
+                </div>
             )}
         </div>
     );

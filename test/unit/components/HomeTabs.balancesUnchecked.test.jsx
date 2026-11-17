@@ -14,7 +14,7 @@
 // notice is up, for a demo wallet exactly as for a real one.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 
 vi.mock('../../../packages/core/src/shared/components/TotalBalanceHero.jsx', () => ({
     TotalBalanceHero: () => null,
@@ -32,6 +32,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useCollectibleKeys.js', () => (
 
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
 import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
+import { showHomeBalances } from '../../helpers/homeBalances.js';
 
 const chainRegistry = { byCoin: () => [], get: () => null, all: () => [] };
 
@@ -55,6 +56,7 @@ function mount(overrides = {}) {
 afterEach(() => {
     cleanup();
     clearDemoWalletId();
+    globalThis.localStorage?.clear();
 });
 
 describe('HomeTabs empty tabs', () => {
@@ -68,7 +70,7 @@ describe('HomeTabs empty tabs', () => {
 
     it('shows the ordinary empty Tokens state with no unchecked state', () => {
         mount({ balancesUnchecked: true, onRecheckBalances: vi.fn() });
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
         expect(screen.getByText('No tokens yet')).toBeInTheDocument();
         expect(screen.queryByText("Balances couldn't be checked")).toBeNull();
         expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
@@ -76,14 +78,14 @@ describe('HomeTabs empty tabs', () => {
 
     it('keeps a search miss as a search miss', () => {
         mount({ tokenQuery: 'LTC' });
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
         expect(screen.getByText('No matching tokens')).toBeInTheDocument();
     });
 
     it('stays quiet while Home shows its own balance notice', () => {
         mount({ balanceNoticeShown: true });
         expect(screen.queryByText('Fund your wallet')).toBeNull();
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
         expect(screen.queryByText('No tokens yet')).toBeNull();
         expect(document.querySelectorAll('[data-empty-state]')).toHaveLength(0);
     });
@@ -92,7 +94,7 @@ describe('HomeTabs empty tabs', () => {
         markDemoWallet('demo-wallet-1');
         mount({ walletId: 'demo-wallet-1', balanceNoticeShown: true });
         expect(screen.queryByText('Fund your wallet')).toBeNull();
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
         expect(screen.queryByText('No tokens yet')).toBeNull();
         expect(document.querySelectorAll('[data-empty-state]')).toHaveLength(0);
     });

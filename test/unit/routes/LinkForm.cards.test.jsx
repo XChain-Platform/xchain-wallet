@@ -47,7 +47,7 @@ describe('LinkForm cards', () => {
         expect(submit.querySelector('svg')).not.toBeNull();
     });
 
-    it('shows the found line green, a missing line muted, and nothing for an empty number', async () => {
+    it('summarises a found action, gives a missing number the field error, and shows nothing for an empty number', async () => {
         const getActionByIndex = vi.fn(({ actionIndex }) => (actionIndex === '10'
             ? Promise.resolve({ action: 'SEND', amount: '10', tick: 'PEPE', block_index: 902311 })
             : Promise.resolve(null)));
@@ -57,16 +57,24 @@ describe('LinkForm cards', () => {
             screen.getByText('Action 2').closest('fieldset'),
         ];
         const inputs = screen.getAllByLabelText('Action number');
-        expect(cards[0].querySelector('[class*="linkActionCheck"]')).toBeNull();
+        expect(cards[0].querySelector('[data-link-action-summary]')).toBeNull();
 
         fireEvent.change(inputs[0], { target: { value: '10' } });
-        const found = await screen.findByText('Found: SEND 10 PEPE, block 902,311');
-        expect(found.className).toMatch(/linkActionFound/);
+        const facts = await waitFor(() => {
+            const node = cards[0].querySelector('[data-link-action-summary]');
+            expect(node).not.toBeNull();
+            return node;
+        });
+        expect(facts.textContent).toContain('Token send');
+        expect(facts.textContent).toContain('10 PEPE');
+        // A block number is an identifier: raw digits, never grouped (G123).
+        expect(facts.textContent).toContain('902311');
+        expect(facts.textContent).not.toContain('902,311');
 
         fireEvent.change(inputs[1], { target: { value: '77' } });
-        const missing = await within(cards[1]).findByText('No action was found at that number.');
-        expect(missing.className).not.toMatch(/linkActionFound/);
-        await waitFor(() => expect(missing).toBeInTheDocument());
+        expect(await within(cards[1]).findByText('No action with this number')).toBeInTheDocument();
+        expect(inputs[1]).toHaveAttribute('aria-invalid', 'true');
+        expect(cards[1].querySelector('[data-link-action-summary]')).toBeNull();
     });
 
     it('reports a number that is not whole (typed through paste of non digits is stripped)', async () => {

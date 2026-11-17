@@ -11,6 +11,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
 import { readAllListPages } from '../../../packages/core/src/shared/utils/historyPages.js';
+import { EXPORT_ITEM, chooseHistoryMenuItem } from './historyMoreMenu.js';
 
 const CHAIN = 'litecoin-regtest';
 const ADDRESS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -82,7 +83,7 @@ describe('History follows every page of an address', () => {
         await waitFor(() => {
             expect(screen.getByText('100 of 250 history items shown')).toBeInTheDocument();
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
+        chooseHistoryMenuItem(EXPORT_ITEM);
         expect(screen.getByText('250 history items will be exported.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 

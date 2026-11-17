@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
@@ -73,16 +73,20 @@ function mount(Component, props, messaging = messagingWith()) {
 }
 
 describe('primary actions explain missing form input', () => {
-    it('BetFeedDetail asks for an outcome when Place bet is pressed', async () => {
+    it('BetFeedDetail needs no outcome prompt: each outcome is its own enabled action', async () => {
         mount(BetFeedDetail, { walletId: 'wallet-1', chainId: BTC, feedIndex: '123', onBack() {} });
-        // The bet form shows only on the Bet tab; Details is the default.
+        // The outcome rows are on the Bet tab.
         fireEvent.click(await screen.findByRole('tab', { name: 'Bet' }));
-        const action = await screen.findByRole('button', { name: 'Place Bet' });
+        const group = await screen.findByRole('list', { name: 'Outcome to back' });
+        const sides = within(group).getAllByRole('button');
 
-        expect(action).toBeEnabled();
-        fireEvent.click(action);
+        expect(sides.length).toBeGreaterThan(0);
+        sides.forEach((side) => expect(side).toBeEnabled());
+        expect(screen.queryByRole('button', { name: 'Bet' })).toBeNull();
+        fireEvent.click(sides[0]);
 
-        expect(await screen.findByText('Choose an outcome.')).toBeTruthy();
+        expect(await screen.findByRole('form', { name: 'Place Bet' })).toBeTruthy();
+        expect(screen.queryByText('Choose an outcome.')).toBeNull();
     });
 
     it('CreateBetFeedForm explains that the selected network has no source address', async () => {
@@ -113,7 +117,7 @@ describe('primary actions explain missing form input', () => {
         expect(await screen.findByText('Governance token is required.')).toBeTruthy();
     });
 
-    it('OracleForm asks for the token ticker', async () => {
+    it('OracleForm asks for the token', async () => {
         mount(OracleForm, { walletId: 'wallet-1', initialChainId: BTC, onBack() {} });
         await screen.findByDisplayValue(ADDRESS.address);
         const action = screen.getByRole('button', { name: /^Publish price$/i });
@@ -121,7 +125,8 @@ describe('primary actions explain missing form input', () => {
         expect(action).toBeEnabled();
         fireEvent.click(action);
 
-        expect(await screen.findByText('Enter the token ticker this oracle prices.')).toBeTruthy();
+        // G122: the Token field is picked, so the copy says choose.
+        expect(await screen.findByText('Choose the token this oracle prices.')).toBeTruthy();
         await waitFor(() => expect(action).toBeEnabled());
     });
 });

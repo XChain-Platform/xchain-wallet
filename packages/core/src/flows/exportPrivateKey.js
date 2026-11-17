@@ -49,8 +49,8 @@ export class NoKeyForAddressError extends Error {
     constructor(reason) {
         const detail =
             reason === 'hardware'
-                ? 'private key lives on the hardware device and is not accessible to the wallet'
-                : 'watch-only addresses have no private key in this wallet';
+                ? 'the private key stays on the hardware wallet and never reaches this wallet'
+                : 'this address signs on another phone, so its private key is not in this wallet';
         super(`exportPrivateKey: ${detail}`);
         this.name = 'NoKeyForAddressError';
         this.reason = reason;

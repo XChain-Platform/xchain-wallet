@@ -89,8 +89,8 @@ async function mount({ destinationRows = [TOKEN_PAID] } = {}) {
         });
     }
     vi.useRealTimers();
-    // Details is the default tab; the buy panel shows only on the Buy tab.
-    fireEvent.click(await screen.findByRole('tab', { name: /^Buy$/ }));
+    // Every viewer opens on Actions; a buyer's first row opens the Buy page.
+    fireEvent.click(await screen.findByTestId('dispenser-buy-row'));
     await screen.findByText(/250 MEMEVALID available/);
     return messaging;
 }

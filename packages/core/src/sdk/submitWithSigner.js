@@ -239,7 +239,7 @@ export function assertCompleteEnvelope(built, action) {
  * @property {{ address: string, value: string | number } | null} [deferredFeeOutput]
  * @property {Array<{ address: string, value: string | number }>} [deferredOutputs]
  * @property {{ change?: string | null, rawData?: string | null } | null} [revealOpts]  what the compose built the commit with, so the phase-2 reveal agrees
- * @property {{ included: boolean } | null} [adsDonation]  whether THESE bytes carry the ADS donation
+ * @property {{ included: boolean, fiat?: string | null, currency?: string | null, reservationId?: string | null } | null} [adsDonation]  whether THESE bytes carry the automatic donation, the queued fiat amount it settles, and the review claim the compose took for it
  * @property {{ compressed: boolean, data?: string, rawData?: string } | null} [compression]  the encoder's transparent-compression report for these bytes, carried so the result can state the size actually stored on chain
  * @property {string | null} [revealPsbt]  TAPROOT only: the reveal PSBT composed with `psbtHex`, signed byte-identically before the commit is broadcast
  * @property {{ commitTxid: string, commitVout: number, commitValue: number|string, commitAddress: string, internalPubkey?: string, tapleafHash: string } | null} [envelope]  TAPROOT only: the recovery record persisted before the commit is broadcast

@@ -13,7 +13,8 @@
 //
 // Verifies that each surface tracks its own lastFetchedAt timestamp and
 // renders <StalenessLabel> only after a successful fetch (never before
-// (§49.3: never fabricate data).
+// (§49.3: never fabricate data). History dropped its label on 2026-11-13
+// (the page is just the list) but still tracks its fetch time.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -71,20 +72,26 @@ assert.ok(
 const settingsSrc = readFileSync(join(routes, 'Settings.jsx'), 'utf8');
 const aboutSrc = readFileSync(join(components, 'settings', 'AboutSection.jsx'), 'utf8');
 assert.ok(
-    /Component:\s*AboutSection,\s*props:\s*\{\s*balancesFetchedAt\s*\}/.test(settingsSrc)
-        && /settings\.about\.balancesUpdated/.test(aboutSrc),
+    // About receives only the balance refresh timestamp from Settings.
+    /Component:\s*AboutSection,[\s\S]{0,160}?props:\s*\{\s*balancesFetchedAt[,\s}]/.test(settingsSrc)
+        && /settings\.about\.balancesUpdated/.test(aboutSrc)
+        && /balancesFetchedAt\s*\?\s*formatRelativeTime\(balancesFetchedAt\)/.test(aboutSrc),
     'Settings, About shows when balances were last updated',
 );
 
 // --- 3. History.jsx tracks historyFetchedAt -----------------------------
+// History is just the list (operator 2026-11-13): no "Updated ..." line, so
+// it renders no StalenessLabel; it still stamps historyFetchedAt for its
+// saved-history snapshot.
 
 const historySrc = readFileSync(join(routes, 'History.jsx'), 'utf8');
 assert.ok(
-    /from\s*['"]\.\.\/components\/StalenessLabel\.jsx['"]/.test(historySrc),
-    'History imports StalenessLabel',
+    !/StalenessLabel/.test(historySrc),
+    'History imports and renders no StalenessLabel',
 );
 assert.ok(
-    /historyFetchedAt/.test(historySrc),
+    // Only the setter is kept: nothing reads the time on the page now.
+    /const \[, setHistoryFetchedAt\] = useState\(/.test(historySrc),
     'History tracks historyFetchedAt state',
 );
 assert.ok(
@@ -94,14 +101,6 @@ assert.ok(
 assert.ok(
     /setHistoryFetchedAt\(null\)/.test(historySrc),
     'History resets historyFetchedAt when no chains are selected',
-);
-assert.ok(
-    /<StalenessLabel\s+lastSyncedAt=\{historyFetchedAt\}/.test(historySrc),
-    'History renders <StalenessLabel> bound to historyFetchedAt',
-);
-assert.ok(
-    /historyFetchedAt && loadingChains\.size === 0/.test(historySrc),
-    'History only renders the staleness row once a fetch has settled and no chain is loading',
 );
 
 // --- 4. TokenDetail tracks holdersFetchedAt ------------------------------

@@ -8,14 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Back shows only when the visible navigation cannot already reach the
-// screen: no Back on sidebar destinations while the sidebar shows, none on
-// bottom-bar tabs while the tab bar shows, Back everywhere else.
+// Back follows the shell's one navigation history (G06): it shows on a page
+// opened from another page, and is left out on a root page, one opened from
+// the sidebar, the bottom bar, the menu or the palette. The nav surface on
+// screen no longer decides it: Send opened from Token detail shows Back with
+// the sidebar and with the tab bar alike.
 
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { PageHeader } from '../../../packages/core/src/ui/PageHeader.jsx';
+import { InPageScreen, NavHistoryContext } from '../../../packages/core/src/ui/navHistory.js';
 import {
     CurrentRouteContext,
     NavSurfaceContext,
@@ -24,8 +27,7 @@ import {
     NAV_SURFACE_DESTINATIONS,
     ROUTE_REGISTRY,
     SIDEBAR_FOOTER_DESTINATIONS,
-    SIDEBAR_PRIMARY_DESTINATIONS,
-    SIDEBAR_SECONDARY_DESTINATIONS,
+    SIDEBAR_NAV_GROUPS,
     TAB_BAR_DESTINATIONS,
     isNavSurfaceDestination,
 } from '../../../packages/core/src/shared/routeRegistry.js';
@@ -38,11 +40,14 @@ const pageHeaderSource = readFileSync('packages/core/src/ui/PageHeader.jsx', 'ut
 const buttonCss = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
 const BACK = { name: 'Back to previous screen' };
 
-function renderAt(surface, routeId, props = {}) {
+/** A header inside a shell whose history is (canGoBack) or is not on a root page. */
+function renderAt(surface, routeId, canGoBack, props = {}) {
     return render(
         <NavSurfaceContext.Provider value={surface}>
             <CurrentRouteContext.Provider value={routeId}>
-                <PageHeader title="Screen" onBack={() => {}} {...props} />
+                <NavHistoryContext.Provider value={{ canGoBack }}>
+                    <PageHeader title="Screen" onBack={() => {}} {...props} />
+                </NavHistoryContext.Provider>
             </CurrentRouteContext.Provider>
         </NavSurfaceContext.Provider>,
     );
@@ -74,45 +79,52 @@ describe('top-level destination map', () => {
     });
 });
 
-describe('PageHeader Back by layout', () => {
-    it('keeps Back outside the unlocked layout (no nav surface known)', () => {
+describe('PageHeader Back by history', () => {
+    it('keeps Back outside a shell (no history known)', () => {
         render(<PageHeader title="Create wallet" onBack={() => {}} />);
         expect(screen.getByRole('button', BACK)).toBeInTheDocument();
     });
 
-    it.each(NAV_SURFACE_DESTINATIONS.sidebar)('hides Back on sidebar destination %s', (id) => {
-        renderAt('sidebar', id);
+    it.each(NAV_SURFACE_DESTINATIONS.sidebar)('shows Back on sidebar destination %s opened from another page', (id) => {
+        renderAt('sidebar', id, true);
+        expect(screen.getByRole('button', BACK)).toBeInTheDocument();
+    });
+
+    it.each(NAV_SURFACE_DESTINATIONS.sidebar)('hides Back on sidebar destination %s opened as a root', (id) => {
+        renderAt('sidebar', id, false);
         expect(screen.queryByRole('button', BACK)).toBeNull();
     });
 
-    it.each(['token-detail', 'action-detail', 'connected-sites', 'wallet-details', 'send-picker'])(
-        'shows Back on deeper screen %s with the sidebar',
-        (id) => {
-            renderAt('sidebar', id);
-            expect(screen.getByRole('button', BACK)).toBeInTheDocument();
-        },
-    );
+    it.each(TAB_BAR_DESTINATIONS)('shows Back on bottom-bar tab %s opened from another page', (id) => {
+        renderAt('tabBar', id, true);
+        expect(screen.getByRole('button', BACK)).toBeInTheDocument();
+    });
 
-    it.each(TAB_BAR_DESTINATIONS)('hides Back on bottom-bar tab %s', (id) => {
-        renderAt('tabBar', id);
+    it.each(TAB_BAR_DESTINATIONS)('hides Back on bottom-bar tab %s opened as a root', (id) => {
+        renderAt('tabBar', id, false);
         expect(screen.queryByRole('button', BACK)).toBeNull();
     });
 
-    it.each(['contacts', 'messaging', 'markets', 'token-detail'])(
-        'shows Back on %s with the tab bar',
+    it.each(['token-detail', 'action-detail', 'connected-sites', 'market'])(
+        'hides Back on %s opened from the palette as a root',
         (id) => {
-            renderAt('tabBar', id);
-            expect(screen.getByRole('button', BACK)).toBeInTheDocument();
+            renderAt('sidebar', id, false);
+            expect(screen.queryByRole('button', BACK)).toBeNull();
         },
     );
 
-    it('shows Back on a nested sub-screen of a sidebar destination (Settings > Privacy)', () => {
-        renderAt('sidebar', 'settings', { nested: true, backLabel: 'Back to settings', title: 'Privacy' });
+    it('shows Back on a nested sub-screen of a root page (Settings > Privacy)', () => {
+        renderAt('sidebar', 'settings', false, { nested: true, backLabel: 'Back to settings', title: 'Privacy' });
         expect(screen.getByRole('button', { name: 'Back to settings' })).toBeInTheDocument();
     });
 
+    it('shows no Back without a handler, even when the history has a previous page', () => {
+        renderAt('sidebar', 'token-detail', true, { onBack: undefined });
+        expect(screen.queryByRole('button', BACK)).toBeNull();
+    });
+
     it('keeps the leading lane and a centred title when Back is hidden', () => {
-        const { container } = renderAt('sidebar', 'settings', { title: 'Settings' });
+        const { container } = renderAt('sidebar', 'settings', false, { title: 'Settings' });
         const header = container.firstElementChild;
         expect(header.children).toHaveLength(3);
         expect(header.children[0].tagName).toBe('SPAN');
@@ -142,7 +154,7 @@ describe('PageHeader Back by layout', () => {
     // controls and shows a focus ring only for keyboard focus.
     it('draws Back as a bare chevron with no border, outline or fill', () => {
         const back = pageHeaderCss.match(/\n\.header \.back \{([^}]*)\}/)?.[1] || '';
-        const hit = pageHeaderCss.match(/\n\.header \.back::before \{([^}]*)\}/)?.[1] || '';
+        const hit = pageHeaderCss.match(/\n\.header \.back::before(?:,\n[^{]*)? \{([^}]*)\}/)?.[1] || '';
         const focus = pageHeaderCss.match(/\n\.header \.back:focus-visible \{([^}]*)\}/)?.[1] || '';
         expect(back).toMatch(/background:\s*transparent;/);
         expect(back).toMatch(/(?:^|\s)border:\s*0;/);
@@ -152,7 +164,7 @@ describe('PageHeader Back by layout', () => {
         expect(hit).toMatch(/height:\s*max\(100%,\s*var\(--xc-control-hit-min/);
         expect(focus).toMatch(/outline:\s*2px solid var\(--xc-focus-ring\)/);
 
-        renderAt('sidebar', 'token-detail');
+        renderAt('sidebar', 'token-detail', true);
         const button = screen.getByRole('button', BACK);
         expect(button.className).toContain('back');
         expect(button.className).not.toMatch(/secondary/);
@@ -175,9 +187,11 @@ describe('PageHeader Back by layout', () => {
         expect(hit).toMatch(/height:\s*max\(100%,\s*var\(--xc-control-hit-min/);
     });
 
+    // The system Back gesture and Android Back follow the same history: on a
+    // root page the chevron is hidden, yet the gesture still runs onBack.
     it('still runs onBack from the system Back gesture when the control is hidden', () => {
         const onBack = vi.fn();
-        renderAt('sidebar', 'history', { onBack });
+        renderAt('sidebar', 'history', false, { onBack });
         expect(screen.queryByRole('button', BACK)).toBeNull();
         act(() => {
             window.dispatchEvent(new Event('xchain:native-edge-back'));
@@ -194,12 +208,17 @@ describe('nav surfaces render from the shared map', () => {
                 onSelect={() => {}}
                 onOpenSettings={() => {}}
                 hasVmAddress
+                hasBtcAddress
+                hasGovernanceAddress
             />,
         );
         const nav = screen.getByRole('navigation', { name: 'Primary navigation' });
-        const lists = within(nav).getAllByRole('list');
-        expect(within(lists[0]).getAllByRole('button')).toHaveLength(SIDEBAR_PRIMARY_DESTINATIONS.length);
-        expect(within(lists[1]).getAllByRole('button')).toHaveLength(SIDEBAR_SECONDARY_DESTINATIONS.length);
+        for (const group of SIDEBAR_NAV_GROUPS) {
+            const list = within(nav).getByRole('list', {
+                name: group.id.charAt(0).toUpperCase() + group.id.slice(1),
+            });
+            expect(within(list).getAllByRole('button')).toHaveLength(group.destinations.length);
+        }
         expect(within(nav).getByRole('button', { name: 'Settings' })).toBeInTheDocument();
         expect([...SIDEBAR_FOOTER_DESTINATIONS]).toEqual(['settings']);
     });
@@ -207,7 +226,9 @@ describe('nav surfaces render from the shared map', () => {
     it('LeftNav still drops gated rows', () => {
         render(<LeftNav currentView="home" onSelect={() => {}} isSignerMode hasDexSurface={false} />);
         const nav = screen.getByRole('navigation', { name: 'Primary navigation' });
-        for (const label of ['Send', 'Receive', 'DEX', 'Marketplace', 'Contracts']) {
+        for (const label of [
+            'Send', 'Receive', 'Exchange (DEX)', 'Marketplace', 'Governance', 'Staking', 'Contracts',
+        ]) {
             expect(within(nav).queryByRole('button', { name: label }), label).toBeNull();
         }
         expect(within(nav).getByRole('button', { name: 'Home' })).toBeInTheDocument();
@@ -221,14 +242,14 @@ describe('nav surfaces render from the shared map', () => {
 });
 
 describe('layout wiring', () => {
-    function Shell({ view, nested = false }) {
+    function Shell({ view, canGoBack, nested = false }) {
         return (
             <FullLayoutWithNav
                 routeKey={`${view}:0`}
                 nav={<nav aria-label="Sidebar stub" />}
                 bottomBar={<nav aria-label="Tab bar stub" />}
             >
-                <ShellRouteOutlet routeKey={view}>
+                <ShellRouteOutlet routeKey={view} canGoBack={canGoBack}>
                     <PageHeader title={view} onBack={() => {}} nested={nested} />
                 </ShellRouteOutlet>
             </FullLayoutWithNav>
@@ -241,33 +262,53 @@ describe('layout wiring', () => {
         return () => Object.defineProperty(window, 'innerWidth', { configurable: true, value: original });
     }
 
-    it('reads the sidebar at a wide width', () => {
+    it('takes Back from the shell history with the sidebar on screen', () => {
         const restore = atWidth(1290);
         try {
-            const { rerender } = render(<Shell view="contacts" />);
+            const { rerender } = render(<Shell view="send" canGoBack={false} />);
             expect(screen.getByRole('navigation', { name: 'Sidebar stub' })).toBeInTheDocument();
             expect(screen.queryByRole('button', BACK)).toBeNull();
-            rerender(<Shell view="token-detail" />);
+            rerender(<Shell view="send" canGoBack />);
             expect(screen.getByRole('button', BACK)).toBeInTheDocument();
-            rerender(<Shell view="settings" nested />);
+            rerender(<Shell view="settings" canGoBack={false} nested />);
             expect(screen.getByRole('button', BACK)).toBeInTheDocument();
         } finally {
             restore();
         }
     });
 
-    it('reads the tab bar at a phone width', () => {
+    it('takes Back from the shell history with the tab bar on screen', () => {
         const restore = atWidth(360);
         try {
-            const { rerender } = render(<Shell view="send" />);
+            const { rerender } = render(<Shell view="receive" canGoBack={false} />);
             expect(screen.getByRole('navigation', { name: 'Tab bar stub' })).toBeInTheDocument();
             expect(screen.queryByRole('button', BACK)).toBeNull();
-            rerender(<Shell view="settings" />);
-            expect(screen.queryByRole('button', BACK)).toBeNull();
-            rerender(<Shell view="contacts" />);
+            rerender(<Shell view="receive" canGoBack />);
             expect(screen.getByRole('button', BACK)).toBeInTheDocument();
+            rerender(<Shell view="contacts" canGoBack={false} />);
+            expect(screen.queryByRole('button', BACK)).toBeNull();
         } finally {
             restore();
         }
+    });
+
+    it('shows Back on a screen a root page opens in its own place', () => {
+        render(
+            <ShellRouteOutlet routeKey="market" canGoBack={false}>
+                <InPageScreen>
+                    <PageHeader title="Trade" onBack={() => {}} />
+                </InPageScreen>
+            </ShellRouteOutlet>,
+        );
+        expect(screen.getByRole('button', BACK)).toBeInTheDocument();
+    });
+
+    it('keeps Back on every screen when the outlet is given no history', () => {
+        render(
+            <ShellRouteOutlet routeKey="send">
+                <PageHeader title="send" onBack={() => {}} />
+            </ShellRouteOutlet>,
+        );
+        expect(screen.getByRole('button', BACK)).toBeInTheDocument();
     });
 });

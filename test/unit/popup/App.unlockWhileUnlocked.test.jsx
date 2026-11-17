@@ -94,7 +94,9 @@ describe('an unlock announcement in an unlocked extension window', () => {
         // end of that load can draw Home again over a screen opened during it,
         // so open the actions screen until it stays open.
         await waitFor(() => {
-            if (screen.queryByRole('button', { name: 'Back to home' })) return;
+            // Opened from the menu, All actions is a root page with no Back
+            // (G06), so its title says it is open.
+            if (screen.queryByRole('heading', { name: 'All Actions', level: 1 })) return;
             // The All actions row lives in the wallet menu the header opens.
             const actions = screen.queryByRole('option', { name: /^All actions/ });
             if (actions) fireEvent.click(actions);
@@ -108,7 +110,7 @@ describe('an unlock announcement in an unlocked extension window', () => {
         await emit('session', { state: 'unlocked' });
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
 
-        expect(screen.getByRole('button', { name: 'Back to home' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'All Actions', level: 1 })).toBeInTheDocument();
         expect(count(sent, 'session.status')).toBe(before);
     });
 

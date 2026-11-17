@@ -22,7 +22,7 @@
 //                 form offered one.
 //   TICKS       - a token list only counted lines, so an unknown TICK the
 //                 network leaves out was never reported.
-//   PASSWORD    - "enter your password twice" showed on an unlocked wallet.
+//   CONFIRM     - two-step actions use Confirm Standard for each approval.
 //   CHAIN       - Create list opened on the wallet's oldest chain.
 //
 // Each block mounts the real screen, since every defect was in what the
@@ -35,12 +35,16 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListDetail } from '../../../packages/core/src/shared/routes/ListDetail.jsx';
-import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
-import { ListShareForm } from '../../../packages/core/src/shared/routes/ListShareForm.jsx';
-import { ListTransferForm } from '../../../packages/core/src/shared/routes/ListTransferForm.jsx';
+import {
+    ListEditRoute,
+    ListForkRoute as ListForkForm,
+    ListShareRoute as ListShareForm,
+    ListTransferRoute as ListTransferForm,
+} from '../../helpers/listFormRoutes.jsx';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
 import { ProjectRosterForm } from '../../../packages/core/src/shared/routes/ProjectRosterForm.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { classifyTickItems, tickLookupVerdict } from '../../../packages/core/src/shared/utils/listTickItems.js';
 
@@ -121,41 +125,47 @@ function mountDetail(row, onFork = vi.fn()) {
     return onFork;
 }
 
+// The detail page opens on Actions; members sit on the List tab and the
+// facts on the Details tab.
+async function openTab(name) {
+    fireEvent.click(await screen.findByRole('tab', { name }));
+}
+
 describe('ListDetail membership under list-edit resolution', () => {
-    it('shows state.current_list as current, labelled with its edit, and keeps the create rows as "As created"', async () => {
+    it('lists state.current_list as the members and forks from it', async () => {
         const onFork = mountDetail({ ...LIST_2700, state: ACTIVE_STATE });
-        expect(await screen.findByText('Current members (2)')).toBeTruthy();
-        expect(screen.getByText(/From edit #2703/)).toBeTruthy();
-        expect(screen.getByText('DOGESWAP')).toBeTruthy();
-        expect(screen.getByText('As created (2)')).toBeTruthy();
-        expect(screen.getByText('MGRTEST')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: /Fork & Edit/ }));
+        await openTab('List');
+        expect(await screen.findByText('DOGESWAP')).toBeTruthy();
+        expect(screen.getByText('SWAPTEST')).toBeTruthy();
+        expect(screen.queryByText('MGRTEST')).toBeNull();
+        await openTab('Actions');
+        fireEvent.click(screen.getByRole('button', { name: /^Fork\b/ }));
         expect(onFork).toHaveBeenCalledWith(expect.objectContaining({
             items: ['DOGESWAP', 'SWAPTEST'], editResolutionActive: true,
         }));
     });
 
-    it('before activation keeps the pinned rows as the current members and has no "As created" block', async () => {
+    it('before activation lists the pinned rows as the members', async () => {
         const onFork = mountDetail({ ...LIST_2700, state: { edit_resolution_active: false, membership_action_index: 2700, current_list: null } });
-        expect(await screen.findByText('Current members (2)')).toBeTruthy();
-        expect(screen.queryByText(/As created/)).toBeNull();
+        await openTab('List');
+        expect(await screen.findByText('MGRTEST')).toBeTruthy();
         expect(screen.queryByText('DOGESWAP')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: /Fork & Edit/ }));
+        await openTab('Actions');
+        fireEvent.click(screen.getByRole('button', { name: /^Fork\b/ }));
         expect(onFork).toHaveBeenCalledWith(expect.objectContaining({
             items: ['MGRTEST', 'SWAPTEST'], editResolutionActive: false,
         }));
     });
 
-    it('an explorer without a state object labels the rows as published, not as current', async () => {
+    it('an explorer without a state object forks with resolution unknown', async () => {
         const onFork = mountDetail({ ...LIST_2700 });
-        expect(await screen.findByText('Members as published (2)')).toBeTruthy();
-        expect(screen.queryByText(/Current members/)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: /Fork & Edit/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Fork\b/ }));
         expect(onFork).toHaveBeenCalledWith(expect.objectContaining({ editResolutionActive: null }));
     });
 
     it('reports the items the network left out of a create', async () => {
         mountDetail({ ...LIST_2700, state: ACTIVE_STATE });
+        await openTab('List');
         expect(await screen.findByText('Left out by the network (1)')).toBeTruthy();
         expect(screen.getByText('NOSUCHTICKQA')).toBeTruthy();
         const row = screen.getByText('NOSUCHTICKQA').closest('li');
@@ -171,21 +181,29 @@ describe('ListDetail membership under list-edit resolution', () => {
             edit: 1,
             edits: [{ tick: 'FORKADDED', status: 'valid' }, { address: 'notanaddress', status: 'invalid: ADDRESS (format)' }],
         });
+        await openTab('List');
         const row = (await screen.findByText('notanaddress')).closest('li');
         expect(row.textContent).toBe('notanaddress (not a valid address for this network)');
-        expect(screen.getByText('FORKADDED').closest('li').textContent).toBe('FORKADDED');
+        expect(screen.getByText('FORKADDED', { selector: 'code' }).closest('li').textContent).toBe('FORKADDED');
     });
+
+    // The Details card's Status value carries the raw verdict as its tooltip.
+    async function statusValue() {
+        await openTab('Details');
+        const row = (await screen.findByText('Status')).closest('li');
+        return row.querySelector('span[class*="detailValue"]');
+    }
 
     it('says why the network refused a list in its status row', async () => {
         mountDetail({ ...LIST_2700, status: 'invalid: LIST_ACTION_INDEX (not owner)' });
-        const value = (await screen.findByText('Status')).nextElementSibling;
+        const value = await statusValue();
         expect(value.textContent).toBe('Rejected: sent by an address that does not own the list');
         expect(value.getAttribute('title')).toBe('invalid: LIST_ACTION_INDEX (not owner)');
     });
 
     it('reads a valid list status as Valid with no tooltip', async () => {
         mountDetail({ ...LIST_2700 });
-        const value = (await screen.findByText('Status')).nextElementSibling;
+        const value = await statusValue();
         expect(value.textContent).toBe('Valid');
         expect(value.getAttribute('title')).toBeNull();
     });
@@ -199,10 +217,11 @@ describe('ListDetail membership under list-edit resolution', () => {
             edits: [{ tick: 'MGRTEST', status: 'valid' }],
         });
 
+        await openTab('Details');
         expect(await screen.findByText('#2700 (removed items)')).toBeTruthy();
     });
 
-    it('shows a confirmed owner change and makes a list owned outside the wallet read-only', async () => {
+    it('shows a confirmed owner change and opens owner forms for a list owned outside the wallet', async () => {
         const owner = 'nexternalownerexternalownerexternal';
         const onFork = vi.fn();
         const onShare = vi.fn();
@@ -225,13 +244,23 @@ describe('ListDetail membership under list-edit resolution', () => {
             getActionFormats: vi.fn().mockResolvedValue({ 4: {}, 5: {} }),
         }));
 
+        await screen.findByRole('button', { name: /^Edit(?! look)\b/ });
+        expect(screen.queryByText('Only the owner can change this list.')).toBeNull();
+        expect(screen.queryByText(/read-only/i)).toBeNull();
+        expect(screen.queryByRole('button', { name: /Rename/ })).toBeNull();
+        for (const name of [/^Edit(?! look)\b/, /^Share\b/, /^Transfer\b/]) {
+            const row = screen.getByRole('button', { name });
+            expect(row).not.toHaveAttribute('aria-disabled');
+        }
+        fireEvent.click(screen.getByRole('button', { name: /^Edit(?! look)\b/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Share\b/ }));
+        expect(onFork).toHaveBeenCalledTimes(1);
+        expect(onShare).toHaveBeenCalledTimes(1);
+        expect(onRename).not.toHaveBeenCalled();
+        // Fork stays open on a list someone else owns.
+        expect(screen.getByRole('button', { name: /^Fork\b/ })).not.toHaveAttribute('aria-disabled');
+        await openTab('Details');
         expect(await screen.findByText('Current owner')).toBeTruthy();
-        expect(screen.getByText(/owned by another address.*read-only/i)).toBeTruthy();
-        await waitFor(() => expect(screen.queryByRole('button', { name: 'Rename list' })).toBeNull());
-        expect(screen.queryByRole('button', { name: 'Fork & Edit' })).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Share List' })).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Transfer List' })).toBeNull();
-        expect(onFork).not.toHaveBeenCalled();
     });
 });
 
@@ -246,34 +275,42 @@ function mountFork(editResolutionActive, overrides = {}, repointHandlers) {
     }, messagingWith(overrides));
 }
 
-// Watcher mode goes compose -> review -> build unsigned -> the repoint step
+// Watcher mode goes compose -> confirm -> build unsigned -> the repoint step
 // without a signer, which is the shortest real path to that step.
+async function approveConfirm(expectedSentence) {
+    expect(await screen.findByTestId('confirm-sentence')).toHaveTextContent(expectedSentence);
+    expect(screen.getByTestId('confirm-reject')).toHaveAccessibleName('Reject');
+    const approve = screen.getByTestId('confirm-approve');
+    expect(approve).toHaveAccessibleName('Approve');
+    fireEvent.click(approve);
+}
+
 async function forkToRepoint({ add = 'NEWTICK', memo = '' } = {}) {
-    await screen.findByText(/Forking token list #2700/);
-    fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: add } });
-    if (memo) fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: memo } });
-    fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Create Unsigned Transaction' }));
+    await screen.findByLabelText('Tokens');
+    fireEvent.change(screen.getByLabelText('Tokens'), { target: { value: add } });
+    if (memo) fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'textarea' }), { target: { value: memo } });
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Fork' }));
+    await approveConfirm('Add 1 item to list #2700');
     await screen.findByText('Fork submitted');
 }
 
 describe('ListForkForm copy follows list-edit resolution', () => {
     it('under resolution says the edit becomes the list\'s current membership', async () => {
         mountFork(true);
-        await screen.findByText(/Forking token list #2700/);
+        await screen.findByLabelText('Tokens');
         expect(screen.getByText(/becomes list #2700's current membership/)).toBeTruthy();
         expect(screen.queryByText(/never changes/)).toBeNull();
     });
 
     it('before activation keeps "#2700 itself never changes"', async () => {
         mountFork(false);
-        await screen.findByText(/Forking token list #2700/);
+        await screen.findByLabelText('Tokens');
         expect(screen.getByText(/#2700 itself never changes/)).toBeTruthy();
     });
 
     it('with the flag unknown names both rules instead of asserting either', async () => {
         mountFork(null);
-        await screen.findByText(/Forking token list #2700/);
+        await screen.findByLabelText('Tokens');
         expect(screen.getByText(/Where list-edit resolution is active/)).toBeTruthy();
         expect(screen.queryByText(/never changes/)).toBeNull();
     });
@@ -320,24 +357,46 @@ describe('ListForkForm signs from the list owner', () => {
 
     it('defaults FROM to the root creator when the wallet holds it, with no warning', async () => {
         const messaging = mountOwnerFork(byChainWithOwner);
-        await screen.findByText(/Forking token list #3069/);
+        await screen.findByLabelText('Tokens');
         await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(OWNER.address));
         expect(screen.queryByText(/Signed from/)).toBeNull();
         expect(screen.queryByText(/which is not an address in this wallet/)).toBeNull();
-        fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'NEWTICK' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Create Unsigned Transaction' }));
+        fireEvent.change(screen.getByLabelText('Tokens'), { target: { value: 'NEWTICK' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Fork' }));
+        await approveConfirm('Add 1 item to list #3069');
         await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalled());
         expect(messaging.buildActionPsbtRequest.mock.calls[0][0].from.address).toBe(OWNER.address);
     });
 
+    // Edit stays owner-only; Fork of someone else's list forks it into a new
+    // list owned by this wallet (LIST format 0 of the resulting members).
     it('refuses to edit when the wallet does not hold the list owner', async () => {
-        mountOwnerFork({ ...BY_CHAIN });
+        mount(ListEditRoute, { walletId: 'w', listRef: editRef, onBack() {}, onDone() {} },
+            messagingWith({
+                ...WATCHER,
+                getAddressesByChain: vi.fn().mockResolvedValue({ ...BY_CHAIN }),
+                getListByActionIndex: vi.fn(({ actionIndex }) => Promise.resolve(rows[actionIndex] || null)),
+            }));
         const warning = await screen.findByText(/not an address in this wallet/);
         expect(warning.textContent).toContain(OWNER.address.slice(0, 8));
         expect(warning.textContent).toMatch(/This wallet cannot edit it/);
-        expect(screen.queryByRole('button', { name: 'Publish Edit' })).toBeNull();
-        expect(screen.queryByLabelText('Add tokens')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Publish Fork' })).toBeNull();
+        expect(screen.queryByLabelText('Tokens')).toBeNull();
+    });
+
+    it('forks a list the wallet does not own into a new list of its own', async () => {
+        const messaging = mountOwnerFork({ ...BY_CHAIN });
+        expect(await screen.findByLabelText('Tokens')).toBeTruthy();
+        expect(screen.queryByText(/This wallet cannot edit it/)).toBeNull();
+        fireEvent.change(screen.getByLabelText('Tokens'), { target: { value: 'NEWTICK' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Fork' }));
+        await approveConfirm('Create token list of 2 items');
+        await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalled());
+        expect(messaging.buildActionPsbtRequest.mock.calls[0][0].actionData.params).toEqual({
+            VERSION: '0',
+            TYPE: '1',
+            ITEM: ['SWAPTEST', 'NEWTICK'],
+        });
     });
 });
 
@@ -365,23 +424,31 @@ describe('owner-only list actions', () => {
         });
     }
 
-    it('keeps direct share navigation disabled for an external owner', async () => {
+    it('keeps direct share navigation inert for an external owner', async () => {
+        const messaging = ownerActionMessaging();
         mount(ListShareForm, {
             walletId: 'w', listRef: { chainId: BTC, actionIndex: '2700' }, onBack() {},
-        }, ownerActionMessaging());
+        }, messaging);
 
         expect(await screen.findByText(/this wallet cannot share it/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Share List' }).disabled).toBe(true);
+        const action = screen.getByRole('button', { name: 'Share List' });
+        expect(action.disabled).toBe(false);
+        fireEvent.click(action);
+        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
         expect(screen.getByLabelText('Memo').disabled).toBe(true);
     });
 
-    it('keeps direct transfer navigation disabled for an external owner', async () => {
+    it('keeps direct transfer navigation inert for an external owner', async () => {
+        const messaging = ownerActionMessaging();
         mount(ListTransferForm, {
             walletId: 'w', listRef: { chainId: BTC, actionIndex: '2700' }, onBack() {},
-        }, ownerActionMessaging());
+        }, messaging);
 
         expect(await screen.findByText(/this wallet cannot transfer it/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Transfer List' }).disabled).toBe(true);
+        const action = screen.getByRole('button', { name: 'Transfer List' });
+        expect(action.disabled).toBe(false);
+        fireEvent.click(action);
+        expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
         expect(screen.getByLabelText('New owner').disabled).toBe(true);
     });
 });
@@ -401,12 +468,12 @@ describe('ListForkForm refuses to build on members that changed since it loaded'
             ...WATCHER,
             getListByActionIndex: vi.fn().mockResolvedValue(rowWith(['DOGESWAP', 'INJECTED', 'SWAPTEST'])),
         });
-        await screen.findByText(/Forking token list #2700/);
-        fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'NEWTICK' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
+        await screen.findByLabelText('Tokens');
+        fireEvent.change(screen.getByLabelText('Tokens'), { target: { value: 'NEWTICK' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Fork' }));
         const error = await screen.findByText(/List #2700 changed since this screen loaded/);
         expect(error.textContent).toMatch(/now has 3 members, not 2/);
-        expect(screen.queryByRole('button', { name: 'Create Unsigned Transaction' })).toBeNull();
+        expect(screen.queryByTestId('confirm-modal')).toBeNull();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -435,8 +502,8 @@ describe('AirdropForm existing-list preview counts the members the airdrop will 
             getListsForSource: vi.fn().mockResolvedValue([row]),
             getListByActionIndex: vi.fn().mockResolvedValue(row),
         }));
-        fireEvent.change(await screen.findByLabelText(/^Airdrop to/), { target: { value: 'existing' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Choose list' }));
+        selectOption(await screen.findByLabelText(/^Airdrop to/), 'existing');
+        fireEvent.click(await screen.findByRole('button', { name: /^List:/ }));
         fireEvent.click(await screen.findByRole('button', { name: '5 addresses, address list, 5 addresses' }));
         expect(await screen.findByText('5 addresses on this list.')).toBeTruthy();
     });
@@ -503,10 +570,12 @@ describe('List forms send an optional MEMO', () => {
         const messaging = mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} },
             messagingWith(WATCHER));
         fireEvent.change(await screen.findByLabelText('Tokens'), { target: { value: 'SWAPTEST' } });
-        fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: 'Our official tokens' } });
+        fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'textarea' }), { target: { value: 'Our official tokens' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
+        expect(await screen.findByTestId('confirm-sentence')).toHaveTextContent('Create token list of 1 item');
         expect(await screen.findByText('Our official tokens')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
+        expect(screen.getByTestId('confirm-reject')).toHaveAccessibleName('Reject');
+        fireEvent.click(screen.getByTestId('confirm-approve'));
         await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalled());
         expect(messaging.buildActionPsbtRequest.mock.calls[0][0].actionData.params)
             .toMatchObject({ VERSION: '0', TYPE: '1', MEMO: 'Our official tokens', ITEM: ['SWAPTEST'] });
@@ -515,7 +584,7 @@ describe('List forms send an optional MEMO', () => {
     it('ListCreateForm refuses a memo with a protocol delimiter', async () => {
         mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} }, messagingWith(WATCHER));
         fireEvent.change(await screen.findByLabelText('Tokens'), { target: { value: 'SWAPTEST' } });
-        fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: 'a|b' } });
+        fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'textarea' }), { target: { value: 'a|b' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
         expect(await screen.findByText(/Memo cannot contain \| or ;/)).toBeTruthy();
     });
@@ -562,24 +631,19 @@ describe('ListCreateForm checks token items before publishing', () => {
 });
 
 describe('two-step copy does not ask an unlocked wallet for a password', () => {
-    async function forkReviewTwoPhase(ready) {
-        mountFork(true, { signerReady: vi.fn().mockResolvedValue({ ready }) });
-        await screen.findByText(/Forking token list #2700/);
-        fireEvent.click(screen.getByRole('checkbox', { name: /DOGESWAP/ }));
-        fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'NEWTICK' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
-        return screen.findByText(/two\s+transactions/);
-    }
-
-    it('ListForkForm, unlocked', async () => {
-        const hint = await forkReviewTwoPhase(true);
-        await waitFor(() => expect(hint.textContent).toMatch(/no password is needed/));
-        expect(hint.textContent).not.toMatch(/password twice/);
-    });
-
-    it('ListForkForm, locked', async () => {
-        const hint = await forkReviewTwoPhase(false);
-        expect(hint.textContent).toMatch(/enter your password twice/);
+    // Fork shares Edit's one Add | Remove toggle over one Tokens field, so a
+    // fork is never a two-transaction add plus remove from the form.
+    it('ListForkForm carries one direction, never a two-transaction review', async () => {
+        mountFork(true, { signerReady: vi.fn().mockResolvedValue({ ready: true }) });
+        const field = await screen.findByLabelText('Tokens');
+        fireEvent.change(field, { target: { value: 'NEWTICK' } });
+        fireEvent.click(screen.getByRole('radio', { name: 'Remove' }));
+        expect(screen.getByLabelText('Tokens')).toHaveValue('');
+        expect(screen.queryByLabelText('Add tokens')).toBeNull();
+        expect(screen.queryByLabelText('Remove tokens')).toBeNull();
+        fireEvent.change(screen.getByLabelText('Tokens'), { target: { value: 'DOGESWAP' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Fork' }));
+        expect(screen.queryByText(/two\s+transactions/)).toBeNull();
     });
 
     // The roster page edits the project's current list: removing OTHER
@@ -587,9 +651,13 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
     const ROSTER = {
         roster_action_index: 60, total: 2, members: [{ tick: 'SWAPTEST' }, { tick: 'OTHER' }],
     };
+    // The token list is a text box, one ticker per line (operator 2026-11-15):
+    // removing OTHER is deleting its line.
     async function removeOtherAndSave() {
-        fireEvent.click(await screen.findByRole('button', { name: 'Remove OTHER' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Save Project Tokens' }));
+        const box = await screen.findByLabelText('Tokens');
+        await waitFor(() => expect(box.value).toMatch(/OTHER/));
+        fireEvent.change(box, { target: { value: box.value.split('\n').filter((line) => line.trim() !== 'OTHER').join('\n') } });
+        fireEvent.click(screen.getByRole('button', { name: 'Update List' }));
     }
 
     it('ProjectRosterForm, unlocked', async () => {
@@ -657,8 +725,8 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
         expect(linkAction.mock.calls[0][0].prebuiltPsbt.psbtHex).toBe('aa00');
     });
 
-    // Drives the recipients path to the list review, where the line renders.
-    async function airdropReviewHint(ready) {
+    // Drives the recipients path to the first Confirm Standard page.
+    async function airdropListConfirm(ready) {
         mount(AirdropForm, { walletId: 'w', initialChainId: BTC, initialTick: 'JDOG', onBack() {} }, messagingWith({
             signerReady: vi.fn().mockResolvedValue({ ready }),
             getTokenInfo: vi.fn().mockResolvedValue({ chainId: BTC, tick: 'JDOG', divisibility: 8, locks: {} }),
@@ -669,25 +737,27 @@ describe('two-step copy does not ask an unlocked wallet for a password', () => {
             target: { value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4\n1FWDonkMbC6hL64JiysuggHnUAw2CKWszs' },
         });
         fireEvent.click(await screen.findByRole('button', { name: 'Review Recipients' }));
-        return screen.findByText(/^Airdrop is a two-transaction flow/);
+        expect(await screen.findByTestId('confirm-sentence')).toHaveTextContent('Create address list of 2 items');
+        expect(screen.getByTestId('confirm-reject')).toHaveAccessibleName('Reject');
+        expect(screen.getByTestId('confirm-approve')).toHaveAccessibleName('Approve');
+        return screen.findByTestId('confirm-summary-notice');
     }
 
-    it('AirdropForm, unlocked', async () => {
-        const hint = await airdropReviewHint(true);
-        await waitFor(() => expect(hint.textContent).toMatch(/no password is needed/));
+    it('AirdropForm, unlocked, shows the first transaction on Confirm Standard', async () => {
+        const notice = await airdropListConfirm(true);
+        expect(notice).toHaveTextContent('This is the first of two transactions.');
+        expect(screen.queryByText(/no password is needed/i)).toBeNull();
     });
 
-    it('AirdropForm, locked', async () => {
-        const hint = await airdropReviewHint(false);
-        expect(hint.textContent).toMatch(/enter your password twice/);
+    it('AirdropForm, locked, keeps password instructions off the action summary', async () => {
+        await airdropListConfirm(false);
+        expect(screen.queryByText(/enter your password twice/i)).toBeNull();
     });
 
     it('AirdropForm names both steps in plain words, not opcodes', async () => {
-        const hint = await airdropReviewHint(false);
-        expect(hint.textContent).toMatch(/broadcasts the address list/);
-        expect(hint.textContent).toMatch(/step 2 signs the airdrop/);
-        expect(hint.textContent).not.toMatch(/AIRDROP|indexed/);
-        expect(screen.getByRole('button', { name: /^Sign address list/ })).toBeTruthy();
+        const notice = await airdropListConfirm(false);
+        expect(notice.textContent).toMatch(/After the address list confirms, you will approve the airdrop/);
+        expect(notice.textContent).not.toMatch(/AIRDROP|indexed/);
     });
 });
 

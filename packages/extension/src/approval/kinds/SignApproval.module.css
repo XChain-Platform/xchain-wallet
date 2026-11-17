@@ -1,121 +1,29 @@
-/* The request summary and the password form stack with one section gap, so a
-   notice or card that ends the summary never touches the password label. */
-.body {
+/* The warning is followed by the signer controls and then the shared decision
+   row. Nothing in this fixed footer may set the popup wider than its screen. */
+.footer {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-section-gap);
-    min-width: 0;
-}
-
-.body > * {
-    min-width: 0;
-}
-
-.body > :first-child > :last-child {
-    margin-bottom: 0;
-}
-
-.chainLine {
-    display: flex;
-    justify-content: flex-start;
-    margin-bottom: var(--xc-space-2);
-}
-
-.detailsList {
-    margin: var(--xc-space-2) 0 0;
-    padding: 0;
-    border-top: 1px solid var(--xc-border);
-}
-
-.detailsRow {
-    display: grid;
-    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
     gap: var(--xc-space-2);
-    padding: var(--xc-space-1) 0;
-    border-bottom: 1px solid var(--xc-border);
-}
-
-.detailsLabel {
+    width: 100%;
     min-width: 0;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin: 0;
-    align-self: start;
 }
 
-.detailsValue {
+.footer > * {
     min-width: 0;
-    font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text);
+}
+
+.credentials {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
     margin: 0;
-    overflow-wrap: anywhere;
-    white-space: pre-wrap;
+    min-width: 0;
 }
 
-/* §21.3 Source block - distinct from the wallet chrome so the user
-   sees clearly which dApp is asking. Origin reads in mono so trailing
-   ports / paths are scannable; appName below as a plain label. */
-.source {
-    margin: 0 0 var(--xc-space-2) 0;
-}
-
-.sourceLabel {
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--xc-text-muted);
+.permission {
     margin: 0;
 }
 
-.sourceOrigin {
-    font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
-    margin: var(--xc-space-1) 0 0 0;
-    word-break: break-all;
-}
-
-.sourceApp {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    margin: var(--xc-space-1) 0 0 0;
-    overflow-wrap: anywhere;
-}
-
-.textWarning {
-    margin: var(--xc-space-1) 0 0;
-    color: var(--xc-warning-text);
-    font-size: var(--xc-text-xs);
-    line-height: 1.4;
-}
-
-/* §21.3 collapsible Details disclosure - closed by default (power
-   users expand, casual users ignore). The disclosure triangle is the
-   browser default; the toggle row reads as a small label. */
-.details {
-    margin: var(--xc-space-2) 0 0;
-}
-
-.detailsToggle {
-    cursor: pointer;
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--xc-text-muted);
-    list-style: revert;
-    padding: var(--xc-space-1) 0;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    align-content: center;
-}
-
-.detailsToggle:hover {
-    color: var(--xc-text);
+.signInChoice {
+    min-width: 0;
 }

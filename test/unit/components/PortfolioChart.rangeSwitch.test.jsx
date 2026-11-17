@@ -43,7 +43,7 @@ function hourlyCalls(messaging) {
     return messaging.getNativePricesRequest.mock.calls.filter(([request]) => !request.includeHistory);
 }
 
-function mount(historyResponse) {
+function mount(historyResponse, chartProps = {}) {
     const messaging = {
         getSettings: vi.fn(async () => ({ fiatCurrency: 'USD' })),
         getNativePricesRequest: vi.fn((request) => (request.includeHistory
@@ -52,7 +52,7 @@ function mount(historyResponse) {
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
-            <PortfolioChart rows={ROWS} walletId="real-wallet" />
+            <PortfolioChart rows={ROWS} walletId="real-wallet" {...chartProps} />
         </MessagingProvider>,
     );
     return messaging;
@@ -81,6 +81,20 @@ afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 afterEach(() => cleanup());
 
 describe('PortfolioChart range switching', () => {
+    it('labels the portfolio range in the selected coin unit', async () => {
+        mount(async () => ({ prices: {} }), {
+            behind: true,
+            unit: { tick: 'BTC', chainId: CHAIN_ID, price: 80_000 },
+        });
+
+        const chart = await screen.findByRole('img', { name: /Range high .* BTC, low .* BTC/ });
+        const labels = [...chart.parentElement.querySelectorAll('[data-chart-scale]')];
+        // A BTC-only portfolio is flat when measured in BTC, so the scale
+        // correctly collapses while retaining the selected unit.
+        expect(labels).toHaveLength(1);
+        expect(labels.every((label) => label.textContent.endsWith(' BTC'))).toBe(true);
+    });
+
     it('keeps the drawn line while a daily range loads, then draws the new range', async () => {
         const history = deferred();
         mount(() => history.promise);

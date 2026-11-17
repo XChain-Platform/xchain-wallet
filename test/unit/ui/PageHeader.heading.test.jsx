@@ -125,11 +125,11 @@ describe('PageHeader', () => {
 
         expect(header).toMatch(/--xc-page-header-side:\s*var\(--xc-control-h-md\)/);
         expect(header).toMatch(
-            /grid-template-columns:\s*var\(--xc-page-header-side\)\s+minmax\(0,\s*1fr\)\s+var\(--xc-page-header-side\)/,
+            /grid-template-columns:\s*minmax\(var\(--xc-page-header-side\),\s*1fr\)\s+minmax\(0,\s*auto\)\s+minmax\(max-content,\s*1fr\)/,
         );
-        expect(title).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(title).toMatch(/white-space:\s*normal/);
-        expect(title).toMatch(/-webkit-line-clamp:\s*2/);
+        // Operator rule 2026-11-13: a title never runs under the trailing buttons; it ends in an ellipsis.
+        expect(title).toMatch(/white-space:\s*nowrap/);
+        expect(title).toMatch(/text-overflow:\s*ellipsis/);
         expect(title).toMatch(/overflow:\s*hidden/);
         expect(trailingButton).toMatch(/width:\s*var\(--xc-control-h-md\)/);
         expect(trailingButton).toMatch(/height:\s*var\(--xc-control-h-md\)/);
@@ -174,8 +174,21 @@ describe('PageHeader', () => {
                             && attribute.name.name === 'trailing',
                     );
                     if (!trailing) return;
+                    // A trailing built by a local helper call (History's
+                    // headerTools(withFilter)) is checked through the helper's body.
+                    const expression = trailing.value?.expression;
+                    const helperInit = expression?.type === 'CallExpression'
+                        && expression.callee.type === 'Identifier'
+                        ? path.scope.getBinding(expression.callee.name)?.path.node.init
+                        : null;
+                    const variableInit = expression?.type === 'Identifier'
+                        ? path.scope.getBinding(expression.name)?.path.node.init
+                        : null;
+                    const trailingRoot = /Function/.test(helperInit?.type || '')
+                        ? helperInit.body
+                        : variableInit || trailing.value;
                     const actions = findNodes(
-                        trailing.value,
+                        trailingRoot,
                         (node) => node.type === 'JSXElement'
                             && jsxName(node.openingElement.name) === 'Button',
                     ).filter((action) => !action.openingElement.attributes.some(
@@ -187,11 +200,11 @@ describe('PageHeader', () => {
                         // A list page's title-line filter is the shared ListFilterMenu
                         // (its trigger is the kit's icon Button), often held in a variable.
                         const holdsFilterMenu = findNode(
-                            trailing.value,
+                            trailingRoot,
                             (node) => (node.type === 'JSXOpeningElement' && /Filter(Menu|Popover)$/.test(jsxName(node.name)))
-                                || (node.type === 'Identifier' && /filter(Menu|Popover)$/i.test(node.name)),
+                                || (node.type === 'Identifier' && /(filter(Menu|Popover)|Tools)$/i.test(node.name)),
                         );
-                        if (!holdsFilterMenu) invalidTrailingActions.push(file);
+                        if (!holdsFilterMenu) invalidTrailingActions.push(`${file}:${opening.loc?.start?.line ?? '?'}`);
                         return;
                     }
                     for (const action of actions) {
@@ -222,7 +235,7 @@ describe('PageHeader', () => {
                         const iconNode = propIconNode || childIconNode;
                         if (hasLabel && !iconNode && localIconNode) continue;
                         if (!hasLabel || !iconNode) {
-                            invalidTrailingActions.push(file);
+                            invalidTrailingActions.push(`${file}:${opening.loc?.start?.line ?? '?'}`);
                             continue;
                         }
                         pageHeaderActions.push({

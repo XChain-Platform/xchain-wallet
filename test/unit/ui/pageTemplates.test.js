@@ -47,7 +47,10 @@ function messagingFor(overrides = {}) {
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         signerReady: () => Promise.resolve({ ready: true }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
-        getContractByActionIndex: () => Promise.resolve({}),
+        // The method is always picked from the contract's declared list, so the row carries one.
+        getContractByActionIndex: () => Promise.resolve({
+            abi: { version: 1, methods: { transfer: { params: [] } } },
+        }),
         composeForConfirm: () => Promise.resolve({
             psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 1,
         }),

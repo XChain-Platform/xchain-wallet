@@ -205,7 +205,7 @@ describe('extension popup main-screen accessibility', () => {
     it('scans a Chrome-delivered approval request at popup size', async () => {
         window.history.replaceState(null, '', '/approval.html?id=approval-1');
         const { container } = render(<Router />);
-        await screen.findByText('Connect to XChain Wallet?');
+        await screen.findByRole('heading', { level: 1, name: 'Connect Wallet' });
         await screen.findByLabelText('Share Main');
         await expectNoSeriousAxeViolations(container);
     });

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 // The shared Give/Get standard for Swap, Create order, Dispenser
-// and Cross Chain Swap (Quick and Full views of one form state).
+// and Cross-Chain Swap (Quick and Full views of one form state).
 export { useGiveGetView } from './useGiveGetView.js';
 export { ViewSwitch } from './ViewSwitch.jsx';
 export { GiveGetFull } from './GiveGetFull.jsx';

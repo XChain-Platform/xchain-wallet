@@ -80,7 +80,8 @@ describe('BackupSection U57 and U63', () => {
     it('publish form: green Publish labels and tips on network and password', async () => {
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Publish Now…' }));
-        await screen.findByLabelText('Publish network');
+        // The standard Network field (operator ruling 2026-11-13).
+        await screen.findByRole('button', { name: /^Network: / });
         expectOnlyGreen('Publish Labels');
         expectEveryButtonHasIcon();
         const tips = screen.getAllByRole('button', { name: /^About / });
@@ -90,7 +91,7 @@ describe('BackupSection U57 and U63', () => {
     it('check form: green Check for contacts and tips on network and password', async () => {
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Check…' }));
-        await screen.findByLabelText('Restore network');
+        await screen.findByRole('button', { name: /^Network: / });
         expectOnlyGreen('Check for Contacts');
         expectEveryButtonHasIcon();
         expect(screen.getAllByRole('button', { name: /^About / }).length).toBeGreaterThanOrEqual(2);

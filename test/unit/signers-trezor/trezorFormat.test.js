@@ -16,6 +16,8 @@ import {
     toTrezorSignTransaction,
     chainIdToTrezorCoin,
     opReturnPayloadHex,
+    CHAIN_ID_TO_TREZOR_COIN,
+    TREZOR_NETWORK_SUPPORT,
 } from '../../../packages/signers-trezor/src/trezorFormat.js';
 
 describe('chainIdToTrezorCoin', () => {
@@ -23,35 +25,22 @@ describe('chainIdToTrezorCoin', () => {
         expect(chainIdToTrezorCoin('bitcoin-mainnet')).toBe('btc');
     });
 
-    // The firmware HAS a 'test' coin, but it derives at SLIP-44 coin-type 1'
-    // while the descriptor anchor pins 0' on every Bitcoin network, so mapping
-    // it would silently derive addresses the software signer/backend cannot
-    // see. Hardware-unsupported instead (see CHAIN_ID_TO_TREZOR_COIN).
-    it("throws for bitcoin-testnet (coin-type parity with the 0' descriptor anchor)", () => {
-        expect(() => chainIdToTrezorCoin('bitcoin-testnet')).toThrow(/software wallet/);
-        expect(() => chainIdToTrezorCoin('bitcoin-testnet')).toThrow(/funds would appear missing/);
+    // Operator ruling 2026-11-15: the firmware's own test coins are used
+    // (Testnet, Regtest, Litecoin Testnet), driven at the wallet's mainnet
+    // coin-type slot by TrezorSigner, so derivation parity holds.
+    it.each([
+        ['bitcoin-testnet', 'test'],
+        ['bitcoin-regtest', 'regtest'],
+        ['litecoin-testnet', 'tltc'],
+    ])('maps %s to the firmware coin %s', (chainId, coin) => {
+        expect(chainIdToTrezorCoin(chainId)).toBe(coin);
     });
 
-    // Trezor's 'regtest' coin carries the identical SLIP-44 coin-type 1' hazard
-    // as its 'test' coin, so bitcoin-regtest must be excluded exactly like
-    // bitcoin-testnet rather than silently mapped and left for coinTypeFor to
-    // reject with an unrelated internal error (uuid 8fc65869).
-    it("throws for bitcoin-regtest (same coin-type 1' hazard as bitcoin-testnet)", () => {
-        expect(() => chainIdToTrezorCoin('bitcoin-regtest')).toThrow(/software wallet/);
-        expect(() => chainIdToTrezorCoin('bitcoin-regtest')).toThrow(/funds would appear missing/);
-    });
-
-    it('bitcoin-testnet and bitcoin-regtest produce the identical rejection message', () => {
-        let testnetMsg = null;
-        let regtestMsg = null;
-        try { chainIdToTrezorCoin('bitcoin-testnet'); } catch (e) { testnetMsg = e.message; }
-        try { chainIdToTrezorCoin('bitcoin-regtest'); } catch (e) { regtestMsg = e.message; }
-        expect(testnetMsg).toBeTruthy();
-        expect(regtestMsg).toBeTruthy();
-        expect(regtestMsg.replace('Bitcoin regtest', 'Bitcoin testnet')).toBe(testnetMsg);
-        expect(testnetMsg).toContain("can't be used on Bitcoin testnet - ");
-        expect(testnetMsg).not.toContain('bitcoin-testnet');
-        expect(regtestMsg).not.toContain('bitcoin-regtest');
+    it('refusals name the network as the UI does, never the chainId', () => {
+        let msg = null;
+        try { chainIdToTrezorCoin('dogecoin-testnet'); } catch (e) { msg = e.message; }
+        expect(msg).toContain("can't be used on Dogecoin testnet - ");
+        expect(msg).not.toContain('dogecoin-testnet');
     });
 
     it('maps litecoin-mainnet to ltc', () => {
@@ -66,14 +55,34 @@ describe('chainIdToTrezorCoin', () => {
         expect(() => chainIdToTrezorCoin('unknown-chain')).toThrow(/unsupported chainId/);
     });
 
-    // Trezor firmware has no Litecoin/Dogecoin testnet coin, so these are
-    // intentionally unmapped and throw an actionable software-signer hint.
-    it('throws for litecoin-testnet (not in Trezor firmware)', () => {
-        expect(() => chainIdToTrezorCoin('litecoin-testnet')).toThrow(/software wallet/);
-    });
+    // Trezor firmware has no Dogecoin testnet/regtest or Litecoin regtest
+    // coin (common/defs/bitcoin), so these stay unmapped and throw a typed,
+    // actionable software-signer hint.
+    it.each(['dogecoin-testnet', 'dogecoin-regtest', 'litecoin-regtest'])(
+        'throws for %s (no coin in Trezor firmware) with code HW_NETWORK_UNSUPPORTED', (chainId) => {
+            let err = null;
+            try { chainIdToTrezorCoin(chainId); } catch (e) { err = e; }
+            expect(err?.message).toMatch(/software wallet/);
+            expect(err?.message).toMatch(/Trezor firmware has no/);
+            expect(err?.code).toBe('HW_NETWORK_UNSUPPORTED');
+        },
+    );
+});
 
-    it('throws for dogecoin-testnet (not in Trezor firmware)', () => {
-        expect(() => chainIdToTrezorCoin('dogecoin-testnet')).toThrow(/software wallet/);
+describe('TREZOR_NETWORK_SUPPORT', () => {
+    it('has one row per XChain network, consistent with the coin map', () => {
+        for (const family of ['bitcoin', 'litecoin', 'dogecoin']) {
+            for (const kind of ['mainnet', 'testnet', 'regtest']) {
+                const chainId = `${family}-${kind}`;
+                const row = TREZOR_NETWORK_SUPPORT[chainId];
+                expect(row, chainId).toBeTruthy();
+                expect(row.supported).toBe(Object.prototype.hasOwnProperty.call(CHAIN_ID_TO_TREZOR_COIN, chainId));
+                if (!row.supported) expect(row.reason).toMatch(/\S/);
+                // Native test derivation asks nothing of the user: no device
+                // setting to relax, so no condition column at all.
+                expect(Object.keys(row).sort()).toEqual(['reason', 'supported']);
+            }
+        }
     });
 });
 
@@ -370,5 +379,45 @@ describe('toTrezorSignTransaction', () => {
         ];
         const payload = toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths: paths });
         expect(payload.refTxs).toHaveLength(1);
+    });
+
+    // Connect never fetches a previous transaction the team regtest rail holds,
+    // so when the PSBT carries every one, every one goes along.
+    it('forwards segwit refTxs when every input carries its previous transaction', () => {
+        const d = makeDecomposed('p2wpkh');
+        d.inputs[0].prevTxInfo = { hash: 'a'.repeat(64), inputs: [], outputs: [], version: 2, locktime: 0 };
+        const payload = toTrezorSignTransaction({ decomposed: d, coin: 'regtest', signingPaths });
+        expect(payload.refTxs).toHaveLength(1);
+    });
+
+    it('omits a partial segwit refTxs set, which Connect would refuse', () => {
+        const d = makeDecomposed('p2wpkh');
+        d.inputs = [
+            { ...d.inputs[0], prevTxInfo: { hash: 'a'.repeat(64), inputs: [], outputs: [], version: 2, locktime: 0 } },
+            { ...d.inputs[0], prevTxHash: 'b'.repeat(64), prevTxInfo: null },
+        ];
+        const paths = [
+            { inputIndex: 0, path: "m/84'/0'/0'/0/0" },
+            { inputIndex: 1, path: "m/84'/0'/0'/0/1" },
+        ];
+        const payload = toTrezorSignTransaction({ decomposed: d, coin: 'btc', signingPaths: paths });
+        expect(payload.refTxs).toBeUndefined();
+    });
+
+    // Trezor's Litecoin Testnet coin reads P2SH at version 58, the wallet writes 0xc4.
+    it('refuses an output to a 0xc4 ("2...") script address on tltc with a typed code', () => {
+        const d = makeDecomposed();
+        d.outputs = [{ address: '2N3oefVeg6stiTb5Kh3ozCSkaqmx91FDbsm', scriptPubKeyHex: `a914${'cc'.repeat(20)}87`, value: 90000 }];
+        let err = null;
+        try { toTrezorSignTransaction({ decomposed: d, coin: 'tltc', signingPaths }); } catch (e) { err = e; }
+        expect(err?.code).toBe('HW_ADDRESS_FORMAT_UNSUPPORTED');
+    });
+
+    it('passes the same output on Bitcoin testnet, where the firmware reads 0xc4', () => {
+        const d = makeDecomposed();
+        d.outputs = [{ address: '2N3oefVeg6stiTb5Kh3ozCSkaqmx91FDbsm', scriptPubKeyHex: `a914${'cc'.repeat(20)}87`, value: 90000 }];
+        const payload = toTrezorSignTransaction({ decomposed: d, coin: 'test', signingPaths });
+        expect(payload.coin).toBe('test');
+        expect(payload.outputs[0].address).toBe('2N3oefVeg6stiTb5Kh3ozCSkaqmx91FDbsm');
     });
 });

@@ -224,11 +224,11 @@ export function ShellNavigationSection() {
             kicker="The shell uses a catalogue-backed left rail on wide layouts, a five-tab bar on phones, and the wallet menu for the complete destination list."
         >
             <Guidance
-                what={<><code>LeftNav</code> and <code>BottomTabBar</code> read labels and icons from the wallet catalogue. The tab bar exposes Home, Send, Receive, History and Settings, while the rail keeps its wider shortcut list.</>}
+                what={<><code>LeftNav</code> and <code>BottomTabBar</code> read labels and icons from the wallet catalogue. The expanded side menu groups Wallet, Trade, Build and Social destinations; its icon rail uses dividers between those groups. The tab bar exposes Home, Send, Receive, History and Settings.</>}
                 when={<>Mounted once by the shell layout, never by a route.</>}
                 whenNot={<>In-page navigation: Tabs and SegmentedControl.</>}
                 doRule={<>✓ Remove a destination the build lacks instead of disabling it</>}
-                dontRule={<>✗ Add a destination to one component and not the other</>}
+                dontRule={<>✗ Put Scan, Lists or Payments due in the side menu; they stay in the complete wallet menu</>}
                 supersedes={<>Source: <code>walletMenu.js</code>, <code>LeftNav.jsx</code> and <code>BottomTabBar.jsx</code> in <code>shared</code>.</>}
             />
             <Markup>

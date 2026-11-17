@@ -17,22 +17,26 @@
 // Forms render this in place of their own body while
 // `actionConfirm.open` is true, exactly like a picker screen.
 
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { Input } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { MessagingContext } from '../MessagingContext.js';
 import { ConfirmActionModal, composedActionName } from './ConfirmActionModal.jsx';
+
+// The confirm screen's warnings card, for a form's own review step (a watcher
+// build) that says the same lines this screen does.
+export { ActionWarningsCard } from './ConfirmActionModal.jsx';
 import { summaryFromDecoded } from './ConfirmSummary.jsx';
 import { SignCredentials } from './SignCredentials.jsx';
 import { PanicPasswordGate, SigningReadyNote } from '../safety/PanicFreezeNotice.jsx';
 import { formatNativeBaseUnits, tickerForDescriptor } from '../../registry/coinTicker.js';
 import { withOutcomeLabels } from '../utils/betOutcomeLabels.js';
 import { readActiveWallet } from '../utils/activeWalletMemory.js';
-import { sumDecimalStrings, trimAmountTail } from '../utils/amountFormat.js';
+import { formatWithThousands } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/confirmStandard.js';
 import '../../i18n/locales/en/extension.js';
-import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -107,8 +111,8 @@ function useSourceIdentity(address, chainId, walletId) {
  * @param {string} [props.walletId]              wallet whose source record signs the action
  * @param {'small'|'full'} [props.screenVariant]
  * @param {string} props.chainLabel
- * @param {string} [props.feeText]               the form's rate ESTIMATE, used only as a
- *   fallback: when the composed PSBT knows its own fee (§5.2.5) that exact value wins
+ * @param {string} [props.feeText]               accepted for callers; the page reads the fee as a
+ *   figure (the composed fee, else `feeEstimate`), never as a sentence
  * @param {string} [props.coinTicker]            ticker for the exact-fee line
  * @param {string} [props.requestOrigin]         browser-verified requesting site
  * @param {boolean} props.signerReady            wallet already unlocked (no password needed)
@@ -116,6 +120,8 @@ function useSourceIdentity(address, chainId, walletId) {
  * @param {(value: string) => void} props.onPasswordChange
  * @param {boolean} [props.credentialsReady]     override; defaults to signerReady || password typed
  * @param {import('react').ReactNode} [props.extraCredentials]   form-specific gate rendered above the password
+ * @param {string[]} [props.extraWarnings]       form-specific points merged into the shared warning slot
+ * @param {string} [props.warningTestId]         id placed inside that slot when the producer needs one
  * @param {string} [props.hintClassName]
  * @param {object|null} [props.simulation]
  * @param {object} [props.hwSource]: the source address record when it is a
@@ -141,27 +147,31 @@ function useSourceIdentity(address, chainId, walletId) {
  *   this screen renders - see withOutcomeLabels for why it is neutralized first.
  * @param {(amount: string) => string|null} [props.formatNativeFee]
  * @param {(amount: string) => string|null} [props.formatProtocolFee]
- * @param {string} [props.totalText]             form-derived aggregate when the action decoder exposes only a per-unit amount
- * @param {import('./ConfirmSummary.jsx').ConfirmSummaryInput|null} [props.summary]   K6 hero and
- *   before and after input, built by the form from values it already holds
- *   ({ verb, amount, ticker, chainId, direction, address, recipient, changes,
- *   networkFee, protocolFee, notice }). `notice` is one fact the form no longer
- *   shows as a standing warning; it renders as a muted line above the network check. Without one the hero comes from the decoded
- *   action, or the action's name when nothing was decoded.
- * @param {import('react').ReactNode} [props.technicalDetails]   form-specific review rows
- *   shown under Technical details rather than above the footer
+ * @param {(parts: { native?: string[], protocol?: string|null }) => string|null} [props.formatFeeTotal]
+ *   useFeeFiat's formatFeeTotal: prices coin and XCHAIN fees together for the Total's fiat line
+ * @param {string} [props.totalText]             accepted for callers; the Total block sums the payment and fees itself
+ * @param {{ coinAmount?: string|number|null } | null} [props.feeEstimate]   the form's network fee
+ *   ESTIMATE (feeEstimate.js's shape). Used only when the composed PSBT does not know its own
+ *   fee, and then labelled as an estimate; without it an unknown fee reads "plus network fee".
+ * @param {import('./ConfirmSummary.jsx').ConfirmSummaryInput|null} [props.summary]   what the
+ *   form already holds ({ verb, amount, ticker, chainId, direction, address, recipient,
+ *   recipients, totals, networkFee, protocolFee, notice, facts }). `notice` is one fact the
+ *   form no longer shows as a standing warning, a plain line under the facts card; `facts`
+ *   ({ label, value }[]) are rows only the form knows, added to the facts card. Without a
+ *   summary the sentence comes from the decoded action, or the action's name.
  */
 export function ActionConfirmScreen({
     confirmAction,
     walletId: walletIdProp = null,
     screenVariant = 'small',
     chainLabel,
-    feeText,
     signerReady,
     password,
     onPasswordChange,
     credentialsReady,
     extraCredentials = null,
+    extraWarnings = [],
+    warningTestId,
     hintClassName,
     simulation = null,
     coinTicker = '',
@@ -179,64 +189,66 @@ export function ActionConfirmScreen({
     outcomeLabels = null,
     formatNativeFee,
     formatProtocolFee,
-    totalText,
+    formatFeeTotal,
+    feeEstimate = null,
     summary = null,
-    technicalDetails = null,
 }) {
     // The popup and side panel share the stored active wallet, so a switch in
     // one rewrites it under a review open in the other. The review names the
     // wallet that was active when it opened, which is the wallet it signs for.
     const [walletAtOpen] = useState(readActiveWallet);
     const walletId = walletIdProp || walletAtOpen;
+    // A device that is only unplugged, or not connected since the app opened,
+    // can still Approve: the hardware sign page then asks for it and its Try
+    // again reconnects it, which a browser lets happen only after a click.
+    const [hwReconnectable, setHwReconnectable] = useState(false);
+    const handleHwStatus = useCallback((state) => {
+        setHwReconnectable(state?.status === 'disconnected'
+            || (state?.status === 'idle' && Boolean(state?.detail)));
+        onHwStatusChange?.(state);
+    }, [onHwStatusChange]);
     // A hardware signer has no password to type: readiness is the device being
-    // connected, unlocked and on the right app - plus the §18.5 cross-check
-    // tick when the risk classifier demands one. Approve stays disabled until
-    // then, exactly as the legacy review stage gated its Sign button.
+    // connected, unlocked and on the right app (or reconnectable, above) - plus
+    // the §18.5 cross-check tick when the risk classifier demands one. Until
+    // then a tap on Approve sends nothing and says why (G130): the page's top
+    // notice, and the password field's own error, which typing clears.
+    const [passwordMissed, setPasswordMissed] = useState(false);
     const credsComplete = credentialsReady !== undefined
         ? credentialsReady
         : hwSource
-            ? (hwStatus === 'available'
+            ? ((hwStatus === 'available' || hwReconnectable)
                 && (!hwRequireExplicitConfirm || hwExplicitConfirmed))
             : (signerReady || password.length > 0);
+    // What a tap on Approve names as missing: the password, the device, or a
+    // form's own step above Approve (a typed confirmation word).
+    const passwordMissing = !hwSource && !signerReady && !password;
+    const credentialsBlockedText = credsComplete ? ''
+        : passwordMissing ? t('confirmStandard.blocked.password')
+            : hwSource
+                ? ((hwStatus === 'available' || hwReconnectable) && hwRequireExplicitConfirm && !hwExplicitConfirmed
+                    ? t('confirmStandard.blocked.deviceConfirm')
+                    : t('confirmStandard.blocked.device'))
+                : t('confirmStandard.blocked.confirmStep');
 
-    // §5.2.5: prefer the fee the composed PSBT actually pays. The caller's
-    // `feeText` is a rate-table estimate and is only shown when the exact fee
-    // is unknowable (an input value missing from the PSBT), in which case it
-    // stays labelled as an estimate rather than passing for the real thing.
+    // §5.2.5: prefer the fee the composed PSBT actually pays. The form's
+    // estimate is used only when the exact fee is unknowable (an input value
+    // missing from the PSBT), and it stays labelled as an estimate rather than
+    // passing for the real thing.
     const composed = confirmAction.composed;
     const exactSats = composed?.networkFeeSats;
     const descriptor = composed?.chainId ? chainRegistry.get(composed.chainId) : null;
     const ticker = coinTicker || nativeTickerFor(composed?.chainId || chainId);
-    // An envelope's total covers its commit and its reveal, and says so.
-    const feeLabel = composed?.envelopeFees ? 'Network fee, both transactions' : 'Network fee';
     const exactCoinAmount = Number.isFinite(exactSats)
         ? formatNativeBaseUnits(exactSats, descriptor)
         : null;
     const exactFeeFiat = exactCoinAmount && typeof formatNativeFee === 'function'
         ? formatNativeFee(exactCoinAmount)
         : null;
-    const exactFeeText = exactCoinAmount
-        ? `${feeLabel}: ${exactCoinAmount} ${ticker}`.trim()
-            + (exactFeeFiat ? ` (${exactFeeFiat})` : '')
-        : null;
+    // No change output: a remainder under the dust limit went to the fee.
     const dustChangeLimit = composed?.dustChangeLimitSats;
-    const dustChangeText = Number.isFinite(dustChangeLimit) && dustChangeLimit > 0
-        ? `No change output was created. Any remainder below ${formatNativeBaseUnits(dustChangeLimit, descriptor)} ${ticker}`
-            + ' is included in the network fee shown above.'
+    const dustChange = Number.isFinite(dustChangeLimit) && dustChangeLimit > 0
+        ? { amount: formatWithThousands(formatNativeBaseUnits(dustChangeLimit, descriptor)), ticker }
         : null;
-    // The caller's text is a rate-table figure, not the fee of these bytes, so it is
-    // marked as an estimate rather than passing for the amount that will be paid.
-    const estimatedFeeText = feeText && !/estimate/i.test(String(feeText))
-        ? `${feeText} (estimate)`
-        : feeText;
-    const unavailableFeeText = ticker ? `Network fee estimate unavailable (${ticker}).` : null;
-    const displayedFee = dustChangeText ? (
-        <>
-            {exactFeeText}
-            <br />
-            <span data-testid="confirm-dust-change">{dustChangeText}</span>
-        </>
-    ) : (exactFeeText || estimatedFeeText || unavailableFeeText);
 
     // (c): still the host's decode of the composed bytes, with the
     // outcome INDEX annotated by the market's own label for it. The index
@@ -245,15 +257,6 @@ export function ActionConfirmScreen({
     const decoded = withOutcomeLabels(composed?.decoded, outcomeLabels);
     const amountDetail = decoded?.details?.find((detail) => detail?.label === 'Amount');
     const tokenDetail = decoded?.details?.find((detail) => detail?.label === 'Token');
-    const nativePaymentTotal = composed?.bareNativePayment
-        && Number.isFinite(exactSats)
-        && amountDetail?.value
-        && String(tokenDetail?.value || '').toUpperCase() === String(ticker).toUpperCase()
-        ? trimAmountTail(sumDecimalStrings([
-            amountDetail.value,
-            formatNativeBaseUnits(exactSats, descriptor),
-        ]))
-        : null;
 
     // #40: the spender, taken from the confirm hook rather than from a new
     // prop on all ~38 calling forms. Every form already passes `from` into
@@ -280,15 +283,18 @@ export function ActionConfirmScreen({
         chainId: summary?.chainId || composed?.chainId || chainId,
     };
     if (!resolvedSummary.address && sourceAddress) resolvedSummary.address = sourceAddress;
-    // The cost card's network fee as a figure: the composed transaction's
-    // exact fee, else the form's estimate, which stays labelled as one.
-    const estimateAmount = summary?.networkFee?.amount ? String(summary.networkFee.amount) : '';
+    // The network fee as a figure: the composed transaction's exact fee, else
+    // the form's estimate (its summary's, or the feeEstimate it computed),
+    // which stays labelled as one.
+    const estimateAmount = summary?.networkFee?.amount
+        ? String(summary.networkFee.amount)
+        : (feeEstimate?.coinAmount ? String(feeEstimate.coinAmount) : '');
     const networkFee = exactCoinAmount
         ? { amount: exactCoinAmount, ticker, fiat: exactFeeFiat, estimate: false }
         : estimateAmount
             ? {
                 amount: estimateAmount,
-                ticker: summary.networkFee.ticker || ticker,
+                ticker: summary?.networkFee?.ticker || ticker,
                 fiat: typeof formatNativeFee === 'function' ? formatNativeFee(estimateAmount) : null,
                 estimate: true,
             }
@@ -340,19 +346,22 @@ export function ActionConfirmScreen({
             signingWallet={sourceIdentity.wallet}
             hardwareSigner={Boolean(hwSource)}
             chainLabel={chainLabel}
-            feeText={displayedFee}
-            totalText={totalText || (nativePaymentTotal
-                ? t('send.totalValue', { amount: nativePaymentTotal, ticker })
-                : undefined)}
             requestOrigin={requestOrigin}
             nativeTicker={ticker}
             formatNativeFee={formatNativeFee}
             formatProtocolFee={formatProtocolFee}
+            formatFeeTotal={formatFeeTotal}
             summary={resolvedSummary}
             networkFee={networkFee}
             paymentAmount={paymentAmount}
-            technicalDetails={technicalDetails}
+            dustChange={dustChange}
+            extraWarnings={extraWarnings}
+            warningTestId={warningTestId}
             credentialsReady={credsComplete}
+            credentialsBlockedText={credentialsBlockedText}
+            onApproveBlocked={(reason) => {
+                if (reason === 'credentials' && passwordMissing) setPasswordMissed(true);
+            }}
             credentials={(
                 <>
                     {extraCredentials}
@@ -364,7 +373,7 @@ export function ActionConfirmScreen({
                         <SignCredentials
                             fromAddress={hwSource}
                             chainId={chainId}
-                            onStatusChange={onHwStatusChange}
+                            onStatusChange={handleHwStatus}
                             getSignerStatus={getSignerStatus}
                             signerInfo={hwSignerInfo}
                             requireExplicitConfirm={hwRequireExplicitConfirm}
@@ -381,8 +390,12 @@ export function ActionConfirmScreen({
                                 label={t('common.password')}
                                 help={t('components.messageConfirmScreen.requiredToSign')}
                                 value={password}
-                                onChange={(e) => onPasswordChange(e.target.value)}
+                                onChange={(e) => {
+                                    setPasswordMissed(false);
+                                    onPasswordChange(e.target.value);
+                                }}
                                 autoComplete="current-password"
+                                error={passwordMissed && !password ? t('confirmStandard.blocked.passwordField') : undefined}
                             />
                         </PanicPasswordGate>
                     )}

@@ -86,9 +86,12 @@ assert.ok(/from '\.\.\/hooks\/useDropZone\.js'/.test(importSrc),
     'ImportWallet imports useDropZone');
 assert.ok(/'\.xchain-wallet'/.test(importSrc),
     'ImportWallet backupDrop accepts the .xchain-wallet extension');
-assert.ok(/setBackupFileName\(file\.name\);[\s\S]{0,200}setBackupContent/.test(importSrc),
-    'ImportWallet backupDrop seeds the existing backupContent / backupFileName state');
-assert.ok(/drop a backup file/i.test(importSrc),
-    'ImportWallet hint surfaces the drop affordance');
+assert.ok(/setBackupContent\(text\);[\s\S]{0,200}setBackupFile\(\{ name: file\.name/.test(importSrc),
+    'ImportWallet backupDrop seeds the backupContent and chosen-file summary state');
+// The drop area and the summary card that replaces it both take a drop.
+assert.ok(/<FileField\s+variant="area"[^>]*drop=\{backupDrop\}/.test(importSrc),
+    'ImportWallet draws the backup drop area as the shared FileField area');
+assert.ok(/<section[\s\S]{0,80}\{\.\.\.backupDrop\.rootProps\}/.test(importSrc),
+    'ImportWallet keeps the summary card a drop target');
 
-console.log('OK: useDropZone + PsbtSignForm / ContactsSection / ImportWallet wiring smoke (24 checks)');
+console.log('OK: useDropZone + PsbtSignForm / ContactsSection / ImportWallet wiring smoke (25 checks)');

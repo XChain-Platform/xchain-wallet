@@ -1,0 +1,91 @@
+/* Settings > About, Titled Sections layout (operator pick 4, 2026-11-15):
+   the logo and intro on top, then the facts under small section titles.
+   Every value stays visible; nothing collapses and nothing is blue. */
+
+.logo {
+    display: block;
+    height: auto;
+    max-width: 100%;
+}
+
+.brandTop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-3);
+    padding: var(--xc-space-3) 0 var(--xc-space-1);
+}
+
+/* The intro is plain text under the logo, never a notice card. */
+.intro {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    line-height: 1.45;
+    text-align: center;
+    max-width: 34ch;
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+/* One facts card per section: rows with dividers, edge to edge. */
+.card {
+    composes: flush from '../../../ui/Card.module.css';
+    list-style: none;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.card > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+.value {
+    min-width: 0;
+    font-weight: 600;
+    text-align: end;
+    overflow-wrap: anywhere;
+    color: var(--xc-text);
+}
+
+.mutedValue {
+    color: var(--xc-text-muted);
+    font-style: italic;
+    font-weight: 400;
+}
+
+.code {
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-sm);
+}
+
+.toggleItem {
+    padding: var(--xc-space-1) var(--xc-space-4);
+}
+
+.updateIconSpinning {
+    display: inline-flex;
+    animation: about-update-spin 0.7s linear infinite;
+}
+
+@keyframes about-update-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .updateIconSpinning {
+        animation: none;
+    }
+}
+
+:global(#full-license-text) {
+    overflow-wrap: normal;
+    word-break: normal !important;
+    hyphens: none;
+}

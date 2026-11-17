@@ -77,7 +77,10 @@ describe('HomeTabs network filtering', () => {
         expect(screen.getByRole('option', { name: 'Sort by name' })).toHaveAttribute('aria-selected', 'true');
         expect(screen.getByRole('option', { name: 'Sort by value' })).toBeInTheDocument();
         fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' });
-        expect(screen.getByRole('searchbox', { name: 'Search coins by name' })).toBeInTheDocument();
+        // Balances lists coins and tokens, so its search names both, and the
+        // menu carries the Balances Type field beside Sort.
+        expect(screen.getByRole('searchbox', { name: 'Search coins, tokens and NFTs by name' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Type/ })).toHaveAttribute('aria-haspopup', 'listbox');
         expect(screen.getByRole('button', { name: /^Filter by network/ })).toBeInTheDocument();
 
         fireEvent.keyDown(window, { key: 'Escape' });
@@ -169,7 +172,8 @@ describe('HomeTabs network filtering', () => {
         const rows = [...container.querySelectorAll('[data-activity-row]')];
         const confirmed = rows.find((row) => row.textContent.includes('Confirmed'));
         const pending = rows.find((row) => row.textContent.includes('Pending'));
-        expect(confirmed).toHaveTextContent('Block 123,456');
+        expect(confirmed).toHaveTextContent('Block 123456');
+        expect(confirmed).not.toHaveTextContent('123,456');
         expect(pending).not.toHaveTextContent(/Block/);
         expect(pending.querySelector('time')).not.toBeNull();
     });

@@ -107,6 +107,21 @@ function submit() {
     fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 }
 
+// The form error standard (Notice Standard, 2026-11-15): a refused press
+// shows the "Form errors" notice listing every problem and a line under each
+// failing field, so several alerts can be on the page at once. A refusal is
+// found in any of them.
+async function findAlertWith(message) {
+    let found = null;
+    await waitFor(() => {
+        found = screen.getAllByRole('alert').find((alert) => (
+            message instanceof RegExp ? message.test(alert.textContent) : alert.textContent.includes(message)
+        )) || null;
+        expect(found, `an alert saying ${message}`).not.toBeNull();
+    });
+    return found;
+}
+
 afterEach(() => cleanup());
 
 describe('TokenWizard advanced disclosure (PC-06)', () => {
@@ -119,7 +134,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
 
         submit();
         // The amount field names its own refusal.
-        expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid decimal amount');
+        await findAlertWith('Enter a valid decimal amount');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -135,7 +150,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
         submit();
-        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        await findAlertWith(message);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -147,9 +162,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         });
 
         submit();
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Max mint per address cannot be less than max mint per transaction.',
-        );
+        await findAlertWith('Max mint per address cannot be less than max mint per transaction.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -162,7 +175,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         fireEvent.change(screen.getByLabelText(label), { target: { value: 'not-an-address' } });
 
         submit();
-        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        await findAlertWith(message);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -233,7 +246,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         });
 
         submit();
-        await screen.findByText(/must be in the future/i);
+        await findAlertWith(/must be in the future/i);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -246,7 +259,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         });
 
         submit();
-        await screen.findByText(/all three/i);
+        await findAlertWith(/all three/i);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -270,8 +283,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         submit();
         // Assert on the error region specifically: the payout hint also
         // says "whole numbers only" while divisibility is unproven.
-        const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toMatch(/whole number/i);
+        await findAlertWith(/whole number/i);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -289,7 +301,7 @@ describe('TokenWizard advanced disclosure (PC-06)', () => {
         expect(header().getAttribute('aria-expanded')).toBe('false');
 
         submit();
-        expect(await screen.findByRole('alert')).toHaveTextContent(/all three/i);
+        await findAlertWith(/all three/i);
         await waitFor(() => expect(header().getAttribute('aria-expanded')).toBe('true'));
         expect(screen.getByRole('textbox', { name: 'Callback token' })).toBeVisible();
         expect(composeForConfirm).not.toHaveBeenCalled();

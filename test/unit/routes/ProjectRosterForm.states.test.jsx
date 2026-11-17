@@ -103,11 +103,11 @@ function expectInsideTemplate(element) {
 }
 
 async function publishList() {
-    await screen.findByText('No list published yet. This will be the first.');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
     fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: 'VALID' } });
     fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
-    fireEvent.click(screen.getByRole('button', { name: /^Create project tokens$/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
     await screen.findByRole('form', { name: 'Review official token list' });
     fireEvent.click(screen.getByRole('button', { name: 'Publish List' }));
     fireEvent.click(await screen.findByTestId('confirm-approve'));
@@ -121,7 +121,7 @@ afterEach(() => {
 describe('ProjectRosterForm: every state renders inside a page template', () => {
     it('renders the watcher-mode refusal inside a template', async () => {
         mount(messagingWith({ getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }) }));
-        expectInsideTemplate(await screen.findByText('Not available in watcher mode'));
+        expectInsideTemplate(await screen.findByText('Not available when another phone signs'));
     });
 
     it('renders the address load error inside a template', async () => {
@@ -150,6 +150,24 @@ describe('ProjectRosterForm: every state renders inside a page template', () => 
         mount(messagingWith());
         await publishList();
         expectInsideTemplate(await screen.findByText('List is on its way'));
+    });
+
+    it('keeps Publish List enabled and refuses an empty password in the form', async () => {
+        const messaging = messagingWith({ signerReady: vi.fn().mockResolvedValue({ ready: false }) });
+        mount(messaging);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
+        fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: 'VALID' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
+
+        const publish = await screen.findByRole('button', { name: 'Publish List' });
+        expect(publish).toBeEnabled();
+        fireEvent.click(publish);
+        expect(await screen.findByRole('alert', { name: /form errors/i }))
+            .toHaveTextContent('Enter your wallet password.');
+        expect(screen.getByLabelText('Password')).toHaveAttribute('aria-invalid', 'true');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('renders the done panel inside a template', async () => {

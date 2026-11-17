@@ -23,12 +23,15 @@ import styles from './GiveGet.module.css';
  * @param {(view: 'quick' | 'full') => void} props.onChange
  * @param {string} [props.label]   accessible name of the group
  * @param {boolean} [props.disabled]
+ * @param {boolean} [props.inSection]  true when it is the first row inside the
+ *   section it restyles (the give/get forms, operator 2026-11-13): it then only
+ *   switches that section's inputs and takes the section's own 8px rhythm.
  */
-export function ViewSwitch({ value, onChange, label, disabled = false }) {
+export function ViewSwitch({ value, onChange, label, disabled = false, inSection = false }) {
     return (
         <SegmentedControl
             aria-label={label ?? t('components.giveGet.formView')}
-            className={styles.viewSwitch}
+            className={inSection ? styles.viewSwitchInSection : styles.viewSwitch}
             value={value}
             onChange={onChange}
             items={[

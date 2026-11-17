@@ -26,7 +26,7 @@ import { withAccountLock } from '../cosigner/accountLock.js';
 
 export class CoSignerAccountNotFoundError extends Error {
     constructor(id) {
-        super(`co-signer account not found: ${id}`);
+        super(`cosigner account not found: ${id}`);
         this.name = 'CoSignerAccountNotFoundError';
         this.id = id;
     }

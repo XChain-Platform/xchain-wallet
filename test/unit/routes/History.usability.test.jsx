@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
@@ -25,7 +25,7 @@ function provider(messaging, child, shell = 'web') {
 afterEach(() => cleanup());
 
 describe('History usability', () => {
-    it('renders no outside favicon URL for extension explorer actions', () => {
+    it('draws extension explorer actions with bundled logos, never an outside favicon URL', () => {
         const view = render(provider(
             {
                 listContacts: vi.fn().mockResolvedValue([]),
@@ -50,8 +50,7 @@ describe('History usability', () => {
         ));
 
         const mempool = screen.getByRole('link', { name: /Mempool/ });
-        expect(mempool.querySelector('img')).toBeNull();
-        expect(mempool).toHaveTextContent(/^M/);
+        expect(mempool.querySelector('img[data-explorer-logo="mempool"]')).toBeTruthy();
         const imageSources = [...view.container.querySelectorAll('img')]
             .map((image) => image.getAttribute('src'));
         expect(imageSources).not.toEqual(expect.arrayContaining([
@@ -251,7 +250,7 @@ describe('History usability', () => {
         expect(preview.style.maxHeight).toBe('');
     });
 
-    it('reports copy failures for detail values and receipts', async () => {
+    it('reports copy failures for receipts, with no copy buttons in Details', async () => {
         Object.defineProperty(document, 'execCommand', {
             configurable: true,
             value: vi.fn(() => false),
@@ -280,17 +279,20 @@ describe('History usability', () => {
             />,
         ));
 
+        // Copying lives in the Actions list; Details values carry no copy
+        // button of their own (operator ruling 2026-11-13).
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Copy Transaction ID' }));
-        expect(await screen.findByText('Copy failed: the clipboard is unavailable.')).toBeInTheDocument();
+        expect(within(screen.getByRole('tabpanel', { name: 'Details' }))
+            .queryAllByRole('button', { name: /copy/i })).toHaveLength(0);
 
-        fireEvent.click(screen.getByRole('button', { name: 'More' }));
-        fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy receipt' }));
-        expect(document.execCommand).toHaveBeenCalledTimes(2);
+        // Copy receipt is a row of the Actions tab's list (G101).
+        fireEvent.click(screen.getByRole('tab', { name: 'Actions' }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Copy receipt/ }));
+        expect(document.execCommand).toHaveBeenCalledTimes(1);
         expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeInTheDocument();
     });
 
-    it('copies the full transaction hash and builds working explorer destinations', async () => {
+    it('shows the full transaction hash in Details and builds working explorer destinations', async () => {
         const writeText = vi.fn().mockResolvedValue(undefined);
         const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
         Object.defineProperty(navigator, 'clipboard', {
@@ -322,14 +324,18 @@ describe('History usability', () => {
             ));
 
             fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-            fireEvent.click(screen.getByRole('button', { name: 'Copy Transaction ID' }));
-            await waitFor(() => expect(writeText).toHaveBeenCalledWith(txHash));
+            const details = screen.getByRole('tabpanel', { name: 'Details' });
+            expect(details.querySelector(`[title="${txHash}"]`)).toBeTruthy();
+            expect(within(details).queryAllByRole('button', { name: /copy/i })).toHaveLength(0);
+            expect(writeText).not.toHaveBeenCalled();
 
-            expect(screen.getByRole('link', { name: 'XChain' }))
+            // The explorers are "View on" rows of the Actions tab's list (G101).
+            fireEvent.click(screen.getByRole('tab', { name: 'Actions' }));
+            expect(screen.getByRole('link', { name: /^View on XChain/ }))
                 .toHaveAttribute('href', 'https://explorer.xchain.io/BTC/action/12');
-            expect(screen.getByRole('link', { name: 'Mempool' }))
+            expect(screen.getByRole('link', { name: /^View on Mempool/ }))
                 .toHaveAttribute('href', `https://mempool.space/tx/${txHash}`);
-            expect(screen.getByRole('link', { name: 'Blockstream' }))
+            expect(screen.getByRole('link', { name: /^View on Blockstream/ }))
                 .toHaveAttribute('href', `https://blockstream.info/tx/${txHash}`);
         } finally {
             if (clipboardDescriptor) {
@@ -378,8 +384,7 @@ describe('History usability', () => {
                 />,
             ));
 
-            fireEvent.click(screen.getByRole('button', { name: 'More' }));
-            fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy receipt' }));
+            fireEvent.click(await screen.findByRole('button', { name: /^Copy receipt/ }));
 
             await waitFor(() => expect(writeText).toHaveBeenCalledWith([
                 'Date: 2024-01-15T20:30:00.000Z',
@@ -431,8 +436,7 @@ describe('History usability', () => {
 
         try {
             render(detail());
-            fireEvent.click(screen.getByRole('button', { name: 'More' }));
-            fireEvent.click(await screen.findByRole('menuitem', { name: 'Share receipt' }));
+            fireEvent.click(await screen.findByRole('button', { name: /^Share receipt/ }));
 
             await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
             expect(await screen.findByText('Transaction receipt copied.')).toBeInTheDocument();
@@ -444,8 +448,7 @@ describe('History usability', () => {
             );
             Object.defineProperty(navigator, 'share', { configurable: true, value: share });
             render(detail());
-            fireEvent.click(screen.getByRole('button', { name: 'More' }));
-            fireEvent.click(await screen.findByRole('menuitem', { name: 'Share receipt' }));
+            fireEvent.click(await screen.findByRole('button', { name: /^Share receipt/ }));
 
             await waitFor(() => expect(share).toHaveBeenCalledOnce());
             expect(writeText).not.toHaveBeenCalled();

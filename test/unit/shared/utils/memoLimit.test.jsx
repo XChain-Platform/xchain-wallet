@@ -130,9 +130,14 @@ describe('shared Memo fields', () => {
             .filter((name) => name.endsWith('.jsx'))
             .flatMap((name) => {
                 const source = readFileSync(join(routesDir, name), 'utf8');
-                return [...source.matchAll(/<(?:Input|Textarea)\b[\s\S]*?\/>/g)]
+                const labelled = [...source.matchAll(/<(?:Input|Textarea)\b[\s\S]*?\/>/g)]
                     .map((match) => ({ name, field: match[0], section: openingTagOfEnclosingSection(source, match.index) }))
                     .filter(({ field }) => /label=(?:"Memo(?: \(optional\))?"|\{t\('send\.memo'\)\})/.test(field));
+                // A memo alone in its Memo section is a MemoSection, optional
+                // by default (the section carries the tag).
+                const lone = [...source.matchAll(/<MemoSection\b[\s\S]*?\/>/g)]
+                    .map((match) => ({ name, field: match[0], section: '<MemoSection optional' }));
+                return [...labelled, ...lone];
             });
 
         expect(memoFields.length).toBeGreaterThan(20);
@@ -141,6 +146,7 @@ describe('shared Memo fields', () => {
             // section that carries the Optional tag (the field then shows none).
             expect(/\boptional(?:\s|=)/.test(field) || /\boptional\b/.test(section), name).toBe(true);
             expect(field, name).toMatch(/maxLength=\{MAX_MEMO_LENGTH\}/);
+            expect(field, name).not.toMatch(/optional=\{false\}/);
         }
     });
 });

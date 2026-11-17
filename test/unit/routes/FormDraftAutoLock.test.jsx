@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
@@ -89,46 +89,54 @@ afterEach(() => {
 
 describe('form drafts across auto-lock', () => {
     it('restores every non-secret field of a multi-recipient Send', async () => {
-        // The wallet holds XCP, so the Asset picker lists it.
+        const FIRST = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+        const SECOND = 'bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3';
+        // The wallet and the From address hold XCP, so the Asset picker lists
+        // it and Multi takes it.
+        const xcp = { tick: 'XCP', quantity: '100000000000', divisibility: 8 };
         const messaging = createMessaging({
+            getAddressBalances: vi.fn().mockResolvedValue({
+                native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                tokens: [xcp],
+            }),
             getWalletBalances: vi.fn().mockResolvedValue({
                 [CHAIN_ID]: [{
                     address: SOURCE.address,
                     balances: {
                         native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
-                        tokens: [{ tick: 'XCP', quantity: '1000', divisibility: 8 }],
+                        tokens: [xcp],
                     },
                 }],
             }),
         });
         const first = mountForm('send', messaging);
-        fireEvent.change(await screen.findByLabelText(/^To$/), {
-            target: { value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' },
-        });
+        fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: FIRST } });
         fireEvent.click(screen.getByRole('button', { name: /^Asset:/ }));
         fireEvent.click(await screen.findByRole('button', { name: /^Select XCP(?: on |$)/ }));
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '2.5' } });
-        fireEvent.click(await screen.findByRole('button', { name: /Add recipient/i }));
-        fireEvent.change(screen.getByLabelText(/Recipient 2 address/i), {
-            target: { value: 'bc1qsecondrecipient0000000000000000000000000' },
-        });
-        fireEvent.change(screen.getByLabelText(/Recipient 2 amount/i, { selector: 'input' }), {
-            target: { value: '1.25' },
-        });
-        fireEvent.click(screen.getByRole('switch', { name: /different token/i }));
+        await screen.findByText(/XCP available/);
+        // Single's complete recipient opens as Multi's first row.
+        fireEvent.click(screen.getByRole('tab', { name: 'Multi' }));
+        await waitFor(() => expect(screen.getAllByTestId('send-multi-row')).toHaveLength(1));
+        fireEvent.click(screen.getByRole('button', { name: /Add Recipient/ }));
+        fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: SECOND } });
+        fireEvent.change(screen.getByLabelText(/^Amount/, { selector: 'input' }), { target: { value: '1.25' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Add$/ }));
 
         const storageKey = `xc:formdraft:send:${WALLET_ID}`;
         await waitFor(() => {
             const saved = JSON.parse(localStorage.getItem(storageKey));
             expect(saved.values).toMatchObject({
-                toAddress: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+                sendMode: 'multi',
+                multiRecipients: [
+                    { to: FIRST, tick: 'XCP', amount: '2.5' },
+                    { to: SECOND, tick: 'XCP', amount: '1.25' },
+                ],
+                toAddress: FIRST,
                 tick: 'XCP',
                 amount: '2.5',
                 perRecipientToken: true,
-                extraLegs: [{
-                    to: 'bc1qsecondrecipient0000000000000000000000000',
-                    amount: '1.25',
-                }],
+                extraLegs: [{ to: SECOND, tick: 'XCP', amount: '1.25' }],
             });
             expect(saved.values).not.toHaveProperty('password');
             expect(saved.values).not.toHaveProperty('gatedScanPassword');
@@ -139,17 +147,69 @@ describe('form drafts across auto-lock', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
 
         await waitFor(() => {
-            expect(document.getElementById('send-destination')).toHaveValue(
-                'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
-            );
-            expect(screen.getByRole('button', { name: /^Asset: XCP(?: on |$)/ })).toBeInTheDocument();
-            expect(document.getElementById('send-amount')).toHaveValue('2.5');
-            expect(screen.getByLabelText(/Recipient 2 address/i)).toHaveValue(
-                'bc1qsecondrecipient0000000000000000000000000',
-            );
-            expect(screen.getByLabelText(/Recipient 2 amount/i, { selector: 'input' })).toHaveValue('1.25');
-            expect(screen.getByRole('switch', { name: /different token/i })).toBeChecked();
+            expect(screen.getByRole('tab', { name: 'Multi' })).toHaveAttribute('aria-selected', 'true');
+            expect(screen.getAllByTestId('send-multi-row').map((row) => row.querySelector('button').getAttribute('aria-label')))
+                .toEqual([
+                    `Edit recipient 1: 2.5 XCP to ${FIRST}`,
+                    `Edit recipient 2: 1.25 XCP to ${SECOND}`,
+                ]);
         });
+        expect(messaging.sendToken).not.toHaveBeenCalled();
+    });
+
+    it('opens a draft saved before the tabs, with its extra rows, as the Multi list', async () => {
+        const FIRST = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+        const SECOND = 'bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3';
+        localStorage.setItem(`xc:formdraft:send:${WALLET_ID}`, JSON.stringify({
+            savedAt: Date.now(),
+            values: {
+                chainId: CHAIN_ID,
+                toAddress: FIRST,
+                tick: 'XCP',
+                amount: '2.5',
+                memo: '',
+                perRecipientToken: false,
+                extraLegs: [{ id: 'leg-1', to: SECOND, amount: '1.25', tick: '' }],
+            },
+        }));
+        mountForm('send', createMessaging());
+        fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+        await waitFor(() => {
+            expect(screen.getByRole('tab', { name: 'Multi' })).toHaveAttribute('aria-selected', 'true');
+            expect(screen.getAllByTestId('send-multi-row')).toHaveLength(2);
+        });
+        // The row without its own token took the first row's.
+        expect(screen.getByRole('button', { name: `Edit recipient 2: 1.25 XCP to ${SECOND}` })).toBeInTheDocument();
+    });
+
+    it('checks a restored half-typed row at Send instead of composing it', async () => {
+        const FIRST = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+        const SECOND = 'bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3';
+        localStorage.setItem(`xc:formdraft:send:${WALLET_ID}`, JSON.stringify({
+            savedAt: Date.now(),
+            values: {
+                chainId: CHAIN_ID,
+                toAddress: FIRST,
+                tick: 'XCP',
+                amount: '2.5',
+                memo: '',
+                extraLegs: [{ id: 'leg-1', to: SECOND, amount: '', tick: '' }],
+            },
+        }));
+        const messaging = createMessaging({
+            getAddressBalances: vi.fn().mockResolvedValue({
+                native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                tokens: [{ tick: 'XCP', quantity: '100000000000', divisibility: 8 }],
+            }),
+        });
+        mountForm('send', messaging);
+        fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+        await waitFor(() => expect(screen.getAllByTestId('send-multi-row')).toHaveLength(2));
+        await waitFor(() => {
+            fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+            expect(screen.getAllByText('Recipient 2: Enter an amount.').length).toBeGreaterThan(0);
+        });
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(messaging.sendToken).not.toHaveBeenCalled();
     });
 
@@ -218,6 +278,36 @@ describe('form drafts across auto-lock', () => {
 
         expect(screen.queryByRole('button', { name: 'Discard and leave' })).toBeNull();
         expect(localStorage.getItem(storageKey)).toBe(stored);
+    });
+
+    it.each([
+        { kind: 'send', label: /^To$/, values: { chainId: CHAIN_ID, amount: '0.5' } },
+        { kind: 'issue-token', label: /^Ticker$/, values: { chainId: CHAIN_ID, ticker: 'OLDTOKEN' } },
+        { kind: 'dispenser', label: /^Give amount/, values: { chainId: CHAIN_ID, giveAmount: '1' } },
+    ])('discards a saved $kind draft from the X and stops offering Restore', async ({ kind, label, values }) => {
+        const storageKey = `xc:formdraft:${kind}:${WALLET_ID}`;
+        localStorage.setItem(storageKey, JSON.stringify({
+            savedAt: Date.now(),
+            network: 'mainnet',
+            values,
+        }));
+
+        const first = mountForm(kind, createMessaging());
+        const notice = await screen.findByTestId('draft-notice');
+        const form = notice.closest('form');
+        const sections = form.querySelector('[data-form-sections]');
+        expect(notice.compareDocumentPosition(sections) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+        fireEvent.click(within(notice).getByRole('button', { name: 'Discard draft' }));
+        await waitFor(() => expect(screen.queryByTestId('draft-notice')).toBeNull());
+        expect(localStorage.getItem(storageKey)).toBeNull();
+
+        first.unmount();
+        mountForm(kind, createMessaging());
+        expect(await screen.findByLabelText(label)).toBeInTheDocument();
+        expect(screen.queryByTestId('draft-notice')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
+        expect(localStorage.getItem(storageKey)).toBeNull();
     });
 
     it.each([

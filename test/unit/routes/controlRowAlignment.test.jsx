@@ -14,6 +14,7 @@ import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import chainPickerStyles from '../../../packages/core/src/ui/ChainPicker.module.css';
 import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 import tabsStyles from '../../../packages/core/src/ui/Tabs.module.css';
+import toggleStyles from '../../../packages/core/src/ui/SegmentedControl.module.css';
 import networkFilterStyles from '../../../packages/core/src/shared/components/NetworkFilter.module.css';
 import betFeedsStyles from '../../../packages/core/src/shared/routes/BetFeedsList.module.css';
 
@@ -77,10 +78,10 @@ describe('route control row alignment', () => {
         );
 
         // Search now sits in the title-bar filter panel at the md size; the views are icon tabs
-        // (All, Mine, Interactions) and Publish contract is the title bar plus.
+        // (All, My Contracts, Interactions) and Publish contract is the title bar plus.
         fireEvent.click(await screen.findByRole('button', { name: 'Filter contracts' }));
         expectMediumInput(await screen.findByLabelText('Search contracts'));
-        for (const name of ['All', 'Mine', 'Interactions']) {
+        for (const name of ['All', 'My Contracts', 'Interactions']) {
             expect(screen.getByRole('tab', { name })).toHaveClass(tabsStyles.tab);
         }
         expect(screen.getByRole('button', { name: /Publish contract/ })).toHaveClass(buttonStyles.md);
@@ -101,10 +102,15 @@ describe('route control row alignment', () => {
         // Network, Status and Sort are md fields in the title-bar filter panel; the views are
         // icon tabs above the list.
         fireEvent.click(await screen.findByRole('button', { name: 'Filter bet markets' }));
-        for (const label of ['Network', 'Status', 'Sort']) {
+        // Network is the standard Network field (it opens the full-screen
+        // network list, operator ruling 2026-11-13), drawn at md.
+        const network = await screen.findByRole('button', { name: /^Network: / });
+        expect(network.closest(`.${chainPickerStyles.wrap}`)).toHaveClass(chainPickerStyles.md);
+        for (const label of ['Status', 'Sort']) {
             expectMediumInput(await screen.findByLabelText(label));
         }
-        expect(screen.getByRole('tablist', { name: 'Bet market views' })).toHaveClass(tabsStyles.tabs);
+        // Tabs draw the shared view-toggle frame.
+        expect(screen.getByRole('tablist', { name: 'Bet market views' })).toHaveClass(toggleStyles.segmented);
     });
 
     it('keeps staking search and network filter on the md size', async () => {
@@ -127,7 +133,7 @@ describe('route control row alignment', () => {
         expect(networkFilter.closest('[role="dialog"]')).toBe(screen.getByRole('dialog', { name: 'Filter staking' }));
     });
 
-    it('keeps oracle action buttons and outcome chips on the md size', async () => {
+    it('draws the oracle actions as list rows and keeps the outcome chips on the md size', async () => {
         mount(
             <OracleConsole
                 walletId="wallet-1"
@@ -148,12 +154,15 @@ describe('route control row alignment', () => {
             }),
         );
 
-        const view = await screen.findByRole('button', { name: 'View Market' });
-        const copy = screen.getByRole('button', { name: 'Copy to a New Market' });
-        expect(view).toHaveClass(buttonStyles.md);
-        expect(copy).toHaveClass(buttonStyles.md);
+        // The market's actions are one action list (G101), full-width rows
+        // rather than sized buttons; the outcome chips keep the md size.
+        const list = await screen.findByRole('list', { name: 'Market #42 actions' });
+        const view = within(list).getByRole('button', { name: /^View market/ });
+        const copy = within(list).getByRole('button', { name: /^Copy to a new market/ });
+        expect(view).not.toHaveClass(buttonStyles.md);
+        expect(copy).not.toHaveClass(buttonStyles.md);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+        fireEvent.click(within(list).getByRole('button', { name: /^Resolve/ }));
         const outcomes = screen.getByRole('group', { name: 'Winning outcome' });
         for (const chip of within(outcomes).getAllByRole('button')) {
             expect(chip).toHaveClass(buttonStyles.md);

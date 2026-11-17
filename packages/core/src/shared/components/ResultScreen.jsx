@@ -62,7 +62,9 @@ function ActionRow({ doneLabel, onDone, secondaryLabel, onSecondary }) {
                 <Button variant="secondary" icon={<Icon.PlusIcon />} onClick={onSecondary}>{secondaryLabel}</Button>
             ) : null}
             {onDone ? (
-                <Button variant="primary" icon={<Icon.CheckIcon />} onClick={onDone}>{doneLabel}</Button>
+                // Done is the screen's main action, so it is the green success
+                // button with its icon like every main action (U63).
+                <Button variant="success" icon={<Icon.CheckIcon />} onClick={onDone}>{doneLabel}</Button>
             ) : null}
         </div>
     );
@@ -78,7 +80,7 @@ function SignedNotBroadcastScreen({ onDone, title = SIGNED_NOT_BROADCAST_TITLE, 
     };
     return (
         <>
-            <StatusMessage variant="warning" lead={title} testId="result-screen-notice" keepsShellNotice>
+            <StatusMessage variant="warning" title={title} testId="result-screen-notice" keepsShellNotice>
                 <p className={styles.line}>{t('components.queuedResultPanel.currentStageWaitingToBroadcast')}</p>
                 {showUnsaved ? (
                     <p className={styles.line} role="alert">{SIGNED_NOT_BROADCAST_UNSAVED_WARNING}</p>
@@ -101,7 +103,7 @@ function UnsignedScreen({ result, onBuildAnother, onSendAnother, onDone, title }
     const buildAnother = onBuildAnother || onSendAnother;
     return (
         <>
-            <StatusMessage variant="info" lead={heading} testId="result-screen-notice" keepsShellNotice>
+            <StatusMessage variant="info" title={heading} testId="result-screen-notice" keepsShellNotice>
                 {t('components.watcherResultPanel.takeThisTransactionToYour')}
             </StatusMessage>
             <WatcherExport result={result} />
@@ -163,7 +165,7 @@ export function ResultScreen({
     }
     return (
         <>
-            <StatusMessage variant={NOTICE_VARIANT[state] || 'info'} lead={title} testId="result-screen-notice" keepsShellNotice>
+            <StatusMessage variant={NOTICE_VARIANT[state] || 'info'} title={title} testId="result-screen-notice" keepsShellNotice>
                 {message}
             </StatusMessage>
             {children ? <div className={styles.body}>{children}</div> : null}

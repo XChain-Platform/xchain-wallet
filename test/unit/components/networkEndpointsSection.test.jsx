@@ -35,9 +35,7 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
     useMessaging: () => ({ messaging: messagingRecord }),
 }));
 
-const { NetworkEndpointsSection } = await import(
-    '../../../packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx'
-);
+const { EndpointsHarness } = await import('./networkRowHarness.jsx');
 
 // litecoin-regtest is the venue from the live repro: three localhost
 // endpoints on three DIFFERENT non-standard ports, so a port-stripping
@@ -48,7 +46,15 @@ const LTC_REGTEST = {
     hub: 'http://localhost:10000',
 };
 
+// The page lists networks; a row opens that network's own page (G117).
+function openNetwork(chainId) {
+    const row = document.querySelector(`[data-network-row="${chainId}"] button`);
+    expect(row).not.toBeNull();
+    fireEvent.click(row);
+}
+
 function ltcRegtestBlock() {
+    openNetwork('litecoin-regtest');
     const block = screen.getByRole('region', { name: 'Litecoin · regtest' });
     expect(within(block).getByRole('textbox', { name: 'Encoder URL' }))
         .toHaveValue(LTC_REGTEST.encoder);
@@ -56,6 +62,7 @@ function ltcRegtestBlock() {
 }
 
 function bitcoinMainnetBlock() {
+    openNetwork('bitcoin-mainnet');
     return screen.getByRole('region', { name: 'Bitcoin' });
 }
 
@@ -67,16 +74,71 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('NetworkEndpointsSection', () => {
-    it('renders each endpoint group as a card', () => {
-        render(<NetworkEndpointsSection />);
+    it('lists one chevron row per network with its icon area and a summary, and no endpoint fields', () => {
+        settingsRecord = {
+            developerMode: true,
+            sdkEndpoints: {
+                'litecoin-regtest': {
+                    explorerUrl: 'http://localhost:18080',
+                    encoderUrl: 'http://localhost:3223',
+                    hubUrl: 'http://localhost:10000',
+                    custom: true,
+                },
+            },
+        };
+        render(<EndpointsHarness />);
 
-        const groups = screen.getAllByRole('region');
-        expect(groups.length).toBeGreaterThan(1);
-        expect(groups.every((group) => group.className.includes('endpointCard'))).toBe(true);
+        const rows = Array.from(document.querySelectorAll('[data-network-row]'));
+        expect(rows.length).toBeGreaterThan(1);
+        expect(screen.queryAllByRole('region')).toHaveLength(0);
+        expect(screen.queryAllByRole('textbox')).toHaveLength(0);
+        for (const row of rows) {
+            expect(row.querySelector('button')).not.toBeNull();
+            expect(row.querySelector('[aria-hidden="true"]')).not.toBeNull();
+        }
+        const ltc = document.querySelector('[data-network-row="litecoin-regtest"]');
+        expect(ltc).toHaveTextContent('Litecoin · regtest');
+        expect(ltc).toHaveTextContent('Custom endpoint');
+        const btc = document.querySelector('[data-network-row="bitcoin-mainnet"]');
+        expect(btc).toHaveTextContent('Default endpoint');
+    });
+
+    it('opens a network page with its endpoint controls and Back returns to the list', () => {
+        render(<EndpointsHarness />);
+
+        const block = ltcRegtestBlock();
+        expect(within(block).getByRole('textbox', { name: 'Explorer URL' })).toBeInTheDocument();
+        expect(within(block).getByRole('textbox', { name: 'Hub URL' })).toBeInTheDocument();
+        expect(document.querySelector('[data-network-row]')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+
+        expect(screen.queryAllByRole('region')).toHaveLength(0);
+        expect(document.querySelectorAll('[data-network-row]').length).toBeGreaterThan(1);
+    });
+
+    it('keeps a saved endpoint after Back and reopening, and the row summary follows it', async () => {
+        updateSpy.mockResolvedValue(undefined);
+        const view = render(<EndpointsHarness />);
+        const block = bitcoinMainnetBlock();
+        fireEvent.change(within(block).getByLabelText('Explorer URL'), { target: { value: 'https://my-explorer.example' } });
+        fireEvent.click(within(block).getByRole('button', { name: 'Save Endpoints' }));
+        await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+        const saved = updateSpy.mock.calls[0][0].sdkEndpoints['bitcoin-mainnet'];
+        expect(saved.explorerUrl).toBe('https://my-explorer.example');
+        expect(saved.custom).toBe(true);
+
+        // The settings hook now returns the stored record.
+        settingsRecord = { ...settingsRecord, sdkEndpoints: { 'bitcoin-mainnet': saved } };
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        view.rerender(<EndpointsHarness />);
+        expect(document.querySelector('[data-network-row="bitcoin-mainnet"]')).toHaveTextContent('Custom endpoint');
+        const reopened = bitcoinMainnetBlock();
+        expect(within(reopened).getByLabelText('Explorer URL')).toHaveValue('https://my-explorer.example');
     });
 
     it('seeds every field with the port the wallet actually uses', () => {
-        render(<NetworkEndpointsSection />);
+        render(<EndpointsHarness />);
         const block = ltcRegtestBlock();
         expect(within(block).getByRole('textbox', { name: 'Explorer URL' }).value).toBe(LTC_REGTEST.explorer);
         expect(within(block).getByRole('textbox', { name: 'Encoder URL' }).value).toBe(LTC_REGTEST.encoder);
@@ -85,7 +147,7 @@ describe('NetworkEndpointsSection', () => {
     });
 
     it('saves an explorer edit without stripping the sibling ports', () => {
-        render(<NetworkEndpointsSection />);
+        render(<EndpointsHarness />);
         const block = ltcRegtestBlock();
         fireEvent.change(within(block).getByRole('textbox', { name: 'Explorer URL' }), {
             target: { value: 'http://10.0.0.9:18080' },
@@ -105,20 +167,26 @@ describe('NetworkEndpointsSection', () => {
         });
     });
 
-    it('refuses to persist a URL the wallet could not talk to', () => {
-        render(<NetworkEndpointsSection />);
+    it('refuses an invalid URL, marks its field, and clears that error on change', async () => {
+        render(<EndpointsHarness />);
         const block = ltcRegtestBlock();
-        fireEvent.change(within(block).getByRole('textbox', { name: 'Hub URL' }), {
+        const hub = within(block).getByRole('textbox', { name: 'Hub URL' });
+        fireEvent.change(hub, {
             target: { value: 'localhost:10000' },   // no scheme
         });
         fireEvent.click(within(block).getByRole('button', { name: 'Save Endpoints' }));
 
         expect(updateSpy).not.toHaveBeenCalled();
-        expect(within(block).getByRole('alert').textContent).toMatch(/Hub URL/);
+        expect(block.querySelector('[data-form-errors]')).toHaveTextContent(/Hub URL/);
+        expect(hub).toHaveAttribute('aria-invalid', 'true');
+
+        fireEvent.change(hub, { target: { value: LTC_REGTEST.hub } });
+        await waitFor(() => expect(block.querySelector('[data-form-errors]')).toBeNull());
+        expect(hub).not.toHaveAttribute('aria-invalid');
     });
 
     it('requires https for a remote host outside regtest', () => {
-        render(<NetworkEndpointsSection />);
+        render(<EndpointsHarness />);
         const block = bitcoinMainnetBlock();
         fireEvent.change(within(block).getByRole('textbox', { name: 'Explorer URL' }), {
             target: { value: 'http://node.example.com' },
@@ -126,7 +194,7 @@ describe('NetworkEndpointsSection', () => {
         fireEvent.click(within(block).getByRole('button', { name: 'Save Endpoints' }));
 
         expect(updateSpy).not.toHaveBeenCalled();
-        expect(within(block).getByRole('alert')).toHaveTextContent(
+        expect(block.querySelector('[data-form-errors]')).toHaveTextContent(
             'Explorer URL: Use https:// for remote hosts.',
         );
     });
@@ -134,7 +202,8 @@ describe('NetworkEndpointsSection', () => {
     it('saves an explorer edit on a chain that has no hub endpoint', () => {
         // Testnet chains ship without a hub, so their Hub URL field starts
         // empty; an untouched empty field is the chain's default, not an error.
-        render(<NetworkEndpointsSection />);
+        render(<EndpointsHarness />);
+        openNetwork('bitcoin-testnet');
         const block = screen.getByRole('region', { name: 'Bitcoin · testnet' });
         expect(within(block).getByRole('textbox', { name: 'Hub URL' })).toHaveValue('');
         fireEvent.change(within(block).getByRole('textbox', { name: 'Explorer URL' }), {
@@ -142,7 +211,7 @@ describe('NetworkEndpointsSection', () => {
         });
         fireEvent.click(within(block).getByRole('button', { name: 'Save Endpoints' }));
 
-        expect(within(block).queryByRole('alert')).toBeNull();
+        expect(block.querySelector('[data-form-errors]')).toBeNull();
         expect(updateSpy).toHaveBeenCalledTimes(1);
         expect(updateSpy.mock.calls[0][0].sdkEndpoints['bitcoin-testnet']).toMatchObject({
             explorerUrl: 'https://explorer.example.com',
@@ -152,7 +221,8 @@ describe('NetworkEndpointsSection', () => {
     });
 
     it('still checks a hub URL typed on a chain that has no hub endpoint', () => {
-        render(<NetworkEndpointsSection />);
+        render(<EndpointsHarness />);
+        openNetwork('bitcoin-testnet');
         const block = screen.getByRole('region', { name: 'Bitcoin · testnet' });
         fireEvent.change(within(block).getByRole('textbox', { name: 'Hub URL' }), {
             target: { value: 'hub.example.com' },
@@ -160,11 +230,11 @@ describe('NetworkEndpointsSection', () => {
         fireEvent.click(within(block).getByRole('button', { name: 'Save Endpoints' }));
 
         expect(updateSpy).not.toHaveBeenCalled();
-        expect(within(block).getByRole('alert').textContent).toMatch(/Hub URL/);
+        expect(block.querySelector('[data-form-errors]')).toHaveTextContent(/Hub URL/);
     });
 
     it('removes trailing slashes before saving an override', () => {
-        render(<NetworkEndpointsSection />);
+        render(<EndpointsHarness />);
         const block = bitcoinMainnetBlock();
         fireEvent.change(within(block).getByRole('textbox', { name: 'Hub URL' }), {
             target: { value: 'https://private.example.com/BTC///' },
@@ -176,21 +246,18 @@ describe('NetworkEndpointsSection', () => {
     });
 
     it('does not mark a default URL with a trailing slash as custom', () => {
-        render(<NetworkEndpointsSection />);
+        render(<EndpointsHarness />);
         const block = bitcoinMainnetBlock();
         fireEvent.change(within(block).getByRole('textbox', { name: 'Explorer URL' }), {
             target: { value: 'https://explorer.xchain.io/' },
         });
         fireEvent.click(within(block).getByRole('button', { name: 'Save Endpoints' }));
 
-        expect(updateSpy.mock.calls[0][0].sdkEndpoints['bitcoin-mainnet']).toMatchObject({
-            explorerUrl: 'https://explorer.xchain.io',
-            custom: false,
-        });
+        expect(updateSpy).not.toHaveBeenCalled();
     });
 
     it('explains the consequence of saving an unreachable custom host', () => {
-        render(<NetworkEndpointsSection />);
+        render(<EndpointsHarness />);
         const block = bitcoinMainnetBlock();
         fireEvent.change(within(block).getByRole('textbox', { name: 'Hub URL' }), {
             target: { value: 'https://private.example.com/BTC' },
@@ -202,7 +269,7 @@ describe('NetworkEndpointsSection', () => {
     });
 
     it('treats an emptied field as "use the default", not as no endpoint', () => {
-        render(<NetworkEndpointsSection />);
+        render(<EndpointsHarness />);
         const block = ltcRegtestBlock();
         fireEvent.change(within(block).getByRole('textbox', { name: 'Explorer URL' }), {
             target: { value: 'http://10.0.0.9:18080' },
@@ -228,7 +295,7 @@ describe('NetworkEndpointsSection', () => {
                 },
             },
         };
-        render(<NetworkEndpointsSection />);
+        render(<EndpointsHarness />);
         const block = ltcRegtestBlock();
         expect(within(block).getByRole('textbox', { name: 'Explorer URL' }).value).toBe('http://10.0.0.9:18080');
         expect(within(block).getByRole('textbox', { name: 'Hub URL' }).value).toBe(LTC_REGTEST.hub);
@@ -236,7 +303,7 @@ describe('NetworkEndpointsSection', () => {
 
     it('restores the persisted endpoint and shows a rejected save', async () => {
         updateSpy.mockRejectedValueOnce(new Error('Storage is unavailable.'));
-        render(<NetworkEndpointsSection />);
+        render(<EndpointsHarness />);
         const block = ltcRegtestBlock();
         const explorer = within(block).getByRole('textbox', { name: 'Explorer URL' });
         fireEvent.change(explorer, {
@@ -261,7 +328,7 @@ describe('NetworkEndpointsSection', () => {
                 },
             },
         };
-        render(<NetworkEndpointsSection />);
+        render(<EndpointsHarness />);
         fireEvent.click(within(ltcRegtestBlock()).getByRole('button', { name: 'Reset to Default' }));
 
         await waitFor(() => expect(updateSpy).toHaveBeenCalledWith({
@@ -285,8 +352,8 @@ describe('NetworkEndpointsSection', () => {
                 lastRefreshedAt: new Date().toISOString(),
             })),
         };
-        render(<NetworkEndpointsSection />);
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh Now' }));
+        render(<EndpointsHarness />);
+        fireEvent.click(screen.getByRole('button', { name: /^Refresh Now/ }));
 
         expect(await screen.findByText('Refresh complete: 6 networks available from the registry.'))
             .toBeInTheDocument();
@@ -298,7 +365,7 @@ describe('NetworkEndpointsSection', () => {
             getChainRegistryStatus: vi.fn(() => new Promise((resolve) => { resolveOldStatus = resolve; })),
             refreshChainRegistry: vi.fn(),
         };
-        const { rerender } = render(<NetworkEndpointsSection />);
+        const { rerender } = render(<EndpointsHarness />);
 
         messagingRecord = {
             getChainRegistryStatus: vi.fn(async () => ({
@@ -308,7 +375,7 @@ describe('NetworkEndpointsSection', () => {
             })),
             refreshChainRegistry: vi.fn(),
         };
-        rerender(<NetworkEndpointsSection />);
+        rerender(<EndpointsHarness />);
 
         expect(await screen.findByText(/9 networks in the registry/)).toBeInTheDocument();
         resolveOldStatus({
@@ -334,13 +401,13 @@ describe('NetworkEndpointsSection', () => {
                 defaultUrl: 'https://remote-explorer.example',
             },
         };
-        const view = render(<NetworkEndpointsSection />);
+        const view = render(<EndpointsHarness />);
         const explorer = within(bitcoinMainnetBlock()).getByLabelText('Explorer URL');
         expect(explorer).toHaveValue('https://explorer.xchain.io');
 
         try {
             registry.applyRemoteDescriptors([replacement]);
-            view.rerender(<NetworkEndpointsSection />);
+            view.rerender(<EndpointsHarness />);
 
             await waitFor(() => expect(explorer).toHaveValue('https://remote-explorer.example'));
         } finally {
@@ -353,8 +420,8 @@ describe('NetworkEndpointsSection', () => {
             getChainRegistryStatus: vi.fn(async () => null),
             refreshChainRegistry: vi.fn(async () => ({ ok: false, error: 'fetch failed' })),
         };
-        render(<NetworkEndpointsSection />);
-        fireEvent.click(screen.getByRole('button', { name: 'Refresh Now' }));
+        render(<EndpointsHarness />);
+        fireEvent.click(screen.getByRole('button', { name: /^Refresh Now/ }));
 
         expect(await screen.findByText(/registry host could not be reached/)).toHaveTextContent(
             'The networks bundled with this wallet remain active.',

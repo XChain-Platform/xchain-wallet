@@ -8,9 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Button } from './Button.jsx';
 import { FormNotice } from './FormNotice.jsx';
+import { FormNotices } from './formNoticeSlot.js';
 import { StatusMessage } from './StatusMessage.jsx';
 import { getNativeQrScanner } from './nativeQrScanner.js';
 import { beginCameraRequest, CAMERA_START_TIMEOUT_MS, waitForCamera } from './cameraWait.js';
@@ -185,6 +186,24 @@ export function cameraErrorText(e) {
     return 'The camera could not start. Paste the code instead.';
 }
 
+/**
+ * A scanner's error message, dismissible. It joins the form's notices at the
+ * top of the page unless `inPlace` keeps it where the scanner is, so a screen
+ * that shows the scanner under a tab row has the message right under the tabs.
+ *
+ * @param {{ inPlace?: boolean, onDismiss: () => void, children: string }} props
+ */
+function ScanNotice({ inPlace = false, onDismiss, children }) {
+    if (inPlace) {
+        return (
+            <StatusMessage variant="error" className={styles.inPlaceNotice} onDismiss={onDismiss}>
+                {children}
+            </StatusMessage>
+        );
+    }
+    return <FormNotice variant="error" onDismiss={onDismiss}>{children}</FormNotice>;
+}
+
 /** Plain words for each reason the native scanner can refuse to start. */
 const NATIVE_START_TEXT = Object.freeze({
     denied: 'Camera access is turned off for XChain Wallet. Allow it in Settings, or paste the code instead.',
@@ -317,7 +336,7 @@ function NativeCameraScan({ scanner, onFrame, alt }) {
                 {t('ui.qrScanner.scanWithCamera')}
             </Button>
             {error ? (
-                <FormNotice variant="error">{error}</FormNotice>
+                <ScanNotice onDismiss={() => setError(null)}>{error}</ScanNotice>
             ) : (
                 <p style={{ margin: 0, fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
                     {phase === 'open'
@@ -335,6 +354,8 @@ export function QrScanner({
     width = 320,
     alt = t('ui.qrScanner.qrScanner'),
     previewState,
+    noticeInPlace = false,
+    onNoticeChange,
 }) {
     const videoRef = useRef(/** @type {HTMLVideoElement | null} */ (null));
     const onFrameRef = useRef(onFrameHandler);
@@ -348,6 +369,24 @@ export function QrScanner({
             rememberedFailureRef.current ? cameraErrorText(rememberedFailureRef.current) : null
         ),
     );
+    // A dismissed message stays hidden until the scanner reports a different
+    // one; the idle "starting" line does not replace it.
+    const [dismissedError, setDismissedError] = useState(/** @type {string | null} */ (null));
+    const noticeShown = Boolean(error) && error !== dismissedError;
+    // A message that joins the form's notices (FormNotice inside a FormPage)
+    // leaves this region with nothing to show: the camera is hidden too. The
+    // empty region then takes no place in the form stack, so the stack's gap
+    // is not paid twice under the form's notice.
+    const noticeLifted = Boolean(useContext(FormNotices)) && !noticeInPlace;
+    const regionEmpty = Boolean(error) && !(noticeShown && !noticeLifted);
+    const onNoticeChangeRef = useRef(onNoticeChange);
+    onNoticeChangeRef.current = onNoticeChange;
+    // True while the scanner has a message instead of a camera picture, shown
+    // or dismissed, so a host can drop the frame it draws around the camera.
+    const hasError = Boolean(error);
+    useEffect(() => {
+        onNoticeChangeRef.current?.(hasError);
+    }, [hasError]);
     const [cameraRationaleAccepted, setCameraRationaleAccepted] = useState(
         () => Boolean(previewState) || terminalFailureRef.current || !isNativeApp(),
     );
@@ -607,7 +646,7 @@ export function QrScanner({
             aria-label={alt}
             data-testid="qr-scanner"
             style={{
-                display: 'flex',
+                display: regionEmpty ? 'none' : 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: 'var(--xc-space-2)',
@@ -633,10 +672,12 @@ export function QrScanner({
                 }}
             />
             {error ? (
-                <FormNotice variant="error">{error}</FormNotice>
+                noticeShown ? (
+                    <ScanNotice inPlace={noticeInPlace} onDismiss={() => setDismissedError(error)}>{error}</ScanNotice>
+                ) : null
             ) : (
                 <p style={{ margin: 0, fontSize: 'var(--xc-text-xs)', color: 'var(--xc-text-muted)' }}>
-                    {running ? t('ui.qrScanner.scanningPointTheCameraAt') : t('ui.qrScanner.startingCamera')}
+                    {running ?t('ui.qrScanner.scanningPointTheCameraAt') : t('ui.qrScanner.startingCamera')}
                 </p>
             )}
         </div>

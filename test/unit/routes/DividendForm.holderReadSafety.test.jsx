@@ -99,7 +99,7 @@ describe('Dividend holder reads fail closed', () => {
         const messaging = mountDividend(async () => { throw new Error('explorer 500'); }, 'watcher');
         await fillDividend();
         const preview = screen.getByRole('button', { name: 'Pay Dividend' });
-        expect(preview).toBeDisabled();
+        expect(preview).toBeEnabled();
         fireEvent.click(preview);
         await flushTimers();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -120,7 +120,7 @@ describe('Dividend holder reads fail closed', () => {
         }));
         await fillDividend();
         expect(document.body.textContent).toMatch(/holder list is incomplete/i);
-        expect(screen.getByRole('button', { name: 'Pay Dividend' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Pay Dividend' })).toBeEnabled();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 

@@ -17,6 +17,7 @@ import { act as domAct, cleanup, fireEvent, render } from '@testing-library/reac
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+import { feeForRate, openNetworkFeeEditor, typeCustomRate } from '../../helpers/customNetworkFee.js';
 import { CoinpayForm } from '../../../packages/core/src/shared/routes/CoinpayForm.jsx';
 
 const CHAIN = 'dogecoin-testnet';
@@ -185,35 +186,32 @@ describe('CoinpayForm shared confirmation', () => {
             orderMatchActionIndex: actionIndex,
         });
 
-        expect(utils.getByText(message)).toBeTruthy();
-        expect(utils.getByRole('button', { name: 'Pay Order' }).disabled).toBe(true);
+        const action = utils.getByRole('button', { name: 'Pay Order' });
+        expect(action.disabled).toBe(false);
+        await step(() => fireEvent.click(action));
+        expect(utils.getAllByText(message).length).toBeGreaterThan(0);
         expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
     });
 
     it('blocks an invalid custom fee, then keeps the valid fee and selection across Back', async () => {
         const { utils, calls } = await mount();
-        // The fee selector sits in the standard Network fee section,
+        // The fee selector sits in the standard Fees section,
         // closed by default; it stays open across the review and Back.
-        await step(() => fireEvent.click(utils.getByRole('button', { name: /^Network fee\b/ })));
-        await step(() => fireEvent.change(
-            utils.getByRole('slider', { name: 'Network fee' }),
-            { target: { value: '3' } },
-        ));
-        const customRate = utils.getByRole('textbox', { name: 'Custom fee rate (DOGE/kB)' });
+        await step(() => fireEvent.click(utils.getByRole('button', { name: /^Speed and Fees\b/ })));
+        await domAct(async () => { await typeCustomRate('', { chainId: CHAIN, queries: utils }); });
+        expect(utils.getByRole('button', { name: 'Pay Order' }).disabled).toBe(false);
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay Order' })));
+        expect(utils.getAllByText('Choose a valid network fee before continuing.').length).toBeGreaterThan(0);
 
-        await step(() => fireEvent.change(customRate, { target: { value: '' } }));
-        expect(utils.getByText('Choose a valid network fee before continuing.')).toBeTruthy();
-        expect(utils.getByRole('button', { name: 'Pay Order' }).disabled).toBe(true);
-
-        await step(() => fireEvent.change(customRate, { target: { value: '2' } }));
+        await domAct(async () => { await typeCustomRate('2', { chainId: CHAIN, queries: utils }); });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay Order' })));
         expect(utils.getByText('Network fee rate').nextElementSibling.textContent)
             .toBe('2 DOGE/kB');
 
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' })));
-        expect(utils.getByRole('textbox', { name: 'Custom fee rate (DOGE/kB)' }).value).toBe('2');
+        expect(openNetworkFeeEditor(utils).value).toBe(feeForRate('2', CHAIN));
         expect(utils.getByRole('button', { name: 'Pay Order' }).disabled).toBe(false);
-        expect(utils.getByText('Amount').nextElementSibling.textContent).toBe('10 DOGE');
+        expect(utils.getByText('You pay', { selector: 'dt' }).nextElementSibling.textContent).toMatch(/^10 DOGE/);
 
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay Order' })));
         await step(() => fireEvent.click(utils.getByRole('button', { name: /^Pay$/ })));
@@ -282,11 +280,13 @@ describe('CoinpayForm shared confirmation', () => {
         expect(utils.queryByText(/internal encoder|private\/wire\/path/i)).toBeNull();
     });
 
-    it('lists a match once when the explorer returns it twice', async () => {
+    it('opens one payment when the explorer returns a match twice', async () => {
         const { utils } = await mount(undefined, {
             getCoinpayObligationsForAddress: () => Promise.resolve([OBLIGATION, { ...OBLIGATION }]),
         }, { orderMatchActionIndex: undefined });
-        expect(utils.getAllByText('Matched order #648')).toHaveLength(1);
+        expect(utils.getAllByRole('form', { name: 'Selected payment' })).toHaveLength(1);
+        expect(utils.getAllByText('Matched order')).toHaveLength(1);
+        expect(utils.getByText('Matched order').nextElementSibling.textContent).toBe('#648');
     });
 
     it('stops a second payment while the first is still on its way', async () => {
@@ -316,7 +316,7 @@ describe('CoinpayForm shared confirmation', () => {
                 ? walletTwoAddresses
                 : Promise.resolve({ [CHAIN]: [OWNER] })),
         });
-        expect(utils.getByText('Amount').nextElementSibling.textContent).toBe('10 DOGE');
+        expect(utils.getByText('You pay', { selector: 'dt' }).nextElementSibling.textContent).toMatch(/^10 DOGE/);
 
         await domAct(async () => {
             utils.rerender(React.createElement(
@@ -364,11 +364,12 @@ describe('CoinpayForm shared confirmation', () => {
             }),
         });
 
-        expect(utils.getByText(/Insufficient DOGE balance/).textContent)
+        expect(utils.getByRole('button', { name: 'Pay Order' }).disabled).toBe(false);
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay Order' })));
+        expect(utils.getAllByText(/Insufficient DOGE balance/)[0].textContent)
             .toContain('This address has 5 DOGE');
-        expect(utils.getByText(/Insufficient DOGE balance/).textContent)
+        expect(utils.getAllByText(/Insufficient DOGE balance/)[0].textContent)
             .toContain('payment and estimated network fee require 10.25 DOGE');
-        expect(utils.getByRole('button', { name: 'Pay Order' }).disabled).toBe(true);
         expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
     });
 
@@ -400,10 +401,39 @@ describe('CoinpayForm shared confirmation', () => {
         });
     });
 
+    // The You get card's match read is display only: the payment composed
+    // with it answered is the same action and the same one native output.
+    it('composes the same payment when the match read answers', async () => {
+        const matchReads = [];
+        const { utils, calls } = await mount(undefined, {
+            getActionByIndex: (args) => {
+                matchReads.push(args);
+                return Promise.resolve({ data: [{
+                    action_index: '648',
+                    give_tick: null, give_amount: '10', give_action_index: '640',
+                    get_tick: 'PEPECASH', get_amount: '1000', get_action_index: '641',
+                }] });
+            },
+        });
+        const youGet = utils.getByText('You get', { selector: 'dt' }).nextElementSibling;
+        expect(youGet.textContent).toContain('1,000');
+        expect(youGet.textContent).toContain('PEPECASH');
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay Order' })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: /^Pay$/ })));
+
+        const compose = calls.find((call) => call.method === 'composeForConfirm');
+        expect(compose.args.actionData).toEqual({
+            action: 'COINPAY',
+            params: { VERSION: '0', ORDER_MATCH_ACTION_INDEX: '648' },
+        });
+        expect(compose.args.encoderOpts.customOutputs).toEqual([{ address: PAYEE, value: 1_000_000_000 }]);
+        expect(matchReads).toEqual([{ chainId: CHAIN, actionIndex: '648' }]);
+    });
+
     it('keeps watcher mode on the obligation-verifying unsigned builder', async () => {
         const { utils, calls } = await mount({ walletMode: 'watcher' });
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Pay Order' })));
-        expect(utils.getByText(/Watcher mode: this prepares the transaction for your offline signer/)).toBeInTheDocument();
+        expect(utils.getByText(/Another phone signs for this wallet: this prepares the transaction for it/)).toBeInTheDocument();
         await step(() => fireEvent.click(utils.getByRole('button', { name: /^Create unsigned transaction$/i })));
 
         const build = calls.find((call) => call.method === 'buildCoinpayPsbtRequest');

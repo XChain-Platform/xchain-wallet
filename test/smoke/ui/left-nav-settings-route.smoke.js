@@ -42,14 +42,15 @@ assert.ok(/initialSubpageId\s*=\s*null/.test(settingsSrc),
 assert.ok(/useState\([^)]*initialSubpageId\s*\|\|\s*null\)/.test(settingsSrc),
     'Settings seeds subpageId state with the initialSubpageId prop');
 
-// --- 2. LeftNav VIEW_GROUPS: settings + connected-sites ----------------
+// --- 2. LeftNav VIEW_GROUPS: settings, connected-sites, pair-partner ----
+// The two-phone pairing opens from Settings, Advanced, so it lights Settings.
 
 const navSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'LeftNav.jsx'),
     'utf8',
 );
-assert.deepEqual(ROUTE_NAV_GROUPS.settings, ['settings', 'connected-sites'],
-    'VIEW_GROUPS.settings covers settings + connected-sites');
+assert.deepEqual(ROUTE_NAV_GROUPS.settings, ['settings', 'connected-sites', 'pair-partner'],
+    'VIEW_GROUPS.settings covers settings, connected-sites and pair-partner');
 
 // --- 3. Settings footer button gets aria-current ------------------------
 
@@ -92,7 +93,7 @@ for (const [label, src] of [['web', webApp], ['desktop', desktopApp]]) {
         /walletList\.find\(\(w\) => w\.id === activeWalletId\)/.test(src),
         `${label} App derives the active wallet from walletList`,
     );
-    assert.ok(/<AppHeader[\s\S]*?activeWallet=\{[^}]+\}[\s\S]*?\/>/.test(src),
+    assert.ok(/<(?:Shell)?AppHeader[\s\S]*?activeWallet=\{[^}]+\}[\s\S]*?\/>/.test(src),
         `${label} App passes the active wallet into AppHeader as its plain name label`);
 }
 

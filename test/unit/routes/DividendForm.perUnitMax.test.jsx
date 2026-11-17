@@ -190,7 +190,7 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         expect(document.body.textContent).not.toMatch(/2,499,500/);
     });
 
-    it('keeps the live total token cost identical on watcher review', async () => {
+    it('keeps the live payout and protocol fee on watcher review', async () => {
         mountDividend({
             walletMode: 'watcher',
             feeQuote: {
@@ -209,10 +209,11 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         fireEvent.click(submitButton());
         await flushTimers();
 
-        const reviewTotal = screen.getByTestId('dividend-review-total-cost');
-        expect(reviewTotal).toHaveTextContent('~1,001 XCHAIN');
-        expect(screen.getByRole('form', { name: 'Review dividend' }))
-            .not.toHaveTextContent('~501 XCHAIN');
+        // No Total block (G127 revised 2026-11-16): the whole payout is the
+        // facts card's You send row.
+        expect(screen.getByTestId('confirm-you-send')).toHaveTextContent('1,000 XCHAIN');
+        expect(screen.getByTestId('confirm-fee-protocol')).toHaveTextContent('1 XCHAIN');
+        expect(screen.getByTestId('confirm-modal')).not.toHaveTextContent('501 XCHAIN');
     });
 
     it('carries the latest live total token cost into the full signing review', async () => {
@@ -233,8 +234,12 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         fireEvent.click(submitButton());
         await flushTimers();
 
-        expect(screen.getByTestId('confirm-total'))
-            .toHaveTextContent('Total token cost: ~1,001 XCHAIN');
+        // The payout is said once, by the sentence or the You send row, and
+        // the protocol fee is its own row (no Total block, G127 revised
+        // 2026-11-16).
+        expect(screen.queryByTestId('confirm-total-main')).toBeNull();
+        expect(screen.getByTestId('confirm-modal').textContent.split('1,000 XCHAIN').length - 1).toBe(1);
+        expect(screen.getByTestId('confirm-fee-protocol')).toHaveTextContent('1 XCHAIN');
     });
 
     it('names the per-unit ceiling next to the available balance', async () => {
@@ -287,14 +292,14 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         await maxReady();
         fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
-        expect(screen.getByRole('alert')).toHaveTextContent(
+        expect(document.querySelector('[data-form-errors]')).toHaveTextContent(
             'This pays ~2,499,500 XCHAIN in total, more than the 4,999 XCHAIN this address holds.',
         );
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it.each([
-        ['', 'Per-unit amount is required.'],
+        ['', 'Enter the per-unit amount.'],
         ['0', 'Per-unit amount must be greater than zero.'],
         ['.', 'Per-unit amount must be a positive decimal number.'],
     ])('keeps amount %j out of review with plain copy', async (value, message) => {
@@ -303,7 +308,7 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         fireEvent.change(amountField(), { target: { value } });
         fireEvent.submit(screen.getByRole('form', { name: 'Pay dividend' }));
 
-        expect(screen.getByRole('alert')).toHaveTextContent(message);
+        expect(document.querySelector('[data-form-errors]')).toHaveTextContent(message);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -315,9 +320,10 @@ describe('DividendForm Max fills a rate, not the balance', () => {
 
         // The field refuses the third decimal with its own error and the
         // submit stays blocked; nothing is cut silently.
-        expect(screen.getByRole('alert')).toHaveTextContent('Amount can have at most 2 decimal places.');
-        expect(submitButton()).toBeDisabled();
+        expect(screen.getByText('Amount can have at most 2 decimal places.')).toBeInTheDocument();
+        expect(submitButton()).toBeEnabled();
         fireEvent.click(submitButton());
+        expect(document.querySelector('[data-form-errors]')).toHaveTextContent('Enter the per-unit amount.');
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -337,17 +343,44 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         const cost = screen.getByTestId('dividend-cost-preview');
         expect(cost.textContent).toContain('Total token cost ~5,000 XCHAIN');
         expect(cost.textContent).toContain('includes 1 XCHAIN protocol fee');
-        expect(screen.getByRole('alert')).toHaveTextContent(
-            'Total token cost is ~5,000 XCHAIN: 4,999 payout + 1 protocol fee, but this address holds 4,999 XCHAIN.',
-        );
+        // G120: the refusal shows when Review is pressed, never live.
+        const refusal = 'Total token cost is ~5,000 XCHAIN: 4,999 payout + 1 protocol fee, but this address holds 4,999 XCHAIN.';
+        expect(screen.queryByText(refusal)).toBeNull();
 
         fireEvent.click(submitButton());
+        await flushTimers();
+        expect(document.querySelector('[data-form-errors]')).toHaveTextContent(refusal);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(messaging.requoteNativeFee).toHaveBeenCalledWith({
             chainId: CHAIN,
             source: SOURCE,
             actionString: 'DIVIDEND|0|S19MINT|XCHAIN|9.998',
         });
+    });
+
+    // G120: flipping the pay-in-coin switch shows or hides no notice; the
+    // balance refusal waits for the Review press.
+    it('changes no notice when the pay-in-coin switch is flipped', async () => {
+        mountDividend({
+            feeQuote: {
+                supported: true,
+                valid: true,
+                xchainFee: '1.00000000',
+                requiredFeeNative: '0.00002',
+            },
+        });
+        await pickDividendToken();
+        fireEvent.change(amountField(), { target: { value: '9.998' } });
+        await flushTimers();
+        const notices = () => document.querySelectorAll('[data-tone], [data-field-note], [role="alert"]').length;
+        const before = notices();
+        const toggle = screen.getByRole('switch', { name: /Pay protocol fee in/, hidden: true });
+        fireEvent.click(toggle);
+        await flushTimers();
+        expect(notices()).toBe(before);
+        fireEvent.click(toggle);
+        await flushTimers();
+        expect(notices()).toBe(before);
     });
 
     it('does not count holder shares whose individually rounded payout is zero', async () => {
@@ -375,9 +408,10 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         // Let the dividend token's divisibility lookup settle before submitting.
         await flushTimers();
         fireEvent.change(amountField(), { target: { value: '1.5' } });
-        expect(screen.getByRole('alert')).toHaveTextContent('Amount can have at most 0 decimal places.');
-        expect(submitButton()).toBeDisabled();
+        expect(screen.getByText('Amount can have at most 0 decimal places.')).toBeInTheDocument();
+        expect(submitButton()).toBeEnabled();
         fireEvent.click(submitButton());
+        expect(document.querySelector('[data-form-errors]')).toHaveTextContent('Enter the per-unit amount.');
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -406,9 +440,8 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         fireEvent.click(submitButton());
         await flushTimers();
 
-        const alert = screen.getByRole('alert');
-        expect(alert).toHaveTextContent(/address needs BTC/);
-        expect(alert.textContent).not.toContain('no spendable UTXOs');
+        expect(document.body).toHaveTextContent(/address needs BTC/);
+        expect(document.body.textContent).not.toContain('no spendable UTXOs');
     });
 
     it('stays gated when the holder list cannot be read', async () => {
@@ -434,7 +467,7 @@ describe('DividendForm Max fills a rate, not the balance', () => {
         fireEvent.change(amountField(), { target: { value: '4999' } });
         fireEvent.click(submitButton());
         await flushTimers();
-        expect(screen.getByRole('button', { name: 'Pay Dividend' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: 'Pay Dividend' })).toBeEnabled();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });
@@ -451,12 +484,12 @@ describe('DividendForm review hint', () => {
         fireEvent.click(submitButton());
         await flushTimers();
         expect(screen.getByText(
-            'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+            'Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
         )).toBeInTheDocument();
-        const hint = screen.getByTestId('dividend-review-fee-hint');
-        expect(hint.textContent).toMatch(/holds enough XCHAIN\s+to cover the full payout/);
-        expect(hint.textContent).toMatch(/grows with the number\s+of holders paid/);
-        expect(hint.textContent).not.toMatch(/§|database hits|DIVIDEND ticker|DIVIDEND charges/);
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
+        expect(screen.getByText('Eligible holders').nextElementSibling).toHaveTextContent('1');
+        expect(screen.getByTestId('confirm-buttons')).toHaveTextContent('RejectApprove');
+        expect(document.body.textContent).not.toMatch(/Estimate unavailable|§|database hits|DIVIDEND ticker|DIVIDEND charges/);
     });
 
     it('review display matches the built precision, asset, holder count, and fees, and Back keeps values', async () => {
@@ -475,11 +508,10 @@ describe('DividendForm review hint', () => {
         fireEvent.click(submitButton());
         await flushTimers();
 
-        expect(screen.getByText('9.00 XCHAIN')).toBeTruthy();
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Pay 9 XCHAIN');
         expect(screen.getByText('Eligible holders').nextElementSibling).toHaveTextContent('1');
-        expect(screen.getByText('Dividend protocol fee')).toBeTruthy();
-        expect(screen.getByText('1 XCHAIN')).toBeTruthy();
-        expect(screen.getByText('Network fee')).toBeTruthy();
+        expect(screen.getByTestId('confirm-fee-protocol')).toHaveTextContent('1 XCHAIN');
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent(/BTC/);
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(await amountField()).toHaveValue('9.00000000');

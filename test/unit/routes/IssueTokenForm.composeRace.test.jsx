@@ -73,9 +73,14 @@ describe('Issue token while the host composes', () => {
             'Max per address', 'Start block', 'Stop block', 'Token description',
             'Allow list', 'Block list', 'New owner address', 'Send initial mint to',
         ]) {
+            // Allow list and Block list are picker fields (G114), named
+            // "Allow list: None set" by their label and value; their section
+            // is closed, so the query includes hidden elements.
             const field = label === 'Max supply'
                 ? screen.getByRole('textbox', { name: label })
-                : screen.getByLabelText(label);
+                : label === 'Allow list' || label === 'Block list'
+                    ? screen.getByRole('button', { name: `${label}: None set`, hidden: true })
+                    : screen.getByLabelText(label);
             expect(field, label).toBeDisabled();
         }
         expect(screen.getByRole('switch', { name: 'Divisible (8 decimal places)' })).toBeDisabled();

@@ -23,7 +23,7 @@
 // Both fields exist on the v1 Settings schema; no migration needed.
 
 import { useRef, useState } from 'react';
-import { InfoTip, Input, Select } from '@xchain-wallet/core/ui';
+import { Icon, InfoTip, Input, Select } from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useBackHandler } from '../../../ui/backStack.js';
 import {
@@ -45,7 +45,7 @@ const LANGUAGE_LABELS = /** @type {Record<string, string>} */ ({
     en: 'English',
 });
 
-function buildLanguageOptions(developerMode) {
+export function buildLanguageOptions(developerMode) {
     const codes = availableLocales();
     return codes
         .filter((code) => developerMode || code !== 'pseudo-rtl')
@@ -58,7 +58,7 @@ function buildLanguageOptions(developerMode) {
 // This list matches the quote currencies offered by the picker. Keeping it
 // explicit prevents a valid-looking ISO code from being saved when the price
 // source cannot return rates for it.
-const FIAT_CURRENCIES = /** @type {const} */ ([
+export const FIAT_CURRENCIES = /** @type {const} */ ([
     { code: 'USD', name: 'US Dollar' },
     { code: 'EUR', name: 'Euro' },
     { code: 'GBP', name: 'British Pound' },
@@ -84,6 +84,19 @@ function currencySymbol(code) {
 
 function currencyLabel(currency) {
     return `${currency.name} (${currency.code}) · ${currencySymbol(currency.code)}`;
+}
+
+/** The Language row's current value, as the picker names it. */
+export function languageSummary(settings) {
+    const code = settings?.language || 'en';
+    return LANGUAGE_LABELS[code] || code;
+}
+
+/** The Currency row's current value: the name and code ("US Dollar (USD)"). */
+export function currencySummary(settings) {
+    const code = settings?.fiatCurrency || 'USD';
+    const known = FIAT_CURRENCIES.find((currency) => currency.code === code);
+    return known ? `${known.name} (${known.code})` : code;
 }
 
 const CONTROLS = {
@@ -118,7 +131,10 @@ const CURRENCY_OPTION = {
     cursor: 'pointer',
 };
 
-export function LanguageRegionSection() {
+// `only` renders one control ('language' or 'currency') for its own Settings
+// page; with no `only` both rows render.
+export function LanguageRegionSection({ only = null } = {}) {
+    const show = (part) => !only || only === part;
     const { settings, loading, error, unsupportedFiatCurrency, update } = useSettings();
     const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
     const [currencyQuery, setCurrencyQuery] = useState('');
@@ -194,6 +210,7 @@ export function LanguageRegionSection() {
 
     return (
         <div style={STACK}>
+            {show('language') ? (
             <div style={ROW}>
                 <div style={ROW_COPY}>
                     <span style={ROW_VALUE}>
@@ -210,11 +227,13 @@ export function LanguageRegionSection() {
                         aria-describedby={languageError ? 'language-error' : undefined}
                     >
                         {LANGUAGES.map((l) => (
-                            <option key={l.value} value={l.value}>{l.label}</option>
+                            <Select.Option key={l.value} value={l.value} icon={<Icon.MessageIcon />}>{l.label}</Select.Option>
                         ))}
                     </Select>
                 </div>
             </div>
+            ) : null}
+            {show('currency') ? (
             <div style={ROW}>
                 <div style={ROW_COPY}>
                     <span style={ROW_VALUE}>
@@ -280,7 +299,8 @@ export function LanguageRegionSection() {
                     ) : null}
                 </div>
             </div>
-            {languageError ? <Status id="language-error" text={languageError} tone="error" /> : null}
+            ) : null}
+            {languageError ?<Status id="language-error" text={languageError} tone="error" /> : null}
             {currencyError ? <Status id="fiat-currency-error" text={currencyError} tone="error" /> : null}
             {unsupportedFiatCurrency ? (
                 <Status

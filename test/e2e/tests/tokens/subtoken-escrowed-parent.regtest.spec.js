@@ -49,6 +49,7 @@ import {
     expect,
     openIssueSection,
     openPaletteCommand,
+    pickIssueParent,
     pickIssuePreset,
     submitTokenWizard,
     test,
@@ -228,8 +229,7 @@ async function fillSubtoken(page, { parent, child, supply }) {
         { timeout: 30_000, message: 'the Issue Token form names no signing address' })
         .toMatch(REGTEST_ADDRESS_RE);
 
-    await expect(main.getByLabel('Parent ticker')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Parent ticker').fill(parent);
+    await pickIssueParent(main, parent);
     await main.getByLabel('Subtoken name').fill(child);
     await main.getByLabel('Max supply', { exact: true }).fill(String(supply));
     // The coin lane on Bitcoin, for the control and the refused leg alike:
@@ -312,18 +312,18 @@ test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () 
                 .or(page.getByText('Manage Token').first()))
                 .toBeVisible({ timeout: 30_000 });
 
-            await clickManageTokenAction(main, 'Sell name');
+            await clickManageTokenAction(main, 'Sell Ownership');
 
             await expect(page.getByRole('main').getByLabel(/^Price/))
                 .toBeVisible({ timeout: 30_000 });
             await page.getByRole('main').getByLabel(/^Price/).fill(ASK);
 
             // A signing wallet composes the sale onto the shared confirm
-            // screen straight from the form's "List name for sale" submit;
+            // screen straight from the form's "List Ownership for Sale" submit;
             // only a watcher wallet gets the form's own review stage. The
             // result panel then carries the txid.
             await page.getByRole('main')
-                .getByRole('button', { name: 'List Name for Sale', exact: true }).click();
+                .getByRole('button', { name: 'List Ownership for Sale', exact: true }).click();
             await expectConfirmScreen(page);
             const orderTxid = await approveAndGetTxid(page);
 

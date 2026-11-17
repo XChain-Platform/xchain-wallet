@@ -32,18 +32,26 @@ import styles from './FormPage.module.css';
  */
 export function FormSection({ title, description, trailing, headingLevel = 'h2', className, children }) {
     const headingId = useId();
+    // A section with no title, description or trailing affordance (a page that
+    // is the section, such as a Backup form opened directly) draws no header:
+    // an empty header still took the section's header gap and put 8px of
+    // blank space between a notice above and the first field.
+    const empty = (value) => value == null || value === false || value === '';
+    const hasHeader = !(empty(title) && empty(description) && empty(trailing));
     return (
         <section
             className={[styles.section, className].filter(Boolean).join(' ')}
-            aria-labelledby={headingId}
+            aria-labelledby={hasHeader ? headingId : undefined}
         >
-            <SectionHeader
-                as={headingLevel}
-                id={headingId}
-                title={title}
-                description={description}
-                trailing={trailing}
-            />
+            {hasHeader ? (
+                <SectionHeader
+                    as={headingLevel}
+                    id={headingId}
+                    title={title}
+                    description={description}
+                    trailing={trailing}
+                />
+            ) : null}
             <div className={styles.sectionBody} data-form-stack="">{children}</div>
         </section>
     );

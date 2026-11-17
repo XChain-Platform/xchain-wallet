@@ -129,8 +129,12 @@ describe('SweepForm lays out every page state through FormPage', () => {
         fireEvent.click(sweep);
 
         await waitFor(() => expect(container).toHaveTextContent(
-            'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+            'Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
         ));
+        expect(container.querySelector('[data-testid="confirm-modal"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="confirm-reject"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="confirm-approve"]')).not.toBeNull();
+        expect(container.textContent).not.toContain('Estimate unavailable');
     });
 
     it('shows the address-load error as the FormPage status', async () => {

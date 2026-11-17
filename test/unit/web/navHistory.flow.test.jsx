@@ -12,10 +12,20 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 
 const host = vi.hoisted(() => {
     const wallet = { id: 'wallet-1', name: 'First Wallet', format: 'bip39' };
+    const address = {
+        id: 'address-1',
+        accountId: 'account-wallet-1',
+        address: 'bcrt1qbackstack0000000000000000000000000000000',
+        label: 'Savings',
+        source: 'hd',
+        addressType: 'p2wpkh',
+        role: 'receive',
+    };
     let wallets = [wallet];
     let session = 'unlocked';
     return {
         wallet,
+        address,
         reset() { wallets = [{ ...wallet }]; session = 'unlocked'; },
         setSession(next) { session = next; },
         getSessionStatus: vi.fn(async () => ({ state: session })),
@@ -46,8 +56,9 @@ vi.mock('../../../packages/web/src/messaging.js', async (importOriginal) => ({
     getSettings: vi.fn(async () => ({})),
     updateSettings: vi.fn(async () => ({})),
     getWalletBalances: vi.fn(async () => ({})),
-    getAddressesByChain: vi.fn(async () => ({})),
+    getAddressesByChain: vi.fn(async () => ({ 'bitcoin-regtest': [host.address] })),
     getActiveAddresses: vi.fn(async () => ({})),
+    listMultisigReceiveAddresses: vi.fn(async () => []),
     listQueuedBroadcasts: vi.fn(async () => []),
     listContacts: vi.fn(async () => []),
     listConnectedSites: vi.fn(async () => []),
@@ -127,6 +138,27 @@ describe('web shell navigation history', () => {
         // Settings reopens on the Wallets page the user was on.
         expect(await screen.findByRole('button', { name: /^My Wallets/ }, LAZY)).toBeTruthy();
         expect(screen.queryByRole('heading', { level: 1, name: 'My Wallets' })).toBeNull();
+    }, 60_000);
+
+    it('returns from Show Private Key to the same address, then from View Address to Addresses', async () => {
+        render(<App />);
+        await openSettingsWallets();
+        fireEvent.click(await screen.findByRole('button', { name: /^My Addresses/ }, LAZY));
+        await heading('Addresses');
+
+        fireEvent.click(await screen.findByRole('button', { name: `View address ${host.address.address}` }, LAZY));
+        await heading('View Address');
+        expect(screen.getByRole('button', { name: 'Back to previous screen' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /^Secret key/ }));
+        await heading('Show Private Key');
+        back();
+        await heading('View Address');
+        expect(screen.getByTestId('address-detail-label')).toHaveTextContent('Savings');
+
+        back();
+        await heading('Addresses');
+        expect(screen.getByRole('button', { name: `View address ${host.address.address}` })).toBeInTheDocument();
     }, 60_000);
 
     it('never returns into the Edit wallet form after it saved', async () => {

@@ -21,6 +21,7 @@
 import { createAddress } from '../schemas/address.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWallet } from './unlockWallet.js';
+import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
 import { HardwareAddressMismatchError } from './verifyReceiveAddress.js';
 import { defaultAddressTypeForWallet } from './_defaultAddressType.js';
 import { indexSpaceSharedForWallet } from './_addressIndexSpace.js';
@@ -141,6 +142,8 @@ async function deriveReceiveAddress({
         throw new Error('receiveAddress: walletId is required');
     }
     if (!providedSigner && (typeof password !== 'string' || password.length === 0)) {
+        // A hardware wallet derives only through its device; no password helps.
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'a new address without it connected');
         throw new Error('receiveAddress: either `signer` or `password` is required');
     }
     if (!chainRegistry) throw new Error('receiveAddress: chainRegistry is required');

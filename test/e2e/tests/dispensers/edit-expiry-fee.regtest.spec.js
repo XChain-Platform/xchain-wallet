@@ -278,8 +278,9 @@ async function openDispenserDetail(page, index) {
     await expect(row, `dispenser #${index} is not in the owner's own list`)
         .toBeVisible({ timeout: 60_000 });
     await row.click();
-    await expect(main.getByRole('button', { name: 'Edit' }),
-        'the detail page has no enabled Edit control for the owner')
+    // Each setting is its own action row opening its own page (G104).
+    await expect(main.getByRole('button', { name: /^Change expiration/ }),
+        'the detail page has no enabled Change expiration row for the owner')
         .toBeEnabled({ timeout: 30_000 });
     return main;
 }
@@ -292,7 +293,7 @@ async function openDispenserDetail(page, index) {
  */
 async function submitExpirationEdit(page, index, targetUnix, { coinFee = false } = {}) {
     const main = await openDispenserDetail(page, index);
-    await main.getByRole('button', { name: 'Edit' }).click();
+    await main.getByRole('button', { name: /^Change expiration/ }).click();
 
     const field = main.getByLabel('New expiration');
     await expect(field, 'the edit form has no expiration field').toBeVisible({ timeout: 30_000 });
@@ -314,7 +315,7 @@ async function submitExpirationEdit(page, index, targetUnix, { coinFee = false }
     await expectConfirmModal(page);
     await waitForIndexerAtTip();
     await page.getByTestId('confirm-approve').click();
-    await expect(main.getByRole('heading', { name: 'Edit submitted' }),
+    await expect(main.getByTestId('result-screen-notice').filter({ hasText: 'Edit submitted' }),
         'the edit never reached its own success screen')
         .toBeVisible({ timeout: 180_000 });
     await expect(main).toContainText(/[0-9a-f]{64}/, { timeout: 60_000 });
@@ -369,7 +370,9 @@ test.describe(`dispenser expiration-edit fee on ${REGTEST_CHAIN_LABEL}`, () => {
             // default window is exactly 90 days, which leaves no room for an
             // extension that is still free - and that extension is this run's
             // control.
-            await main.getByRole('radio', { name: /Expire at a specific time/ }).check();
+            // Expiration is the icon dropdown (G44), not radio buttons.
+            await main.getByRole('combobox', { name: /Expiration/ }).click();
+            await page.getByRole('option', { name: /Expire at a specific time/ }).click();
             const nowSec = Math.floor(Date.now() / 1000);
             await main.getByLabel('Expires').fill(
                 unixToLocalInput(toMinute(nowSec + (CREATE_DAYS * 86_400) + MINUTE_MARGIN)),

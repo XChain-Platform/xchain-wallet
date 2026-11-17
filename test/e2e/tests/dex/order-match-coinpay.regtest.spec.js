@@ -311,7 +311,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             // A native GIVE is the only shape that can arm auto-pay, and this
             // spec wants the MANUAL queue. Turning it off also removes the
             // web-shell acknowledgement the armed path would demand.
-            const autopay = main.getByRole('switch', { name: /Enable auto-pay/ });
+            const autopay = main.getByRole('switch', { name: 'Auto pay', exact: true });
             await expect(autopay,
                 'the native-coin GIVE side offers no auto-pay control, so PC-16 never armed')
                 .toBeVisible();
@@ -364,7 +364,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await page.getByRole('button', { name: 'Payments due' }).first().click();
             const main = page.getByRole('main');
-            const pending = main.getByRole('list', { name: 'Pending payments' });
+            const pending = main.getByRole('list', { name: 'Payments due' });
             await expect(pending, 'the obligation this wallet owes is not in Payments due')
                 .toBeVisible({ timeout: 60_000 });
             // The debt must be named in COIN units. Reading it as base units is
@@ -375,7 +375,9 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(pending, 'the queue labels the debt in the wrong unit (D-137)')
                 .not.toContainText(/base units/);
 
-            await main.getByRole('button', { name: 'Pay Now' }).first().click();
+            // The row says what it buys once the bulk read lands; the tap opens
+            // the payment's detail either way.
+            await pending.getByRole('button', { name: new RegExp(`^Buying\\b.*, Pay ${ASK}`) }).first().click();
             await main.getByRole('button', { name: 'Pay Order', exact: true }).click();
             await page.getByRole('button', { name: /^Pay \d/ }).click();
             await expectConfirmModal(page, 'the matched order payment', 60_000);
@@ -492,7 +494,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // Left ON this time: this is the arming the rest of the test
             // depends on. The web shell's keep-open fact is a confirm notice.
-            await expect(main.getByRole('switch', { name: /Enable auto-pay/ })).toBeChecked();
+            await expect(main.getByRole('switch', { name: 'Auto pay', exact: true })).toBeChecked();
 
             await main.getByRole('button', { name: /^Place order/ }).click();
             await expectConfirmModal(page, 'this action', 60_000);
@@ -501,7 +503,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(String(action.status), 'the chain rejected the taker order').toBe('valid');
             takerOrder = String(action.action_index);
             await expect(page.getByRole('main'), 'the wallet did not report the order as armed')
-                .toContainText(/Auto-pay is armed/, { timeout: 30_000 });
+                .toContainText(/Auto pay is armed/, { timeout: 30_000 });
         });
 
         await test.step('nobody touches the wallet, and the payment happens anyway', async () => {

@@ -191,12 +191,13 @@ for (const viewport of VIEWPORTS) {
             }).click();
             await expectScreenLayout(page, 'View address', 'address detail');
 
+            // Labelling is the Edit label tile, then its small form; saving
+            // closes the form and returns to the detail, titled by the label.
+            await page.getByRole('button', { name: /^Edit label/ }).click();
             const label = page.getByRole('textbox', { name: 'Address label' });
-            const save = page.getByRole('button', { name: 'Save Label', exact: true });
             await label.fill(LABEL);
-            await save.click();
-            await expect(save).toBeDisabled();
-            await expect(label).toHaveValue(LABEL);
+            await page.getByRole('button', { name: 'Save Label', exact: true }).click();
+            await expect(page.getByTestId('address-detail-label')).toHaveText(LABEL);
             await expectScreenLayout(page, 'View address', 'labelled address detail');
 
             await page.getByRole('button', { name: 'Edit on-chain preferences' }).click();
@@ -205,13 +206,13 @@ for (const viewport of VIEWPORTS) {
 
         await test.step('review changed preferences from the top with exact values', async () => {
             const main = page.getByRole('main');
-            await main.getByRole('radio', { name: 'Destroy the fee (reduces supply)' }).check();
-            await main.getByRole('checkbox', {
-                name: 'Require a memo on any send to this address',
-            }).check();
-            await main.getByRole('radio', {
-                name: 'Anyone may open a dispenser funded by this address',
-            }).check();
+            // Each preference is the themed dropdown (G119): open it, pick the option.
+            await main.getByRole('button', { name: /^How the protocol fee is handled: / }).click();
+            await main.getByRole('option', { name: 'Destroy (reduces supply)' }).click();
+            await main.getByRole('button', { name: /^Require memo on incoming sends: / }).click();
+            await main.getByRole('option', { name: 'Yes' }).click();
+            await main.getByRole('button', { name: /^Who may open dispensers: / }).click();
+            await main.getByRole('option', { name: 'Anyone' }).click();
             await main.getByLabel('Memo', { exact: true }).fill(MEMO);
             await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
             await main.getByRole('button', { name: 'Update preferences', exact: true }).click();
@@ -244,8 +245,8 @@ for (const viewport of VIEWPORTS) {
             await expect(row).toContainText(LABEL);
             await row.click();
             await expectScreenLayout(page, 'View address', 'address detail before Use');
-            const use = page.getByRole('button', { name: 'Use', exact: true });
-            await expect(use).toHaveAttribute('title', 'Make this the active address');
+            const use = page.getByRole('button', { name: /^Set active/ });
+            await expect(use).toBeVisible();
             await use.click();
             await expect(use).toBeHidden();
             // Use returns to Home by design; let Home finish mounting before
@@ -259,7 +260,7 @@ for (const viewport of VIEWPORTS) {
             }).click();
             await expect(page.getByRole('main').getByText('Active', { exact: true }))
                 .toBeVisible();
-            await expect(page.getByRole('button', { name: 'Use', exact: true })).toHaveCount(0);
+            await expect(page.getByRole('button', { name: /^Set active/ })).toHaveCount(0);
             await expectScreenLayout(page, 'View address', 'active address detail');
         });
     });

@@ -97,8 +97,8 @@ async function mount() {
         });
     }
     vi.useRealTimers();
-    // Details is the default tab; the buy panel shows only on the Buy tab.
-    fireEvent.click(await screen.findByRole('tab', { name: /^Buy$/ }));
+    // Every viewer opens on Actions; a buyer's first row opens the Buy page.
+    fireEvent.click(await screen.findByTestId('dispenser-buy-row'));
     await screen.findByText(/250 MEMEVALID available/);
     return messaging;
 }
@@ -132,6 +132,18 @@ afterEach(() => {
 });
 
 describe('dispenser buy reads fresh at Approve', () => {
+    it('keeps Buy enabled and reports a missing dispense count without composing', async () => {
+        const messaging = await mount();
+        const input = screen.getByLabelText('How Many Dispenses');
+        fireEvent.change(input, { target: { value: '' } });
+        const buy = screen.getByRole('button', { name: 'Buy Dispenses' });
+        expect(buy).toBeEnabled();
+        fireEvent.click(buy);
+
+        expect(screen.getByLabelText('Form errors')).toHaveTextContent('Enter a whole number of fills, at least 1.');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('tags every Approve-time read fresh and leaves the review reads ordinary', async () => {
         const messaging = await mount();
         await openReview();

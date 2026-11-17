@@ -58,8 +58,8 @@ assert.ok(
     'SignerSelectForm renders the explicit "Software wallet" card label',
 );
 assert.ok(
-    /<RadioGroup\b/.test(formSrc),
-    'SignerSelectForm uses the shared RadioGroup for its single-select choices',
+    /<IconSelect\b/.test(formSrc) && !/<RadioGroup\b/.test(formSrc),
+    'SignerSelectForm uses the themed icon dropdown (G44), not a radio list, for its single-select choice',
 );
 
 // --- 2. AddAccountForm + Receive consume the picker -----------------------
@@ -75,8 +75,9 @@ assert.ok(
     /<SignerSelectForm\b/.test(addAccountSrc),
     'AddAccountForm renders <SignerSelectForm>',
 );
+// A hardware wallet's own signer comes first; otherwise the picked one.
 assert.ok(
-    /signerId\s*:\s*signerId\s*\|\|\s*undefined/.test(addAccountSrc),
+    /signerId\s*:\s*(?:hardwareSignerId\s*\|\|\s*)?signerId\s*\|\|\s*undefined/.test(addAccountSrc),
     'AddAccountForm threads signerId into messaging.createAccount',
 );
 
@@ -131,8 +132,8 @@ assert.ok(
     'background host defines pickSignerFromRequest helper',
 );
 assert.ok(
-    /signerBridge\.getTransport\(record\.id\)/.test(bg),
-    'pickSignerFromRequest fetches the live HW transport via signerBridge.getTransport',
+    /signerBridge\.requireTransport\(record\.id\)/.test(bg),
+    'pickSignerFromRequest fetches the live HW transport via signerBridge.requireTransport',
 );
 assert.ok(
     /buildRemoteSigner\s*\(\s*descriptor\s*,\s*transport\s*\)/.test(bg),

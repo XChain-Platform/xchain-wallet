@@ -11,9 +11,24 @@ const routeModules = import.meta.glob([
     '!../../../packages/core/src/shared/routes/HistoryDetailCard.jsx',
     '!../../../packages/core/src/shared/routes/HistoryEntryRow.jsx',
     '!../../../packages/core/src/shared/routes/HistoryShared.jsx',
+    // ActionDetail.jsx renders this body with the entry it resolved.
+    '!../../../packages/core/src/shared/routes/ActionDetailView.jsx',
     '!../../../packages/core/src/shared/routes/ResumeConfirm.jsx',
     // The poll status pill is shared by GovernancePolls and PollDetail, not a route.
     '!../../../packages/core/src/shared/routes/PollStatusPill.jsx',
+    // AddressList renders View Address with the row the user opened.
+    '!../../../packages/core/src/shared/routes/AddressDetail.jsx',
+    // Split-out pieces of My Orders and Order detail; OrderDetail renders them.
+    '!../../../packages/core/src/shared/routes/OrderRow.jsx',
+    '!../../../packages/core/src/shared/routes/OrderDetailBody.jsx',
+    '!../../../packages/core/src/shared/routes/OrderActionPanel.jsx',
+    // The Edit and Cancel route bodies and their shared Form Standard frame;
+    // EditOrderForm, CancelOrderForm, EditSwapForm and CancelSwapForm render them.
+    '!../../../packages/core/src/shared/routes/OrderActionForms.jsx',
+    '!../../../packages/core/src/shared/routes/SwapActionForms.jsx',
+    '!../../../packages/core/src/shared/routes/TradeOwnerActionForm.jsx',
+    // The bet market's outcome list; BetFeedDetail renders it on its Bet tab.
+    '!../../../packages/core/src/shared/routes/OutcomeList.jsx',
 ]);
 
 const ROUTES_RENDERED_BY_AXE = [
@@ -37,6 +52,8 @@ const ROUTES_RENDERED_BY_AXE = [
     'BridgeOriginBadge',
     'BroadcastForm',
     'CallbackForm',
+    'CancelOrderForm',
+    'CancelSwapForm',
     'CoSignerAccountDetail',
     'CoSignerAccountList',
     'CoSignerPolicyEditor',
@@ -48,7 +65,6 @@ const ROUTES_RENDERED_BY_AXE = [
     'ContractDetail',
     'ContractFundsForm',
     'ContractHero',
-    'ContractStakeForm',
     'ContractsList',
     'ControllerBindForm',
     'CreateBetFeedForm',
@@ -58,7 +74,6 @@ const ROUTES_RENDERED_BY_AXE = [
     'CrossChainOrderForm',
     'CrossChainSwapForm',
     'DelegateVoteForm',
-    'DelegationActionForm',
     'DeployContractForm',
     'DestroyForm',
     'DispenserDetail',
@@ -67,8 +82,12 @@ const ROUTES_RENDERED_BY_AXE = [
     'DispenserHero',
     'DispensersList',
     'DividendForm',
+    'EditOrderForm',
+    'EditSwapForm',
     'ExecuteContractForm',
     'ExportWalletBackup',
+    // Forgot Password pages (forgotPassword.a11y.test.jsx), rendered through Locked.
+    'ForgotPassword',
     'GatedPublishForm',
     'GovernancePolls',
     'History',
@@ -78,10 +97,8 @@ const ROUTES_RENDERED_BY_AXE = [
     'LinkForm',
     'ListCreateForm',
     'ListDetail',
-    'ListForkForm',
-    'ListRenameForm',
-    'ListShareForm',
-    'ListTransferForm',
+    // Edit look page, scanned in routes-a-l.a11y.
+    'ListLookForm',
     'Loading',
     'Locked',
     'ManageToken',
@@ -104,9 +121,9 @@ const ROUTES_RENDERED_BY_AXE = [
     'ObligationsView',
     'Onboarding',
     'OnboardingCarousel',
-    'OperatorDashboard',
     'OracleConsole',
     'OracleForm',
+    'OrderDetail',
     'OracleRecord',
     'OracleRecordHero',
     'PairPartnerWallet',
@@ -127,15 +144,18 @@ const ROUTES_RENDERED_BY_AXE = [
     'Send',
     'SendPicker',
     'Settings',
+    // Settings' stateful inline rows, scanned on the Security, Backup and
+    // Recovery, Notifications and Network and Fees pages (settings.a11y).
+    'SettingsInlineRows',
     'SharedListDirectory',
     'SignMessageForm',
     'SignerSelectForm',
     'SleepForm',
     'StakeDetail',
-    'StakeForm',
     'StakeNew',
-    'StakingActionForm',
+    'StakingForm',
     'StakingList',
+    'SwapDetail',
     'SwapForm',
     'SweepForm',
     'TokenAdminForm',
@@ -143,7 +163,6 @@ const ROUTES_RENDERED_BY_AXE = [
     'TokenPicker',
     'TokenWizard',
     'UnbindForm',
-    'UnionListForm',
     'VaultUnavailable',
     'VerifySignatureForm',
     'ViewPrivateKey',

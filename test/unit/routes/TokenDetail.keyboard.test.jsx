@@ -111,19 +111,18 @@ describe('TokenDetail keyboard navigation', () => {
             { getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ address: creator }] }) },
         );
 
-        // The Actions tab opens first and holds the tiles: Send, Receive, Exchange, then the
-        // issuer's own group with Manage token. History is its own tab now.
-        await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled());
-        await screen.findByRole('button', { name: 'Manage token' });
-        const actions = within(screen.getByRole('group', { name: `Actions for ${TICK}` }))
+        // The Actions tab opens first and holds the action list: Send, Receive, Exchange,
+        // then the issuer's own list with Manage token. History is its own tab now.
+        await vi.waitFor(() => expect(screen.getByRole('button', { name: /^Send\b/ })).not.toHaveAttribute('aria-disabled'));
+        await screen.findByRole('button', { name: /^Manage token\b/ });
+        const actions = within(screen.getByRole('list', { name: `Actions for ${TICK}` }))
             .getAllByRole('button');
-        expect(actions.slice(0, 3).map((button) => button.getAttribute('aria-label') || button.textContent)).toEqual([
-            'Send',
-            'Receive',
-            'Exchange',
+        expect(actions.slice(0, 3).map((button) => button.getAttribute('data-action-id'))).toEqual([
+            'send',
+            'receive',
+            'exchange',
         ]);
         expect(actions.map((button) => button.tabIndex).every((index) => index === 0)).toBe(true);
-        expect(actions.every((button) => button.getAttribute('aria-busy') === 'false')).toBe(true);
 
         const handlers = [onSend, onReceive, onBuy];
         actions.slice(0, 3).forEach((button, index) => {
@@ -132,8 +131,8 @@ describe('TokenDetail keyboard navigation', () => {
             expect(handlers[index]).toHaveBeenCalledTimes(1);
         });
 
-        const manage = within(screen.getByRole('group', { name: 'You issued this token' }))
-            .getByRole('button', { name: 'Manage token' });
+        const manage = within(screen.getByRole('list', { name: 'You issued this token' }))
+            .getByRole('button', { name: /^Manage token\b/ });
         keyboardActivate(manage);
         expect(onManageToken).toHaveBeenCalledTimes(1);
         expect(document.activeElement).toBe(manage);

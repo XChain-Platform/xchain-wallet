@@ -7,7 +7,7 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import React from 'react';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
@@ -25,67 +25,16 @@ function mount() {
     );
 }
 
-function backToList() {
-    act(() => { screen.getByRole('button', { name: 'Back to settings' }).click(); });
-}
-
-function installBridge() {
-    let listener;
-    const bridge = {
-        install: vi.fn().mockResolvedValue({ ok: true }),
-        onEvent: vi.fn((next) => { listener = next; return vi.fn(); }),
-        emit(event) { act(() => listener(event)); },
-    };
-    window.xchainWalletUpdater = bridge;
-    return bridge;
-}
-
 afterEach(() => { cleanup(); delete window.xchainWalletUpdater; });
 
 describe('Settings check for updates', () => {
-    it('is absent when the shell has no updater bridge', () => {
+    it('is absent from Advanced even when the desktop updater bridge exists', () => {
+        window.xchainWalletUpdater = {
+            install: vi.fn(),
+            onEvent: vi.fn(),
+        };
         mount();
         expect(screen.queryByRole('button', { name: /check for updates/i })).toBeNull();
-    });
-
-    it('runs the visible check and shows the up-to-date result', async () => {
-        const bridge = installBridge();
-        mount();
-        await act(async () => {
-            screen.getByRole('button', { name: /check for updates/i }).click();
-            await Promise.resolve();
-        });
-        expect(bridge.install).toHaveBeenCalledWith('check');
-        bridge.emit({ type: 'not-available', userInitiated: true });
-        // The result notice renders on the Settings list, not on the Advanced page.
-        backToList();
-        expect(screen.getByText(/is up to date/i)).toBeTruthy();
-    });
-
-    it('shows an available version only when it is plain semver', async () => {
-        const bridge = installBridge();
-        mount();
-        await act(async () => {
-            screen.getByRole('button', { name: /check for updates/i }).click();
-            await Promise.resolve();
-        });
-        bridge.emit({ type: 'available', info: { version: '1.2.3' } });
-        backToList();
-        expect(screen.getByText('Version 1.2.3 is available.')).toBeTruthy();
-    });
-
-    it('shows a constant error when the check is refused', async () => {
-        const bridge = installBridge();
-        bridge.install.mockResolvedValue({ ok: false, reason: 'remote text' });
-        mount();
-        await act(async () => {
-            screen.getByRole('button', { name: /check for updates/i }).click();
-            await Promise.resolve();
-        });
-        backToList();
-        const notice = screen.getByText(/couldn.t check for updates/i).closest('[role="alert"]');
-        expect(notice).toHaveTextContent(/couldn.t check for updates/i);
-        expect(notice.parentElement.firstElementChild).toBe(notice);
-        expect(screen.queryByText(/remote text/)).toBeNull();
+        expect(screen.queryByText('Check for updates')).toBeNull();
     });
 });

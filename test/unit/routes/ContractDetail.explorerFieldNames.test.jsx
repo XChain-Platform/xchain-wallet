@@ -15,7 +15,7 @@
 // row read "(method)" with no way to tell a reverted call from a good one.
 
 import { describe, it, expect } from 'vitest';
-import { render, act as domAct } from '@testing-library/react';
+import { render, act as domAct, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContractDetail } from '../../../packages/core/src/shared/routes/ContractDetail.jsx';
@@ -58,11 +58,33 @@ function mount(messaging, props) {
     );
 }
 
-function expandState(utils) {
-    const btn = Array.from(utils.container.querySelectorAll('button'))
-        .find((b) => /Expand/i.test(b.textContent || ''));
-    expect(btn).toBeTruthy();
-    btn.click();
+async function clickAndDrain(element) {
+    await domAct(async () => {
+        element.click();
+        await drain();
+    });
+}
+
+/**
+ * Mounts the page and, once it has its tabs, opens `tab` (Activity holds the
+ * execution history). Only the chosen tab's panel renders.
+ */
+async function mountOn(messaging, tab, props) {
+    let utils;
+    await domAct(async () => {
+        utils = mount(messaging, props);
+        await drain();
+    });
+    const tabEl = within(utils.container).queryByRole('tab', { name: tab });
+    if (tabEl) await clickAndDrain(tabEl);
+    return utils;
+}
+
+/** State is its own page, opened from its View state row on the Actions tab. */
+async function expandState(utils) {
+    await clickAndDrain(within(utils.container).getByRole('tab', { name: 'Actions' }));
+    const row = within(utils.container).getByRole('button', { name: /^View state/ });
+    await clickAndDrain(row);
 }
 
 describe('State table reads the explorer\'s real field names', () => {
@@ -77,14 +99,8 @@ describe('State table reads the explorer\'s real field names', () => {
             }),
         });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
-        await domAct(async () => {
-            expandState(utils);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
+        await expandState(utils);
         expect(utils.container.textContent).toContain('pending');
         expect(utils.container.textContent).toContain('price');
         // pending is a real null value: still shows the literal word "null".
@@ -103,14 +119,8 @@ describe('State table reads the explorer\'s real field names', () => {
             }),
         });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
-        await domAct(async () => {
-            expandState(utils);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
+        await expandState(utils);
         expect(utils.container.textContent).toContain('note');
         expect(utils.container.textContent).toContain('not json');
     });
@@ -123,14 +133,8 @@ describe('State table reads the explorer\'s real field names', () => {
             }),
         });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
-        await domAct(async () => {
-            expandState(utils);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
+        await expandState(utils);
         expect(utils.container.textContent).toContain('k1');
         expect(utils.container.textContent).toContain('v1');
     });
@@ -146,14 +150,8 @@ describe('State table reads the explorer\'s real field names', () => {
             }),
         });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
-        await domAct(async () => {
-            expandState(utils);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
+        await expandState(utils);
         const cells = Array.from(utils.container.querySelectorAll('td'));
         expect(cells.some((td) => td.textContent === 'onlykey')).toBe(true);
     });
@@ -166,14 +164,8 @@ describe('State table reads the explorer\'s real field names', () => {
             }),
         });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
-        await domAct(async () => {
-            expandState(utils);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
+        await expandState(utils);
         expect(utils.container.textContent).toContain('safe');
         expect(utils.container.textContent).toContain('value');
         expect(utils.container.textContent).not.toContain('also bad');
@@ -186,15 +178,11 @@ describe('State table reads the explorer\'s real field names', () => {
             ]),
         });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
-        expect(utils.container.textContent).toContain('1 state key(s)');
-        await domAct(async () => {
-            expandState(utils);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
+        await clickAndDrain(within(utils.container).getByRole('tab', { name: 'Actions' }));
+        // The View state row on Actions counts and names the keys.
+        expect(within(utils.container).getByRole('button', { name: /^View state/ }).textContent).toContain('1 key: <state-key>');
+        await clickAndDrain(within(utils.container).getByRole('button', { name: /^View state/ }));
         expect(utils.container.textContent).toContain('<state-key>');
         expect(utils.container.textContent).toContain('<b>plain text</b>');
         expect(utils.container.querySelector('b')).toBeNull();
@@ -239,10 +227,7 @@ describe('Execution history reads the explorer\'s real field names', () => {
     it('shows the method name from method_name, not "(method)"', async () => {
         const { messaging } = harness({ getExecutionsForContract: executionsFixture });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
         expect(utils.container.textContent).toContain('requestPrice');
         expect(utils.container.textContent).not.toContain('(method)');
     });
@@ -250,10 +235,7 @@ describe('Execution history reads the explorer\'s real field names', () => {
     it('falls back to the action\'s display label for a row with no method_name', async () => {
         const { messaging } = harness({ getExecutionsForContract: executionsFixture });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
         expect(utils.container.textContent).toContain('Publish contract #190');
         expect(utils.container.textContent).not.toContain('DEPLOY');
     });
@@ -266,20 +248,14 @@ describe('Execution history reads the explorer\'s real field names', () => {
             }),
         });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
         expect(utils.container.textContent).toContain('(method) #201');
     });
 
     it('marks a reverted row distinguishably from a valid one', async () => {
         const { messaging } = harness({ getExecutionsForContract: executionsFixture });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
         expect(utils.container.textContent).toContain('Reverted');
         expect(utils.container.textContent).toContain('Valid');
         // The two labels must not collapse into the same visible marker.
@@ -289,10 +265,7 @@ describe('Execution history reads the explorer\'s real field names', () => {
     it('shows gas_used when present and drops the obfuscated caller line', async () => {
         const { messaging } = harness({ getExecutionsForContract: executionsFixture });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
         expect(utils.container.textContent).toContain('6375');
         expect(utils.container.textContent).not.toContain('[obfuscated]');
         expect(utils.container.textContent).not.toContain('caller');
@@ -304,10 +277,7 @@ describe('Execution history reads the explorer\'s real field names', () => {
     it('does not render the literal placeholder for any row in this fixture', async () => {
         const { messaging } = harness({ getExecutionsForContract: executionsFixture });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
         expect(utils.container.textContent).not.toContain('(method)');
     });
 
@@ -321,10 +291,7 @@ describe('Execution history reads the explorer\'s real field names', () => {
             }),
         });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
         expect(utils.container.textContent).toContain('safeMethod #202');
         expect(utils.container.textContent).not.toContain('also bad');
     });
@@ -343,10 +310,7 @@ describe('A failed contract read is shown in plain words', () => {
             getContractByActionIndex: () => Promise.reject(explorer502('contract/49')),
         });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
         const shown = utils.container.textContent;
         expect(shown).toContain("Couldn't load this contract.");
         expect(shown).toContain('temporarily unavailable (error 502)');
@@ -362,11 +326,21 @@ describe('A failed contract read is shown in plain words', () => {
             getExecutionsForContract: () => Promise.reject(explorer502('executions/49/contract')),
         });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
-        const shown = utils.container.textContent;
+        utils = await mountOn(messaging, 'Activity');
+        // Each failure shows where its data would: the publication read leads
+        // the page, the history on Activity, the balances on Details and the
+        // state on its own page.
+        const onActivity = utils.container.textContent;
+        await clickAndDrain(within(utils.container).getByRole('tab', { name: 'Details' }));
+        const onDetails = utils.container.textContent;
+        await clickAndDrain(within(utils.container).getByRole('tab', { name: 'Actions' }));
+        await clickAndDrain(within(utils.container).getByRole('button', { name: /^View state/ }));
+        const onState = utils.container.textContent;
+        const shown = `${onActivity}\n${onDetails}\n${onState}`;
+        expect(onActivity).toContain("Couldn't load the publication details.");
+        expect(onActivity).toContain("Couldn't load the execution history.");
+        expect(onDetails).toContain("Couldn't load the contract balances.");
+        expect(onState).toContain("Couldn't load the contract state.");
         for (const verb of ['load the publication details', 'load the contract state', 'load the contract balances', 'load the execution history']) {
             expect(shown).toContain(`Couldn't ${verb}.`);
         }
@@ -384,14 +358,8 @@ describe('State table shows what the contract stored', () => {
             getContractState: () => Promise.resolve({ data: rows, total: rows.length }),
         });
         let utils;
-        await domAct(async () => {
-            utils = mount(messaging);
-            await drain();
-        });
-        await domAct(async () => {
-            expandState(utils);
-            await drain();
-        });
+        utils = await mountOn(messaging, 'Activity');
+        await expandState(utils);
         return utils;
     }
 

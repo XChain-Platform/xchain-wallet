@@ -124,14 +124,16 @@ describe('SellOwnershipForm UI rulings', () => {
         // The optional terms are closed sections; open them to reach their tips.
         fireEvent.click(screen.getByRole('button', { name: /^Expiration/ }));
         fireEvent.click(screen.getByRole('button', { name: /^Memo/ }));
-        for (const label of ['From address', 'Sell via', 'Get paid in', 'Expires after (blocks)', 'Memo']) {
+        for (const label of ['From address', 'Sell via', 'Get paid in', 'Expires after (blocks)']) {
             expect(screen.getByRole('button', { name: `About ${label}` })).toBeInTheDocument();
         }
+        // A memo alone in its Memo section has no label row and no tip (ruling).
+        expect(screen.queryByRole('button', { name: 'About Memo' })).toBeNull();
         expect(screen.getByRole('button', { name: /^About Price/ })).toBeInTheDocument();
         expect(screen.queryByText('Open order: anyone can take the offer at your price; cancel before it matches.'))
             .not.toBeInTheDocument();
 
-        const submit = screen.getByRole('button', { name: /^List name for sale$/i });
+        const submit = screen.getByRole('button', { name: /^List ownership for sale$/i });
         expect(submit.className).toMatch(/success/);
         expect(submit.querySelector('svg')).not.toBeNull();
     });
@@ -181,13 +183,14 @@ describe('SellOwnershipForm UI rulings', () => {
         }));
 
         fireEvent.change(await screen.findByRole('textbox', { name: 'Price (BTC)' }), { target: { value: '5' } });
-        const formSubmit = screen.getByRole('button', { name: /^List name for sale$/i });
+        const formSubmit = screen.getByRole('button', { name: /^List ownership for sale$/i });
         expect(formSubmit.className).toMatch(/success/);
         expect(formSubmit.querySelector('svg')).not.toBeNull();
         fireEvent.click(formSubmit);
 
-        const reviewSubmit = await screen.findByRole('button', { name: /Create Unsigned Transaction: List Name for Sale/ });
+        const reviewSubmit = await screen.findByRole('button', { name: 'Approve' });
         expect(reviewSubmit.className).toMatch(/success/);
         expect(reviewSubmit.querySelector('svg')).not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
     });
 });

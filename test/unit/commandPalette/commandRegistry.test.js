@@ -324,6 +324,18 @@ describe('buildCommands', () => {
         expect(findById(commands, 'nav-lists').title).toBe('Lists');
     });
 
+    it('matches side-menu destination labels in palette search', () => {
+        const commands = buildCommands({
+            navigate() {},
+            hasBtcAddress: true,
+            hasGovernanceAddress: true,
+        });
+        expect(findById(commands, 'nav-my-tokens').searchTitle).toBe('My Tokens');
+        expect(findById(commands, 'nav-betting').searchTitle).toBe('Betting markets');
+        expect(findById(commands, 'nav-governance').searchTitle).toBe('Governance');
+        expect(findById(commands, 'nav-staking').searchTitle).toBeUndefined();
+    });
+
     it('omits verb commands whose handler the shell did not supply', () => {
         const bare = buildCommands({ navigate() {} });
         expect(findById(bare, 'wallet-lock')).toBeUndefined();

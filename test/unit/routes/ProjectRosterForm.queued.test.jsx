@@ -66,11 +66,11 @@ describe('ProjectRosterForm queued list', () => {
                 />
             </MessagingProvider>,
         );
-        await screen.findByText('No list published yet. This will be the first.');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
         fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
         fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: 'VALID' } });
         fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
-        fireEvent.click(screen.getByRole('button', { name: /^Create project tokens$/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
         await screen.findByRole('form', { name: 'Review official token list' });
         fireEvent.click(screen.getByRole('button', { name: 'Publish List' }));
         fireEvent.click(await screen.findByTestId('confirm-approve'));

@@ -34,9 +34,11 @@ describe('extension wallet menu routing', () => {
         expect(handler).not.toMatch(/case 'alerts'/);
     });
 
-    it('resets the history for tab-bar roots and pushes every other menu row', () => {
-        expect(handler).toContain('if (TAB_BAR_DESTINATIONS.includes(viewId)) resetNav(viewId);');
-        expect(handler).toContain('else setUnlockedView(viewId);');
+    it('opens every menu row as a root, so the history starts over and Back hides (G06)', () => {
+        expect(handler).toContain('palette.navigate(viewId);');
+        expect(handler).not.toContain('TAB_BAR_DESTINATIONS');
+        expect(handler).not.toContain('setUnlockedView(viewId)');
+        expect(source).toContain('const openRootView = nav.navigateRoot;');
     });
 
     it('keeps no per-page return state for Lists, Contacts or forms', () => {
@@ -46,9 +48,9 @@ describe('extension wallet menu routing', () => {
         expect(source).toMatch(/<ContactsList[\s\S]*?onBack=\{goBack\}/);
     });
 
-    it('leaves route state unchanged when the active destination is selected again', () => {
+    it('leaves route state unchanged when the root destination on screen is selected again', () => {
         expect(source).toMatch(
-            /const handleWalletMenuSelect = \(viewId\) => \{\s*if \(viewId === unlockedView\) return;\s*switch \(viewId\)/,
+            /const handleWalletMenuSelect = \(viewId\) => \{[\s\S]{0,200}?if \(viewId === unlockedView && !nav\.canGoBack\) return;\s*switch \(viewId\)/,
         );
     });
 });

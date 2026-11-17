@@ -69,9 +69,10 @@ describe('plain-language transaction and share labels', () => {
             'scan.error.xcwChunk':
                 'Part {n} of {total} of a multi-frame QR code was scanned. Open the screen that asked for this code and capture every frame there.',
             'scan.error.backupPointer':
-                'This is an encrypted-backup code. Open Import wallet, choose Encrypted backup, and scan it there.',
+                // The Backup tab takes a file, never a pointer (2026-11-14).
+                'This is an encrypted-backup code. Save the backup file it points to, then open Import wallet, choose Backup, and pick that file.',
             'scan.error.pairingCode':
-                'This is a wallet pairing code. Open Pair an offline signer and scan it there.',
+                'This is a wallet pairing code. Open Settings, Advanced, Use another phone as a signer, and scan it there.',
         },
     };
     const ENCODING_WORD = /\b(hex|payload|psbt)\b/i;

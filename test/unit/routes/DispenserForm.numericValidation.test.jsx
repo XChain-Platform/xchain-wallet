@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
@@ -168,7 +168,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: 'many' } });
         fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
 
-        expect(utils.getByRole('alert')).toHaveTextContent('Trigger price must be a positive number.');
+        expect(utils.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Trigger price must be a positive number.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
 
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.01' } });
@@ -182,7 +182,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
         fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
 
-        expect(utils.getByRole('alert')).toHaveTextContent('Per-fill give amount must be a positive number.');
+        expect(utils.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Per-fill give amount must be a positive number.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -208,13 +208,13 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.000000001' } });
         fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
-        expect(utils.getByRole('alert')).toHaveTextContent('Trigger price can have at most 8 decimal places for BTC.');
+        expect(utils.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Trigger price can have at most 8 decimal places for BTC.');
 
         await payWithToken(utils, 'PAY');
         fireEvent.change(utils.getByLabelText('Payment amount per fill'), { target: { value: '1.1' } });
         await waitFor(() => expect(utils.getByRole('button', { name: 'Create Dispenser' })).toBeEnabled());
         fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
-        expect(utils.getByRole('alert')).toHaveTextContent('Payment amount must be a whole number because PAY is indivisible.');
+        expect(utils.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Payment amount must be a whole number because PAY is indivisible.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -234,7 +234,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
         fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
 
-        expect(utils.getByRole('alert')).toHaveTextContent('This address holds only 5 JDOG.');
+        expect(utils.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('This address holds only 5 JDOG.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -265,7 +265,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText('Payment amount per fill'), { target: { value: '1' } });
         fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
 
-        expect(utils.getByRole('alert')).toHaveTextContent(/Payment token/i);
+        expect(utils.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(/Payment token/i);
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -282,7 +282,7 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Fiat amount/), { target: { value: '12.34' } });
         fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
 
-        expect(utils.getByRole('alert')).toHaveTextContent('Fiat pricing needs a fiat currency.');
+        expect(utils.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Fiat pricing needs a fiat currency.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -291,12 +291,41 @@ describe('DispenserForm numeric validation', () => {
         fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         openTerms(utils);
-        fireEvent.change(utils.getByLabelText('Priced in fiat'), { target: { value: 'USD' } });
+        // G122: the Fiat currency field opens its picker page.
+        fireEvent.click(utils.getByRole('button', { name: /^Fiat currency:/ }));
+        fireEvent.click(within(utils.getByRole('list', { name: 'Fiat currencies' })).getByRole('button', { name: /USD/ }));
         fireEvent.change(utils.getByLabelText(/^Oracle address/), { target: { value: 'not-an-address' } });
         fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
 
-        expect(utils.getByRole('alert')).toHaveTextContent('Oracle address: This is not a valid Bitcoin address.');
+        expect(utils.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Oracle address: This is not a valid Bitcoin address.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('picks the fiat currency on the Fiat currency field and picker page, with None first (G122)', async () => {
+        const utils = await mountForm();
+        fireEvent.change(utils.getByLabelText(/^Give amount/), { target: { value: '10' } });
+        fireEvent.change(utils.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
+        openTerms(utils);
+        expect(utils.queryByText('Priced in fiat')).toBeNull();
+        expect(utils.queryByRole('combobox', { name: /fiat/i })).toBeNull();
+        fireEvent.click(utils.getByRole('button', { name: 'Fiat currency: None, coin-paid' }));
+
+        const rows = within(utils.getByRole('list', { name: 'Fiat currencies' })).getAllByRole('button');
+        expect(rows[0]).toHaveTextContent('None, coin-paid');
+        expect(rows[0]).toHaveAttribute('aria-current', 'true');
+        expect(rows.slice(1).map((row) => row.closest('li').getAttribute('data-fiat-currency-choice')))
+            .toEqual(['USD', 'CAD', 'AUD', 'MXN', 'GBP', 'JPY', 'CNY', 'CHF', 'BRL', 'INR', 'EUR', 'KRW']);
+        fireEvent.click(rows[11]);
+
+        expect(utils.getByRole('button', { name: 'Fiat currency: EUR, Euro' })).toBeInTheDocument();
+        fireEvent.change(utils.getByLabelText(/^Fiat amount/), { target: { value: '12.34' } });
+        await act(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Create Dispenser' }));
+            await drainMicrotasks();
+        });
+        await waitFor(() => expect(utils.composeForConfirm).toHaveBeenCalled());
+        // The submitted code is the same plain ISO code the dropdown sent.
+        expect(utils.composeForConfirm.mock.calls[0][0].actionData.params).toMatchObject({ FIAT_CODE: 'EUR', FIAT_AMOUNT: '12.34' });
     });
 
     it('ignores inactive coin fields and reviews the token payment terms', async () => {

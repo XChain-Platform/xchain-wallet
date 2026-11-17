@@ -7,7 +7,7 @@
 // /transaction/{txid}/tx_hash with the index nested inside an `actions` array
 // and NO top-level `action_index`. Four forms each carried a private copy of
 // this reader; ProjectRosterForm and AttachContentForm unwrapped the array,
-// AirdropForm and ListForkForm did not - so their poll resolved to null
+// AirdropForm and the list fork form did not - so their poll resolved to null
 // forever while the catch above it read that as "not indexed yet".
 //
 // The first case below is the exact live payload, captured from the regtest

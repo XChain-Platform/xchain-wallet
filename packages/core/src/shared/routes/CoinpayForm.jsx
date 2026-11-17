@@ -13,8 +13,16 @@ import {
     // The fee selector renders inside the standard FeeSection.
     AddressText, Button, ChainBadge, EmptyState, FormPage, Icon,
     FormNotice,
-    ListPage, PageHeader, Screen, SectionHeader, StatusMessage,
+    ListPage, PageHeader, Screen, Skeleton, StatusMessage, useFormErrors,
 } from '@xchain-wallet/core/ui';
+import { useSettings } from '../hooks/useSettings.js';
+import { useTickFiatRate } from '../hooks/useFiatRate.js';
+import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
+import {
+    expandDecimalNotation,
+    formatWithThousands,
+    multiplyDecimalStrings,
+} from '../utils/amountFormat.js';
 // The Wallet Form Standard frame for the selected payment (From,
 // Payment, Network fee, status slot, one action).
 import {
@@ -23,7 +31,8 @@ import {
     FormFrame,
     FormSection,
     FromSection,
-    summaryAddress,
+    SummaryAddress,
+    joinSummaryParts,
     useFormSections,
 } from '../components/formStandard/index.js';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -31,6 +40,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
@@ -43,9 +53,10 @@ import {
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { coinpayExpiryText } from '../../market/coinpayExpiry.js';
 import { baseUnitsToCoinText, obligationBaseUnits } from '../../market/obligationStatus.js';
-import { classifyObligation } from '../../market/obligationStatus.js';
+import { classifyObligation, countdownText } from '../../market/obligationStatus.js';
 import { hasAttemptedCoinpay } from '../../market/coinpayPending.js';
 import styles from './IssueTokenForm.module.css';
+import facts from './FactRows.module.css';
 import coinpayStyles from './CoinpayForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { addressValidationError, isValidAddressForChain } from '../utils/addressValidation.js';
@@ -80,6 +91,8 @@ const EXPIRY_LOSS_WARNING = 'This payment must confirm before the payment deadli
  *     `pending_coinpay` obligation, OR
  *   - The ActionsMenu "Pay COINPAY" entry, which opens this form
  *     without a prefilled obligation and scans the wallet on mount.
+ * The page has no picker: a named obligation opens that one, and an open
+ * with none named takes the payment due soonest.
  *
  * Flow: form -> review -> submitting -> done. Nothing is signed
  * or broadcast until the user reaches the review stage and confirms.
@@ -127,6 +140,7 @@ function ScopedCoinpayForm({
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
+    const formErrors = useFormErrors();
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [nativeBalance, setNativeBalance] = useState(
         /** @type {{ loading: boolean, baseUnits: bigint | null }} */
@@ -209,12 +223,19 @@ function ScopedCoinpayForm({
                 ? loadFailureMessage(failures[0], 'load every payment due')
                 : null);
             if (initialActionIndex) {
+                // A named payment opens only itself; when it is gone the page
+                // says so rather than offering a different one in its place.
                 const match = found.find((f) =>
                     String(f.obligation.action_index) === String(initialActionIndex)
                     && (!initialChainId || f.chainId === initialChainId)
                     && (!initialAddress || f.address === initialAddress)
                 );
                 if (match) setSelected(match);
+            } else {
+                // A chain or payer passed without a match still narrows the pick.
+                setSelected(soonestDue(found.filter((f) =>
+                    (!initialChainId || f.chainId === initialChainId)
+                    && (!initialAddress || f.address === initialAddress))));
             }
         })();
         return () => { cancelled = true; };
@@ -254,6 +275,71 @@ function ScopedCoinpayForm({
     // Payments-due card. summary.coinAmount is base units and must never be
     // shown next to the ticker as if it were coins.
     const amountLabel = coinAmountLabel(summary?.coinAmount, coinTicker);
+    const payCoinText = summary?.coinAmount != null ? baseUnitsToCoinText(String(summary.coinAmount)) : null;
+
+    // You get: the match row names the token and its fill. One read per
+    // page load, keyed on the match alone, so a fee change or Review and
+    // Back never reads it again. The explorer's by-block match list carries
+    // no ticks, so this reads the match action's own detail, which does.
+    const matchChainId = selected?.chainId || '';
+    const matchIndex = summary?.actionIndex || '';
+    const [matchRead, setMatchRead] = useState(
+        /** @type {{ key: string, status: 'loading' | 'ready' | 'failed', row: any }} */
+        ({ key: '', status: 'loading', row: null }),
+    );
+    useEffect(() => {
+        const key = `${matchChainId}\u0000${matchIndex}`;
+        if (!matchChainId) return undefined;
+        // No match number (validation refuses the payment too): nothing to read.
+        if (!matchIndex || typeof messaging.getActionByIndex !== 'function') {
+            setMatchRead({ key, status: 'failed', row: null });
+            return undefined;
+        }
+        let cancelled = false;
+        setMatchRead({ key, status: 'loading', row: null });
+        Promise.resolve()
+            .then(() => messaging.getActionByIndex({ chainId: matchChainId, actionIndex: matchIndex }))
+            .then((resp) => {
+                if (!cancelled) setMatchRead({ key, status: 'ready', row: unwrapActionDetail(resp) });
+            }, () => {
+                if (!cancelled) setMatchRead({ key, status: 'failed', row: null });
+            });
+        return () => { cancelled = true; };
+    }, [matchChainId, matchIndex, messaging]);
+    const youGet = useMemo(() => {
+        if (matchRead.key !== `${matchChainId}\u0000${matchIndex}`) return { status: 'loading' };
+        if (matchRead.status !== 'ready') return { status: matchRead.status };
+        const side = coinpayTokenSide(matchRead.row, summary?.coinAmount, coinTicker);
+        return side ? { status: 'ready', ...side } : { status: 'failed' };
+    }, [matchRead, matchChainId, matchIndex, summary?.coinAmount, coinTicker]);
+
+    // Fiat under each amount: the wallet's own price sources, on the same
+    // terms as Stake detail: only an obligation on a mainnet chain is priced,
+    // never one on a test network. A token the wallet cannot price shows no
+    // fiat line.
+    const { settings } = useSettings();
+    const fiatCurrency = settings?.fiatCurrency || 'USD';
+    const locale = settings?.language || 'en-US';
+    const fiatOn = descriptor?.networkKind === 'mainnet';
+    const allowCoingeckoFallback = Boolean(settings) && settings?.privacy?.priceDataEnabled !== false;
+    const coinRate = useTickFiatRate({
+        chainCoin: descriptor?.coin,
+        tick: coinTicker,
+        nativeTicker: coinTicker,
+        fiatCurrency,
+        allowCoingeckoFallback,
+        enabled: fiatOn && Boolean(coinTicker),
+    });
+    const tokenRate = useTickFiatRate({
+        chainCoin: descriptor?.coin,
+        tick: youGet.tick || '',
+        nativeTicker: coinTicker,
+        fiatCurrency,
+        allowCoingeckoFallback,
+        enabled: fiatOn && Boolean(coinTicker) && Boolean(youGet.tick),
+    });
+    const payFiat = fiatOn ? fiatText(payCoinText, coinRate?.rate, fiatCurrency, locale) : null;
+    const getFiat = fiatOn && youGet.tick ? fiatText(youGet.amount, tokenRate?.rate, fiatCurrency, locale) : null;
 
     // Network fee: Low / Normal / Fast / Custom, editable via FeeSelector on
     // the obligation-confirm stage. `feeEstimate` backs the slider readout and
@@ -334,30 +420,26 @@ function ScopedCoinpayForm({
         setReviewAttempt((n) => n + 1);
         setErrorSection('main');
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setErrorSection('fee'); setSubmitError(feeStop.formError); return; }
-        if (!selected || !summary) {
-            setSubmitError('Choose a payment before continuing.');
-            return;
-        }
-        if (validationError) {
-            setSubmitError(validationError);
-            return;
-        }
-        if (insufficientBalance) {
-            setSubmitError(insufficientBalanceMessage);
-            return;
-        }
-        if (classifyObligation(summary.expiration).state === 'expired') {
-            setSubmitError(EXPIRED_ERROR);
-            return;
-        }
+        if (feeStop) setErrorSection('fee');
+        const paymentError = !selected || !summary
+            ? 'Choose a payment before continuing.'
+            : validationError || insufficientBalanceMessage
+                || (classifyObligation(summary.expiration).state === 'expired' ? EXPIRED_ERROR : null);
+        if (!formErrors.validate({
+            'form:coinpay-fee': feeStop?.formError,
+            'coinpay-payment': paymentError,
+        }) || feeStop) return;
         setSubmitError(null);
         setStage('review');
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (!selected || !summary || stage === 'submitting' || ownerLane.composing) return;
+        if (stage === 'submitting' || ownerLane.composing) return;
+        if (!selected || !summary) {
+            formErrors.validate({ 'coinpay-payment': 'Choose a payment before continuing.' });
+            return;
+        }
         if (validationError) {
             setSubmitError(validationError);
             setStage('review');
@@ -477,6 +559,7 @@ function ScopedCoinpayForm({
         : 'Pay for Matched Order';
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
@@ -516,6 +599,7 @@ function ScopedCoinpayForm({
                 {...ownerLane.confirmProps}
                 summary={paySummary}
                 screenVariant={variant}
+                feeEstimate={feeEstimate}
                 chainLabel={descriptor?.displayName || selected?.chainId}
                 signerReady={signerReady}
                 hintClassName={styles.hint}
@@ -552,7 +636,7 @@ function ScopedCoinpayForm({
                     </p>
                 ) : null}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </>,
         );
@@ -568,6 +652,7 @@ function ScopedCoinpayForm({
                 demoGuard={demoGuard}
                 label="Review matched order payment"
                 onSubmit={handleSubmit}
+                errors={formErrors}
                 status={submitError ? (
                     <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : stage === 'submitting' ? (
@@ -588,7 +673,7 @@ function ScopedCoinpayForm({
                     </Button>
                 )}
             >
-                <dl className={styles.detailsList}>
+                <dl id="coinpay-payment" className={styles.detailsList}>
                     {descriptor ? (
                         <DetailRow
                             label="Network"
@@ -629,8 +714,9 @@ function ScopedCoinpayForm({
         );
     }
 
-    // Form stage: obligation picker. No credentials shown here; the user
-    // picks an obligation then advances to review before signing.
+    // Form stage: the one payment this page was opened for (or the one due
+    // soonest), with no picker. No credentials shown here; the user
+    // advances to review before signing.
     return wrap(
         <>
             {addressesByChain === null ? (
@@ -648,63 +734,11 @@ function ScopedCoinpayForm({
                     body="Open a matched order from Payments due to pay it."
                 />
             ) : null}
-
-            {obligations.length > 0 ? (
-                <>
-                    <SectionHeader title="Payments due" />
-                    <ul className={coinpayStyles.dueList}>
-                        {obligations.map((row) => {
-                            const isSelected = Boolean(selected
-                                && selected.chainId === row.chainId
-                                && String(selected.obligation.action_index) === String(row.obligation.action_index));
-                            const d = chainRegistry.get(row.chainId);
-                            const t = d ? PROTOCOL_COIN_TICKER[d.coin] : '';
-                            // Same canonical reader the confirm/review stages use
-                            // (amountLabel below): coin_amount is the explorer's
-                            // decimal coin figure, and echoing it verbatim skips
-                            // the normalization (e.g. trailing-zero stripping)
-                            // that reader does. Falls back to the raw figure only
-                            // when the row can't be parsed at all.
-                            const rowAmountLabel = coinAmountLabel(
-                                safeBaseUnitAmount(row.obligation.coin_amount), t,
-                            ) ?? `${row.obligation.coin_amount} ${t || 'base units'}`;
-                            return (
-                                <li key={`${row.chainId}-${row.obligation.action_index}`}>
-                                    {/* The native row button keeps the whole obligation card as one target. */}
-                                    <button
-                                        type="button"
-                                        className={coinpayStyles.dueRow}
-                                        onClick={() => setSelected(row)}
-                                        aria-pressed={isSelected}
-                                    >
-                                        <div className={coinpayStyles.dueTitle}>
-                                            {d ? <ChainBadge descriptor={d} size="sm" showName={false} /> : null}
-                                            <span>
-                                                Matched order #{String(row.obligation.action_index)}
-                                            </span>
-                                        </div>
-                                        <div className={coinpayStyles.dueAmount}>
-                                            Pay {rowAmountLabel}{' '}
-                                            <span className={styles.inlineDirectionalIcon}>
-                                                <Icon.ForwardIcon />
-                                            </span>{' '}
-                                            <AddressText address={row.obligation.payee_address} />
-                                        </div>
-                                        <div className={coinpayStyles.dueMeta}>
-                                            From <AddressText address={row.address} />
-                                            {coinpayExpiryText(row.obligation.expiration) ? (
-                                                <> · payment deadline {coinpayExpiryText(row.obligation.expiration)}</>
-                                            ) : null}
-                                            {classifyObligation(row.obligation.expiration).state === 'expired' ? (
-                                                <strong className={coinpayStyles.dueExpired}> · EXPIRED, do not pay</strong>
-                                            ) : null}
-                                        </div>
-                                    </button>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                </>
+            {!scanning && !scanError && obligations.length > 0 && !selected ? (
+                <EmptyState
+                    title="Payment not found"
+                    body="This payment is no longer due; Payments due lists what this wallet owes."
+                />
             ) : null}
 
             {selected && summary ? (
@@ -712,10 +746,11 @@ function ScopedCoinpayForm({
                     demoGuard={demoGuard}
                     label="Selected payment"
                     onSubmit={handleReview}
+                    errors={formErrors}
                     data-form-standard="coinpay"
-                    status={[(submitError || validationError || insufficientBalanceMessage) ? (
+                    status={[submitError ? (
                         <StatusMessage key="error" variant="error">
-                            {submitError || validationError || insufficientBalanceMessage}
+                            {submitError}
                         </StatusMessage>
                     ) : nativeBalance.loading ? (
                         <StatusMessage key="balance">Checking available balance…</StatusMessage>
@@ -723,15 +758,14 @@ function ScopedCoinpayForm({
                     action={(
                         <FormAction
                             icon={<Icon.TokenIcon />}
-                            disabled={!selected || !summary || nativeBalance.loading
-                                || Boolean(validationError) || insufficientBalance}
+                            loading={nativeBalance.loading}
                         >
                             Pay Order
                         </FormAction>
                     )}
                     /* From holds the network and the paying address.
                        Both are fixed by the matched order, so the Network is
-                       locked and the address has no picker to open. */
+                       locked and the address picker shows locked. */
                     from={(
                         <FromSection
                             {...formSections.bind('from')}
@@ -741,11 +775,15 @@ function ScopedCoinpayForm({
                             networkHelp="The chain this order is paid on. It is fixed by the matched order."
                             address={selected.address}
                             addressHelp="The address that owes this payment. It is fixed by the matched order."
+                            pickerLockedReason="The matched order fixes the paying address"
                         />
                     )}
                     fee={(
                         <FeeSection
                             {...formSections.bind('fee')}
+                            // The payment goes to one exact payee from the order's own
+                            // inputs, so coin control and a custom change address cannot apply.
+                            advanced={{ coins: false, change: false }}
                             chainId={selected.chainId}
                             coinTicker={coinTicker}
                             tiers={feeTiers}
@@ -762,30 +800,59 @@ function ScopedCoinpayForm({
                         icon={Icon.TokenIcon}
                         {...formSections.bind('main')}
                         revealKey={submitError && errorSection === 'main' ? reviewAttempt + 1 : 0}
-                        summary={[amountLabel, summary.payeeAddress ? `to ${summaryAddress(summary.payeeAddress)}` : null]
-                            .filter(Boolean).join(' ') || null}
+                        summary={joinSummaryParts([
+                            amountLabel,
+                            summary.payeeAddress ? <>to <SummaryAddress address={summary.payeeAddress} /></> : null,
+                        ], ' ') || null}
                     >
-                    <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>Matched order</dt>
-                        <dd className={styles.detailsValue}>
-                            <code>{summary.actionIndex}</code>
+                    {/* One compact facts list: the amounts are fixed by the match. */}
+                    <dl id="coinpay-payment" className={facts.list} data-coinpay-facts="">
+                        <dt className={facts.label}>You pay</dt>
+                        <dd className={facts.value}>
+                            <span className={coinpayStyles.amountWithIcon}>
+                                {coinTicker ? (
+                                    <TickerIcon chainId={selected.chainId} tick={coinTicker} context="header" />
+                                ) : null}
+                                <span>
+                                    {`${payCoinText ?? amountLabel}${coinTicker && payCoinText != null ? ` ${coinTicker}` : ''}`}
+                                    {payFiat ? <span className={coinpayStyles.boxFiat}>{` ≈ ${payFiat}`}</span> : null}
+                                </span>
+                            </span>
                         </dd>
-                        <dt className={styles.detailsLabel}>Paying to</dt>
-                        <dd className={styles.detailsValue}>
-                            <AddressText address={summary.payeeAddress} />
-                        </dd>
-                        <dt className={styles.detailsLabel}>Amount</dt>
-                        <dd className={styles.detailsValue}>
-                            {amountLabel}
-                        </dd>
-                        {coinpayExpiryText(summary.expiration) ? (
+                        {youGet.status !== 'failed' ? (
                             <>
-                                <dt className={styles.detailsLabel}>Payment deadline</dt>
-                                <dd className={styles.detailsValue}>
-                                    {coinpayExpiryText(summary.expiration)}
+                                <dt className={facts.label}>You get</dt>
+                                <dd className={facts.value} aria-busy={youGet.status === 'loading' || undefined}>
+                                    {youGet.status === 'loading' ? (
+                                        <Skeleton shape="text" width="8em" ariaLabel="Loading you get" />
+                                    ) : (
+                                        <span className={coinpayStyles.amountWithIcon}>
+                                            {youGet.tick ? (
+                                                <TickerIcon chainId={selected.chainId} tick={youGet.tick} context="header" />
+                                            ) : null}
+                                            <span>
+                                                {`${youGet.amount ? formatWithThousands(youGet.amount, locale) : ''} ${youGet.tick || ''}`.trim()}
+                                                {getFiat ? <span className={coinpayStyles.boxFiat}>{` ≈ ${getFiat}`}</span> : null}
+                                            </span>
+                                        </span>
+                                    )}
                                 </dd>
                             </>
                         ) : null}
+                        {coinpayExpiryText(summary.expiration) ? (
+                            <>
+                                <dt className={facts.label}>Time left</dt>
+                                <dd className={facts.value}>
+                                    <TimeLeftPill expiration={summary.expiration} />
+                                </dd>
+                            </>
+                        ) : null}
+                        <dt className={facts.label}>Pay to</dt>
+                        <dd className={facts.value}>
+                            <AddressText address={summary.payeeAddress} />
+                        </dd>
+                        <dt className={facts.label}>Matched order</dt>
+                        <dd className={facts.value}>#{summary.actionIndex}</dd>
                     </dl>
                     </FormSection>
                 </FormFrame>
@@ -801,6 +868,101 @@ function DetailRow({ label, value }) {
             <dd className={styles.detailsValue}>{value}</dd>
         </>
     );
+}
+
+// Under an hour left the pill turns red, so a payment that still needs
+// time to confirm stands out before the deadline does.
+const URGENT_SECONDS = 60 * 60;
+
+/** The Time left pill, counting down on its own so the form does not re-render each second. */
+function TimeLeftPill({ expiration }) {
+    const [nowSeconds, setNowSeconds] = useState(() => Math.floor(Date.now() / 1000));
+    useEffect(() => {
+        const id = setInterval(() => setNowSeconds(Math.floor(Date.now() / 1000)), 1000);
+        return () => clearInterval(id);
+    }, []);
+    const { state, secondsLeft } = classifyObligation(expiration, nowSeconds);
+    if (state === 'expired') {
+        return <span className={`${coinpayStyles.pill} ${coinpayStyles.pillUrgent}`}>Expired, do not pay</span>;
+    }
+    const countdown = countdownText(secondsLeft);
+    if (!countdown) return null;
+    const urgent = secondsLeft != null && secondsLeft < URGENT_SECONDS;
+    return (
+        <span
+            className={`${coinpayStyles.pill}${urgent ? ` ${coinpayStyles.pillUrgent}` : ''}`}
+            data-urgent={urgent ? 'true' : undefined}
+        >
+            {`${countdown} left`}
+        </span>
+    );
+}
+
+// With no payment named, the page opens the one due soonest that can still
+// be paid (an expired one only when nothing else is due). The scan collects
+// rows in network-reply order, so the pick sorts rather than taking the first.
+function soonestDue(found) {
+    if (!Array.isArray(found) || found.length === 0) return null;
+    const deadline = (row) => {
+        const n = Number(row.obligation.expiration);
+        return Number.isFinite(n) && n > 0 ? n : Number.MAX_SAFE_INTEGER;
+    };
+    const byDeadline = (a, b) => deadline(a) - deadline(b)
+        || String(a.obligation.action_index).localeCompare(String(b.obligation.action_index));
+    const open = found.filter((row) => classifyObligation(row.obligation.expiration).state !== 'expired');
+    return [...(open.length > 0 ? open : found)].sort(byDeadline)[0];
+}
+
+// The explorer's action detail arrives wrapped as { data }, as a one-row
+// array, or nested under `action`; this returns the row itself or null.
+function unwrapActionDetail(body) {
+    if (!body || typeof body !== 'object') return null;
+    let row = body.data !== undefined && body.data !== null ? body.data : body;
+    if (Array.isArray(row)) row = row.length > 0 ? row[0] : null;
+    if (!row || typeof row !== 'object') return null;
+    if (row.action && typeof row.action === 'object' && !Array.isArray(row.action)
+        && row.action.action_index !== undefined) return row.action;
+    return row;
+}
+
+/**
+ * The token side of a COINPAY match row: { tick, amount } or null.
+ *
+ * Each order_matches row stores both sides' ticks and amounts from one
+ * order's point of view (see autopayPolicy orientMatch), so a tick and the
+ * amount beside it always pair. A COINPAY match trades the native coin for
+ * a token: the coin side has a blank tick (or the coin's own ticker) and
+ * the token side names its tick. The coin side must also be the amount this
+ * obligation owes, so a row that does not fit is never shown as a guess.
+ */
+function coinpayTokenSide(row, coinBaseUnits, coinTicker) {
+    if (!row || typeof row !== 'object' || coinBaseUnits == null) return null;
+    const native = (tick) => {
+        const text = String(tick ?? '').trim().toUpperCase();
+        return text.length === 0 || (Boolean(coinTicker) && text === coinTicker);
+    };
+    const sides = [
+        { tick: row.give_tick, amount: row.give_amount },
+        { tick: row.get_tick, amount: row.get_amount },
+    ];
+    const coinSides = sides.filter((s) => native(s.tick));
+    const tokenSides = sides.filter((s) => !native(s.tick));
+    if (coinSides.length !== 1 || tokenSides.length !== 1) return null;
+    const coinBase = obligationBaseUnits(coinSides[0].amount);
+    if (coinBase === null || coinBase !== BigInt(coinBaseUnits)) return null;
+    const amount = String(tokenSides[0].amount ?? '').trim();
+    if (!/^\d+(\.\d+)?$/.test(amount) || !/[1-9]/.test(amount)) return null;
+    return { tick: String(tokenSides[0].tick).trim(), amount };
+}
+
+// "$102.40" for an amount at a rate, or null when either is missing.
+function fiatText(amount, rate, currency, locale) {
+    if (amount == null || amount === '' || typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) {
+        return null;
+    }
+    const value = multiplyDecimalStrings(expandDecimalNotation(String(amount)), expandDecimalNotation(String(rate)));
+    if (value == null) return null;
+    return formatFiatAmount(value, currency, locale) || null;
 }
 
 function obligationValidationError({

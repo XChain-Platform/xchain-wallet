@@ -18,6 +18,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { AdvancedActionsForm, fieldLabel } from '../../../packages/core/src/shared/routes/AdvancedActionsForm.jsx';
+import { selectOption, selectOptionValues } from '../../helpers/selectOption.js';
 
 const BTC = 'bitcoin-mainnet';
 const FROM = {
@@ -61,9 +62,9 @@ describe('Advanced action field labels', () => {
                 <AdvancedActionsForm walletId="w" onBack={() => {}} />
             </MessagingProvider>,
         );
-        await waitFor(() => expect(document.querySelector('option[value="SLEEP"]')).toBeTruthy());
-        const picker = document.querySelector('option[value="SLEEP"]').closest('select');
-        fireEvent.change(picker, { target: { value: 'SLEEP' } });
+        const picker = await screen.findByRole('combobox', { name: 'Action' });
+        await waitFor(() => expect(selectOptionValues(picker)).toContain('SLEEP'));
+        selectOption(picker, 'SLEEP');
 
         expect(await screen.findByLabelText('Resume block')).toBeInTheDocument();
         expect(screen.queryByLabelText('RESUME_BLOCK')).not.toBeInTheDocument();

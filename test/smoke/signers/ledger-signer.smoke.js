@@ -439,8 +439,16 @@ await assert.rejects(
 assert.equal(modelFromLedgerTransport({ id: 'nanoS' }), 'nanoS');
 assert.equal(modelFromLedgerTransport({ id: 'nanoX' }), 'nanoX');
 assert.equal(modelFromLedgerTransport({ id: 'stax' }), 'stax');
-assert.equal(modelFromLedgerTransport(null), 'nanoX', 'falls back to nanoX');
-assert.equal(modelFromLedgerTransport({ id: 'unknown' }), 'nanoX', 'unknown → nanoX fallback');
+// Each known model keeps its own code (the Flex reports either id and stores
+// europa); an absent or unrecognised id stores the neutral 'unknown' code,
+// never another model's code.
+assert.equal(modelFromLedgerTransport({ id: 'nanoSP' }), 'nanoSP');
+assert.equal(modelFromLedgerTransport({ id: 'europa' }), 'europa');
+assert.equal(modelFromLedgerTransport({ id: 'flex' }), 'europa', 'the Flex stores europa');
+assert.equal(modelFromLedgerTransport({ id: 'apex' }), 'apex');
+assert.equal(modelFromLedgerTransport(null), 'unknown', 'no device model stores unknown');
+assert.equal(modelFromLedgerTransport({}), 'unknown', 'no id string stores unknown');
+assert.equal(modelFromLedgerTransport({ id: 'unknown' }), 'unknown', 'an unrecognised id stores unknown, never nanoX');
 
 // --- 9. schemas.SIGNER_KINDS includes 'ledger' ------------------------
 

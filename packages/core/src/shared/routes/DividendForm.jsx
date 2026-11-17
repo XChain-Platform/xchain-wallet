@@ -12,7 +12,7 @@ import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Network, From and the fee selector come from the Wallet Form
 // Standard's FromSection and FeeSection.
-import { AddressText, Button, ChainBadge, FormNotice, FormPage, Icon, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, FormNotice, FormPage, Icon, PageHeader, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
 // Pay Dividend is laid out on the Wallet Form Standard: From
 // (closed), Dividend (open), Memo (optional, closed), Network fee (the
 // FeesCard with the native-fee switch), the status slot and Pay Dividend.
@@ -23,6 +23,7 @@ import {
     FormSection,
     FromSection,
     joinSummary,
+    MemoSection,
     useFormSections,
 } from '../components/formStandard/index.js';
 import {
@@ -36,7 +37,7 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { SignCredentials } from '../components/SignCredentials.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -44,7 +45,7 @@ import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatWithThousands, groupDecodedAmounts, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import {
     perUnitMax,
     dividendPreview,
@@ -74,12 +75,13 @@ import { isNativeCoinTick, nativeCoinTickMessage, unknownTickMessage } from '../
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
-import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { listMembers } from '../../flows/allowListSelfCheck.js';
 import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -144,11 +146,15 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     // Counts Pay Dividend presses, so the section holding the error
     // reopens on every attempt even after the user closed it.
     const [reviewAttempt, setReviewAttempt] = useState(0);
+    // Set by a Pay Dividend press (G22): each required field still empty
+    // then shows red with its own message.
+    const [attempted, setAttempted] = useState(false);
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const formErrors = useFormErrors();
     // The amount field reports when the per-unit amount holds more decimals
     // than the dividend token allows, so the submit gate matches its error.
     const [amountPrecisionError, setAmountPrecisionError] = useState(/** @type {string | null} */ (null));
@@ -467,13 +473,24 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action: 'DIVIDEND',
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
-        });
+        }));
     }, [stage, actionParams, chainId]);
+    const legacyComposed = useMemo(() => {
+        if (!decoded) return null;
+        const quote = normalizeProtocolFee(protocolFeeQuote);
+        return {
+            action: 'DIVIDEND',
+            chainId,
+            decoded,
+            quote: protocolFeeQuote,
+            protocolFeeKnownFree: quote.known && quote.free,
+        };
+    }, [chainId, decoded, protocolFeeQuote]);
 
     // Holder-count preview excludes the source address per DIVIDEND.md
     // ("SOURCE address is excluded from receiving dividends"). When
@@ -600,10 +617,25 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     async function handleReview(event) {
         event.preventDefault();
         setReviewAttempt((n) => n + 1);
+        setAttempted(true);
+        // G22: an empty required field is marked on the field itself and
+        // takes the cursor; nothing else is checked until it is filled.
+        const missing = {
+            'dividend-holder-token': !tick.trim() ? 'Pick the holder token.' : null,
+            'dividend-token': !dividendTick.trim() ? 'Pick the dividend token.' : null,
+            'dividend-amount': !String(amount).trim() ? 'Enter the per-unit amount.' : amountPrecisionError,
+        };
+        const firstMissing = Object.keys(missing).find((id) => missing[id]) || null;
+        if (!formErrors.validate(missing)) {
+            setFormError(null);
+            setTimeout(() => document.getElementById(firstMissing)?.focus(), 0);
+            return;
+        }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { setFormError(null); formErrors.fail(feeStop.formError, 'form:fee'); return; }
         if (!chainId || !fromAddress) {
-            setFormError('Pick a source address first.');
+            setFormError(null);
+            formErrors.fail('Pick a source address first.', 'form:from');
             return;
         }
         if (!tick.trim()) {
@@ -616,11 +648,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             return;
         }
         if (tickIsNativeCoin) {
-            setFormError(nativeCoinTickMessage(coinTicker, 'the active network'));
+            formErrors.validate({ 'dividend-holder-token': nativeCoinTickMessage(coinTicker, 'the active network') });
             return;
         }
         if (tickCheck.verdict === 'missing') {
-            setFormError(unknownTickMessage(trimmedTick, 'the active network'));
+            formErrors.validate({ 'dividend-holder-token': unknownTickMessage(trimmedTick, 'the active network') });
             return;
         }
         if (!dividendTick.trim()) {
@@ -633,7 +665,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             return;
         }
         if (dividendTickCheck.verdict === 'missing') {
-            setFormError(unknownTickMessage(trimmedDividendTick, 'the active network'));
+            formErrors.validate({ 'dividend-token': unknownTickMessage(trimmedDividendTick, 'the active network') });
             return;
         }
         const amt = String(amount).trim();
@@ -643,9 +675,9 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         }
         const amountComparison = compareDecimalStrings(amt, '0');
         if (amountComparison !== 1) {
-            setFormError(amountComparison === null
+            formErrors.validate({ 'dividend-amount': amountComparison === null
                 ? 'Per-unit amount must be a positive decimal number.'
-                : 'Per-unit amount must be greater than zero.');
+                : 'Per-unit amount must be greater than zero.' });
             return;
         }
         // Keep each payout within the dividend token's on-chain decimal scale.
@@ -655,14 +687,14 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             noun: 'Per-unit amount',
         });
         if (precisionError) {
-            setFormError(precisionError);
+            formErrors.validate({ 'dividend-amount': precisionError });
             return;
         }
         // Stop a payout the balance cannot cover here, not three screens
         // later. This check runs when both projected total and balance are
         // known; holder completeness is gated separately below.
         if (balanceError) {
-            setFormError(balanceError);
+            formErrors.validate({ 'dividend-amount': balanceError });
             return;
         }
         if (memo && /[|;]/.test(memo)) {
@@ -671,7 +703,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         }
         const memoError = memoLengthError(memo.trim());
         if (memoError) { setFormError(memoError); return; }
-        if (!holders.rows || !preview || holderReviewPendingRef.current) return;
+        if (!holders.rows || !preview) {
+            formErrors.fail(holders.error || 'Wait for the wallet to finish loading the holder list.');
+            return;
+        }
+        if (holderReviewPendingRef.current) return;
 
         // Refresh at the review boundary so a holder change cannot leave the
         // displayed payout behind the set used by the network. A changed set
@@ -852,11 +888,13 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
 
     function handleBuildAnother() {
         setResult(null);
+        setAttempted(false); // a fresh form opens with no G22 marks
         setSubmitError(null);
         setStage('form');
     }
         const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
@@ -914,7 +952,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             <FormPage
                 as="div"
                 label="Dividend result"
-                actions={<Button variant="primary" onClick={onBack}>Done</Button>}
+                actions={<Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>}
             >
                 <h2 className={styles.successTitle}>Dividend sent</h2>
                 {txid ? (
@@ -930,123 +968,47 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review dividend"
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        icon={<Icon.SignIcon />}
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create Unsigned Transaction: Pay Dividend'
-                            : 'Sign: Pay Dividend'}
-                    </Button>
-                )}
-            >
-                <p className={styles.summary}>{decoded?.summary}</p>
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Network</dt>
-                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {(decoded?.details || []).map((d) => (
-                        <DetailRow
-                            key={d.label}
-                            label={d.label}
-                            value={d.label === 'Per-unit amount'
-                                ? `${d.value} ${dividendTick.trim()}`
-                                : d.value}
-                        />
-                    ))}
-                    {preview ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Eligible holders</dt>
-                            <dd className={styles.detailsValue}>
-                                {preview.eligibleCount}
-                                {preview.sourceExcluded ? ' (source excluded)' : ''}
-                            </dd>
-                            {preview.total !== null ? (
-                                <>
-                                    <dt className={styles.detailsLabel}>Total distribution</dt>
-                                    <dd className={styles.detailsValue}>
-                                        ~{formatWithThousands(preview.total)} {dividendTick.trim()}
-                                    </dd>
-                                </>
-                            ) : null}
-                        </>
-                    ) : null}
-                    {totalCostText ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Total token cost</dt>
-                            <dd className={styles.detailsValue} data-testid="dividend-review-total-cost">
-                                {totalCostText}
-                            </dd>
-                        </>
-                    ) : null}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                    <DetailRow
-                        label="Dividend protocol fee"
-                        value={protocolFeeText || 'Calculated from the final holder count when the dividend executes'}
-                    />
-                </dl>
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-                <p className={styles.hint} data-testid="dividend-review-fee-hint">
-                    Paying a dividend has a protocol fee that grows with the number
-                    of holders paid, charged separately from the payout. Make sure
-                    this address holds enough {dividendTick.trim() || 'of the token you are paying out'}
-                    {' '}to cover the full payout.
-                </p>
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-            </FormPage>,
+        const payTick = String(actionParams.DIVIDEND_TICK || '').toUpperCase();
+        const holderTick = String(actionParams.TICK || '').toUpperCase();
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setStage('form'); }}
+                decoded={decoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentials={<p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>}
+                credentialsReady
+                summary={{
+                    verb: t('components.confirmSummary.verbPayDividend'),
+                    ...(payTick ? { ticker: payTick } : {}),
+                    ...(payTick && preview?.total != null ? { amount: String(preview.total) } : {}),
+                    ...(holderTick ? { target: t('components.confirmSummary.holdersTarget', { tick: holderTick }) } : {}),
+                    direction: 'out',
+                    chainId,
+                    address: fromAddress?.address,
+                    facts: preview ? [{
+                        label: 'Eligible holders',
+                        value: `${formatWithThousands(preview.eligibleCount)}${preview.sourceExcluded ? ' (source excluded)' : ''}`,
+                    }] : [],
+                    ...(!nativeFee.payFeeInNativeCoin && protocolFee
+                        ? { protocolFee: { amount: String(protocolFee), ticker: protocolFeeTick } }
+                        : {}),
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -1065,6 +1027,12 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             direction: 'out',
             chainId,
             address: fromAddress?.address,
+            // The XCHAIN lane's quoted protocol fee, so the confirm Total
+            // counts it when the pre-flight report carries no figure; a
+            // native-coin fee is a composed output the screen reads itself.
+            ...(!nativeFee.payFeeInNativeCoin && protocolFee
+                ? { protocolFee: { amount: String(protocolFee), ticker: protocolFeeTick } }
+                : {}),
         };
         return (
             <ActionConfirmScreen
@@ -1072,6 +1040,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 summary={dividendSummary}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -1158,7 +1127,14 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         if (/memo/i.test(formError)) return 'memo';
         return 'dividend';
     })();
-    const sectionErrorKey = (id) => (errorSection === id ? reviewAttempt + 1 : 0);
+    // G22 marks: shown once Pay Dividend was pressed, cleared as soon as filled.
+    const holderTokenMark = attempted && !tick.trim() ? 'Holder-of token is required.' : undefined;
+    const dividendTokenMark = attempted && !dividendTick.trim() ? 'Dividend token is required.' : undefined;
+    const amountMark = attempted && !String(amount).trim() ? 'Per-unit amount is required.' : undefined;
+    const sectionErrorKey = (id) => (
+        errorSection === id || (id === 'dividend' && (holderTokenMark || dividendTokenMark || amountMark))
+            ? reviewAttempt + 1 : 0
+    );
     const dividendSummary = joinSummary(
         amount && dividendTick.trim()
             ? `${formatWithThousands(amount)} ${dividendTick.trim().toUpperCase()} per unit`
@@ -1174,18 +1150,19 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             demoGuard={demoGuard}
             label="Pay dividend"
             onSubmit={handleReview}
-            status={(formError || balanceError) ? (
-                <StatusMessage variant="error">{formError || balanceError}</StatusMessage>
+            errors={formErrors}
+            // G120: the balance refusal shows when Review is pressed (the
+            // submit sets formError), never live, so flipping the pay-in-coin
+            // switch, which moves the fee off the XCHAIN balance, shows or
+            // hides no notice.
+            status={formError ? (
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
             action={(
                 <FormAction
                     icon={<Icon.CoinsIcon />}
                     loading={actionConfirm.composing || holderReviewPending}
-                    disabled={!fromAddress || !tick || !dividendTick || !amount || actionConfirm.composing
-                        || holderReviewPending || !holders.rows || !preview
-                        || tickIsNativeCoin || tickCheck.verdict === 'missing'
-                        || dividendTickCheck.verdict === 'missing'
-                        || !!amountPrecisionError}
+                    // Invalid values answer the tap through the form summary.
                 >
                     Pay Dividend
                 </FormAction>
@@ -1223,8 +1200,6 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                     value={feePick}
                     onChange={setFeePick}
                     customEstimate={feeCustomEstimate}
-                    // The protocol fee joins the Network fee row's summary.
-                    protocolSummary={protocolFeeText ? `${protocolFeeText} protocol fee` : undefined}
                     fees={{
                         quote: protocolFeeQuote,
                         pending: protocolFeePending,
@@ -1246,21 +1221,25 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 Holder-of token field. */}
             {(
                 <TokenField
+                    id="dividend-holder-token"
                     label="Holder-of token"
                     help="The token whose holders receive this dividend. Each holder is paid according to their balance."
                     value={tick && chainId ? { chainId, tick } : null}
                     onOpenPicker={() => setTokenPickerOpen(true)}
-                    error={tickFieldError}
+                    error={tickFieldError || holderTokenMark}
                 />
             )}
             <TokenField
+                id="dividend-token"
                 label="Dividend token"
                 help="The token distributed to holders. Your From address must have enough to fund the dividend."
                 value={dividendTick && chainId ? { chainId, tick: dividendTick } : null}
                 onOpenPicker={() => setDividendPickerOpen(true)}
-                error={dividendTickFieldError}
+                error={dividendTickFieldError || dividendTokenMark}
             />
             <AmountField
+                id="dividend-amount"
+                error={amountMark}
                 label="Per-unit amount"
                 help="Amount of dividend ticker per 1 unit of holder-of token."
                 amount={amount}
@@ -1318,39 +1297,19 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             ) : null}
             </FormSection>
 
-            <FormSection
-                id="memo"
-                title="Memo"
-                icon={Icon.MessageIcon}
-                optional
+            {/* Memo holds only the memo: the section title names the field
+                and carries its count. */}
+            <MemoSection
                 {...formSections.bind('memo')}
                 revealKey={sectionErrorKey('memo')}
-                summary={memo.trim() || 'None'}
-            >
-                <Input
-                    label="Memo"
-                    // Inside the optional Memo section the field drops
-                    // its own Optional tag.
-                    aria-required="false"
-                    maxLength={MAX_MEMO_LENGTH}
-                    help={MEMO_HINT}
-                    value={memo}
-                    onChange={(e) => setMemo(e.target.value)}
-                    autoComplete="off"
-                />
-            </FormSection>
+                aria-required="false"
+                maxLength={MAX_MEMO_LENGTH}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+            />
             {/* The FeesCard (network fee selector, protocol fee and the
                 pay-in-native switch) opens from the one Network fee section. */}
         </FormFrame>,
-    );
-}
-
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
     );
 }
 

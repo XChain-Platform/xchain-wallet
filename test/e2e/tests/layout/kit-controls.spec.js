@@ -55,14 +55,14 @@ test('kit navigation and filter controls work on populated routes', async ({ pag
 
     await test.step('Home tabs select and focus the next tab with an arrow key', async () => {
         const tabs = page.getByRole('main').getByRole('tablist', { name: 'Wallet view' });
-        const coins = tabs.getByRole('tab', { name: 'Coins' });
-        const tokens = tabs.getByRole('tab', { name: 'Tokens' });
+        const balances = tabs.getByRole('tab', { name: 'Balances' });
+        const nfts = tabs.getByRole('tab', { name: 'NFTs' });
 
-        await expect(coins).toHaveAttribute('aria-selected', 'true');
-        await coins.focus();
-        await coins.press('ArrowRight');
-        await expect(tokens).toBeFocused();
-        await expect(tokens).toHaveAttribute('aria-selected', 'true');
+        await expect(balances).toHaveAttribute('aria-selected', 'true');
+        await balances.focus();
+        await balances.press('ArrowRight');
+        await expect(nfts).toBeFocused();
+        await expect(nfts).toHaveAttribute('aria-selected', 'true');
     });
 
     await test.step('History chips and the segmented view expose their selected state', async () => {

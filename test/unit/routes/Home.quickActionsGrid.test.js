@@ -8,37 +8,26 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Home's quick actions used auto-fit columns with a 76px floor, so at 360 the
-// gaps pushed four tiles into a 3+1 wrap with "Swap" alone on a second row.
-// Above 360 the tiles share one row of equal tracks capped at the tile
-// measure; below it they are two columns and an odd last tile spans both.
-// jsdom has no layout, so this pins the rules.
+// Home no longer has a quick action row: its stylesheet holds no tile grid,
+// and the loading skeleton draws no tile row either. jsdom has no layout, so
+// this pins the source.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const css = readFileSync(join(process.cwd(), 'packages/core/src/shared/routes/Home.module.css'), 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '');
+const read = (path) => readFileSync(join(process.cwd(), path), 'utf8');
 
-function ruleBody(selector) {
-    const escaped = selector.replace(/[.*+?^${}()|[\]\\:>]/g, '\\$&');
-    const match = new RegExp(`(^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`).exec(css);
-    return match ? match[2] : '';
-}
-
-describe('Home quick actions grid', () => {
-    it('lays the tiles in one centred row of equal columns by default', () => {
-        const body = ruleBody('.quickActions');
-        expect(body).toMatch(/display:\s*grid/);
-        expect(body).toMatch(/grid-auto-flow:\s*column/);
-        expect(body).toMatch(/grid-auto-columns:\s*minmax\(0,\s*5\.5rem\)/);
-        expect(body).toMatch(/justify-content:\s*center/);
-        expect(body).not.toMatch(/auto-fit|auto-fill/);
+describe('Home quick actions grid is gone', () => {
+    it('keeps no quick action grid rules in the Home stylesheet', () => {
+        const css = read('packages/core/src/shared/routes/Home.module.css');
+        expect(css).not.toMatch(/\.quickActions/);
+        expect(css).not.toMatch(/\.quickActionsReason/);
     });
 
-    it('goes two columns below 360 and spans an odd last tile', () => {
-        expect(css).toMatch(/@media not all and \(min-width: 360px\)\s*\{\s*\.quickActions\s*\{[^}]*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
-        expect(css).toMatch(/\.quickActions > :last-child:nth-child\(odd\)\s*\{[^}]*grid-column:\s*1 \/ -1/);
+    it('draws no tile row in the loading skeleton', () => {
+        const source = read('packages/core/src/shared/routes/Home.jsx');
+        expect(source).not.toMatch(/shape="tile"/);
+        expect(source).not.toMatch(/styles\.quickActions/);
     });
 });

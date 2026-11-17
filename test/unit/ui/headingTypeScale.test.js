@@ -23,7 +23,6 @@ const headingStyles = [
     ['ui/PageHeader.module.css', '.title', 'page-title'],
     ['ui/SectionHeader.module.css', '.title', 'section-title'],
     ['ui/EmptyState.module.css', '.title', 'card-title'],
-    ['shared/components/BackupReminderCard.module.css', '.headline', 'card-title'],
     ['shared/components/BalanceChanges.module.css', '.heading', 'card-title'],
     ['shared/components/EmptyStateNudge.module.css', '.title', 'card-title'],
     ['shared/components/RouteErrorBoundary.module.css', '.title', 'page-title'],
@@ -32,7 +31,6 @@ const headingStyles = [
 const bodyStyles = [
     ['ui/SectionHeader.module.css', '.description'],
     ['ui/EmptyState.module.css', '.body'],
-    ['shared/components/BackupReminderCard.module.css', '.copy'],
     ['shared/components/EmptyStateNudge.module.css', '.body'],
     ['shared/components/RouteErrorBoundary.module.css', '.body'],
 ];

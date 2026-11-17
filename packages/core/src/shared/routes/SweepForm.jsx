@@ -12,19 +12,19 @@ import { t } from '../../i18n/index.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Network, From, the fee selector and the section frame come from the Form Standard.
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, FieldNote, FormNotice, FormPage, Icon, InfoTip, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, Button, FieldNote, FormNotice, FormPage, Icon, InfoTip, Input, Notice, OptionSwitch, OptionSwitchList, PageHeader, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
 import {
     FeeSection,
     FormAction,
     FormFrame,
     FormSection,
     FromSection,
-    joinSummary,
-    summaryAddress,
+    MemoSection,
+    SummaryAddress,
+    joinSummaryParts,
     useFormSections,
 } from '../components/formStandard/index.js';
-import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
-import { formatCoinBaseUnits } from '../../flows/feesCard.js';
+import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
@@ -38,6 +38,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import {
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
@@ -45,8 +46,8 @@ import { humanizeError } from '../utils/humanizeError.js';
 import { detectAddressCoin, isValidAddressForChain } from '../utils/addressValidation.js';
 import { gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
-import { SignCredentials } from '../components/SignCredentials.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
@@ -65,6 +66,7 @@ import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { markMigrationSwept } from '../../flows/migrationSweeps.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -104,11 +106,11 @@ function canonicalDestination(address, descriptor) {
 }
 
 const CATEGORY_META = [
-    { key: 'balances', label: 'Token balances', defaultOn: true, hint: 'Every token balance this address holds.' },
-    { key: 'ownerships', label: 'Token ownerships', defaultOn: true, hint: 'Issuer control of every token this address owns.' },
-    { key: 'orders', label: 'Open orders (force-close)', defaultOn: false, hint: 'Cancels every open order; escrow goes to the destination.' },
-    { key: 'swaps', label: 'Open swaps (force-close)', defaultOn: false, hint: 'Cancels every open swap; escrow goes to the destination.' },
-    { key: 'dispensers', label: 'Open dispensers (force-close)', defaultOn: false, hint: 'Closes every open dispenser (1-hour close window); remaining escrow goes to the destination.' },
+    { key: 'balances', label: 'Token balances', icon: 'CoinsIcon', defaultOn: true, hint: 'Every token balance this address holds.' },
+    { key: 'ownerships', label: 'Token ownerships', icon: 'KeyIcon', defaultOn: true, hint: 'Issuer control of every token this address owns.' },
+    { key: 'orders', label: 'Open orders (force-close)', icon: 'MarketIcon', defaultOn: false, hint: 'Cancels every open order; escrow goes to the destination.' },
+    { key: 'swaps', label: 'Open swaps (force-close)', icon: 'SwapIcon', defaultOn: false, hint: 'Cancels every open swap; escrow goes to the destination.' },
+    { key: 'dispensers', label: 'Open dispensers (force-close)', icon: 'TokenIcon', defaultOn: false, hint: 'Closes every open dispenser (1-hour close window); remaining escrow goes to the destination.' },
 ];
 
 /**
@@ -227,6 +229,7 @@ export function SweepForm({
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const formErrors = useFormErrors();
     // The Sweep button sits below every section, so on a short popup a
     // refusal shown in the form status at the top is out of view; each
     // refused attempt moves focus to that status and scrolls it in.
@@ -372,7 +375,11 @@ export function SweepForm({
 
     async function handleRecoverKeys() {
         if (!canScan || scanning) return;
-        if (scanPassword.length === 0) { setScanError('Enter the wallet password to scan.'); return; }
+        if (!formErrors.validate({
+            'sweep-recovery-password': scanPassword.length === 0
+                ? 'Enter the wallet password to scan.'
+                : null,
+        })) return;
         setScanning(true);
         setScanError(null);
         try {
@@ -488,6 +495,22 @@ export function SweepForm({
             chainRegistry,
         });
     }, [stage, confirmModalOpen, actionParams, chainId]);
+    const sweepReviewDecoded = useMemo(() => {
+        if (!decoded) return null;
+        const warnings = [...(decoded.warnings || [])];
+        if (thirdPartyDestination) {
+            warnings.push("This destination is not one of this wallet's addresses. Everything selected will belong to that address's owner. Triple-check it before approving.");
+        }
+        if (!migrateLane) warnings.push(...gatedTicks.map((tick) => gatedTickWarningCopy(tick, 'sweep recipients')));
+        if (missingKeysNotice) warnings.push(missingKeysNotice);
+        return { ...decoded, warnings };
+    }, [decoded, gatedTicks, migrateLane, missingKeysNotice, thirdPartyDestination]);
+    const legacyComposed = useMemo(() => (sweepReviewDecoded ? {
+        action: 'SWEEP',
+        chainId,
+        decoded: sweepReviewDecoded,
+        protocolFeeKnownFree: true,
+    } : null), [chainId, sweepReviewDecoded]);
 
     // The migration list marks this legacy address once its sweep is on the
     // network. A queued or unsigned result has not moved anything yet.
@@ -516,7 +539,7 @@ export function SweepForm({
                 preflightOpts: {
                     mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report',
                 },
-                compose: () => messaging.composeForConfirm({
+                compose: () => messaging.composeForConfirm(withAdvancedOptions({
                     walletId,
                     chainId,
                     from,
@@ -527,7 +550,7 @@ export function SweepForm({
                         payFeeInNativeCoin: nativeFee.flag,
                         ...(feePerKb != null ? { feePerKb } : {}),
                     },
-                }),
+                })),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 // §4.6: the input-liveness half of the Approve-time re-check,
                 // the same one useActionConfirmFlow.run gives every migrated form.
@@ -574,52 +597,31 @@ export function SweepForm({
         }
     }
 
-    function refuseReview(message, section = null) {
-        setFormError(message);
-        // Open the section holding the refused field.
-        if (section) setRefusedIn((prev) => ({ section, attempt: prev.attempt + 1 }));
-        markReviewAttempt();
-    }
-
     function handleReview(event) {
         event.preventDefault();
-        if (!chainId || !fromAddress) {
-            refuseReview('Pick a source address first.', 'from');
-            return;
-        }
-        if (!destTrimmed) {
-            refuseReview('Destination address is required.', 'sweep');
-            return;
-        }
-        // The destination field already shows this error; a second copy in the
-        // form status would say the same thing twice, so focus moves to the
-        // field and brings its error into view instead.
-        if (destFormatError) {
-            setFormError(null);
-            setRefusedIn((prev) => ({ section: 'sweep', attempt: prev.attempt + 1 })); // Reopen its section.
-            destinationRef.current?.focus({ preventScroll: true });
-            destinationRef.current?.scrollIntoView?.({ block: 'center' });
-            return;
-        }
-        if (destTrimmed === fromAddress.address) {
-            refuseReview('Destination is the source address itself; the sweep would move nothing anywhere.', 'sweep');
-            return;
-        }
-        if (selectedCount === 0) {
-            refuseReview('Select at least one category to sweep.', 'sweep');
-            return;
-        }
         const m = memo.trim();
-        if (m.includes('|') || m.includes(';')) {
-            refuseReview('Memo cannot contain "|" or ";".', 'memo');
-            return;
-        }
         const memoError = memoLengthError(m);
-        if (memoError) { refuseReview(memoError, 'memo'); return; }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { refuseReview(feeStop.formError, 'fee'); return; }
-        if (!gateSatisfied) {
-            refuseReview('Still checking the vault for gated-content unlock keys. Try again in a moment.', 'keys');
+        const problems = {
+            'sweep-source': !chainId || !fromAddress ? 'Pick a source address first.' : null,
+            'sweep-destination': !destTrimmed
+                ? 'Destination address is required.'
+                : destFormatError || (fromAddress && destTrimmed === fromAddress.address
+                    ? 'Destination is the source address itself; the sweep would move nothing anywhere.'
+                    : null),
+            'form:categories': selectedCount === 0 ? 'Select at least one category to sweep.' : null,
+            'sweep-memo': m.includes('|') || m.includes(';') ? 'Memo cannot contain "|" or ";".' : memoError,
+            'form:fee': feeStop?.formError || null,
+            'form:keys': !gateSatisfied
+                ? 'Still checking the vault for gated-content unlock keys. Try again in a moment.'
+                : null,
+        };
+        if (!formErrors.validate(problems)) {
+            const section = problems['sweep-source'] ? 'from'
+                : problems['sweep-destination'] || problems['form:categories'] ? 'sweep'
+                    : problems['sweep-memo'] ? 'memo'
+                        : problems['form:fee'] ? 'fee' : 'keys';
+            setRefusedIn((prev) => ({ section, attempt: prev.attempt + 1 }));
             return;
         }
         setFormError(null);
@@ -684,6 +686,7 @@ export function SweepForm({
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review' ? () => setStage('form') : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
@@ -746,7 +749,7 @@ export function SweepForm({
         return wrap(
             <FormPage
                 label="Sweep result"
-                actions={<Button variant="primary" onClick={onBack}>Done</Button>}
+                actions={<Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>}
             >
                 <h2 className={styles.successTitle}>Sweep broadcast</h2>
                 {txid ? (
@@ -759,7 +762,7 @@ export function SweepForm({
                 )}
                 {forceClose && (forceClose.autopayDisabled > 0 || forceClose.holdsReleased > 0) ? (
                     <p className={styles.hint}>
-                        Auto-pay disarmed on {forceClose.autopayDisabled} order
+                        Auto pay disarmed on {forceClose.autopayDisabled} order
                         {forceClose.autopayDisabled === 1 ? '' : 's'} from the swept address
                         {forceClose.holdsReleased > 0
                             ? `; ${forceClose.holdsReleased} reservation hold${forceClose.holdsReleased === 1 ? '' : 's'} released`
@@ -787,9 +790,8 @@ export function SweepForm({
     const sweepWarnings = (
         <>
             {thirdPartyDestination ? (
-                <StatusMessage variant="warning" role="alert">
+                <StatusMessage variant="warning" role="alert" title="This destination is not one of this wallet's addresses.">
                     <p>
-                        <strong>This destination is not one of this wallet's addresses.</strong>{' '}
                         Everything selected - balances, ownerships, and released
                         escrow - will belong to that address's owner. Triple-check
                         it before signing.
@@ -807,124 +809,54 @@ export function SweepForm({
             ) : null}
         </>
     );
-    // The review form shows the same facts as notices above its card.
-    const sweepReviewNotices = (
-        <>
-            {thirdPartyDestination ? (
-                <FormNotice variant="warning" role="alert" lead="This destination is not one of this wallet's addresses.">
-                    {"Everything selected - balances, ownerships, and released escrow - will belong to that address's owner. Triple-check it before signing."}
-                </FormNotice>
-            ) : null}
-            {!migrateLane && gatedTicks.length > 0 ? (
-                <FormNotice
-                    variant="warning"
-                    role="alert"
-                    lines={gatedTicks.map((tick) => gatedTickWarningCopy(tick, 'sweep recipients'))}
-                />
-            ) : null}
-            {/* The watcher review is this lane's confirm step, so it says the
-                missing-keys fact the confirm screen says. */}
-            {missingKeysNotice ? <FormNotice variant="warning" role={null}>{missingKeysNotice}</FormNotice> : null}
-        </>
-    );
-
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review sweep"
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant={isWatcherMode ? 'primary' : 'danger'}
-                        icon={isHwSource ? <Icon.SignIcon /> : <Icon.TrashIcon />}
-                        loading={stage === 'submitting'}
-                        disabled={
-                            !typedConfirmOk || (
-                                isWatcherMode
-                                    ? false
-                                    : isHwSource
-                                        ? hwStatus !== 'available'
-                                        : (!signerReady && password.length === 0)
-                            )
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create Unsigned Transaction'
-                            : 'Sweep'}
-                    </Button>
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setTypedConfirm(''); setStage('form'); }}
+                decoded={sweepReviewDecoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentialsReady={typedConfirmOk}
+                credentials={(
+                    <>
+                        <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
+                        <Input
+                            label='Type "SWEEP" to confirm'
+                            help={t('common.typedConfirmationHint', { word: 'SWEEP' })}
+                            value={typedConfirm}
+                            onChange={(event) => setTypedConfirm(event.target.value)}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                        />
+                    </>
                 )}
-            >
-                <p className={styles.summary}>{decoded?.summary}</p>
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Network</dt>
-                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    <dt className={styles.detailsLabel}>Destination</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={destTrimmed} />
-                    </dd>
-                    <dt className={styles.detailsLabel}>Sweeps</dt>
-                    <dd className={styles.detailsValue}>
-                        {CATEGORY_META.filter((c) => flags[c.key]).map((c) => c.label).join(', ')}
-                    </dd>
-                    {(decoded?.details || []).map((d) => (
-                        <DetailRow key={d.label} label={d.label} value={d.value} />
-                    ))}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                </dl>
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-                {sweepReviewNotices}
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-                <Input
-                    label="Type SWEEP to confirm"
-                    help={t('common.typedConfirmationSweepHint')}
-                    value={typedConfirm}
-                    onChange={(e) => setTypedConfirm(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                />
-            </FormPage>,
+                summary={{
+                    verb: t('components.confirmSummary.verbSweep'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    recipient: actionParams.DESTINATION,
+                    facts: [{
+                        label: 'Sweeps',
+                        value: CATEGORY_META.filter((category) => flags[category.key]).map((category) => category.label).join(', '),
+                    }],
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -944,6 +876,7 @@ export function SweepForm({
                 }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -959,7 +892,7 @@ export function SweepForm({
                         {sweepWarnings}
                         <Input
                             label='Type "SWEEP" to confirm'
-                            help={t('common.typedConfirmationSweepReviewHint')}
+                            help={t('common.typedConfirmationHint', { word: 'SWEEP' })}
                             value={typedConfirm}
                             onChange={(e) => setTypedConfirm(e.target.value)}
                             autoComplete="off"
@@ -1013,10 +946,10 @@ export function SweepForm({
     }
 
     // One-line summaries for the closed sections.
-    const sweepSummary = joinSummary(
+    const sweepSummary = joinSummaryParts([
         `${selectedCount} ${selectedCount === 1 ? 'category' : 'categories'}`,
-        destTrimmed ? `to ${summaryAddress(destTrimmed)}` : null,
-    ).replace(', to ', ' to ');
+        destTrimmed ? <>to <SummaryAddress address={destTrimmed} /></> : null,
+    ], ' ');
     const keysSummary = gateLoading
         ? 'Checking the vault'
         : (gateMissingTicks.length > 0
@@ -1027,6 +960,7 @@ export function SweepForm({
             demoGuard={demoGuard}
             label={migrateLane ? 'Sweep to new wallet' : 'Sweep address'}
             onSubmit={handleReview}
+            errors={formErrors}
             // No standing warning; the confirm screen says exactly what the
             // sweep moves before anything is signed. A form error shows in the
             // standard's status slot just above the action.
@@ -1037,7 +971,6 @@ export function SweepForm({
                 <FormAction
                     icon={<Icon.SweepIcon />}
                     loading={confirmAction.composing}
-                    disabled={!fromAddress || confirmAction.composing}
                 >
                     Sweep
                 </FormAction>
@@ -1055,8 +988,11 @@ export function SweepForm({
                     lockNetwork={migrateLane}
                     networkHelp="The chain whose holdings are swept. The From and destination addresses and fees are on this network."
                     address={fromAddress?.address}
+                    addressId="sweep-source"
+                    formErrorKey="sweep-source"
                     onOpenPicker={migrateLane ? undefined : () => setSourcePickerOpen(true)}
                     pickerLabel={migrateLane ? undefined : 'Choose source address'}
+                    pickerLockedReason="A migration sweeps the address it started from"
                     addressHelp="The address being emptied. Everything selected below moves out of it, and it pays the network fee."
                     // Only when this network truly has no address; a
                     // render before the source is picked must not open From for good.
@@ -1077,7 +1013,7 @@ export function SweepForm({
                     value={feePick}
                     onChange={setFeePick}
                     customEstimate={feeCustomEstimate}
-                    protocolSummary={protocolFeeSummary(protocolFeeQuote, protocolFeePending, nativeFee.flag, coinTicker)}
+                    formErrorKey="form:fee"
                     fees={{
                         quote: protocolFeeQuote,
                         pending: protocolFeePending,
@@ -1097,23 +1033,31 @@ export function SweepForm({
                 revealKey={sectionReveal('sweep')}
                 summary={sweepSummary}
             >
+            {/* A note, so it sits in the one warning card (no loose paragraph).
+                A migrating user is the one person who must not read this as
+                "everything moved": SWEEP never touches the coin, so the card
+                says where it stays and what is left to do. */}
             {migrateLane ? (
-                <p className={styles.hint}>
-                    Migration sweep: moves this legacy address's tokens to{' '}
-                    {migrateTo.name || 'your new BIP39 wallet'}.{' '}
-                    {/* A migrating user is the one person who must not read
-                        this as "everything moved" - SWEEP never touches the
-                        coin, so say where it stays and what is left to do. */}
-                    Your {coinTicker || 'coin'} balance stays on the legacy
-                    address; send it across separately, and keep the legacy
-                    recovery phrase until you have.
-                </p>
+                <>
+                    <WarningCard data-sweep-migration-note="">
+                        <WarningLine>
+                            Migration sweep: moves this legacy address's tokens to{' '}
+                            {migrateTo.name || 'your new BIP39 wallet'}.
+                        </WarningLine>
+                    </WarningCard>
+                    <Notice tone="danger" role="note" data-sweep-migration-caution="">
+                        Your {coinTicker || 'coin'} balance stays on the legacy
+                        address; send it across separately, and keep the legacy
+                        recovery phrase until you have.
+                    </Notice>
+                </>
             ) : null}
 
             {/* From lives in the standard From section above. */}
 
             {migrateLane ? (
                 <Input
+                    id="sweep-destination"
                     label="Destination address"
                     help={`The matching address in ${migrateTo.name || 'the new wallet'}.`}
                     value={destination}
@@ -1126,6 +1070,7 @@ export function SweepForm({
                 />
             ) : (
                 <AddressField
+                    id="sweep-destination"
                     label="Destination address"
                     help="Where every selected holding (and released escrow) is credited."
                     icon="addresses"
@@ -1163,35 +1108,34 @@ export function SweepForm({
                     label="A sweep moves everything you tick here from this address to the destination address in one transaction, for example when you retire an address or move to a new wallet. The counts show what the address holds now; the sweep moves whatever it holds when the transaction confirms."
                 />
             </span>
-            {CATEGORY_META.map((c) => (
-                <div key={c.key}>
-                    <Checkbox
-                        label={`${c.label}${preview ? ` (${categoryCount(preview, c.key)})` : ''}`}
-                        description={c.hint}
-                        checked={flags[c.key]}
-                        onChange={(e) => {
-                            setFlags((f) => ({ ...f, [c.key]: e.target.checked }));
-                            clearFormError();
-                        }}
-                    />
-                </div>
-            ))}
+            <OptionSwitchList id="sweep-categories" data-sweep-what-list="">
+                {CATEGORY_META.map((c) => {
+                    const CategoryIcon = Icon[c.icon];
+                    return (
+                        <OptionSwitch
+                            key={c.key}
+                            icon={<CategoryIcon />}
+                            label={`${c.label}${preview ? ` (${categoryCount(preview, c.key)})` : ''}`}
+                            description={c.hint}
+                            checked={flags[c.key]}
+                            onChange={(e) => {
+                                setFlags((f) => ({ ...f, [c.key]: e.target.checked }));
+                                formErrors.clear('form:categories');
+                                clearFormError();
+                            }}
+                        />
+                    );
+                })}
+            </OptionSwitchList>
             {selectedPreviewUnavailable ? (
                 <p className={styles.hint}>Count unavailable for this category; the sweep still moves it.</p>
             ) : null}
             {previewLoading ? <p className={styles.hint}>Loading counts…</p> : null}
-            {previewError ? (
-                <p className={styles.hint}>
-                    {previewError} The counts are a snapshot; the sweep moves
-                    whatever the address holds when it confirms.
-                </p>
-            ) : null}
+            {/* Live lines only (U57): the "counts are a snapshot" fact lives in
+                the What to sweep tip above. */}
+            {previewError ? <p className={styles.hint}>{previewError}</p> : null}
             {selectedPreviewEmpty ? (
-                <p className={styles.hint}>
-                    Nothing is in the selected categories right now. The counts
-                    are a snapshot; the sweep moves whatever the address holds
-                    when it confirms.
-                </p>
+                <p className={styles.hint}>Nothing is in the selected categories right now.</p>
             ) : null}
             </FormSection>
 
@@ -1205,12 +1149,13 @@ export function SweepForm({
                     revealKey={sectionReveal('keys')}
                     summary={keysSummary}
                 >
-                    <p className={styles.hint}>
+                    {/* A safety caution: a danger notice, never a box in a card. */}
+                    <Notice tone="danger" role="note" flush data-sweep-keys-note="">
                         On-chain key handoffs are encrypted to this legacy address,
                         so unlock keys must be secured in the vault BEFORE the
                         sweep; they cannot be recovered from the new wallet's seed
                         afterwards.
-                    </p>
+                    </Notice>
                     {gateLoading ? <p className={styles.hint}>Checking vault keys…</p> : null}
                     {(gateRows || []).map((r) => (
                         <div key={r.tick}>
@@ -1226,7 +1171,7 @@ export function SweepForm({
                                 </p>
                             )}
                             {r.missingKeyHashes.length > 0 ? (
-                                <ul className={styles.detailsList}>
+                                <ul className={styles.keyHashList}>
                                     {r.missingKeyHashes.map((hash) => (
                                         <li key={hash}><code>{hash}</code></li>
                                     ))}
@@ -1245,6 +1190,7 @@ export function SweepForm({
                     {canScan ? (
                         <>
                             <Input
+                                id="sweep-recovery-password"
                                 type="password"
                                 label="Wallet password (key recovery scan)"
                                 help="Scans this wallet's on-chain messages for the missing unlock keys and stores them in the vault."
@@ -1264,7 +1210,6 @@ export function SweepForm({
                                     icon={<Icon.KeyIcon />}
                                     onClick={handleRecoverKeys}
                                     loading={scanning}
-                                    disabled={scanning || scanPassword.length === 0}
                                 >
                                     Recover Keys
                                 </Button>
@@ -1273,48 +1218,26 @@ export function SweepForm({
                     ) : null}
                     {(isHwSource || isWatcherMode) && gateMissingTicks.length > 0 ? (
                         <FormNotice variant="warning" role={null}>
-                            {`This signer cannot run the key recovery scan (${isWatcherMode ? 'watch-only' : 'hardware'} addresses hold no exportable key). Unlock keys for ${gateMissingTicks.join(', ')} may be lost after migration.`}
+                            {`This wallet cannot run the key recovery scan (${isWatcherMode ? 'another phone holds its keys' : 'the keys stay on the hardware wallet'}, so no key can be exported). Unlock keys for ${gateMissingTicks.join(', ')} may be lost after migration.`}
                         </FormNotice>
                     ) : null}
                 </FormSection>
             ) : null}
 
-            {/* Memo is its own closed, optional section; the field drops its
-                own Optional tag inside it. */}
-            <FormSection
-                id="memo"
-                title="Memo"
-                icon={Icon.MessageIcon}
-                optional
+            {/* Memo is its own closed, optional section holding only the
+                memo: the section title names the field and carries its count. */}
+            <MemoSection
                 {...formSections.bind('memo')}
                 revealKey={sectionReveal('memo')}
-                summary={memo.trim() || 'None'}
-            >
-            <Input
-                label="Memo"
-                help="An optional public note stored on-chain with this sweep. Anyone can read it."
+                inputId="sweep-memo"
                 maxLength={MAX_MEMO_LENGTH}
                 value={memo}
                 onChange={(e) => { setMemo(e.target.value); clearFormError(); }}
-                autoComplete="off"
             />
-            </FormSection>
         </FormFrame>,
     );
 }
 
-// The protocol fee joins the Network fee row's summary, as the standard asks
-// of forms with a protocol fee. Nothing while it is unknown.
-function protocolFeeSummary(quote, pending, payInNative, coinTicker) {
-    if (pending) return undefined;
-    const fee = normalizeProtocolFee(quote);
-    if (!fee.known || fee.free) return undefined;
-    if (payInNative) {
-        const native = formatCoinBaseUnits(quote?.requiredFeeSats);
-        return native ? `${native} ${coinTicker} protocol fee` : undefined;
-    }
-    return fee.amount ? `${fee.amount} XCHAIN protocol fee` : undefined;
-}
 
 function categoryCount(preview, key) {
     const cat = preview?.[key];
@@ -1322,13 +1245,4 @@ function categoryCount(preview, key) {
     if (cat.error) return 'count unavailable';
     const n = Array.isArray(cat.rows) ? cat.rows.length : 0;
     return String(n);
-}
-
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
-    );
 }

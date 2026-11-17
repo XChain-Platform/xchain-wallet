@@ -115,7 +115,7 @@ describe('the surface that loses a race on one reply reloads the session', () =>
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         await screen.findByLabelText('Multisig signing progress');
-        fireEvent.click(screen.getByRole('button', { name: 'Import Cosigner Reply' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Import cosigner reply/ }));
         const reply = buildReplyEnvelope({
             kind: c.kind,
             fingerprint: fingerprintSessionRef({

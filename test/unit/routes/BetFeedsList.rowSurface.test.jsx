@@ -57,8 +57,12 @@ describe('BetFeedsList market rows', () => {
         const source = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/routes/BetFeedsList.jsx'), 'utf8');
         const css = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/routes/BetFeedsList.module.css'), 'utf8');
         expect(source.length).toBeGreaterThan(1000);
-        // Each market is a BetMarketCard, a plain button drawn on the shared Card surface.
-        expect(source).toMatch(/<BetMarketCard\s+market=\{m\}\s+onOpen=\{\(\) => onOpenMarket\(marketChainId, m\.action_index\)\}/);
+        // Each market is a BetMarketCard, a plain button drawn on the shared
+        // Card surface, and it is the only card: All, My bets and My markets
+        // draw the same one (ruling 2026-11-13).
+        expect(source).toMatch(/<BetMarketCard\s+market=\{m\}/);
+        expect(source).toMatch(/if \(!twoPanel\) \{\s*onOpenMarket\(chainId, m\.action_index\);/);
+        expect(source.match(/<BetMarketCard\b/g)).toHaveLength(1);
         const cardCss = readFileSync(resolve(process.cwd(), 'packages/core/src/shared/components/BetMarketCard.module.css'), 'utf8');
         expect(cardCss).toMatch(/\.card \{[^}]*composes: card from '\.\.\/\.\.\/ui\/Card\.module\.css';/s);
     });

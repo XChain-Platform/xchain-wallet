@@ -123,8 +123,9 @@ describe('shared components at a 320px viewport', () => {
         expect(await screen.findByRole('region', { name: 'Back up your wallet' }))
             .toHaveTextContent('Save your recovery phrase or export an encrypted backup');
         expect(screen.getByRole('button', { name: 'Back Up Now' })).toBeInTheDocument();
-        expect(ruleBody(css.backupReminder, '.card')).toMatch(/flex-wrap:\s*wrap/);
-        expect(ruleBody(css.backupReminder, '.body')).toMatch(/min-width:\s*0/);
+        // The box and its wrapping row are the kit Notice's; the card only
+        // lets its wrapper shrink with the viewport.
+        expect(ruleBody(css.backupReminder, '.region')).toMatch(/min-width:\s*0/);
         expectNoFixedWidthBeyondViewport(css.backupReminder);
     });
 

@@ -82,7 +82,8 @@ assert.match(
     /import \{ DuressPassphraseRow \}/,
     'SafetySection imports DuressPassphraseRow',
 );
-assert.match(safetySrc, /<DuressPassphraseRow \/>/, 'SafetySection renders the row');
+// The Duress passphrase row page opens straight on its form (`direct`).
+assert.match(safetySrc, /<DuressPassphraseRow direct=\{only === 'duress'\} \/>/, 'SafetySection renders the row');
 
 // --- DuressPassphraseRow logic ----------------------------------------
 

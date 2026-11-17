@@ -21,10 +21,12 @@ import { chainRegistry, memCollection } from './_addressesByChainFixture.js';
 const ORACLE = 'https://explorer.xchain.io/BTC/api/price_snapshots/FINALIZED/status?limit=25';
 const MARKET = 'https://explorer.xchain.io/LTC/api/market/PEPECASH/LTC';
 const GECKO = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd';
+const PRICE_HISTORY = 'https://explorer.xchain.io/BTC/api/price_history?assets=BTC%2CPEPE&interval=hour&from=1&to=2&fiat=USD';
 
 describe('isFiatRateSourceUrl', () => {
-    it('accepts the lookup\'s oracle, market and CoinGecko URLs', () => {
+    it('accepts the lookup\'s oracle, market, price-history and CoinGecko URLs', () => {
         expect(isFiatRateSourceUrl(ORACLE)).toBe(true);
+        expect(isFiatRateSourceUrl(PRICE_HISTORY)).toBe(true);
         expect(isFiatRateSourceUrl(MARKET)).toBe(true);
         expect(isFiatRateSourceUrl(GECKO)).toBe(true);
     });
@@ -34,6 +36,9 @@ describe('isFiatRateSourceUrl', () => {
             'http://explorer.xchain.io/BTC/api/price_snapshots/FINALIZED/status?limit=25',
             'https://explorer.xchain.io/BTC/api/address/bc1qxyz',
             'https://explorer.xchain.io/BTC/api/market/A/B/extra',
+            'https://explorer.xchain.io/BTC/api/price_history/extra',
+            'https://explorer.xchain.io/BTC/api/native_history',
+            'https://explorer.xchain.io/BTC/api/history',
             'https://evil.example/BTC/api/price_snapshots/FINALIZED/status',
             'https://explorer.xchain.io.evil.example/BTC/api/price_snapshots/FINALIZED/status',
             'https://user:pw@explorer.xchain.io/BTC/api/price_snapshots/FINALIZED/status',

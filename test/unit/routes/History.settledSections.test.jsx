@@ -3,12 +3,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// A row goes in the section its status pill names. A send this wallet proved
-// into a block before any explorer indexed it reads Confirmed, so it sits
-// among the confirmed rows by its block time; a send the wallet gave up on, or
-// one the network dropped, reads Failed and sits by its own time in its day,
-// where an indexer-rejected action sits. Only rows still in flight stay in
-// Pending activity.
+// History is one flat list with no headings (operator 2026-11-13), and a row's
+// place in it follows its status pill. Rows still in flight lead the list. A
+// send this wallet proved into a block before any explorer indexed it reads
+// Confirmed, so it sits among the confirmed rows by its block time; a send the
+// wallet gave up on, or one the network dropped, reads Failed and sits by its
+// own time, where an indexer-rejected action sits.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, waitFor } from '@testing-library/react';
@@ -86,28 +86,22 @@ function confirmedRow(actionIndex, txHash, ageMs) {
     };
 }
 
-/**
- * Every rendered row in screen order, each with the day heading it sits under
- * and the status its pill shows.
- */
-function rowsWithSections(container) {
-    const out = [];
-    let heading = null;
+/** Every rendered row in screen order, each with the status its pill shows. */
+function rowsInOrder(container) {
     const timeline = container.querySelector('ul[aria-label]');
-    for (const li of timeline.children) {
-        const h2 = li.querySelector('h2');
-        if (h2) {
-            heading = h2.textContent.trim();
-            continue;
-        }
-        for (const row of li.querySelectorAll('[data-history-key]')) {
-            const status = [...row.querySelectorAll('button [title]')]
-                .map((el) => el.getAttribute('title'))
-                .find((title) => ['Confirmed', 'Failed', 'Pending'].includes(title)) || '';
-            out.push({ key: row.getAttribute('data-history-key'), heading, status });
-        }
-    }
-    return out;
+    if (!timeline) return [];
+    return [...timeline.querySelectorAll('[data-history-key]')].map((row) => {
+        const status = [...row.querySelectorAll('button [title]')]
+            .map((el) => el.getAttribute('title'))
+            .find((title) => ['Confirmed', 'Failed', 'Pending'].includes(title)) || '';
+        return { key: row.getAttribute('data-history-key'), status };
+    });
+}
+
+/** The list carries no headings: no Pending activity, no day labels. */
+function expectNoHeadings(container) {
+    const timeline = container.querySelector('ul[aria-label]');
+    expect(timeline.querySelectorAll('h2, h3, [data-xc-section-header]')).toHaveLength(0);
 }
 
 afterEach(() => {
@@ -116,8 +110,8 @@ afterEach(() => {
     localStorage.clear();
 });
 
-describe('History sections follow each row\'s status', () => {
-    it('lists a wallet-proved Confirmed row among the confirmed rows by its block time, not under Pending', async () => {
+describe('History order follows each row\'s status', () => {
+    it('lists a wallet-proved Confirmed row among the confirmed rows by its block time, not with the pending rows', async () => {
         const provedAt = agoIso(60_000);
         const view = mountHistory({
             mempool: [{
@@ -142,18 +136,19 @@ describe('History sections follow each row\'s status', () => {
             ],
         });
 
-        await waitFor(() => expect(rowsWithSections(view.container)).toHaveLength(4));
-        const rows = rowsWithSections(view.container);
+        await waitFor(() => expect(rowsInOrder(view.container)).toHaveLength(4));
+        const rows = rowsInOrder(view.container);
+        expectNoHeadings(view.container);
         const proved = rows.find((row) => row.key.includes(PROVED_HASH));
         expect(proved.status).toBe('Confirmed');
-        expect(proved.heading).not.toBe('Pending activity');
 
-        // Only the mempool row is still in flight.
-        expect(rows.filter((row) => row.heading === 'Pending activity').map((row) => row.key))
+        // Only the mempool row is still in flight, and it leads the list.
+        expect(rows[0].key).toContain(SEEN_HASH);
+        expect(rows.filter((row) => row.status === 'Pending').map((row) => row.key))
             .toEqual([expect.stringContaining(SEEN_HASH)]);
-        // Newest first among the settled rows: the newer indexed row, the
+        // Then newest first among the settled rows: the newer indexed row, the
         // proved row at the time its block was learned, the older indexed row.
-        const settled = rows.filter((row) => row.heading !== 'Pending activity');
+        const settled = rows.slice(1);
         expect(settled.map((row) => (row.key.includes(PROVED_HASH) ? 'proved' : row.key.split(':')[1])))
             .toEqual(['1', 'proved', '2']);
         // The row shows the time it is ordered by, not its broadcast time.
@@ -161,7 +156,7 @@ describe('History sections follow each row\'s status', () => {
         expect(provedRow.querySelector('time').getAttribute('dateTime')).toBe(provedAt);
     });
 
-    it('lists a Failed local send by its own time among the dated rows, not under Pending', async () => {
+    it('lists a Failed local send by its own time among the dated rows, not with the pending rows', async () => {
         const view = mountHistory({
             pendingTxs: [localSend({
                 id: 'ptx-failed',
@@ -176,9 +171,10 @@ describe('History sections follow each row\'s status', () => {
             ],
         });
 
-        await waitFor(() => expect(rowsWithSections(view.container)).toHaveLength(3));
-        const rows = rowsWithSections(view.container);
-        expect(rows.some((row) => row.heading === 'Pending activity')).toBe(false);
+        await waitFor(() => expect(rowsInOrder(view.container)).toHaveLength(3));
+        const rows = rowsInOrder(view.container);
+        expectNoHeadings(view.container);
+        expect(rows.some((row) => row.status === 'Pending')).toBe(false);
         const failed = rows.find((row) => row.key.includes('ptx-failed'));
         expect(failed.status).toBe('Failed');
         expect(rows.map((row) => (row.key.includes('ptx-failed') ? 'failed' : row.key.split(':')[1])))
@@ -199,11 +195,12 @@ describe('History sections follow each row\'s status', () => {
             ],
         });
 
-        await waitFor(() => expect(rowsWithSections(view.container)).toHaveLength(3));
-        const rows = rowsWithSections(view.container);
+        await waitFor(() => expect(rowsInOrder(view.container)).toHaveLength(3));
+        const rows = rowsInOrder(view.container);
+        expectNoHeadings(view.container);
         const dropped = rows.find((row) => row.key.includes(PROVED_HASH));
         expect(dropped.status).toBe('Failed');
-        expect(dropped.heading).not.toBe('Pending activity');
+        expect(rows.some((row) => row.status === 'Pending')).toBe(false);
         expect(rows.map((row) => (row.key.includes(PROVED_HASH) ? 'dropped' : row.key.split(':')[1])))
             .toEqual(['1', 'dropped', '2']);
     });

@@ -30,6 +30,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
+import { selectOptionValues } from '../../helpers/selectOption.js';
 import { buildCommands } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
 import { ControllerBindForm } from '../../../packages/core/src/shared/routes/ControllerBindForm.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -94,8 +95,8 @@ describe('D-153: the address-controller lane is reachable without a token', () =
         // build an ISSUE v6 with an empty TICK.
         // Owned tokens load after the form renders; until they do the Token
         // option stays offered, so wait for the settled list.
-        const subject = screen.getByLabelText('What to protect', { selector: 'select' });
+        const subject = screen.getByLabelText('What to protect', { selector: '[data-xc-select]' });
         expect(subject.value).toBe('address');
-        await waitFor(() => expect(Array.from(subject.options).map((o) => o.value)).toEqual(['address']));
+        await waitFor(() => expect(selectOptionValues(subject)).toEqual(['address']));
     });
 });

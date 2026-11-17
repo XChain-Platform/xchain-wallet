@@ -152,14 +152,19 @@ export function FormSection({
                 {optional ? <OptionalPill className={styles.optionalTag} /> : null}
                 {/* A second tag (Irreversible) sits after Optional. */}
                 {tag ? <span className={styles.tag} data-form-section-tag="">{tag}</span> : null}
+                {/* While open the summary gives way to a count, if any. It
+                    stays mounted (hidden) while closed, so a field that names
+                    it in aria-describedby always finds it; it comes before the
+                    summary so the visible one always sits next to the chevron. */}
+                {count != null && count !== '' ? (
+                    <span className={styles.count} data-section-count="" hidden={!showCount}>{count}</span>
+                ) : null}
                 {showSummary ? (
                     <span ref={summaryRef} className={styles.summary} data-section-summary="">
                         {summary}
                         {summaryUnit ? <span data-summary-unit="">{` ${summaryUnit}`}</span> : null}
                     </span>
                 ) : null}
-                {/* While open the summary gives way to a count, if any. */}
-                {showCount ? <span className={styles.count} data-section-count="">{count}</span> : null}
                 <span className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`.trim()} aria-hidden="true" data-form-section-chevron="">
                     <ChevronDownIcon />
                 </span>

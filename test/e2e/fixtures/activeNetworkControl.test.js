@@ -5,21 +5,22 @@
 
 import { expect, it } from 'vitest';
 
-import { activeNetworkControl } from './regtest.js';
+import { networkOption } from './regtest.js';
 
-it('targets the settings network control by role and exact accessible name', () => {
+it('targets a Network page environment row by role and exact accessible name', () => {
     const control = {};
-    let query;
+    const queries = [];
     const page = {
         getByRole(...args) {
-            query = args;
+            queries.push(args);
             return control;
         },
     };
 
-    expect(activeNetworkControl(page)).toBe(control);
-    expect(query).toEqual([
-        'combobox',
-        { name: 'Active network', exact: true },
+    expect(networkOption(page, 'regtest')).toBe(control);
+    expect(networkOption(page, 'testnet')).toBe(control);
+    expect(queries).toEqual([
+        ['button', { name: 'Select Regtest', exact: true }],
+        ['button', { name: 'Select Testnet', exact: true }],
     ]);
 });

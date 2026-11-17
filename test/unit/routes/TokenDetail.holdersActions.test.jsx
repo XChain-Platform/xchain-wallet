@@ -95,7 +95,9 @@ describe('TokenDetail holders', () => {
             }),
         });
 
-        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Actions', 'Details', 'History']);
+        // The page's own tab row; the hero's range buttons are a tab row too.
+        expect(within(screen.getByRole('tablist', { name: 'Coin or token view' })).getAllByRole('tab')
+            .map((tab) => tab.textContent)).toEqual(['Actions', 'Details', 'History']);
         openDetails();
         expect(await screen.findByText(description)).toBeTruthy();
         expect([...document.querySelectorAll('[data-detail-id]')].map((item) => item.textContent)).toEqual([
@@ -222,7 +224,7 @@ describe('TokenDetail holders', () => {
         openMore('Holders');
         expect(await screen.findByText(/couldn't load the holders/i)).toBeTruthy();
         fireEvent.click(screen.getByRole('tab', { name: 'Actions' }));
-        expect(screen.getByRole('group', { name: 'Actions for DETAILPROBE' })).toBeTruthy();
+        expect(screen.getByRole('list', { name: 'Actions for DETAILPROBE' })).toBeTruthy();
     });
 
     it('discards holder pagination and revealed panel state when the token changes', async () => {
@@ -311,44 +313,40 @@ describe('TokenDetail holders', () => {
 });
 
 describe('TokenDetail actions', () => {
-    it('renders Send, Receive and Exchange tiles in order and invokes the routes', async () => {
+    it('renders Send, Receive and Exchange rows in order and invokes the routes', async () => {
         const onSend = vi.fn();
         const onReceive = vi.fn();
         const onBuy = vi.fn();
         mount({ props: { onSend, onReceive, onBuy } });
 
-        await screen.findByRole('button', { name: 'Send' });
-        const actions = within(screen.getByRole('group', { name: 'Actions for DETAILPROBE' }))
-            .getAllByRole('button');
-        expect(actions.slice(0, 3).map((button) => button.getAttribute('aria-label') || button.textContent)).toEqual([
-            'Send',
-            'Receive',
-            'Exchange',
-        ]);
+        await screen.findByRole('button', { name: /^Send\b/ });
+        const list = screen.getByRole('list', { name: 'Actions for DETAILPROBE' });
+        expect([...list.querySelectorAll('[data-action-id]')].slice(0, 3).map((row) => row.getAttribute('data-action-id')))
+            .toEqual(['send', 'receive', 'exchange']);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Receive' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Exchange' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Send\b/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Receive\b/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Exchange\b/ }));
         expect(onSend).toHaveBeenCalledTimes(1);
         expect(onReceive).toHaveBeenCalledTimes(1);
         expect(onBuy).toHaveBeenCalledTimes(1);
     });
 
-    it('disables Send in watch-only mode while retaining the other action tiles', async () => {
+    it('keeps Send live in watch-only mode (it builds unsigned) and retains the other action rows', async () => {
         publishWalletModes({ wallets: [{ id: 'wallet', walletMode: 'watcher' }], activeWalletId: 'wallet' });
         const onSend = vi.fn();
         mount({ props: { onSend, onReceive: vi.fn(), onBuy: vi.fn() } });
 
-        const send = await screen.findByRole('button', { name: 'Send' });
-        expect(send).toBeDisabled();
-        expect(screen.getByText("This wallet is watch-only and can't sign. Send from its paired signer.")).toBeTruthy();
+        const send = await screen.findByRole('button', { name: /^Send\b/ });
+        await waitFor(() => expect(send).not.toHaveAttribute('aria-disabled'));
+        expect(screen.queryByText(/watch-only and can't sign/)).toBeNull();
         fireEvent.click(send);
-        expect(onSend).not.toHaveBeenCalled();
-        expect(screen.getByRole('button', { name: 'Receive' })).toBeEnabled();
-        expect(screen.getByRole('button', { name: 'Exchange' })).toBeEnabled();
+        expect(onSend).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('button', { name: /^Receive\b/ })).not.toHaveAttribute('aria-disabled');
+        expect(screen.getByRole('button', { name: /^Exchange\b/ })).not.toHaveAttribute('aria-disabled');
     });
 
-    it('reads the mode of the wallet on screen: a full wallet signs, a watch-only one cannot', async () => {
+    it('reads the mode of the wallet on screen: a watch-only wallet keeps Send but cannot run other signing actions', async () => {
         publishWalletModes({
             wallets: [{ id: 'full-wallet', walletMode: 'full' }, { id: 'watch-wallet', walletMode: 'watcher' }],
             activeWalletId: 'full-wallet',
@@ -382,45 +380,47 @@ describe('TokenDetail actions', () => {
         );
         const view = render(tree('full-wallet'));
 
-        const fullSend = await screen.findByRole('button', { name: 'Send' });
-        await waitFor(() => expect(fullSend).toBeEnabled());
+        const fullSend = await screen.findByRole('button', { name: /^Send\b/ });
+        await waitFor(() => expect(fullSend).not.toHaveAttribute('aria-disabled'));
         fireEvent.click(fullSend);
         expect(onSend).toHaveBeenCalledTimes(1);
-        expect(screen.getByRole('button', { name: 'Create dispenser' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: /^Create dispenser\b/ })).not.toHaveAttribute('aria-disabled');
 
         act(() => { publishWalletModes({ activeWalletId: 'watch-wallet' }); });
         view.rerender(tree('watch-wallet'));
 
-        const watchSend = await screen.findByRole('button', { name: 'Send' });
-        await waitFor(() => expect(watchSend).toBeDisabled());
+        const watchSend = await screen.findByRole('button', { name: /^Send\b/ });
+        await waitFor(() => expect(screen.getByRole('button', { name: /^Create dispenser\b/ })).toHaveAttribute('aria-disabled', 'true'));
+        expect(watchSend).not.toHaveAttribute('aria-disabled');
         fireEvent.click(watchSend);
-        expect(onSend).toHaveBeenCalledTimes(1);
-        expect(screen.getByText("This wallet is watch-only and can't sign. Send from its paired signer.")).toBeTruthy();
-        const dispenser = screen.getByRole('button', { name: 'Create dispenser' });
-        expect(dispenser).toBeDisabled();
+        expect(onSend).toHaveBeenCalledTimes(2);
+        const dispenser = screen.getByRole('button', { name: /^Create dispenser\b/ });
+        expect(dispenser).toHaveAttribute('aria-disabled', 'true');
         fireEvent.click(dispenser);
         expect(onCreateDispenser).not.toHaveBeenCalled();
-        expect(screen.getByText(/Create dispenser: needs a wallet that can sign; this one is watch-only\./)).toBeTruthy();
+        // The locked row says why in place of its description.
+        expect(within(dispenser).getByText('Needs a wallet that can sign; another phone signs for this one.')).toBeTruthy();
         // Looking up dispensers signs nothing, so it stays open.
-        expect(screen.getByRole('button', { name: 'Browse dispensers' })).toBeEnabled();
-        expect(screen.getByRole('button', { name: 'Receive' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: /^Browse dispensers\b/ })).not.toHaveAttribute('aria-disabled');
+        expect(screen.getByRole('button', { name: /^Receive\b/ })).not.toHaveAttribute('aria-disabled');
     });
 
-    it('locks Send the moment the same wallet turns watch-only', async () => {
+    it('keeps Send enabled when the same wallet turns watch-only', async () => {
         publishWalletModes({ wallets: [{ id: 'wallet', walletMode: 'full' }], activeWalletId: 'wallet' });
         mount({ props: { onSend: vi.fn() } });
 
-        const send = await screen.findByRole('button', { name: 'Send' });
-        await waitFor(() => expect(send).toBeEnabled());
+        const send = await screen.findByRole('button', { name: /^Send\b/ });
+        await waitFor(() => expect(send).not.toHaveAttribute('aria-disabled'));
         act(() => { publishWalletModes({ wallets: [{ id: 'wallet', walletMode: 'watcher' }], activeWalletId: 'wallet' }); });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: /^Send\b/ })).not.toHaveAttribute('aria-disabled'));
+        expect(screen.queryByText(/watch-only and can't sign/)).toBeNull();
     });
 
     it('keeps a zero-balance Send visible and shows why it is disabled', async () => {
         mount({ props: { quantity: '0', onSend: vi.fn() } });
 
-        const send = await screen.findByRole('button', { name: 'Send' });
-        expect(send.disabled).toBe(true);
-        expect(screen.getByText('No balance to send.')).toBeTruthy();
+        const send = await screen.findByRole('button', { name: /^Send\b/ });
+        expect(send).toHaveAttribute('aria-disabled', 'true');
+        expect(within(send).getByText('No balance to send.')).toBeTruthy();
     });
 });

@@ -53,6 +53,7 @@ import { decryptWalletSeed, decryptWalletPassphrase } from '../crypto/walletBlob
 import { bip39MnemonicToSeed } from '../crypto/mnemonic.js';
 import { counterwalletMnemonicToSeedBytes } from '../crypto/counterwallet.js';
 import { WalletNotFoundError } from './unlockWallet.js';
+import { hardwareWalletRecord, isHardwareWallet, refuseHardwareWallet } from './hardwareWallet.js';
 import { submitAction } from './submitAction.js';
 import { ENVELOPE_MAX_PAYLOAD } from './fileSizeLimits.js';
 import { activeSourceId } from '../shared/addressSelection.js';
@@ -283,7 +284,9 @@ export async function applyLabelSyncPayload({
  * @typedef {Object} PublishLabelsNowOpts
  * @property {import('../storage/Vault.js').Vault} vault
  * @property {string} walletId
- * @property {string} password
+ * @property {string} [password]             required unless `masterKey` is given
+ * @property {Uint8Array} [masterKey]        the unlocked session's vault master key (a pooled SoftwareSigner's getMasterKey(), derived under this wallet's kdfParams), so an unlocked wallet opens its seed without the password; copied, never zeroed here
+ * @property {any} [signer]                  the unlocked session's signer; the submission signs with it instead of unlocking again
  * @property {string} [bip39Passphrase]      required if the wallet is BIP39 with §15.6 25th-word enabled
  * @property {string} chainId                chain to publish on
  * @property {import('../registry/index.js').ChainRegistry} chainRegistry
@@ -345,6 +348,7 @@ export async function prepareLabelsPublication({
     vault,
     walletId,
     password,
+    masterKey,
     bip39Passphrase = '',
     chainId,
     chainRegistry,
@@ -357,7 +361,11 @@ export async function prepareLabelsPublication({
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('prepareLabelsPublication: walletId is required');
     }
-    if (typeof password !== 'string' || password.length === 0) {
+    const hasMasterKey = masterKey instanceof Uint8Array && masterKey.length > 0;
+    if (!hasMasterKey && (typeof password !== 'string' || password.length === 0)) {
+        // The commitment key is seed-derived and a hardware wallet has no
+        // seed, so no password could help: name the real reason.
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'label sync');
         throw new Error('prepareLabelsPublication: password is required');
     }
     if (typeof chainId !== 'string' || chainId.length === 0) {
@@ -371,6 +379,7 @@ export async function prepareLabelsPublication({
     if (format === 'wif-only') {
         throw new WifOnlyLabelSyncUnsupportedError(walletId);
     }
+    refuseHardwareWallet(wallet, 'label sync');
 
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) {
@@ -384,7 +393,15 @@ export async function prepareLabelsPublication({
         : await defaultPickFromAddress({ vault, walletId, descriptor, activeEntry });
     if (!fromAddress) throw new NoFundedAddressError(walletId, chainId);
 
-    const seed = await deriveLabelSyncSeed({ wallet, password, bip39Passphrase });
+    // An unlocked session hands its master key instead of the password; the
+    // seed then opens without asking again (operator preference 2026-11-14:
+    // no password prompts once unlocked when the wallet can avoid them).
+    const seed = await deriveLabelSyncSeed({
+        wallet,
+        password,
+        bip39Passphrase,
+        masterKey: hasMasterKey ? masterKey : undefined,
+    });
 
     let payload;
     try {
@@ -552,6 +569,7 @@ export async function publishLabelsNow(opts) {
  * @returns {Promise<Uint8Array>}
  */
 async function deriveLabelSyncSeed({ wallet, password, bip39Passphrase = '', masterKey }) {
+    refuseHardwareWallet(wallet, 'label sync');
     const format = wallet.format ?? 'bip39';
     let sessionMasterKey = null;
     const plaintext = await decryptWalletSeed({
@@ -702,7 +720,14 @@ export async function restoreLabelSyncAfterImport({
     if (typeof walletId !== 'string' || walletId.length === 0) {
         throw new Error('restoreLabelSyncAfterImport: walletId is required');
     }
-    if (typeof password !== 'string' || password.length === 0) {
+    // An unlocked session may open the seed with its master key alone; that
+    // key counts only when it was derived under this wallet's kdfParams,
+    // checked once the wallet record is read below.
+    const hasMasterKey = masterKey instanceof Uint8Array && masterKey.length > 0 && masterKeyKdfParams != null;
+    // A hardware wallet is skipped below whatever the caller holds, so it
+    // needs no password to get there.
+    if (!hasMasterKey && (typeof password !== 'string' || password.length === 0)
+        && !(await hardwareWalletRecord(vault, walletId))) {
         throw new Error('restoreLabelSyncAfterImport: password is required');
     }
     if (!Array.isArray(chainIds)) {
@@ -714,7 +739,7 @@ export async function restoreLabelSyncAfterImport({
 
     const base = {
         restored: false,
-        skipped: /** @type {'wif-only' | 'created' | 'demo' | 'no-chains' | null} */ (null),
+        skipped: /** @type {'wif-only' | 'hardware' | 'created' | 'demo' | 'no-chains' | null} */ (null),
         chainId: /** @type {string | null} */ (null),
         updatedAt: /** @type {string | null} */ (null),
         searchedChainIds: /** @type {string[]} */ ([]),
@@ -726,6 +751,10 @@ export async function restoreLabelSyncAfterImport({
     if (!wallet) throw new WalletNotFoundError(walletId);
     if ((wallet.format ?? 'bip39') === 'wif-only') {
         return { ...base, skipped: 'wif-only' };
+    }
+    // No seed, so no commitment key to search under.
+    if (isHardwareWallet(wallet)) {
+        return { ...base, skipped: 'hardware' };
     }
     if (wallet.origin === 'created') {
         return { ...base, skipped: 'created' };
@@ -740,13 +769,17 @@ export async function restoreLabelSyncAfterImport({
 
     // One commitment key for every chain: the seed is opened once and the
     // key is zeroed on the way out whatever happens in between.
+    const usableMasterKey = masterKey !== undefined && kdfParamsEqual(wallet.kdfParams, masterKeyKdfParams)
+        ? masterKey
+        : undefined;
+    if (!usableMasterKey && (typeof password !== 'string' || password.length === 0)) {
+        throw new Error('restoreLabelSyncAfterImport: password is required');
+    }
     const seed = await deriveLabelSyncSeed({
         wallet,
         password,
         bip39Passphrase,
-        masterKey: masterKey !== undefined && kdfParamsEqual(wallet.kdfParams, masterKeyKdfParams)
-            ? masterKey
-            : undefined,
+        masterKey: usableMasterKey,
     });
     let commitmentKey;
     try {
@@ -1116,7 +1149,11 @@ function ciphertextForms(served) {
 // would cost eight password prompts and eight FILE transactions - so
 // the scheduler debounces the edits and raises at most one prompt per
 // unlock window. A rename storm therefore costs one prompt and one
-// on-chain write; the unlocked session still never holds a raw seed.
+// on-chain write. Since 2026-11-14 an unlocked session whose signer pool
+// holds the wallet's software signer opens the seed with that signer's
+// master key instead (operator preference: no password prompts once
+// unlocked when the wallet can avoid them), so the prompt appears only
+// when the pool is empty.
 //
 // What the scheduler does NOT do: it does not publish. It decides that
 // a publish is due and calls `requestPublish`, which the shell wires to

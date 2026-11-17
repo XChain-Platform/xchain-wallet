@@ -99,22 +99,21 @@ describe("AssetIconPicker help", () => {
     });
 });
 
-describe("Send: added recipient Token field help", () => {
-    it("shows the help tip on the added recipient token row", async () => {
+describe("Send: Multi add-recipient field help", () => {
+    it("puts its own help on the new recipient's To, Token and Amount fields", async () => {
         mount();
-        fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: ALICE } });
-        fireEvent.click(await screen.findByRole("button", { name: /^Asset/ }));
-        fireEvent.click(await screen.findByRole("button", { name: "Pick PEPE" }));
-        fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: "7" } });
-        await screen.findByText(/PEPE available/);
+        await screen.findByLabelText(/^To$/);
+        fireEvent.click(screen.getByRole("tab", { name: "Multi" }));
         fireEvent.click(await screen.findByRole("button", { name: /Add Recipient/ }));
-        fireEvent.click(screen.getByRole("switch", { name: /different token/i }));
-        await screen.findByRole("button", { name: /Recipient 2 token/ });
-        // The first field is the form's Asset field; the added row's is Token.
-        expect(screen.getAllByRole("button", { name: "About Asset" })).toHaveLength(1);
-        const tips = screen.getAllByRole("button", { name: "About Token" });
-        expect(tips).toHaveLength(1);
-        fireEvent.click(tips[0]);
+        // Multi shows only the new recipient's fields, so each tip is the one
+        // there; the field offers tokens only, so it is Token (G60).
+        expect(screen.getAllByRole("button", { name: "About To" })).toHaveLength(1);
+        expect(screen.queryByRole("button", { name: "About Asset" })).toBeNull();
+        const tokenTips = screen.getAllByRole("button", { name: "About Token" });
+        expect(tokenTips).toHaveLength(1);
+        fireEvent.click(tokenTips[0]);
         expect(await screen.findByText(/The token this recipient receives/)).toBeTruthy();
+        expect(screen.getByLabelText(/^To$/)).toHaveValue("");
+        expect(ALICE).toMatch(/^bc1/);
     });
 });

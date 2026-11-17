@@ -12,6 +12,7 @@ import { createDefaultSettings } from '../../../packages/core/src/schemas/settin
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
 import { BottomTabBar } from '../../../packages/core/src/shared/components/BottomTabBar.jsx';
 import { Onboarding } from '../../../packages/core/src/shared/routes/Onboarding.jsx';
+import { t } from '../../../packages/core/src/i18n/index.js';
 import { Locked } from '../../../packages/core/src/shared/routes/Locked.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 
@@ -103,14 +104,14 @@ describe('extension popup main screens at 360x600', () => {
         );
     });
 
-    it('keeps Get started visible below the explainer scroll lane', () => {
+    it('keeps the last Next visible below the explainer scroll lane', () => {
         localStorage.removeItem('xc:onboardingExplainerSeenAt');
         renderPopup(<Onboarding onCreate={() => {}} onImport={() => {}} />);
 
         for (let step = 0; step < 3; step += 1) {
             fireEvent.click(screen.getByRole('button', { name: 'Next' }));
         }
-        expect(screen.getByRole('button', { name: 'Get Started' })).toBeVisible();
+        expect(screen.getByRole('button', { name: 'Next' })).toBeVisible();
         expect(css.onboardingCarousel).toMatch(
             /\.rootPopup\s*\{[^}]*height:\s*100%;[^}]*max-height:\s*100%;[^}]*overflow:\s*hidden;/s,
         );
@@ -148,7 +149,9 @@ describe('extension popup main screens at 360x600', () => {
                 onCreate={() => {}}
                 onImport={() => {}}
                 onImportFromFreeWallet={() => {}}
-                onPairPartner={() => {}}
+                onConnectHardware={() => {}}
+                // A shell whose Trezor factory can reach a device.
+                hardwareFactories={{ trezor: () => {}, ledger: null }}
                 onDemoEntered={() => {}}
             />,
         );
@@ -156,9 +159,8 @@ describe('extension popup main screens at 360x600', () => {
         for (const label of [
             'Create New Wallet',
             'Import Wallet',
-            'From FreeWallet',
-            'Pair an Offline Signer',
-            'Try in Demo Mode',
+            t('onboarding.connectHardwareWallet'),
+            'Try Demo',
         ]) {
             expectCompleteButtonLabel(label);
         }
@@ -171,7 +173,7 @@ describe('extension popup main screens at 360x600', () => {
         expect(screen.getByLabelText('Password')).toBeVisible();
     });
 
-    it('renders Home with popup quick actions and labels intact', async () => {
+    it('renders Home with no quick action row and the popup hero controls intact', async () => {
         renderPopup(
             <Home
                 activeWalletId="wallet-1"
@@ -185,9 +187,9 @@ describe('extension popup main screens at 360x600', () => {
         );
 
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalled());
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeVisible());
-        for (const label of ['Send', 'Receive', 'Exchange', 'Swap']) {
-            expectCompleteButtonLabel(label);
+        await waitFor(() => expect(screen.getAllByRole('tablist').length).toBeGreaterThan(0));
+        for (const label of ['Send', 'Receive', 'Exchange', 'More', 'Swap']) {
+            expect(screen.queryByRole('button', { name: label })).toBeNull();
         }
     });
 
@@ -217,10 +219,11 @@ describe('extension popup main screens at 360x600', () => {
         expect(appWrapper).not.toContain('<ReachabilityBanner');
         expect(popupApp).toMatch(
             // The network and demo banners are gone by ruling; the layout's
-            // notice slot holds the outcome of a send that settled while the
-            // wallet was locked, then the reachability notice, which a demo
-            // wallet does not show.
-            /notices=\{\(\s*<>\s*\{activeWalletId \? <LockedSendOutcomeNotice walletId=\{activeWalletId\} routeKey=\{unlockedView\} \/> : null\}\s*\{isDemoWallet\(activeWalletId\) \? null : <ReachabilityBanner\s*\/>\}\s*<\/>\s*\)\}/,
+            // notice slot holds an erase scheduled from a lock screen first,
+            // then the outcome of a send that settled while the wallet was
+            // locked, then the reachability notice, which a demo wallet does
+            // not show.
+            /notices=\{\(\s*<>\s*\{\/\*[^*]*\*\/\}\s*<EraseScheduledNotice \/>\s*\{activeWalletId \? <LockedSendOutcomeNotice walletId=\{activeWalletId\} routeKey=\{unlockedView\} \/> : null\}\s*\{isDemoWallet\(activeWalletId\) \? null : <ReachabilityBanner\s*\/>\}\s*<\/>\s*\)\}/,
         );
         expect(css.popup).toMatch(
             /html\.xchain-toolbar-popup\s*\{[^}]*height:\s*600px;[^}]*overflow:\s*hidden;/,

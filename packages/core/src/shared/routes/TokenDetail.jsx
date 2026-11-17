@@ -8,33 +8,43 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, ChainBadge, CopyButton, EmptyState, Icon, Input, ListPage, ListRow, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { HoldingValueContext, holdingValueSeries } from '../components/holdingValueContext.js';
+import { assetKeyOf } from '../utils/portfolioValueHistory.js';
+import { AddressText, Button, ChainBadge, CopyButton, EmptyState, FormErrorSummary, Icon, Input, ListPage, ListRow, Notice, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs, useFormErrors } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { getDemoGatedGroupsForTick, isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
-import { Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
+import { formatCompactChartValue, Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
-import { BEHIND_CHART_FILL, BEHIND_CHART_STROKE, ChartRangeTabs, RANGES as CHART_RANGES, defaultRangeId, priceHistoryForRange, rangeChangeFor } from '../components/PortfolioChart.jsx';
+import { BEHIND_CHART_FILL, BEHIND_CHART_STROKE, ChartRangeTabs, RANGES as CHART_RANGES, defaultRangeId, priceHistoryForRange, rangeChangeFor, rangeWindowStart } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import { rangeChangeText } from '../components/TotalBalanceHero.jsx';
 import heroStyles from '../components/TotalBalanceHero.module.css';
 import homeTabsStyles from '../components/HomeTabs.module.css';
-import { TokenHistoryTab } from '../components/TokenHistoryTab.jsx';
+import { TokenHistoryTab, useTokenHistory } from '../components/TokenHistoryTab.jsx';
+import {
+    TOKEN_OWNER_GROUP_ACTION_IDS,
+    TokenOwnerActionGroups,
+    buildTokenOwnerGroups,
+    tokenOwnerDetailRows,
+    useTokenOwnerState,
+} from '../components/TokenOwnerActions.jsx';
+import { balanceSeries, balanceWindowStart } from '../utils/assetBalanceSeries.js';
 import { TokenMarketRows } from '../components/TokenMarketTab.jsx';
 import listRowStyles from '../../ui/ListRow.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { useIsTokenIssuer } from '../hooks/useIsTokenIssuer.js';
 import { useNativePrice } from '../hooks/useNativePrice.js';
 import { useTickFiatRate } from '../hooks/useFiatRate.js';
-import { usePriceAlerts } from '../hooks/usePriceAlerts.js';
-import { PriceAlertForm } from '../components/PriceAlertForm.jsx';
+import { PriceAlertEditorPage } from '../components/settings/PriceAlertsSection.jsx';
+import { useBackHandler } from '../../ui/backStack.js';
 import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
 import { useSettings } from '../hooks/useSettings.js';
+import { pinnedTokensForWallet, pinnedTokensPatchForWallet } from '../../schemas/settings.js';
 import { explorerChainUrl, explorerPageUrl } from '../utils/explorerLinks.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
@@ -52,7 +62,8 @@ import {
 } from '../utils/amountFormat.js';
 import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
-import { tickerForCoin } from '../../registry/coinTicker.js';
+import { nativeDecimalsFor, tickerForCoin } from '../../registry/coinTicker.js';
+import { useDocumentTitleSection } from '../hooks/useDocumentTitle.js';
 import { extractHolderRows } from '../utils/holderRows.js';
 import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
@@ -60,13 +71,17 @@ import { safeHttpUrl, safeImageSrc } from '../utils/externalUrl.js';
 import { readActiveAccount } from '../utils/activeAccountMemory.js';
 import { chainReadFailed, sumTickOnChain } from '../utils/walletBalanceShape.js';
 import styles from './TokenDetail.module.css';
-import { QuickActionTile } from '../../ui/QuickActionTile.jsx';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
+import { NftIdentityCard, nftArtUrl } from '../components/NftIdentityCard.jsx';
+import { TickerIcon } from '../components/TickerIcon.jsx';
 import { buildActionEntries } from '../actionEntries.js';
 import { ENTRY_ICON } from './ActionsMenu.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/routes.js';
+import '../../i18n/locales/en/settings.js';
 import '../../i18n/locales/en/tokenDetail.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -109,12 +124,26 @@ function callAsync(callback) {
  * @param {() => void} [props.onReceive]             navigate to Receive route
  * @param {() => void} [props.onBuy]                 navigate to the selected asset's exchange flow
  * @param {() => void} [props.onViewActivity]        navigate to History pre-filtered to this tick
- * @param {() => void} [props.onManageToken]         navigate to the issuer's Manage Token view for this tick; only offered when the wallet holds the issuing address (see useIsTokenIssuer.js)
+ * @param {() => void} [props.onManageToken]         navigate to the issuer's Manage Token view for this tick
  * @param {Record<string, (() => void) | undefined>} [props.assetActions]
  *   handlers keyed by the action registry's handler names (actionEntries.js),
  *   each opening its flow pre-filled with this asset; the Actions tab offers
  *   the ones that apply to this coin or token
  * @param {(entry: any) => void} [props.onSelectEntry] open one History row's detail (the History tab)
+ * @param {boolean} [props.embedded] drawn as wide Home's detail panel beside the balances list (G115):
+ *   Home's Screen owns the header, the scroller and the notices, so the page has no header or
+ *   Back of its own, and an NFT opens with its outlined identity card (G16) instead of the blue card
+ * @param {Record<string, ((ctx?: { issuer?: string }) => void) | undefined>} [props.manageActions]
+ *   the issuer's handlers (onMint, onLock, onIssueSubtoken, ... as the shells wire them), each
+ *   opening its form with this token and its resolved issuer; when given, the issuer actions
+ *   in grouped lists in the Actions tab and their facts in the Details card
+ * @param {boolean} [props.ownerView] opened from My Tokens (the manage-token route): uses a plain
+ *   identity card instead of the balance hero, and shows the issuer's groups
+ * @param {(issuer: string | null) => void} [props.onIssuerResolved] told the token's issuer once read
+ *
+ * The browse page for a coin or token opens with the blue balance hero. The
+ * Manage Token owner view replaces only that hero with its identity card;
+ * Actions, Details and History stay shared.
  */
 export function TokenDetail(props) {
     const assetScope = JSON.stringify([
@@ -147,15 +176,36 @@ function TokenDetailContent({
     onManageToken,
     assetActions = null,
     onSelectEntry,
+    embedded = false,
+    manageActions = null,
+    ownerView = false,
+    onIssuerResolved,
 }) {
     const { messaging, shell } = useMessaging();
-    const { settings, error: settingsError } = useSettings();
+    const { settings, error: settingsError, update: updateSettings } = useSettings();
+    // The token's place in the watched, pinned and hidden lists (the lists
+    // Settings, Appearance, Tokens shows); the Actions rows below edit them.
+    const listKey = `${chainId}:${tick}`;
+    const watchedList = Array.isArray(settings?.watchedTokens) ? settings.watchedTokens : [];
+    const hiddenList = Array.isArray(settings?.hiddenTokens) ? settings.hiddenTokens : [];
+    const pinnedList = settings ? pinnedTokensForWallet(settings, walletId) : [];
+    const isWatchedToken = watchedList.includes(listKey);
+    const isPinnedToken = pinnedList.includes(listKey);
+    const isHiddenToken = hiddenList.includes(listKey);
+    const canEditLists = Boolean(settings) && typeof updateSettings === 'function';
+    const [listActionFailed, setListActionFailed] = useState(false);
+    const writeList = (patch) => {
+        setListActionFailed(false);
+        Promise.resolve(updateSettings(patch)).catch(() => setListActionFailed(true));
+    };
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     // The balance card formats its coin amounts as Home's does.
     const fiatLocale = settings?.language || 'en-US';
     // The mode is this wallet's own (§20); a wallet list that cannot say
-    // still opens the screen in full mode. A watch-only wallet holds no keys,
-    // so every action that signs stays visible but disabled with its reason.
+    // still opens the screen in full mode. A watch-only wallet holds no keys:
+    // Send stays live (it builds an unsigned transaction for the paired
+    // signer), while every other signing action stays visible but disabled
+    // with its reason.
     const { isSignerMode, isWatcherMode, walletModeKnown: walletModeReady } = useWalletMode(walletId);
     const isDemo = isDemoWallet(walletId);
     const { offline: networkOffline } = useNetworkOffline({ walletId });
@@ -163,6 +213,8 @@ function TokenDetailContent({
     const variant = screenVariantFor(shell);
     const tabsId = useId();
     const [revealedExtra, setRevealedExtra] = useState(null);
+    // The system Back from the Add Price Alert page returns to this page.
+    useBackHandler(revealedExtra === 'price-alert' ? () => setRevealedExtra(null) : undefined, false, 'screen');
     const [resolvedQuantity, setResolvedQuantity] = useState(
         typeof suppliedQuantity === 'string' ? suppliedQuantity : null,
     );
@@ -246,16 +298,29 @@ function TokenDetailContent({
     const loadFailed = !isNative && (readFailed || assetInfo?.loadError === true);
     const metadataLoading = !isNative && !assetInfo && !tokenMissing && !readFailed;
 
-    // A holder who is also the issuer gets a way back to the admin
-    // surface: without this, ManageToken was reachable only via Menu ->
-    // My Tokens, several taps away from the token they just opened.
-    // Native coins have no issuer, so the check is skipped there.
-    const isTokenOwner = useIsTokenIssuer({
-        messaging,
-        walletId,
-        chainId,
-        issuerAddress: isNative ? null : (assetInfo?.creator || null),
-    });
+    // The issuer's groups open their forms for any wallet. Each form runs its
+    // own preflight and refuses a source that cannot perform the action.
+    const tokenOwnerAddress = isNative ? null : (assetInfo?.creator || null);
+    const showOwnerGroups = !isNative && manageActions != null;
+    const ownerState = useTokenOwnerState({ messaging, chainId, tick, enabled: showOwnerGroups });
+    useEffect(() => {
+        if (showOwnerGroups && typeof onIssuerResolved === 'function') onIssuerResolved(tokenOwnerAddress);
+    }, [showOwnerGroups, tokenOwnerAddress, onIssuerResolved]);
+
+    // A coin whose price is never asked for (a test network) charts its own
+    // balance from the wallet's rows, as a token does, so its blue hero still
+    // has a chart (G10).
+    const nativeBalanceChart = isNative && !(fiatSupported && fiatAllowed);
+    // On wide Home the hero draws this holding from the wallet's one history
+    // read (HoldingValueContext), so the panel reads its own rows only once
+    // its History tab opens (the tab reads them itself when none are handed in).
+    const holdingSource = useContext(HoldingValueContext);
+    const holdingDrawn = embedded
+        && Boolean(holdingSource?.prepared?.assets?.some((asset) => asset.key === assetKeyOf(chainId, tick)));
+    const readsOwnHistory = (!isNative || nativeBalanceChart) && !holdingDrawn;
+    // This wallet's own rows: one read feeds the hero's balance line and the
+    // History tab. A coin with a price line leaves its tab to read its own.
+    const tokenHistory = useTokenHistory({ messaging, walletId, chainId, tick, isNative, enabled: readsOwnHistory });
 
     // Native-coin price oracle (BTC / LTC / DOGE mainnet). Gated by
     // settings.privacy.priceDataEnabled; the hook surfaces a `disabled`
@@ -455,6 +520,13 @@ function TokenDetailContent({
         : explorerPageUrl({ chainId, kind: 'token', value: tick, settings });
     const explorerTitle = t('tokenDetail.actions.explorerTitle', { tick });
     const pageTitle = displayName || bridgeDisplayTick(tick, coinFromChainId(chainId)).label;
+    const tokenLongNameCandidate = assetInfo?.name || assetInfo?.displayName || displayName || '';
+    const tokenLongName = String(tokenLongNameCandidate).trim().toUpperCase() === String(tick).trim().toUpperCase()
+        ? ''
+        : String(tokenLongNameCandidate).trim();
+    // The window title names the asset, as the page header does; wide Home's
+    // panel leaves the window to Home.
+    useDocumentTitleSection(embedded ? null : pageTitle);
     const header = (
         <PageHeader
             onBack={handleBack}
@@ -542,9 +614,52 @@ function TokenDetailContent({
     const primaryCode = showFiatPrimary ? fiatCurrency : tick;
     const atomicQuantity = parseAtomicQuantity(quantity);
 
+    // A token has no recorded price history (nor a coin on a test network), so
+    // its hero draws what this wallet's own rows prove: the balance over the
+    // range, valued at the current fiat price when there is one (never a
+    // synthesized walk).
+    const tokenHistoryEntries = tokenHistory.entries;
+    const tokenHistoryAddresses = tokenHistory.addresses;
+    const tokenUnitPrice = !isNative && fiatAvailable ? Number(holdingFiatRate) : null;
+    // A coin row may arrive without its divisibility; the chain names it.
+    const seriesDivisibility = resolvedDivisibility ?? (isNative ? nativeDecimalsFor(descriptor || chainId) : null);
+    const tokenSeriesFor = useCallback((range) => {
+        if (!readsOwnHistory || tokenHistoryEntries === null || atomicQuantity == null) return null;
+        const nowMs = Date.now();
+        // Every own address on the chain, so a move between two of them
+        // never reads as a send.
+        const own = Array.isArray(tokenHistoryAddresses)
+            ? new Set(tokenHistoryAddresses.map((address) => String(address).toLowerCase()))
+            : undefined;
+        const units = balanceSeries({
+            entries: tokenHistoryEntries,
+            currentAtomic: atomicQuantity,
+            tick,
+            divisibility: seriesDivisibility,
+            walletAddresses: own,
+            points: range.points,
+            windowStart: balanceWindowStart(range, nowMs, rangeWindowStart),
+            nowMs,
+        });
+        if (!units) return null;
+        return Number.isFinite(tokenUnitPrice) && tokenUnitPrice > 0 ? units.map((value) => value * tokenUnitPrice) : units;
+    }, [readsOwnHistory, tokenHistoryEntries, tokenHistoryAddresses, atomicQuantity, tick, seriesDivisibility, tokenUnitPrice]);
+
     // The price chart behind the balance card, its range buttons and
     // the stats row under the card all read one market state.
+    // Wide Home's detail panel draws this holding's value over time (the
+    // wallet's balance of the asset at each point times its price then), the
+    // asset's share of Home's portfolio chart from the same valuation and the
+    // same one history read. The page opened on its own keeps its price line.
+    const holdingSeriesFor = useMemo(() => (holdingDrawn
+        ? (range, priceEntry) => holdingValueSeries(holdingSource, { chainId, tick, range, priceEntry })
+        : null), [holdingDrawn, holdingSource, chainId, tick]);
     const market = useMarketData({
+        holdingSeriesFor,
+        tokenSeriesFor,
+        tokenSeriesLoading: readsOwnHistory && (tokenHistoryEntries === null || (atomicQuantity == null && !balanceFailed)),
+        tokenSeriesKind: tokenUnitPrice ? 'value' : 'balance',
+        nativeBalanceChart,
         enabled: fiatSupported,
         isNative,
         nativePrice,
@@ -561,13 +676,21 @@ function TokenDetailContent({
     // The card's change pill, as on Home: what the holding gained or
     // lost over the selected range. The price line is scaled to the holding's
     // value, so it ends at the balance and the percent is the price's own move.
-    // Without a fiat value the change is counted in the coin itself.
+    // Without a fiat value the change is counted in the coin itself. A
+    // balance line (or its value at today's price) has no pill: a receive is
+    // not a gain, so only a price line says how the holding moved.
     const holdingUnits = atomicQuantity != null && resolvedDivisibility != null
         ? Number(decimalFromBaseUnits(atomicQuantity, resolvedDivisibility))
         : NaN;
     const unitPrice = fiatAvailable ? Number(holdingFiatRate) : 1;
     const rangeChange = useMemo(() => {
         const series = market.sparkline;
+        // A holding line is already the holding's fiat value over the range.
+        if (market.holding) {
+            if (market.chartBusy || !Array.isArray(series) || series.length < 2) return null;
+            return rangeChangeFor(series, market.range.label, (value) => formatFiatAmount(String(value), fiatCurrency));
+        }
+        if (market.seriesKind !== 'price') return null;
         if (market.chartBusy || !Array.isArray(series) || series.length < 2) return null;
         const last = series[series.length - 1];
         const holdingValue = fiatAvailable ? Number(fiat) : holdingUnits;
@@ -576,7 +699,7 @@ function TokenDetailContent({
         return rangeChangeFor(scaled, market.range.label, (value) => (fiatAvailable
             ? formatFiatAmount(String(value), fiatCurrency)
             : `${new Intl.NumberFormat(fiatLocale, { maximumFractionDigits: 8 }).format(value)} ${tick}`));
-    }, [market.sparkline, market.chartBusy, market.range.label, fiatAvailable, fiat, holdingUnits, fiatCurrency, fiatLocale, tick]);
+    }, [market.sparkline, market.seriesKind, market.holding, market.chartBusy, market.range.label, fiatAvailable, fiat, holdingUnits, fiatCurrency, fiatLocale, tick]);
     const changeInCoin = !showFiatPrimary;
     // The figure measures the selected range, so it names that period for
     // screen readers as the Home balance does with 24h.
@@ -592,7 +715,6 @@ function TokenDetailContent({
     const sendDisabledReason = typeof onSend !== 'function'
         ? 'Send is unavailable.'
         : !walletModeReady ? 'Loading wallet…'
-        : isWatcherMode ? t('tokenDetail.actions.watcherSend')
         : atomicQuantity == null
             ? (balanceFailed ? 'Balance is unavailable.' : 'Loading balance…')
         : atomicQuantity <= 0n ? 'No balance to send.'
@@ -607,7 +729,10 @@ function TokenDetailContent({
     const priceAlertsSupported = typeof messaging.listPriceAlertsForWallet === 'function'
         && typeof messaging.savePriceAlert === 'function'
         && typeof messaging.clearPriceAlert === 'function';
-    const showPriceAlertItem = fiatSupported
+    // Add Price Alert opens as this page's own full page, which wide Home's
+    // detail panel cannot hold, so the panel leaves the row to the coin page.
+    const showPriceAlertItem = !embedded
+        && fiatSupported
         && fiatAllowed
         && priceAlertsSupported
         && Boolean(walletId)
@@ -666,7 +791,7 @@ function TokenDetailContent({
                 setRevealedExtra('holders');
             },
         } : null,
-        !isNative && typeof onManageToken === 'function' && isTokenOwner ? {
+        !isNative && !manageActions && typeof onManageToken === 'function' ? {
             id: 'manage',
             label: 'Manage',
             Icon: Icon.GearIcon,
@@ -681,58 +806,229 @@ function TokenDetailContent({
     const actionGrid = buildAssetActionTiles({
         assetActions,
         isNative,
-        isTokenOwner,
         isSignerMode,
         isWatcherMode,
         tick,
         atomicQuantity,
         networkActionsAvailable,
         core: [
-            { id: 'send', label: t('tokenDetail.actions.send'), Icon: Icon.SendIcon, onSelect: onSend, reason: sendDisabledReason },
-            { id: 'receive', label: t('tokenDetail.actions.receive'), Icon: Icon.ReceiveIcon, onSelect: onReceive, reason: receiveDisabledReason },
+            {
+                id: 'send',
+                label: t('tokenDetail.actions.send'),
+                description: t('tokenDetail.actionDescriptions.send', { tick }),
+                Icon: Icon.SendIcon,
+                onSelect: onSend,
+                reason: sendDisabledReason,
+            },
+            {
+                id: 'receive',
+                label: t('tokenDetail.actions.receive'),
+                description: t('tokenDetail.actionDescriptions.receive', { tick }),
+                Icon: Icon.ReceiveIcon,
+                onSelect: onReceive,
+                reason: receiveDisabledReason,
+            },
             typeof onBuy === 'function'
-                ? { id: 'exchange', label: t('tokenDetail.actions.exchange'), Icon: Icon.MarketIcon, onSelect: onBuy, reason: tradeDisabledReason }
+                ? {
+                    id: 'exchange',
+                    label: t('tokenDetail.actions.exchange'),
+                    description: t('tokenDetail.actionDescriptions.exchange', { tick }),
+                    Icon: Icon.MarketIcon,
+                    onSelect: onBuy,
+                    reason: tradeDisabledReason,
+                }
                 : null,
         ],
         tail: [
             showPriceAlertItem ? {
                 id: 'price-alert',
                 label: t('tokenDetail.actions.priceAlert'),
+                description: t('tokenDetail.actionDescriptions.priceAlert', { tick }),
                 Icon: Icon.BellIcon || Icon.InfoIcon,
                 onSelect: () => setRevealedExtra('price-alert'),
                 shortReason: isNative && (nativePriceLoading || nativePriceValue === null)
                     ? t('tokenDetail.actions.needsPrice')
                     : null,
             } : null,
+            canEditLists && isWatchedToken ? {
+                id: 'stop-watching',
+                label: t('tokenDetail.actions.stopWatching'),
+                description: t('tokenDetail.actionDescriptions.stopWatching', { tick }),
+                Icon: Icon.EyeOffIcon,
+                onSelect: () => writeList({ watchedTokens: watchedList.filter((key) => key !== listKey) }),
+            } : null,
+            canEditLists ? {
+                id: 'pin',
+                label: isPinnedToken ? t('balances.unpin2') : t('balances.pinToTop'),
+                description: isPinnedToken
+                    ? t('tokenDetail.actionDescriptions.unpin', { tick })
+                    : t('tokenDetail.actionDescriptions.pin', { tick }),
+                Icon: PinGlyph,
+                onSelect: () => writeList(pinnedTokensPatchForWallet(
+                    walletId,
+                    isPinnedToken ? pinnedList.filter((key) => key !== listKey) : [...pinnedList, listKey],
+                )),
+            } : null,
+            canEditLists ? {
+                id: 'hide',
+                label: isHiddenToken ? t('settings.display.unhide2') : t('settings.developer.hide'),
+                description: isHiddenToken
+                    ? t('tokenDetail.actionDescriptions.unhide', { tick })
+                    : t('tokenDetail.actionDescriptions.hide', { tick }),
+                Icon: isHiddenToken ? Icon.EyeIcon : Icon.EyeOffIcon,
+                onSelect: () => writeList({
+                    hiddenTokens: isHiddenToken
+                        ? hiddenList.filter((key) => key !== listKey)
+                        : [...hiddenList, listKey],
+                }),
+            } : null,
         ],
-        manage: !isNative && typeof onManageToken === 'function' && isTokenOwner
-            ? { id: 'manage', label: t('tokenDetail.actions.manage'), Icon: Icon.GearIcon, onSelect: onManageToken }
+        // A shell that wires the issuer's handlers gets their groups on this
+        // page; one that does not keeps the Manage row to the issuer's page.
+        manage: !isNative && !manageActions && typeof onManageToken === 'function'
+            ? {
+                id: 'manage',
+                label: t('tokenDetail.actions.manage'),
+                description: t('tokenDetail.actionDescriptions.manage', { tick }),
+                Icon: Icon.GearIcon,
+                onSelect: onManageToken,
+            }
             : null,
+        ownerGroupsShown: showOwnerGroups,
     });
+    // The issuer's groups, with the registry's issuer actions the groups do
+    // not already hold (Publish oracle price) folded in.
+    const issuerActionBlockedReason = isWatcherMode
+        ? capitalize(t('tokenDetail.actions.needsSigner'))
+        : !networkActionsAvailable ? capitalize(t('tokenDetail.actions.needsNetwork')) : null;
+    const ownerGroups = showOwnerGroups
+        ? buildTokenOwnerGroups({
+            assetInfo,
+            sleepState: ownerState.sleepState,
+            handlers: manageActions,
+            owner: tokenOwnerAddress,
+            blockedReason: issuerActionBlockedReason,
+            // Destroy, Dispenser and Airdrop spend the token, so with none held
+            // they stay locked with that reason (an unknown balance does not lock).
+            noBalanceReason: atomicQuantity != null && atomicQuantity <= 0n
+                ? capitalize(t('tokenDetail.actions.needsBalance', { tick }))
+                : null,
+            extraActions: actionGrid.ownerExtra.map((tile) => ({
+                id: tile.id,
+                label: tile.label,
+                description: tile.description,
+                Icon: tile.Icon,
+                onSelect: tile.onSelect,
+                disabled: Boolean(rowReason(tile)) || typeof tile.onSelect !== 'function',
+                disabledReason: rowReason(tile) || t('routes.manageToken.actionUnavailable'),
+                danger: tile.danger,
+            })),
+        })
+        : null;
+    const ownerDetailRows = showOwnerGroups
+        ? tokenOwnerDetailRows({
+            creator: tokenOwnerAddress,
+            issuer: ownerState.genesis?.source || tokenOwnerAddress,
+            maxSupply: assetInfo?.maxSupply ?? null,
+            divisibility: resolvedDivisibility,
+            tokenLocks: assetInfo?.locks || {},
+            lockBridge: assetInfo?.lockBridge === true,
+            paused: ownerState.sleepState.paused,
+            createdBlock: ownerState.genesis?.blockIndex ?? assetInfo?.blockIndex ?? assetInfo?.block_index ?? null,
+            lockedClassName: styles.ownerLocked,
+            editableClassName: styles.ownerEditable,
+        })
+        : [];
+
+    // The Price alert action opens Add Price Alert as its own page with this
+    // asset chosen; Back (or a saved alert) returns to this page.
+    if (revealedExtra === 'price-alert' && showPriceAlertItem) {
+        return (
+            <PriceAlertEditorPage
+                nested={false}
+                variant={variant}
+                walletId={walletId}
+                fiatCurrency={String(fiatCurrency).toLowerCase()}
+                allowCoingeckoFallback={false}
+                initialChainId={chainId}
+                initialTick={isNative ? undefined : tick}
+                currentPrice={isNative ? nativePriceValue : tokenPriceValue}
+                onBack={() => setRevealedExtra(null)}
+                onSave={async (input) => {
+                    await messaging.savePriceAlert({ walletId, ...input });
+                    setRevealedExtra(null);
+                }}
+            />
+        );
+    }
+
+    // Embedded in wide Home's detail panel, Home's Screen is the page (its
+    // header, scroller and notices), so this page adds none of its own.
+    const PageFrame = embedded ? EmbeddedPageFrame : Screen;
+    // An NFT there opens with its outlined identity card (G16): it has no
+    // price history to draw behind a blue card.
+    const showNftIdentity = embedded && !isNative && resolvedDivisibility === 0
+        && assetInfo?.locks?.max_supply === true;
+    // A blue hero always has its chart (G10): a coin's price line, or, where
+    // there is no price (a token, a coin on a test network), its own balance.
+    const showHeroChart = !isNative || fiatSupported || nativeBalanceChart;
 
     if (tokenMissing) {
         return (
-            <Screen variant={variant} header={header}>
+            <PageFrame variant={variant} header={header}>
                 <ListPage><EmptyState title="Token not found" body="It may not be indexed yet, or the name may be mistyped." /></ListPage>
-            </Screen>
+            </PageFrame>
         );
     }
 
     return (
-        <Screen variant={variant} header={header}>
+        <PageFrame variant={variant} header={header}>
             {/* 8px between the coin page blocks, as on Home. */}
             <ListPage className={styles.detailPage}>
+                {/* The panel's own heading, where the page header would name it. */}
+                {embedded ? <h2 className="sr-only">{pageTitle}</h2> : null}
                 {loadFailed ? (
                     <StatusMessage variant="error">
                         Token details could not be loaded from the explorer. Try again in a moment.
                     </StatusMessage>
                 ) : null}
-                {/* The coin or token balance card, built like Home's: one blue card
-                    with the price chart behind its text and the range buttons
-                    along its foot. The caption row carries the asset and the swap
-                    and privacy buttons; the range's change sits above the balance. */}
-                <div className={fiatSupported ? `${homeTabsStyles.heroStack} ${homeTabsStyles.heroStackWithChart}` : homeTabsStyles.heroStack}>
-                    <section className={`${heroStyles.hero} ${styles.cardNoCaption}`} aria-labelledby={captionId}>
+                {listActionFailed ? (
+                    <StatusMessage variant="error">{t('tokenDetail.actions.listSaveFailed')}</StatusMessage>
+                ) : null}
+                {/* No ownership pre-warning: an owner action that would fail is refused
+                    by its preflight when the user tries it (operator 2026-11-16). */}
+                {/* Manage Token identifies the asset without showing browse-only
+                    balance or chart data. Other token and coin pages keep the
+                    Home-style balance hero, and wide Home keeps its NFT card. */}
+                {ownerView ? (
+                    <section className={styles.manageIdentityCard} aria-label="Token identity">
+                        <span className={styles.manageIdentityIcon}>
+                            <TickerIcon chainId={chainId} tick={tick} context="list" />
+                        </span>
+                        <div className={styles.manageIdentityText}>
+                            <h2 className={styles.manageIdentityTicker}>{tick}</h2>
+                            {tokenLongName ? <p className={styles.manageIdentityName}>{tokenLongName}</p> : null}
+                        </div>
+                    </section>
+                ) : showNftIdentity ? (
+                    <NftIdentityCard
+                        name={pageTitle}
+                        tick={tick}
+                        chainName={descriptor?.displayName || coinFromChainId(chainId)}
+                        artUrl={nftArtUrl(assetInfo) || headerIconUrl}
+                        quantity={quantity}
+                        supply={assetInfo?.totalSupply ?? assetInfo?.maxSupply ?? null}
+                        fiat={fiat}
+                        fiatCurrency={fiatCurrency}
+                        fiatFromSale={fiatRateSource === 'market'}
+                        hidden={balanceHidden}
+                    />
+                ) : (
+                <div className={showHeroChart ? `${homeTabsStyles.heroStack} ${homeTabsStyles.heroStackWithChart}` : homeTabsStyles.heroStack}>
+                    {/* The page header names the asset, so its card hides the
+                        caption; in wide Home's panel there is no page header,
+                        so the card shows it (the asset's icon and name). */}
+                    <section className={embedded ? heroStyles.hero : `${heroStyles.hero} ${styles.cardNoCaption}`} aria-labelledby={captionId}>
                         <div className={`${heroStyles.row} ${heroStyles.rowWithActions}`}>
                             <span id={captionId} className={`${heroStyles.label} ${heroStyles.walletLabel} ${styles.cardCaption}`}>
                                 {headerIconUrl || metadataLoading ? (
@@ -789,17 +1085,19 @@ function TokenDetailContent({
                                 >
                                     {null}
                                 </Button>
-                                <Button
-                                    type="button"
-                                    className={heroStyles.eye}
-                                    onClick={toggleBalanceHidden}
-                                    aria-label={balanceHidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance')}
-                                    aria-pressed={balanceHidden ? 'false' : 'true'}
-                                    title={balanceHidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance')}
-                                    icon={balanceHidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
-                                >
-                                    {null}
-                                </Button>
+                                {!embedded ? (
+                                    <Button
+                                        type="button"
+                                        className={heroStyles.eye}
+                                        onClick={toggleBalanceHidden}
+                                        aria-label={balanceHidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance')}
+                                        aria-pressed={balanceHidden ? 'false' : 'true'}
+                                        title={balanceHidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance')}
+                                        icon={balanceHidden ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
+                                    >
+                                        {null}
+                                    </Button>
+                                ) : null}
                             </div>
                         </div>
                         <div className={heroStyles.meta} role="group" aria-label={t('components.totalBalanceHero.balanceSummary')}>
@@ -831,19 +1129,30 @@ function TokenDetailContent({
                             </div>
                         ) : null}
                     </section>
-                    {fiatSupported ? (
+                    {showHeroChart ? (
                         <RouteErrorBoundary
                             variant="compact"
                             resetKey={`${chainId}:${tick}:market`}
                         >
-                            <MarketPanel market={market} hidden={balanceHidden} />
+                            <MarketPanel
+                                market={market}
+                                hidden={balanceHidden}
+                                showFiat={showFiatPrimary}
+                                fiatValue={Number(fiat)}
+                                coinValue={holdingUnits}
+                                unitPrice={unitPrice}
+                                currency={fiatCurrency}
+                                unit={tick}
+                                locale={fiatLocale}
+                            />
                         </RouteErrorBoundary>
                     ) : null}
                 </div>
+                )}
 
                 {/* The market figures are a Market group at the top of the Details tab. */}
 
-                {/* The Actions tab holds the action tiles; the information items
+                {/* The Actions tab holds the action list (G101); the information items
                     (Supply over time, About, Media, Gated content, Holders) are
                     links in the Details tab. */}
 
@@ -866,18 +1175,7 @@ function TokenDetailContent({
                         >
                             {activeTab === 'actions' ? (
                                 <>
-                                <AssetActionsPanel grid={actionGrid} tick={tick} />
-                {revealedExtra === 'price-alert' ? (
-                    <NativePriceAlertEntry
-                        walletId={walletId}
-                        chainId={chainId}
-                        tick={isNative ? undefined : tick}
-                        currentPrice={isNative ? nativePriceValue : tokenPriceValue}
-                        fiatCurrency={fiatCurrency}
-                        loading={isNative && nativePriceLoading}
-                        disabled={!fiatAllowed || (isNative && nativePrice.disabled)}
-                    />
-                ) : null}
+                                <AssetActionsPanel grid={actionGrid} tick={tick} ownerGroups={ownerGroups} />
                                 </>
                             ) : activeTab === 'history' ? (
                                 <TokenHistoryTab
@@ -885,15 +1183,17 @@ function TokenDetailContent({
                                     chainId={chainId}
                                     tick={tick}
                                     isNative={isNative}
+                                    history={readsOwnHistory ? tokenHistory : null}
                                     onSelectEntry={onSelectEntry}
                                 />
                             ) : (
                             <>
-                            {/* Details is one list in the rounded card, one detail per line;
-                                the information items are rows at its foot that open
-                                under the card. */}
-                            <div className={styles.infoCard}>
+                            {/* Details is one list in the standard card (Card.module.css),
+                                one detail per line, 8px under the tab row; the information
+                                items are rows at its foot that open under the card. */}
+                            <div className={styles.detailsCard} data-details-card="">
                                 <DetailsPanel
+                                    extraRows={ownerDetailRows}
                                     tick={tick}
                                     displayName={displayName}
                                     descriptor={descriptor}
@@ -1007,8 +1307,13 @@ function TokenDetailContent({
                         </div>
 
             </ListPage>
-        </Screen>
+        </PageFrame>
     );
+}
+
+/** Wide Home's detail panel: the page's content with no Screen around it. */
+function EmbeddedPageFrame({ children }) {
+    return children;
 }
 
 // Registry actions that act on a holding of an issued token. Native coins
@@ -1028,19 +1333,47 @@ const READ_ONLY_ACTION_IDS = new Set(['dispenser-explorer']);
 const NEEDS_BALANCE_ACTION_IDS = new Set([
     'destroy', 'dispenser', 'airdrop', 'swap', 'cross-chain-swap', 'bridge-move',
 ]);
+// The star on the Pin row, drawn as Home's row star is.
+function PinGlyph() {
+    return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+    );
+}
+
+// Registry actions drawn in the danger tone (G101): they burn tokens.
+const DANGER_ACTION_IDS = new Set(['destroy']);
+// The one line under each registry action's title on this page, naming the
+// token it acts on. An id missing here falls back to the registry's own text.
+const ACTION_DESCRIPTION_KEYS = {
+    destroy: 'tokenDetail.actionDescriptions.destroy',
+    sweep: 'tokenDetail.actionDescriptions.sweep',
+    dispenser: 'tokenDetail.actionDescriptions.dispenser',
+    'dispenser-explorer': 'tokenDetail.actionDescriptions.dispenserExplorer',
+    airdrop: 'tokenDetail.actionDescriptions.airdrop',
+    swap: 'tokenDetail.actionDescriptions.swap',
+    'cross-chain-swap': 'tokenDetail.actionDescriptions.crossChainSwap',
+    'bridge-move': 'tokenDetail.actionDescriptions.bridgeMove',
+    mint: 'tokenDetail.actionDescriptions.mint',
+    lock: 'tokenDetail.actionDescriptions.lock',
+    description: 'tokenDetail.actionDescriptions.description',
+    transfer: 'tokenDetail.actionDescriptions.transfer',
+    oracle: 'tokenDetail.actionDescriptions.oracle',
+    dividend: 'tokenDetail.actionDescriptions.dividend',
+    'bridge-settings': 'tokenDetail.actionDescriptions.bridgeSettings',
+};
 
 /**
- * The Actions tab's tiles for one coin or token: the per-asset basics
- * (Send, Receive, Exchange), the registry actions this asset kind allows,
- * History and the price alert, then the issuer's actions in their own
- * group. A gated action stays as a disabled tile with its reason, as the
- * quick-action row does; an action the shell does not wire is left out, as
- * the registry does.
+ * The Actions tab's rows for one coin or token: the per-asset basics
+ * (Send, Receive, Exchange), the registry actions this asset kind allows
+ * and the price alert, then the issuer's actions in their own group. A
+ * gated action stays as a disabled row with its reason; an action the shell
+ * does not wire is left out, as the registry does.
  */
 function buildAssetActionTiles({
     assetActions,
     isNative,
-    isTokenOwner,
     isSignerMode,
     isWatcherMode,
     tick,
@@ -1049,6 +1382,7 @@ function buildAssetActionTiles({
     core,
     tail,
     manage,
+    ownerGroupsShown = false,
 }) {
     const entries = isSignerMode || isNative || !assetActions
         ? []
@@ -1061,73 +1395,96 @@ function buildAssetActionTiles({
         else if (NEEDS_BALANCE_ACTION_IDS.has(entry.id) && atomicQuantity != null && atomicQuantity <= 0n) {
             reason = t('tokenDetail.actions.needsBalance', { tick });
         }
-        return { id: entry.id, label: entry.label, Icon: EntryIcon, onSelect: entry.onSelect, shortReason: reason };
+        const descriptionKey = ACTION_DESCRIPTION_KEYS[entry.id];
+        return {
+            id: entry.id,
+            label: entry.label,
+            description: descriptionKey ? t(descriptionKey, { tick }) : entry.description,
+            Icon: EntryIcon,
+            onSelect: entry.onSelect,
+            shortReason: reason,
+            danger: DANGER_ACTION_IDS.has(entry.id),
+        };
     };
-    const holder = entries.filter((e) => TOKEN_HOLDER_ACTION_IDS.has(e.id)).map(registryTile);
-    const owner = isTokenOwner
+    // With the issuer's groups on the page, an action they hold (Destroy,
+    // Dispenser, Airdrop, Mint, Lock, ...) is listed once, in its group; the
+    // registry's issuer actions the groups lack (Publish oracle price) join them.
+    const holder = entries
+        .filter((e) => TOKEN_HOLDER_ACTION_IDS.has(e.id))
+        .filter((e) => !ownerGroupsShown || !TOKEN_OWNER_GROUP_ACTION_IDS.has(e.id))
+        .map(registryTile);
+    const owner = !ownerGroupsShown
         ? entries.filter((e) => TOKEN_OWNER_ACTION_IDS.has(e.id)).map(registryTile)
+        : [];
+    const ownerExtra = ownerGroupsShown
+        ? entries
+            .filter((e) => TOKEN_OWNER_ACTION_IDS.has(e.id) && !REGISTRY_OWNER_IDS_IN_GROUPS.has(e.id))
+            .map(registryTile)
         : [];
     const main = [...core.filter(Boolean), ...holder, ...tail.filter(Boolean)];
     const ownerTiles = [manage, ...owner].filter(Boolean);
-    // One line per reason; registry tiles that share a short reason share it.
-    const reasons = [];
-    const shortGroups = new Map();
-    for (const tile of [...main, ...ownerTiles]) {
-        if (tile.reason) {
-            if (!reasons.some((r) => r.text === tile.reason)) reasons.push({ key: tile.id, text: tile.reason });
-        } else if (tile.shortReason) {
-            const labels = shortGroups.get(tile.shortReason) || [];
-            labels.push(tile.label);
-            shortGroups.set(tile.shortReason, labels);
-        }
-    }
-    for (const [reason, labels] of shortGroups) {
-        reasons.push({ key: reason, text: t('tokenDetail.actions.reason', { label: labels.join(', '), reason }) });
-    }
-    return { main, owner: ownerTiles, reasons };
+    return { main, owner: ownerTiles, ownerExtra };
 }
 
-function AssetActionTile({ tile, reasonId }) {
-    const TileIcon = tile.Icon || Icon.MoreIcon;
-    const blocked = Boolean(tile.reason || tile.shortReason || tile.disabled || typeof tile.onSelect !== 'function');
+// Registry issuer actions the issuer's groups already offer under their own
+// ids (lock is Lock settings, bridge-settings is Bridge).
+const REGISTRY_OWNER_IDS_IN_GROUPS = new Set(['mint', 'lock', 'description', 'transfer', 'dividend', 'bridge-settings']);
+
+function capitalize(text) {
+    const value = String(text || '');
+    return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+// A short reason ("needs a balance of X.") is a fragment; under a row's
+// title it stands alone, so it opens with a capital.
+function rowReason(tile) {
+    if (tile.reason) return tile.reason;
+    if (!tile.shortReason) return null;
+    return capitalize(tile.shortReason);
+}
+
+function AssetActionRow({ tile }) {
+    const RowIcon = tile.Icon || Icon.MoreIcon;
+    const reason = rowReason(tile);
+    const blocked = Boolean(reason || tile.disabled || typeof tile.onSelect !== 'function');
     return (
-        <QuickActionTile
-            square
+        <ActionListItem
             data-action-id={tile.id}
+            icon={<RowIcon />}
+            title={tile.label}
+            description={tile.description}
             onClick={tile.onSelect}
+            tone={tile.danger ? 'danger' : 'default'}
             disabled={blocked}
-            title={tile.reason || tile.shortReason || undefined}
-            aria-describedby={tile.reason || tile.shortReason ? reasonId : undefined}
-            aria-busy="false"
-            icon={<TileIcon />}
-        >
-            {tile.label}
-        </QuickActionTile>
+            disabledReason={reason || undefined}
+        />
     );
 }
 
-function AssetActionsPanel({ grid, tick }) {
-    const reasonId = useId();
-    if (grid.main.length === 0 && grid.owner.length === 0) {
+// The Actions tab (G101): one action list for everyone, then the issuer's
+// actions as lists under their own headings (one per group when the shell
+// wires the issuer's handlers).
+function AssetActionsPanel({ grid, tick, ownerGroups = null }) {
+    if (grid.main.length === 0 && grid.owner.length === 0 && !ownerGroups?.length) {
         return <p className={styles.muted}>{t('tokenDetail.actions.empty')}</p>;
     }
     return (
         <div className={styles.assetActions}>
-            <div className={styles.assetActionGrid} role="group" aria-label={t('tokenDetail.actions.label', { tick })}>
-                {grid.main.map((tile) => <AssetActionTile key={tile.id} tile={tile} reasonId={reasonId} />)}
-            </div>
+            {grid.main.length > 0 ? (
+                <ActionList label={t('tokenDetail.actions.label', { tick })}>
+                    {grid.main.map((tile) => <AssetActionRow key={tile.id} tile={tile} />)}
+                </ActionList>
+            ) : null}
             {grid.owner.length > 0 ? (
                 <section className={styles.assetActionOwner} aria-label={t('tokenDetail.actions.ownerHeading')}>
                     <SectionHeader title={t('tokenDetail.actions.ownerHeading')} />
-                    <div className={styles.assetActionGrid} role="group" aria-label={t('tokenDetail.actions.ownerHeading')}>
-                        {grid.owner.map((tile) => <AssetActionTile key={tile.id} tile={tile} reasonId={reasonId} />)}
-                    </div>
+                    <ActionList label={t('tokenDetail.actions.ownerHeading')}>
+                        {grid.owner.map((tile) => <AssetActionRow key={tile.id} tile={tile} />)}
+                    </ActionList>
                 </section>
             ) : null}
-            {grid.reasons.length > 0 ? (
-                <div id={reasonId} className={styles.assetActionReasons}>
-                    {grid.reasons.map((r) => <p key={r.key} className={styles.quickActionReason}>{r.text}</p>)}
-                </div>
+            {ownerGroups?.length ? (
+                <TokenOwnerActionGroups groups={ownerGroups} sectionClassName={styles.assetActionOwner} />
             ) : null}
         </div>
     );
@@ -1242,73 +1599,6 @@ function SupplyChart({ points, divisibility, tick }) {
     );
 }
 
-/**
- * Context-first price alert panel for a coin or token. More info reveals the
- * shared PriceAlertForm pinned to this asset and prefilled with the live price.
- * Renders nothing when the shell doesn't expose the price-alert routes.
- *
- * @param {object} props
- * @param {string} props.walletId
- * @param {string} props.chainId
- * @param {string} [props.tick]
- * @param {number | null} props.currentPrice
- * @param {string} props.fiatCurrency
- * @param {boolean} props.loading
- * @param {boolean} props.disabled
- */
-function NativePriceAlertEntry({ walletId, chainId, tick, currentPrice, fiatCurrency, loading, disabled }) {
-    const { supported, addAlert } = usePriceAlerts(walletId);
-    const [open, setOpen] = useState(true);
-    const [done, setDone] = useState(false);
-
-    if (!supported || !walletId) return null;
-
-    if (loading) {
-        return (
-            <div className={`${styles.infoCard} ${styles.priceAlertCard}`}>
-                <Skeleton height={28} ariaLabel="Loading price alert action" />
-            </div>
-        );
-    }
-
-    // Without a live price the market panel already states why; a second
-    // boxed note about the same missing data adds nothing, so the entry
-    // stays out until a price exists to prefill the alert.
-    if (disabled || currentPrice == null) return null;
-
-    const onCreate = async (input) => {
-        await addAlert(input);
-        setDone(true);
-        setOpen(false);
-    };
-
-    return (
-        <div className={`${styles.infoCard} ${styles.priceAlertCard}`}>
-            {open ? (
-                <PriceAlertForm
-                    onCreate={onCreate}
-                    walletId={walletId}
-                    fiatCurrency={fiatCurrency}
-                    lockedChainId={chainId}
-                    lockedTick={tick}
-                    allowCoingeckoFallback={false}
-                    currentPrice={currentPrice}
-                    onCancel={() => setOpen(false)}
-                />
-            ) : (
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={<Icon.BellIcon />}
-                    onClick={() => { setOpen(true); setDone(false); }}
-                >
-                    {done ? 'Price Alert Set ✓ · Add Another' : 'Set Price Alert'}
-                </Button>
-            )}
-        </div>
-    );
-}
-
 // Chart placeholder for real wallets: a price line is drawn only from real
 // history (wallet rule: never fabricate a number), so an absent series gets
 // this message instead of a synthesized walk.
@@ -1323,7 +1613,7 @@ const NO_PRICE_HISTORY = 'No price history yet';
  * then lazily request daily history for longer ranges. Demo wallets
  * synthesize every range without requesting history.
  */
-function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading, loadFailed = false }) {
+function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading, loadFailed = false, tokenSeriesFor = null, tokenSeriesLoading = false, tokenSeriesKind = 'balance', nativeBalanceChart = false, holdingSeriesFor = null }) {
     const [rangeId, setRangeId] = useState(defaultRangeId());
     const range = CHART_RANGES.find((item) => item.id === rangeId) || CHART_RANGES[0];
     // Once a daily range has been picked the daily request stays armed, so
@@ -1352,8 +1642,17 @@ function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick
     let note = null;
     let chartBusy = false;
     let showRanges = false;
+    let seriesKind = 'price';
 
-    if (isNative) {
+    if (isNative && nativeBalanceChart) {
+        // A coin on a test network has no price to ask for, so its hero draws
+        // the balance this wallet's own rows prove, as a token's does.
+        chartBusy = tokenSeriesLoading;
+        sparkline = chartBusy || typeof tokenSeriesFor !== 'function' ? null : tokenSeriesFor(range);
+        if (sparkline) seriesKind = 'balance';
+        showRanges = Boolean(sparkline);
+        if (!chartBusy && !sparkline) note = 'No market data available for this network.';
+    } else if (isNative) {
         const nativeLoading = nativePrice.loading
             || (!nativePrice.entry && !nativePrice.disabled && !nativePrice.error);
         const dailyHistoryLoading = wantsDailyHistory && range.source === 'daily' && (dailyNativePrice.loading
@@ -1454,16 +1753,52 @@ function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick
             hint = 'Market data is unavailable.';
         }
         chartBusy = loading;
-        if (!loading && !sparkline) {
+        showRanges = Boolean(sparkline) && isDemo;
+        // No price line: the hero draws the holding from this wallet's own
+        // rows, the balance (or its value at today's price) over the range.
+        if (!sparkline && typeof tokenSeriesFor === 'function') {
+            chartBusy = loading || tokenSeriesLoading;
+            sparkline = chartBusy ? null : tokenSeriesFor(range);
+            if (sparkline) seriesKind = tokenSeriesKind;
+            showRanges = Boolean(sparkline);
+        }
+        if (!chartBusy && !sparkline) {
             note = loadFailed ? (hint || 'Market data is unavailable.') : NO_PRICE_HISTORY;
         }
-        showRanges = Boolean(sparkline) && isDemo;
+    }
+
+    // Wide Home's panel: the holding's value line replaces the price or
+    // balance line once the prices it needs are in. A coin brings its own
+    // price entry (with the daily series this page loaded), so the panel's
+    // line reads the same prices the page shows. Without a price history the
+    // card says so instead of drawing a line.
+    let holding = false;
+    // A coin waits for its prices; a token's line needs nothing the page
+    // is still loading (its metadata only feeds the stats).
+    const holdingReady = isNative ? !chartBusy && !nativePrice.disabled : true;
+    if (typeof holdingSeriesFor === 'function' && holdingReady) {
+        const ownEntry = isNative && nativePrice.entry
+            ? (dailyNativePrice.entry
+                ? { ...nativePrice.entry, historyDaily: dailyNativePrice.entry.historyDaily ?? null }
+                : nativePrice.entry)
+            : null;
+        const result = holdingSeriesFor(range, ownEntry);
+        if (result) {
+            holding = true;
+            chartBusy = false;
+            sparkline = result.series;
+            seriesKind = 'value';
+            note = result.series ? null : NO_PRICE_HISTORY;
+            showRanges = Boolean(result.series) || (isNative && showRanges);
+        }
     }
 
     return {
         range,
         setRangeId,
         sparkline,
+        seriesKind,
+        holding,
         chartBusy,
         showRanges,
         note,
@@ -1477,14 +1812,29 @@ function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick
  * buttons sit along the card's foot. Privacy mode hides the line and the
  * buttons but keeps their room.
  */
-function MarketPanel({ market, hidden }) {
+function MarketPanel({ market, hidden, showFiat, fiatValue, coinValue, unitPrice, currency, unit, locale }) {
     const panelId = useId();
-    const { range, setRangeId, sparkline, chartBusy, showRanges } = market;
+    const { range, setRangeId, sparkline, chartBusy, showRanges, seriesKind = 'price', holding = false, note = null } = market;
+    const displaySeries = useMemo(
+        () => marketSeriesInHeroUnit(sparkline, seriesKind, {
+            showFiat, fiatValue, coinValue, unitPrice,
+        }),
+        [sparkline, seriesKind, showFiat, fiatValue, coinValue, unitPrice],
+    );
+    const formatChartAmount = (value) => formatCompactChartValue(value, showFiat
+        ? { locale, currency }
+        : { locale, unit });
+    // Wide Home's holding line: with no price history the card says so where
+    // the line would be.
+    const holdingNote = holding && !sparkline && !chartBusy && !hidden ? note : null;
     return (
         <section
             className={`${portfolioChartStyles.wrap} ${portfolioChartStyles.behind}${hidden ? ` ${portfolioChartStyles.behindHidden}` : ''}`}
             data-chart-behind="true"
-            aria-label="Price chart"
+            data-series-kind={seriesKind}
+            aria-label={seriesKind === 'balance'
+                ? t('tokenDetail.chart.balance')
+                : seriesKind === 'value' ? t('tokenDetail.chart.value') : t('tokenDetail.chart.price')}
             aria-busy={chartBusy || undefined}
         >
             <div
@@ -1493,15 +1843,24 @@ function MarketPanel({ market, hidden }) {
                 aria-labelledby={`${panelId}-tab-${range.id}`}
             >
                 <div className={portfolioChartStyles.slot}>
-                    {sparkline && !chartBusy ? (
+                    {/* A balance or value line is the holding itself, so privacy
+                        mode leaves it out of the page, not only out of sight. */}
+                    {sparkline && !chartBusy && !(hidden && seriesKind !== 'price') ? (
                         <div className={portfolioChartStyles.chart}>
                             <Sparkline
-                                series={sparkline}
+                                series={displaySeries || sparkline}
                                 height="100%"
                                 strokeColor={BEHIND_CHART_STROKE}
                                 areaFill={BEHIND_CHART_FILL}
                                 edgeToEdge
                                 rangeLabel={range.label}
+                                formatValue={displaySeries ? formatChartAmount : undefined}
+                                formatScaleValue={formatChartAmount}
+                                showScale={Boolean(displaySeries)}
+                                heroScale
+                                {...(seriesKind === 'balance'
+                                    ? { label: t('tokenDetail.chart.balanceTrend') }
+                                    : seriesKind === 'value' ? { label: t('tokenDetail.chart.valueTrend') } : {})}
                             />
                         </div>
                     ) : null}
@@ -1509,15 +1868,45 @@ function MarketPanel({ market, hidden }) {
             </div>
             {/* With no history to switch between, the buttons keep their
                 room unseen so the card holds one height. */}
-            <ChartRangeTabs
-                panelId={panelId}
-                ranges={CHART_RANGES}
-                rangeId={range.id}
-                onSelect={setRangeId}
-                className={showRanges ? '' : styles.rangesIdle}
-            />
+            <div className={portfolioChartStyles.foot}>
+                {holdingNote ? (
+                    <div className={portfolioChartStyles.tokenNote} data-chart-note="no-price-history">{holdingNote}</div>
+                ) : null}
+                <ChartRangeTabs
+                    panelId={panelId}
+                    ranges={CHART_RANGES}
+                    rangeId={range.id}
+                    onSelect={setRangeId}
+                    className={showRanges ? '' : styles.rangesIdle}
+                />
+            </div>
         </section>
     );
+}
+
+// Keep the chart's shape while expressing its scale in the balance hero's
+// current unit. Price lines are rebased to the current holding, value lines
+// convert through the current unit price, and balance lines use that price
+// only while fiat is selected.
+function marketSeriesInHeroUnit(series, seriesKind, { showFiat, fiatValue, coinValue, unitPrice }) {
+    if (!Array.isArray(series) || series.length === 0) return null;
+    if (seriesKind === 'price') {
+        const last = series[series.length - 1];
+        const target = showFiat ? fiatValue : coinValue;
+        if (!(last > 0) || !Number.isFinite(target)) return null;
+        return series.map((value) => (value / last) * target);
+    }
+    if (seriesKind === 'balance') {
+        if (!showFiat) return series;
+        if (!(unitPrice > 0)) return null;
+        return series.map((value) => value * unitPrice);
+    }
+    if (seriesKind === 'value') {
+        if (showFiat) return series;
+        if (!(unitPrice > 0)) return null;
+        return series.map((value) => value / unitPrice);
+    }
+    return null;
 }
 
 function DetailsPanel({
@@ -1535,6 +1924,7 @@ function DetailsPanel({
     fiatCurrency,
     marketRows = null,
     linkRows = [],
+    extraRows = [],
 }) {
     const [balanceHidden] = useBalancesHidden();
     return (
@@ -1623,6 +2013,13 @@ function DetailsPanel({
                         )}
                     </DetailRow>
                 ) : null}
+                {/* The issuer's facts (supply cap, lock states, pause state,
+                    creation block) in the same card, before the link rows. */}
+                {extraRows.map((row) => (
+                    <li key={row.id} data-detail-id={row.id}>
+                        <ListRow className={styles.detailRow} title={row.label} trailing={row.value} />
+                    </li>
+                ))}
                 {linkRows.map(({ id, label, onSelect, pressed }) => (
                     <li key={id}>
                         <ListRow
@@ -1851,27 +2248,14 @@ function MediaPanel({ isNative, assetInfo, loading }) {
     }
     return (
         <div className={styles.mediaPanel}>
-            <div className={styles.subtabs} role="tablist" aria-label="Token media">
-                {subtabs.map((t) => (
-                    // A native button preserves tab semantics and roving tab focus, which Button does not provide.
-                    <button
-                        key={t.id}
-                        id={`${tabsId}-tab-${t.id}`}
-                        type="button"
-                        role="tab"
-                        aria-selected={selectedSubtab === t.id ? 'true' : 'false'}
-                        aria-controls={`${tabsId}-panel`}
-                        tabIndex={selectedSubtab === t.id ? 0 : -1}
-                        className={`${styles.subtab} ${selectedSubtab === t.id ? styles.subtabActive : ''}`}
-                        onClick={() => setActiveSubtab(t.id)}
-                    >
-                        <span className={homeTabsStyles.tabWithIcon}>
-                            <span className={homeTabsStyles.tabIcon} aria-hidden="true">{t.icon}</span>
-                            {t.label}
-                        </span>
-                    </button>
-                ))}
-            </div>
+            <Tabs
+                id={tabsId}
+                aria-label="Token media"
+                items={subtabs}
+                value={selectedSubtab}
+                onChange={setActiveSubtab}
+                panelId={`${tabsId}-panel`}
+            />
             <div
                 id={`${tabsId}-panel`}
                 role="tabpanel"
@@ -2351,7 +2735,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
     }, [addresses, addressesLoading, messaging, walletId, chainId]);
 
     if (loading) return <p className={styles.muted}>Loading gated content…</p>;
-    if (error) return <StatusMessage variant="error" className={styles.error}>{error}</StatusMessage>;
+    if (error) return <Notice tone="danger">{error}</Notice>;
     if (!groups || groups.length === 0) {
         return (
             <EmptyState
@@ -2420,6 +2804,7 @@ function GatedGroupCard({
     tokenLabel,
 }) {
     const [password, setPassword] = useState('');
+    const unlockErrors = useFormErrors();
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
     const [accessError, setAccessError] = useState(/** @type {string | null} */ (null));
     const [submitting, setSubmitting] = useState(false);
@@ -2567,15 +2952,19 @@ function GatedGroupCard({
         setPendingFile(null);
         setPassword('');
         setUnlockError(null);
+        unlockErrors.reset();
     }
 
     async function handleUnlock(event) {
         event.preventDefault();
-        if (submitting || password.length === 0) return;
-        if (!Array.isArray(addresses) || addresses.length === 0) {
-            setUnlockError('No usable holding address found for this network.');
+        if (submitting) return;
+        if (!Array.isArray(addresses) || addresses.length === 0) return;
+        if (password.length === 0) {
+            setUnlockError(null);
+            unlockErrors.validate({ 'gated-file-password': 'Enter your wallet password.' });
             return;
         }
+        unlockErrors.reset();
         setSubmitting(true);
         setUnlockError(null);
         try {
@@ -2731,34 +3120,33 @@ function GatedGroupCard({
             <StatusMessage variant="error">{accessError}</StatusMessage>
             {passwordOpen ? (
                 <form onSubmit={handleUnlock} noValidate style={{ marginTop: 'var(--xc-space-3)' }}>
+                    <FormErrorSummary form={unlockErrors} />
                     {addressesLoading ? (
                         <p className={styles.muted}>Loading addresses…</p>
                     ) : addressesError ? (
-                        <StatusMessage variant="error" className={styles.error}>{addressesError}</StatusMessage>
+                        <Notice tone="danger">{addressesError}</Notice>
                     ) : null}
                     <Input
                         ref={passwordRef}
+                        id="gated-file-password"
                         type="password"
                         label="Wallet password"
+                        help="The password that unlocks this wallet on this device. Your address key then decrypts the gated files this token opens."
                         value={password}
                         onChange={(e) => {
                             setPassword(e.target.value);
+                            unlockErrors.clear('gated-file-password');
                             if (unlockError) setUnlockError(null);
                         }}
                         autoComplete="current-password"
-                        error={unlockError || undefined}
+                        error={unlockError || unlockErrors.errorFor('gated-file-password') || undefined}
                     />
                     <div style={{ display: 'flex', gap: 'var(--xc-space-2)', marginTop: 'var(--xc-space-2)' }}>
                         <Button
                             type="submit"
                             variant="primary"
                             loading={submitting}
-                            disabled={
-                                submitting
-                                || password.length === 0
-                                || !Array.isArray(addresses)
-                                || addresses.length === 0
-                            }
+                            aria-disabled={!Array.isArray(addresses) || addresses.length === 0 ? 'true' : undefined}
                         >
                             Open File
                         </Button>
@@ -2840,7 +3228,7 @@ function HoldersPanel({
         : HOLDER_WINDOW_SIZE;
 
     if (holdersLoading) return <p className={styles.muted}>Loading holders…</p>;
-    if (holdersError) return <StatusMessage variant="error" className={styles.error}>{holdersError}</StatusMessage>;
+    if (holdersError) return <Notice tone="danger">{holdersError}</Notice>;
     if (!holders || holders.length === 0) {
         return <EmptyState title="No holders yet" body="Mint or distribute supply to populate this list." titleAs="p" />;
     }
@@ -2897,7 +3285,7 @@ function HoldersPanel({
                 })}
             </ul>
             {holdersMoreError ? (
-                <StatusMessage variant="error" className={styles.error}>{holdersMoreError}</StatusMessage>
+                <Notice tone="danger">{holdersMoreError}</Notice>
             ) : null}
             {visibleHolderCount < holders.length ? (
                 <Button type="button" variant="secondary" icon={<Icon.ChevronDownIcon />} onClick={showMoreLoadedHolders}>

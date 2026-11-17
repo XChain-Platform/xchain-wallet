@@ -30,8 +30,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useOwnerActionLane.js', () => (
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
-import { ListRenameForm } from '../../../packages/core/src/shared/routes/ListRenameForm.jsx';
-import { ListShareForm } from '../../../packages/core/src/shared/routes/ListShareForm.jsx';
+import { ListEditRoute as ListRenameForm, ListShareRoute as ListShareForm } from '../../helpers/listFormRoutes.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -104,7 +103,8 @@ describe('watcher-mode hint and button source contract', () => {
     const read = (name) => fs.readFileSync(path.join(dir, name + '.jsx'), 'utf8');
     const WITH_HINT = [
         'AddressPreferencesForm', 'CrossChainSwapForm', 'DispenserForm', 'LinkForm',
-        'ListCreateForm', 'ListForkForm', 'SellOwnershipForm', 'SwapForm',
+        // ListCreateForm is the one List form (Create, Edit, Share, Transfer, Fork).
+        'ListCreateForm', 'SellOwnershipForm', 'SwapForm',
     ];
 
     it.each(WITH_HINT)('%s shows the shared offline-signer hint and no bespoke paragraph', (name) => {
@@ -113,16 +113,16 @@ describe('watcher-mode hint and button source contract', () => {
         expect(src).not.toMatch(/Watcher mode: this (wallet will build|builds)/);
     });
 
-    it('GatedPublishForm and PublishFileForm name the offline signer in their own hint', () => {
+    it('GatedPublishForm and PublishFileForm name the phone that signs in their own hint', () => {
         expect(read('GatedPublishForm')).toContain("t('gatedPublish.watcherHint')");
         expect(read('BatchComposerForm')).toContain("t('common.watcherBuildsUnsigned')");
-        // PublishFileForm uses the shared hint, whose copy names the offline signer.
+        // PublishFileForm uses the shared hint, whose copy names the phone that signs.
         expect(read('PublishFileForm')).toContain("t('common.watcherBuildsUnsigned')");
         const common = fs.readFileSync(
             path.resolve(__dirname, '../../../packages/core/src/i18n/locales/en/common.js'),
             'utf8',
         );
-        expect(common).toMatch(/'common\.watcherBuildsUnsigned':\s*'Watcher mode: this prepares the transaction for your offline signer/);
+        expect(common).toMatch(/'common\.watcherBuildsUnsigned':\s*'Another phone signs for this wallet: this prepares the transaction for it/);
         expect(read('PublishFileForm')).not.toMatch(/Watcher mode: this (wallet will build|builds)/);
     });
 
@@ -133,14 +133,10 @@ describe('watcher-mode hint and button source contract', () => {
         CrossChainSwapForm: 'Create Cross-Chain Swap',
         GatedPublishForm: "t('palette.createPublishFile.title')",
         ListCreateForm: 'Publish List',
-        ListForkForm: 'Publish Edit',
-        ListRenameForm: 'Rename List',
-        ListShareForm: 'Share List',
-        ListTransferForm: 'Transfer List',
         PublishFileForm: 'Publish File',
-        SellOwnershipForm: 'List Name for Sale',
+        // Renamed Sell Ownership everywhere a user sees it (operator 2026-11-15).
+        SellOwnershipForm: 'List Ownership for Sale',
         SwapForm: 'Create Swap',
-        UnionListForm: 'Create Union List',
     };
 
     it.each(Object.entries(LABELS))('%s compose button reads %s outside watcher mode', (name, label) => {
@@ -148,5 +144,10 @@ describe('watcher-mode hint and button source contract', () => {
         expect(src).toContain(label);
         expect(src).not.toMatch(/singleEncode \? '[^']+' : '(Review|Preview)[^']*'/);
         expect(src).not.toMatch(/isWatcherMode \? '[^']+' : '(Review|Preview)[^']*'/);
+    });
+
+    // The List form's other actions read their labels from its action table.
+    it.each(['Publish Edit', 'Share List', 'Transfer List'])('ListCreateForm list action label reads %s', (label) => {
+        expect(read('ListCreateForm')).toContain(`actionLabel: '${label}'`);
     });
 });

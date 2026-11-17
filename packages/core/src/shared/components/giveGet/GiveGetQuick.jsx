@@ -10,7 +10,8 @@
 
 import { registry as registryLib } from '../../../index.js';
 import { InfoTip } from '../../../ui/InfoTip.jsx';
-import { BookIcon, ChevronDownIcon, FilterIcon, KeyIcon, SwapIcon } from '../../../ui/icons/index.jsx';
+import { FieldIconButton } from '../../../ui/FieldIconButton.jsx';
+import { BookIcon, ChevronDownIcon, FilterIcon, KeyIcon, MaxIcon, SwapIcon } from '../../../ui/icons/index.jsx';
 import { TickerIcon } from '../TickerIcon.jsx';
 import { GiveGetSection, GiveGetStaticSection } from './GiveGetSection.jsx';
 import { t } from '../../../i18n/index.js';
@@ -37,11 +38,12 @@ import styles from './GiveGet.module.css';
  * @property {(raw: string) => void} onAmountChange
  * @property {string} amountLabel                  accessible field name, e.g. 'Give amount'
  * @property {boolean} [ownership]                 ownership mode: the amount gives way to the name
- * @property {import('react').ReactNode} [ownershipHint]
+ * @property {string} [ownershipHint]             static note for ownership mode; it joins the card's '?' tip, never a line (U57)
  * @property {import('react').ReactNode} [balanceText]
  * @property {() => void} [onMax]                  omit for no Max button (get side)
  * @property {boolean} [maxDisabled]
- * @property {import('react').ReactNode} [footNote] left foot text (fiat preview, per-fill note)
+ * @property {import('react').ReactNode} [footNote] left foot text, live or state-dependent only (a fiat preview);
+ *   static explanations belong in `help`, the card's '?' tip (U57)
  * @property {import('react').ReactNode} [address] a QuickAddressRow (From, Receive at)
  * @property {import('react').ReactNode} [extra]   anything else the form needs inside the card
  * @property {boolean} [disabled]
@@ -119,11 +121,17 @@ function QuickSideCard({ side, fallbackLabel }) {
         ? `${side.assetLabel}: ${tick}${chainName ? ` on ${chainName}` : ''}`
         : `${side.assetLabel}: ${side.assetPlaceholder || t('components.tokenField.selectAToken')}`; // Per-form placeholder (Asset pickers say Select an asset).
     const amountName = tick ? `${side.amountLabel} (${tick})` : side.amountLabel;
+    // The ownership note is static help, so it joins the '?' tip instead of
+    // sitting as a loose line under the card (U57).
+    const ownershipNote = side.ownership && side.ownershipHint ? side.ownershipHint : null;
+    const tip = ownershipNote
+        ? (side.help ? <>{side.help} {ownershipNote}</> : ownershipNote)
+        : side.help;
     return (
         <section className={styles.card} aria-label={label}>
             <div className={styles.cardTop}>
                 <span className={styles.cardLabel}>{label}</span>
-                {side.help ? <InfoTip label={side.help} aria={t('ui.field.about', { label })} /> : null}
+                {tip ? <InfoTip label={tip} aria={t('ui.field.about', { label })} /> : null}
                 {/* The asset decides the network, so the card shows no network
                     control or name; the token icon's chain badge is the only cue. */}
                 <span className={styles.spacer} />
@@ -139,6 +147,7 @@ function QuickSideCard({ side, fallbackLabel }) {
                         className={styles.bigAmount}
                         type="text"
                         inputMode="decimal"
+                        enterKeyHint="done"
                         autoComplete="off"
                         autoCorrect="off"
                         spellCheck={false}
@@ -169,22 +178,18 @@ function QuickSideCard({ side, fallbackLabel }) {
                     <span className={styles.chipCaret} aria-hidden="true"><ChevronDownIcon /></span>
                 </button>
             </div>
-            {side.ownership ? (
-                side.ownershipHint ? <div className={styles.cardFoot}>{side.ownershipHint}</div> : null
-            ) : (side.footNote || side.balanceText || side.onMax) ? (
+            {side.ownership ? null : (side.footNote || side.balanceText || side.onMax) ? (
                 <div className={styles.cardFoot}>
                     {side.footNote ? <span>{side.footNote}</span> : null}
                     {side.balanceText ? <span className={styles.balance}>{side.balanceText}</span> : <span className={styles.spacer} />}
+                    {/* Max is the same bare icon every amount field uses. */}
                     {side.onMax !== undefined ? (
-                        <button
-                            type="button"
-                            className={styles.maxPill}
+                        <FieldIconButton
+                            icon={<MaxIcon />}
+                            label={t('components.giveGet.maxAmount', { label: label.toLowerCase() })}
                             onClick={side.onMax || undefined}
                             disabled={side.disabled || side.maxDisabled || !side.onMax}
-                            aria-label={t('components.giveGet.maxAmount', { label: label.toLowerCase() })}
-                        >
-                            {t('components.amountField.max')}
-                        </button>
+                        />
                     ) : null}
                 </div>
             ) : null}

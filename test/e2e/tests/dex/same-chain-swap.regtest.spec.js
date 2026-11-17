@@ -124,7 +124,7 @@ test.describe(`same-chain SWAP on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('button', { name: 'Swap', exact: true }).click();
 
             await expectConfirmModal(page, 'the same-chain SWAP');
-            await expect(page.getByTestId('action-intent'))
+            await expect(page.getByTestId('confirm-sentence'))
                 .toContainText(`give ${GIVE_AMOUNT} ${GIVE_TICK} for ${GET_AMOUNT} XCHAIN`);
             swapTxid = await approveAndReadTxid(page, 'the same-chain SWAP');
             await expect(main).toContainText('Swap sent');

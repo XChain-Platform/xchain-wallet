@@ -141,9 +141,9 @@ describe('makeLedgerFactory', () => {
             expect(result.pairingInfo.model).toBe('nanoSP');
         });
 
-        it('defaults model to nanoX for unknown deviceModel', async () => {
+        it('stores the neutral unknown model for an unknown deviceModel', async () => {
             const result = await pairWithMocks({ modelId: 'unknownModel' });
-            expect(result.pairingInfo.model).toBe('nanoX');
+            expect(result.pairingInfo.model).toBe('unknown');
         });
     });
 
@@ -184,9 +184,6 @@ describe('makeLedgerFactory', () => {
             await expect(pair()).rejects.toThrow('app name');
         });
 
-        // The Test app answers app-info fine and then rejects the coin-type 0'
-        // identity path with a bare 0x6a82. Name the cause at pair time
-        // instead of surfacing the device's error code.
         // The signer this factory returns is the exact instance the shells
         // register with signerBridge, and signPsbt needs an SDKRegistry. No
         // shell passes one today, so hardware PSBT signing fails with
@@ -216,15 +213,29 @@ describe('makeLedgerFactory', () => {
                 .rejects.toThrow(/requires an sdkRegistry/);
         });
 
-        it('names the Bitcoin Test app rather than failing on the identity xpub', async () => {
-            const app = makeValidApp();
-            const pair = makeLedgerFactory({
-                getTransport: vi.fn().mockResolvedValue(makeValidTransport({ name: 'Bitcoin Test', version: '2.5.0' })),
-                getAppClass: vi.fn().mockResolvedValue(function Btc() { return app; }),
+        // Every coin app answers only its own coin type, and this same call
+        // reopens the device before a sign that needs that app, so each
+        // supported app pairs, reading the identifier at its own coin type.
+        for (const [appName, currency, path] of [
+            ['Bitcoin', 'bitcoin', "m/44'/0'/0'"],
+            ['Bitcoin Test', 'bitcoin_testnet', "m/44'/1'/0'"],
+            ['Litecoin', 'litecoin', "m/44'/2'/0'"],
+            ['Dogecoin', 'dogecoin', "m/44'/3'/0'"],
+        ]) {
+            it(`pairs with the ${appName} app open, reading the identifier at ${path}`, async () => {
+                const app = makeValidApp();
+                const Btc = vi.fn(function Btc() { return app; });
+                const pair = makeLedgerFactory({
+                    getTransport: vi.fn().mockResolvedValue(makeValidTransport({ name: appName, version: '2.5.0' })),
+                    getAppClass: vi.fn().mockResolvedValue(Btc),
+                });
+                const { pairingInfo } = await pair();
+                expect(Btc.mock.calls[0][0].currency).toBe(currency);
+                expect(app.getWalletPublicKey).toHaveBeenCalledWith(path, { verify: false });
+                expect(pairingInfo.appName).toBe(appName);
+                expect(pairingInfo.chainIds.length).toBeGreaterThan(0);
             });
-            await expect(pair()).rejects.toThrow(/Open the Bitcoin app/);
-            expect(app.getWalletPublicKey).not.toHaveBeenCalled();
-        });
+        }
 
         it('names any non-Bitcoin app before reading the identity xpub', async () => {
             const app = makeValidApp();

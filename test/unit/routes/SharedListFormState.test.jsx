@@ -22,7 +22,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { SharedListDirectory } from '../../../packages/core/src/shared/routes/SharedListDirectory.jsx';
 import { SignerSelectForm } from '../../../packages/core/src/shared/routes/SignerSelectForm.jsx';
-import { UnionListForm } from '../../../packages/core/src/shared/routes/UnionListForm.jsx';
+import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = Object.freeze({
@@ -85,6 +85,8 @@ describe('shared list route state boundaries', () => {
         expect(screen.getAllByRole('listitem')).toHaveLength(40);
 
         const loadMore = screen.getByRole('button', { name: 'Load More' });
+        // The search sits in the title bar filter panel.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter shared lists' }));
         await act(async () => {
             fireEvent.change(screen.getByLabelText('Search shared lists'), { target: { value: 'BTC' } });
             fireEvent.click(loadMore);
@@ -188,7 +190,7 @@ describe('shared list route state boundaries', () => {
         });
         render(
             <MessagingProvider shell="web" messaging={messaging}>
-                <UnionListForm walletId="wallet-1" chainId={CHAIN} onBack={() => {}} />
+                <ListCreateForm initialType="3" walletId="wallet-1" chainId={CHAIN} onBack={() => {}} />
             </MessagingProvider>,
         );
 
@@ -197,8 +199,10 @@ describe('shared list route state boundaries', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Build Another' }));
 
-        expect(screen.getByRole('checkbox', { name: 'Token list #101' })).not.toBeChecked();
-        expect(screen.getByLabelText('Memo')).toHaveValue('');
+        // The fresh form remounts the shared Advanced section, whose change
+        // address reads settings asynchronously; wait for it to settle.
+        expect(await screen.findByRole('checkbox', { name: 'Token list #101' })).not.toBeChecked();
+        await waitFor(() => expect(screen.getByLabelText('Memo')).toHaveValue(''));
     });
 
     it('surfaces a synchronous union address failure through the load error', async () => {
@@ -214,7 +218,7 @@ describe('shared list route state boundaries', () => {
         });
         render(
             <MessagingProvider shell="web" messaging={messaging}>
-                <UnionListForm walletId="wallet-1" chainId={CHAIN} onBack={() => {}} />
+                <ListCreateForm initialType="3" walletId="wallet-1" chainId={CHAIN} onBack={() => {}} />
             </MessagingProvider>,
         );
 
@@ -237,7 +241,8 @@ describe('shared list route state boundaries', () => {
                 <SignerSelectForm walletId="wallet-1" value="signer-old" onChange={onChange} />
             </MessagingProvider>,
         );
-        expect(await screen.findByRole('radio', { name: /Old signer/ })).toBeChecked();
+        // The signer dropdown's trigger names the chosen signer.
+        expect(await screen.findByRole('button', { name: /^Sign with: Old signer/ })).toBeTruthy();
         onChange.mockClear();
 
         view.rerender(
@@ -249,7 +254,7 @@ describe('shared list route state boundaries', () => {
         expect(onChange).not.toHaveBeenCalled();
 
         await act(async () => { resolveNewSigners([NEW_SIGNER]); });
-        expect(await screen.findByRole('radio', { name: /New signer/ })).toBeChecked();
+        expect(await screen.findByRole('button', { name: /^Sign with: New signer/ })).toBeTruthy();
         expect(onChange).not.toHaveBeenCalled();
     });
 

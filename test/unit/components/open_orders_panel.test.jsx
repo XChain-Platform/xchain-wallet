@@ -209,10 +209,10 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         await act(async () => newWallet.resolve([{
             id: 'new-consent', orderActionIndex: 17, autopay: true,
         }]));
-        expect(await screen.findByText('Auto-pay on')).toBeInTheDocument();
+        expect(await screen.findByText('Auto pay on')).toBeInTheDocument();
 
         await act(async () => oldWallet.resolve([]));
-        expect(screen.getByText('Auto-pay on')).toBeInTheDocument();
+        expect(screen.getByText('Auto pay on')).toBeInTheDocument();
     });
 
     it('exposes immediate auto-pay changes as a switch', async () => {
@@ -224,7 +224,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
             setAutopayEnabled,
         });
 
-        const toggle = await screen.findByRole('switch', { name: 'Auto-pay on' });
+        const toggle = await screen.findByRole('switch', { name: 'Auto pay on' });
         expect(toggle).toBeChecked();
         fireEvent.click(toggle);
 
@@ -289,7 +289,7 @@ describe('OpenOrdersPanel cancellation confirmation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Cancel Order' }));
 
         expect(await screen.findByLabelText('Confirm Cancel order (#17)')).toBeTruthy();
-        expect(screen.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent('0.00001234 BTC');
         expect(lane.hook).toHaveBeenLastCalledWith(expect.objectContaining({
             walletId: 'wallet-1',
             chainId: 'bitcoin-mainnet',

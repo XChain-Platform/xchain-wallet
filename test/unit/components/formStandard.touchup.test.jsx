@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The Wallet Form Standard touch-up props (FromSection disabled and
-// network label, no picker icon without a picker; FormSection main, tag and
+// network label, a locked picker icon without a picker; FormSection main, tag and
 // count; FeeSection fixed-fee mode; FormAction type="button" in the success
 // style; NetworkField notSource; RadioGroup option icons).
 
@@ -54,12 +54,14 @@ describe('FromSection touch-up props', () => {
         expect(screen.getByRole('button', { name: 'Choose source address' })).toBeDisabled();
     });
 
-    it('shows no address-book icon when the host has no picker', () => {
+    it('shows the picker icon locked when the host has no picker', () => {
         render(
             <FromSection defaultOpen chainId={CHAIN} chainRegistry={registry} lockNetwork address={ADDRESS} />,
         );
         expect(screen.getByLabelText('From address')).toHaveValue(ADDRESS);
-        expect(screen.queryByRole('button', { name: /address/i })).toBeNull();
+        const picker = screen.getByRole('button', { name: 'Choose address' });
+        expect(picker).toHaveAttribute('aria-disabled', 'true');
+        expect(picker).toHaveAttribute('title', 'This action signs from this address only');
     });
 });
 
@@ -82,9 +84,12 @@ describe('FormSection touch-up props', () => {
         const { container } = render(
             <FormSection id="memo" title="Memo" summary="None" count="12 / 250"><p>body</p></FormSection>,
         );
-        expect(container.querySelector('[data-section-count]')).toBeNull();
+        // Closed, the count stays mounted but hidden (a field may name it in
+        // aria-describedby).
+        expect(container.querySelector('[data-section-count]')).toHaveAttribute('hidden');
         expect(container.querySelector('[data-section-summary]')).toHaveTextContent('None');
         fireEvent.click(screen.getByRole('button', { name: /^Memo/ }));
+        expect(container.querySelector('[data-section-count]')).not.toHaveAttribute('hidden');
         expect(container.querySelector('[data-section-count]')).toHaveTextContent('12 / 250');
         expect(container.querySelector('[data-section-summary]')).toBeNull();
     });
@@ -108,12 +113,12 @@ describe('FormSection touch-up props', () => {
 describe('FeeSection fixed-fee mode', () => {
     it('shows the fee figure with no speed picker', () => {
         const { container } = render(
-            <FeeSection defaultOpen chainId={CHAIN} coinTicker="BTC" fixedFee="0.00001410" etaMinutes={30} />,
+            <FeeSection defaultOpen chainId={CHAIN} coinTicker="BTC" fixedFee="0.00001410" />,
         );
         expect(screen.queryByRole('slider')).toBeNull();
-        expect(container.querySelector('[data-fees-row="network"]')).toHaveTextContent('0.00001410 BTC');
-        fireEvent.click(screen.getByRole('button', { name: /^Network fee/ }));
-        expect(container.querySelector('[data-section-summary]')).toHaveTextContent('Normal, ~30 min, 0.0000141 BTC');
+        expect(container.querySelector('[data-fees-row="network"]')).toHaveTextContent(/^Network fee.*0\.0000141 BTC$/);
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/ }));
+        expect(container.querySelector('[data-section-summary]')).toHaveTextContent(/^Normal · 0\.0000141 BTC$/);
     });
 });
 

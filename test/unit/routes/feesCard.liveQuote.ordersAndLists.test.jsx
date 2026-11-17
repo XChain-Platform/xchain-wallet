@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -12,8 +12,7 @@ import { CallbackForm } from '../../../packages/core/src/shared/routes/CallbackF
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
 import { CrossChainOrderForm } from '../../../packages/core/src/shared/routes/CrossChainOrderForm.jsx';
 import { SweepForm } from '../../../packages/core/src/shared/routes/SweepForm.jsx';
-import { ListRenameForm } from '../../../packages/core/src/shared/routes/ListRenameForm.jsx';
-import { ListShareForm } from '../../../packages/core/src/shared/routes/ListShareForm.jsx';
+import { ListEditRoute as ListRenameForm, ListShareRoute as ListShareForm } from '../../helpers/listFormRoutes.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
 import { PlaceOrderPanel } from '../../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
@@ -171,8 +170,11 @@ async function expectLiveQuote(messaging, actionData, chainId = BTC, source = SO
         source,
         actionData,
     }), { timeout: 2500 });
-    expect(await screen.findByText('0.064 XCHAIN')).toBeInTheDocument();
-    expect(screen.getByText(/\+ 0\.064 XCHAIN/)).toBeInTheDocument();
+    // The Speed and Fees section's Protocol fee line shows the live quote; the
+    // Total lives on the confirm screen, never in the form.
+    await waitFor(() => expect(document.querySelector('[data-fees-row="protocol"]'))
+        .toHaveTextContent('0.064 XCHAIN'), { timeout: 3000 });
+    expect(document.querySelector('[data-fees-row="total"]')).toBeNull();
 }
 
 describe('Fees card live quotes for orders and lists', () => {
@@ -318,7 +320,7 @@ describe('Fees card live quotes for orders and lists', () => {
             messaging,
         );
 
-        await screen.findByLabelText('Type SHARE to confirm');
+        await screen.findByRole('button', { name: /^Share list$/i });
         await expectLiveQuote(messaging, {
             action: 'LIST',
             params: { VERSION: '2', LIST_ACTION_INDEX: '2700', MEMO: '' },
@@ -337,10 +339,14 @@ describe('Fees card live quotes for orders and lists', () => {
             messaging,
         );
 
-        // The market page opens on Details; betting is the Bet tab.
+        // Betting is the Bet tab: its outcome list (one row per outcome), where
+        // tapping a row opens the Place Bet step with that outcome, and the
+        // stake is there.
         fireEvent.click(await screen.findByRole('tab', { name: /^Bet/ }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Home' }));
-        fireEvent.change(screen.getByLabelText('Stake (XCHAIN)'), { target: { value: '5' } });
+        const home = await screen.findByRole('button', { name: /^Bet on Home,/ });
+        await waitFor(() => expect(home).toBeEnabled());
+        fireEvent.click(home);
+        fireEvent.change(await screen.findByLabelText('Stake (XCHAIN)'), { target: { value: '5' } });
 
         await expectLiveQuote(messaging, {
             action: 'BET',
@@ -351,6 +357,12 @@ describe('Fees card live quotes for orders and lists', () => {
     });
 
     it('quotes PlaceOrderPanel and review composes the exact quoted action data', async () => {
+        // A preset expiration resolves from the clock on every render (a panel
+        // left open still places a full-length order), so the clock is held
+        // still: a second boundary between quote and compose must not make
+        // EXPIRATION differ by one.
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now());
+        onTestFinished(() => clock.mockRestore());
         const messaging = makeMessaging();
         mount(
             <PlaceOrderPanel
@@ -374,8 +386,9 @@ describe('Fees card live quotes for orders and lists', () => {
                 GIVE_TICK: '', GIVE_AMOUNT: '4', GET_TICK: 'XCHAIN', GET_AMOUNT: '2',
             },
         });
-        expect(await screen.findByText('0.064 XCHAIN')).toBeInTheDocument();
-        expect(screen.getByText(/\+ 0\.064 XCHAIN/)).toBeInTheDocument();
+        await waitFor(() => expect(document.querySelector('[data-fees-row="protocol"]'))
+            .toHaveTextContent('0.064 XCHAIN'), { timeout: 3000 });
+        expect(document.querySelector('[data-fees-row="total"]')).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Place Buy Order' }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
@@ -395,6 +408,9 @@ describe('Fees card live quotes for orders and lists', () => {
             messaging,
         );
 
-        expect((await screen.findAllByText('Priced at review')).length).toBeGreaterThanOrEqual(2);
+        // The Protocol fee line says so; no Total row repeats it in the form.
+        await waitFor(() => expect(document.querySelector('[data-fees-row="protocol"]'))
+            .toHaveTextContent('Priced at review'));
+        expect(document.querySelector('[data-fees-row="total"]')).toBeNull();
     });
 });

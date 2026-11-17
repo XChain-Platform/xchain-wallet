@@ -63,7 +63,9 @@ describe('Chrome 102 shared form inputs', () => {
     it('guards every number input from wheel changes and classifies autocomplete', () => {
         const numberInputs = controls.filter(({ attributes }) => attributes.type === 'number');
 
-        expect(numberInputs).toHaveLength(7);
+        // 2026-11-14: Connected Sites' two throttle number fields became the
+        // Options page's preset dropdowns with Custom text fields (SignThrottlePanel).
+        expect(numberInputs).toHaveLength(5);
         for (const { file, attributes } of numberInputs) {
             expect(attributes.onWheel, `${file}: wheel guard`).toBe('blurNumberInputOnWheel');
             expect(attributes.autoComplete, `${file}: autocomplete`).toBe('off');
@@ -83,20 +85,24 @@ describe('Chrome 102 shared form inputs', () => {
         const modesByFile = Object.groupBy(classified, ({ file }) => file);
         const inputModes = (file) => modesByFile[file]?.map(({ attributes }) => attributes.inputMode);
 
-        // Both amount fields come from the one shared AmountField.
+        // Per transaction and Send at share one Custom amount field, in fiat with cents.
         expect(inputModes('packages/core/src/shared/components/settings/AdsSection.jsx'))
-            .toEqual(['numeric']);
+            .toEqual(['decimal']);
         expect(inputModes('packages/core/src/shared/components/settings/FeesSection.jsx'))
             .toEqual(['decimal']);
+        // The test-send threshold is now a fiat amount with cents, not a whole sat count.
         expect(inputModes('packages/core/src/shared/components/settings/SafetySection.jsx'))
-            .toEqual(['numeric']);
+            .toEqual(['decimal']);
         expect(inputModes('packages/core/src/ui/FeeSelector.jsx'))
             .toEqual(['decimal', 'decimal']);
         // The Dispenser detail's dispense-count stepper is a bare native input.
         expect(inputModes('packages/core/src/shared/routes/DispenserDetail.jsx'))
             .toEqual(['numeric']);
+        // The Quick give/get card's big amount is a bare native input too.
+        expect(inputModes('packages/core/src/shared/components/giveGet/GiveGetQuick.jsx'))
+            .toEqual(['decimal']);
 
-        expect(classified).toHaveLength(8);
+        expect(classified).toHaveLength(9);
         for (const { file, attributes } of classified) {
             expect(attributes.autoComplete, `${file}: autocomplete`).toBe('off');
             expect(['done', 'go'], `${file}: enterKeyHint`).toContain(attributes.enterKeyHint);

@@ -51,9 +51,17 @@ describe('coinTypeFor vs chain descriptor coin-type parity', () => {
         });
     });
 
-    it('rejects bitcoin-testnet and bitcoin-regtest rather than deriving at 1', () => {
-        expect(() => coinTypeFor('bitcoin-testnet')).toThrow(/software wallet/);
-        expect(() => coinTypeFor('bitcoin-regtest')).toThrow(/software wallet/);
+    // Operator ruling 2026-11-15: the Bitcoin test networks derive at the
+    // Bitcoin Test app's own coin type 1', never the mainnet 0'.
+    it('derives bitcoin-testnet and bitcoin-regtest at the Bitcoin Test app\'s 1\'', () => {
+        expect(coinTypeFor('bitcoin-testnet')).toBe("1'");
+        expect(coinTypeFor('bitcoin-regtest')).toBe("1'");
+    });
+
+    it('rejects the Litecoin and Dogecoin test networks, which have no Ledger app', () => {
+        for (const chainId of ['litecoin-testnet', 'litecoin-regtest', 'dogecoin-testnet', 'dogecoin-regtest']) {
+            expect(() => coinTypeFor(chainId)).toThrow(/software wallet/);
+        }
     });
 });
 
@@ -203,19 +211,30 @@ describe('LedgerSigner.getStatus', () => {
         expect(await s.getStatus()).toBe('disconnected');
     });
 
-    // Hardware-unsupported chainIds (non-mainnet BTC, and LTC/DOGE non-mainnet)
-    // are absent from LEDGER_APP_NAME_FOR_CHAIN and throw at derivation time in
+    // Hardware-unsupported chainIds (LTC/DOGE non-mainnet: no Ledger app) are
+    // absent from LEDGER_APP_NAME_FOR_CHAIN and throw at derivation time in
     // coinTypeFor/chainIdToLedgerFormat. getStatus must surface that up front
     // instead of reporting 'available' and failing on the next call.
     for (const chainId of [
-        'bitcoin-testnet',
-        'bitcoin-regtest',
         'litecoin-testnet',
+        'litecoin-regtest',
+        'dogecoin-testnet',
         'dogecoin-regtest',
     ]) {
         it(`returns "unsupported-network" for ${chainId}`, async () => {
             const s = makeSigner({}, { transport: makeTransport({ name: 'Bitcoin', version: '2.0' }) });
             expect(await s.getStatus({ chainId })).toBe('unsupported-network');
+        });
+    }
+
+    // The Bitcoin test networks sign in the Bitcoin Test app (operator ruling
+    // 2026-11-15), so the Bitcoin app is the wrong one for them.
+    for (const chainId of ['bitcoin-testnet', 'bitcoin-regtest']) {
+        it(`expects the Bitcoin Test app for ${chainId}`, async () => {
+            const onBitcoin = makeSigner({}, { transport: makeTransport({ name: 'Bitcoin', version: '2.0' }) });
+            expect(await onBitcoin.getStatus({ chainId })).toBe('wrong-app');
+            const onTest = makeSigner({}, { transport: makeTransport({ name: 'Bitcoin Test', version: '2.0' }) });
+            expect(await onTest.getStatus({ chainId })).toBe('available');
         });
     }
 });
@@ -469,17 +488,19 @@ describe('LedgerSigner.signPsbt', () => {
     });
 
     // Trezor refuses these networks before decomposing; Ledger must match it,
-    // wording included, instead of failing later on an input.
-    it.each(['bitcoin-testnet', 'bitcoin-regtest'])('refuses %s before touching the PSBT, in the Trezor wording', async (chainId) => {
+    // wording included, instead of failing later on an input. The Bitcoin
+    // test networks are signable now (Bitcoin Test app), so the refused set
+    // is the Litecoin and Dogecoin test networks.
+    it.each(['litecoin-testnet', 'dogecoin-regtest'])('refuses %s before touching the PSBT, in the Trezor wording', async (chainId) => {
         const mockSdk = signPsbtSdk();
         const get = vi.fn(() => mockSdk);
         const s = makeSigner({}, { sdkRegistry: { get } });
         const err = await s.signPsbt({ psbtHex: 'cafe', chainId, signingPaths: [] }).catch((e) => e);
         expect(err).toBeInstanceOf(Error);
-        expect(err.message).toMatch(/funds would appear missing/);
-        expect(err.message).toContain(chainId === 'bitcoin-testnet' ? 'Bitcoin testnet' : 'Bitcoin regtest');
+        expect(err.code).toBe('HW_NETWORK_UNSUPPORTED');
+        expect(err.message).toMatch(/use a software wallet/);
+        expect(err.message).toContain(chainId === 'litecoin-testnet' ? 'Litecoin testnet' : 'Dogecoin regtest');
         expect(err.message).not.toContain(chainId);
-        expect(err.message).not.toMatch(/Litecoin|Dogecoin/);
         expect(get).not.toHaveBeenCalled();
         expect(mockSdk.wallet.decomposePsbt).not.toHaveBeenCalled();
     });
@@ -670,16 +691,26 @@ describe('modelFromLedgerTransport', () => {
         expect(modelFromLedgerTransport({ id: 'stax' })).toBe('stax');
     });
 
-    it('defaults to nanoX for unknown id', () => {
-        expect(modelFromLedgerTransport({ id: 'flex' })).toBe('nanoX');
+    it('returns europa for the Flex (id "europa" and "flex")', () => {
+        expect(modelFromLedgerTransport({ id: 'europa' })).toBe('europa');
+        expect(modelFromLedgerTransport({ id: 'flex' })).toBe('europa');
     });
 
-    it('defaults to nanoX for null/undefined', () => {
-        expect(modelFromLedgerTransport(null)).toBe('nanoX');
-        expect(modelFromLedgerTransport(undefined)).toBe('nanoX');
+    it('returns apex for the Nano Gen5', () => {
+        expect(modelFromLedgerTransport({ id: 'apex' })).toBe('apex');
     });
 
-    it('defaults to nanoX when deviceModel has no id string', () => {
-        expect(modelFromLedgerTransport({ id: 42 })).toBe('nanoX');
+    it('stores the neutral unknown code for an unrecognised id, never nanoX', () => {
+        expect(modelFromLedgerTransport({ id: 'someNewBoard' })).toBe('unknown');
+        expect(modelFromLedgerTransport({ id: 'blue' })).toBe('unknown');
+    });
+
+    it('stores unknown for null/undefined', () => {
+        expect(modelFromLedgerTransport(null)).toBe('unknown');
+        expect(modelFromLedgerTransport(undefined)).toBe('unknown');
+    });
+
+    it('stores unknown when deviceModel has no id string', () => {
+        expect(modelFromLedgerTransport({ id: 42 })).toBe('unknown');
     });
 });

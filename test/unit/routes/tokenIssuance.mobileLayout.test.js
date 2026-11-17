@@ -70,7 +70,7 @@ describe('token issuance mobile layout', () => {
         expect(issue).toMatch(/<FormFrame\b/);
 
         for (const source of [swap, order]) {
-            expect(source).toMatch(/<AddressField\s+label="Receive at"/);
+            expect(source).toMatch(/<AddressField[\s\S]*?label="Receive at"/);
             expect(source).toMatch(/<SectionHeader title="Cross-chain (?:swap|order) broadcast"/);
             expect(source).toMatch(/<CopyButton value={txid} label="Copy Transaction ID"/);
         }
@@ -78,27 +78,27 @@ describe('token issuance mobile layout', () => {
 
     it.each(routeStyles)('%s keeps review text inside its grid track', (path) => {
         const css = readCss(path);
-        const expectedColumns = path.endsWith('IssueTokenForm.module.css')
-            ? /grid-template-columns:\s*minmax\(0, 1fr\)/
-            : /grid-template-columns:\s*var\(--xc-table-label-column\)\s+minmax\(0, 1fr\)/;
-        expect(ruleBody(css, '.detailsList')).toMatch(expectedColumns);
+        // Label-left value-right rows at every width (the FactRows look): the
+        // label track and a wider value track whose text wraps at the end edge.
+        expect(ruleBody(css, '.detailsList'))
+            .toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)\s+minmax\(0, 2fr\)/);
         expect(ruleBody(css, '.detailsValue')).toMatch(/min-width:\s*0/);
         expect(ruleBody(css, '.detailsValue')).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(ruleBody(css, '.detailsValue')).toMatch(
-            path.endsWith('IssueTokenForm.module.css')
-                ? /text-align:\s*start/
-                : /text-align:\s*end/,
-        );
+        expect(ruleBody(css, '.detailsValue')).toMatch(/text-align:\s*end/);
         expect(ruleBody(css, '.detailsValue')).toMatch(/font-variant-numeric:\s*tabular-nums/);
         expect(css).toContain('border-top: var(--xc-table-row-divider);');
         expect(ruleBody(css, '.summary')).toMatch(/overflow-wrap:\s*anywhere/);
     });
 
-    it('adds shared form review columns only from 834px', () => {
-        const wide = mediaBlock(readCss(routeStyles[0]), '(min-width: 834px)');
-        expect(ruleBody(wide, '.detailsList')).toMatch(
-            /grid-template-columns:\s*var\(--xc-table-label-column\)\s+minmax\(0, 1fr\)/,
-        );
+    it('draws the shared details labels as sentence-case rows, never uppercase stacked labels', () => {
+        const css = readCss(routeStyles[0]);
+        const label = ruleBody(css, '.detailsLabel');
+        expect(label).not.toMatch(/text-transform/);
+        expect(label).not.toMatch(/letter-spacing/);
+        expect(label).toMatch(/padding-block:\s*var\(--xc-space-2\)/);
+        expect(ruleBody(css, '.detailsValue')).toMatch(/padding:\s*var\(--xc-space-2\) 0/);
+        // No width switch: the rows are the same on a phone and a desktop.
+        expect(ruleBody(mediaBlock(css, '(min-width: 834px)'), '.detailsList')).toBe('');
     });
 
     it('lets long ticker and description values shrink within shared inputs', () => {

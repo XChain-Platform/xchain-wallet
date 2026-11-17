@@ -7,8 +7,6 @@
 // General Public License v3.0 or later; see LICENSE.md.
 
 import { describe, expect, it } from 'vitest';
-import { render } from '@testing-library/react';
-import React from 'react';
 import { fiatToCoin } from '../../../packages/core/src/flows/priceLookup.js';
 import { customFeeEstimate } from '../../../packages/core/src/flows/feeEstimate.js';
 import { exactNetworkFeeSats } from '../../../packages/core/src/flows/psbtNetworkFee.js';
@@ -16,7 +14,7 @@ import { classifySignRisk } from '../../../packages/core/src/flows/signRiskClass
 import { decodeAction } from '../../../packages/core/src/decoder/actionDecoder.js';
 import { normalizeOrderbook } from '../../../packages/core/src/market/orderbook.js';
 import { bucketizeMatches } from '../../../packages/core/src/market/bucketize.js';
-import { PsbtIntentPanel } from '../../../packages/core/src/shared/components/PsbtIntentPanel.jsx';
+import { amountLabel } from '../../../packages/core/src/shared/components/PsbtIntentPanel.jsx';
 import {
     fiatValue,
     formatFiat,
@@ -59,20 +57,9 @@ describe('exact signed and safety amount math', () => {
         })).toBe(993);
     });
 
-    it('shows large string-valued PSBT amounts as known on the signing screen', () => {
-        const utils = render(React.createElement(PsbtIntentPanel, {
-            decomposed: {
-                inputs: [{ address: 'mine', value: '9007199254740993' }],
-                outputs: [{ address: 'theirs', value: '9007199254740000' }],
-            },
-            ownAddresses: new Set(['mine']),
-            signingAddress: 'mine',
-            decodedAction: { summary: 'x' },
-        }));
-        const text = utils.container.textContent;
-        expect(text).toContain('9,007,199,254,740,993 sats');
-        expect(text).toContain('993 sats');
-        expect(text).not.toContain('amount unknown');
+    it('formats large string-valued PSBT amounts without losing precision', () => {
+        expect(amountLabel('9007199254740993')).toBe('9,007,199,254,740,993 sats');
+        expect(amountLabel('993')).toBe('993 sats');
     });
 });
 

@@ -17,11 +17,10 @@
 // palette, where "Sites" results are their own category) mount THIS,
 // which is the same body under its own header - not a fork of the panel.
 //
-// Deliberately thin: no state, no data loading. Everything the screen
-// does lives in the shared section, so the standalone route and the
-// Settings drilldown can never drift apart.
+// Deliberately thin: no state, no data loading. The section draws the
+// whole screen, header included (its filter, plus and drill-in titles),
+// so the standalone route and the Settings drilldown can never drift apart.
 
-import { ListPage, PageHeader, Screen } from '@xchain-wallet/core/ui';
 import { screenVariantFor, useMessaging } from '../useMessaging.js';
 import { ConnectedSitesSection } from '../components/settings/ConnectedSitesSection.jsx';
 
@@ -31,13 +30,5 @@ import { ConnectedSitesSection } from '../components/settings/ConnectedSitesSect
  */
 export function ConnectedSites({ onBack }) {
     const { shell } = useMessaging();
-    const variant = screenVariantFor(shell);
-    const header = <PageHeader onBack={onBack} title="Connected Sites" />;
-    return (
-        <Screen variant={variant} header={header}>
-            <ListPage>
-                <ConnectedSitesSection />
-            </ListPage>
-        </Screen>
-    );
+    return <ConnectedSitesSection onBack={onBack} variant={screenVariantFor(shell)} />;
 }

@@ -59,12 +59,19 @@ export const WALLET_ORIGINS = /** @type {const} */ ([
     'imported-wif',
     'imported-xchain-backup',
     'imported-freewallet',
+    // A wallet whose keys live only on a Trezor or Ledger (format 'hardware').
+    'connected-hardware',
 ]);
 
+// 'hardware' holds no key material at all: no seed, no imported keys, no
+// passphrase. Its addresses carry the device's signerId and every signature
+// comes from the device. Older builds refuse the enum value, so a vault that
+// holds one cannot be opened by a downgrade.
 export const WALLET_FORMATS = /** @type {const} */ ([
     'bip39',
     'counterwallet-legacy',
     'wif-only',
+    'hardware',
 ]);
 
 /**
@@ -169,6 +176,8 @@ export function validateWallet(record) {
     // imported private keys stored in importedKeys).
     if (r.format === 'wif-only') {
         check(errors, 'encryptedSeed', isString(r.encryptedSeed), 'must be a string (may be empty for wif-only)');
+    } else if (r.format === 'hardware') {
+        check(errors, 'encryptedSeed', r.encryptedSeed === '', 'must be empty for a hardware wallet');
     } else {
         check(errors, 'encryptedSeed', isNonEmptyString(r.encryptedSeed), 'must be a non-empty string');
     }
@@ -183,6 +192,25 @@ export function validateWallet(record) {
     }
     if (r.format === 'wif-only' && r.passphraseEnabled === true) {
         errors.push('passphraseEnabled: wif-only wallet has no mnemonic; must be false');
+    }
+    // A hardware wallet keeps every key on the device, so the record holds
+    // none, and it is always the normal mode (the device signs and this app
+    // broadcasts). The origin and format travel together both ways.
+    if (r.format === 'hardware') {
+        if (isArray(r.importedKeys) && r.importedKeys.length > 0) {
+            errors.push('importedKeys: a hardware wallet holds no imported keys');
+        }
+        if (r.passphraseEnabled === true) {
+            errors.push('passphraseEnabled: a hardware wallet has no phrase here; must be false');
+        }
+        if (r.walletMode !== undefined && r.walletMode !== 'full') {
+            errors.push('walletMode: a hardware wallet must be "full"');
+        }
+        if (r.origin !== 'connected-hardware') {
+            errors.push('origin: a hardware wallet must be "connected-hardware"');
+        }
+    } else if (r.origin === 'connected-hardware') {
+        errors.push('format: a connected-hardware wallet must be "hardware"');
     }
 
     // encryptedPassphrase (§15.6). The `format` half is carried here and not

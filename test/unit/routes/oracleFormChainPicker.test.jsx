@@ -104,7 +104,9 @@ function recordingMessaging() {
     return { messaging, calls };
 }
 
-async function mountForm() {
+// The Token field takes no typed text (G122), so the priced ticker arrives as
+// initialTick; oracleFormPickers.test.jsx drives the token picker itself.
+async function mountForm({ tick = 'pepecash' } = {}) {
     const { messaging, calls } = recordingMessaging();
     let utils;
     await domAct(async () => {
@@ -114,7 +116,7 @@ async function mountForm() {
                 { shell: 'web', messaging },
                 // No initialChainId: this is the palette's entry, the one that
                 // has to fall back to a choice the user can see and change.
-                React.createElement(OracleForm, { walletId: 'w', onBack() {} }),
+                React.createElement(OracleForm, { walletId: 'w', onBack() {}, initialTick: tick }),
             ),
         );
         await drainMicrotasks();
@@ -141,10 +143,8 @@ async function pickChain(utils, label) {
 }
 
 async function publish(utils, { tick, value }) {
-    await domAct(async () => {
-        fireEvent.change(utils.getByLabelText(/^Token ticker/), { target: { value: tick } });
-        await drainMicrotasks();
-    });
+    // The ticker came in at mount; the Token field shows it.
+    expect(utils.getByRole('button', { name: new RegExp(`^Token: ${tick.toUpperCase()} on `) })).toBeTruthy();
     await domAct(async () => {
         fireEvent.change(utils.getByLabelText(/^Price of one/), { target: { value } });
         await drainMicrotasks();

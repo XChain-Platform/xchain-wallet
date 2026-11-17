@@ -85,50 +85,11 @@
 /* The "no addresses anywhere" fallback. Centred so the CTA reads
    as the screen's single next step rather than an afterthought. */
 
-/* Copy, Share, Explore and New sit four across in one row at every width. Side padding
-   drops to 0 and the icon gap to 2px so an icon and "Explore" fit a quarter of a 360px form.
-   The doubled class outranks QrDisplay's single-class .actions flex row. */
-.qrActions.qrActions {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--xc-space-2);
+/* Copy, Share, the explorer and New address are one ActionList under the
+   QR (G101), full width; the stack's own gap spaces it from the fields. */
+.qrActions {
     margin-top: 0;
-    align-items: stretch;
-}
-
-.qrActions.qrActions > * {
-    --xc-button-padding-x: 0;
-
-    padding-inline: 0;
     min-width: 0;
-    box-sizing: border-box;
-    height: var(--xc-control-h-md);
-    min-height: var(--xc-control-h-md);
-    justify-content: center;
-    gap: calc(var(--xc-space-1) / 2);
-    white-space: nowrap;
-}
-
-.qrActions > * > span {
-    white-space: nowrap;
-}
-
-.explorerLink {
-    /* Receive.jsx adds Button's btn, secondary and md classes beside this one. */
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: var(--xc-tap-min);
-    cursor: pointer;
-}
-
-.amountEditor button {
-    --xc-button-height: var(--xc-control-h-md);
-    --xc-button-font-size: var(--xc-control-font-md, 14px);
-    --xc-button-padding-x: var(--xc-button-pad-x-md, 16px);
-    --xc-icon-size: var(--xc-control-icon-md, 20px);
-
-    min-height: var(--xc-control-h-md);
 }
 
 .generateAddressAction {

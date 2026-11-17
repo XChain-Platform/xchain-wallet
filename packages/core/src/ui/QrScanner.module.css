@@ -15,3 +15,11 @@
 .rationale p {
     margin: 0;
 }
+
+/* A scan message kept where the scanner is: the screen spaces it, so the
+   notice's own block margin drops (the element selector outranks the
+   notice's one-class margin wherever its sheet lands). */
+div.inPlaceNotice {
+    width: 100%;
+    margin: 0;
+}

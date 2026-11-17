@@ -43,7 +43,7 @@ const SETTINGS_SUBPAGES = [
     'Backup',
     'Fees',
     'Connected sites',
-    'Automatic donation system',
+    'Automatic Donations',
     'About',
 ];
 

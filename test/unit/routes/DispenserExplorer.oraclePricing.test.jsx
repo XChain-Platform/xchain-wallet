@@ -74,11 +74,12 @@ function renderExplorer(extra = {}) {
 }
 
 async function searchFor(token) {
-    // The search box is the page's first element; Popular, Newest and Best
-    // deals list under it until something is typed.
-    await waitFor(() => expect(screen.getByRole('searchbox')).toBeTruthy());
+    // The search box lives in the title bar's filter panel; Popular, Newest and
+    // Best deals list on the page until something is typed.
+    fireEvent.click(screen.getByRole('button', { name: 'Filter dispensers' }));
+    await waitFor(() => expect(screen.queryByText('Loading available networks…')).toBeNull());
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: token } });
-    fireEvent.click(screen.getByRole('button', { name: /search/i }));
+    fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
 }
 
 afterEach(() => {
@@ -167,12 +168,12 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
 
         const [facts] = await screen.findAllByTestId('dispenser-result-facts');
         expect(facts).toHaveAttribute('role', 'list');
-        // One card: the give and the price share the title line, the chain and
-        // seller sit on the line under it.
+        // One row: the give and the price share the first line, the stock
+        // left sits on the line under it; no coin name and no address.
         expect(within(facts).getByText('1 MGRTEST')).toBeInTheDocument();
         expect(within(facts).getByText(/0\.05 USD/)).toBeInTheDocument();
         expect(within(facts).getAllByRole('listitem').length).toBeGreaterThanOrEqual(2);
-        expect(facts.closest('button')?.className).toMatch(/card/);
+        expect(facts.closest('button')?.className).toMatch(/row/);
     });
 
     it('pins the no-overflow rules shared by all four dispenser screens', () => {
@@ -196,9 +197,9 @@ describe('DispenserExplorer result price for an oracle-priced dispenser', () => 
         expect(ruleBody(listRow, '.content')).toMatch(/min-width:\s*0/);
         expect(ruleBody(listRow, '.trailing')).toMatch(/min-width:\s*0;[\s\S]*max-width:\s*50%/);
 
-        // A result card stacks its lines in a shrinkable column and wraps long text.
+        // A result row stacks its lines in a shrinkable column and wraps long text.
         const card = readCss('packages/core/src/shared/components/DispenserExplorerCard.module.css');
-        expect(ruleBody(card, '.card')).toMatch(/min-width:\s*0/);
+        expect(ruleBody(card, '.row')).toMatch(/min-width:\s*0/);
         expect(ruleBody(card, '.body')).toMatch(/flex-direction:\s*column/);
         expect(ruleBody(card, '.body')).toMatch(/min-width:\s*0/);
         expect(ruleBody(card, '.title')).toMatch(/overflow-wrap:\s*anywhere/);

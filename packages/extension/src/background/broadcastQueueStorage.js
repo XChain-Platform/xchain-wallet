@@ -36,7 +36,7 @@ export const BROADCAST_QUEUE_STORAGE_VERSION = 1;
  * `pendingTxId`, `resumedClaim` and `adsCommit` tie a stored entry to its vault
  * record and ADS verdict. `siblingPendingTxIds` is a live-only link rebuilt
  * from owned PendingTx records and is never authoritative storage data.
- * @typedef {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, siblingPendingTxIds?: string[], resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string, revealTxHex?: string, revealTxid?: string, retryAttempt?: number, nextRetryAt?: number, adsCommit?: { chainId: string, donationIncluded: boolean } }} QueueEntry
+ * @typedef {{ id: string, chainId: string, signedTxHex: string, summary: string, signedAt: number, txid?: string, pendingTxId?: string, siblingPendingTxIds?: string[], resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string, revealTxHex?: string, revealTxid?: string, retryAttempt?: number, nextRetryAt?: number, adsCommit?: { chainId: string, donationIncluded: boolean, donatedFiat?: string, currency?: string, mainnet?: boolean, reservationId?: string } }} QueueEntry
  */
 
 /**

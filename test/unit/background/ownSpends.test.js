@@ -35,6 +35,7 @@ const {
 vi.mock('../../../packages/extension/src/background/signerBridge.js', async (importOriginal) => ({
     ...(await importOriginal()),
     getTransport: () => ({}),
+    requireTransport: () => ({}),
 }));
 
 vi.mock('@xchain-wallet/core', async (importOriginal) => {

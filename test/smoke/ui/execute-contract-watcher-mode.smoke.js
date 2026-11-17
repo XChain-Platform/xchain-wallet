@@ -18,14 +18,21 @@ import { withEnglishCopy } from '../_localized-source.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
-const formSrc = withEnglishCopy(readFileSync(
+const rawFormSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'ExecuteContractForm.jsx'),
     'utf8',
-));
+);
+const formSrc = withEnglishCopy(rawFormSrc);
 
 assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/);
 assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'EXECUTE'/);
-assert.match(formSrc, /Create Transaction for Signing/);
+assert.match(formSrc, /if \(result\?\.psbtHex && !txid\)[\s\S]{0,500}?<ResultScreen[\s\S]{0,200}?state="unsigned"/);
+assert.match(
+    rawFormSrc,
+    /<ConfirmActionModal[\s\S]{0,1200}?credentials=\{<p[\s\S]{0,180}?watcherBuildsUnsigned/,
+    'watcher guidance lives on the Confirm Standard review',
+);
+assert.doesNotMatch(formSrc, /Create Transaction for Signing/, 'old review action label is retired');
 console.log('execute-contract-watcher-mode smoke OK');

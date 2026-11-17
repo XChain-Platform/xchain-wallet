@@ -28,6 +28,14 @@ export function writeWalletTile(walletId, tile) {
     try { window.dispatchEvent(new CustomEvent(WALLET_TILE_EVENT, { detail: { walletId } })); } catch { /* no window */ }
 }
 
+/**
+ * The tile id a list's look is stored under: a list has no vault record, so
+ * its chain and list index name it, and every wallet on this device shares it.
+ */
+export function listTileId(chainId, actionIndex) {
+    return `list:${chainId}:${actionIndex}`;
+}
+
 /** The CSS radius for a tile shape; circle is the default. */
 export function tileRadius(shape) {
     return shape === 'rounded' ? '24%' : '50%';

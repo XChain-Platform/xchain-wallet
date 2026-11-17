@@ -114,7 +114,8 @@ describe('ListPickerScreen selection name', () => {
             />,
         );
 
-        await waitFor(() => expect(screen.getAllByText('2 members')).toHaveLength(3));
+        // A named row's line also names its type.
+        await waitFor(() => expect(screen.getAllByText(/^(Address list · )?2 members$/)).toHaveLength(3));
         fireEvent.click(screen.getByRole('button', { name: /VIP wallets \(List #10\)/ }));
         fireEvent.click(screen.getByRole('button', { name: /Address list #11/ }));
         fireEvent.click(screen.getByRole('button', { name: /Address list #12/ }));
@@ -132,15 +133,14 @@ describe('Issue Token list names', () => {
         mountWizard();
         await driveToAccessLists();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Choose allow-list' }));
+        // G114: each field opens the picker and then reads the list's name.
+        fireEvent.click(screen.getByRole('button', { name: 'Allow list: None set' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick named allow-list' }));
-        expect(await screen.findByText('Treasury allow (List #41)')).toBeTruthy();
-        expect(screen.getByLabelText('Allow list')).toHaveValue('41');
+        expect(await screen.findByRole('button', { name: 'Allow list: Treasury allow (List #41)' })).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Choose block-list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Block list: None set' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick named block-list' }));
-        expect(await screen.findByText('Treasury block (List #42)')).toBeTruthy();
-        expect(screen.getByLabelText('Block list')).toHaveValue('42');
+        expect(await screen.findByRole('button', { name: 'Block list: Treasury block (List #42)' })).toBeTruthy();
 
         // The picked indexes are what the ISSUE carries.
         fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'LISTED' } });
@@ -156,28 +156,36 @@ describe('Issue Token list names', () => {
         mountWizard();
         await driveToAccessLists();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Choose allow-list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Allow list: None set' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick named allow-list' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Choose block-list' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Block list: None set' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick named block-list' }));
         await screen.findByText('Treasury block (List #42)');
 
         fireEvent.click(screen.getByRole('button', { name: 'Remove allow-list' }));
-        expect(screen.getByLabelText('Allow list')).toHaveValue('');
+        expect(screen.getByRole('button', { name: 'Allow list: None set' })).toBeTruthy();
         expect(screen.queryByText('Treasury allow (List #41)')).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Remove block-list' }));
-        expect(screen.getByLabelText('Block list')).toHaveValue('');
+        expect(screen.getByRole('button', { name: 'Block list: None set' })).toBeTruthy();
         expect(screen.queryByText('Treasury block (List #42)')).toBeNull();
+
+        // Cleared lists leave the ISSUE without either slot.
+        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'NOLIST' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        const params = messaging.composeForConfirm.mock.calls[0][0].actionData.params;
+        expect(params.ALLOW_LIST).toBeUndefined();
+        expect(params.BLOCK_LIST).toBeUndefined();
     });
 
     it('keeps the existing label for an unnamed pick', async () => {
         mountWizard();
         await driveToAccessLists();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Choose allow-list' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Allow list: None set' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick unnamed allow-list' }));
 
-        expect(await screen.findByText('List #51')).toBeTruthy();
+        expect(await screen.findByRole('button', { name: 'Allow list: List #51' })).toBeTruthy();
     });
 });

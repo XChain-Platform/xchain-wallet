@@ -3,11 +3,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Rows inside the authoring forms are spaced by the form gap alone. Three of
+// Rows inside the authoring forms are spaced by the form gap alone. Some of
 // them still carried a margin from before the form owned its spacing, so the
-// space under them read 8 to 12px wider than every other gap: Publish
-// contract's Validate / Estimate / Suggest row, Airdrop's upload button and
-// the parallel composer's row-state line.
+// space under them read 8 to 12px wider than every other gap: Airdrop's
+// upload button and the parallel composer's row-state line. (Publish
+// contract's Validate / Estimate / Suggest row is retired: the code field
+// now checks itself and shows its size in the field header.)
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,7 +23,6 @@ function ruleBody(css, selector) {
 
 describe('authoring form rows add no margin to the form gap', () => {
     it.each([
-        ['packages/core/src/shared/routes/ContractScreens.module.css', '.toolActions'],
         ['packages/core/src/shared/routes/ParallelComposer.module.css', '.rowStatus'],
     ])('%s %s has no block margin', (file, selector) => {
         const body = ruleBody(read(file), selector);

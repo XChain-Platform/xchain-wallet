@@ -29,23 +29,22 @@ const messages = {
     'onboarding.licenseTerms': 'License terms',
     'onboarding.iHaveReadAndAgree': 'I have read and agree to these terms.',
     'onboarding.scrollToTheEndTo': 'Scroll to the end to review all terms.',
+    'onboarding.licenseAckHelp': 'The terms for using this wallet app. The box turns on once you reach the end of the terms, and ticking it lets you continue to wallet setup.',
     'onboarding.leaveTheDemoFirst': 'Leave the Demo First',
     'onboarding.clearDemoCreateNewWallet': 'Clear Demo & Create New Wallet',
     'onboarding.clearDemoImportWallet': 'Clear Demo & Import Wallet',
-    'onboarding.clearDemoImportFromFreewallet': 'Clear Demo & Import From FreeWallet',
     'onboarding.keepExploringTheDemo': 'Keep Exploring the Demo',
     'onboarding.theDemoUsesATemporary': 'The demo uses a temporary password for this device.',
     'onboarding.clearTheDemoBeforeYou':
         'Clear the demo before you create or import a wallet. Your wallet can then use the password you choose.',
     'onboarding.demoBalancesAndActivityAre':
         "Demo balances and activity are examples, so clearing the demo doesn't affect real funds.",
-    'onboarding.walletSetup': 'Wallet setup',
+    'onboarding.walletSetup': 'Wallet Setup',
+    'onboarding.welcomeTagline': 'Multi-chain wallet for the XChain platform.',
     'onboarding.createNewWallet': 'Create New Wallet',
-    'onboarding.fromFreewallet': 'From FreeWallet',
-    'onboarding.connectHardwareWallet': 'Connect a Hardware Wallet',
-    'onboarding.pairAnOfflineSigner': 'Pair an Offline Signer',
+    'onboarding.connectHardwareWallet': 'Connect Hardware Wallet',
     'onboarding.settingUpDemo': 'Setting Up Demo…',
-    'onboarding.tryInDemoMode': 'Try in Demo Mode',
+    'onboarding.tryInDemoMode': 'Try Demo',
 };
 
 addEnglish(messages);

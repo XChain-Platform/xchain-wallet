@@ -18,9 +18,10 @@ import { FormErrorSummary } from '../../../packages/core/src/ui/FormErrorSummary
 
 afterEach(cleanup);
 
+// The line is plain text since the Notice Standard (2026-11-15), no link.
 function link(error) {
     render(<FormErrorSummary errors={[{ id: 'f', ...error }]} focusKey={1} />);
-    return screen.getByRole('link').textContent;
+    return screen.getByRole('listitem').textContent;
 }
 
 describe('FormErrorSummary label repetition', () => {

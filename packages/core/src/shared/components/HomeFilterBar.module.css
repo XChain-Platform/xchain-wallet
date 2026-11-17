@@ -35,12 +35,19 @@
     width: 100%;
 }
 
+/* G112: the glass sits in the same square slot the Select and IconSelect
+   option icon uses (--xc-control-icon-md box at --xc-field-icon-inset-md), so
+   the icons of a filter panel stack on one centre line. */
 .searchIcon {
+    --xc-icon-size: var(--xc-icon-md);
     position: absolute;
-    inset-inline-start: 10px;
+    inset-inline-start: var(--xc-field-icon-inset-md);
     z-index: calc(var(--xc-z-base) + 1);
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    width: var(--xc-control-icon-md);
+    height: var(--xc-control-icon-md);
     color: var(--xc-text-muted);
     pointer-events: none;
 }
@@ -61,9 +68,10 @@
 
 /* The kit Input rule (.input:not(textarea)) outranks a bare class and resets
    the inline padding, so the start padding that clears the search icon is
-   set through the wrapper. */
+   set through the wrapper: the icon's inset, the icon, and one icon gap,
+   less the border. */
 .searchWrap input.search {
-    padding-inline-start: var(--xc-space-8);
+    padding-inline-start: calc(var(--xc-field-icon-inset-md) + var(--xc-control-icon-md) + var(--xc-field-icon-gap) - var(--xc-field-border));
 }
 
 /* No focus ring on the search box: the user wants it to look identical

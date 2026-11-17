@@ -81,7 +81,8 @@ describe('SleepForm rendering', () => {
         const token = screen.getByRole('button', { name: 'Token: Select a token' });
         expect(network.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(from.compareDocumentPosition(token) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(screen.getByText('Active, not paused')).toBeInTheDocument(); // The state badge.
+        // No status line: the form offers only the action that applies.
+        expect(screen.queryByText('Active, not paused')).toBeNull();
         expect(screen.getByText(
             "The token owner's address. Only the owner can pause or resume a token.",
         ).closest('[role="tooltip"]')).not.toBeNull();
@@ -103,7 +104,8 @@ describe('SleepForm rendering', () => {
             query: 'GATE',
             type: 'token',
         }));
-        expect(await screen.findByText('Active, not paused')).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /^Pause token$/i })).toBeEnabled();
+        expect(screen.queryByText('Active, not paused')).toBeNull();
 
         // The Form Standard has the picked token decide the network,
         // so the Network field locks once a token is chosen.
@@ -146,7 +148,7 @@ describe('SleepForm rendering', () => {
         fireEvent.click(submit);
 
         expect(await screen.findByText(
-            'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+            'Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
         )).toBeInTheDocument();
     });
 
@@ -176,14 +178,16 @@ describe('SleepForm rendering', () => {
         expect(screen.queryByText(/Locking an address/)).toBeNull();
         expect(screen.queryByRole('radiogroup')).toBeNull();
         expect(screen.queryByText(/Lock indefinitely/)).toBeNull();
-        expect(await screen.findByText(/Ends at block 244/)).toBeInTheDocument();
+        expect(await screen.findByRole('slider', { name: 'Duration' })).toBeInTheDocument();
+        expect(screen.queryByText(/Ends at block/)).toBeNull();
         await waitFor(() => expect(screen.getByRole('button', { name: /^Lock address$/i })).toBeEnabled());
 
         fireEvent.click(screen.getByRole('button', { name: /^Lock address$/i }));
         fireEvent.change(await screen.findByLabelText('Type LOCK to confirm'), { target: { value: 'LOCK' } });
-        // The signing submit is the green success action with the lock icon, never danger red.
-        const reviewSubmit = screen.getByRole('button', { name: /^Lock address$/i });
-        expect(reviewSubmit).toHaveTextContent('Lock Address');
+        // Every review uses the shared green Approve action.
+        const reviewSubmit = screen.getByTestId('confirm-approve');
+        await waitFor(() => expect(reviewSubmit).toBeEnabled());
+        expect(reviewSubmit).toHaveTextContent('Approve');
         expect(reviewSubmit).toHaveClass(buttonStyles.success);
         expect(reviewSubmit).not.toHaveClass(buttonStyles.danger);
         expect(reviewSubmit.querySelector('svg')).not.toBeNull();
@@ -220,15 +224,39 @@ describe('SleepForm rendering', () => {
 
         // Page titles are Title Case.
         expect(await screen.findByRole('heading', { name: 'Pause Token' })).toBeInTheDocument();
-        expect(await screen.findByText('Paused indefinitely')).toBeInTheDocument(); // The state badge.
-        expect(screen.getByRole('radio', { name: 'Resume now (unpause)' })).toBeInTheDocument();
-        expect(screen.getByRole('radio', { name: 'Pause for a duration' })).toBeInTheDocument();
-        expect(screen.getByRole('radio', { name: 'Pause indefinitely' })).toBeInTheDocument();
-
-        fireEvent.click(screen.getByRole('radio', { name: 'Resume now (unpause)' }));
-
-        expect(screen.getByRole('heading', { name: 'Resume Token' })).toBeInTheDocument();
+        // A paused token offers only Resume (no status line, no pause setting).
+        expect(await screen.findByRole('heading', { name: 'Resume Token' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^Resume token$/i })).toBeEnabled();
+        expect(screen.queryByRole('button', { name: /^Pause token$/i })).toBeNull();
+        expect(screen.queryByText('Paused indefinitely')).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Pause setting/ })).toBeNull();
+        expect(screen.queryAllByRole('radio')).toHaveLength(0);
+    });
+
+    it('offers the pause setting as a themed dropdown with pause options only', async () => {
+        const messaging = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
+            getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+            signerReady: vi.fn().mockResolvedValue({ ready: true }),
+            getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
+            getTokenInfo: vi.fn().mockResolvedValue({ tick: 'gate', creator: ADDRESS.address, locks: {} }),
+            sleepState: vi.fn().mockResolvedValue({ resumeBlock: null }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <SleepForm walletId="wallet-1" mode="tick" initialChainId={CHAIN} initialTick="gate" onBack={vi.fn()} />
+            </MessagingProvider>,
+        );
+        expect(await screen.findByRole('heading', { name: 'Pause Token' })).toBeInTheDocument();
+        expect(screen.queryAllByRole('radio')).toHaveLength(0);
+        const trigger = screen.getByRole('button', { name: /^Pause setting: / });
+        expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
+        expect(trigger.querySelector('svg')).not.toBeNull();
+        fireEvent.click(trigger);
+        const options = screen.getAllByRole('option');
+        expect(options.map((o) => o.textContent)).toEqual(['Pause for a duration', 'Pause indefinitely']);
+        options.forEach((o) => expect(o.querySelector('svg')).not.toBeNull());
     });
 
     it('uses the Pause lock name when pausing and resuming are locked', async () => {
@@ -279,8 +307,7 @@ describe('SleepForm rendering', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(await screen.findByRole('radio', { name: 'Resume now (unpause)' }));
-        fireEvent.click(screen.getByRole('button', { name: /^Resume token$/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Pause token$/i }));
 
         expect(await screen.findByText("Token can be a name, or ^ followed by the token's number (^123).")).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -306,7 +333,11 @@ describe('SleepForm rendering', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: /^Pause token$/i })).toBeDisabled();
+        // G22: the action stays enabled; the press is refused before review.
+        const pause = screen.getByRole('button', { name: /^Pause token$/i });
+        expect(pause).not.toBeDisabled();
+        fireEvent.click(pause);
+        await waitFor(() => expect(screen.getAllByText(/issuer could not be confirmed/).length).toBeGreaterThan(0));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

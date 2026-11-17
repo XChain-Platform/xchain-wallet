@@ -132,6 +132,64 @@ describe('CollectiblesView cards', () => {
         expect(css).not.toMatch(/-webkit-line-clamp/);
     });
 
+    it('puts Home NFTs three across below 31rem and phone-sized tiles beyond', () => {
+        const css = readFileSync(
+            'packages/core/src/shared/components/CollectiblesView.module.css',
+            'utf8',
+        );
+        const rem = 16;
+        // Phone, Pixel, large phone and the 480px popup: the container is the
+        // viewport less the two page gutters (space-4 = 1rem each), under 31rem.
+        const gap = 8;
+        for (const viewport of [320, 360, 412, 480]) {
+            const container = viewport - 2 * rem;
+            expect(container).toBeLessThan(31 * rem);
+        }
+        expect(css).toMatch(/\.wrap\[data-size='large'\] \{\s*container-type: inline-size;/);
+        expect(css).toMatch(/\.wrap\[data-size='large'\] \.grid \{\s*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+        const wide = css.match(/@container \(min-width: 31rem\) \{\s*\.wrap\[data-size='large'\] \.grid \{\s*grid-template-columns: repeat\(auto-fill, minmax\(([\d.]+)rem, ([\d.]+)rem\)\);/);
+        expect(wide).not.toBeNull();
+        const [minTile, maxTile] = [Number(wide[1]) * rem, Number(wide[2]) * rem];
+
+        // A phone three-across tile at 320 to 412 (gutters 2 x 16px, 2 gaps).
+        const phoneTile = (viewport) => (viewport - 2 * rem - 2 * gap) / 3;
+        const reference = phoneTile(360);
+        for (const viewport of [320, 360, 412]) {
+            expect(phoneTile(viewport)).toBeGreaterThanOrEqual(reference * 0.8 - 8);
+        }
+        // Wide containers: tiles stay within 20 percent of the 360 phone tile.
+        expect(minTile).toBeGreaterThanOrEqual(reference * 0.8);
+        expect(maxTile).toBeLessThanOrEqual(reference * 1.2);
+        // Tap target: even the smallest tile is above the 44px minimum.
+        expect(minTile).toBeGreaterThanOrEqual(44);
+
+        // Columns that fit at 1280 and 1920 desktop (sidebar-less worst case
+        // of a 40rem list still beats three; full width gives many more).
+        const columns = (container) => Math.floor((container + gap) / (minTile + gap));
+        expect(columns(31 * rem)).toBeGreaterThanOrEqual(4);
+        expect(columns(1280 - 2 * rem)).toBeGreaterThan(3);
+        expect(columns(1920 - 2 * rem)).toBeGreaterThan(columns(1280 - 2 * rem));
+    });
+
+    it('leaves the Settings grid on its own bounded columns', () => {
+        const css = readFileSync(
+            'packages/core/src/shared/components/CollectiblesView.module.css',
+            'utf8',
+        );
+        expect(css).toMatch(/\.grid \{[^}]*minmax\(min\(5\.75rem, 100%\), 1fr\)/);
+        // The container and the three-across rule are scoped to the large size.
+        expect(css).not.toMatch(/\n\.grid \{[^}]*container-type/);
+        expect(css).not.toMatch(/\n\.grid \{[^}]*repeat\(3,/);
+    });
+
+    it('keeps the name on one line with an ellipsis only where the grid is large', () => {
+        const css = readFileSync(
+            'packages/core/src/shared/components/CollectiblesView.module.css',
+            'utf8',
+        );
+        expect(css).toMatch(/\.wrap\[data-size='large'\] \.name \{[^}]*white-space: nowrap;[^}]*text-overflow: ellipsis/);
+    });
+
     it('stacks the ticker directly under the name with no reserved line', () => {
         const css = readFileSync(
             'packages/core/src/shared/components/CollectiblesView.module.css',

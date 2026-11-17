@@ -56,11 +56,8 @@ describe('CreateWallet review items', () => {
         }
         // The tip keeps its text in a hidden description; no hint line is drawn.
         expect(document.getElementById('create-password-hint')).toBeNull();
-        // The one hint left on the step is the wallet mode field's note that the
-        // mode is chosen once; no field label carries a static hint.
-        expect([...document.querySelectorAll('[id$="-hint"]')].map((node) => node.textContent)).toEqual([
-            'Chosen once for this wallet. To use another mode, set the wallet up again with that mode.',
-        ]);
+        // No field label on the step carries a static hint, and there is no wallet mode field.
+        expect([...document.querySelectorAll('[id$="-hint"]')].map((node) => node.textContent)).toEqual([]);
 
         fireEvent.click(screen.getByRole('button', { name: 'About Password' }));
         expect(screen.getByRole('tooltip')).toHaveTextContent('At least 8 characters');
@@ -68,6 +65,7 @@ describe('CreateWallet review items', () => {
 
     it('gives the extra passphrase confirm field a help tip', () => {
         draw();
+        fireEvent.click(screen.getByRole('button', { name: /^Extra Passphrase/ }));
         fireEvent.click(screen.getByRole('switch', { name: /extra passphrase/ }));
         expect(screen.getByRole('button', { name: 'About Confirm passphrase' })).toBeTruthy();
     });
@@ -75,7 +73,13 @@ describe('CreateWallet review items', () => {
     it('draws the recovery phrase step without the wide form card and with a green Verify action', () => {
         toPhraseStep();
         const verify = screen.getByRole('button', { name: 'Verify Recovery Phrase' });
-        expect(verify).toBeDisabled();
+        // G130: enabled while concealed; the tap explains the reveal gate.
+        expect(verify).toBeEnabled();
+        fireEvent.click(verify);
+        expect(screen.getByRole('alert', { name: /form errors/i })).toHaveTextContent(
+            'Reveal your recovery phrase and write it down first.',
+        );
+        expect(screen.getByRole('button', { name: 'Verify Recovery Phrase' })).toBeInTheDocument();
         expect(verify.className.split(' ')).toContain(buttonStyles.success);
         expect(verify.closest('form').className.split(' ')).toContain(formStyles.cardlessForm);
         expect(document.querySelector('[data-mnemonic-card]')).not.toBeNull();
@@ -83,6 +87,7 @@ describe('CreateWallet review items', () => {
 
     it('gives each verify word field its own help tip', () => {
         toPhraseStep();
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
         fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
         const words = screen.getAllByLabelText(/^Word \d+$/);

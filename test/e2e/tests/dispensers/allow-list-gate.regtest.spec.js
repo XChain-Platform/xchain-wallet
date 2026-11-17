@@ -39,7 +39,7 @@
 //       --config=playwright.regtest.config.js tests/dispensers/allow-list-gate.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test, addWallet, switchToWallet } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test, addWallet, switchToWallet } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal as sharedConfirmModal,
@@ -284,7 +284,7 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create a list');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('List type')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByRole('button', { name: /^List type:/ })).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             // TYPE=2 (addresses). The SELLER'S OWN ADDRESS IS ON THE LIST, and
@@ -293,7 +293,9 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
             // who lists only their customers refuses every sale with
             // `invalid: GET_ADDRESS (dispenser allow list)`. Same asymmetry the
             // token lists have (§"Dispensers" / Session 32), one level down.
-            await main.getByLabel('List type').selectOption('2');
+            // List type is the themed dropdown: open it, then pick Addresses.
+            await main.getByRole('button', { name: /^List type:/ }).click();
+            await main.getByRole('option', { name: 'Addresses', exact: true }).click();
             await main.getByLabel('Addresses', { exact: true }).fill([seller, allowed].join('\n'));
             await expect(main, 'the list form did not accept both addresses for this chain')
                 .toContainText('2 valid addresses');
@@ -330,14 +332,16 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
             await main.getByLabel(/Trigger price/).fill(TRIGGER);
 
-            await main.getByRole('button', { name: 'Set Allow-List' }).click();
+            // The allow and block lists live in their own closed Lists section.
+            await openFormSection(main, 'Lists');
+            await main.getByRole('button', { name: 'Allow list: None set' }).click();
             const picker = page.getByRole('main');
             const row = picker.getByRole('button').filter({ hasText: `Address list #${listIndex}` });
             await expect(row, `the dispenser's list picker cannot see list #${listIndex}, which this `
                 + 'wallet just published from this chain')
                 .toBeVisible({ timeout: 60_000 });
             await row.click();
-            await expect(main.getByRole('button', { name: `Allow-List #${listIndex}` }),
+            await expect(main.getByRole('button', { name: new RegExp(`^Allow list: .*#${listIndex}\\b`) }),
                 'the picker closed without binding the list')
                 .toBeVisible({ timeout: 30_000 });
 
@@ -440,6 +444,9 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
             await row.click();
 
             const panel = page.getByRole('main');
+            // The dispenser page opens on Actions (G102); the buy panel is the
+            // Buy page a buyer's first action row opens.
+            await panel.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
             await expect(panel, 'no pay-to-buy panel rendered at all')
                 .toContainText('Pay to buy', { timeout: 30_000 });
             const text = await panel.innerText();

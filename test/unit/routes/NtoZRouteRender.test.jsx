@@ -41,7 +41,8 @@ describe('SendPicker render', () => {
             onSelect,
         });
 
-        expect(screen.getByRole('heading', { name: 'Send' })).toBeInTheDocument();
+        // Send's Asset field opens this page, so it is titled Asset (G60).
+        expect(screen.getByRole('heading', { name: 'Asset' })).toBeInTheDocument();
         expect(screen.getByRole('status', { name: 'Loading balances' })).toBeInTheDocument();
 
         await act(async () => {
@@ -131,7 +132,7 @@ describe('StakeNew render', () => {
         }, props);
 
         expect(await screen.findByText(/Use Receive on a Bitcoin network/)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Validator staking/ })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /Validator staking/ })).toHaveAttribute('aria-disabled', 'true');
         unmount();
 
         renderRoute(StakeNew, {
@@ -152,11 +153,18 @@ describe('Bet Markets My bets tab render', () => {
         onOpenMarket: vi.fn(),
     };
 
+    // My bets is the All list narrowed to the markets bet in (ruling
+    // 2026-11-13): one market the wallet bet in, one it did not.
+    const MARKETS = [
+        { action_index: 7, label: 'Will it rain?', outcomes: 'Yes,No', tick: 'XCHAIN', feed_status: 'open', source: 'bc1qoracle' },
+        { action_index: 8, label: 'Will it snow?', outcomes: 'Yes,No', tick: 'XCHAIN', feed_status: 'open', source: 'bc1qoracle' },
+    ];
+
     it('renders loading and main states', async () => {
         const addresses = deferred();
         renderRoute(BetFeedsList, {
             getAddressesByChain: vi.fn(() => addresses.promise),
-            betFeeds: vi.fn().mockResolvedValue({ data: [] }),
+            betFeeds: vi.fn().mockResolvedValue({ data: MARKETS }),
             bets: vi.fn().mockResolvedValue([{
                 action_index: 9,
                 feed_action_index: 7,
@@ -175,17 +183,17 @@ describe('Bet Markets My bets tab render', () => {
         });
 
         expect(screen.getByRole('tab', { name: 'My bets' })).toHaveAttribute('aria-selected', 'true');
-        const row = await screen.findByRole('button', { name: /Market #7/ });
-        fireEvent.click(row);
+        const card = await screen.findByRole('button', { name: 'Will it rain?' });
+        expect(screen.queryByRole('button', { name: 'Will it snow?' })).toBeNull();
+        expect(card).toHaveTextContent('You bet 12 XCHAIN');
+        fireEvent.click(card);
         expect(props.onOpenMarket).toHaveBeenCalledWith('bitcoin-mainnet', 7);
-        expect(screen.getByRole('heading', { name: 'Pending resolution' })).toBeInTheDocument();
-        expect(screen.getByText('from bc1qbettor')).toBeInTheDocument();
     });
 
     it('renders empty and error states', async () => {
         const { unmount } = renderRoute(BetFeedsList, {
             getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [{ address: 'bc1qbettor' }] }),
-            betFeeds: vi.fn().mockResolvedValue({ data: [] }),
+            betFeeds: vi.fn().mockResolvedValue({ data: MARKETS }),
             bets: vi.fn().mockResolvedValue([]),
         }, props);
 
@@ -194,7 +202,7 @@ describe('Bet Markets My bets tab render', () => {
 
         renderRoute(BetFeedsList, {
             getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [{ address: 'bc1qbettor' }] }),
-            betFeeds: vi.fn().mockResolvedValue({ data: [] }),
+            betFeeds: vi.fn().mockResolvedValue({ data: MARKETS }),
             bets: vi.fn().mockRejectedValue(new Error('Bet history unavailable.')),
         }, props);
 
@@ -237,10 +245,13 @@ describe('OracleRecord render', () => {
             await record.promise;
         });
 
+        // Actions opens first (G102); the market rows are on Markets.
+        expect(await screen.findByRole('list', { name: 'Oracle actions' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('tab', { name: /Markets/ }));
         expect(await screen.findByText('Example market')).toBeInTheDocument();
-        // Only the chosen tab renders: the counts and fees are on About.
+        // Only the chosen tab renders: the counts and fees are on Details.
         expect(screen.queryByText('Markets opened')).toBeNull();
-        fireEvent.click(screen.getByRole('tab', { name: /About/ }));
+        fireEvent.click(screen.getByRole('tab', { name: /Details/ }));
         expect(screen.getByText('Markets opened')).toBeInTheDocument();
         expect(screen.getByText('Fees earned')).toBeInTheDocument();
         expect(screen.getByText('4')).toBeInTheDocument();
@@ -252,9 +263,10 @@ describe('OracleRecord render', () => {
             betFeeds: vi.fn().mockResolvedValue([]),
         }, props);
 
-        // Markets is the first tab; the fees sit under About.
+        // Actions is the first tab and Markets the next; the fees sit under Details.
+        fireEvent.click(await screen.findByRole('tab', { name: /Markets/ }));
         expect(await screen.findByText('No markets yet')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('tab', { name: /About/ }));
+        fireEvent.click(screen.getByRole('tab', { name: /Details/ }));
         expect(await screen.findByText('No settlement fees yet')).toBeInTheDocument();
         unmount();
 

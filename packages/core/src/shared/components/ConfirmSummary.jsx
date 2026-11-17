@@ -23,6 +23,7 @@ import { defaultRegistry } from '../../registry/index.js';
 import { TickerIcon } from './TickerIcon.jsx';
 import { formatDisplayAmount } from '../utils/amountFormat.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { PREFLIGHT_CHECK_STATES, preflightCheckState } from '../utils/preflightCheckState.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/firstPaint.js';
@@ -49,7 +50,9 @@ const TARGET_MAX = 120;
  * @property {'in'|'out'|'none'} [direction]   green "+" coming in, red minus leaving
  * @property {string} [address]         the address the action happens on
  * @property {string} [recipient]
- * @property {string} [target]          what the action works on when that is not an address (a
+ * @property {Array<{ to: string, tick: string, amount: string }>} [recipients]   every leg of a multi-recipient send, listed in their own card
+ * @property {string[]} [totals]        the per-asset totals of `recipients`, grouped ("1,600 XCHAIN")
+ * @property {string} [target]        what the action works on when that is not an address (a
  *   list, a poll, a contract): the hero's big line when there is no amount, else after the
  *   chain on the line under it; a token target without an amount is `ticker`
  * @property {ConfirmChange[]} [changes]   rows only the form knows (a supply)
@@ -148,22 +151,15 @@ export function mergeChanges(formRows, projected) {
 }
 
 /**
- * The "Looks good" state of the pre-flight panel: the check passed, the
- * network was reached and judged all of it, and nothing was held back.
+ * Whether the page may say "Checked against the network: this will go
+ * through": the indexer gave its own valid verdict, judged all of it, and
+ * nothing was held back. The rule lives in utils/preflightCheckState.js so the
+ * panel chip reads the same report the same way.
  *
  * @param {any} report
  */
 export function preflightCleanPass(report) {
-    if (!report || report.verdict !== 'pass' || report.restricted) return false;
-    const findings = Array.isArray(report.findings) ? report.findings : [];
-    if (findings.some((f) => f?.severity === 'error' || f?.severity === 'warning')) return false;
-    if (findings.some((f) => f?.code === 'DRYRUN_UNAVAILABLE')) return false;
-    const partlyJudged = findings.some((f) => f?.code === 'DRYRUN_VALID'
-        && Number.isInteger(f?.data?.subCommandCount)
-        && Number.isInteger(f?.data?.accepted)
-        && f.data.accepted < f.data.subCommandCount);
-    if (partlyJudged) return false;
-    return !(Array.isArray(report.unverified) && report.unverified.length > 0);
+    return preflightCheckState(report) === PREFLIGHT_CHECK_STATES.PASS;
 }
 
 /**

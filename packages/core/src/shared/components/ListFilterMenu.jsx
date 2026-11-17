@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button, Icon, Input } from '@xchain-wallet/core/ui';
+import { InFilterPanel } from '../../ui/filterPanelSlot.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import { useFilterPanelTop } from './useFilterPanelTop.js';
@@ -57,11 +58,17 @@ export function ListFilterMenu({
 
     useEffect(() => {
         if (!open) return undefined;
+        // The Network choice opens a full-screen list portaled outside the
+        // panel; a press, Escape or focus inside it belongs to that list, so
+        // the panel stays open under it and the pick reaches its handler.
+        const inPickerLayer = (event) => Boolean(event.target?.closest?.('[data-picker-layer]'));
         const onPointerDown = (event) => {
+            if (inPickerLayer(event)) return;
             if (!wrapRef.current?.contains(event.target)) setOpen(false);
         };
         const onKeyDown = (event) => {
             if (event.key !== 'Escape') return;
+            if (inPickerLayer(event)) return;
             event.preventDefault();
             setOpen(false);
             triggerRef.current?.focus();
@@ -69,6 +76,7 @@ export function ListFilterMenu({
         // Arrowing from the search box into the list it narrows keeps the
         // panel open, so the search can be refined and the arrows used again.
         const onFocusIn = (event) => {
+            if (inPickerLayer(event)) return;
             if (wrapRef.current?.contains(event.target)) return;
             if (resultsId && document.getElementById(resultsId)?.contains(event.target)) return;
             setOpen(false);
@@ -101,6 +109,7 @@ export function ListFilterMenu({
                 aria-label={label}
                 aria-haspopup="dialog"
                 aria-expanded={open ? 'true' : 'false'}
+                data-active={filterOn ? 'true' : undefined}
                 title={label}
                 onClick={() => setOpen((value) => !value)}
             >
@@ -143,10 +152,13 @@ export function ListFilterMenu({
                                     value={networkFilter || 'all'}
                                     onChange={onNetworkFilterChange}
                                     ariaLabel={t('home.filter.filterByNetwork')}
+                                    fieldLook
                                 />
                             </div>
                         ) : null}
-                        {children}
+                        {/* Dropdowns in the panel drop their visible labels (G96 walk
+                            ruling 2026-11-13); each label stays the accessible name. */}
+                        <InFilterPanel.Provider value>{children}</InFilterPanel.Provider>
                     </div>
                 </div>
             ) : null}

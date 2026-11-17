@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
+import { selectOption, selectOptionLabels } from '../../helpers/selectOption.js';
 
 vi.mock('@xchain-wallet/core/ui', async (importOriginal) => {
     const actual = await importOriginal();
@@ -130,7 +131,7 @@ describe('AirdropForm page templates', () => {
         expect(from.compareDocumentPosition(token) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(token.compareDocumentPosition(amount) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(amount.compareDocumentPosition(destination) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(Array.from(destination.options).map((option) => option.textContent)).toEqual([
+        expect(selectOptionLabels(destination)).toEqual([
             'Addresses',
             'Existing list',
             'Token holders',
@@ -141,27 +142,26 @@ describe('AirdropForm page templates', () => {
         expect(screen.getByRole('textbox', { name: /^Recipients file \(CSV or TXT\)/ })).toHaveAttribute('readonly');
         expect(screen.getByRole('button', { name: 'Choose a file' })).toBeInTheDocument();
 
-        fireEvent.change(destination, { target: { value: 'existing' } });
+        selectOption(destination, 'existing');
         expect(screen.queryByText('Existing list', { selector: 'label' })).toBeNull();
         expect(screen.queryByRole('textbox', { name: 'Recipients' })).toBeNull();
 
-        fireEvent.change(destination, { target: { value: 'paste' } });
+        selectOption(destination, 'paste');
         expect(screen.getByRole('textbox', { name: 'Recipients' })).toBeInTheDocument();
     });
 
-    it('shows the AIRDROP Fees card in the compose form', async () => {
+    it('shows the AIRDROP fees in the compose form', async () => {
         mountAirdrop();
         await flushTimers();
 
-        const fees = document.querySelector('[data-fees-card]');
+        // The network and protocol fee lines sit in the standard Fees section,
+        // with the pay-in-native switch (closed section, so hidden) and no Total.
+        const fees = document.querySelector('[data-form-section="fee"]');
         expect(fees).not.toBeNull();
         expect(fees.querySelector('[data-fees-row="network"]')).not.toBeNull();
         expect(fees.querySelector('[data-fees-row="protocol"]')).not.toBeNull();
-        // The Fees card sits in the standard Network fee section;
-        // its pay-in-native switch must still be there (closed section, so hidden).
-        expect(fees.closest('[data-form-section="fee"]')).not.toBeNull();
         expect(screen.getByRole('switch', { name: /Pay protocol fee in/, hidden: true })).toBeInTheDocument();
-        expect(fees.querySelector('[data-fees-row="total"]')).not.toBeNull();
+        expect(fees.querySelector('[data-fees-row="total"]')).toBeNull();
     });
 
     it('uses the approved main action and form-specific field help', async () => {
@@ -179,7 +179,7 @@ describe('AirdropForm page templates', () => {
         expect(document.getElementById(recipientsTip.getAttribute('aria-describedby')).textContent)
             .toBe('Enter or upload the recipient addresses for this airdrop. A new address list is published first, then the airdrop is sent to that list.');
 
-        fireEvent.change(screen.getByLabelText(/^Airdrop to/), { target: { value: 'holders' } });
+        selectOption(screen.getByLabelText(/^Airdrop to/), 'holders');
         const tokensTip = screen.getByRole('button', { name: 'About Tokens (one per line)' });
         expect(document.getElementById(tokensTip.getAttribute('aria-describedby')).textContent)
             .toContain('Enter one token ticker per line. A new token list is published first');
@@ -226,8 +226,8 @@ describe('AirdropForm page templates', () => {
 
         mountAirdrop({ walletMode: 'watcher' });
         await flushTimers();
-        expectInsideTemplate(screen.getByRole('heading', { name: 'Not available in watcher mode' }));
-        expectInsideTemplate(screen.getByText(/Switch this wallet to/));
+        expectInsideTemplate(screen.getByRole('heading', { name: 'Not available when another phone signs' }));
+        expectInsideTemplate(screen.getByText(/To author an airdrop, use a wallet that signs on this/));
     });
 
     it('lays out the wait-for-index and done panels through a page template', async () => {
@@ -256,9 +256,9 @@ describe('AirdropForm page templates', () => {
             overrides: { getListsForSource: vi.fn(() => new Promise((resolve) => { resolveLists = resolve; })) },
         });
         await flushTimers();
-        fireEvent.change(screen.getByLabelText(/^Airdrop to/), { target: { value: 'existing' } });
+        selectOption(screen.getByLabelText(/^Airdrop to/), 'existing');
         await flushTimers();
-        fireEvent.click(screen.getByRole('button', { name: 'Choose list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^List:/ }));
         await flushTimers();
         const loading = screen.getByText('Loading lists…');
         expect(loading.closest('[data-test-template="list"]')).not.toBeNull();
@@ -280,9 +280,9 @@ describe('AirdropForm page templates', () => {
             },
         });
         await flushTimers();
-        fireEvent.change(screen.getByLabelText(/^Airdrop to/), { target: { value: 'existing' } });
+        selectOption(screen.getByLabelText(/^Airdrop to/), 'existing');
         await flushTimers();
-        fireEvent.click(screen.getByRole('button', { name: 'Choose list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^List:/ }));
         await flushTimers();
         const addressRow = screen.getByRole('button', { name: 'Team wallets, address list, 1 address' });
         const tokenRow = screen.getByRole('button', {
@@ -299,6 +299,40 @@ describe('AirdropForm page templates', () => {
         expect(tokenRow.querySelector('svg')).not.toBeNull();
         fireEvent.click(tokenRow);
         await flushTimers();
-        expect(screen.getByText('PEPE and DANKEST holders, token list, 2 tokens')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'List: List #43' })).toBeTruthy();
+    });
+
+    it('shows the existing list as a ListField: None set, then the picked name, then a changed pick', async () => {
+        mountAirdrop({
+            overrides: {
+                getListsForSource: vi.fn().mockResolvedValue([
+                    { action_index: 42, type: '2', status: 'valid', block_index: 10, name: 'Team wallets' },
+                    { action_index: 44, type: '2', status: 'valid', block_index: 8, name: 'Friends' },
+                ]),
+                getListByActionIndex: vi.fn(({ actionIndex }) => Promise.resolve(actionIndex === '42'
+                    ? { action_index: 42, type: '2', name: 'Team wallets', list: ['bc1qrecipient'] }
+                    : { action_index: 44, type: '2', name: 'Friends', list: ['bc1qother'] })),
+            },
+        });
+        await flushTimers();
+        selectOption(screen.getByLabelText(/^Airdrop to/), 'existing');
+        await flushTimers();
+        // Empty: the field reads None set, with the list icon, and the old line is gone.
+        const field = screen.getByRole('button', { name: 'List: None set' });
+        expect(field.querySelector('svg')).not.toBeNull();
+        expect(screen.queryByText('No list chosen yet.')).toBeNull();
+        // Pick: the field reads the chosen list's name.
+        fireEvent.click(field);
+        await flushTimers();
+        fireEvent.click(screen.getByRole('button', { name: /^Team wallets, address list/ }));
+        await flushTimers();
+        expect(screen.getByRole('button', { name: /^List: Team wallets/ })).toBeTruthy();
+        // Change: opening the field again and picking another list replaces the name.
+        fireEvent.click(screen.getByRole('button', { name: /^List: Team wallets/ }));
+        await flushTimers();
+        fireEvent.click(screen.getByRole('button', { name: /^Friends, address list/ }));
+        await flushTimers();
+        expect(screen.getByRole('button', { name: /^List: Friends/ })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /^List: Team wallets/ })).toBeNull();
     });
 });

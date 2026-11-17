@@ -95,8 +95,9 @@ function stubBrowser({ write, writeText, share, canShare = () => true }) {
 }
 
 async function clickWhenEnabled(name) {
-    const button = await screen.findByRole('button', { name });
-    await waitFor(() => expect(button.disabled).toBe(false));
+    const button = await screen.findByRole('button', { name: typeof name === 'string' ? new RegExp(`^${name}`) : name });
+    // The QR actions are ActionList rows, which wait with aria-disabled.
+    await waitFor(() => expect(button.getAttribute('aria-disabled')).toBeNull());
     fireEvent.click(button);
 }
 
@@ -129,7 +130,7 @@ describe('Receive QR copy and share toasts', () => {
             .toBeInTheDocument();
         expect(qrToDataURL).not.toHaveBeenCalled();
         expect(screen.queryByText('Rendering QR…')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Copy payment link' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Copy payment link/ })).toBeNull();
         expect(screen.queryByRole('textbox', { name: /^Amount/ })).toBeNull();
     });
 
@@ -137,8 +138,10 @@ describe('Receive QR copy and share toasts', () => {
         renderReceive();
 
         expect(await screen.findByRole('textbox', { name: 'Amount (BTC)' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Share QR payment link' }))
-            .toHaveTextContent(/^Share$/);
+        // Share is an ActionList row: its title, then what it does (G101).
+        const shareRow = screen.getByRole('button', { name: /^Share QR payment link/ });
+        await waitFor(() => expect(shareRow)
+            .toHaveTextContent(/^Share QR payment link\s*Send the link and QR through another app$/));
         expect(screen.queryByRole('slider', { name: /fee/i })).toBeNull();
         expect(screen.queryByText(/network fee|sat\/vB|fee estimate/i)).toBeNull();
         expect(screen.queryByText('0.000015 BTC')).toBeNull();
@@ -168,8 +171,8 @@ describe('Receive QR copy and share toasts', () => {
             expect(await screen.findByDisplayValue(MOBILE_ADDRESS)).toBeInTheDocument();
             expect(screen.getByRole('button', { name: /^Asset: / })).toBeInTheDocument();
             expect(screen.getByRole('textbox', { name: /^Amount/ })).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Copy payment link' })).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'Share QR payment link' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /^Copy payment link/ })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /^Share QR payment link/ })).toBeInTheDocument();
             await waitFor(() => expect(qrToDataURL).toHaveBeenCalledWith(
                 expect.any(String),
                 expect.objectContaining({
@@ -206,9 +209,9 @@ describe('Receive QR copy and share toasts', () => {
             const address = screen.getByDisplayValue(MOBILE_ADDRESS);
             const token = screen.getByRole('button', { name: /^Asset: / });
             const amount = screen.getByRole('textbox', { name: /^Amount/ });
-            const copy = screen.getByRole('button', { name: 'Copy payment link' });
-            const share = screen.getByRole('button', { name: 'Share QR payment link' });
-            const generate = screen.getByRole('button', { name: 'Generate new address' });
+            const copy = screen.getByRole('button', { name: /^Copy payment link/ });
+            const share = screen.getByRole('button', { name: /^Share QR payment link/ });
+            const generate = screen.getByRole('button', { name: /^Generate new address/ });
 
             expect(precedes(qr, address)).toBe(true);
             expect(precedes(address, token)).toBe(true);
@@ -359,7 +362,7 @@ describe('Receive QR copy and share toasts', () => {
         expect(await screen.findByRole('textbox', {
             name: 'Address',
         })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Copy payment link' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^Copy payment link/ })).toBeTruthy();
         const amount = await screen.findByRole('textbox', { name: /^Amount/ });
         fireEvent.change(amount, { target: { value: '0.00000001' } });
         await waitFor(() => expect(qrToDataURL.mock.calls.some(
@@ -622,14 +625,18 @@ describe('Receive address handling', () => {
             derivationPath: "m/84'/0'/0'/0/1",
         };
         const setAddressLabel = vi.fn().mockResolvedValue({ ok: true });
+        let newest = ADDRESS;
         renderReceive({
             setAddressLabel,
-            generateReceiveAddress: vi.fn(async () => generated),
+            getNewestAddress: async () => newest,
+            generateReceiveAddress: vi.fn(async () => { newest = generated; return generated; }),
         });
 
         expect(await screen.findByRole('textbox', { name: 'Address' })).toHaveValue(ADDRESS.address);
         expect(screen.queryByRole('textbox', { name: 'Daily deposits' })).toBeNull();
+        // Generate new address opens the Add Addresses page; its Add Address makes it.
         fireEvent.click(screen.getByRole('button', { name: /Generate new address/ }));
+        fireEvent.click(await screen.findByTestId('add-address-generate'));
         expect(await screen.findByDisplayValue(generated.address)).toBeInTheDocument();
         expect(screen.getByRole('textbox', { name: 'Address' })).toHaveValue(generated.address);
         expect(screen.queryByRole('textbox', { name: 'Second address' })).toBeNull();
@@ -670,15 +677,17 @@ describe('Receive address handling', () => {
             address: 'bcrt1qledgernext',
             derivationPath: "m/84'/0'/0'/0/1",
         };
+        let newest = hardwareAddress;
         renderReceive({
             getAddressesByChain: async () => ({ 'bitcoin-regtest': [hardwareAddress] }),
-            getNewestAddress: async () => hardwareAddress,
+            getNewestAddress: async () => newest,
             verifyReceiveAddress: vi.fn(() => verification),
-            generateReceiveAddress: vi.fn(async () => nextHardwareAddress),
+            generateReceiveAddress: vi.fn(async () => { newest = nextHardwareAddress; return nextHardwareAddress; }),
         });
 
         fireEvent.click(await screen.findByRole('button', { name: 'Verify on Your Ledger' }));
         fireEvent.click(screen.getByRole('button', { name: /Generate new address/ }));
+        fireEvent.click(await screen.findByTestId('add-address-generate'));
         expect(await screen.findByDisplayValue(nextHardwareAddress.address)).toBeInTheDocument();
 
         await act(async () => { resolveVerification({ confirmed: true }); });
@@ -709,22 +718,26 @@ describe('Receive address handling', () => {
             configurable: true,
             value: { writeText },
         });
+        let newest = legacy;
+        generateReceiveAddress.mockImplementation(async () => { newest = generated; return generated; });
         renderReceive({
             getAddressesByChain: async () => ({ 'bitcoin-regtest': [ADDRESS, legacy] }),
-            // Receive has no Address type select; it uses the newest address's type.
-            getNewestAddress: async () => legacy,
+            // Receive has no Address type select of its own.
+            getNewestAddress: async () => newest,
             generateReceiveAddress,
         });
 
         expect(await screen.findByLabelText('Address')).toHaveValue(legacy.address);
         expect(screen.queryByLabelText('Address type')).toBeNull();
 
+        // The Add Addresses page opens for this chain; its own default type applies.
         fireEvent.click(screen.getByRole('button', { name: /Generate new address/ }));
+        fireEvent.click(await screen.findByTestId('add-address-generate'));
         await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledWith({
             walletId: 'w1',
             accountId: 'acct-1',
             chainId: 'bitcoin-regtest',
-            addressType: 'p2pkh',
+            addressType: 'p2wpkh',
         }));
         await screen.findByDisplayValue(generated.address);
         const generatedField = screen.getByLabelText('Address');
@@ -782,5 +795,51 @@ describe('Receive address handling', () => {
         resolveQr[1]('data:image/png;base64,Y3VycmVudA==');
         const currentQr = await screen.findByRole('img', { name: /QR code for/ });
         expect(currentQr).toHaveAttribute('src', 'data:image/png;base64,Y3VycmVudA==');
+    });
+});
+
+describe('Receive QR actions as an ActionList (G101)', () => {
+    it('draws Copy, Share and New address as list rows, each with what it does', async () => {
+        renderReceive();
+        const list = await screen.findByRole('list', { name: 'Payment request actions' });
+        const rows = list.querySelectorAll(':scope > li');
+        expect(rows.length).toBeGreaterThanOrEqual(3);
+        const copy = screen.getByRole('button', { name: /^Copy (QR code|payment link)/ });
+        const share = screen.getByRole('button', { name: /^Share QR payment link/ });
+        const generate = screen.getByRole('button', { name: /^Generate new address/ });
+        for (const row of [copy, share, generate]) expect(list.contains(row)).toBe(true);
+        await waitFor(() => expect(copy).not.toHaveAttribute('aria-disabled'));
+        expect(copy).toHaveTextContent(/payment link|QR image/);
+        expect(share).toHaveTextContent('Send the link and QR through another app');
+        expect(generate).toHaveTextContent('A fresh address on this network for the next payment');
+        // No short button row is left under the QR.
+        expect(screen.queryByRole('button', { name: /^Copy$/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Share$/ })).toBeNull();
+    });
+
+    it('keeps Copy and Share as disabled rows with their reason until the QR renders', async () => {
+        let resolveQr;
+        qrToDataURL.mockImplementation(() => new Promise((resolve) => { resolveQr = resolve; }));
+        renderReceive();
+        const copy = await screen.findByRole('button', { name: /^Copy (QR code|payment link)/ });
+        const share = screen.getByRole('button', { name: /^Share QR payment link/ });
+        await waitFor(() => expect(typeof resolveQr).toBe('function'));
+        for (const row of [copy, share]) {
+            expect(row).toHaveAttribute('aria-disabled', 'true');
+            expect(row).toHaveTextContent('Ready once the QR code appears');
+        }
+        fireEvent.click(share);
+        expect(showToast).not.toHaveBeenCalled();
+        await act(async () => { resolveQr('data:image/png;base64,iVBORw0KGgo='); });
+        await waitFor(() => expect(copy).not.toHaveAttribute('aria-disabled'));
+    });
+
+    it('runs the existing copy handler from its row', async () => {
+        const write = vi.fn().mockResolvedValue(undefined);
+        stubBrowser({ write });
+        renderReceive();
+        await clickWhenEnabled('Copy QR code');
+        await waitFor(() => expect(write).toHaveBeenCalledOnce());
+        expect(showToast).toHaveBeenCalledWith({ message: 'QR code copied to clipboard.' });
     });
 });

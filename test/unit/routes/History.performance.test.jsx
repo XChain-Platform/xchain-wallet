@@ -24,6 +24,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
 import { slowTimeout } from '../../helpers/testEnvSpeed.js';
+import { EXPORT_ITEM, chooseHistoryMenuItem } from './historyMoreMenu.js';
 
 const CHAIN = 'litecoin-regtest';
 const ADDRESS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -90,7 +91,7 @@ describe('History large-list performance', () => {
 
         // The block label rides on the newest row's accessible description.
         await waitFor(() => {
-            expect(view.container.querySelector('[data-history-row][aria-description*="Block 100,000"]')).not.toBeNull();
+            expect(view.container.querySelector('[data-history-row][aria-description*="Block 100000"]')).not.toBeNull();
         }, { timeout: 20_000 });
         const elapsedMs = performance.now() - startedAt;
         const renderedRows = view.container.querySelectorAll('[data-history-key]');
@@ -108,7 +109,7 @@ describe('History large-list performance', () => {
         });
         expect(renderMetrics.blockLabels.mock.calls.length - initialBlockLabels).toBe(1);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
+        chooseHistoryMenuItem(EXPORT_ITEM);
         expect(screen.getByText(`${ENTRY_COUNT.toLocaleString()} history items will be exported.`))
             .toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));

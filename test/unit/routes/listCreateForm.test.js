@@ -111,10 +111,13 @@ describe('ListCreateForm: the bridge-foreclosure disclosure', () => {
         await screen.findByLabelText('Tokens');
         expect(screen.queryByText(FORECLOSURE_TEXT)).not.toBeInTheDocument();
 
-        fireEvent.change(screen.getByLabelText('List type'), { target: { value: '2' } });
+        // List type is the themed dropdown: open it, then pick the option.
+        fireEvent.click(screen.getByRole('button', { name: /^List type:/ }));
+        fireEvent.click(screen.getByRole('option', { name: 'Addresses' }));
         expect(await screen.findByText(FORECLOSURE_TEXT)).toBeInTheDocument();
 
-        fireEvent.change(screen.getByLabelText('List type'), { target: { value: '1' } });
+        fireEvent.click(screen.getByRole('button', { name: /^List type:/ }));
+        fireEvent.click(screen.getByRole('option', { name: 'Tokens' }));
         expect(screen.queryByText(FORECLOSURE_TEXT)).not.toBeInTheDocument();
     });
 
@@ -130,7 +133,7 @@ describe('ListCreateForm: the bridge-foreclosure disclosure', () => {
         const textarea = await screen.findByLabelText('Tokens');
         expect(textarea).toHaveAttribute('autocapitalize', 'off');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add From Token Picker' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add from Token Picker' }));
         fireEvent.click(await screen.findByLabelText(/^Select MiXeD!(?:[\s,]|$)/));
 
         expect(await screen.findByLabelText('Tokens')).toHaveValue('MiXeD!');

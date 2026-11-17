@@ -12,10 +12,9 @@ import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
 import { isFeeBearingAction } from '../../flows/feeBearingActions.js';
-import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { AddressText, Button, FieldNote, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { Button, FieldNote, FormNotice, Icon, Input, ListPage, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 // The Wallet Form Standard frame.
 import { FeeSection, FormAction, FormFrame, FormSection, FromSection, useFormSections } from '../components/formStandard/index.js';
 import {
@@ -25,13 +24,14 @@ import {
 import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/send.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { groupDecodedAmounts } from '../utils/amountFormat.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { irreversibleConfirmWord } from '../utils/irreversibleActionGate.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
-import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -46,10 +46,13 @@ import {
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+import { actionSelectOptions } from '../utils/actionOptionIcon.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
+import { actionWarningIds } from '../../flows/actionWarnings.js';
 import {
     BTC_EXCLUSIVE_ACTIONS,
     COMMON_ACTIONS,
@@ -60,6 +63,7 @@ import {
 } from '../../registry/actions.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
@@ -138,12 +142,10 @@ export function dedicatedFormActions({ authorable, protocolOnly }) {
     return new Set(authorable.filter((a) => !formless.has(a)));
 }
 
-// Actions that have their own dedicated forms. The Advanced form
-// still exposes them (power users may want the raw field surface),
-// but the dropdown decorates them with "(dedicated form available)"
-// so the user doesn't reach for Advanced when a curated UX exists.
-// Derived from the registry, so a new form is labelled the day it ships.
-const ACTIONS_WITH_DEDICATED_FORMS = dedicatedFormActions({
+// Actions that have their own dedicated forms, derived from the registry.
+// The picker no longer prints this beside each option (operator ruling
+// 2026-11-14); the set stays exported for callers that need to know.
+export const ACTIONS_WITH_DEDICATED_FORMS = dedicatedFormActions({
     authorable: [...COMMON_ACTIONS, ...BTC_EXCLUSIVE_ACTIONS],
     protocolOnly: PROTOCOL_ONLY_ACTIONS,
 });
@@ -425,13 +427,29 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action,
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
-        });
+        }));
     }, [stage, action, actionParams, chainId]);
+    const quotedProtocolFee = normalizeProtocolFee(protocolFeeQuote);
+    const reviewDecoded = useMemo(() => (decoded ? {
+        ...decoded,
+        warnings: [
+            ...(decoded.warnings || []),
+            ...(payFeeInNativeCoin ? [NATIVE_FEE_WARNING] : []),
+        ],
+    } : null), [decoded, payFeeInNativeCoin]);
+    const legacyComposed = useMemo(() => (reviewDecoded ? {
+        action,
+        chainId,
+        decoded: reviewDecoded,
+        quote: protocolFeeQuote,
+        protocolFeeKnownFree: quotedProtocolFee.known && quotedProtocolFee.free,
+        actionWarnings: actionWarningIds({ action, params: actionParams }),
+    } : null), [action, actionParams, chainId, protocolFeeQuote, quotedProtocolFee.free, quotedProtocolFee.known, reviewDecoded]);
 
     const handleFieldChange = useCallback((field, rawValue) => {
         setValues((prev) => ({ ...prev, [field]: rawValue }));
@@ -650,12 +668,11 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
         setStage('form');
     }
 
-        // Name the action in words on the review stage, as the queued and success copy do.
-        const actionLabelLower = actionDisplayLabel(action).toLowerCase() || 'action';
-        // Button labels are Title Case, so the action name is cased the same way.
-        const actionLabelTitle = titleCase(actionLabelLower);
-        const header = (
+    // Name the action in words on the review stage, as the queued and success copy do.
+    const actionLabelLower = actionDisplayLabel(action).toLowerCase() || 'action';
+    const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
@@ -743,78 +760,55 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review advanced action"
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="success"
-                        icon={isWatcherMode ? <Icon.DownloadIcon /> : isHwSource ? <Icon.SignIcon /> : <Icon.KeyIcon />}
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? `Create Unsigned Transaction: ${actionLabelTitle}`
-                            : `Sign: ${actionLabelTitle}`}
-                    </Button>
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setTypedConfirm(''); setStage('compose'); }}
+                decoded={reviewDecoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentialsReady={typedConfirmOk}
+                credentials={(
+                    <>
+                        <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
+                        {confirmWord ? (
+                            <Input
+                                label={`Type "${confirmWord}" to confirm`}
+                                help={t('common.typedConfirmationHint', { word: confirmWord })}
+                                value={typedConfirm}
+                                onChange={(event) => setTypedConfirm(event.target.value)}
+                                autoComplete="off"
+                                autoCorrect="off"
+                                spellCheck={false}
+                            />
+                        ) : null}
+                    </>
                 )}
-            >
-                <p className={styles.summary}>{decoded?.summary}</p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {(decoded?.details || []).map((d) => (
-                        <DetailRow key={d.label} label={d.label} value={d.value} />
-                    ))}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                </dl>
-                {payFeeInNativeCoin ? (
-                    <FormNotice variant="warning" role="alert">{NATIVE_FEE_WARNING}</FormNotice>
-                ) : null}
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                )}
-            </FormPage>,
+                summary={{
+                    verb: titleCase(actionDisplayLabel(action)),
+                    chainId,
+                    address: fromAddress?.address,
+                    ...(!payFeeInNativeCoin && quotedProtocolFee.known ? {
+                        protocolFee: {
+                            amount: quotedProtocolFee.free ? '0' : String(quotedProtocolFee.amount ?? ''),
+                            ticker: 'XCHAIN',
+                        },
+                    } : {}),
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -834,6 +828,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 confirmAction={actionConfirm.confirmAction}
                 summary={advancedSummary}
                 screenVariant={variant}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -854,7 +849,7 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                 extraCredentials={confirmWord ? (
                     <Input
                         label={`Type "${confirmWord}" to confirm`}
-                        help={t('common.typedConfirmationAdvancedHint', { word: confirmWord })}
+                        help={t('common.typedConfirmationHint', { word: confirmWord })}
                         value={typedConfirm}
                         onChange={(e) => setTypedConfirm(e.target.value)}
                         autoComplete="off"
@@ -883,17 +878,9 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
 
     // stage === 'compose'
     const errorKey = (section) => (errorAt.section === section ? errorAt.attempt : 0);
-    // The closed summaries. Action names the picked action; the fee
-    // row adds the protocol fee when the action carries one.
+    // The closed summary of the Action section names the picked action; the
+    // Fees section writes its own.
     const actionSummary = action ? actionDisplayLabel(action) : 'Not set';
-    const protocolFee = feeBearingAction ? normalizeProtocolFee(protocolFeeQuote) : null;
-    const protocolSummary = !protocolFee
-        ? undefined
-        : payFeeInNativeCoin
-            ? `protocol fee in ${coinTicker}`
-            : protocolFee.known
-                ? (protocolFee.free ? 'no protocol fee' : (protocolFee.amount ? `${protocolFee.amount} XCHAIN protocol fee` : 'protocol fee'))
-                : (protocolFeePending ? 'protocol fee pending' : undefined);
     // The Wallet Form Standard. From holds the Network and the From address;
     // Action holds the picker, format version and raw fields; then the Network
     // fee row (Fees card for a protocol fee), the status slot and Sign action.
@@ -950,7 +937,6 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     onChange={setFeePick}
                     customEstimate={feeCustomEstimate}
                     revealKey={errorKey('fee')}
-                    protocolSummary={protocolSummary}
                     // The Fees card only for an action with a protocol fee path.
                     fees={isFeeBearingAction(action, { newToken: action === 'ISSUE' }) ? ({
                         quote: protocolFeeQuote,
@@ -979,20 +965,12 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             >
             <Select
                 label="Action"
-                help="Pick any XChain action to compose it from its raw fields. Actions marked (dedicated form available) also have a guided form, which is easier to use."
+                help="Pick any XChain action to compose it from its raw fields."
                 className={styles.picker}
                 value={action}
                 onChange={(e) => handleActionChange(e.target.value)}
             >
-                <option value="">Pick an action</option>
-                {(actions || []).map((a) => (
-                    <option key={a} value={a}>
-                        {actionDisplayLabel(a)} ({a})
-                        {ACTIONS_WITH_DEDICATED_FORMS.has(a)
-                            ? ' (dedicated form available)'
-                            : ''}
-                    </option>
-                ))}
+                {actionSelectOptions(actions || [], 'Pick an action')}
             </Select>
 
             {action === 'SEND' || action === 'BATCH' ? (
@@ -1022,11 +1000,11 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
                     value={version}
                     onChange={(e) => { setVersion(e.target.value); setValidation(null); }}
                 >
-                    <option value="">Auto-select (recommended)</option>
+                    <Select.Option value="" icon={<Icon.ZapIcon />}>Auto-select (recommended)</Select.Option>
                     {Object.keys(formats).map((v) => (
-                        <option key={v} value={v}>
+                        <Select.Option key={v} value={v} icon={<Icon.DocumentIcon />}>
                             v{v}: {formats[v]}
-                        </option>
+                        </Select.Option>
                     ))}
                 </Select>
             ) : null}
@@ -1079,15 +1057,6 @@ export function AdvancedActionsForm({ walletId, onBack, hasDexSurface = true }) 
             ) : null}
             </FormSection>
         </FormFrame>,
-    );
-}
-
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
     );
 }
 

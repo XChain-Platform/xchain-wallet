@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useLayoutEffect, useState } from 'react';
 import { userEvent } from '../../helpers/userEvent.js';
 import { readFileSync } from 'node:fs';
@@ -211,6 +211,7 @@ describe('TokenPicker asset visibility and filtering', () => {
             messaging: makeMessaging({
                 getSettings: vi.fn().mockResolvedValue({
                     privacy: { hideSmallBalances: true },
+                    // An old coin-unit choice reads as the fiat default.
                     smallBalanceThreshold: 'dust',
                 }),
             }),
@@ -219,7 +220,9 @@ describe('TokenPicker asset visibility and filtering', () => {
         expect(await screen.findByText(LONG_NAME)).toBeInTheDocument();
         expect(screen.queryByText('Zero Bitcoin token')).toBeNull();
         expect(screen.queryByText('Zero Litecoin token')).toBeNull();
-        const toggle = await screen.findByRole('button', { name: 'Show 4 small balances' });
+        // The picker's rows carry no price, so only the zero balances fold
+        // (operator ruling 2026-11-14: no price is never small by value).
+        const toggle = await screen.findByRole('button', { name: 'Show 3 small balances' });
         fireEvent.click(toggle);
         expect(screen.getByText('Zero Bitcoin token')).toBeInTheDocument();
         expect(screen.getByText('Zero Litecoin token')).toBeInTheDocument();
@@ -242,7 +245,9 @@ describe('TokenPicker asset visibility and filtering', () => {
 
         openFilter();
         fireEvent.click(screen.getByRole('button', { name: /^Filter by network/ }));
-        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
+        // The network filter opens the full-screen network list.
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Network' }))
+            .getByRole('button', { name: 'Select Litecoin' }));
 
         expect(screen.getByRole('button', { name: /^Select Litecoin\b/ })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /^Select Bitcoin\b/ })).toBeNull();
@@ -285,7 +290,8 @@ describe('TokenPicker asset visibility and filtering', () => {
 
         openFilter();
         fireEvent.click(screen.getByRole('button', { name: /^Filter by network/ }));
-        fireEvent.click(screen.getByRole('option', { name: /Litecoin/ }));
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Network' }))
+            .getByRole('button', { name: 'Select Litecoin' }));
         fireEvent.change(openSearch(), {
             target: { value: 'PEPE' },
         });

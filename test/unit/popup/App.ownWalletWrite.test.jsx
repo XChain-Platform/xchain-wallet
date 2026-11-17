@@ -94,28 +94,27 @@ function boot() {
 const count = (sent, type) => sent.filter((entry) => entry === type).length;
 
 describe('popup onboarding lanes keep the window through their own first-wallet write', () => {
-    it('does not offer hardware setup among the fresh-wallet choices yet', async () => {
+    const CONNECT_HARDWARE = /^Connect (a )?Hardware Wallet$/;
+
+    it('offers no two-phone pairing on Welcome, and no hardware setup without WebHID', async () => {
         boot();
         render(<App />);
-        expect(await screen.findByRole('button', { name: 'Pair an Offline Signer' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Connect a Hardware Wallet' })).toBeNull();
+        expect(await screen.findByRole('button', { name: 'Import Wallet' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Offline Signer|another phone/i })).toBeNull();
+        // The extension has Ledger only, over WebHID; jsdom has no WebHID.
+        expect(screen.queryByRole('button', { name: CONNECT_HARDWARE })).toBeNull();
     });
 
-    it('reaches the pairing code exchange after the lane imports the shared phrase', async () => {
-        const { sent } = boot();
-        render(<App />);
-        fireEvent.click(await screen.findByRole('button', { name: 'Pair an Offline Signer' }));
-        fireEvent.click(screen.getByRole('button', { name: 'This device watches. Pair a signer' }));
-        fireEvent.change(screen.getByLabelText('Shared recovery phrase'), { target: { value: PHRASE } });
-        fireEvent.change(screen.getByLabelText('Password for this device'), { target: { value: PASSWORD } });
-        fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
-        const sessionReads = count(sent, 'session.status');
-        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-
-        expect(await screen.findByText('XCW-PAIR:ZmFrZQ')).toBeInTheDocument();
-        expect(screen.getByLabelText("Paste the other wallet's code")).toBeInTheDocument();
-        expect(count(sent, 'pairing.payload')).toBe(1);
-        expect(count(sent, 'session.status')).toBe(sessionReads);
+    it('opens the Connect Hardware Wallet flow from Welcome when WebHID can reach a Ledger', async () => {
+        boot();
+        Object.defineProperty(navigator, 'hid', { value: {}, configurable: true });
+        try {
+            render(<App />);
+            fireEvent.click(await screen.findByRole('button', { name: CONNECT_HARDWARE }));
+            expect(await screen.findByRole('heading', { name: 'Hardware Wallet' })).toBeInTheDocument();
+        } finally {
+            delete navigator.hid;
+        }
     });
 
     it('shows the donation notice after the lane imports a recovery phrase', async () => {
@@ -128,7 +127,7 @@ describe('popup onboarding lanes keep the window through their own first-wallet 
         const sessionReads = count(sent, 'session.status');
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
-        expect(await screen.findByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Automatic Donations' })).toBeInTheDocument();
         expect(count(sent, 'session.status')).toBe(sessionReads);
     });
 

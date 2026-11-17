@@ -94,7 +94,8 @@ async function mountManage(onAccessLists) {
             />
         </MessagingProvider>,
     );
-    await screen.findByText('Shared list token');
+    // The page heading names the token; its description is a Details row.
+    await screen.findByRole('heading', { level: 1, name: TICK });
 }
 
 afterEach(() => {
@@ -103,11 +104,14 @@ afterEach(() => {
 });
 
 describe('TokenAdminForm shared block lists', () => {
-    it('opens the directory, binds its local target, and composes ISSUE v5', async () => {
+    it('picks a published list from the Block list field, binds its local target, and composes ISSUE v5', async () => {
         const { composeForConfirm, messaging } = mountAdmin();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Use a Shared Block List' }));
-        const choose = await screen.findByRole('button', { name: 'Choose List' });
+        // The field opens the picker; with no lists of its own the wallet
+        // lands on All, which carries the shared directory.
+        fireEvent.click(await screen.findByRole('button', { name: 'Block list: None set' }));
+        const choose = await screen.findByRole('button', { name: /Address list #204/ });
+        expect(choose).toHaveTextContent('shared from LTC list #9');
         expect(messaging.getSharedLists).toHaveBeenCalledWith({ chainId: CHAIN });
         fireEvent.click(choose);
 
@@ -122,11 +126,12 @@ describe('TokenAdminForm shared block lists', () => {
         });
     });
 
-    it('opens the shared directory from initialPicker', async () => {
+    it('opens the block list picker on All from initialPicker', async () => {
         mountAdmin({ initialPicker: 'shared-block' });
 
-        expect(await screen.findByText('Choose a Shared List')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Choose List' })).toBeTruthy();
+        expect(await screen.findByRole('heading', { name: 'Select Block List' })).toBeTruthy();
+        expect(screen.getByRole('radio', { name: 'All' })).toHaveAttribute('aria-checked', 'true');
+        expect(await screen.findByRole('button', { name: /Address list #204/ })).toBeTruthy();
     });
 
     it('preserves an initialPicker selection when token metadata finishes loading', async () => {
@@ -134,7 +139,7 @@ describe('TokenAdminForm shared block lists', () => {
         const getTokenInfo = vi.fn().mockReturnValue(new Promise((resolve) => { resolveTokenInfo = resolve; }));
         mountAdmin({ initialPicker: 'shared-block', getTokenInfo });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Choose List' }));
+        fireEvent.click(await screen.findByRole('button', { name: /Address list #204/ }));
         expect(await screen.findByText(/List #204 \(shared from LTC list #9\)/)).toBeTruthy();
 
         resolveTokenInfo({ creator: SOURCE.address, allowList: '88', blockList: '77' });
@@ -150,9 +155,11 @@ describe('shared block list entry points', () => {
         const onAccessLists = vi.fn();
         await mountManage(onAccessLists);
 
-        // The action sits in the closed "Rules and automation" group.
-        fireEvent.click(screen.getByRole('button', { name: /^Rules and automation/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Shared block list' }));
+        // The action sits in the issuer's "Rules and automation" list, which
+        // unlocks once the page knows this wallet issued the token.
+        await screen.findByRole('region', { name: 'Rules and automation' });
+        await waitFor(() => expect(screen.getByRole('button', { name: /^Shared block list\b/ })).not.toHaveAttribute('aria-disabled'));
+        fireEvent.click(screen.getByRole('button', { name: /^Shared block list\b/ }));
 
         expect(onAccessLists).toHaveBeenCalledTimes(1);
     });

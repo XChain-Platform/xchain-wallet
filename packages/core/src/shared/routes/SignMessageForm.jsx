@@ -23,7 +23,7 @@
 // separate FOLLOWUP and will route through the signer bridge.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CopyButton, Icon, InfoTip, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { CopyButton, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 // The Wallet Form Standard frame.
 import { FormAction, FormFrame, FormSection, FromSection, useFormSections } from '../components/formStandard/index.js';
@@ -35,7 +35,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
+import { DraftNotice } from '../components/DraftNotice.jsx';
 import styles from './SignMessageForm.module.css';
 import {
     hasAnyAddress,
@@ -148,7 +148,7 @@ export function SignMessageForm({ walletId, onBack }) {
         if (typeof v.message === 'string') setMessage(v.message);
         setDraftPending(true);
     }, [draft]);
-    const dismissDraft = useCallback(() => {
+    const discardSavedDraft = useCallback(() => {
         draft.clear();
         setDraftPending(true);
     }, [draft]);
@@ -327,15 +327,12 @@ export function SignMessageForm({ walletId, onBack }) {
     }
 
     const draftBanner = draft.hasDraft() && !draftPending && !signature ? (
-        <StatusMessage
-            variant="status"
-            recovery={{ label: 'Restore', onAction: restoreDraft }}
+        <DraftNotice
+            onRestore={restoreDraft}
+            onDiscard={discardSavedDraft}
         >
             You have an unfinished message draft.
-            <DraftDiscardButton onClick={dismissDraft} label="Discard saved draft">
-                Discard
-            </DraftDiscardButton>
-        </StatusMessage>
+        </DraftNotice>
     ) : null;
 
     // The closed Message summary is the message's first line.
@@ -349,10 +346,8 @@ export function SignMessageForm({ walletId, onBack }) {
         <FormFrame
             label="Sign message"
             onSubmit={handleSubmit}
-            status={[
-                error ? <StatusMessage variant="error">{error}</StatusMessage> : null,
-                draftBanner,
-            ]}
+            lead={draftBanner}
+            status={error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
             action={(
                 <FormAction
                     icon={<Icon.SignIcon />}
@@ -409,11 +404,6 @@ export function SignMessageForm({ walletId, onBack }) {
             <div className={styles.signatureField}>
                 <div className={styles.signatureLabelRow}>
                     <span className={styles.signatureLabel}>Signature</span>
-                    <InfoTip
-                        className={styles.signatureHelp}
-                        label="The signature for this message and address. Share it with the message and the address so others can verify it."
-                        aria="About Signature"
-                    />
                 </div>
                 <div
                     className={styles.signatureBox}

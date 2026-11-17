@@ -21,7 +21,7 @@
 //
 // All signing pubkey fields are 64-hex Ed25519 pubkeys. The composers
 // guard the format up-front so a malformed input short-circuits before
-// we hit the SDK encoder. UI is in DelegationActionForm.jsx.
+// we hit the SDK encoder. UI is the one Staking form (StakingForm.jsx).
 
 import { submitAction } from './submitAction.js';
 import { normalizeSource } from './sendToken.js';

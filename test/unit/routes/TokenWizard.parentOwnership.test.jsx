@@ -20,6 +20,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 // The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+import { ownedTokensFor, pickParentToken } from '../../helpers/issueParentPicker.js';
 
 const OWNER = 'bc1qownerownerownerownerownerownerownerow';
 const STRANGER = 'bc1qstrangerstrangerstrangerstrangerstrang';
@@ -43,6 +44,8 @@ async function review(parentLookup, overrides = {}) {
         getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getTokenInfo,
+        // The picker lists PARENT; the lookup at submit decides ownership.
+        getOwnedTokens: ownedTokensFor(vi.fn, OWNER, ['PARENT']),
         composeForConfirm: vi.fn().mockResolvedValue({
             psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
         }),
@@ -56,7 +59,7 @@ async function review(parentLookup, overrides = {}) {
     );
     fireEvent.click(await screen.findByRole('button', { name: /^Select template/ }));
     fireEvent.click(screen.getByRole('option', { name: /Subtoken/ }));
-    fireEvent.change(await screen.findByLabelText('Parent ticker'), { target: { value: 'PARENT' } });
+    await pickParentToken('PARENT');
     fireEvent.change(screen.getByLabelText('Subtoken name'), { target: { value: 'CHILD' } });
     fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
@@ -83,13 +86,18 @@ describe('Issue Token subtoken parent lookup', () => {
 
     it('refuses a parent that the explorer does not know', async () => {
         const messaging = await review(vi.fn().mockResolvedValue({ creator: null }));
-        expect(await screen.findByRole('alert')).toHaveTextContent(/PARENT could not be confirmed as a token this wallet owns/);
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(/PARENT could not be confirmed as a token this wallet owns/);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('refuses a parent owned by another address', async () => {
         const messaging = await review(vi.fn().mockResolvedValue({ creator: STRANGER }));
-        expect(await screen.findByRole('alert')).toHaveTextContent(/This wallet does not own PARENT/);
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(/This wallet does not own PARENT/);
+        // The refusal is keyed to the Parent token field, so that field is
+        // outlined red with the same line under it (the form error standard).
+        const parentField = document.getElementById('issue-parent-ticker');
+        expect(parentField.getAttribute('aria-invalid')).toBe('true');
+        expect(document.getElementById('issue-parent-ticker-error')).toHaveTextContent(/This wallet does not own PARENT/);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -101,16 +109,18 @@ describe('Issue Token subtoken parent lookup', () => {
         const messaging = await review(vi.fn(() => Promise.resolve({ creator: owner })), {
             buildActionPsbtRequest: vi.fn().mockResolvedValue({ psbtHex: '70736274ff00' }),
         });
-        const reviewForm = await screen.findByRole('form', { name: 'Review token issue' });
+        await screen.findByTestId('confirm-modal');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Issue');
         owner = STRANGER;
-        fireEvent.submit(reviewForm);
+        await waitFor(() => expect(screen.getByTestId('confirm-approve')).not.toBeDisabled());
+        fireEvent.click(screen.getByTestId('confirm-approve'));
         expect(await screen.findByText(/This wallet does not own PARENT/)).toBeTruthy();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
     it('refuses when the explorer cannot answer', async () => {
         const messaging = await review(vi.fn().mockRejectedValue(new Error('explorer 500')));
-        expect(await screen.findByRole('alert')).toHaveTextContent(/PARENT could not be confirmed as a token this wallet owns/);
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(/PARENT could not be confirmed as a token this wallet owns/);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

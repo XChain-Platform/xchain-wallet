@@ -65,12 +65,14 @@ afterEach(() => {
 });
 
 describe('SweepForm field help tips', () => {
-    it('gives From, Destination address and Memo a help button on the label', async () => {
+    it('gives From and Destination address a help button on the label, and the lone memo none', async () => {
         const container = mountSweep();
         // The standard From section labels the field "From address".
         await waitFor(() => expect(container.querySelector('button[aria-label="About From address"]')).not.toBeNull());
         expect(container.querySelector('button[aria-label="About Destination address"]')).not.toBeNull();
-        expect(container.querySelector('button[aria-label="About Memo"]')).not.toBeNull();
+        // A memo alone in its Memo section has no label row and no tip (ruling).
+        expect(container.querySelector('button[aria-label="About Memo"]')).toBeNull();
+        expect(container.querySelector('[data-form-section="memo"] textarea[aria-label="Memo"]')).not.toBeNull();
     });
 
     it('shows no Addresses heading above the Network field', async () => {

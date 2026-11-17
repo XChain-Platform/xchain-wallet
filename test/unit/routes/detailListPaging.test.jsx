@@ -126,7 +126,9 @@ describe('ListDetail member paging', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByText('Members as published (26)')).toBeTruthy();
+        // The members sit on the List tab, 25 to a page, the duplicate dropped.
+        fireEvent.click(await screen.findByRole('tab', { name: 'List' }));
+        await screen.findByRole('button', { name: 'Load More Members' });
         const list = document.querySelector('ul');
         expect(list.querySelectorAll('li')).toHaveLength(25);
         const scroller = document.querySelector('main');
@@ -173,8 +175,11 @@ describe('DispenserExplorer result paging', () => {
         );
 
         await waitFor(() => expect(messaging.getSettings).toHaveBeenCalled());
+        // The search box lives in the title bar's filter panel (G04).
+        fireEvent.click(screen.getByRole('button', { name: 'Filter dispensers' }));
+        await waitFor(() => expect(screen.queryByText('Loading available networks…')).toBeNull());
         fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'PAGED' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+        fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
 
         const loadMore = await screen.findByRole('button', { name: /Load more results for/ });
         return loadMore;
@@ -188,8 +193,10 @@ describe('DispenserExplorer result paging', () => {
     it('merges pages by action index and keeps the result scroller anchored', async () => {
         const loadMore = await searchPagedDispensers();
         const section = loadMore.closest('section');
-        // Each result is a card button; its name carries the unique seller address.
-        const cards = () => within(section).getAllByRole('button', { name: /seller bcrt1qholder/ });
+        // Each result is a row button named by its terms ("... PAGED for ...");
+        // rows print no seller address now, so the count alone proves the
+        // duplicate across pages was merged (49, not 50).
+        const cards = () => within(section).getAllByRole('button', { name: /PAGED for / });
         expect(cards()).toHaveLength(25);
         const scroller = document.querySelector('main');
         scroller.scrollTop = 211;
@@ -238,7 +245,8 @@ describe('MarketActivity long lists', () => {
         // Dispenser sales are the Trades tab now.
         fireEvent.click(await screen.findByRole('tab', { name: 'Trades' }));
         const section = await screen.findByRole('region', { name: 'Recent trades' });
-        expect(within(section).getByText('51 recent')).toBeTruthy();
+        // The card is just its rows now, with no title or count line above them.
+        expect(within(section).queryByText(/\d+ recent/)).toBeNull();
         expect(within(section).getAllByRole('listitem')).toHaveLength(50);
         const list = within(section).getByRole('list');
         const scroller = document.querySelector('main');

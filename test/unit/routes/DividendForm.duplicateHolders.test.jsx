@@ -86,7 +86,7 @@ describe('Dividend holder completeness', () => {
         await flushTimers();
 
         expect(document.body.textContent).toMatch(/holder list is incomplete/i);
-        expect(screen.getByRole('button', { name: 'Pay Dividend' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Pay Dividend' })).toBeEnabled();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

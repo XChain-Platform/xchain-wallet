@@ -28,7 +28,9 @@ test('the dispenser expiration field names its time zone and shows the UTC momen
     await createWallet(page);
     await gotoPalette(page, 'Create dispenser');
     const main = page.getByRole('main');
-    await main.getByRole('radio', { name: /Expire at a specific time/ }).check();
+    // Expiration is the icon dropdown (G44), not radio buttons.
+    await main.getByRole('combobox', { name: /Expiration/ }).click();
+    await page.getByRole('option', { name: /Expire at a specific time/ }).click();
 
     // Exact, since the label row's help tip is named "About Expires" (U57).
     const field = main.getByLabel('Expires', { exact: true });

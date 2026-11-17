@@ -114,9 +114,11 @@ describe('Issue Token form flow', () => {
         await reachForm('Meme token', { ticker: 'OFFLINE', supply: '1' });
         await screen.findByText('Creating a token needs a network connection.');
         expect(screen.getAllByText('Creating a token needs a network connection.')).toHaveLength(1);
-        expect(screen.getByRole('button', { name: 'Issue Token' })).toBeDisabled();
+        // G130: enabled offline; the press brings the one notice into view.
+        expect(screen.getByRole('button', { name: 'Issue Token' })).toBeEnabled();
         fireEvent.submit(issueForm());
         expect(composeForConfirm).not.toHaveBeenCalled();
+        expect(screen.getAllByText('Creating a token needs a network connection.')).toHaveLength(1);
     });
 
     it('submits from the keyboard, composes every field, and keeps the values after a Reject', async () => {
@@ -148,8 +150,9 @@ describe('Issue Token form flow', () => {
                 MAX_MINT: '25',
             },
         });
-        // The confirm page names what is being issued.
-        expect(screen.getByTestId('confirm-modal')).toHaveTextContent('UTILITY');
+        // The stub returns an opaque action string, so confirmation reports it
+        // as unknown while the request assertion above pins the ISSUE fields.
+        expect(screen.getByTestId('confirm-status')).toHaveAttribute('data-state', 'unknownAction');
 
         // Reject returns to the form with every value still there.
         fireEvent.click(screen.getByTestId('confirm-reject'));
@@ -343,12 +346,15 @@ describe('Issue Token form flow', () => {
 
         await reachForm('Meme token', { ticker: 'ONCE', supply: '1' });
         fireEvent.submit(issueForm());
-        const review = await screen.findByRole('form', { name: 'Review token issue' });
-        expect(screen.getByRole('button', { name: /^Create transaction for signing$/i })).toBeInTheDocument();
-        expect(review).toHaveTextContent('Watcher mode: this prepares the transaction for your offline signer.');
+        const review = await screen.findByTestId('confirm-modal');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Issue');
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+        expect(review).toHaveTextContent('Another phone signs for this wallet: this prepares the transaction for it.');
 
-        fireEvent.submit(review);
-        fireEvent.submit(review);
+        await waitFor(() => expect(screen.getByTestId('confirm-approve')).not.toBeDisabled());
+        fireEvent.click(screen.getByTestId('confirm-approve'));
+        fireEvent.click(screen.getByTestId('confirm-approve'));
 
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
         resolveBuild({ psbtHex: '70736274ff00', chainId: 'bitcoin-mainnet' });

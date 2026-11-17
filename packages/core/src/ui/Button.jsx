@@ -57,12 +57,14 @@ function defaultIconFor(children) {
  * @param {'primary' | 'secondary' | 'ghost' | 'link' | 'danger' | 'success' | 'rowAction'} [props.variant]
  * @param {'sm' | 'md' | 'lg'} [props.size]
  * @param {boolean} [props.block]
- * @param {boolean} [props.loading]
- * @param {boolean} [props.disabled]
+ * @param {boolean} [props.loading]   a request is in flight: the spinner shows and repeat taps are ignored, the colours stay
+ * @param {boolean} [props.disabled]  for a control that genuinely cannot apply (a pager's end, a policy lock); it has no look
+ *   of its own (G130). Never use it to wait for valid input: keep the button enabled and answer the tap with the form's errors (G129).
  * @param {string} [props.className]
  * @param {'button' | 'submit' | 'reset'} [props.type]
  * @param {(e: import('react').MouseEvent<HTMLButtonElement>) => void} [props.onClick]
  * @param {import('react').ReactNode | null} [props.icon]   icon node before the label, or `null` to suppress the auto-default
+ * @param {'leading' | 'trailing' | 'leading-edge' | 'trailing-edge'} [props.iconPlacement]
  * @param {import('react').ReactNode} [props.children]
  * @param {import('react').Ref<HTMLButtonElement>} [ref]  forwarded to the native button so callers can restore focus to it
  */
@@ -76,6 +78,7 @@ export const Button = forwardRef(function Button({
     className,
     onClick,
     icon,
+    iconPlacement = 'leading',
     children,
     ...rest
 }, ref) {
@@ -84,6 +87,9 @@ export const Button = forwardRef(function Button({
     // no icon at all. Any truthy value renders verbatim.
     const resolvedIcon = icon === undefined ? defaultIconFor(children) : icon;
     const iconOnly = Boolean(resolvedIcon) && children == null;
+    const trailingIcon = iconPlacement === 'trailing' || iconPlacement === 'trailing-edge';
+    const edgePinnedIcon = Boolean(resolvedIcon) && !iconOnly
+        && (iconPlacement === 'leading-edge' || iconPlacement === 'trailing-edge');
     const textOnly = isPlainText(children);
     const ariaLabel = rest['aria-label'];
     const ariaLabelledBy = rest['aria-labelledby'];
@@ -101,6 +107,7 @@ export const Button = forwardRef(function Button({
         styles[drawnVariant],
         styles[size],
         iconOnly ? styles.iconOnly : null,
+        edgePinnedIcon ? styles.edgePinnedIcon : null,
         block ? styles.block : null,
         loading ? styles.loading : null,
         className,
@@ -119,11 +126,26 @@ export const Button = forwardRef(function Button({
         >
             {/* Busy keeps the icon and label in layout (hidden) so the button never resizes; the spinner overlays the centre. */}
             {loading ? <Spinner size={size} className={styles.busySpinner} /> : null}
-            {resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}
-            {/* An icon-only button renders no label span: an empty flex item
-                plus the icon gap would pull the icon off centre. */}
-            {iconOnly ? null : (
-                <span className={textOnly ? `${styles.label} ${styles.textLabel}` : styles.label}>{children}</span>
+            {edgePinnedIcon ? (
+                <>
+                    <span className={styles.edgeIconSlot} aria-hidden="true">
+                        {trailingIcon ? null : <span className={styles.icon}>{resolvedIcon}</span>}
+                    </span>
+                    <span className={textOnly ? `${styles.label} ${styles.textLabel}` : styles.label}>{children}</span>
+                    <span className={styles.edgeIconSlot} aria-hidden="true">
+                        {trailingIcon ? <span className={styles.icon}>{resolvedIcon}</span> : null}
+                    </span>
+                </>
+            ) : (
+                <>
+                    {trailingIcon ? null : (resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null)}
+                    {/* An icon-only button renders no label span: an empty flex item
+                        plus the icon gap would pull the icon off centre. */}
+                    {iconOnly ? null : (
+                        <span className={textOnly ? `${styles.label} ${styles.textLabel}` : styles.label}>{children}</span>
+                    )}
+                    {trailingIcon && resolvedIcon ? <span className={styles.icon} aria-hidden="true">{resolvedIcon}</span> : null}
+                </>
             )}
         </button>
     );

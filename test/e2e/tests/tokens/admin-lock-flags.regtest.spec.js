@@ -242,7 +242,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = page.getByRole('main');
             await expect(main.getByRole('alert').filter({ hasText: /Pausing and resuming are permanently locked/ }))
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.getByRole('radio', { name: /Pause indefinitely/ })).toBeDisabled();
+            await expect(main.getByRole('button', { name: /^Pause setting/ })).toBeDisabled();
             await expect(main.getByRole('button', { name: 'Pause token', exact: true })).toBeDisabled();
             await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
         });

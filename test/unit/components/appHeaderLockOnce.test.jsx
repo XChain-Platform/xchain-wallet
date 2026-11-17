@@ -8,8 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Lock shows once per layout: the sidebar or rail keeps its Lock row and the
-// app header drops its Lock button; with the bottom tab bar the header keeps it.
+// Lock lives in the side navigation or wallet menu, never in the app bar.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
@@ -60,19 +59,19 @@ describe('Lock control appears once per layout', () => {
         expect(screen.getAllByRole('button', { name: /^Lock/ })).toHaveLength(1);
     });
 
-    it.each([360, 480])('phone layout (%dpx): the header keeps Lock beside the tab bar', (width) => {
+    it.each([360, 480])('phone layout (%dpx): the header leaves Lock to the wallet menu', (width) => {
         const onLock = vi.fn();
         const { container } = renderLayout(width, onLock);
         expect(container.querySelector('[data-xc-rail="shown"]')).toBeNull();
 
         const header = screen.getByRole('region', { name: 'App header' });
-        fireEvent.click(within(header).getByRole('button', { name: 'Lock wallet' }));
-        expect(onLock).toHaveBeenCalledTimes(1);
+        expect(within(header).queryByRole('button', { name: 'Lock wallet' })).toBeNull();
+        expect(onLock).not.toHaveBeenCalled();
         expect(header.lastElementChild).toContainElement(within(header).getByRole('button', { name: 'Open menu' }));
     });
 
-    it('a header outside any layout keeps Lock', () => {
+    it('a header outside any layout also omits Lock', () => {
         render(<AppHeader onLock={() => {}} onMenuToggle={() => {}} />);
-        expect(screen.getByRole('button', { name: 'Lock wallet' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Lock wallet' })).toBeNull();
     });
 });

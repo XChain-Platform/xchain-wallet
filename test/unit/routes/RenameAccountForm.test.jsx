@@ -48,6 +48,23 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
+describe('RenameAccountForm flat layout', () => {
+    it('has no FormSection wrappers and lists the fields in order', () => {
+        const { container } = mount();
+        expect(container.querySelector('[data-form-section-title]')).toBeNull();
+        expect(container.querySelector('[data-form-section-chevron]')).toBeNull();
+        const flat = container.querySelector('[data-flat-look-form]');
+        expect(flat).toBeTruthy();
+        const text = container.textContent;
+        const order = ['Account name', 'Icon colour', 'Icon shape', 'Icon image', 'Save Changes'].map((s) => text.indexOf(s));
+        expect(order.every((i) => i >= 0)).toBe(true);
+        expect([...order].sort((a, b) => a - b)).toEqual(order);
+        const tile = flat.firstElementChild;
+        expect(tile.compareDocumentPosition(screen.getByLabelText('Account name')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getByRole('radio', { name: 'Colour #1E90C7' })).toBeTruthy();
+    });
+});
+
 describe('RenameAccountForm name validation', () => {
     it('prefills the input with the initial name', () => {
         mount({ initialName: 'Savings' });

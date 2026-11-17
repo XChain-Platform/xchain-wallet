@@ -32,13 +32,9 @@ for (const [label, src] of [['Home', homeSrc], ['web', webSrc], ['extension', po
     assert.doesNotMatch(src, /components\/DemoBanner\.jsx/, `${label} does not import DemoBanner`);
 }
 
-assert.match(homeSrc, /t\('home\.demoSendBlocked'\)/, 'Home carries the short blocked-send note');
-assert.match(
-    enLocaleSrc,
-    /'home\.demoSendBlocked': "Demo wallets can't send\. Create a real wallet to send\."/,
-    'the blocked-send note says why and what to do',
-);
-assert.match(homeSrc, /t\('walletDetails\.exitDemoAction'\)/, 'the blocked-send note carries the exit action');
+// Home has no Send button, so it carries no blocked-send note; Send itself says why a demo wallet cannot send.
+assert.doesNotMatch(homeSrc, /home\.demoSendBlocked/, 'Home carries no blocked-send note');
+assert.doesNotMatch(enLocaleSrc, /'home\.demoSendBlocked'/, 'the blocked-send note key is gone');
 assert.match(enLocaleSrc, /'walletDetails\.exitDemoAction': 'Exit Demo & Wipe'/, 'the exit action is named for what it does');
 
 for (const [label, src] of [['web', webSrc], ['extension', popupSrc]]) {

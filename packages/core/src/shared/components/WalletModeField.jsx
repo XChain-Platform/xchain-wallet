@@ -12,7 +12,7 @@
 // is a property of each wallet, chosen once here (or by pairing) and shown
 // read-only on Wallet Details afterwards, so the field says it is final.
 
-import { Icon, RadioGroup } from '@xchain-wallet/core/ui';
+import { Icon, Select } from '@xchain-wallet/core/ui';
 import { WALLET_MODES } from '../../schemas/wallet.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/walletDetails.js';
@@ -50,23 +50,29 @@ function walletModeHint(mode) {
  * @param {boolean} [props.disabled]
  */
 export function WalletModeField({ value, onChange, name = 'wallet-mode', disabled = false }) {
+    // A few named choices, so it is the standard icon dropdown with an icon
+    // and a one-line description per mode (G44, G96), never a radio list.
     return (
-        <RadioGroup
-            legend={t('walletDetails.walletMode')}
+        <Select
+            label={t('walletDetails.walletMode')}
             help={t('walletDetails.walletMode.help')}
             hint={t('walletDetails.walletMode.final')}
             name={name}
             value={value}
             disabled={disabled}
-            onChange={(next) => {
+            onChange={(event) => {
+                const next = event.target.value;
                 if (WALLET_MODES.includes(/** @type {any} */ (next))) onChange(/** @type {any} */ (next));
             }}
-            options={WALLET_MODES.map((mode) => ({
-                value: mode,
-                label: walletModeLabel(mode),
-                description: walletModeHint(mode),
-                icon: MODE_ICONS[mode],
-            }))}
+            options={WALLET_MODES.map((mode) => {
+                const ModeIcon = MODE_ICONS[mode];
+                return {
+                    value: mode,
+                    label: walletModeLabel(mode),
+                    sub: walletModeHint(mode),
+                    icon: <ModeIcon />,
+                };
+            })}
         />
     );
 }

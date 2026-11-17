@@ -159,7 +159,7 @@ describe('A through H routes at 320px', () => {
         expectFitsNarrowViewport(view.container);
     });
 
-    it('wraps alert content within the viewport and exposes its primary action', () => {
+    it('keeps alert content within the viewport, each line ending in an ellipsis, and exposes its primary action', () => {
         const title = 'AlertTitleWithoutAnyNaturalBreakPointsThatCouldWidenTheCard';
         const message = 'AlertMessageWithoutAnyNaturalBreakPointsThatCouldWidenTheCard';
         const view = renderRoute(
@@ -176,12 +176,16 @@ describe('A through H routes at 320px', () => {
         );
 
         expect(screen.getByRole('button', { name: 'Review' })).toBeInTheDocument();
-        // The text column may shrink below its content, and long titles and
-        // messages wrap inside it instead of widening the row.
+        // The text column may shrink below its content. Each Notifications row
+        // is three one-line rows (shared/alertCopy.js): the copy wrapper adds
+        // no box, and a long label, title or message ends in an ellipsis inside
+        // the column instead of widening the row.
         expect(ruleBody(alertsCss, '.rowGrid')).toMatch(/minmax\(0,\s*1fr\)/);
-        expect(ruleBody(alertsCss, '.copy')).toMatch(/min-width:\s*0/);
-        expect(ruleBody(alertsCss, '.title')).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(ruleBody(alertsCss, '.message')).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(ruleBody(alertsCss, '.copy')).toMatch(/display:\s*contents/);
+        const lineClamp = /\.typeLabel,\s*\.title,\s*\.message\s*\{([^}]*)\}/.exec(alertsCss)?.[1] || '';
+        expect(lineClamp).toMatch(/min-width:\s*0/);
+        expect(lineClamp).toMatch(/overflow:\s*hidden/);
+        expect(lineClamp).toMatch(/text-overflow:\s*ellipsis/);
         expectFitsNarrowViewport(view.container);
     });
 

@@ -619,23 +619,18 @@ assert.ok(
     'the action.describe host route runs sdk.decoder.describe',
 );
 assert.ok(
-    /decoded\.warnings/.test(sign),
-    'SignApproval.jsx renders the warnings array',
+    /decodedWarnings:\s*Array\.isArray\(formattedIntent\?\.warnings\)\s*\?\s*formattedIntent\.warnings\s*:\s*\[\]/.test(sign),
+    'SignApproval.jsx sends decoded warnings to the Confirm Standard warning slot',
 );
 assert.ok(
-    /decoded\.details/.test(sign),
-    'SignApproval.jsx renders the details array',
-);
-
-const signCss = readFileSync(
-    join(ext, 'src', 'approval', 'kinds', 'SignApproval.module.css'),
-    'utf8',
+    /decodedFacts\(\{[\s\S]{0,120}decoded:\s*formattedIntent/.test(sign)
+        && /facts=\{confirmationFacts\}/.test(sign),
+    'SignApproval.jsx maps decoded details into the Confirm Standard facts card',
 );
 assert.ok(
-    /<StatusMessage variant="warning" role="alert">\s*<ul>\s*\{decoded\.warnings\.map/.test(sign),
-    'warnings render in the shared warning message',
+    /<ConfirmStandard\b[\s\S]{0,2400}?warning=\{confirmationWarning\}/.test(sign),
+    'warnings render in the shared short warning after the details (G127 revised 2026-11-16)',
 );
-assert.ok(signCss.includes('.detailsList'), 'details list has a style');
 
 console.log(
     'OK: action decoder smoke (28 cases: SEND + SWEEP + ISSUE v0/v1/v3 + MINT + DESTROY v0 + DESTROY multi-fallback + BATCH + LIST v0/v1 + AIRDROP v0/v1/v2 + fallback + null-safety + SignApproval wiring)',

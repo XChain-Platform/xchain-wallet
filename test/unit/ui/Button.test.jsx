@@ -109,10 +109,12 @@ describe('<Button>', () => {
 
     it.each([
         'shared/components/DraftDiscardButton.jsx',
-        'shared/components/LearnNote.jsx',
+        // LearnNote left this list when its text Dismiss became the kit
+        // Notice's X (the Notice Standard).
         'shared/routes/BetFeedDetail.jsx',
+        // Locked.jsx left this list when Forgot password became a secondary
+        // button that opens its own page.
         'shared/routes/ContactsList.jsx',
-        'shared/routes/Locked.jsx',
     ])('%s does not suppress the link button icon', (path) => {
         const source = readFileSync(`packages/core/src/${path}`, 'utf8');
 
@@ -123,6 +125,31 @@ describe('<Button>', () => {
     it('keeps kit styles when a caller adds a contextual class', () => {
         render(<Button className="context-action">Go</Button>);
         expect(screen.getByRole('button')).toHaveClass(styles.btn, styles.md, 'context-action');
+    });
+
+    it('pins a nav icon to either edge while the mirrored tracks centre the label', () => {
+        render(
+            <>
+                <Button icon={<SendIcon />} iconPlacement="leading-edge">Back</Button>
+                <Button icon={<SendIcon />} iconPlacement="trailing-edge">Next</Button>
+            </>,
+        );
+        const back = screen.getByRole('button', { name: 'Back' });
+        const next = screen.getByRole('button', { name: 'Next' });
+        const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
+
+        expect(back).toHaveClass(styles.edgePinnedIcon);
+        expect(next).toHaveClass(styles.edgePinnedIcon);
+        expect(back.children).toHaveLength(3);
+        expect(next.children).toHaveLength(3);
+        expect(back.children[0].querySelector('svg')).toBeInTheDocument();
+        expect(back.children[1]).toHaveTextContent('Back');
+        expect(back.children[2]).toBeEmptyDOMElement();
+        expect(next.children[0]).toBeEmptyDOMElement();
+        expect(next.children[1]).toHaveTextContent('Next');
+        expect(next.children[2].querySelector('svg')).toBeInTheDocument();
+        expect(css).toMatch(/\.edgePinnedIcon\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*var\(--xc-icon-size\) minmax\(0, 1fr\) var\(--xc-icon-size\);[^}]*gap:\s*0;/s);
+        expect(css).toMatch(/\.edgePinnedIcon \.label\s*\{[^}]*grid-column:\s*2;[^}]*justify-self:\s*center;/s);
     });
 
     it('uses the shared size scale and hides decorative icons', () => {
@@ -211,7 +238,10 @@ describe('<Button>', () => {
         const chainTrigger = chainPickerCss.match(/\.trigger\s*\{[^}]*\}/s)?.[0] || '';
         expect(chainTrigger).toMatch(/box-sizing:\s*border-box/);
         expect(chainTrigger).toMatch(/height:\s*var\(--chain-picker-control-height\)/);
-        expect(chainTrigger).toMatch(/padding:\s*0 var\(--chain-picker-padding-x\)/);
+        // G112: the start keeps the size's padding token; the end sits the
+        // trailing caret at the shared glyph inset, less the border.
+        expect(chainTrigger).toMatch(/padding-block:\s*0;/);
+        expect(chainTrigger).toMatch(/padding-inline:\s*var\(--chain-picker-padding-x\) calc\(var\(--chain-picker-glyph-inset\) - var\(--xc-field-border\)\)/);
         expect(chainTrigger).toMatch(/font-size:\s*var\(--chain-picker-font-size\)/);
         expect(chainTrigger).toMatch(/border-radius:\s*var\(--xc-control-radius\)/);
 
@@ -240,14 +270,13 @@ describe('<Button>', () => {
             expect(css).not.toMatch(/\.iconButton\s*\{/);
         }
 
+        // Max is the field's own in-field icon (FieldIconButton through the
+        // Input's fieldAction slot), so the amount field draws no button box
+        // of its own.
         const amountCss = readCss('shared/components/AmountField.module.css');
         const amountSource = readFileSync('packages/core/src/shared/components/AmountField.jsx', 'utf8');
-        const amountActions = amountCss.match(/\.amountFieldWrap \.maxAction\s*\{[^}]*\}/s)?.[0] || '';
-        expect(amountSource).toMatch(/className=\{styles\.maxAction\}/);
-        expect(amountActions).toMatch(/position:\s*absolute/);
-        expect(amountActions).toMatch(/height:\s*calc\(var\(--amount-control-height\) - var\(--xc-space-2\)\)/);
-        expect(amountActions).toMatch(/min-height:\s*calc\(var\(--amount-control-height\) - var\(--xc-space-2\)\)/);
-        expect(amountCss).toMatch(/\.maxAction\s*\{[^}]*inset-inline-end:\s*var\(--xc-space-1\)/s);
+        expect(amountSource).toMatch(/fieldAction=\{\(\s*<FieldIconButton[\s\S]*?icon=\{<Icon\.MaxIcon \/>\}/);
+        expect(amountCss).not.toMatch(/\.maxAction\b/);
 
         const addressFieldCss = readCss('ui/AddressField.module.css');
         const readOnlyValue = addressFieldCss.match(/\.readOnlyValue\s*\{[^}]*\}/s)?.[0] || '';
@@ -312,7 +341,8 @@ describe('<Button>', () => {
 
     it('the success variant keeps its fill and its icon when disabled', () => {
         const css = readFileSync('packages/core/src/ui/Button.module.css', 'utf8');
-        expect(css).toMatch(/\.btn:disabled:not\(\.link\):not\(\.success\)\s*\{/);
+        // G130: no variant has a disabled look, so there is no rule to opt out of.
+        expect(css).not.toMatch(/\.btn:disabled[^{]*\{/);
         render(<Button variant="success" disabled>Unlock wallet</Button>);
         const btn = screen.getByRole('button');
         expect(btn).toBeDisabled();

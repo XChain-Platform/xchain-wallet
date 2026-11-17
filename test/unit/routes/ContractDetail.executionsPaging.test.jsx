@@ -74,6 +74,8 @@ async function mount() {
         );
         await drain();
     });
+    // The calls and their pager are the Activity tab's list.
+    await press(utils, /^Activity$/);
     return utils;
 }
 
@@ -125,8 +127,9 @@ describe('Execution history pager', () => {
             );
             await drain();
         });
+        await press(utils, /^Activity$/);
         await press(utils, /Next/);
-        expect(utils.container.textContent).toContain('No contract calls yet');
+        expect(utils.container.textContent).toContain('No contract activity yet');
         const prev = button(utils, /Prev/);
         expect(prev).toBeTruthy();
         await press(utils, /Prev/);

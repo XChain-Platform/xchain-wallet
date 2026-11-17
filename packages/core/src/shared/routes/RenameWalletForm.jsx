@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Screen, Icon, Input, PageHeader } from '@xchain-wallet/core/ui';
 // The Wallet Form Standard frame (no From and no fee: this form never signs or sends).
-import { FormAction, FormFrame, FormSection, useFormSections } from '../components/formStandard/index.js';
+import { FormAction, FormFrame } from '../components/formStandard/index.js';
 import { t } from '../../i18n/index.js';
 import { NAME_MAX_LENGTH, hasVisibleText, nameKey, nameLength } from '../../util/display_name.js';
 import '../../i18n/locales/en/renameAccount.js';
@@ -60,8 +60,6 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
     const edited = useRef(false);
     const firstRead = useRef(true);
     const nameRef = useRef(/** @type {HTMLInputElement | null} */ (null));
-    // The main section starts open, the Look section closed.
-    const formSections = useFormSections({ wallet: true, look: false });
 
     useEffect(() => {
         setTimeout(() => {
@@ -148,7 +146,7 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
     );
 
     const formBody = (
-        /* FormFrame with the main section open and Look closed. */
+        /* FormFrame around one flat set of fields. */
         <FormFrame
             label={t('renameWallet.formTitle')}
             onSubmit={handleSubmit}
@@ -162,15 +160,10 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
                 </FormAction>
             )}
         >
-            <FormSection
-                id="wallet"
-                title={t('settings.thisWallet.wallet')}
-                icon={Icon.WalletIcon}
-                {...formSections.bind('wallet')}
-                revealKey={error || walletLoadError ? 1 : 0}
-                summary={name.trim() || t('renameAccount.unnamed')}
-            >
-                {/* The wallet tile, centred at the top of the section. */}
+            {/* One flat form, no section wrappers: the look tile, Wallet name,
+                then Icon colour, Icon shape and Icon image. */}
+            <div data-flat-look-form="" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-4)', minWidth: 0 }}>
+                {/* The current look tile, centred at the top. */}
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
                     <span style={{ '--xc-avatar-shape': tileRadius(tileShape), display: 'inline-flex' }}>
                         <IdentityAvatar name={name || 'Wallet'} text={walletTileText(name)} seed={walletId} context="hero" variant="asset" tone={tileColour} src={tileImage} />
@@ -194,17 +187,8 @@ export function RenameWalletForm({ walletId, initialName = '', onBack, onRenamed
                     disabled={busy || Boolean(walletLoadError)}
                     error={error || walletLoadError || undefined}
                 />
-            </FormSection>
-            <FormSection
-                id="look"
-                title={t('renameAccount.look')}
-                icon={Icon.PaletteIcon}
-                optional
-                {...formSections.bind('look')}
-                summary={`${tileShape === 'rounded' ? 'Rounded' : 'Circle'}${tileImage ? ', image' : ', colour'}`}
-            >
-                <TileLookFields kind="wallet"colour={tileColour} onColour={setTileColour} shape={tileShape} onShape={setTileShape} image={tileImage} onImage={setTileImage} />
-            </FormSection>
+                <TileLookFields kind="wallet" colour={tileColour} onColour={setTileColour} shape={tileShape} onShape={setTileShape} image={tileImage} onImage={setTileImage} />
+            </div>
         </FormFrame>
     );
 

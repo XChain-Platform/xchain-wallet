@@ -35,12 +35,13 @@ const panelSrc = readFileSync(join(wsRoot, panelPath), 'utf8');
 
 assert.match(
     panelSrc,
-    /import \{ AnimatedQrFrames, RadioGroup, StatusMessage \} from '\.\.\/\.\.\/ui\/index\.js';/,
+    /import \{ AnimatedQrFrames, Icon, IconSelect, StatusMessage \} from '\.\.\/\.\.\/ui\/index\.js';/,
     'panel imports UI primitives from core/ui',
 );
 assert.match(
     panelSrc,
-    /import \{ CopyButton, Textarea \} from '\.\.\/\.\.\/ui\/index\.js';/,
+    // InfoTip is the unsigned-code label's '?' help (ruling 2026-11-13).
+    /import \{ CopyButton, (?:InfoTip, )?Textarea \} from '\.\.\/\.\.\/ui\/index\.js';/,
     'panel uses the shared section, copy, and textarea primitives',
 );
 assert.match(
@@ -91,10 +92,14 @@ assert.match(panelSrc, /Plain-text chunks|watcherResultPanel\.plainTextChunks/, 
 assert.match(
     panelSrc,
     /BBQr \(Sparrow \/ Coldcard \/ SeedSigner\)/,
-    'panel labels the BBQr radio choice with target wallets',
+    'panel labels the BBQr QR format choice with target wallets',
 );
-assert.match(panelSrc, /XCW \(this wallet\)/, 'panel labels the XCW radio choice');
-assert.match(panelSrc, /<RadioGroup\b/, 'panel uses the shared radio group');
+assert.match(panelSrc, /XCW \(this wallet\)/, 'panel labels the XCW QR format choice');
+// G119: the QR format is the themed dropdown with an icon per option, never radios.
+assert.match(panelSrc, /<IconSelect\b/, 'panel uses the shared themed dropdown');
+assert.doesNotMatch(panelSrc, /<RadioGroup\b/, 'panel renders no radio group');
+assert.match(panelSrc, /value: 'xcw'[^}]*icon: <Icon\.\w+Icon \/>/, 'the XCW option carries an icon');
+assert.match(panelSrc, /value: 'bbqr'[^}]*icon: <Icon\.\w+Icon \/>/, 'the BBQr option carries an icon');
 assert.doesNotMatch(panelSrc, /<input\b/, 'panel has no route-local radio inputs');
 
 // ─── 4. CSS module ------------------------------------------------

@@ -21,7 +21,7 @@
 //      bounds, drops timestamp-less rows, accepts open-ended bounds.
 //   4. flows/index.js re-exports the new helpers.
 //   5. History.jsx exports visible rows with the selected fiat currency.
-//   6. ExportModal carries format radios, a column list, filtered-row
+//   6. ExportModal carries a format dropdown (G119), a column list, filtered-row
 //      count, role="dialog" + aria-modal, and Esc closes.
 
 import { strict as assert } from 'node:assert';
@@ -174,16 +174,18 @@ assert.ok(!/Export JSON<\/button>/.test(historySrc),
     'History.jsx no longer renders the bare Export-JSON chip');
 assert.ok(/t\('history\.export\.open'\)/.test(historySrc),
     'History.jsx now renders a single "Export…" trigger');
-assert.ok(/aria-haspopup="dialog"/.test(historySrc),
-    'Export trigger announces it opens a dialog');
-assert.ok(/aria-expanded=\{exportModalOpen\}/.test(historySrc),
-    'Export trigger reports its expanded state');
+// Export is an item in the title line's ⋯ menu, "More actions" (operator 2026-11-13).
+assert.ok(/aria-haspopup="menu"[\s\S]{0,160}?aria-expanded=\{moreOpen\}[\s\S]{0,80}?aria-label=\{t\('actionsMenu\.more'\)\}/.test(historySrc),
+    'The ⋯ "More actions" trigger announces its menu and reports its expanded state');
+assert.ok(/role="menuitem"[\s\S]{0,600}?onClick=\{\(\) => \{ setMoreOpen\(false\); setExportModalOpen\(true\); \}\}[\s\S]{0,200}?t\('history\.export\.open'\)/.test(historySrc),
+    'The Export menu item closes the menu and opens the export dialog');
 assert.ok(/<ExportModal\b/.test(historySrc) || /function ExportModal\(/.test(historySrc),
     'History.jsx mounts an ExportModal');
 assert.ok(/role="dialog"[\s\S]{0,80}?aria-modal="true"/.test(historySrc),
     'ExportModal carries role="dialog" + aria-modal');
-assert.ok(/<RadioGroup[\s\S]*?name="export-format"[\s\S]*?value: 'csv'[\s\S]*?value: 'json'/.test(historySrc),
-    'ExportModal kit radio group covers CSV + JSON');
+assert.ok(/<IconSelect[\s\S]{0,200}?label=\{t\('history\.export\.format'\)\}[\s\S]*?value: 'csv'[^}]*icon:[\s\S]*?value: 'json'[^}]*icon:/.test(historySrc),
+    'ExportModal format dropdown covers CSV + JSON with an icon each (G119)');
+assert.ok(!/<RadioGroup\b/.test(historySrc), 'ExportModal renders no radio group (G119)');
 assert.ok(!/name="export-scope"/.test(historySrc),
     'ExportModal cannot switch away from the filtered view');
 assert.ok(/EXPORT_COLUMNS\.map/.test(historySrc),
@@ -200,10 +202,11 @@ assert.ok(/entries: visibleEntries/.test(historySrc),
     'History.jsx passes only visible rows into runExport');
 assert.ok(/fiatCurrency,/.test(historySrc),
     'History.jsx passes the selected fiat currency into runExport');
-assert.ok(/disabled=\{visibleEntries\.length === 0\}/.test(historySrc),
-    'Export trigger disables when no filtered rows are visible');
-assert.ok(/history-export-disabled-reason/.test(historySrc),
-    'Export trigger points to its empty-view explanation');
+assert.ok(/const exportDisabled = visibleEntries\.length === 0;/.test(historySrc)
+        && /role="menuitem"[\s\S]{0,200}?disabled=\{exportDisabled\}/.test(historySrc),
+    'Export menu item disables when no filtered rows are visible');
+assert.ok(/title=\{exportDisabled \? t\('history\.export\.noMatchingRows'\) : undefined\}/.test(historySrc),
+    'Export menu item gives its empty-view explanation as its title');
 
 console.log(
     'OK: history export serializes ISO dates, quoted memos, and selected fiat; History exports visible rows and disables the trigger with a reason when none are visible',

@@ -29,15 +29,22 @@ const contractCss = readFileSync(
     'packages/core/src/shared/routes/ContractScreens.module.css',
     'utf8',
 );
+const confirmStandardCss = readFileSync(
+    'packages/core/src/shared/components/ConfirmStandard.module.css',
+    'utf8',
+);
 
-function rule(selector) {
+function rules(css, selector) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     // A selector can appear in a shared group (the RTL isolation rule) and in
     // its own rule, so collect the declarations of every block it heads.
-    return [...contractCss.matchAll(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`, 'g'))]
+    return [...css.matchAll(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`, 'g'))]
         .map((match) => match[1])
         .join('\n');
 }
+
+const rule = (selector) => rules(contractCss, selector);
+const confirmRule = (selector) => rules(confirmStandardCss, selector);
 
 function mount(walletMode = 'full', abiParamName = 'config', overrides = {}, props = {}) {
     // A wallet's mode is published by the shell from the wallet list, not read from settings.
@@ -105,9 +112,9 @@ describe('ExecuteContractForm argument validation', () => {
             expect(rule('.abiField label')).toMatch(/overflow-wrap:\s*anywhere/);
             expect(rule('.monospaceInput')).toMatch(/overflow-x:\s*auto/);
             expect(rule('.monospaceInput')).toMatch(/white-space:\s*nowrap/);
-            expect(rule('.monospaceValue')).toMatch(/overflow-wrap:\s*anywhere/);
+            expect(confirmRule('.sentence')).toMatch(/overflow-wrap:\s*anywhere/);
+            expect(confirmRule('.oneLine')).toMatch(/text-overflow:\s*ellipsis/);
             expect(rule('.codeSource')).toMatch(/overflow:\s*auto/);
-            expect(rule('.toolActions')).toMatch(/flex-wrap:\s*wrap/);
             expect(rule('.contractRow')).toMatch(/width:\s*100%/);
         } finally {
             if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
@@ -128,19 +135,22 @@ describe('ExecuteContractForm argument validation', () => {
         expect(await screen.findAllByText('config contains invalid JSON. Check the syntax and try again.')).not.toHaveLength(0);
     });
 
-    it('shows the required method message before compose', async () => {
+    it('has no manual method or arguments field beside the declared method list', async () => {
         mount();
-        fireEvent.click(await screen.findByRole('button', { name: 'Enter Method Manually' }));
-        fireEvent.change(screen.getByLabelText('Method'), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
-
-        expect(await screen.findByRole('alert')).toHaveTextContent('Method name is required.');
+        await screen.findByLabelText('config (json)');
+        expect(screen.queryByRole('button', { name: 'Enter Method Manually' })).toBeNull();
+        expect(screen.queryByLabelText('Arguments')).toBeNull();
+        expect(screen.queryByRole('textbox', { name: 'Method' })).toBeNull();
+        expect(screen.getByLabelText('Method')).toHaveValue('configure');
     });
 
     it('refuses hostile method text before review', async () => {
-        mount();
-        fireEvent.click(await screen.findByRole('button', { name: 'Enter Method Manually' }));
-        fireEvent.change(screen.getByLabelText('Method'), { target: { value: 'pay\u202eout' } });
+        mount('full', 'config', {
+            getContractByActionIndex: () => Promise.resolve({
+                data: { abi: { version: 1, methods: { 'pay\u202eout': { params: [] } } } },
+            }),
+        });
+        await screen.findByLabelText('Method');
         fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
 
         expect(await screen.findByRole('alert'))
@@ -244,19 +254,6 @@ describe('ExecuteContractForm argument validation', () => {
         expect(screen.queryByText(/no spendable UTXOs/)).toBeNull();
     });
 
-    it('shows blank positional arguments in manual mode', async () => {
-        mount();
-        fireEvent.click(await screen.findByRole('button', { name: 'Enter Method Manually' }));
-        fireEvent.change(screen.getByLabelText('Arguments'), { target: { value: 'first||third' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
-
-        await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(
-                'Arguments cannot be blank between "|" separators.',
-            );
-        });
-    });
-
     it('returns from watcher review to the populated form', async () => {
         mount('watcher');
         fireEvent.change(await screen.findByLabelText('config (json)'), {
@@ -265,33 +262,83 @@ describe('ExecuteContractForm argument validation', () => {
         fireEvent.change(screen.getByLabelText('limit (amount)'), { target: { value: '2.5' } });
         fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
 
-        expect(await screen.findByRole('heading', { name: 'Review Contract Call' })).toBeInTheDocument();
-        expect(screen.getByText('Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        expect(await screen.findByRole('heading', { name: 'Confirm' })).toBeInTheDocument();
+        expect(screen.getByText('Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
 
         expect(await screen.findByRole('form', { name: 'Call Contract' })).toBeInTheDocument();
         expect(screen.getByLabelText('config (json)')).toHaveValue('{"enabled":true}');
         expect(screen.getByLabelText('limit (amount)')).toHaveValue('2.5');
     });
 
-    it('shows undeclared deep-link arguments and composes the visible values exactly', async () => {
+    it('refuses a link whose arguments exceed the declared method and composes nothing', async () => {
         const composeForConfirm = vi.fn(() => new Promise(() => {}));
         mount('full', 'config', { composeForConfirm }, {
             initialMethod: 'configure',
             initialParamsText: '{"safe":true}|9007199254740993|hidden',
         });
 
-        expect(await screen.findByLabelText('Arguments'))
-            .toHaveValue('{"safe":true}|9007199254740993|hidden');
-        expect(screen.queryByLabelText('config (json)')).toBeNull();
-
+        expect(await screen.findByText(/passes more arguments than configure takes \(2\)/))
+            .toBeInTheDocument();
+        expect(screen.queryByLabelText('Arguments')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
-        await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
-        expect(composeForConfirm.mock.calls[0][0].actionData.params.PARAMS).toEqual([
-            '{"safe":true}',
-            '9007199254740993',
-            'hidden',
-        ]);
+        expect(composeForConfirm).not.toHaveBeenCalled();
+    });
+});
+
+describe('ExecuteContractForm when the method list cannot load', () => {
+    const goodAbi = {
+        data: { abi: { version: 1, methods: { configure: { params: [{ name: 'config', type: 'json' }] } } } },
+    };
+
+    it('shows the error with Try Again, keeps Call Contract disabled, and re-reads on retry', async () => {
+        const lookup = vi.fn()
+            .mockRejectedValueOnce(new Error('indexer down'))
+            .mockResolvedValue(goodAbi);
+        mount('full', 'config', { getContractByActionIndex: lookup });
+
+        expect(await screen.findByRole('button', { name: 'Try Again' })).toBeInTheDocument();
+        expect(screen.queryByLabelText('Method')).toBeNull();
+        expect(screen.queryByLabelText('Arguments')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Call Contract' })).toBeDisabled();
+        expect(lookup).toHaveBeenCalledTimes(1);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
+
+        expect(await screen.findByLabelText('config (json)')).toBeInTheDocument();
+        expect(lookup).toHaveBeenCalledTimes(2);
+        expect(screen.getByRole('button', { name: 'Call Contract' })).toBeEnabled();
+    });
+
+    it('shows the same recovery when the contract publishes no abi', async () => {
+        mount('full', 'config', {
+            getContractByActionIndex: () => Promise.resolve({ data: {} }),
+        });
+
+        expect(await screen.findByText(/doesn.t declare any methods/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Call Contract' })).toBeDisabled();
+    });
+
+    it('preselects a linked method that the list declares', async () => {
+        mount('full', 'config', {}, {
+            initialMethod: 'configure',
+            initialParamsText: '{"a":1}|2',
+        });
+
+        expect(await screen.findByLabelText('config (json)')).toHaveValue('{"a":1}');
+        expect(screen.getByLabelText('limit (amount)')).toHaveValue('2');
+        expect(screen.getByLabelText('Method')).toHaveValue('configure');
+    });
+
+    it('refuses a linked method that the list does not declare', async () => {
+        mount('full', 'config', {}, { initialMethod: 'missing', initialParamsText: 'x' });
+
+        expect(await screen.findByText(/names the method missing/)).toBeInTheDocument();
+        expect(screen.getByLabelText('Method')).toHaveValue('');
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
+        expect((await screen.findAllByText(/names the method missing/)).length).toBeGreaterThan(0);
+        expect(screen.queryByRole('heading', { name: 'Review Contract Call' })).toBeNull();
     });
 });
 
@@ -321,7 +368,8 @@ describe('ExecuteContractForm tick arguments', () => {
         fireEvent.change(await screen.findByLabelText('asset (tick)'), { target: { value } });
         fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
 
-        expect(await screen.findByRole('heading', { name: 'Review Contract Call' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Confirm' })).toBeInTheDocument();
+        expect(screen.getByText('Arguments 1').nextElementSibling).toHaveTextContent(value);
     });
 });
 
@@ -347,17 +395,19 @@ describe('ExecuteContractForm link prefill against a declared method', () => {
         expect(screen.getByLabelText('note (string)')).toHaveValue('thanks');
     });
 
-    it('keeps every argument visible when the link carries more than the method declares', async () => {
+    it('refuses a link that carries more arguments than the method declares', async () => {
         mount('full', 'config', twoParamAbi(), { initialMethod: 'pay', initialParamsText: 'ann|thanks|extra' });
 
-        expect(await screen.findByLabelText('Arguments')).toHaveValue('ann|thanks|extra');
+        expect(await screen.findByText(/passes more arguments than pay takes \(2\)/)).toBeInTheDocument();
         expect(screen.queryByLabelText('who (string)')).toBeNull();
+        expect(screen.queryByLabelText('Arguments')).toBeNull();
     });
 
-    it('keeps the declared inputs for a no-argument method and a link with no arguments', async () => {
+    it('preselects a no-argument method for a link with no arguments', async () => {
         mount('full', 'config', twoParamAbi(), { initialMethod: 'ping', initialParamsText: '' });
 
-        expect(await screen.findByRole('button', { name: 'Enter Method Manually' })).toBeInTheDocument();
+        expect(await screen.findByLabelText('Method')).toHaveValue('ping');
         expect(screen.queryByLabelText('Arguments')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Enter Method Manually' })).toBeNull();
     });
 });

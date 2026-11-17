@@ -27,5 +27,11 @@ assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMo
 assert.match(formSrc, /import \{ ResultScreen \} from '\.\.\/components\/ResultScreen\.jsx';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
 assert.match(formSrc, /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'ISSUE'/);
-assert.match(formSrc, /Create Unsigned Transaction/);
+assert.match(formSrc, /if \(result\?\.psbtHex && !txid\)[\s\S]{0,500}?<ResultScreen[\s\S]{0,200}?state="unsigned"/);
+assert.match(
+    formSrc,
+    /<ConfirmActionModal[\s\S]{0,1400}?credentialsReady=\{mode !== 'lock' \|\| typedConfirmOk\}[\s\S]{0,500}?watcherBuildsUnsigned/,
+    'watcher guidance and lock confirmation live on the Confirm Standard review',
+);
+assert.doesNotMatch(formSrc, /Create Unsigned Transaction/, 'old review action label is retired');
 console.log('token-admin-watcher-mode smoke OK');

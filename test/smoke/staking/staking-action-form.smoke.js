@@ -27,23 +27,28 @@ const web = join(wsRoot, 'packages', 'web');
 const desktop = join(wsRoot, 'packages', 'desktop');
 const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
-const formPath = join(sharedRoutes, 'StakingActionForm.jsx');
-assert.ok(existsSync(formPath), 'StakingActionForm.jsx exists');
+// Validator Unstake and Claim are actions of the one Staking form
+// (StakingForm.jsx); the old StakingActionForm.jsx is gone.
+const formPath = join(sharedRoutes, 'StakingForm.jsx');
+assert.ok(existsSync(formPath), 'StakingForm.jsx exists');
+assert.ok(!existsSync(join(sharedRoutes, 'StakingActionForm.jsx')),
+    'StakingActionForm.jsx is merged into StakingForm.jsx');
 const formSrc = readFileSync(formPath, 'utf8');
 
-assert.ok(/export function StakingActionForm\b/.test(formSrc),
-    'StakingActionForm is a named export');
-assert.equal(
-    (formSrc.match(/^export\s+(function|const|class)\b/gm) || []).length,
-    1,
-    'StakingActionForm.jsx only exports the component',
-);
+assert.ok(/export function StakingForm\b/.test(formSrc),
+    'StakingForm is a named export');
+const actionRow = (key) => formSrc.split(`'${key}': {`)[1]?.split(/\n    '[a-z]+:[a-z-]+': \{/)[0] || '';
+const unstakeRow = actionRow('network:unstake');
+const claimRow = actionRow('network:claim-rewards');
 
-// Mode prop + branching.
-assert.ok(/mode\s*===\s*['"]unstake['"]/.test(formSrc),
-    'StakingActionForm branches on mode === unstake');
-assert.ok(/Unstake|Claim Rewards/.test(formSrc),
-    'StakingActionForm renders both verbs');
+// Action rows + branching.
+assert.ok(unstakeRow && claimRow, 'StakingForm has network unstake and claim action rows');
+assert.ok(/currentAction\s*===\s*['"]unstake['"]/.test(formSrc),
+    'StakingForm branches on the unstake action');
+assert.ok(/verb:\s*'Unstake'/.test(unstakeRow) && /verb:\s*'Claim Rewards'/.test(claimRow),
+    'StakingForm names both verbs');
+assert.ok(/amount:\s*'position'/.test(unstakeRow) && /amount:\s*'position'/.test(claimRow),
+    'Unstake and Claim judge their amount against a known position total');
 
 // 4-stage state machine.
 for (const stage of ['form', 'review', 'submitting', 'done']) {
@@ -54,8 +59,8 @@ for (const stage of ['form', 'review', 'submitting', 'done']) {
 // Capability-staking model: UNSTAKE addresses a signing pubkey, not a tier.
 assert.ok(!/Tier 1/.test(formSrc) && !/Tier 2/.test(formSrc),
     'StakingActionForm does not surface tier labels (capability-staking model dropped tiers)');
-assert.ok(/label="Signing public key"/.test(formSrc),
-    'StakingActionForm renders a Signing public key input for unstake');
+assert.ok(/key:\s*\{\s*label:\s*'Signing public key'/.test(unstakeRow) && /label=\{cfg\.key\.label\}/.test(formSrc),
+    'StakingForm renders a Signing public key input for unstake');
 // The wire params are built by stakingActionParams in the flows module, so
 // the route file keeps exporting only the component.
 const flowSrc = readFileSync(join(core, 'src', 'flows', 'unstakeClaimActions.js'), 'utf8');
@@ -86,15 +91,21 @@ assert.ok(!/coming soon/.test(formSrc),
     'StakingActionForm no longer shows the pinned-amount banner');
 
 // Wiring of all four messaging helpers + shared chassis.
+assert.ok(/software:\s*'unstakeAction'/.test(unstakeRow) && /hardware:\s*'unstakeActionHw'/.test(unstakeRow),
+    'Unstake signs through unstakeAction and unstakeActionHw');
+assert.ok(/software:\s*'collectAction'/.test(claimRow) && /hardware:\s*'collectActionHw'/.test(claimRow),
+    'Claim signs through collectAction and collectActionHw');
+assert.ok(/wire:\s*'UNSTAKE'/.test(unstakeRow) && /wire:\s*'COLLECT'/.test(claimRow),
+    'Unstake composes UNSTAKE and Claim composes COLLECT');
+assert.ok(/full:\s*true/.test(unstakeRow) && /full:\s*true/.test(claimRow),
+    'Unstake and Claim pass the explicit whole-balance request');
 for (const call of [
-    'messaging.unstakeAction',
-    'messaging.unstakeActionHw',
-    'messaging.collectAction',
-    'messaging.collectActionHw',
+    'messaging[cfg.software]',
+    'messaging[cfg.hardware]',
     'messaging.getAddressesByChain',
     'messaging.getSignerStatus',
 ]) {
-    assert.ok(formSrc.includes(call), `StakingActionForm calls ${call}`);
+    assert.ok(formSrc.includes(call), `StakingForm calls ${call}`);
 }
 
 // Wrong-password handling.
@@ -158,15 +169,15 @@ await assert.rejects(
     'contractStakeAction (unstake) rejects AMOUNT of zero',
 );
 
-// ContractStakeForm v1 lane: unstake mode renders the amount field and
-// threads the optional partial AMOUNT.
-const csfSrc = readFileSync(join(sharedRoutes, 'ContractStakeForm.jsx'), 'utf8');
-assert.ok(/mode === 'stake' \|\| mode === 'unstake' \?/.test(csfSrc),
-    'ContractStakeForm renders the Amount field for unstake mode too');
-assert.ok(/mode === 'unstake' && amount\.trim\(\) !== ''/.test(csfSrc),
-    'ContractStakeForm threads an optional partial AMOUNT for unstake');
-assert.ok(/stakedAvailable/.test(csfSrc),
-    'ContractStakeForm bounds the unstake amount by the staked balance');
+// Contract v1 lane of the same form: a contract unstake shows the amount
+// field and threads the optional partial AMOUNT.
+const contractUnstakeRow = actionRow('contract:unstake');
+assert.ok(/amount:\s*'contract'/.test(contractUnstakeRow),
+    'StakingForm renders the Amount field for a contract unstake too');
+assert.ok(/currentAction === 'unstake' && amount\.trim\(\) !== ''/.test(formSrc),
+    'StakingForm threads an optional partial AMOUNT for a contract unstake');
+assert.ok(/stakedAvailable/.test(formSrc),
+    'StakingForm bounds the contract unstake amount by the staked balance');
 
 // --- Background host + shell messaging helpers ---
 
@@ -201,8 +212,8 @@ for (const [shell, appPath] of [
     ['desktop', join(desktop, 'renderer', 'App.jsx')],
 ]) {
     const app = readFileSync(appPath, 'utf8');
-    assert.ok(app.includes('StakingActionForm'),
-        `${shell} App.jsx imports StakingActionForm`);
+    assert.ok(app.includes("import('@xchain-wallet/core/shared/routes/StakingForm.jsx')"),
+        `${shell} App.jsx loads StakingForm`);
     assert.ok(app.includes("'staking-unstake'"),
         `${shell} tracks staking-unstake sub-route`);
     assert.ok(app.includes("'staking-claim'"),
@@ -213,12 +224,13 @@ for (const [shell, appPath] of [
         `${shell} wires StakeDetail.onUnstake (validator arm) → staking-unstake`);
     assert.ok(/onClaimRewards=\{\(\)\s*=>\s*setUnlockedView\('staking-claim'\)\}/.test(app),
         `${shell} wires StakeDetail.onClaimRewards → staking-claim`);
-    assert.ok(/mode="unstake"/.test(app),
-        `${shell} App.jsx passes mode="unstake" to StakingActionForm for the unstake route`);
-    assert.ok(/mode="claim-rewards"/.test(app),
-        `${shell} App.jsx passes mode="claim-rewards" to StakingActionForm for the claim route`);
+    for (const [view, action] of [['staking-unstake', 'unstake'], ['staking-claim', 'claim-rewards']]) {
+        const block = app.split(`unlockedView === '${view}'`)[1]?.split('unlockedView ===')[0] || '';
+        assert.ok(new RegExp(`<StakingForm\\b[\\s\\S]*kind: 'network'[\\s\\S]*action="${action}"`).test(block),
+            `${shell} ${view} opens the Staking form on action="${action}"`);
+    }
 }
 
 console.log(
-    'OK: staking action form smoke (StakingActionForm mode=unstake|claim-rewards + capability-model pubkey-based unstake + partial amount editing/threading + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakeDetail)',
+    'OK: staking action form smoke (StakingForm unstake|claim-rewards + capability-model pubkey-based unstake + partial amount editing/threading + bg handlers + 3-shell messaging + two App.jsx sub-routes wired from StakeDetail)',
 );

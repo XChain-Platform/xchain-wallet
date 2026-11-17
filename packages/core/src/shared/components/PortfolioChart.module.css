@@ -228,9 +228,35 @@
     display: none;
 }
 
-.behind .ranges {
+.behind .ranges,
+.behind .foot {
     position: relative;
     z-index: 2;
+}
+
+/* The range row and the note that some tokens sit out of the line. The note
+   hangs above the row and takes no room, so the card keeps its height
+   whether it shows or not. */
+.foot {
+    position: relative;
+}
+
+.tokenNote {
+    margin-block-end: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    line-height: 1.2;
+    text-align: center;
+}
+
+.behind .tokenNote {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 100%;
+    margin: 0 0 var(--xc-space-1);
+    color: var(--xc-on-accent);
+    opacity: 0.85;
+    pointer-events: none;
 }
 
 .behind .range {

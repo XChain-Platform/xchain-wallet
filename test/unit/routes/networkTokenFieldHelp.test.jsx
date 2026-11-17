@@ -16,7 +16,6 @@ import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCre
 import { OracleForm } from '../../../packages/core/src/shared/routes/OracleForm.jsx';
 import { PublishFileForm } from '../../../packages/core/src/shared/routes/PublishFileForm.jsx';
 import { SellOwnershipForm } from '../../../packages/core/src/shared/routes/SellOwnershipForm.jsx';
-import { UnionListForm } from '../../../packages/core/src/shared/routes/UnionListForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -88,15 +87,17 @@ describe('Network and Token field help on route forms', () => {
         // Network sits in the standard From section, closed on load.
         fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
         await expectTip('About Network', 'The chain the file is published on.');
-        fireEvent.click(screen.getByRole('radio', { name: /token-gated/ }));
+        // Publish as is the themed dropdown (G119): open it, pick Encrypted.
+        fireEvent.click(screen.getByRole('button', { name: /^Publish as: / }));
+        fireEvent.click(screen.getByRole('option', { name: /token-gated/ }));
         await expectTip('About Token', 'Only tokens you own are listed.');
     });
 
-    it('Attach: artwork checkbox tip', async () => {
+    it('Attach: artwork file tip', async () => {
         mount(AttachContentForm, { chainId: CHAIN, tick: 'HELP', issuerAddress: ADDRESS.address });
-        // The picture choice is its own closed section.
-        fireEvent.click(await screen.findByRole('button', { name: /^Token Picture/, expanded: false }));
-        await expectTip(/^About Also make this HELP/, 'this becomes the token\'s picture everywhere');
+        // The token-picture toggle is gone; the file field carries the tip.
+        expect(screen.queryByRole('button', { name: /^Token Picture/ })).toBeNull();
+        await expectTip(/^About Artwork file/, 'Two signatures: one to upload the file');
     });
 
     it('List create: Network tip', async () => {
@@ -106,7 +107,7 @@ describe('Network and Token field help on route forms', () => {
     });
 
     it('Union list: Network tip', async () => {
-        mount(UnionListForm, { chainId: CHAIN });
+        mount(ListCreateForm, { chainId: CHAIN, initialType: '3' });
         await openFrom();
         await expectTip('About Network', 'Only your lists on this network can be combined.');
     });
@@ -134,7 +135,7 @@ describe('Network and Token field help on route forms', () => {
     it('Sell ownership: Network tip', async () => {
         mount(SellOwnershipForm, { chainId: CHAIN, tick: 'HELP' });
         await openFrom();
-        await expectTip('About Network', 'The chain the name is listed for sale on.');
+        await expectTip('About Network', 'The chain the ownership is listed for sale on.');
     });
 
     it('Controller bind: Network tip', async () => {

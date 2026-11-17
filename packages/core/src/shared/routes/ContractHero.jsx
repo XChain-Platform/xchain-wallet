@@ -8,25 +8,25 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The contract's blue card, laid out like Home's balance card (heroStack, chart
-// behind, range chips along the foot). It shows the name, short address with
-// copy, publisher and age, this wallet's calls, holdings, and calls over time.
+// The contract's identity card (G16, screen walk 2026-11-14, layout 3): an
+// outlined white card with the contract mark centred (its network badge in
+// the corner), the name and version, the address with copy, and What It Does
+// as one muted line; under a divider, what the contract holds, then who
+// published it, at which block, and how many calls it has had. No chart: the
+// old blue card's line counted calls from one history page only (G10, G12).
 
-import { useId, useMemo, useState } from 'react';
+import { useId, useState } from 'react';
 import { CopyButton, Icon } from '@xchain-wallet/core/ui';
-import { truncateAddress } from '../../ui/AddressText.jsx';
-import { BEHIND_CHART_FILL, BEHIND_CHART_STROKE, ChartRangeTabs, RANGES as CHART_RANGES, defaultRangeId } from '../components/PortfolioChart.jsx';
-import portfolioChartStyles from '../components/PortfolioChart.module.css';
-import homeTabsStyles from '../components/HomeTabs.module.css';
-import { formatRelativeTime } from '../utils/dateTime.js';
+import { branding as brandingLib, registry as registryLib } from '@xchain-wallet/core';
+import { AddressText } from '../../ui/AddressText.jsx';
 import { formatWithThousands, trimAmountTail } from '../utils/amountFormat.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
-import { CALL_RANGE_WINDOWS, callSeries } from './contractDetailModel.js';
-import betStyles from './BetFeedDetail.module.css';
+// The identity card's frame, mark, badge and lines are the oracle record's,
+// so the two G16 cards match.
+import identity from './OracleRecord.module.css';
 import local from './ContractDetail.module.css';
 
-/** The card's seven range chips (Home's, without YTD). */
-const CALL_RANGES = CHART_RANGES.filter((r) => r.id in CALL_RANGE_WINDOWS);
+const chainRegistry = registryLib.defaultRegistry();
 
 function amountText(quantity) {
     const q = String(quantity ?? '');
@@ -34,31 +34,26 @@ function amountText(quantity) {
     return formatWithThousands(trimAmountTail(q) || '0');
 }
 
+function blockText(block) {
+    // A block number is an identifier: shown raw, never grouped (G123).
+    return String(block ?? '?');
+}
+
 /**
- * Calls per slot drawn behind the card: Home's purple line and area, kept to
- * the lower half so the figures above stay readable.
+ * "Holds 0.015 BTC and 1,250 XCHAIN", the chain's own coin first; past two
+ * tokens the rest are counted.
+ *
+ * @param {Array<{ tick: string, quantity: any }>} rows
+ * @param {string} coin
  */
-function CallLine({ values, label }) {
-    if (!values) return null;
-    const max = Math.max(1, ...values);
-    const TOP = 48;
-    const BOTTOM = 99;
-    const n = values.length;
-    const pts = values.map((v, i) => `${((i / Math.max(1, n - 1)) * 100).toFixed(2)},${(BOTTOM - (v / max) * (BOTTOM - TOP)).toFixed(2)}`);
-    return (
-        <svg className={betStyles.heroChartSvg} viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={label}>
-            <polygon fill={BEHIND_CHART_FILL} stroke="none" points={`0,100 ${pts.join(' ')} 100,100`} />
-            <polyline
-                fill="none"
-                stroke={BEHIND_CHART_STROKE}
-                strokeWidth="2"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-                points={pts.join(' ')}
-            />
-        </svg>
-    );
+function holdingsLine(rows, coin) {
+    if (rows.length === 0) return 'Holds no tokens';
+    const lead = rows.find((r) => String(r.tick).toUpperCase() === coin) || rows[0];
+    const ordered = [lead, ...rows.filter((r) => r !== lead)];
+    const parts = ordered.map((r) => `${amountText(r.quantity)} ${r.tick}`);
+    if (parts.length === 1) return `Holds ${parts[0]}`;
+    if (parts.length === 2) return `Holds ${parts[0]} and ${parts[1]}`;
+    return `Holds ${parts[0]}, ${parts[1]} and ${parts.length - 2} more`;
 }
 
 /**
@@ -69,13 +64,11 @@ function CallLine({ values, label }) {
  * @param {string} props.chainId
  * @param {string | null} props.owner
  * @param {boolean} props.isOwner
- * @param {any} props.publishedAt             the contract row's timestamp
  * @param {string | number} props.deployBlock
+ * @param {string} props.about               What It Does, in the publisher's words or built from its functions
  * @param {Array<{ tick: string, quantity: any }> | null} props.holdings  null while loading
- * @param {boolean} [props.holdingsError]   the balance read failed; the Code tab says why
- * @param {number | null} props.callsTotal   the explorer's total, null when unknown
- * @param {any[] | null} props.chartRows      the first page of executions, null while loading
- * @param {number | null} props.myCalls       this wallet's calls on that page, null when its addresses are unknown
+ * @param {boolean} [props.holdingsError]   the balance read failed; the Details tab says why
+ * @param {number | null} props.callsTotal   the explorer's total, or the loaded count when it gives none; null while loading
  */
 export function ContractHero({
     name,
@@ -84,120 +77,74 @@ export function ContractHero({
     chainId,
     owner,
     isOwner,
-    publishedAt,
     deployBlock,
+    about,
     holdings,
     holdingsError = false,
     callsTotal,
-    chartRows,
-    myCalls,
 }) {
-    const captionId = useId();
-    const chartPanelId = useId();
-    const [rangeId, setRangeId] = useState(defaultRangeId());
-    const range = CALL_RANGES.find((r) => r.id === rangeId) || CALL_RANGES[1];
+    const titleId = useId();
+    const [pipFailed, setPipFailed] = useState(false);
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    const pipUrl = descriptor ? brandingLib.chainIconSmallUrl(descriptor.id) : null;
 
-    const series = useMemo(
-        () => callSeries({ rows: chartRows || [], rangeId: range.id }),
-        [chartRows, range.id],
-    );
-
-    // The chain's own coin leads the holdings when the contract holds it.
     const coin = protocolCoinTickerFor(chainId);
-    const rows = Array.isArray(holdings) ? holdings : [];
-    const lead = rows.find((r) => String(r.tick).toUpperCase() === coin) || rows[0] || null;
-    const rest = rows.filter((r) => r !== lead);
-
-    const age = formatRelativeTime(publishedAt);
-    const loadedRows = Array.isArray(chartRows) ? chartRows.length : 0;
-    const partial = callsTotal !== null && callsTotal > loadedRows;
-    const chartLabel = series.values
-        ? `${series.counted} call${series.counted === 1 ? '' : 's'} over ${range.label}${partial ? `, from the latest ${loadedRows}` : ''}`
-        : chartRows === null ? 'Loading calls' : `No calls with a time to chart over ${range.label}`;
+    const holdingsText = holdingsError
+        ? 'Holdings unavailable'
+        : holdings == null ? 'Loading holdings…' : holdingsLine(holdings, coin);
+    const callsText = callsTotal == null
+        ? null
+        : `${formatWithThousands(String(callsTotal))} call${callsTotal === 1 ? '' : 's'}`;
 
     return (
-        <div className={`${homeTabsStyles.heroStack} ${homeTabsStyles.heroStackWithChart} ${betStyles.heroStack}`}>
-            <section className={betStyles.hero} aria-labelledby={captionId}>
-                <div className={local.heroTitleRow}>
-                    <span className={local.heroIcon} aria-hidden="true"><Icon.ContractIcon /></span>
-                    <h2 id={captionId} className={local.heroName} style={{ overflowWrap: 'anywhere' }}>
-                        {name}
-                        {headingRest ? <span className="sr-only">{headingRest}</span> : null}
-                    </h2>
-                </div>
-                {contractAddress ? (
-                    <p className={local.heroLine}>
-                        <span className={local.heroAddress}>{truncateAddress(contractAddress)}</span>
-                        <span className={local.heroCopy}>
-                            <CopyButton value={contractAddress} label="Copy Contract Address" iconOnly />
-                        </span>
-                    </p>
+        <section className={identity.identityCard} aria-labelledby={titleId} data-contract-identity="">
+            <span className={identity.identityMark} aria-hidden="true">
+                <Icon.ContractIcon />
+                {pipUrl && !pipFailed ? (
+                    <img
+                        className={identity.networkPip}
+                        src={pipUrl}
+                        width={20}
+                        height={20}
+                        alt=""
+                        decoding="async"
+                        onError={() => setPipFailed(true)}
+                    />
                 ) : null}
-                <p className={local.heroLine}>
+            </span>
+            <h2 id={titleId} className={identity.identityName} style={{ overflowWrap: 'anywhere' }}>
+                {name}
+                {headingRest ? <span className="sr-only">{headingRest}</span> : null}
+            </h2>
+            {contractAddress ? (
+                <p className={`${identity.identityAddress} ${local.identityAddressRow}`}>
+                    <AddressText address={contractAddress} size="sm" className={local.identityMono} />
+                    <span className={local.heroCopy}>
+                        <CopyButton value={contractAddress} label="Copy Contract Address" iconOnly />
+                    </span>
+                </p>
+            ) : null}
+            {about ? <p className={identity.identityLine} data-contract-about="">{about}</p> : null}
+            <div className={local.identityFoot}>
+                <p className={local.identityHoldings}>{holdingsText}</p>
+                <p className={`${identity.identityLine} ${local.identityPublished}`}>
                     {owner ? (
                         <>
                             <span>Published by</span>
-                            <strong className={local.heroAddress}>{isOwner ? 'you' : truncateAddress(String(owner))}</strong>
+                            {isOwner
+                                ? <span>you,</span>
+                                : <><AddressText address={String(owner)} size="sm" className={local.identityOwner} /><span aria-hidden="true">,</span></>}
                         </>
-                    ) : <span>Publisher unknown</span>}
-                    <span aria-hidden="true">·</span>
-                    <span>{age || `block ${deployBlock}`}</span>
-                </p>
-                {myCalls !== null ? (
-                    <div className={betStyles.heroTop}>
-                        <span className={`${betStyles.statusChip} ${local.youChip}`}>
-                            <span className={local.youIcon} aria-hidden="true"><Icon.UserIcon /></span>
-                            <span>
-                                You: {myCalls} call{myCalls === 1 ? '' : 's'}
-                                {partial ? ` in the latest ${loadedRows}` : ''}
-                            </span>
-                        </span>
-                    </div>
-                ) : null}
-                <div className={betStyles.bigRow}>
-                    {holdingsError ? (
-                        <span className={`${betStyles.bigPct} ${betStyles.bigMessage}`}>Holdings unavailable</span>
-                    ) : holdings === null ? (
-                        <span className={`${betStyles.bigPct} ${betStyles.bigMessage}`}>Loading holdings…</span>
-                    ) : lead ? (
+                    ) : <span>Publisher unknown,</span>}
+                    <span>block {blockText(deployBlock)}</span>
+                    {callsText ? (
                         <>
-                            <span className={betStyles.bigPct}>{amountText(lead.quantity)}</span>
-                            <span className={betStyles.bigLabel}>{String(lead.tick)} held</span>
+                            <span aria-hidden="true">·</span>
+                            <span data-contract-calls="">{callsText}</span>
                         </>
-                    ) : (
-                        <span className={`${betStyles.bigPct} ${betStyles.bigMessage}`}>Holds no tokens</span>
-                    )}
-                </div>
-                <p className={`${betStyles.heroStats} ${local.heroStats}`}>
-                    <span className={local.heroOthers}>
-                        {rest.length > 0 ? `+ ${amountText(rest[0].quantity)} ${rest[0].tick}${rest.length > 1 ? ` and ${rest.length - 1} more` : ''}` : ''}
-                    </span>
-                    <span className={local.heroTotal}>
-                        {callsTotal !== null
-                            ? `${formatWithThousands(String(callsTotal))} call${callsTotal === 1 ? '' : 's'} total`
-                            : chartRows !== null ? `${loadedRows} call${loadedRows === 1 ? '' : 's'} loaded` : ''}
-                    </span>
+                    ) : null}
                 </p>
-            </section>
-            <section
-                className={`${portfolioChartStyles.wrap} ${portfolioChartStyles.behind}`}
-                data-chart-behind="true"
-                aria-label="Calls over time"
-            >
-                <div id={chartPanelId} role="tabpanel" aria-labelledby={`${chartPanelId}-tab-${range.id}`}>
-                    <div className={portfolioChartStyles.slot}>
-                        <div className={portfolioChartStyles.chart}>
-                            <CallLine values={series.values} label={chartLabel} />
-                        </div>
-                    </div>
-                </div>
-                <ChartRangeTabs
-                    panelId={chartPanelId}
-                    ranges={CALL_RANGES}
-                    rangeId={range.id}
-                    onSelect={setRangeId}
-                />
-            </section>
-        </div>
+            </div>
+        </section>
     );
 }

@@ -36,7 +36,7 @@ function deferred() {
 afterEach(cleanup);
 
 describe('PSBT review while a new parse is pending', () => {
-    it('drops the previous review and keeps signing disabled until the new paste parses', async () => {
+    it('drops the previous review while keeping the Sign action available during parsing', async () => {
         const second = deferred();
         const parsePsbtRequest = vi.fn()
             .mockResolvedValueOnce({ decomposed: decomposedFor('bc1qfirstrecipient'), action: null, actionDecodeReason: 'NO_OP_RETURN' })
@@ -69,7 +69,7 @@ describe('PSBT review while a new parse is pending', () => {
 
         // The second parse has not answered: no review of the first transaction may stay up.
         expect(screen.queryAllByTestId('psbt-sign-output')).toHaveLength(0);
-        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(false);
 
         second.resolve({ decomposed: decomposedFor('bc1qsecondrecipient'), action: null, actionDecodeReason: 'NO_OP_RETURN' });
         await waitFor(() => expect(screen.getAllByTestId('psbt-sign-output')).toHaveLength(1));

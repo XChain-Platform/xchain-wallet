@@ -45,6 +45,7 @@ describe('pending row for a raw broadcast', () => {
         const text = container.textContent;
         expect(text).not.toMatch(/unknown/i);
         expect(text).toMatch(/Raw transaction/);
-        expect(container.querySelector(`[title="${TXID}"]`)).not.toBeNull();
+        // The row no longer prints the txid as an address pill.
+        expect(container.querySelector(`[title="${TXID}"]`)).toBeNull();
     });
 });

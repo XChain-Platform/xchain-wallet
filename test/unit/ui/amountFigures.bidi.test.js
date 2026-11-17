@@ -38,11 +38,16 @@ describe('inline amount figures isolate their direction', () => {
         });
     }
 
+    // The isolate moved from an inline style to the row's .change rule; the
+    // change figure's span must still carry that class.
     it('the market row change figure reads left to right', () => {
         const source = read('shared/routes/MarketsList.jsx');
-        const style = source.slice(source.indexOf('aria-label={changeDisplay ?'));
-        const block = style.slice(0, style.indexOf('}}'));
-        expect(block).toMatch(/direction:\s*'ltr'/);
-        expect(block).toMatch(/unicodeBidi:\s*'isolate'/);
+        const head = source.slice(0, source.indexOf('aria-label={changeDisplay ?'));
+        const span = head.slice(head.lastIndexOf('<span'));
+        expect(span).toMatch(/className=\{marketsStyles\.change\}/);
+        const block = cssBlock(read('shared/routes/MarketsList.module.css'), 'change');
+        expect(block, '.change rule in MarketsList.module.css').not.toBe('');
+        expect(block).toMatch(/direction:\s*ltr/);
+        expect(block).toMatch(/unicode-bidi:\s*isolate/);
     });
 });

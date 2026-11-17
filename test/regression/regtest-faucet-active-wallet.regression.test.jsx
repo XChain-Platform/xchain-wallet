@@ -28,8 +28,8 @@ vi.mock('../../packages/core/src/shared/hooks/useSettings.js', () => ({
 }));
 vi.mock('../../packages/core/src/shared/components/LogConsole.jsx', () => ({ LogConsole: () => null }));
 
-const { DeveloperModeSection } = await import(
-    '../../packages/core/src/shared/components/settings/DeveloperModeSection.jsx'
+const { AddNetworkPage, FaucetPage, TestNetworksPage } = await import(
+    '../../packages/core/src/shared/components/settings/TestNetworksPages.jsx'
 );
 const { Settings } = await import('../../packages/core/src/shared/routes/Settings.jsx');
 
@@ -89,13 +89,14 @@ describe('regression/regtest-faucet-active-wallet', () => {
         mount(
             <Settings
                 onBack={vi.fn()}
-                initialSubpageId="developer"
+                // The faucet is its own page under Advanced > Developer options (2026-11-13).
+                initialSubpageId="developer-faucet"
                 activeWallet={ACTIVE_WALLET}
                 activeAccount={ACTIVE_ACCOUNT}
             />,
         );
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Get Test BTC' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Get Test Coins' }));
 
         await waitFor(() => expect(messaging.getNewestAddress).toHaveBeenCalledWith(
             ACTIVE_WALLET.id,
@@ -109,13 +110,14 @@ describe('regression/regtest-faucet-active-wallet', () => {
         });
     });
 
-    it('[REGRESSION P1] removes Activate from the Bitcoin regtest row once it becomes active', () => {
+    // Test Networks (operator picks 2026-11-14): Add Network offers only the
+    // built-ins not active yet, and the list shows an active one as Active.
+    it('[REGRESSION P1] stops offering Bitcoin Regtest for activation once it becomes active', () => {
         settings = enabledSettings({
             'dogecoin-regtest': { strategy: 'normal', customSatsPerKb: null, rbfByDefault: true },
         });
-        const view = mount(<DeveloperModeSection />);
-        const bitcoinRow = screen.getByRole('heading', { name: 'Bitcoin' }).closest('section');
-        expect(within(bitcoinRow).getByRole('button', { name: 'Activate…' })).toBeTruthy();
+        const view = mount(<AddNetworkPage activeWallet={ACTIVE_WALLET} />);
+        expect(screen.getByRole('button', { name: /^Bitcoin Regtest/ })).toBeTruthy();
 
         settings = enabledSettings({
             'bitcoin-regtest': { strategy: 'normal', customSatsPerKb: null, rbfByDefault: true },
@@ -123,30 +125,37 @@ describe('regression/regtest-faucet-active-wallet', () => {
         });
         view.rerender(
             <MessagingProvider shell="web" messaging={messaging}>
-                <DeveloperModeSection />
+                <AddNetworkPage activeWallet={ACTIVE_WALLET} />
             </MessagingProvider>,
         );
+        expect(screen.queryByRole('button', { name: /^Bitcoin Regtest/ })).toBeNull();
 
-        expect(within(bitcoinRow).queryByRole('button', { name: 'Activate…' })).toBeNull();
-        expect(within(bitcoinRow).getByText('Active')).toBeTruthy();
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <TestNetworksPage />
+            </MessagingProvider>,
+        );
+        const list = screen.getByRole('list', { name: 'On this wallet' });
+        expect(within(list).getByRole('button', { name: /^Bitcoin Regtest/ })).toHaveTextContent('Active');
     });
 
-    it('[REGRESSION P1] renders the faucet without a hook-order warning when activation makes it visible', () => {
+    it('[REGRESSION P1] renders the faucet without a hook-order warning when activation makes it usable', () => {
         settings = enabledSettings();
         const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const view = mount(<DeveloperModeSection />);
-        expect(screen.queryByRole('heading', { name: 'Regtest faucet' })).toBeNull();
+        const props = { activeWallet: ACTIVE_WALLET, activeAccount: ACTIVE_ACCOUNT };
+        const view = mount(<FaucetPage {...props} />);
+        expect(screen.queryByRole('button', { name: 'Get Test Coins' })).toBeNull();
 
         settings = enabledSettings({
             'bitcoin-regtest': { strategy: 'normal', customSatsPerKb: null, rbfByDefault: true },
         });
         expect(() => view.rerender(
             <MessagingProvider shell="web" messaging={messaging}>
-                <DeveloperModeSection />
+                <FaucetPage {...props} />
             </MessagingProvider>,
         )).not.toThrow();
 
-        expect(screen.getByRole('heading', { name: 'Regtest faucet' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Get Test Coins' })).toBeTruthy();
         expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/change in the order of hooks|rendered more hooks/i);
     });
 });

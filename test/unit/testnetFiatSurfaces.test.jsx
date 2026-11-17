@@ -128,7 +128,7 @@ describe('test-network fiat suppression', () => {
         },
     );
 
-    it('hides TokenDetail value, change, chart, and price alerts on regtest', async () => {
+    it('hides TokenDetail value, change, price chart, and price alerts on regtest', async () => {
         const getNativePricesRequest = vi.fn().mockResolvedValue({
             prices: {
                 [CHAIN]: {
@@ -159,8 +159,12 @@ describe('test-network fiat suppression', () => {
         // no value" line belongs to Home's hero (checked above).
         const balance = await screen.findByRole('region', { name: 'BTC' });
         expect(balance).not.toHaveTextContent('$');
-        expect(screen.queryByText('24h')).toBeNull();
-        expect(screen.queryByRole('tablist', { name: 'Chart range' })).toBeNull();
+        // The blue hero keeps its chart (G10), drawn from the coin's own balance,
+        // never a price; a balance line carries no change pill (G12, 2026-11-15).
+        expect(await screen.findByRole('region', { name: 'Balance chart' })).toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'Price chart' })).toBeNull();
+        expect(screen.queryByRole('region', { name: 'Value chart' })).toBeNull();
+        expect(screen.queryByLabelText(/ change\. /)).toBeNull();
         expect(screen.queryByRole('button', { name: /chart/i })).toBeNull();
         expect(screen.queryByRole('button', { name: /price alert/i })).toBeNull();
         expect(getNativePricesRequest).not.toHaveBeenCalled();

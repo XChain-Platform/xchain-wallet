@@ -21,6 +21,7 @@
 // guaranteed lock in `finally`.
 
 import { unlockWallet } from './unlockWallet.js';
+import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
 import { assertSigningAllowed } from './panicMode.js';
 import { assertNoDeceptiveCharacters, assertNoHiddenControls } from './signRiskClassifier.js';
 
@@ -79,6 +80,8 @@ export async function signMessageFlow({
     assertNoDeceptiveCharacters({ chainId, path, addressId, message }, 'signMessageFlow');
     assertNoHiddenControls(message, 'signMessageFlow');
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
+        // A hardware wallet signs only on its device; no password helps.
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'signing without it connected');
         throw new Error('signMessageFlow: either `password` or `signer` is required');
     }
     // §26.5 panic-mode freeze.
@@ -144,6 +147,8 @@ export async function signPsbtFlow({
     // Refuse text whose visual form can conceal the bytes the signer receives.
     assertNoDeceptiveCharacters({ chainId, psbtHex, signingPaths }, 'signPsbtFlow');
     if (!injectedSigner && (typeof password !== 'string' || password.length === 0)) {
+        // A hardware wallet signs only on its device; no password helps.
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'signing without it connected');
         throw new Error('signPsbtFlow: either `password` or `signer` is required');
     }
     // §26.5 panic-mode freeze.

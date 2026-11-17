@@ -82,7 +82,7 @@ describe('coin control over a very large input set', () => {
         mount();
         fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.001' } });
-        fireEvent.click(screen.getByText('Advanced'));
+        fireEvent.click(screen.getByText('Advanced', { selector: '[data-form-section-title]' }));
         await waitFor(() => expect(screen.getByRole('switch', { name: 'Coin control enabled' })).not.toBeDisabled());
         fireEvent.click(screen.getByRole('switch', { name: 'Coin control enabled' }));
 

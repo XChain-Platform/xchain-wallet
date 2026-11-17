@@ -30,7 +30,7 @@
 //   7. ActionsMenu.jsx exists and renders an entries[] prop with
 //      label + optional description; popup + web both pass an `issue`
 //      entry wired to setUnlockedView('issue').
-//   8. Home accepts onActions and wires an "All actions" button.
+//   8. Home has no More quick action; the wallet menu carries All actions.
 //   9. popup + web App.jsx import IssueTokenForm + ActionsMenu and
 //      track the `'issue'` + `'actions'` sub-routes.
 
@@ -52,6 +52,7 @@ const locksPath = join(sharedRoutes, 'issueLocks.js');
 const cssPath = join(sharedRoutes, 'IssueTokenForm.module.css');
 const menuPath = join(sharedRoutes, 'ActionsMenu.jsx');
 const menuCssPath = join(sharedRoutes, 'ActionsMenu.module.css');
+const confirmPath = join(core, 'src', 'shared', 'components', 'ConfirmActionModal.jsx');
 
 assert.ok(existsSync(formPath), 'IssueTokenForm.jsx exists');
 assert.ok(existsSync(locksPath), 'issueLocks.js exists');
@@ -63,6 +64,7 @@ const src = readFileSync(formPath, 'utf8');
 const locksSrc = readFileSync(locksPath, 'utf8');
 const css = readFileSync(cssPath, 'utf8');
 const menuSrc = readFileSync(menuPath, 'utf8');
+const confirmSrc = readFileSync(confirmPath, 'utf8');
 
 // --- 1. Public surface -------------------------------------------------
 
@@ -234,13 +236,16 @@ assert.ok(
 
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
 assert.ok(
-    /onActions/.test(home) && /onClick=\{onActions\}/.test(home),
-    'Home accepts + wires onActions for the Actions menu',
+    !/onActions/.test(home) && !home.includes('<Icon.MoreIcon />'),
+    'Home has no More quick action; the Actions menu is the All actions row of the wallet menu',
 );
-assert.ok(
-    home.includes("aria-label={t('actionsMenu.more')}") && home.includes('<Icon.MoreIcon />'),
-    'Home exposes a More quick action with the more icon that opens the Actions menu',
-);
+{
+    const walletMenu = readFileSync(join(sharedRoutes, '..', 'walletMenu.js'), 'utf8');
+    assert.ok(
+        /id: 'actions', labelKey: 'walletMenu\.row\.allActions'/.test(walletMenu),
+        'the wallet menu carries the All actions row that opens the Actions menu',
+    );
+}
 
 // --- 9. Both shells wire the new sub-routes ---------------------------
 
@@ -274,9 +279,8 @@ for (const [shell, appPath] of [
         `${shell} App.jsx includes the issue entry`,
     );
     assert.ok(
-        /onActions=\{activeWalletId/.test(app)
-            || /onActions=\{/.test(app),
-        `${shell} App.jsx passes onActions to Home`,
+        !/onActions=\{/.test(app),
+        `${shell} App.jsx passes no onActions to Home (Home has no More quick action)`,
     );
 }
 
@@ -293,9 +297,10 @@ assert.ok(
 
 // --- 11. CSS module ---------------------------------------------------
 
+// The From line is the shared FromSection now, so .fromLine is gone (an
+// unreferenced class fails cssModuleReferences).
 for (const cls of [
     '.picker',
-    '.fromLine',
     '.checkRow',
     '.detailsList',
     '.actions',
@@ -306,9 +311,13 @@ for (const cls of [
         `IssueTokenForm.module.css defines ${cls}`,
     );
 }
-assert.ok(!/^\.warnings\s*\{/m.test(css), 'IssueTokenForm warnings render through StatusMessage, not a route box');
-assert.ok(/<(?:StatusMessage|FormNotice) variant="warning" role="alert"/.test(src), 'IssueTokenForm warnings use the shared warning message');
-assert.ok(src.includes('<FormPage'), 'IssueTokenForm delegates its page card to FormPage');
+assert.ok(!/^\.warnings\s*\{/m.test(css), 'IssueTokenForm has no route-level warning box');
+assert.ok(
+    /decoded=\{reviewDecoded\}/.test(src)
+        && /decodedWarnings:[\s\S]{0,120}formattedDecoded\?\.warnings/.test(confirmSrc),
+    'IssueTokenForm decoder warnings feed Confirm Standard shared warning slot',
+);
+assert.ok(src.includes('<FormFrame'), 'IssueTokenForm delegates its responsive form surface to FormFrame');
 assert.ok(!/(^|\n)\.card\s*\{/.test(css), 'IssueTokenForm has no route-level page card');
 
 console.log(

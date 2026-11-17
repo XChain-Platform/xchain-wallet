@@ -102,9 +102,11 @@ async function buildWith(buildResult) {
     fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
-    const submit = await screen.findByRole('button', { name: 'Create Unsigned Cross-Chain Swap Transaction' });
+    // The review step renders after the form's async checks settle, which can
+    // pass the default 1 s wait in a loaded full-suite run.
+    const submit = await screen.findByRole('button', { name: 'Approve' }, { timeout: 10_000 });
     await act(async () => {
-        submit.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        fireEvent.click(submit);
     });
 }
 

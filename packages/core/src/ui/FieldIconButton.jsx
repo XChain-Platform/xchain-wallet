@@ -10,27 +10,39 @@
 
 import styles from './FieldIconButton.module.css';
 
-/** Plain icon action placed at the trailing edge of an Input or Textarea. */
+/**
+ * Plain icon action placed at the trailing edge of an Input or Textarea.
+ *
+ * `lockedReason` shows the action but locks it: the field's value is fixed,
+ * so there is nothing to pick. The button stays focusable (aria-disabled, not
+ * the native attribute) so a keyboard or screen reader user still reaches it
+ * and hears why, from its title, while its name stays the action's own.
+ */
 export function FieldIconButton({
     icon,
     label,
     onClick,
     disabled = false,
+    lockedReason,
     'aria-pressed': ariaPressed,
     'aria-expanded': ariaExpanded,
     'aria-controls': ariaControls,
+    'aria-busy': ariaBusy,
 }) {
+    const locked = Boolean(lockedReason);
     return (
         <button
             type="button"
             className={styles.button}
-            onClick={onClick}
+            onClick={locked ? undefined : onClick}
             disabled={disabled}
+            aria-disabled={locked ? 'true' : undefined}
             aria-label={label}
-            title={label}
+            title={locked ? lockedReason : label}
             aria-pressed={ariaPressed}
             aria-expanded={ariaExpanded}
             aria-controls={ariaControls}
+            aria-busy={ariaBusy}
         >
             {icon}
         </button>

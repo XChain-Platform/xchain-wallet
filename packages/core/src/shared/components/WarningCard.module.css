@@ -15,19 +15,8 @@
     margin-bottom: 0;
 }
 
-/* A line the reader must not miss: a red-edged callout inside the card. */
-.critical {
-    composes: paragraph;
-    font-weight: 600;
-    background: var(--xc-danger-bg);
-    /* Keep the critical-copy marker heavier than a hairline without adding a token. */
-    border-inline-start: 3px solid var(--xc-danger);
-    padding: var(--xc-space-2) var(--xc-space-3);
-    border-radius: 0;
-    border-start-end-radius: var(--xc-radius-sm);
-    border-end-end-radius: var(--xc-radius-sm);
-    margin: var(--xc-space-2) 0;
-}
+/* A critical line is the shared danger Notice (WarningLine critical renders
+   one; StatusMessage.module.css paints it), so no critical style lives here. */
 
 /* An explanation page's paragraph, at body size, with a little more room
    between paragraphs than lines in a card. */

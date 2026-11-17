@@ -59,7 +59,7 @@ describe('AddressPreferencesForm memo delimiters', () => {
             fireEvent.click(screen.getByRole('button', { name: /^Update preferences$/i }));
 
             expect(await screen.findByText('Memo cannot contain "|" or ";".')).toBeTruthy();
-            expect(screen.queryByRole('form', { name: 'Review preferences' })).toBeNull();
+            expect(screen.queryByTestId('confirm-modal')).toBeNull();
             // Only the mount prefill read runs; Review stops before its baseline read.
             expect(target.getAddressPreferences).toHaveBeenCalledTimes(1);
         });
@@ -71,7 +71,7 @@ describe('AddressPreferencesForm memo delimiters', () => {
         fireEvent.change(memo, { target: { value: 'café 🚀' } });
         fireEvent.click(screen.getByRole('button', { name: /^Update preferences$/i }));
 
-        expect(await screen.findByRole('form', { name: 'Review preferences' })).toBeTruthy();
+        expect(await screen.findByTestId('confirm-modal')).toBeTruthy();
         expect(screen.getByText('café 🚀')).toBeTruthy();
     });
 });

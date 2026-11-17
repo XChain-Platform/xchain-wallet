@@ -214,8 +214,8 @@ for (const variant of ['status', 'info', 'warning', 'error', 'success']) {
 }
 assert.match(
     primitiveCss,
-    /^\.row\.error \{[^}]*background: var\(--xc-danger\);[^}]*color: var\(--xc-on-danger\);/m,
-    'the error variant paints on-danger text over the danger background',
+    /^\.row\.error \{[^}]*background: var\(--xc-danger-bg\);[^}]*color: var\(--xc-danger-text\);[^}]*border: 1px solid var\(--xc-danger\);/m,
+    'the error variant paints the Notice Standard danger look (tint, dark red text, thin red border; 2026-11-15)',
 );
 
 console.log(

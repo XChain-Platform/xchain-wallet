@@ -104,7 +104,8 @@ describe('BiometricRow', () => {
         render(<BiometricRow />);
 
         const enable = await screen.findByRole('button', { name: 'Enable' });
-        expect(enable.className).toMatch(/ghost/);
+        // Settings has no grey ghost buttons (operator 2026-11-13).
+        expect(enable.className).toMatch(/secondary/);
         expect(enable.style.border).toBe('');
         fireEvent.click(enable);
 
@@ -155,6 +156,15 @@ describe('BiometricRow', () => {
         expect(await screen.findByText('Biometric unlock could not be disabled.')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Try Again' })).toBeTruthy();
     });
+
+    it('lands its own page straight on the enable form, with no Enable or Cancel step', async () => {
+        render(<BiometricRow direct />);
+
+        expect(await screen.findByLabelText('Wallet password')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Enable' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Enable Biometric Unlock' })).toBeTruthy();
+    });
 });
 
 describe('DuressPassphraseRow', () => {
@@ -170,7 +180,7 @@ describe('DuressPassphraseRow', () => {
         render(<DuressPassphraseRow />);
 
         const set = screen.getByRole('button', { name: 'Set' });
-        expect(set.className).toMatch(/ghost/);
+        expect(set.className).toMatch(/secondary/);
         expect(set.style.border).toBe('');
         fireEvent.click(set);
 
@@ -179,6 +189,15 @@ describe('DuressPassphraseRow', () => {
             expect(input.className).toMatch(/input/);
             expect(input).toHaveAttribute('type', 'password');
         }
+    });
+
+    it('lands its own page straight on the form, with no Set or Cancel step', () => {
+        render(<DuressPassphraseRow direct />);
+
+        expect(screen.queryByRole('button', { name: 'Set' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+        expect(screen.getByLabelText('Current wallet password')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Save Passphrase' })).toBeTruthy();
     });
 
     it('rejects a duress passphrase that equals the wallet password', async () => {

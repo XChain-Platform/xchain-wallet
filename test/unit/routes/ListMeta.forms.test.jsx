@@ -40,10 +40,11 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
 import { ListDetail } from '../../../packages/core/src/shared/routes/ListDetail.jsx';
-import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
-import { ListRenameForm } from '../../../packages/core/src/shared/routes/ListRenameForm.jsx';
-import { ListShareForm } from '../../../packages/core/src/shared/routes/ListShareForm.jsx';
-import { UnionListForm } from '../../../packages/core/src/shared/routes/UnionListForm.jsx';
+import {
+    ListEditRoute as ListRenameForm,
+    ListForkRoute as ListForkForm,
+    ListShareRoute as ListShareForm,
+} from '../../helpers/listFormRoutes.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -193,14 +194,18 @@ describe('wallet list metadata forms', () => {
         });
     });
 
-    it('shows list metadata and exposes Rename only when the callback and formats exist', async () => {
+    // Renaming now happens in the List form that Edit opens, so the detail
+    // page shows the metadata on its identity card and has no Rename tile.
+    it('shows list metadata on the identity card and sends Edit to the edit handler', async () => {
         const onRename = vi.fn();
+        const onEdit = vi.fn();
         mount(
             <ListDetail
                 chainId={CHAIN}
                 actionIndex="2700"
                 onBack={() => {}}
                 onFork={() => {}}
+                onEdit={onEdit}
                 onRename={onRename}
             />,
             makeMessaging({
@@ -211,30 +216,12 @@ describe('wallet list metadata forms', () => {
             }),
         );
 
-        expect(await screen.findByText('Treasury')).toBeTruthy();
+        expect(await screen.findByRole('heading', { name: 'Treasury' })).toBeTruthy();
         expect(screen.getByText('Quarterly payout addresses')).toBeTruthy();
-        fireEvent.click(await screen.findByRole('button', { name: 'Rename List' }));
-        expect(onRename).toHaveBeenCalledWith({ chainId: CHAIN, actionIndex: '2700' });
-    });
-
-    it('keeps Rename hidden when metadata formats are unavailable', async () => {
-        const messaging = makeMessaging({
-            getActionFormats: vi.fn().mockResolvedValue({ 0: META_FORMATS[0] }),
-        });
-        mount(
-            <ListDetail
-                chainId={CHAIN}
-                actionIndex="2700"
-                onBack={() => {}}
-                onFork={() => {}}
-                onRename={() => {}}
-            />,
-            messaging,
-        );
-
-        await screen.findByText('#2700');
-        await waitFor(() => expect(messaging.getActionFormats).toHaveBeenCalled());
-        expect(screen.queryByRole('button', { name: 'Rename List' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Rename/ })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^Edit(?! look)\b/ }));
+        expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ chainId: CHAIN, actionIndex: '2700' }));
+        expect(onRename).not.toHaveBeenCalled();
     });
 
     it('submits the clear sentinel as format 5 and shows the shared-list fee note', async () => {
@@ -257,11 +244,24 @@ describe('wallet list metadata forms', () => {
 
         await screen.findByLabelText('Name');
         expect(screen.getByText(/shared-list edit fee/i)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Clear name' }));
+        // Renaming is the List form's Edit: its name and description sit in
+        // the Details section, closed until used, and it publishes with Publish Edit.
+        fireEvent.click(screen.getByRole('button', { name: /^Details\b/, expanded: false }));
+        // The X is inside the field and shows only once it holds text; it sets the clear sentinel.
+        expect(screen.queryByRole('button', { name: 'Clear Name' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Clear$/ })).toBeNull();
+        // Description is an auto-growing textarea; both counters sit in their label rows.
+        const descriptionBox = screen.getByLabelText('Description');
+        expect(descriptionBox.tagName).toBe('TEXTAREA');
+        expect(descriptionBox).toHaveAttribute('rows', '1');
+        const nameCounter = screen.getByText('0 / 64 bytes', { exact: false });
+        expect(nameCounter.parentElement).toContainElement(screen.getByText('Name'));
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'x' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Clear Name' }));
         fireEvent.change(screen.getByLabelText('Description'), {
             target: { value: 'New description' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Rename List' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
 
         await waitFor(() => expect(ownerRun).toHaveBeenCalledTimes(1));
         expect(ownerRun.mock.calls[0][0].actionData.params).toEqual({
@@ -295,10 +295,10 @@ describe('wallet list metadata forms', () => {
             }),
         );
 
-        fireEvent.change(await screen.findByLabelText('Add addresses'), {
+        fireEvent.change(await screen.findByLabelText('Addresses'), {
             target: { value: '1BoatSLRHtKNngkdXEeobR76b53LETtpyT' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Fork' }));
         expect(await screen.findByText('Treasury (List #2700)')).toBeTruthy();
 
         cleanup();
@@ -310,12 +310,84 @@ describe('wallet list metadata forms', () => {
             />,
             makeMessaging({ getListByActionIndex: vi.fn().mockResolvedValue(namedDetail) }),
         );
-        expect(await screen.findByText('Treasury')).toBeTruthy();
+        expect(await screen.findByRole('button', { name: /^Share list$/i })).toBeTruthy();
+        expect(screen.getByText('Treasury (List #2700)', { selector: 'dd' })).toBeTruthy();
+    });
+
+    describe('share page states', () => {
+        const SHARE_FORMATS = { ...META_FORMATS };
+        function mountShare(overrides = {}) {
+            return mount(
+                <ListShareForm
+                    walletId="wallet-1"
+                    listRef={{ chainId: CHAIN, actionIndex: '2700' }}
+                    onBack={() => {}}
+                />,
+                makeMessaging({ getActionFormats: vi.fn().mockResolvedValue(SHARE_FORMATS), ...overrides }),
+            );
+        }
+
+        it('ready: explains sharing, shows the list facts and offers an enabled Share List', async () => {
+            mountShare({
+                getListByActionIndex: vi.fn().mockResolvedValue(detail({ name: 'Treasury' })),
+                getFeeSchedule: vi.fn().mockResolvedValue({
+                    gasPrice: '0.00001',
+                    gasSchedule: { LIST_SHARE: 100000 },
+                    prices: { available: false },
+                }),
+            });
+            const button = await screen.findByRole('button', { name: 'Share List' });
+            expect(button.disabled).toBe(false);
+            const intro = screen.getByText(/This list now lives only on/i);
+            expect(intro.textContent).toMatch(/lives only on Bitcoin/i);
+            expect(intro.textContent).toMatch(/shared list that lives on every network, so other chains can use it/i);
+            expect(intro.textContent).toMatch(/sharing is permanent/i);
+            expect(intro.textContent).toMatch(/share fee pays the hubs and validators that carry and store the list on every chain/i);
+            expect(screen.getByText('Treasury (List #2700)', { selector: 'dd' })).toBeTruthy();
+            expect(screen.getByText('Address list', { selector: 'dd' })).toBeTruthy();
+            expect(screen.getByText('1', { selector: 'dd' })).toBeTruthy();
+            // The share fee in XCHAIN, priced from the chain's fee schedule.
+            expect(await screen.findByText('1 XCHAIN', { selector: 'dd' })).toBeTruthy();
+            // One collapsible Share section, open by default, holds all of it.
+            const toggle = screen.getByRole('button', { name: /^Share\b/, expanded: true });
+            const region = intro.closest('section');
+            expect(region).toBeTruthy();
+            expect(region.contains(screen.getByText('Treasury (List #2700)', { selector: 'dd' }))).toBe(true);
+            expect(region.contains(screen.getByText('1 XCHAIN', { selector: 'dd' }))).toBe(true);
+            fireEvent.click(toggle);
+            expect(screen.getByRole('button', { name: /^Share\b/, expanded: false })).toBeTruthy();
+        });
+
+        it('already shared: shows the state and no action', async () => {
+            mountShare({
+                getSharedLists: vi.fn().mockResolvedValue({
+                    lists: [{ kind: 'home', home_chain: 'BTC', home_list_index: 2700 }],
+                }),
+            });
+            expect(await screen.findByText(/already shared to every network/i)).toBeTruthy();
+            expect(screen.queryByRole('button', { name: 'Share List' })).toBeNull();
+            expect(screen.getByText('Address list', { selector: 'dd' })).toBeTruthy();
+            expect(screen.getByRole('button', { name: /^Share\b/, expanded: true })).toBeTruthy();
+        });
+
+        it('not the owner: shows the refusal plainly and the active action composes nothing', async () => {
+            mountShare({
+                getListByActionIndex: vi.fn().mockResolvedValue(detail({
+                    source: 'bc1qother',
+                    state: { owner: 'bc1qother', edit_resolution_active: true, current_list: [MEMBER] },
+                })),
+            });
+            expect(await screen.findByText(/is not an address in this wallet/i)).toBeTruthy();
+            const action = screen.getByRole('button', { name: 'Share List' });
+            expect(action.disabled).toBe(false);
+            fireEvent.click(action);
+            expect(confirmRun).not.toHaveBeenCalled();
+        });
     });
 
     it('shows current names for local and shared union candidates', async () => {
         mount(
-            <UnionListForm walletId="wallet-1" chainId={CHAIN} onBack={() => {}} />,
+            <ListCreateForm initialType="3" walletId="wallet-1" chainId={CHAIN} onBack={() => {}} />,
             makeMessaging({
                 getListsForSource: vi.fn().mockResolvedValue({
                     data: [{ action_index: 101, type: 1, members: [], name: 'Stable coins' }],

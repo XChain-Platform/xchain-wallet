@@ -46,7 +46,8 @@ import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/history.js';
 import '../../../i18n/locales/en/settings.js';
 
-const PRIVACY_CONTROL_DEFAULTS = Object.freeze({
+// The Reset privacy settings row on the Privacy and Sites page writes these too.
+export const PRIVACY_CONTROL_DEFAULTS = Object.freeze({
     torRouting: false,
     changeAddressRotation: false,
     blurOnBlur: false,
@@ -101,7 +102,7 @@ export function PrivacySection({ only = null } = {}) {
                 <>
                     <ToggleRow
                         label={t('settings.privacy.torRouting')}
-                        hint={t('settings.privacy.desktopOnlySendWalletTraffic')}
+                        help={t('settings.privacy.desktopOnlySendWalletTraffic')}
                         checked={settings.privacy.torRouting}
                         onChange={(v) => onToggle('torRouting', v)}
                     />
@@ -113,6 +114,7 @@ export function PrivacySection({ only = null } = {}) {
             {show('tor') && !shellCapabilities().socksProxy && (
                 <ToggleRow
                     label={t('settings.privacy.torRouting')}
+                    help={t('settings.help.privacy.tor')}
                     hint={isNativeShell()
                         ? t('settings.privacy.notAvailableInNativeApp')
                         : t('settings.privacy.notAvailableOnThisPlatform')}
@@ -125,7 +127,7 @@ export function PrivacySection({ only = null } = {}) {
             <>
             <ToggleRow
                 label={t('settings.privacy.changeAddressRotation')}
-                hint={t('settings.privacy.importedKeyAndWatchOnly')}
+                help={t('settings.privacy.importedKeyAndWatchOnly')}
                 checked={settings.privacy.changeAddressRotation}
                 onChange={(v) => onToggle('changeAddressRotation', v)}
             />
@@ -136,7 +138,7 @@ export function PrivacySection({ only = null } = {}) {
             <>
             <ToggleRow
                 label={t('settings.privacy.blurSensitiveDataOnBlur')}
-                hint={t('settings.privacy.blurTheEntireWalletDisplay')}
+                help={t('settings.privacy.blurTheEntireWalletDisplay')}
                 checked={Boolean(settings.privacy.blurOnBlur)}
                 onChange={(v) => onToggle('blurOnBlur', v)}
             />
@@ -147,7 +149,7 @@ export function PrivacySection({ only = null } = {}) {
             <>
             <ToggleRow
                 label={t('settings.privacy.labelsSurviveRestore')}
-                hint={t('settings.privacy.inTheBrowserExtensionBatch')}
+                help={t('settings.privacy.inTheBrowserExtensionBatch')}
                 checked={Boolean(settings.privacy.labelsSurviveRestore)}
                 onChange={(v) => onToggle('labelsSurviveRestore', v)}
             />
@@ -158,7 +160,7 @@ export function PrivacySection({ only = null } = {}) {
             <>
             <ToggleRow
                 label={t('settings.privacy.hapticFeedback')}
-                hint={t('settings.privacy.allowVibrationForTapSuccess')}
+                help={t('settings.privacy.allowVibrationForTapSuccess')}
                 checked={settings.privacy.hapticsEnabled !== false}
                 onChange={(v) => onToggle('hapticsEnabled', v)}
             />
@@ -169,7 +171,7 @@ export function PrivacySection({ only = null } = {}) {
             <>
             <ToggleRow
                 label={t('settings.notifications.nativeCoinPriceData')}
-                hint={t('settings.privacy.allowCoingeckoRequestsForNative')}
+                help={t('settings.privacy.allowCoingeckoRequestsForNative')}
                 checked={settings.privacy.priceDataEnabled !== false}
                 onChange={(v) => onToggle('priceDataEnabled', v)}
             />
@@ -180,7 +182,7 @@ export function PrivacySection({ only = null } = {}) {
             <>
             <ToggleRow
                 label={t('settings.privacy.fetchTokenMetadata')}
-                hint={t('settings.privacy.fetchTokenInformationStandardTis')}
+                help={t('settings.privacy.fetchTokenInformationStandardTis')}
                 checked={settings.privacy.metadataFetchEnabled !== false}
                 onChange={(v) => onToggle('metadataFetchEnabled', v)}
             />
@@ -191,7 +193,7 @@ export function PrivacySection({ only = null } = {}) {
             <>
             <ToggleRow
                 label={t('settings.privacy.alwaysRequireHardwareCrossCheck')}
-                hint={t('settings.privacy.requireTheIVeVerified')}
+                help={t('settings.privacy.requireTheIVeVerified')}
                 checked={settings.privacy.alwaysRequireHwExplicitConfirm === true}
                 onChange={(v) => onToggle('alwaysRequireHwExplicitConfirm', v)}
             />
@@ -322,10 +324,10 @@ function FormDraftTtlRow({ settings, update }) {
                     aria-label={t('settings.privacy.formDraftRetention')}
                     style={{ width: '7.5rem' }}
                 >
-                    <option value={FORM_DRAFT_TTL_OFF}>{t('settings.privacy.off')}</option>
-                    <option value={FORM_DRAFT_TTL_1H}>{t('settings.developer.1Hour')}</option>
-                    <option value={FORM_DRAFT_TTL_24H}>{t('settings.privacy.24Hours')}</option>
-                    <option value={FORM_DRAFT_TTL_7D}>{t('history.filters.last7Days')}</option>
+                    <Select.Option value={FORM_DRAFT_TTL_OFF} icon={<Icon.BanIcon />}>{t('settings.privacy.off')}</Select.Option>
+                    <Select.Option value={FORM_DRAFT_TTL_1H} icon={<Icon.ClockIcon />}>{t('settings.developer.1Hour')}</Select.Option>
+                    <Select.Option value={FORM_DRAFT_TTL_24H} icon={<Icon.ClockIcon />}>{t('settings.privacy.24Hours')}</Select.Option>
+                    <Select.Option value={FORM_DRAFT_TTL_7D} icon={<Icon.HistoryIcon />}>{t('history.filters.last7Days')}</Select.Option>
                 </Select>
             </div>
             <PrivacySaveError visible={saveError} />

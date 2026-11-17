@@ -203,14 +203,12 @@ describe('multisig jsdom flow', () => {
         render(
             <MultisigCosignerShare
                 walletId={WALLET_ID}
-                addresses={[LOCAL_ADDRESS]}
-                chainId={CHAIN_ID}
-                networkKind="testnet"
-                addressId={LOCAL_ADDRESS.id}
-                onAddressChange={() => {}}
-                onOpenAddressPicker={() => {}}
+                onBack={() => {}}
             />,
         );
+        fireEvent.click(await screen.findByRole('button', { name: 'Choose address to share' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick local address' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Share' }));
         await waitFor(() => expect(toDataURL).toHaveBeenCalled());
         const shared = JSON.parse(toDataURL.mock.calls.at(-1)[0]);
         expect(shared).toEqual({
@@ -262,7 +260,7 @@ describe('multisig jsdom flow', () => {
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         await screen.findByLabelText('Multisig signing progress');
-        fireEvent.click(screen.getByRole('button', { name: 'Import Cosigner Reply' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Import cosigner reply/ }));
         const sessionRef = {
             chainId: session.chainId,
             scheme: session.scheme,
@@ -345,8 +343,8 @@ describe('multisig jsdom flow', () => {
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         expect(await screen.findByText(/Watcher mode exports signing data/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Export Signing Request' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Sign With My Key' })).toBeNull();
+        expect(screen.getByRole('button', { name: /^Export signing request/ })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /^Sign with my key/i })).toBeNull();
         expect(screen.queryByLabelText('Wallet password')).toBeNull();
         expect(messaging.signMultisigLocally).not.toHaveBeenCalled();
     });

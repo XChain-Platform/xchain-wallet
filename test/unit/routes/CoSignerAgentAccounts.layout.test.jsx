@@ -88,10 +88,13 @@ describe('Allowed tokens in the policy editor', () => {
         render(<Harness />);
         const sections = screen.getAllByRole('region').map((s) => s.getAttribute('aria-label'));
         expect(sections.slice(0, 2)).toEqual(['Allowed actions', 'Allowed tokens']);
-        const group = screen.getByRole('group', { name: 'Tokens the agent may move' });
-        expect(within(group).getByRole('radio', { name: /Any token/ })).toBeChecked();
+        // The token choice is the themed dropdown with an icon per option (G119).
+        expect(screen.queryAllByRole('radio')).toHaveLength(0);
+        const trigger = screen.getByRole('button', { name: /^Tokens the agent may move: Any token/ });
+        expect(trigger.querySelector('svg')).not.toBeNull();
         expect(screen.queryByRole('textbox', { name: /^Tokens/ })).toBeNull();
-        fireEvent.click(within(group).getByRole('radio', { name: /Only These Tokens/ }));
+        fireEvent.click(trigger);
+        fireEvent.click(screen.getByRole('option', { name: /^Only These Tokens/ }));
         const field = screen.getByRole('textbox', { name: /^Tokens/ });
         fireEvent.change(field, { target: { value: 'mytoken' } });
         expect(field).toHaveValue('MYTOKEN');
@@ -125,7 +128,7 @@ describe('Agent account list rows', () => {
         expect(large).toBe(small);
     });
 
-    it('names the network and the allowed tokens on each row', async () => {
+    it('shows exactly three lines per row, name, balance and address, with no scheme line', async () => {
         render(
             <MessagingProvider shell="web" messaging={{
                 listCoSignerAccounts: vi.fn().mockResolvedValue([account()]),
@@ -134,8 +137,33 @@ describe('Agent account list rows', () => {
                 <CoSignerAccountList walletId="wallet-1" onBack={() => {}} onOpen={() => {}} onProvision={() => {}} />
             </MessagingProvider>,
         );
-        expect(await screen.findByText('Network: Bitcoin Regtest')).toBeInTheDocument();
-        expect(screen.getByText('2-of-2 · Order, Swap · MYTOKEN, XCHAIN')).toBeInTheDocument();
+        const balance = await screen.findByText('0.4821 BTC · 2 tokens');
+        const row = balance.closest('li');
+        expect(within(row).getByText('Trading bot')).toBeInTheDocument();
+        expect(within(row).getByTestId('agent-balance')).toBe(balance);
+        expect(row.textContent).toContain(account().aggregateAddress);
+        // The scheme and the token list moved to the detail page.
+        expect(within(row).queryByText(/\d-of-\d/)).toBeNull();
+        expect(row.textContent).not.toMatch(/\d-of-\d/);
+        expect(row.textContent).not.toMatch(/MYTOKEN/);
+        expect(screen.queryByText(/Network: /)).toBeNull();
+    });
+
+    it('does not name the allowed tokens or scheme on a row, with the network only as the badge', async () => {
+        render(
+            <MessagingProvider shell="web" messaging={{
+                listCoSignerAccounts: vi.fn().mockResolvedValue([account()]),
+                getCoSignerAccountBalances: vi.fn().mockResolvedValue(balancesFor(['acct-1'])),
+            }}>
+                <CoSignerAccountList walletId="wallet-1" onBack={() => {}} onOpen={() => {}} onProvision={() => {}} />
+            </MessagingProvider>,
+        );
+        // Only name, balance and address show on a row by ruling (2026-11-15).
+        expect(await screen.findByText('0.4821 BTC · 2 tokens')).toBeInTheDocument();
+        expect(screen.queryByText(/2-of-2/)).toBeNull();
+        expect(screen.queryByText(/MYTOKEN/)).toBeNull();
+        expect(screen.queryByText(/Order, Swap/)).toBeNull();
+        expect(screen.queryByText(/Network: /)).toBeNull();
     });
 
     it('says the balance is unavailable when the read failed or the shell has no route', () => {
@@ -187,27 +215,60 @@ describe('Agent account page', () => {
         expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
     });
 
-    it('starts at the identity card when nothing waits, with name, status, network, tokens and balance', async () => {
+    it('starts at the identity card when nothing waits, with name, status and balance only (G16)', async () => {
         mountDetail();
         const card = await screen.findByRole('region', { name: 'Agent account' });
         expect(within(card).getByRole('heading', { name: 'Trading bot' })).toBeInTheDocument();
         expect(within(card).getByText('Active')).toBeInTheDocument();
-        expect(within(card).getByText('Network: Bitcoin Regtest')).toBeInTheDocument();
-        expect(within(card).getByText('MYTOKEN, XCHAIN')).toBeInTheDocument();
+        // No network chip and no fact chips on the identity card; both are Details rows.
+        expect(within(card).queryByText(/Network: /)).toBeNull();
+        expect(within(card).queryByText('MYTOKEN, XCHAIN')).toBeNull();
         await waitFor(() => expect(within(card).getByText('0.4821 BTC · 2 tokens')).toBeInTheDocument());
         expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     });
 
-    it('has Actions, Activity and Details tabs, each with an icon, and Actions as tiles', async () => {
+    it('has Actions, Activity and Details tabs, each with an icon, and Actions as one action list', async () => {
         mountDetail();
         await screen.findByRole('region', { name: 'Agent account' });
         const tabs = screen.getAllByRole('tab');
         expect(tabs.map((tab) => tab.textContent)).toEqual(['Actions', 'Activity', 'Details']);
         for (const tab of tabs) expect(tab.querySelector('svg')).not.toBeNull();
-        const tiles = within(screen.getByRole('group', { name: 'Actions' })).getAllByRole('button');
-        expect(tiles.map((tile) => tile.textContent)).toEqual(['Fund', 'Withdraw', 'Edit Rules', 'Copy Address', 'Turn Off']);
-        for (const tile of tiles) expect(tile.querySelector('svg')).not.toBeNull();
-        expect(screen.getByRole('button', { name: 'Withdraw' })).toBeDisabled();
+        // Actions is the first tab and the one chosen when the page opens (G102).
+        expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+        // The actions are one ActionList (G101): a native list, a row per action
+        // with its icon square, title and one-line description.
+        const list = screen.getByRole('list', { name: 'Actions' });
+        const rows = within(list).getAllByRole('button');
+        expect(rows.map((row) => row.textContent)).toEqual([
+            expect.stringMatching(/^FundShow the shared address/),
+            expect.stringMatching(/^WithdrawWithdraw needs the agent to co-sign/),
+            expect.stringMatching(/^Edit rulesChange the name, limits/),
+            expect.stringMatching(/^Edit lookChange its name and tile/),
+            expect.stringMatching(/^Copy addressCopy the shared funding address/),
+            expect.stringMatching(/^Turn offPause the agent signing/),
+        ]);
+        for (const row of rows) expect(row.querySelector('svg')).not.toBeNull();
+        // Withdraw stays a reachable row that is off and says why on the row.
+        const withdraw = screen.getByRole('button', { name: /^Withdraw/ });
+        expect(withdraw).toHaveAttribute('aria-disabled', 'true');
+        expect(withdraw).toHaveAccessibleDescription('Withdraw needs the agent to co-sign, so the agent starts it.');
+    });
+
+    it('runs each action row through its own handler', async () => {
+        const messaging = mountDetail({ extra: { updateCoSignerAccount: vi.fn() } });
+        await screen.findByRole('region', { name: 'Agent account' });
+        // Fund opens its own page (QR over a Send form); CoSignerAccountDetail.subpages.test.jsx drives it.
+        expect(screen.getByRole('button', { name: /^Fund/ })).not.toHaveAttribute('aria-expanded');
+        fireEvent.click(screen.getByRole('button', { name: /^Copy address/ }));
+        expect(await screen.findByText('Address copied.')).toBeInTheDocument();
+        // The locked Withdraw row does nothing when pressed.
+        fireEvent.click(screen.getByRole('button', { name: /^Withdraw/ }));
+        expect(messaging.updateCoSignerAccount).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: /^Turn off/ }));
+        const dialog = await screen.findByRole('dialog', { name: 'Turn off this agent account?' });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Edit rules/ }));
+        expect(await screen.findByRole('button', { name: 'Update Policy' })).toBeInTheDocument();
     });
 
     it('lists signed requests on Activity, newest first', async () => {
@@ -238,6 +299,8 @@ describe('Agent account page', () => {
         ]);
         const details = screen.getByRole('region', { name: 'Details' });
         expect(within(details).getByText('Allowed tokens')).toBeInTheDocument();
+        // The scheme left the list row and stays here.
+        expect(within(details).getByText('2-of-2')).toBeInTheDocument();
         expect(within(details).getByText('Agent key')).toBeInTheDocument();
         expect(within(details).getByText('02' + 'a'.repeat(64))).toBeInTheDocument();
     });

@@ -111,8 +111,8 @@ describe('Send Max', () => {
         await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99999000'));
         expect(quote).toHaveBeenLastCalledWith(expect.objectContaining({ feePerKb: 6000 }));
 
-        // The Network fee section starts closed: open it to reach the slider.
-        fireEvent.click(screen.getByRole('button', { name: /^Network fee/, expanded: false }));
+        // The Fees section starts closed: open it to reach the slider.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/, expanded: false }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '2' },
         });
@@ -154,7 +154,8 @@ describe('Send Max', () => {
 
         await screen.findByText(/held by another send from this wallet that hasn't gone out yet, so Max can't create a payment/);
         expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('');
-        expect(screen.getByRole('button', { name: /^Send$/ })).toBeDisabled();
+        // G130: Send stays enabled; a press answers with the Max note on the amount.
+        expect(screen.getByRole('button', { name: /^Send$/ })).toBeEnabled();
     });
 
     it('says other sends hold every coin when held coins leave the available line at zero', async () => {
@@ -195,11 +196,12 @@ describe('Send Max', () => {
 
         await screen.findByText(/below the 0\.00000546 BTC dust minimum/);
         expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('');
-        expect(screen.getByRole('button', { name: /^Send$/ })).toBeDisabled();
+        // G130: Send stays enabled; a press answers with the Max note on the amount.
+        expect(screen.getByRole('button', { name: /^Send$/ })).toBeEnabled();
         expect(screen.queryByRole('alert')).toBeNull();
     });
 
-    it('clears a stale amount and disables Send when the selected fee consumes the balance', async () => {
+    it('clears a stale amount and refuses Send when the selected fee consumes the balance', async () => {
         mount({
             nativeQuantity: '1000',
             quote: vi.fn().mockResolvedValue({
@@ -216,7 +218,11 @@ describe('Send Max', () => {
 
         await screen.findByText('The selected network fee uses the available balance, so Max cannot create a payment.');
         expect(amount).toHaveValue('');
-        expect(screen.getByRole('button', { name: /^Send$/ })).toBeDisabled();
+        // G130: Send stays enabled; a press answers with the Max note on the amount.
+        expect(screen.getByRole('button', { name: /^Send$/ })).toBeEnabled();
         expect(screen.queryByRole('alert')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        expect(await screen.findByRole('alert', { name: /form errors/i }))
+            .toHaveTextContent('The selected network fee uses the available balance, so Max cannot create a payment.');
     });
 });

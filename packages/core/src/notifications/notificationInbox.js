@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { getDefaultAlertInbox } from '../shared/alertInbox.js';
+import { compactNotification } from '../shared/alertCopy.js';
 
 const PAYMENT_KINDS = new Set(['coinpay-required', 'coinpay-autopay', 'payment-deadline', 'deadline']);
 const MESSAGE_KINDS = new Set(['incoming-message', 'message']);
@@ -30,12 +31,16 @@ function identity(payload, now) {
     return `notification:${payload.kind}:${(hash >>> 0).toString(36)}:${now}`;
 }
 
+// The row keeps the short three-line copy (label, title, message); the OS
+// notification the same payload raises carries the full wording.
 export function notificationToAlert(payload, at = Date.now()) {
+    const copy = compactNotification(payload);
     return {
         id: identity(payload, at),
         type: notificationType(payload?.kind),
-        title: String(payload?.title || 'Wallet alert'),
-        message: String(payload?.body || ''),
+        ...(copy.label ? { label: copy.label } : {}),
+        title: copy.title,
+        message: copy.message,
         at,
         read: false,
     };

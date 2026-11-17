@@ -20,17 +20,18 @@
 // the shared confirm then dry-runs and signs the exact composed transaction.
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { AddressText, Button, Checkbox, FieldNote, FormPage, Icon, InfoTip, Input, ListPage, PageHeader, RadioGroup, IconSelect, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Checkbox, FieldNote, Icon, InfoTip, ListPage, PageHeader, IconSelect, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 // The Wallet Form Standard frame. Its
 // FormSection is the collapsible standard one, not ui/FormSection.jsx.
-import { FeeSection, FormAction, FormFrame, FormSection, FromSection, useFormSections } from '../components/formStandard/index.js';
-import { summaryAddress } from '../components/formStandard/summaryText.js';
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, MemoSection, useFormSections } from '../components/formStandard/index.js';
+import { SummaryAddress } from '../components/formStandard/SummaryAddress.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { humanizeError } from '../utils/humanizeError.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/addressPreferences.js';
@@ -58,6 +59,7 @@ import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 /**
  * @param {object} props
@@ -209,6 +211,11 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         DISPENSER_PREFERENCE: dispPref,
         ...(memo.trim() ? { MEMO: memo.trim() } : {}),
     }), [feePref, requireMemo, dispPref, memo]);
+    const preferenceReviewComposed = useMemo(() => ({
+        action: 'ADDRESS',
+        chainId,
+        protocolFeeKnownFree: true,
+    }), [chainId]);
 
     const hwSignerInfo = useSignerInfo({
         walletId,
@@ -321,6 +328,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     const header = (
         <PageHeader
+            nested={stage === 'review'}
             onBack={stage === 'review' ? () => setStage('form') : onBack}
             title={stage === 'review' || stage === 'submitting' ? 'Review Preferences' : 'Address Preferences'}
         />
@@ -353,6 +361,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     address: fromAddress?.address,
                 }}
                 screenVariant={variant}
+                feeEstimate={feeEstimate}
                 signerReady={signerReady}
                 hwSignerInfo={hwSignerInfo}
                 hintClassName={styles.hint}
@@ -398,57 +407,45 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     if (stage === 'review' || stage === 'submitting') {
         const rows = writtenRows(actionParams, reviewBaseline);
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review preferences"
-                onSubmit={handleSubmit}
-                status={submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' || ownerLane.composing ? 'signing' : 'ready'}
+                composed={preferenceReviewComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review' && !ownerLane.composing}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setStage('form'); }}
+                decoded={null}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentialsReady
+                credentials={isWatcherMode ? (
+                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
                 ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        icon={<Icon.ForwardIcon />}
-                        loading={stage === 'submitting' || ownerLane.composing}
-                    >
-                        {isWatcherMode ? 'Build Unsigned Transaction' : 'Continue to Confirmation'}
-                    </Button>
-                )}
-            >
-                <p className={styles.summary}>
-                    Writes all three on-chain preferences for this address in one
-                    ADDRESS action. Unchanged rows are re-written with their current
-                    value; the protocol has no &quot;keep current&quot; for this action.
-                </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Address</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {rows.map((r) => (
-                        <DetailRow
-                            key={r.label}
-                            label={r.label}
-                            value={r.changed ? `${r.value} - CHANGED` : `${r.value} (unchanged)`}
-                            emphasize={r.changed}
-                        />
-                    ))}
-                    {memo.trim() ? <DetailRow label="Memo" value={memo.trim()} /> : null}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                </dl>
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : null}
-            </FormPage>,
+                summary={{
+                    verb: t('components.confirmSummary.verbSetAddressPreferences'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    facts: [
+                        ...rows.map((row) => ({
+                            label: row.label,
+                            value: row.changed ? `${row.value} - changed` : `${row.value} (unchanged)`,
+                        })),
+                        ...(memo.trim() ? [{ label: 'Memo', value: memo.trim() }] : []),
+                    ],
+                    notice: 'All three preferences are written together. Unchanged values are re-written with their current setting.',
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -495,7 +492,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                     title={t('addressPreferences.addressInfo')}
                     icon={Icon.ReceiveIcon}
                     addressLabel={t('addressPreferences.address')}
-                    summary={fromAddress.address ? summaryAddress(fromAddress.address) : t('addressPreferences.notSet')}
+                    summary={fromAddress.address ? <SummaryAddress address={fromAddress.address} /> : t('addressPreferences.notSet')}
                     chainId={chainId}
                     chainIds={chainsWithAddresses.length ? chainsWithAddresses : [chainId]}
                     chainRegistry={chainRegistry}
@@ -577,30 +574,19 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
                 />
             </FormSection>
 
-            {/* Memo is its own optional section; the field carries no Optional
-                tag of its own. The network fee is the one Network fee row. */}
-            <FormSection
-                id="memo"
-                title="Memo"
-                icon={Icon.MessageIcon}
-                optional
+            {/* Memo is its own optional section holding only the memo, so the
+                section title names the field and carries its count. The
+                network fee is the one Network fee row. */}
+            <MemoSection
                 {...formSections.bind('memo')}
                 revealKey={errorKey('memo')}
-                summary={memo.trim() ? memo.trim() : 'None'}
-            >
-                <Input
-                    label="Memo"
-                    maxLength={MAX_MEMO_LENGTH}
-                    help="A short public note stored with this preferences update on chain. Anyone can read it."
-                    value={memo}
-                    onChange={(e) => setMemo(e.target.value)}
-                    autoComplete="off"
-                />
-            </FormSection>
+                maxLength={MAX_MEMO_LENGTH}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+            />
         </FormFrame>,
     );
 }
-
 // The three write rows the review shows, each compared against the
 // re-fetched baseline (never the load-time snapshot).
 function writtenRows(params, baseline) {
@@ -627,15 +613,4 @@ function writtenRows(params, baseline) {
             changed: Number(params.DISPENSER_PREFERENCE) !== dispNow,
         },
     ];
-}
-
-function DetailRow({ label, value, emphasize = false }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>
-                {emphasize ? <strong>{value}</strong> : value}
-            </dd>
-        </>
-    );
 }

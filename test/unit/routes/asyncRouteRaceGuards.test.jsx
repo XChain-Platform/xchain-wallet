@@ -6,6 +6,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
 import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
@@ -43,7 +44,7 @@ afterEach(() => cleanup());
 // Show (Popular, All, Watchlist) lives in the title-bar filter panel.
 function showWatchlist() {
     fireEvent.click(screen.getByRole('button', { name: 'Filter markets' }));
-    fireEvent.change(screen.getByRole('combobox', { name: 'Show' }), { target: { value: 'watchlist' } });
+    selectOption(screen.getByRole('combobox', { name: 'Show markets' }), 'watchlist');
 }
 
 describe('async route parameter races', () => {
@@ -119,7 +120,8 @@ describe('async route parameter races', () => {
         const bets = vi.fn().mockResolvedValue([]);
         const messaging = messagingWith({
             getAddressesByChain: addresses,
-            betFeeds: vi.fn().mockResolvedValue({ data: [] }),
+            // A market nobody here bet in: My bets shows its own empty state.
+            betFeeds: vi.fn().mockResolvedValue({ data: [{ action_index: '1', label: 'Q', outcomes: 'Yes,No', source: 'other' }] }),
             bets,
         });
         const props = { view: 'bets', onOpenMarket() {}, onBack() {} };

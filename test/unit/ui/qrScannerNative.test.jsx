@@ -69,7 +69,7 @@ function fakeScanner() {
 }
 
 async function tapScan() {
-    fireEvent.click(screen.getByRole('button', { name: /Scan With Camera/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Scan with Camera/ }));
 }
 
 async function openScanner(state) {
@@ -86,7 +86,7 @@ describe('QrScanner picks its camera path', () => {
 
         expect(screen.getByTestId('qr-scanner-native')).toBeTruthy();
         expect(screen.getByRole('region', { name: 'Test scanner' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: /Scan With Camera/ })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /Scan with Camera/ })).toBeTruthy();
         expect(screen.queryByTestId('qr-scanner-unsupported')).toBeNull();
         expect(scanner.start).not.toHaveBeenCalled();
     });
@@ -131,7 +131,7 @@ describe('QrScanner picks its camera path', () => {
         window.Capacitor = { isNativePlatform: () => true };
         render(<QrScanner onFrame={() => {}} />);
         expect(screen.getByTestId('qr-scanner-unsupported').textContent).toMatch(/isn\x27t available on this device/);
-        expect(screen.queryByRole('button', { name: /Scan With Camera/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Scan with Camera/ })).toBeNull();
     });
 });
 
@@ -186,7 +186,7 @@ describe('QrScanner with the native scanner', () => {
         expect(() => act(() => { state.onValue('malformed-frame'); })).not.toThrow();
         expect(onFrame).toHaveBeenCalledWith('malformed-frame');
         expect(screen.getByRole('alert')).not.toHaveTextContent(rawError);
-        expect(screen.getByRole('button', { name: /Scan With Camera/ })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /Scan with Camera/ })).toBeDisabled();
     });
 
     it('follows a new onFrame without reopening the camera', async () => {
@@ -240,7 +240,7 @@ describe('QrScanner with the native scanner', () => {
         expect(screen.getByRole('alert').textContent).toContain(
             'Camera access is turned off for XChain Wallet. Allow it in Settings, or paste the code instead.',
         );
-        expect(screen.getByRole('button', { name: /Scan With Camera/ }).disabled).toBe(false);
+        expect(screen.getByRole('button', { name: /Scan with Camera/ }).disabled).toBe(false);
     });
 
     it('says there is no camera when none is available', async () => {
@@ -263,7 +263,7 @@ describe('QrScanner with the native scanner', () => {
         await act(async () => { state.reject('stopped'); });
 
         expect(screen.queryByRole('alert')).toBeNull();
-        expect(screen.getByRole('button', { name: /Scan With Camera/ }).disabled).toBe(false);
+        expect(screen.getByRole('button', { name: /Scan with Camera/ }).disabled).toBe(false);
     });
 
     it('offers the button again after the view closes by itself', async () => {
@@ -271,11 +271,11 @@ describe('QrScanner with the native scanner', () => {
         setNativeQrScanner(scanner);
         render(<QrScanner onFrame={() => {}} />);
         await openScanner(state);
-        expect(screen.getByRole('button', { name: /Scan With Camera/ }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /Scan with Camera/ }).disabled).toBe(true);
 
         act(() => { state.onClosed('interrupted'); });
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: /Scan With Camera/ }).disabled).toBe(false);
+            expect(screen.getByRole('button', { name: /Scan with Camera/ }).disabled).toBe(false);
         });
         expect(screen.getByRole('alert').textContent).toMatch(/Scan again, or paste the code/);
         expect(state.stop).not.toHaveBeenCalled();
@@ -289,7 +289,7 @@ describe('QrScanner with the native scanner', () => {
 
         act(() => { state.onClosed('cancelled'); });
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: /Scan With Camera/ }).disabled).toBe(false);
+            expect(screen.getByRole('button', { name: /Scan with Camera/ }).disabled).toBe(false);
         });
         expect(screen.queryByRole('alert')).toBeNull();
     });

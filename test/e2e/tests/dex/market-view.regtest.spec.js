@@ -225,12 +225,17 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             await selectPickerAsset(page, TICK);
 
             // "All" rather than "Popular": a market minutes old has no volume,
-            // and Popular is volume-ranked.
-            await main.getByRole('tab', { name: 'All' }).click();
+            // and Popular is volume-ranked. Show sits in the title-line filter.
+            await page.getByRole('button', { name: 'Filter markets' }).click();
+            await page.getByRole('combobox', { name: 'Show markets' }).click();
+            await page.getByRole('option', { name: 'Show all' }).click();
             // Each row names the OTHER side of the pair (the selected asset is
             // the column the list is scoped to), so the row for this run's market
             // reads "XCHAIN", not the token that was just issued.
-            const row = main.getByRole('listitem').filter({ hasText: 'XCHAIN' }).first();
+            // Scoped to the Markets list: at 720px and up the market panel sits
+            // beside it and has list items of its own.
+            const row = main.getByRole('list', { name: 'Markets' }).getByRole('listitem')
+                .filter({ hasText: 'XCHAIN' }).first();
             await expect(row,
                 `${TICK}/XCHAIN is on the venue's own markets feed but the wallet's DEX list does not `
                 + 'show it')

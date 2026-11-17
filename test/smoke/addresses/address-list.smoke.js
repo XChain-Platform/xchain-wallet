@@ -50,7 +50,9 @@ assert.ok(/<MultisigBadge[\s\S]*?threshold=\{(?:row\.)?multisig\.threshold\}/.te
 // tokenQuery), so the route honours those instead of owning chip state.
 assert.ok(/networkFilter/.test(route),
     'AddressList honours the networkFilter prop (replaces the removed chip bar)');
-assert.ok(/aria-label="Addresses"/.test(route),
+// Each account group's list is labelled by its account, or Addresses when
+// the list is not grouped.
+assert.ok(/aria-label=(?:"Addresses"|\{group\.title \|\| (?:t\('home\.addresses'\)|'Addresses')\})/.test(route),
     'AddressList row container is labeled');
 assert.ok(/Multisig receive/.test(route),
     'AddressList synthesizes a "Multisig receive" row when the address is not in the persisted table');

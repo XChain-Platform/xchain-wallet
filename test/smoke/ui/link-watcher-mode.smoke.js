@@ -33,5 +33,7 @@ assert.match(formSrc, /COIN1: String\(ticker1\)\.toUpperCase\(\)/);
 assert.match(formSrc, /COIN2: String\(ticker2\)\.toUpperCase\(\)/);
 assert.match(formSrc, /COIN1_ACTION_INDEX: actionIndex1/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
-assert.match(formSrc, /Create Unsigned Transaction/);
+assert.match(formSrc, /singleEncode = !isWatcherMode/);
+assert.match(formSrc, /<ConfirmActionModal[\s\S]+?credentials=\{<p[^>]*>\{t\('common\.watcherBuildsUnsigned'\)\}<\/p>\}/);
+assert.match(formSrc, /<FormAction[\s\S]+?<Icon\.LinkIcon \/>[\s\S]+?'Link Actions'/);
 console.log('link-watcher-mode smoke OK');

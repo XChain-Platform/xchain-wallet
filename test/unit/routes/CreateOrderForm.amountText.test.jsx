@@ -92,7 +92,7 @@ import { pickOrderAsset } from '../../helpers/orderAssetPicker.js';
 
 async function renderForm() {
     render(<CreateOrderForm walletId="wallet-1" onBack={vi.fn()} />);
-    await screen.findByDisplayValue('mSourceAddress');
+    await screen.findAllByDisplayValue('mSourceAddress');
 }
 
 function chooseTokenOnGetSide() {

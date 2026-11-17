@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §5.6 slice 4: the dApp-approval window reuses the confirm
-// surface's panels.
+// Smoke for §5.6 slice 4 and G127: the dApp-approval window reuses the
+// Confirm Standard body, warning slot and decision buttons.
 //
 // The point of the slice is that a dApp request and a hand-signed one verify
 // themselves through the SAME components, so a rule fixed on one surface is
 // fixed on both. What this pins:
 //
-//   1. the shared panels are imported from core (not re-forked locally);
+//   1. Confirm Standard and the bare-payment model are imported from core;
 //   2. the whole <ConfirmActionModal> is deliberately NOT nested here - this
 //      window already owns its Screen + origin block + Approve/Reject footer;
 //   3. pre-flight for a dApp action runs HOST-side via an approval-scoped
@@ -45,18 +45,17 @@ const signCode = signSrc
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '');
 
-// --- 1. Shared panels imported from core --------------------------------
+// --- 1. Shared Confirm Standard imported from core -----------------------
 
-for (const [component, path] of [
-    ['PsbtIntentPanel', 'shared/components/PsbtIntentPanel.jsx'],
-    ['PreflightPanel', 'shared/components/PreflightPanel.jsx'],
-    ['ActionIntentSummary', 'shared/components/ActionIntentSummary.jsx'],
-]) {
-    assert.ok(
-        signSrc.includes(`import { ${component} } from '@xchain-wallet/core/${path}'`),
-        `SignApproval imports ${component} from core`,
-    );
-}
+assert.ok(
+    signSrc.includes("barePsbtSendPresentation } from '@xchain-wallet/core/shared/components/PsbtIntentPanel.jsx'"),
+    'SignApproval reuses the shared bare-payment model',
+);
+assert.match(
+    signSrc,
+    /import \{[\s\S]{0,120}ConfirmButtons,[\s\S]{0,120}ConfirmStandard,[\s\S]{0,120}\} from '@xchain-wallet\/core\/shared\/components\/ConfirmStandard\.jsx'/,
+    'SignApproval imports the shared G127 body and decision buttons (the body draws the status and short warning)',
+);
 assert.match(
     signSrc,
     /import \{ psbtRefusalReason \} from '@xchain-wallet\/core\/shared\/components\/PsbtConfirmScreen\.jsx'/,
@@ -148,8 +147,10 @@ assert.match(
 
 assert.match(
     signSrc,
-    /const approvalBlocked = psbtApprovalBlocked \|\| coSignApprovalBlocked\s*\n?\s*\|\| !!psbtRefusal \|\| preflightBlocked/,
-    'the slice-4 gates are OR-ed ON TOP of the existing decode + policy gates, '
+    // G130: the gates are checked in one place, approveBlockReason, which
+    // says why a tap sends nothing; each gate still holds Approve.
+    /function approveBlockReason\(\) \{[\s\S]{0,300}?psbtRefusal[\s\S]{0,400}?preflightBlocked[\s\S]{0,700}?psbtApprovalBlocked \|\| coSignApprovalBlocked[\s\S]{0,400}?signInBlocked/,
+    'the slice-4 gates are checked ON TOP of the existing decode + policy gates, '
     + 'never replacing them',
 );
 assert.match(
@@ -177,10 +178,15 @@ assert.doesNotMatch(
     /confirmModalSlices|isConfirmModalSliceEnabled|confirmSlice/,
     'no slice flag survives in the approval window',
 );
+assert.doesNotMatch(
+    signSrc,
+    /<PsbtIntentPanel/,
+    'the raw PSBT panel is not nested under Confirm Standard',
+);
 assert.match(
     signSrc,
-    /kind === 'signPsbt' \? \([\s\S]{0,200}<PsbtIntentPanel/,
-    'the shared panel is what signPsbt renders, unconditionally',
+    /const confirmationDecoded = kind === 'signPsbt'[\s\S]{0,300}barePayment\?\.decoded/,
+    'a PSBT action or bare payment becomes the shared confirm decoded model',
 );
 assert.doesNotMatch(
     signSrc,
@@ -189,9 +195,9 @@ assert.doesNotMatch(
 );
 
 console.log(
-    'OK: sign-approval confirm-reuse smoke (§5.6 slice 4: PsbtIntentPanel +'
-    + 'PreflightPanel + ActionIntentSummary reused from core; modal shell deliberately '
-    + 'not nested; preflight host-side and absent from bridge-spec; shared '
+    'OK: sign-approval confirm-reuse smoke (§5.6 slice 4 + G127: ConfirmStandard + '
+    + 'ConfirmButtons and the PSBT presentation model reused from core; modal shell '
+    + 'deliberately not nested; preflight host-side and absent from bridge-spec; shared '
     + 'canApproveWithReport gate; new gates additive; reason-keyed refusal; '
     + 'unconditional with the legacy summary deleted)',
 );

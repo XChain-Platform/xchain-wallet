@@ -33,7 +33,7 @@ export async function scaleTo64(file) {
 /**
  * Colour swatches, shape picker and image picker for a tile look.
  * @param {object} props
- * @param {string} [props.kind]  'wallet' or 'account', used in the help copy
+ * @param {string} [props.kind]  'wallet', 'account', 'list' or 'contact', used in the help copy
  * @param {string} [props.noun]  older spelling of kind
  * @param {string} props.colour
  * @param {(c: string) => void} props.onColour
@@ -43,7 +43,12 @@ export async function scaleTo64(file) {
  * @param {(i: string | null) => void} props.onImage
  */
 export function TileLookFields({ kind, noun: legacyNoun, colour, onColour, shape, onShape, image, onImage }) {
-    const noun = t((kind || legacyNoun) === 'account' ? 'components.tileLook.nounAccount' : 'components.tileLook.nounWallet');
+    const resolvedKind = kind || legacyNoun;
+    const noun = t(({
+        account: 'components.tileLook.nounAccount',
+        list: 'components.tileLook.nounList',
+        contact: 'components.tileLook.nounContact',
+    })[resolvedKind] || 'components.tileLook.nounWallet');
     const [imageError, setImageError] = useState(/** @type {string | null} */ (null));
     return (
         <>
@@ -71,6 +76,7 @@ export function TileLookFields({ kind, noun: legacyNoun, colour, onColour, shape
                         />
                     ))}
                 </div>
+                {image ? <span style={{ fontSize: 'var(--xc-text-sm)', color: 'var(--xc-text-muted)' }}>{t('components.tileLook.colourBlockedByImage')}</span> : null}
             </div>
             <IconSelect
                 label={t('components.tileLook.iconShape')}
@@ -96,11 +102,11 @@ export function TileLookFields({ kind, noun: legacyNoun, colour, onColour, shape
                     if (!file.type.startsWith('image/')) { setImageError(t('components.tileLook.notAnImage')); return; }
                     try { onImage(await scaleTo64(file)); } catch { setImageError(t('components.tileLook.unreadable')); }
                 }}
-                onClear={() => { setImageError(null); onImage(null); }}
                 inputLabel={t('components.tileLook.imageFileInput')}
                 chooseLabel={t('components.tileLook.chooseImage')}
-                clearLabel={t('components.tileLook.removeImage')}
                 error={imageError}
+                onClear={() => { setImageError(null); onImage(null); }}
+                clearLabel={t('components.tileLook.removeImage')}
             />
         </>
     );

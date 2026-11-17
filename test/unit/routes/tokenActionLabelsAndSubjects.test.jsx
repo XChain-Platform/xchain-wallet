@@ -126,6 +126,7 @@ describe('token action sentence subjects', () => {
             />,
         );
 
-        expect(await screen.findByText('Active, not paused')).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /^Pause token$/i })).toBeInTheDocument();
+        expect(screen.queryByText('Active, not paused')).toBeNull();
     });
 });

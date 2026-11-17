@@ -9,7 +9,8 @@
 // contact legal@dankest.llc.
 
 import { Children, Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, FieldIconButton, Icon, InfoTip, Input, ListPage, OptionalPill, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { Button, FieldIconButton, Icon, InfoTip, Input, ListPage, ListRow, OptionalPill, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
 // Open a Market uses the shared Quick | Full standard (one form state, two views).
 import { useGiveGetView } from '../components/giveGet/index.js';
 // The Wallet Form Standard frame: From first, sections, one Network fee row, one action.
@@ -20,13 +21,15 @@ import {
     FormSection,
     FromSection,
     joinSummary,
+    MemoSection,
 } from '../components/formStandard/index.js';
+import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
 import bet from './CreateBetFeedForm.module.css';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
-import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ActionConfirmScreen, ActionWarningsCard } from '../components/ActionConfirmScreen.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
@@ -37,6 +40,9 @@ import { preferredSourceId } from '../addressSelection.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { ListField } from '../components/ListField.jsx';
+import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
+import { pickedListText } from '../utils/listLabel.js';
 import { useBetChainIds } from './BetFeedsList.jsx';
 import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
@@ -215,6 +221,10 @@ export function CreateBetFeedForm({
 
     const [allowList, setAllowList] = useState('');
     const [blockList, setBlockList] = useState('');
+    // The list pickers (G114): which one is open and the names picked.
+    const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
+    const [allowPick, setAllowPick] = useState(/** @type {{ index: string, name: unknown } | null} */ (null));
+    const [blockPick, setBlockPick] = useState(/** @type {{ index: string, name: unknown } | null} */ (null));
     const [memo, setMemo] = useState('');
 
     const [password, setPassword] = useState('');
@@ -547,13 +557,13 @@ export function CreateBetFeedForm({
             const res = await actionConfirm.run({
                 chainId,
                 from,
-                compose: () => messaging.composeBetForConfirm({
+                compose: () => messaging.composeBetForConfirm(withAdvancedOptions({
                     walletId, chainId, from, builder: 'createMarketParams', params: marketParams,
                     // The fee mode must reach COMPOSE, not just submit: the
                     // FEE_DESTINATION output has to be inside the PSBT the user
                     // approves and the tamper check verifies.
                     payFeeInNativeCoin: nativeFee.flag,
-                }),
+                })),
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId, chainId, from, params: marketParams, prebuiltPsbt,
                     payFeeInNativeCoin: nativeFee.flag,
@@ -595,6 +605,7 @@ export function CreateBetFeedForm({
                 summary={openMarketSummary}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -624,6 +635,27 @@ export function CreateBetFeedForm({
                 onChainChange={tick.trim() ? undefined : (cid) => { setChainId(cid); setFromAddressId(null); }}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    if (listPickerFor) {
+        return (
+            <ListPickerScreen
+                variant={variant}
+                messaging={messaging}
+                chainId={chainId}
+                addresses={addressesByChain?.[chainId] || []}
+                filterType="2"
+                walletId={walletId}
+                title={listPickerFor === 'allow' ? 'Choose Allow-List' : 'Choose Block-List'}
+                onSelect={(row) => {
+                    const pick = { index: String(row.actionIndex), name: row.name };
+                    if (listPickerFor === 'allow') { setAllowList(String(row.actionIndex)); setAllowPick(pick); }
+                    else { setBlockList(String(row.actionIndex)); setBlockPick(pick); }
+                    setListPickerFor(null);
+                }}
+                onBack={() => setListPickerFor(null)}
             />
         );
     }
@@ -705,23 +737,32 @@ export function CreateBetFeedForm({
                 </ListPage>,
             );
         }
+        // The shared result screen: the notice, the transaction id as a
+        // label-left value-right fact row, the permanence note in a
+        // WarningCard (never a loose paragraph), and the green Done with its icon.
         return wrap(
             <ListPage>
-                <p className={styles.summary}>
-                    Market submitted. Once the network records it, anyone holding {tick} can bet on it,
-                    and it is yours to resolve after betting closes.
-                </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Transaction ID</dt>
-                    <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
-                </dl>
-                <p className={styles.hint}>
-                    The terms you just set are permanent: a market cannot be edited. If something is
-                    wrong, cancel it (everyone is refunded) and open a new one.
-                </p>
-                <div className={styles.actions}>
-                    <Button variant="primary" onClick={onCreated || onBack}>Done</Button>
-                </div>
+                <ResultScreen
+                    state="success"
+                    title="Market submitted."
+                    message={`Once the network records it, anyone holding ${tick} can bet on it, and it is yours to resolve after betting closes.`}
+                    onDone={onCreated || onBack}
+                >
+                    <ul className={bet.resultFacts}>
+                        <li>
+                            <ListRow
+                                title="Transaction ID"
+                                trailing={<span className={bet.resultValue}>{String(txid || 'n/a')}</span>}
+                            />
+                        </li>
+                    </ul>
+                    <WarningCard data-bet-create-permanent="">
+                        <WarningLine>
+                            The terms you just set are permanent: a market cannot be edited. If something is
+                            wrong, cancel it (everyone is refunded) and open a new one.
+                        </WarningLine>
+                    </WarningCard>
+                </ResultScreen>
             </ListPage>,
         );
     }
@@ -782,7 +823,7 @@ export function CreateBetFeedForm({
     const questionField = (
         <Input
             label="Question"
-            help="The question bettors back an outcome of, such as who wins a match. Everything about the market is permanent once it is on the chain: there is no edit. Your only later choices are publishing the winning outcome or cancelling and refunding everyone."
+            help="The question bettors back an outcome of, such as who wins a match."
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             autoComplete="off"
@@ -793,20 +834,21 @@ export function CreateBetFeedForm({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-form-gap)' }}>
             {withLabel ? (
                 <span className={bet.groupLabel}>
-                    <Icon.TokenListIcon aria-hidden="true" />
                     <span>Outcomes</span>
                     <InfoTip label={outcomeHelp} aria="About Outcomes" />
                 </span>
             ) : null}
             {outcomes.map((o, i) => (
                 <div key={i} className={bet.outcomeRow}>
-                    <span
-                        className={bet.outcomeDot}
-                        style={{ background: OUTCOME_DOTS[i % OUTCOME_DOTS.length] }}
-                        aria-hidden="true"
-                    />
-                    <div className={bet.outcomeField}>
+                    <div className={bet.outcomeField} data-testid="outcome-field">
+                        <span
+                            className={bet.outcomeDot}
+                            style={{ '--outcome-dot': OUTCOME_DOTS[i % OUTCOME_DOTS.length] }}
+                            data-testid="outcome-dot"
+                            aria-hidden="true"
+                        />
                         <Input
+                            className={bet.outcomeInput}
                             aria-label={`Outcome ${i + 1}`}
                             placeholder={`Outcome ${i + 1}`}
                             value={o}
@@ -871,12 +913,15 @@ export function CreateBetFeedForm({
     // Section open state comes from the same Give/Get view state; `main`
     // flags the main section (Market in Quick, Question in Full).
     const bind = (id) => ({ open: Boolean(sections[id]), onOpenChange: (open) => betView.setSectionOpen(id, open), main: id === 'market' || id === 'question' });
+    // A note is a WarningCard, never a loose paragraph.
     const duplicatedNote = duplicated ? (
-        <p className={styles.hint}>
-            Copied from market #{String(duplicateFeedIndex)}. Pick new dates, then check the terms:
-            the copy is a brand new market, and opening it pays the cost below again. Cancelling a
-            market does not refund what it cost to open.
-        </p>
+        <WarningCard className={bet.duplicatedNote} data-bet-duplicated-note="">
+            <WarningLine>
+                Copied from market #{String(duplicateFeedIndex)}. Pick new dates, then check the terms:
+                the copy is a brand new market, and opening it pays the cost below again. Cancelling a
+                market does not refund what it cost to open.
+            </WarningLine>
+        </WarningCard>
     ) : null;
     const marketSummary = joinSummary(
         label.trim() || null,
@@ -980,7 +1025,7 @@ export function CreateBetFeedForm({
                     value={windowPreset}
                     onChange={(e) => setWindowPreset(e.target.value)}
                 >
-                    {WINDOW_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                    {WINDOW_PRESETS.map((p) => <Select.Option key={p.value} value={p.value} icon={p.value === 'custom' ? <Icon.PencilIcon /> : <Icon.ClockIcon />}>{p.label}</Select.Option>)}
                 </Select>
                 {windowPreset === 'custom' ? (
                     <Input
@@ -1051,23 +1096,25 @@ export function CreateBetFeedForm({
                     onChange={(e) => setResolutionCriteria(e.target.value)}
                     rows={3}
                 />
-                <Input
+                <ListField
                     label="Only These Addresses May Bet"
                     optional
-                    help="Address list number. Membership is checked when each bet is placed, so later removals do not cancel existing bets."
-                    value={allowList}
-                    onChange={(e) => setAllowList(e.target.value)}
-                    inputMode="numeric"
-                    autoComplete="off"
+                    help="An address list you published in My Lists. Membership is checked when each bet is placed, so later removals do not cancel existing bets."
+                    placeholder="None set"
+                    valueText={pickedListText(allowList, allowPick)}
+                    onOpenPicker={() => setListPickerFor('allow')}
+                    onClear={() => { setAllowList(''); setAllowPick(null); }}
+                    clearLabel="Clear allow list"
                 />
-                <Input
+                <ListField
                     label="These Addresses May Not Bet"
                     optional
-                    help="The number of an on-chain address list. If an address is on both lists, it is blocked."
-                    value={blockList}
-                    onChange={(e) => setBlockList(e.target.value)}
-                    inputMode="numeric"
-                    autoComplete="off"
+                    help="An address list you published in My Lists. If an address is on both lists, it is blocked."
+                    placeholder="None set"
+                    valueText={pickedListText(blockList, blockPick)}
+                    onOpenPicker={() => setListPickerFor('block')}
+                    onClear={() => { setBlockList(''); setBlockPick(null); }}
+                    clearLabel="Clear block list"
                 />
             </FormSection>
             {/* Network and the From (oracle) address live in the standard From
@@ -1107,10 +1154,6 @@ export function CreateBetFeedForm({
         </FormSection>
     );
 
-    // The opening cost joins the Network fee row's summary. The form
-    // has no fee speed choice (it composes at the normal rate), so the row
-    // states that estimate rather than offering a selector it would ignore.
-    const openCostText = quote?.free ? 'free to open' : (quote?.fee ? `${quote.fee} XCHAIN to open` : null);
     const betChainsWithAddresses = (addressesByChain ? Object.keys(addressesByChain) : [chainId])
         .filter((cid) => betChainIds.length === 0 || betChainIds.includes(cid));
 
@@ -1123,7 +1166,12 @@ export function CreateBetFeedForm({
             view={view}
             onViewChange={setView}
             viewLabel="Open a Market form view"
-            status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
+            // That market terms are permanent is the confirm screen's warnings
+            // card; a watcher build has no confirm screen, so it shows here.
+            status={[
+                formError ? <StatusMessage key="error" variant="error">{formError}</StatusMessage> : null,
+                isWatcherMode ? <ActionWarningsCard key="warnings" ids={['MARKET_CREATE']} /> : null,
+            ]}
             action={(
                 <FormAction
                     icon={isWatcherMode ? <Icon.PlusIcon /> : <Icon.MarketIcon />}
@@ -1158,20 +1206,18 @@ export function CreateBetFeedForm({
                    the row states the real answer instead of the chain's rule. Most
                    markets are free (the first 90 days cost nothing), and on LTC the
                    row used to promise a coin payment for every one of them. */
-                /* FeeSection's fixed-fee mode: no speed picker, the
-                   network fee figure plus the open cost on one summary. */
+                /* FeeSection's fixed-fee mode: the form composes at the
+                   normal rate, so no speed picker; the Fees section shows the
+                   network fee figure and the open cost as the protocol fee. */
                 <FeeSection
                     {...bind('fee')}
                     chainId={chainId}
                     coinTicker={coinTicker}
                     fixedFee={feeEstimate?.coinAmount || null}
-                    etaMinutes={feeEstimate?.etaMinutes}
-                    protocolSummary={openCostText || undefined}
                     fees={{
                         quote,
                         pending: !quote && !quoteFailed,
                         nativeFeeProps: nativeFee.toggleProps,
-                        tiers: feeEstimate ? { normal: feeEstimate } : null,
                     }}
                 >
                     {quoteBlock}
@@ -1180,23 +1226,14 @@ export function CreateBetFeedForm({
         >
             {view === 'quick' ? quickView() : fullView}
 
-            <FormSection
-                id="memo"
-                title="Memo"
-                icon={Icon.MessageIcon}
-                optional
-                summary={memo.trim() || 'None'}
+            {/* Memo holds only the memo: the section title names the field
+                and carries its count. */}
+            <MemoSection
                 {...bind('memo')}
-            >
-                <Input
-                    label="Memo"
-                    help="A short public note stored with the market transaction."
-                    maxLength={MAX_MEMO_LENGTH}
-                    value={memo}
-                    onChange={(e) => setMemo(e.target.value)}
-                    autoComplete="off"
-                />
-            </FormSection>
+                maxLength={MAX_MEMO_LENGTH}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+            />
 
             {previewCard}
 

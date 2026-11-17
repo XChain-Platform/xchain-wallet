@@ -104,6 +104,7 @@ const {
     restoreFailureMessage,
 } = await import('../../../packages/core/src/flows/restorePasswordCopy.js');
 const {
+    __phraseRecoveryJobForTests,
     createWalletLocal,
     importBackupLocal,
     lockWalletLocal,
@@ -209,16 +210,20 @@ describe('fresh-device onboarding persists in one commit', () => {
             walletPassword: WALLET_PASSWORD,
             fileContent,
         });
-        expect(state.writes).toEqual(['blob', 'meta']);
+        // The recovery-phrase record lands in its own meta write, off the reply path.
+        await __phraseRecoveryJobForTests();
+        expect(state.writes).toEqual(['blob', 'meta', 'meta']);
     });
 
     it('a created wallet writes the vault blob once, then the kdf params', async () => {
         await createWalletLocal({ password: DEVICE_PASSWORD });
-        expect(state.writes).toEqual(['blob', 'meta']);
+        await __phraseRecoveryJobForTests();
+        expect(state.writes).toEqual(['blob', 'meta', 'meta']);
     });
 
     it('later changes persist one write each once the commit is done', async () => {
         await createWalletLocal({ password: DEVICE_PASSWORD });
+        await __phraseRecoveryJobForTests();
         const before = state.writes.length;
         await sendMessage('settings.update', { patch: { fiatCurrency: 'EUR' } });
         expect(state.writes.slice(before)).toEqual(['blob']);

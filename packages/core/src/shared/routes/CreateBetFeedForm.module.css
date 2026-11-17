@@ -25,16 +25,39 @@
     min-width: 0;
 }
 
+/* The coloured circle is the field's leading icon (G112): its box is the shared
+   icon box, set in from the start edge by the shared inset token, so the space
+   above, below and before it is equal. */
 .outcomeDot {
-    flex: 0 0 auto;
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: var(--xc-field-icon-inset-md);
+    z-index: var(--xc-z-base);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--xc-control-icon-md);
+    height: var(--xc-control-h-md);
+    pointer-events: none;
+}
+
+.outcomeDot::before {
+    content: '';
     width: 10px;
     height: 10px;
     border-radius: 50%;
+    background: var(--outcome-dot);
 }
 
 .outcomeField {
+    position: relative;
     flex: 1 1 auto;
+    width: 100%;
     min-width: 0;
+}
+
+.outcomeField .outcomeInput.outcomeInput {
+    padding-inline-start: calc(var(--xc-field-icon-inset-md) + var(--xc-control-icon-md) + var(--xc-field-icon-gap));
 }
 
 /* A dashed outline row, not the slate ghost fill. */
@@ -215,4 +238,24 @@
 .previewOutcomePct {
     flex: 0 0 auto;
     font-variant-numeric: tabular-nums;
+}
+
+/* ---- Submitted screen: facts as label-left value-right rows ---------- */
+.resultFacts {
+    composes: flush from '../../ui/Card.module.css';
+    list-style: none;
+    margin: 0;
+    overflow: hidden;
+}
+
+.resultValue {
+    min-width: 0;
+    font-weight: 600;
+    text-align: end;
+    overflow-wrap: anywhere;
+}
+
+/* The copied-market note sits 8px above the form. */
+.duplicatedNote {
+    margin-bottom: var(--xc-space-2);
 }

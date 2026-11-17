@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import {
     AddressText,
     Button,
@@ -16,75 +16,93 @@ import {
     EmptyState,
     Icon,
     ListPage,
+    ListRow,
     PageHeader,
     Screen,
-    SectionHeader,
     StatusMessage,
+    Tabs,
 } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { branding as brandingLib, registry as registryLib } from '@xchain-wallet/core';
 import { EmptyStateAsLineContext } from '../../ui/Screen.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { IdentityAvatar } from '../components/WalletIdentity.jsx';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
+import { ListLookForm } from './ListLookForm.jsx';
 import { TickMemberName } from '../components/TickMemberName.jsx';
+import { listTileId, readWalletTile, tileRadius, walletTileText } from '../utils/walletTile.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
-import { listMetaSupported } from '../../flows/listFormatSupport.js';
-import { findListOwner } from '../../flows/listMembership.js';
+import { currentListItems, findListOwner } from '../../flows/listMembership.js';
+import { listShareEligibility } from '../../flows/listShareEligibility.js';
 import { uniqueRows } from '../utils/pagedRows.js';
 import { listItemStatusText, listStatusText, listStatusTitle } from '../utils/listItemStatusText.js';
-import styles from './IssueTokenForm.module.css';
-import detailStyles from './ListDetail.module.css';
+import homeTabsStyles from '../components/HomeTabs.module.css';
+import tokenDetailStyles from './TokenDetail.module.css';
+import styles from './ListDetail.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const MEMBERS_PAGE_SIZE = 25;
+// Source lists of a union read at once, as ListPickerScreen reads lists.
+const SOURCE_READ_CONCURRENCY = 4;
 
 /**
- * PC-10 "My Lists" detail page: membership + lineage + a best-effort
- * "used by" panel for one LIST action.
+ * PC-10 "My Lists" detail page for one LIST action: the identity card (the
+ * list's own look, which the user sets as for a wallet), then three tabs.
+ * Actions (the default) holds the action list, List the entries, Details the facts.
  *
- * Membership and fork-lineage both come from a single read,
- * `messaging.getListByActionIndex` (`sdk.getAction(actionIndex)`):
- * the explorer's LIST detail row carries `list` (the membership this
- * exact action_index was written with), `edits` (each item it sent,
- * tagged valid/invalid) plus `list_action_index` (the parent a fork
- * came from), and `state`: whether list-edit resolution is active and,
- * when it is, `current_list`, the membership every reference to this
- * list now resolves to, taken from edit `membership_action_index`.
- * Under resolution that is the current membership and `list` is only
- * what the action was created with; before it, `list` IS what a
- * reference to this index uses. An explorer without `state` is shown
- * as "members as published", which is true under either rule.
+ * Membership and fork lineage both come from one read,
+ * `messaging.getListByActionIndex`: `list` is what this action was published
+ * with, `edits` the items it sent (each valid or invalid), `list_action_index`
+ * the parent of a fork, and `state` whether list-edit resolution is active and,
+ * when it is, `current_list`, the membership every reference now resolves to.
+ * The List tab shows the current membership when there is one.
  *
- * "Used by": AIRDROP/DISPENSER/ORDER/ISSUE all reference a list by
- * ACTION_INDEX (`list_action_index`, `allow_list`, `block_list`), but
- * the explorer exposes no reverse-lookup query (its
- * `/airdrops|dispensers|orders|issues/{query}/{type}` routes only take
- * block/address/token/source/destination, never a list index; verified
- * against xchain-explorer/src/XChainExplorer.js at HEAD). Faking a
- * client-side scan across every consumer's full history isn't a
- * substitute for a real indexed reverse lookup and would be slow and
- * easy to get wrong, so this panel says plainly what it cannot show
- * rather than pretending to.
+ * A union list's items are the action indexes of its source lists; when the
+ * List tab first opens, each source is read once (a union holds at most 16,
+ * four reads at a time) so the tab can group its entries under the source's name.
+ *
+ * Actions: Edit, Share, Transfer and Fork call the shell handlers; Edit goes to
+ * `onEdit` and falls back to `onFork` (the edit form) when a shell passes no
+ * `onEdit`. Each owner action opens its form normally; that form resolves the
+ * signing address and refuses the action if this wallet cannot perform it.
  *
  * @param {object} props
  * @param {string} [props.walletId]
  * @param {string} props.chainId
  * @param {string} props.actionIndex
  * @param {() => void} props.onBack
- * @param {(ref: { chainId: string, actionIndex: string, type: string, items: string[], editResolutionActive: boolean | null, source: string | null, parentIndex: string | null }) => void} props.onFork
- * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onShare]     shows "Share list" when passed
- * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onRename]    shows "Rename list" when passed and supported
- * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onTransfer]  shows "Transfer list" when passed
+ * @param {(ref: ListEditRef) => void} props.onFork
+ * @param {(ref: ListEditRef) => void} [props.onEdit]                           Edit; defaults to onFork
+ * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onEditLook]  opens the Edit look page
+ * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onShare]
+ * @param {(ref: { chainId: string, actionIndex: string }) => void} [props.onTransfer]
+ *
+ * @typedef {{ chainId: string, actionIndex: string, type: string, items: string[], editResolutionActive: boolean | null, source: string | null, parentIndex: string | null }} ListEditRef
  */
-export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onShare, onRename, onTransfer }) {
+export function ListDetail({ chainId, actionIndex, onBack, onFork, onEdit, onEditLook, onShare, onTransfer }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    const tabsId = useId();
 
     const [data, setData] = useState(/** @type {any | null | undefined} */ (undefined));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    const [metaSupported, setMetaSupported] = useState(false);
     const [owner, setOwner] = useState(/** @type {string | null | undefined} */ (undefined));
-    const [walletAddresses, setWalletAddresses] = useState(/** @type {any[] | null | undefined} */ (undefined));
+    const [sources, setSources] = useState(/** @type {Array<{ index: string, row: any }> | null | undefined} */ (null));
     const [reload, setReload] = useState(0);
+    const [activeTab, setActiveTab] = useState('actions');
+    const [lookOpen, setLookOpen] = useState(false);
+    const [lookVersion, setLookVersion] = useState(0);
+    const [pipFailed, setPipFailed] = useState(false);
+    const [sourcesWanted, setSourcesWanted] = useState(false);
+
+    useEffect(() => {
+        setActiveTab('actions');
+        setLookOpen(false);
+        setSourcesWanted(false);
+    }, [chainId, actionIndex]);
+    useEffect(() => {
+        if (activeTab === 'list') setSourcesWanted(true);
+    }, [activeTab]);
 
     useEffect(() => {
         let cancelled = false;
@@ -106,35 +124,45 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
         return () => { cancelled = true; };
     }, [chainId, actionIndex, messaging, reload]);
 
-    useEffect(() => {
-        let cancelled = false;
-        if (!walletId) {
-            setWalletAddresses(null);
-            return () => { cancelled = true; };
-        }
-        setWalletAddresses(undefined);
-        messaging.getAddressesByChain(walletId)
-            .then((byChain) => {
-                if (!cancelled) setWalletAddresses(Array.isArray(byChain?.[chainId]) ? byChain[chainId] : []);
-            })
-            .catch(() => { if (!cancelled) setWalletAddresses(null); });
-        return () => { cancelled = true; };
-    }, [walletId, chainId, messaging]);
+    const isUnion = data ? String(data.type) === '3' : false;
+    const unionIndexes = useMemo(() => {
+        if (!isUnion) return [];
+        // The explorer resolves only token and address memberships, so a
+        // union's own rows (its source list indexes) are the published list.
+        const rows = Array.isArray(data?.list) && data.list.length > 0 ? data.list : (currentListItems(data) || []);
+        return uniqueRows(rows.map(sourceIndexOf).filter(Boolean), memberIdentity);
+    }, [isUnion, data]);
 
     useEffect(() => {
         let cancelled = false;
-        setMetaSupported(false);
-        if (!chainId) return () => { cancelled = true; };
-        const sdkRegistry = {
-            get: () => ({
-                getActionFormats: (action) => messaging.getActionFormats({ chainId, action }),
-            }),
+        if (!isUnion || !sourcesWanted) {
+            setSources(null);
+            return () => { cancelled = true; };
+        }
+        setSources(undefined);
+        // One read per source list (a union holds at most 16), a few at a
+        // time because the explorer rate-limits a burst, and only once the
+        // List tab is opened: Actions and Details need none of them.
+        const rows = new Array(unionIndexes.length);
+        let next = 0;
+        const worker = async () => {
+            while (next < unionIndexes.length) {
+                const at = next;
+                next += 1;
+                const index = unionIndexes[at];
+                try {
+                    // eslint-disable-next-line no-await-in-loop
+                    const row = await messaging.getListByActionIndex({ chainId, actionIndex: index });
+                    rows[at] = { index, row: row || null };
+                } catch {
+                    rows[at] = { index, row: undefined };
+                }
+            }
         };
-        Promise.resolve().then(() => listMetaSupported({ sdkRegistry, chainId }))
-            .then((supported) => { if (!cancelled) setMetaSupported(supported === true); })
-            .catch(() => { if (!cancelled) setMetaSupported(false); });
+        Promise.all(Array.from({ length: Math.min(SOURCE_READ_CONCURRENCY, unionIndexes.length) }, worker))
+            .then(() => { if (!cancelled) setSources(rows); });
         return () => { cancelled = true; };
-    }, [chainId, messaging]);
+    }, [isUnion, sourcesWanted, unionIndexes, chainId, messaging]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const isTick = data ? String(data.type) === '1' : false;
@@ -162,23 +190,18 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
             : null),
         [resolution, state],
     );
-    const membershipIndex = state?.membership_action_index != null ? String(state.membership_action_index) : null;
-    const name = typeof data?.name === 'string' && data.name.length > 0 ? data.name : null;
+    const name = typeof data?.name === 'string' && data.name.length > 0 ? neutralizeControlText(data.name) : null;
     const description = typeof data?.description === 'string' && data.description.length > 0
-        ? data.description : null;
-    const permissionCheckEnabled = Boolean(walletId);
-    const walletOwnsList = Boolean(owner && walletAddresses?.some((record) => record?.address === owner));
-    const canManage = !permissionCheckEnabled || walletOwnsList;
-    const readOnlyReason = !permissionCheckEnabled || canManage
-        ? null
-        : owner === undefined || walletAddresses === undefined
-            ? 'Checking whether this wallet owns the list.'
-            : owner === null || walletAddresses === null
-                ? 'Ownership could not be verified, so this list is read-only.'
-                : 'This list is owned by another address, so it is read-only in this wallet.';
+        ? neutralizeControlText(data.description) : null;
+    const typeLabel = isUnion ? 'Union list' : isTick ? 'Token list' : 'Address list';
+
+    const tileId = listTileId(chainId, actionIndex);
+    // lookVersion re-reads the stored look after the editor saves it.
+    const look = useMemo(() => readWalletTile(tileId), [tileId, lookVersion]);
+    const pipUrl = descriptor ? brandingLib.chainIconSmallUrl(descriptor.id) : null;
 
     const header = (
-        <PageHeader onBack={onBack} title={isTick ? 'Token List' : 'Address List'} />
+        <PageHeader onBack={onBack} title="List" />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>
@@ -207,187 +230,303 @@ export function ListDetail({ walletId, chainId, actionIndex, onBack, onFork, onS
         return wrap(<EmptyState title="List not found" body="It may have been removed or not indexed yet." />);
     }
 
+    const displayName = name || typeLabel;
+    const tileText = walletTileText(displayName);
+    const listRef = () => ({ chainId, actionIndex });
+    // Edit look is its own page: a shell routes it through onEditLook; with
+    // no handler the page stands in for this one until Back or Save.
+    const openLook = () => (typeof onEditLook === 'function' ? onEditLook(listRef()) : setLookOpen(true));
+    if (lookOpen && typeof onEditLook !== 'function') {
+        return (
+            <ListLookForm
+                chainId={chainId}
+                actionIndex={actionIndex}
+                name={displayName}
+                onBack={() => setLookOpen(false)}
+                onDone={() => { setLookOpen(false); setLookVersion((value) => value + 1); }}
+            />
+        );
+    }
+    const editRef = () => ({
+        chainId,
+        actionIndex,
+        type: String(data.type),
+        // An edit applies to the membership a reference resolves to, so
+        // start from the current members under resolution.
+        items: isUnion ? unionIndexes : (currentItems || items),
+        editResolutionActive: resolution,
+        // Where the edit form starts its walk to the list's owner.
+        source: data.source ? String(data.source) : null,
+        parentIndex: isFork ? String(data.list_action_index) : null,
+    });
+
+    const actions = [];
+    // An owner action the shell does not offer here is left out. Ownership is
+    // checked by the action form after the user chooses the row.
+    const ownerAction = (id, label, description, IconGlyph, handler, makeRef, ownReason = null) => {
+        if (typeof handler !== 'function') return;
+        actions.push({
+            id,
+            label,
+            description,
+            Icon: IconGlyph,
+            onSelect: typeof handler === 'function' ? () => handler(makeRef()) : undefined,
+            reason: ownReason,
+        });
+    };
+    ownerAction('edit', 'Edit', 'Change the members, name or description', Icon.PencilIcon, onEdit || onFork, editRef);
+    ownerAction('share', 'Share', 'Share the list with every chain', Icon.ShareIcon, onShare, listRef,
+        isUnion ? listShareEligibility({ type: '3', memberCount: null, isShared: false }).reasons[0]?.text || null : null);
+    ownerAction('transfer', 'Transfer', "Hand the list's ownership to another address", Icon.SendIcon, onTransfer, listRef);
+    actions.push({
+        id: 'fork',
+        label: 'Fork',
+        description: 'Publish an edit of the members at a new list index',
+        Icon: Icon.ForkIcon,
+        onSelect: () => onFork(editRef()),
+        reason: null,
+    });
+    actions.push({
+        id: 'look',
+        label: 'Edit look',
+        description: "Change the list icon's colour, shape and image",
+        Icon: Icon.PaletteIcon,
+        onSelect: openLook,
+        reason: null,
+    });
+
+    const tabLabel = (IconGlyph, text) => (
+        <span className={homeTabsStyles.tabWithIcon}><span className={homeTabsStyles.tabIcon} aria-hidden="true"><IconGlyph /></span>{text}</span>
+    );
+
     return wrap(
         <>
-            {/* The ownership warning is the page notice, the first item of the content. */}
-            {readOnlyReason ? <StatusMessage variant="warning">{readOnlyReason}</StatusMessage> : null}
-            <dl className={styles.detailsList}>
-                <dt className={styles.detailsLabel}>Network</dt>
-                <dd className={styles.detailsValue}>{descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : 'Selected network'}</dd>
-                <dt className={styles.detailsLabel}>List index</dt>
-                <dd className={styles.detailsValue}>#{actionIndex}</dd>
-                {name !== null ? (
-                    <>
-                        <dt className={styles.detailsLabel}>Name</dt>
-                        <dd className={styles.detailsValue}>{neutralizeControlText(name)}</dd>
-                    </>
-                ) : null}
-                {description !== null ? (
-                    <>
-                        <dt className={styles.detailsLabel}>Description</dt>
-                        <dd className={styles.detailsValue}>{neutralizeControlText(description)}</dd>
-                    </>
-                ) : null}
-                <dt className={styles.detailsLabel}>Type</dt>
-                <dd className={styles.detailsValue}>{isTick ? 'Token list' : 'Address list'}</dd>
-                <dt className={styles.detailsLabel}>Published by</dt>
-                <dd className={styles.detailsValue}>{data.source ? <AddressText address={data.source} /> : '?'}</dd>
-                {owner !== undefined ? (
-                    <>
-                        <dt className={styles.detailsLabel}>Current owner</dt>
-                        <dd className={styles.detailsValue}>{owner ? <AddressText address={owner} /> : 'Unavailable'}</dd>
-                    </>
-                ) : null}
-                <dt className={styles.detailsLabel}>Status</dt>
-                <dd className={styles.detailsValue} title={statusWhy ? listStatusTitle(data.status) : undefined}>{statusLabel}</dd>
-                {data.block_index != null ? (
-                    <>
-                        <dt className={styles.detailsLabel}>Block</dt>
-                        <dd className={styles.detailsValue}>{data.block_index}</dd>
-                    </>
-                ) : null}
-                {isFork ? (
-                    <>
-                        <dt className={styles.detailsLabel}>Forked from</dt>
-                        <dd className={styles.detailsValue}>
-                            #{data.list_action_index} ({String(data.edit) === '2' ? 'removed items' : 'added items'})
-                        </dd>
-                    </>
-                ) : null}
-            </dl>
+            {/* The identity card: the list's own look (tap to change it), its
+                network badge, its name and its type line. */}
+            <section className={styles.identityCard} aria-label="List identity">
+                <button
+                    type="button"
+                    className={styles.lookButton}
+                    aria-label="Edit look"
+                    title="Edit look"
+                    onClick={openLook}
+                >
+                    <span className={styles.avatar} style={{ '--xc-avatar-shape': tileRadius(look.shape) }}>
+                        <IdentityAvatar
+                            name={displayName}
+                            text={tileText}
+                            seed={tileId}
+                            context="list"
+                            variant="asset"
+                            tone={look.colour}
+                            src={look.image || null}
+                        />
+                    </span>
+                    {pipUrl && !pipFailed ? (
+                        <img
+                            className={styles.networkPip}
+                            src={pipUrl}
+                            width={24}
+                            height={24}
+                            alt=""
+                            aria-hidden="true"
+                            title={descriptor?.displayName}
+                            decoding="async"
+                            onError={() => setPipFailed(true)}
+                        />
+                    ) : null}
+                </button>
+                <h2 className={styles.identityName}>{displayName}</h2>
+                <p className={styles.identityLine}>{name ? `${typeLabel} · #${actionIndex}` : `#${actionIndex}`}</p>
+                {description ? <p className={styles.identityLine}>{description}</p> : null}
+            </section>
 
-            {currentItems ? (
-                <>
-                    <SectionHeader
-                        title={`Current members (${currentItems.length})`}
-                        description={membershipIndex && membershipIndex !== String(actionIndex)
-                            ? `From edit #${membershipIndex}, the newest valid edit of this list. Everything that references #${actionIndex} uses these members.`
-                            : `No edits yet. Everything that references #${actionIndex} uses these members.`}
-                    />
-                    <MemberList
-                        key={`current:${actionIndex}:${membershipIndex || ''}`}
-                        items={currentItems}
-                        isTick={isTick}
-                        messaging={messaging}
-                        chainId={chainId}
-                    />
-                    <SectionHeader
-                        title={`As created (${items.length})`}
-                        description="The members this action was published with."
-                    />
-                    <MemberList
-                        key={`created:${actionIndex}`}
-                        items={items}
-                        isTick={isTick}
-                        messaging={messaging}
-                        chainId={chainId}
-                    />
-                </>
-            ) : (
-                <>
-                    <SectionHeader
-                        title={resolution === false ? `Current members (${items.length})` : `Members as published (${items.length})`}
-                    />
-                    <MemberList
-                        key={`published:${actionIndex}`}
-                        items={items}
-                        isTick={isTick}
-                        messaging={messaging}
-                        chainId={chainId}
-                    />
-                </>
-            )}
-
-            {!isFork && rejected.length > 0 ? (
-                <>
-                    <SectionHeader
-                        title={`Left out by the network (${rejected.length})`}
-                        description="These items were sent but are not on the list: the network checks each item on its own."
-                    />
-                    <ul className={detailStyles.itemList}>
-                        {/* Say why in plain words; the raw verdict stays in the tooltip. */}
-                        {rejected.map((e, i) => (
-                            <li key={i} title={listStatusTitle(e.status)} className={detailStyles.itemRow}>
-                                <code>{e.tick ?? e.address}</code>{` (${listItemStatusText(e.status)})`}
-                            </li>
-                        ))}
-                    </ul>
-                </>
-            ) : null}
-
-            {isFork && edits.length > 0 ? (
-                <>
-                    <SectionHeader title="This fork's edit" />
-                    <ul className={detailStyles.itemList}>
-                        {edits.map((e, i) => {
-                            const why = listItemStatusText(e.status);
-                            return (
-                                <li key={i} title={why ? listStatusTitle(e.status) : undefined} className={detailStyles.itemRow}>
-                                    <code>{e.tick ?? e.address}</code>
-                                    {why ? ` (${why})` : ''}
-                                </li>
-                            );
-                        })}
-                    </ul>
-                </>
-            ) : null}
-
-            <SectionHeader
-                title="Used by"
-                description="The explorer has no reverse lookup from a list index to the airdrops, dispensers, gates, or orders that reference it today, so the wallet can't show what uses this list. If you know a specific airdrop, dispenser, gate, or order references it, check that item directly."
+            <Tabs
+                id={tabsId}
+                className={tokenDetailStyles.detailTabs}
+                aria-label="List detail view"
+                items={[
+                    { id: 'actions', label: tabLabel(Icon.ZapIcon, 'Actions') },
+                    { id: 'list', label: tabLabel(Icon.ListIcon, 'List') },
+                    { id: 'details', label: tabLabel(Icon.InfoIcon, 'Details') },
+                ]}
+                value={activeTab}
+                onChange={setActiveTab}
+                panelId={`${tabsId}-panel`}
             />
 
-            <SectionHeader title="Actions" />
-            {canManage ? (
-                <div className={styles.actions}>
-                    {onShare ? (
-                        <Button variant="secondary" icon={<Icon.UsersIcon />} onClick={() => onShare({ chainId, actionIndex })}>
-                            Share List
-                        </Button>
-                    ) : null}
-                    {onTransfer ? (
-                        <Button variant="secondary" onClick={() => onTransfer({ chainId, actionIndex })}>
-                            Transfer List
-                        </Button>
-                    ) : null}
-                    {onRename && metaSupported ? (
-                        <Button variant="secondary" onClick={() => onRename({ chainId, actionIndex })}>
-                            Rename List
-                        </Button>
-                    ) : null}
-                    <Button
-                        variant="primary"
-                        icon={<Icon.PencilIcon />}
-                        onClick={() => onFork({
-                            chainId,
-                            actionIndex,
-                            type: String(data.type),
-                            // An edit applies to the membership a reference resolves
-                            // to, so fork from the current members under resolution.
-                            items: currentItems || items,
-                            editResolutionActive: resolution,
-                            // Where the fork form starts its walk to the list's owner.
-                            source: data.source ? String(data.source) : null,
-                            parentIndex: isFork ? String(data.list_action_index) : null,
+            <div
+                id={`${tabsId}-panel`}
+                className={tokenDetailStyles.tabPanel}
+                role="tabpanel"
+                aria-labelledby={`${tabsId}-tab-${activeTab}`}
+            >
+                {activeTab === 'actions' ? (
+                    // The shared action list (G101): a locked owner action is a
+                    // disabled row that says why in place of its description.
+                    <ActionList label="List actions">
+                        {actions.map((action) => {
+                            const ActionIcon = action.Icon;
+                            return (
+                                <ActionListItem
+                                    key={action.id}
+                                    data-action-id={action.id}
+                                    icon={<ActionIcon />}
+                                    title={action.label}
+                                    description={action.description}
+                                    onClick={action.reason ? undefined : action.onSelect}
+                                    disabled={Boolean(action.reason)}
+                                    disabledReason={action.reason || undefined}
+                                />
+                            );
                         })}
-                    >
-                        Fork &amp; Edit
-                    </Button>
-                </div>
-            ) : null}
+                    </ActionList>
+                ) : null}
+
+                {activeTab === 'list' ? (
+                    <>
+                        {isUnion ? (
+                            <UnionMembers sources={sources} messaging={messaging} chainId={chainId} />
+                        ) : (
+                            <MemberList
+                                key={`members:${actionIndex}`}
+                                items={currentItems || items}
+                                isTick={isTick}
+                                messaging={messaging}
+                                chainId={chainId}
+                            />
+                        )}
+
+                        {!isFork && rejected.length > 0 ? (
+                            <>
+                                <p className={styles.groupLabel}>{`Left out by the network (${rejected.length})`}</p>
+                                <ul className={styles.itemList}>
+                                    {/* Say why in plain words; the raw verdict stays in the tooltip. */}
+                                    {rejected.map((e, i) => (
+                                        <li key={i} title={listStatusTitle(e.status)} className={styles.itemRow}>
+                                            <code>{e.tick ?? e.address}</code>{` (${listItemStatusText(e.status)})`}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </>
+                        ) : null}
+
+                        {isFork && edits.length > 0 ? (
+                            <>
+                                <p className={styles.groupLabel}>This fork&apos;s edit</p>
+                                <ul className={styles.itemList}>
+                                    {edits.map((e, i) => {
+                                        const why = listItemStatusText(e.status);
+                                        return (
+                                            <li key={i} title={why ? listStatusTitle(e.status) : undefined} className={styles.itemRow}>
+                                                <code>{e.tick ?? e.address}</code>
+                                                {why ? ` (${why})` : ''}
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </>
+                        ) : null}
+                    </>
+                ) : null}
+
+                {activeTab === 'details' ? (
+                    <ul className={styles.itemList} aria-label="List details">
+                        <DetailRow label="Network">
+                            {descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : 'Selected network'}
+                        </DetailRow>
+                        <DetailRow label="Type">{typeLabel}</DetailRow>
+                        <DetailRow label="List index">{`#${actionIndex}`}</DetailRow>
+                        {isUnion ? (
+                            <DetailRow label="Built from">
+                                {`${unionIndexes.length} ${unionIndexes.length === 1 ? 'list' : 'lists'}`}
+                            </DetailRow>
+                        ) : null}
+                        <DetailRow label="Published by">
+                            {data.source ? <AddressText address={String(data.source)} /> : 'Unavailable'}
+                        </DetailRow>
+                        {owner !== undefined ? (
+                            <DetailRow label="Current owner">
+                                {owner ? <AddressText address={owner} /> : 'Unavailable'}
+                            </DetailRow>
+                        ) : null}
+                        <DetailRow label="Status" tooltip={statusWhy ? listStatusTitle(data.status) : undefined}>
+                            {statusLabel}
+                        </DetailRow>
+                        {data.block_index != null ? (
+                            <DetailRow label="Block">{String(data.block_index)}</DetailRow>
+                        ) : null}
+                        {isFork ? (
+                            <DetailRow label="Forked from">
+                                {`#${data.list_action_index} (${String(data.edit) === '2' ? 'removed items' : 'added items'})`}
+                            </DetailRow>
+                        ) : null}
+                    </ul>
+                ) : null}
+            </div>
+
         </>,
     );
 }
 
+/** One label-left, value-right fact in the Details card. */
+function DetailRow({ label, tooltip, children }) {
+    return (
+        <li>
+            <ListRow title={label} trailing={<span className={styles.detailValue} title={tooltip}>{children}</span>} />
+        </li>
+    );
+}
+
 /**
- * One membership block: ticks as code, addresses in full.
+ * A union's entries, grouped under each source list's name.
+ *
+ * @param {{ sources: Array<{ index: string, row: any }> | null | undefined, messaging: object, chainId: string }} props
+ */
+function UnionMembers({ sources, messaging, chainId }) {
+    if (sources === undefined) {
+        return <div role="status" aria-busy="true">Loading source lists…</div>;
+    }
+    if (!sources || sources.length === 0) {
+        return (
+            <EmptyStateAsLineContext.Provider value>
+                <EmptyState titleAs="p" title="No source lists" body="Lists this union combines appear here." />
+            </EmptyStateAsLineContext.Provider>
+        );
+    }
+    return sources.map(({ index, row }) => {
+        const members = row ? uniqueRows(currentListItems(row) || [], memberIdentity) : [];
+        const sourceName = row && typeof row.name === 'string' && row.name.length > 0
+            ? neutralizeControlText(row.name) : `List #${index}`;
+        const count = row ? `${members.length} ${members.length === 1 ? 'member' : 'members'}` : 'members unavailable';
+        return (
+            <section key={index} className={styles.unionGroup} aria-label={sourceName}>
+                <p className={styles.groupLabel}>
+                    <Icon.TokenListIcon />
+                    <strong className={styles.groupName}>{sourceName}</strong>
+                    <span className={styles.groupMeta}>{`#${index} · ${count}`}</span>
+                </p>
+                {row ? (
+                    <MemberList
+                        items={members}
+                        isTick={String(row.type) === '1'}
+                        messaging={messaging}
+                        chainId={chainId}
+                    />
+                ) : null}
+            </section>
+        );
+    });
+}
+
+/**
+ * One membership card: tickers by name, addresses cut in the middle.
  *
  * @param {{ items: string[], isTick: boolean, messaging: object, chainId: string }} props
  */
 function MemberList({ items, isTick, messaging, chainId }) {
     const [visibleLimit, setVisibleLimit] = useState(MEMBERS_PAGE_SIZE);
     if (items.length === 0) {
-        // Keep this as a section line: the page's notice may be the ownership warning.
         return (
             <EmptyStateAsLineContext.Provider value>
                 <EmptyState
@@ -401,26 +540,24 @@ function MemberList({ items, isTick, messaging, chainId }) {
     const visibleItems = items.slice(0, visibleLimit);
     return (
         <>
-            <ul className={detailStyles.itemList}>
+            <ul className={styles.itemList}>
                 {visibleItems.map((item) => (
-                    <li key={String(item)} className={detailStyles.itemRow}>
+                    <li key={String(item)} className={styles.itemRow}>
                         {isTick
                             ? <TickMemberName item={item} messaging={messaging} chainId={chainId} />
-                            : <AddressText address={item} truncate={false} />}
+                            : <AddressText address={String(item)} />}
                     </li>
                 ))}
             </ul>
             {visibleItems.length < items.length ? (
-                <div className={styles.actions}>
-                    <Button
-                        type="button"
-                        variant="secondary"
-                        icon={<Icon.ChevronDownIcon />}
-                        onClick={() => setVisibleLimit((limit) => limit + MEMBERS_PAGE_SIZE)}
-                    >
-                        Load More Members
-                    </Button>
-                </div>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    icon={<Icon.ChevronDownIcon />}
+                    onClick={() => setVisibleLimit((limit) => limit + MEMBERS_PAGE_SIZE)}
+                >
+                    Load More Members
+                </Button>
             ) : null}
         </>
     );
@@ -428,4 +565,10 @@ function MemberList({ items, isTick, messaging, chainId }) {
 
 function memberIdentity(item) {
     return item == null ? null : String(item);
+}
+
+/** A union item is a source list's action index, bare or as a row. */
+function sourceIndexOf(item) {
+    const index = item && typeof item === 'object' ? item.action_index ?? item.list_action_index : item;
+    return index == null || index === '' ? null : String(index);
 }

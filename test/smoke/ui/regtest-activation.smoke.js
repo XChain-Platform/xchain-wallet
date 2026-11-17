@@ -28,6 +28,7 @@ const popupMsgSrc = read('packages/extension/src/popup/messaging.js');
 const webMsgSrc = read('packages/web/src/messaging.js');
 const desktopMsgSrc = read('packages/desktop/renderer/messaging.js');
 const sectionSrc = read('packages/core/src/shared/components/settings/DeveloperModeSection.jsx');
+const pagesSrc = read('packages/core/src/shared/components/settings/TestNetworksPages.jsx');
 
 // 1. Flow exports `activateChain` and is re-exported from flows/index.
 assert.ok(/export async function activateChain\(/.test(flowSrc),
@@ -71,34 +72,47 @@ for (const [src, name] of [
         `${name} activateChainRequest sends wallet.activateChain`);
 }
 
-// 6. DeveloperModeSection mounts the new RegtestNetworksRow and the
-//    inner activation form calls activateChainRequest with password.
-assert.ok(/RegtestNetworksRow/.test(sectionSrc),
-    'DeveloperModeSection mounts RegtestNetworksRow');
-assert.ok(/networkKind === 'regtest'/.test(sectionSrc),
-    'DeveloperModeSection filters chainRegistry to regtest descriptors');
-assert.ok(/messaging\.activateChainRequest\(/.test(sectionSrc),
-    'DeveloperModeSection calls activateChainRequest');
-assert.ok(/disabled=\{disabled \|\| open\}/.test(sectionSrc) || /disabled=\{!developerMode\}/.test(sectionSrc),
-    'DeveloperModeSection greys out the Activate button when Developer Mode is off');
+// 6. Test Networks (operator picks 2026-11-14): Add Network lists the
+//    built-in regtest networks not active yet and asks for the password in
+//    place, then calls activateChainRequest with it. The Developer section
+//    no longer carries the regtest rows.
+assert.ok(!/RegtestNetworksRow/.test(sectionSrc),
+    'DeveloperModeSection no longer mounts the old Regtest networks rows');
+assert.ok(/export function AddNetworkPage\(/.test(pagesSrc),
+    'TestNetworksPages exports the Add Network page');
+assert.ok(/networkKind === 'regtest' && !d\?\.isUserAdded/.test(pagesSrc),
+    'Add Network offers the built-in regtest descriptors');
+assert.ok(/!isActiveOn\(settings, d\.id\)/.test(pagesSrc),
+    'Add Network offers only the networks not active yet');
+assert.ok(/messaging\.activateChainRequest\(/.test(pagesSrc),
+    'the in-place activation calls activateChainRequest');
+// The smoke loader reads source with English copy in place of t() keys.
+assert.ok(/disabledReason=(?:\{t\('settings\.testNetworks\.needsDevMode'\)\}|"Turn on Developer mode first")/.test(pagesSrc),
+    'activation rows stay listed with their reason while Developer Mode is off');
 
-// 7. §17.4 / FOLLOWUP 1: RegtestRow is HW-aware. It mounts the shared
-//    SignerSelectForm, branches on signer kind, threads signerId into
-//    the activation request, and swaps the password field for
-//    "check your device" copy when a hardware signer is selected.
-assert.ok(/import \{ SignerSelectForm \} from '\.\.\/\.\.\/routes\/SignerSelectForm\.jsx'/.test(sectionSrc),
-    'DeveloperModeSection imports SignerSelectForm');
-assert.ok(/<SignerSelectForm\b/.test(sectionSrc),
-    'RegtestRow renders <SignerSelectForm> so HW-paired wallets can pick a device');
-assert.ok(/const isHardware = Boolean\(signerId\)/.test(sectionSrc),
-    'RegtestRow branches on signer kind via isHardware');
-assert.ok(/signerId: signerId \|\| undefined/.test(sectionSrc),
-    'RegtestRow threads signerId into activateChainRequest');
-assert.ok(/password: isHardware \? undefined : password/.test(sectionSrc),
-    'RegtestRow omits the password for hardware signers');
-assert.ok(/!isHardware && password\.length === 0/.test(sectionSrc),
-    'RegtestRow only requires a wallet password for software signers');
-assert.ok(/check your device/i.test(sectionSrc),
-    'RegtestRow shows device-check copy for hardware signers');
+// 7. §17.4 / FOLLOWUP 1: the in-place activation is HW-aware. It mounts the
+//    shared SignerSelectForm, branches on signer kind, threads signerId into
+//    the activation request, and swaps the password field for device copy
+//    when a hardware signer is selected.
+assert.ok(/import \{ SignerSelectForm \} from '\.\.\/\.\.\/routes\/SignerSelectForm\.jsx'/.test(pagesSrc),
+    'TestNetworksPages imports SignerSelectForm');
+assert.ok(/<SignerSelectForm\b/.test(pagesSrc),
+    'the in-place activation renders <SignerSelectForm> so HW-paired wallets can pick a device');
+assert.ok(/const isHardware = Boolean\(signerId\)/.test(pagesSrc),
+    'the in-place activation branches on signer kind via isHardware');
+assert.ok(/signerId: signerId \|\| undefined/.test(pagesSrc),
+    'the in-place activation threads signerId into activateChainRequest');
+assert.ok(/const sendPassword = askPassword && !isHardware/.test(pagesSrc)
+    && /password: sendPassword \? password : undefined/.test(pagesSrc),
+    'the in-place activation omits the password for hardware signers and an unlocked session');
+assert.ok(/if \(sendPassword && password\.length === 0\)/.test(pagesSrc),
+    'the in-place activation only requires a wallet password for software signers with no pooled signer');
+// Operator preference 2026-11-14: the session's pooled signer (the host's
+// wallet.signerReady) activates at once with no password field.
+assert.ok(/const signerReady = useSignerReady\(walletId\)/.test(pagesSrc)
+    && /const askPassword = !signerReady \|\| poolGone/.test(pagesSrc),
+    'the in-place activation asks for the password only while the signer pool is empty');
+assert.ok(/settings\.testNetworks\.deviceNote/.test(pagesSrc),
+    'the in-place activation shows device-check copy for hardware signers');
 
-console.log('OK: activateChain flow + host + messaging shims + Settings UI + HW-aware smoke');
+console.log('OK: activateChain flow + host + messaging shims + Test Networks UI + HW-aware smoke');

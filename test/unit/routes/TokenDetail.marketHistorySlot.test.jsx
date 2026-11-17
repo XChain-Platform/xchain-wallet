@@ -3,10 +3,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The token's price chart is drawn behind the balance card. Whether or not a
-// chart is drawn (including when the token record cannot be read) the chart
-// slot stays in the card and fills it, so the card never changes height, and
-// the page prints no pricing status text in its place.
+// The token's chart is drawn behind the balance card. Whatever is drawn
+// (a price line, or with no price history the balance from the wallet's own
+// rows, operator ruling 2026-11-15) the chart slot stays in the card and
+// fills it, so the card never changes height, and the page prints no pricing
+// status text in its place.
 
 import React from 'react';
 import { readFileSync } from 'node:fs';
@@ -67,7 +68,7 @@ function renderToken(walletId, assetInfo, { readFails = false } = {}) {
 }
 
 function chartPanel() {
-    return screen.getByRole('region', { name: 'Price chart' });
+    return screen.getByRole('region', { name: /^(Price|Value|Balance) chart$/ });
 }
 
 function chartSlot() {
@@ -88,21 +89,24 @@ async function settledSlot() {
 }
 
 describe('token market history slot', () => {
-    it('keeps the empty chart slot and prints no status text when the token record cannot be read', async () => {
+    it('draws the balance line in the slot and prints no status text when the token record cannot be read', async () => {
         renderToken('real-wallet', null, { readFails: true });
         const slot = await settledSlot();
         await vi.waitFor(() => expect(screen.getByRole('tab', { name: 'Details' })).toBeTruthy());
-        expect(within(chartPanel()).queryByRole('img')).toBeNull();
+        // No price line is invented; the hero draws the balance the wallet holds.
+        expect(within(chartPanel()).queryByRole('img', { name: /^Price trend/ })).toBeNull();
+        await vi.waitFor(() => expect(within(slot).getByRole('img', { name: /^Balance trend/ })).toBeTruthy());
         expect(document.body).not.toHaveTextContent('Market data is unavailable.');
         expect(document.body).not.toHaveTextContent('No price history yet');
         expect(inBalanceCard(slot)).toBe(true);
         expect(chartPanel().querySelectorAll('[class*="slot"]')).toHaveLength(1);
     });
 
-    it('keeps the empty chart slot and shows no DEX trades when the token record has no market price', async () => {
+    it('draws the balance line in the slot and shows no DEX trades when the token record has no market price', async () => {
         renderToken('real-wallet', { creator: 'bcrt1qx' });
         const slot = await settledSlot();
-        expect(within(chartPanel()).queryByRole('img')).toBeNull();
+        expect(within(chartPanel()).queryByRole('img', { name: /^Price trend/ })).toBeNull();
+        await vi.waitFor(() => expect(within(slot).getByRole('img', { name: /^Balance trend/ })).toBeTruthy());
         expect(document.body).not.toHaveTextContent('No price history yet');
         expect(inBalanceCard(slot)).toBe(true);
         expect(document.body).not.toHaveTextContent('Indexed market activity builds');

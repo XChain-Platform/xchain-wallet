@@ -167,7 +167,7 @@ test.describe('DESTROY on regtest', () => {
             await main.getByRole('button', { name: 'Destroy', exact: true }).click();
 
             await expectConfirmModal(page, 'the DESTROY');
-            const intent = page.getByTestId('action-intent');
+            const intent = page.getByTestId('confirm-sentence');
             await expect(intent).toContainText(`Destroy ${DESTROY_AMOUNT} ${TICK}`);
         });
 

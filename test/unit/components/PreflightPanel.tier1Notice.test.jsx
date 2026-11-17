@@ -198,6 +198,22 @@ describe('PreflightPanel Tier-1 notice (§4.2, )', () => {
             .toMatch(/network checked this action/i);
     });
 
+    // A pass verdict with no Tier-1 finding at all, or a DRYRUN_VALID that no
+    // indexer stamped, is not an approval: the chip says nobody checked.
+    it('does NOT call a pass with no indexer verdict "Looks good"', () => {
+        const unstamped = [
+            [],
+            [{ code: 'DRYRUN_VALID', severity: 'info', source: 'client', overridable: false, message: 'Dev mock: no on-chain dry-run.' }],
+            [{ code: 'DRYRUN_VALID', severity: 'info', message: 'ok' }],
+        ];
+        for (const findings of unstamped) {
+            const { unmount } = mount(reportWith('pass', findings));
+            expect(chip().textContent).toBe('Not checked by the indexer.');
+            expect(panel().getAttribute('data-dryrun')).toBe('none');
+            unmount();
+        }
+    });
+
     // The property the item is really about: two different states must not
     // produce the same screen. Comparing whole rendered text pins it against
     // any future refactor that drops one of the two branches.

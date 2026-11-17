@@ -80,7 +80,7 @@ afterEach(() => {
 });
 
 describe('Lock token', () => {
-    it('shows seven lock switches whose icon flips from unlock to lock', async () => {
+    it('shows seven lock switches whose item icon stays the same when the switch flips', async () => {
         mount('lock');
         const switches = await screen.findAllByRole('switch');
         expect(switches).toHaveLength(7);
@@ -91,7 +91,8 @@ describe('Lock token', () => {
         fireEvent.click(first);
         await waitFor(() => expect(first).toBeChecked());
         const after = row(first).querySelector('span[aria-hidden="true"]').innerHTML;
-        expect(after).not.toBe(before);
+        // The icon names the thing locked; the switch alone shows the state.
+        expect(after).toBe(before);
     });
 
     it('has no top permanence notice and a Lock token action that is not the danger style', async () => {

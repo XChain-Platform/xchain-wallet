@@ -184,7 +184,7 @@ describe('MESSAGE handshakes use shared confirmation', () => {
             utils = mount(MessagingInbox, messaging);
             await drainMicrotasks(24);
         });
-        expect(utils.getByLabelText('Search conversations')).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Filter conversations' })).toBeTruthy();
 
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Share My Key' }));
@@ -194,14 +194,14 @@ describe('MESSAGE handshakes use shared confirmation', () => {
         // The review is its own screen: no inbox toolbar, request list or
         // inbox title sits around it.
         expect(utils.getByTestId('confirm-modal')).toBeTruthy();
-        expect(utils.queryByLabelText('Search conversations')).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Filter conversations' })).toBeNull();
         expect(utils.queryByRole('region', { name: 'Encrypted-session requests' })).toBeNull();
         expect(utils.queryByRole('heading', { name: 'Messaging' })).toBeNull();
 
         await approve(utils);
 
         expect(utils.queryByTestId('confirm-modal')).toBeNull();
-        expect(utils.getByLabelText('Search conversations')).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Filter conversations' })).toBeTruthy();
         expect(utils.getByText(/Key shared/)).toBeTruthy();
     });
 

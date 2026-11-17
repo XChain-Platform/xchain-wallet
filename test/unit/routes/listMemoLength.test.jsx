@@ -22,7 +22,7 @@ import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
-import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
+import { ListForkRoute as ListForkForm } from '../../helpers/listFormRoutes.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../../../packages/core/src/shared/utils/memoLimit.js';
 
@@ -74,7 +74,7 @@ const lengthErrorText = new RegExp(`at most ${INDEXER_MAX_MEMO_LENGTH}`);
 async function createWithMemo(memo) {
     const messaging = mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} });
     fireEvent.change(await screen.findByLabelText('Tokens'), { target: { value: 'SWAPTEST' } });
-    fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: memo } });
+    fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'textarea' }), { target: { value: memo } });
     const publish = await screen.findByRole('button', { name: 'Publish List' });
     await waitFor(() => expect(publish.disabled).toBe(false));
     fireEvent.click(publish);
@@ -88,10 +88,10 @@ async function forkWithMemo(memo) {
         onBack() {},
         onDone() {},
     });
-    await screen.findByText(/Forking token list #2700/);
-    fireEvent.change(screen.getByLabelText('Add tokens'), { target: { value: 'NEWTICK' } });
-    fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: memo } });
-    fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
+    await screen.findByLabelText('Tokens');
+    fireEvent.change(screen.getByLabelText('Tokens'), { target: { value: 'NEWTICK' } });
+    fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'textarea' }), { target: { value: memo } });
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Fork' }));
     return messaging;
 }
 
@@ -132,9 +132,9 @@ describe('ListForkForm memo length', () => {
 
     it('composes a memo exactly at the limit', async () => {
         const messaging = await forkWithMemo(AT_LIMIT);
-        const publish = await screen.findByRole('button', { name: 'Publish Add' });
-        await waitFor(() => expect(publish.disabled).toBe(false));
-        fireEvent.click(publish);
+        expect(await screen.findByTestId('confirm-status')).toHaveAttribute('data-state', 'unknownAction');
+        expect(screen.getByTestId('confirm-reject')).toHaveAccessibleName('Reject');
+        expect(screen.getByTestId('confirm-approve')).toHaveAccessibleName('Approve');
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params)
             .toMatchObject({ VERSION: '1', MEMO: AT_LIMIT, ITEM: ['NEWTICK'] });
@@ -142,12 +142,13 @@ describe('ListForkForm memo length', () => {
     });
 });
 
-// Create list uses memo help that distinguishes the action note from the
-// list metadata while preserving the protocol character rule.
-describe('Memo hint on Create list', () => {
-    it('distinguishes the memo from list metadata and names the forbidden characters', async () => {
+// Create list's memo sits alone in its Memo section, so by ruling
+// (2026-11-13) it has no label row or tip; the old protocol hint stays gone.
+describe('Memo on Create list', () => {
+    it('draws the lone memo with no tip and no protocol hint', async () => {
         mount(ListCreateForm, { walletId: 'w', chainId: DOGE, initialType: '1', onBack() {} });
-        expect(await screen.findByText("A public note stored on-chain with this list creation action. It is separate from the list's name and description and cannot contain | or ;.")).toBeTruthy();
+        expect(await screen.findByRole('textbox', { name: 'Memo', hidden: true })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'About Memo', hidden: true })).toBeNull();
         expect(screen.queryByText('Protocol rejects | or ;.')).toBeNull();
     });
 });
@@ -166,16 +167,14 @@ describe('ListForkForm memo-only edit', () => {
         });
     }
 
-    it('publishes a memo with no member change as one item-less edit', async () => {
+    it('composes a memo with no member change as one item-less edit', async () => {
         const messaging = openFork();
-        await screen.findByText(/Forking token list #2700/);
-        fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'input' }), { target: { value: 'season two' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
-        expect(await screen.findByText(/Only the memo changes\. The list keeps its 1 member/)).toBeTruthy();
-        expect(screen.getByText(/^Update the memo on list #2700/)).toBeTruthy();
-        const publish = screen.getByRole('button', { name: 'Publish Memo' });
-        await waitFor(() => expect(publish.disabled).toBe(false));
-        fireEvent.click(publish);
+        await screen.findByLabelText('Tokens');
+        fireEvent.change(screen.getByLabelText(/Memo/, { selector: 'textarea' }), { target: { value: 'season two' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Fork' }));
+        expect(await screen.findByTestId('confirm-status')).toHaveAttribute('data-state', 'unknownAction');
+        expect(screen.getByTestId('confirm-reject')).toHaveAccessibleName('Reject');
+        expect(screen.getByTestId('confirm-approve')).toHaveAccessibleName('Approve');
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         expect(messaging.composeForConfirm.mock.calls[0][0].actionData.params)
             .toEqual({ VERSION: '1', EDIT: '1', LIST_ACTION_INDEX: '2700', MEMO: 'season two', ITEM: [] });
@@ -183,8 +182,8 @@ describe('ListForkForm memo-only edit', () => {
 
     it('still refuses an edit with no member change and no memo', async () => {
         const messaging = openFork();
-        await screen.findByText(/Forking token list #2700/);
-        fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
+        await screen.findByLabelText('Tokens');
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Fork' }));
         expect(await screen.findByText('Nothing changed: add or remove an item, or write a memo.')).toBeTruthy();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });

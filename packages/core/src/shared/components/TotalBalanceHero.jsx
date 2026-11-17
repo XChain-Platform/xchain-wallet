@@ -46,7 +46,7 @@ import '../../i18n/locales/en/components.js';
  * @param {() => void} [props.onCommandPalette]  when provided, adds a search row that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
  * @param {() => void} [props.onLockWallet]      when provided, adds a lock row. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
  */
-export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, walletId, networkFilter, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap }) {
+export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, walletId, networkFilter, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap, onUnitChange }) {
     const labelId = useId();
     const source = useWalletSource(walletId);
     const { messaging } = source;
@@ -125,7 +125,6 @@ export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, wa
         return { delta, pct };
     }, [rows, effectivePriceMap, total]);
 
-    const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
     const hasChange = !hidden
         && change24h
         && Number.isFinite(change24h.delta)
@@ -153,6 +152,13 @@ export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, wa
     const canShowInCoin = !testCoinsOnly && !balanceUnread
         && Boolean(unitTick) && Number.isFinite(unitPrice) && unitPrice > 0;
     const showInCoin = coinPrimary && canShowInCoin;
+    // The chart behind the card draws in the same unit (each point divided by
+    // the coin's price at that point), so the card says which unit it shows.
+    const unitChainId = showInCoin ? unitRow.chainId : '';
+    useEffect(() => {
+        if (typeof onUnitChange !== 'function') return;
+        onUnitChange(unitChainId ? { tick: unitTick, chainId: unitChainId, price: unitPrice } : null);
+    }, [onUnitChange, unitChainId, unitTick, unitPrice]);
     const coinAmount = showInCoin
         ? new Intl.NumberFormat(fiatLocale, { maximumFractionDigits: 8 }).format(Number(total) / unitPrice)
         : null;
@@ -214,11 +220,11 @@ export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, wa
         // figure is.
         <section className={styles.hero} aria-labelledby={labelId}>
             <div className={`${styles.row} ${styles.rowWithActions}`}>
+                {/* The caption is the wallet name alone (G11): a network filter
+                    never adds the network's name here (U12); the filter
+                    button's dot says a filter is on. */}
                 <span id={labelId} className={walletName ? `${styles.label} ${styles.walletLabel}` : styles.label}>
                     {walletName || t('components.totalBalanceHero.activeAddressBalance')}
-                    {filterLabel ? (
-                        <span className={styles.scope}>· {filterLabel}</span>
-                    ) : null}
                 </span>
                 <div
                     className={`${styles.amount} ${balanceIsMessage ? styles.amountMessage : ''}`}
@@ -296,6 +302,8 @@ export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, wa
  * @param {{ showInCoin: boolean, unitPrice: number, unitTick: string, locale: string }} unit
  */
 export function rangeChangeText(rangeChange, { showInCoin, unitPrice, unitTick, locale }) {
+    // A chart drawn in the coin already measured its change in it.
+    if (rangeChange.inCoin) return rangeChange.text || '…';
     return rangeChange.text && showInCoin && Number.isFinite(rangeChange.delta)
         ? `${rangeChange.arrow} ${new Intl.NumberFormat(locale, { maximumFractionDigits: 8 }).format(rangeChange.delta / unitPrice)} ${unitTick}${rangeChange.pctText ? ` (${rangeChange.pctText})` : ''}`
         : (rangeChange.text || '…');

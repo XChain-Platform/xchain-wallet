@@ -93,6 +93,35 @@ describe('PSBT sign form UI rulings', () => {
         expect(browse.querySelector('svg path[d="m17 8-5-5-5 5"]')).toBeTruthy();
     });
 
+    it('keeps Sign Transaction enabled with an empty code and marks the code field on press (G22)', async () => {
+        const target = setup();
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true });
+
+        const sign = screen.getByRole('button', { name: /^Sign transaction$/i });
+        await waitFor(() => expect(sign).toBeEnabled());
+        fireEvent.click(sign);
+
+        const field = screen.getByLabelText('Unsigned transaction code');
+        await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'));
+        expect(screen.getAllByText('Paste the transaction code or choose a .psbt file.')).toHaveLength(2);
+        expect(document.activeElement).toBe(screen.getByRole('alert', { name: 'Form errors' }));
+        expect(target.signPsbtUserInitiated).not.toHaveBeenCalled();
+
+        fireEvent.change(field, { target: { value: PSBT } });
+        expect(field).not.toHaveAttribute('aria-invalid', 'true');
+        expect(screen.queryByText('Paste the transaction code or choose a .psbt file.')).toBeNull();
+    });
+
+    it('lets the shared field keep the code text clear of the scan icon', async () => {
+        setup();
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true });
+
+        const field = screen.getByLabelText('Unsigned transaction code');
+        // No inline padding may override the field-action inset.
+        expect(field.style.padding).toBe('');
+        expect(field.getAttribute('style') || '').not.toMatch(/padding/);
+    });
+
     it('keeps exactly one green main action through entry, review, and result stages', async () => {
         setup();
         await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // The network field lives in the closed "Signing with" section.

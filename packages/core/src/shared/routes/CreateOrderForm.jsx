@@ -9,18 +9,21 @@
 // contact legal@dankest.llc.
 
 import { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, PageHeader, RadioGroup, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { AddressField, Button, FormNotice, FormPage, Icon, ListPage, PageHeader, Screen, StatusMessage, Switch } from '@xchain-wallet/core/ui';
+import { ListField } from '../components/ListField.jsx';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
+import { ExpirationFields, expirationWithinFreePeriod } from '../components/expirationChoice.jsx';
 // Create order renders through the shared Give/Get standard (Quick and Full views of one state).
 import {
     GiveGetQuick,
     OwnershipToggle,
-    QuickAddressRow,
     RateLine,
     useGiveGetView,
+    ViewSwitch,
 } from '../components/giveGet/index.js';
 // The Wallet Form Standard frame (From, Order, Ownership, Order Terms, Network fee, action).
-import { FeeSection, FormAction, FormFrame, FormSection, FromSection, joinSummary } from '../components/formStandard/index.js';
-import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, MemoSection, joinSummary } from '../components/formStandard/index.js';
+import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
@@ -36,10 +39,10 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import {
     resolvePreflightPrivacy,
 } from '../../schemas/settings.js';
-import { SignCredentials } from '../components/SignCredentials.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
@@ -57,9 +60,9 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
 import styles from './IssueTokenForm.module.css';
 import { humanizeError } from '../utils/humanizeError.js';
+import { pickedListText } from '../utils/listLabel.js';
 import { MAX_MEMO_LENGTH, memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
-import { ActionIntentSummary } from '../components/ActionIntentSummary.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -68,6 +71,7 @@ import { tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { orderGiveParts } from '../utils/confirmSummaryParts.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 
@@ -78,8 +82,8 @@ function orderFailureFallback(err) {
         ? 'Could not create the order. Check the details and try again.'
         : humanized.message;
 }
-
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -179,13 +183,21 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     const [getAmount, setGetAmount] = useState('');
     const [getOwnership, setGetOwnership] = useState(false);
 
+    // Receive at shows the From address until the user edits it; an empty
+    // edited value falls back to From, so no GET_ADDRESS is sent for it.
     const [getAddress, setGetAddress] = useState('');
-    const [expMode, setExpMode] = useState(/** @type {'default' | 'custom'} */ ('default'));
+    const [receiveEdited, setReceiveEdited] = useState(false);
+    const [receiveError, setReceiveError] = useState(/** @type {string | null} */ (null));
+    // 'default' is 3 months; the presets fill expInput, which Expires shows.
+    const [expMode, setExpMode] = useState(/** @type {'default' | '6m' | '9m' | '1y' | 'custom'} */ ('default'));
     const [expInput, setExpInput] = useState('');
     const [allowListIdx, setAllowListIdx] = useState('');
     const [allowListCount, setAllowListCount] = useState(/** @type {number | null} */ (null));
     const [blockListIdx, setBlockListIdx] = useState('');
     const [blockListCount, setBlockListCount] = useState(/** @type {number | null} */ (null));
+    // The picked lists' names, so the fields show a name (G114).
+    const [allowListPick, setAllowListPick] = useState(/** @type {{ index: string, name: unknown } | null} */ (null));
+    const [blockListPick, setBlockListPick] = useState(/** @type {{ index: string, name: unknown } | null} */ (null));
     const [memo, setMemo] = useState('');
 
     const [password, setPassword] = useState('');
@@ -199,7 +211,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     // early return, so a picker page or the confirm screen never resets them.
     // From, Ownership, Order Terms (options) and Network fee start closed.
     const giveGetView = useGiveGetView('order', {
-        sections: { from: false, order: true, ownership: false, options: false, fee: false },
+        sections: { from: false, order: true, ownership: false, options: false, lists: false, memo: false, fee: false },
     });
 
     const giveAssetTick = giveType === 'coin' ? coinTicker : giveTick;
@@ -235,14 +247,16 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         ? t('components.placeOrderPanel.autoPayConfirmNotice')
         : undefined;
 
+    // Read on eligibility, not on the switch: the exposure note under Auto pay
+    // is a static note (G120), so flipping the switch never shows or hides it.
     useEffect(() => {
-        if (!autopayArm || typeof messaging.getAutopayExposure !== 'function') { setExposure(null); return undefined; }
+        if (!autopayEligible || typeof messaging.getAutopayExposure !== 'function') { setExposure(null); return undefined; }
         let cancelled = false;
         messaging.getAutopayExposure({ walletId })
             .then((e) => { if (!cancelled) setExposure(e || {}); })
             .catch(() => { if (!cancelled) setExposure(null); });
         return () => { cancelled = true; };
-    }, [messaging, walletId, autopayArm]);
+    }, [messaging, walletId, autopayEligible]);
 
     const [feePick, setFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
@@ -298,7 +312,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             p.GET_AMOUNT = wireAmount(getAmount);
         }
         if (getAddress.trim()) p.GET_ADDRESS = getAddress.trim();
-        if (expMode === 'custom' && expInput.trim()) {
+        if (expMode !== 'default' && expInput.trim()) {
             const unix = localInputToUnix(expInput.trim());
             if (unix) p.EXPIRATION = String(unix);
         }
@@ -339,7 +353,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         if (giveType === 'token' && getType === 'token'
             && giveTick.trim().toUpperCase() === getTick.trim().toUpperCase()) return null;
         if (getAddress.trim() && addressValidationError(getAddress.trim(), descriptor)) return null;
-        if (expMode === 'custom') {
+        if (expMode !== 'default') {
             const expiration = localInputToUnix(expInput.trim());
             if (!expiration || expiration <= Math.floor(Date.now() / 1000)) return null;
         }
@@ -353,7 +367,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         expInput, expMode, fromAddress, getAddress, getAmount, getOwnership, getTick,
         getTokenInfo?.divisibility, getType, giveAmount, giveAssetTick, giveBalance,
         giveOwnership, giveTick, giveTokenInfo?.divisibility, giveType, memo]);
-    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+    const { quote: protocolFeeQuote, pending: protocolFeePending, waiting: protocolFeeWaiting } = useProtocolFeeQuote({
         messaging,
         chainId,
         source: fromAddress?.address,
@@ -373,6 +387,22 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             action: 'ORDER', params: actionParams, chainId: chainId || undefined, chainRegistry,
         });
     }, [stage, confirmModalOpen, actionParams, chainId]);
+    const quotedProtocolFee = normalizeProtocolFee(protocolFeeQuote);
+    const legacyComposed = useMemo(() => (decoded ? {
+        action: 'ORDER',
+        chainId,
+        decoded,
+        quote: protocolFeeQuote,
+        protocolFeeKnownFree: quotedProtocolFee.known && quotedProtocolFee.free,
+    } : null), [chainId, decoded, protocolFeeQuote, quotedProtocolFee.free, quotedProtocolFee.known]);
+    const orderFacts = [{
+        label: 'Expiration',
+        value: expMode === 'default'
+            ? '3 months'
+            : (localInputToUnix(expInput.trim())
+                ? formatLocalDateTime(localInputToUnix(expInput.trim()))
+                : 'Custom expiry'),
+    }];
 
     function guardBeforeSign() {
         if (!chainId || !fromAddress) { setFormError('Pick a source address first.'); revealSection('from'); return false; }
@@ -430,24 +460,26 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         }
         // Receive at sits in the Order section; reveal it so the field is in sight.
         const ga = getAddress.trim();
-        const receiveError = ga ? addressValidationError(ga, descriptor) : null;
-        if (receiveError) { setFormError(receiveError); revealSection('get'); return false; }
+        const receiveFailure = ga ? addressValidationError(ga, descriptor) : null;
+        if (receiveFailure) {
+            setFormError(receiveFailure); setReceiveError(receiveFailure); revealSection('get'); return false;
+        }
         // The order terms below live in Options; a failure there opens it so the field is in sight.
-        if (expMode === 'custom') {
+        if (expMode !== 'default') {
             const raw = expInput.trim();
-            if (!raw) { setFormError('Pick an expiration date and time, or switch to the default window.'); revealSection('options'); return false; }
+            if (!raw) { setFormError('Pick an expiration date and time, or choose a common term.'); revealSection('options'); return false; }
             const unix = localInputToUnix(raw);
             if (!unix || unix <= Math.floor(Date.now() / 1000)) { setFormError('Expiration must be a future date and time.'); revealSection('options'); return false; }
         }
         const m = memo.trim();
-        if (m.includes('|') || m.includes(';')) { setFormError('Memo cannot contain "|" or ";".'); revealSection('options'); return false; }
+        if (m.includes('|') || m.includes(';')) { setFormError('Memo cannot contain "|" or ";".'); revealSection('memo'); return false; }
         const memoError = memoLengthError(m) || memoCharacterError(m);
-        if (memoError) { setFormError(memoError); revealSection('options'); return false; }
+        if (memoError) { setFormError(memoError); revealSection('memo'); return false; }
         if (allowListIdx && !isCanonicalActionIndex(allowListIdx)) {
-            setFormError('Allow-list ID must be a positive whole number.'); revealSection('options'); return false;
+            setFormError('Allow-list ID must be a positive whole number.'); revealSection('lists'); return false;
         }
         if (blockListIdx && !isCanonicalActionIndex(blockListIdx)) {
-            setFormError('Block-list ID must be a positive whole number.'); revealSection('options'); return false;
+            setFormError('Block-list ID must be a positive whole number.'); revealSection('lists'); return false;
         }
         return true;
     }
@@ -478,7 +510,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 chainId,
                 source: from.address,
                 preflightOpts: { mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report' },
-                compose: () => messaging.composeForConfirm({
+                compose: () => messaging.composeForConfirm(withAdvancedOptions({
                     walletId, chainId, from,
                     actionData: { action: 'ORDER', params: actionParams },
                     // PC-51: the opt-in must reach COMPOSE so the FEE_DESTINATION
@@ -487,7 +519,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         payFeeInNativeCoin: nativeFee.flag,
                         ...(feePerKb != null ? { feePerKb } : {}),
                     },
-                }),
+                })),
                 preflight: (o) => messaging.preflight({ chainId, ...o }),
                 // §4.6: the input-liveness half of the Approve-time re-check,
                 // the same one useActionConfirmFlow.run gives every migrated form.
@@ -593,6 +625,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     function handleChainChange(nextChainId) {
         if (nextChainId === chainId) return;
         setChainId(nextChainId);
+        // A custom receive address belongs to the old network; From leads again.
+        setGetAddress(''); setReceiveEdited(false); setReceiveError(null);
         clearGiveAsset();
         clearGetAsset();
     }
@@ -700,8 +734,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         }
         const autopayNote = autopayArm
             ? (result?.autopayArmed === false
-                ? 'Auto-pay could not be armed for this order; you will be prompted to pay any match manually.'
-                : 'Auto-pay is armed: matches on this order will be paid automatically while a wallet holding it is unlocked.')
+                ? 'Auto pay could not be armed for this order; you will be prompted to pay any match manually.'
+                : 'Auto pay is armed: matches on this order will be paid automatically while a wallet holding it is unlocked.')
             : null;
         return wrap(
             <FormPage
@@ -710,7 +744,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 actions={(
                     <>
                         {onManageOrders ? <Button variant="secondary" icon={<Icon.TokenListIcon />} onClick={onManageOrders}>My Orders</Button> : null}
-                        <Button variant="primary" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
+                        <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                     </>
                 )}
             >
@@ -735,10 +769,12 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     ...orderGiveParts(actionParams, coinTicker),
                     chainId,
                     address: fromAddress?.address,
+                    facts: orderFacts,
                     ...(confirmNotice ? { notice: confirmNotice } : {}),
                 }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim() : undefined}
                 signerReady={signerReady}
                 password={password}
@@ -783,8 +819,9 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 filterType="2"
                 title={listPickerFor === 'allow' ? 'Choose Allow-List' : 'Choose Block-List'}
                 onSelect={(row) => {
-                    if (listPickerFor === 'allow') { setAllowListIdx(row.actionIndex); setAllowListCount(row.memberCount); }
-                    else { setBlockListIdx(row.actionIndex); setBlockListCount(row.memberCount); }
+                    const pick = { index: String(row.actionIndex), name: row.name };
+                    if (listPickerFor === 'allow') { setAllowListIdx(row.actionIndex); setAllowListCount(row.memberCount); setAllowListPick(pick); }
+                    else { setBlockListIdx(row.actionIndex); setBlockListCount(row.memberCount); setBlockListPick(pick); }
                     setListPickerFor(null);
                 }}
                 onBack={() => setListPickerFor(null)}
@@ -828,83 +865,50 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 walletId={walletId}
                 chainId={chainId}
                 lockNetwork
-                onPick={(a) => { setGetAddress(a.address); setReceivePickerOpen(false); }}
+                onPick={(a) => { setGetAddress(a.address); setReceiveEdited(true); setReceiveError(null); setReceivePickerOpen(false); }}
                 onBack={() => setReceivePickerOpen(false)}
             />
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review order"
-                onSubmit={handleSubmit}
-                noValidate
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <>
-                        <Button variant="secondary" icon={<Icon.PencilIcon />} onClick={() => { setStage('form'); setSubmitError(null); }} disabled={stage === 'submitting'}>Edit</Button>
-                        <Button
-                            type="submit"
-                            variant="success"
-                            icon={isHwSource ? <Icon.SignIcon /> : <Icon.MarketIcon />}
-                            loading={stage === 'submitting'}
-                            disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                        >
-                            {isWatcherMode ? 'Create Unsigned Transaction' : 'Place Order'}
-                        </Button>
-                    </>
-                )}
-            >
-                {decoded ? <ActionIntentSummary decoded={decoded} simulation={null} /> : null}
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Network</dt>
-                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
-                    <DetailRow label="Settlement address" value={getAddress.trim() || fromAddress.address} />
-                    {expMode === 'default' ? (
-                        <DetailRow label="Expiration" value="Default window" />
-                    ) : null}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}` : 'Estimate unavailable'}
-                    />
-                </dl>
-                {getType === 'coin' ? (
-                    <p className={styles.hint}>
-                        You are requesting native {coinTicker}. When matched, the buyer must send you a coin
-                        payment within the expiration window (tokens stay escrowed until they do).
-                    </p>
-                ) : null}
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-                {isWatcherMode ? (
-                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => { setPassword(v); if (submitError) setSubmitError(null); }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-            </FormPage>,
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setStage('form'); setSubmitError(null); }}
+                decoded={decoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentials={<p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>}
+                credentialsReady
+                summary={{
+                    verb: t('components.confirmSummary.verbPlaceOrder'),
+                    ...orderGiveParts(actionParams, coinTicker),
+                    chainId,
+                    address: fromAddress?.address,
+                    facts: orderFacts,
+                    ...(confirmNotice ? { notice: confirmNotice } : {}),
+                    ...(!nativeFee.flag && quotedProtocolFee.known ? {
+                        protocolFee: {
+                            amount: quotedProtocolFee.free ? '0' : String(quotedProtocolFee.amount ?? ''),
+                            ticker: 'XCHAIN',
+                        },
+                    } : {}),
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -935,7 +939,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         ? () => setGiveAmount(giveBalance)
         : undefined;
     const giveBalanceText = giveType === 'token' && giveBalance != null && giveTick.trim()
-        ? `${giveBalance} ${giveTick.trim().toUpperCase()} available`
+        ? `${formatWithThousands(giveBalance) || giveBalance} ${giveTick.trim().toUpperCase()} available`
         : null;
 
     const giveAssetValue = chainId && giveTickUpper ? { chainId, tick: giveTickUpper } : null;
@@ -949,18 +953,21 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         : 'Enter both amounts to see the rate';
     const rateLine = <RateLine text={rateText} help="The price this order asks: how much of the get asset you want for one of the give asset." />;
 
-    // One line naming every non-default term, else "Default terms".
+    // Order Terms reads the expiry ("3 months" or "Expires <time>") and
+    // auto-pay; Lists names the lists set, else "None".
     const termsParts = [];
-    if (expMode === 'custom') {
+    if (expMode === 'default') termsParts.push('3 months');
+    else {
         const unix = localInputToUnix(expInput.trim());
         termsParts.push(expInput.trim() && unix ? `Expires ${formatLocalDateTime(unix)}` : 'Custom expiry');
     }
-    if (memo.trim()) termsParts.push('Memo');
-    if (allowListIdx) termsParts.push(`Allow-list #${allowListIdx}`);
-    if (blockListIdx) termsParts.push(`Block-list #${blockListIdx}`);
-    if (autopayEligible) termsParts.push(autopayEnabled ? 'Auto-pay on' : 'Auto-pay off');
+    if (autopayEligible) termsParts.push(autopayEnabled ? 'Auto pay on' : 'Auto pay off');
     // The standard's summaries join their parts with ", ".
-    const termsSummary = termsParts.length ? joinSummary(...termsParts) : 'Default terms';
+    const termsSummary = joinSummary(...termsParts);
+    const listsParts = [];
+    if (allowListIdx) listsParts.push(`Allow list #${allowListIdx}`);
+    if (blockListIdx) listsParts.push(`Block list #${blockListIdx}`);
+    const listsSummary = listsParts.length ? joinSummary(...listsParts) : 'None';
 
     const sideSummary = (type, tickUpper, amount, ownership) => {
         if (!tickUpper) return 'No asset yet';
@@ -973,12 +980,6 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     // useGiveGetView above the early returns, so a picker page keeps it.
     // `main` flags Order as the form's main section (data-form-main).
     const bind = (id) => ({ open: Boolean(sections[id]), onOpenChange: (open) => setSectionOpen(id, open), main: id === 'order' });
-    // An XCHAIN protocol fee joins the Network fee row's summary; paid
-    // in the coin it is part of the open card's total instead.
-    const protocolFee = normalizeProtocolFee(protocolFeeQuote);
-    const protocolSummary = protocolFee.known && !protocolFee.free && !nativeFee.flag
-        ? `${protocolFee.amount} XCHAIN`
-        : undefined;
     // A picked token decides the network; a coin side follows it.
     const assetLocksNetwork = Boolean((giveType === 'token' && giveTick.trim()) || (getType === 'token' && getTick.trim()));
 
@@ -990,7 +991,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         asset: `Ask for a token, or for ${coinTicker || 'the network coin'}. Any holder of the token can match your order; when you ask for native ${coinTicker || 'coin'}, the matcher pays it to you within the expiration window.`,
         amount: 'How much you want in total for what you give; together with the give amount it sets your price.',
     };
-    const fromHelp = 'The address that posts this order and escrows what you give. Both sides of the order settle on this network; to get a token on another network, use Cross-chain order.';
+    const fromHelp = 'The address that posts this order and escrows what you give. Both sides of the order settle on this network; to get a token on another network, use Cross-Chain Order.';
     const receiveHelp = 'Address where you receive the get side. Defaults to your source address.';
 
     // The ownership switches, built once and shown in whichever view
@@ -1025,6 +1026,24 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
         </FormNotice>
     ) : null;
 
+    // Receive at: a normal address field right under You get, in both views,
+    // prefilled with From. Editing sets a custom address; clearing uses From.
+    const receiveField = (
+        <AddressField
+            label="Receive at"
+            help={receiveHelp}
+            value={receiveEdited ? getAddress : (fromAddress?.address || '')}
+            onChange={(e) => { setGetAddress(e.target.value); setReceiveEdited(true); setReceiveError(null); }}
+            error={receiveError || undefined}
+            icon="addresses"
+            iconLabel="Choose receive address"
+            onIconClick={() => setReceivePickerOpen(true)}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+        />
+    );
+
     // The Quick body of the Order section: the give and get cards
     // (Receive at stays on the get card), the flip and the rate.
     const quickOrder = (
@@ -1044,7 +1063,8 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 balanceText: giveBalanceText,
                 onMax: giveMax || null,
                 maxDisabled: !giveMax,
-                footNote: giveType === 'coin' ? `Native ${coinTicker}: you pay it after a match.` : null,
+                // "Native coin is paid after a match" lives in the You give
+                // '?' tip (giveHelp.asset), never as a loose line (U57).
                 // No From row in the card; From is the standard's first section.
             }}
             get={{
@@ -1058,21 +1078,12 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 amountLabel: 'Get amount',
                 ownership: getType === 'token' && getOwnership,
                 ownershipHint: 'The matcher hands over this token name.',
-                footNote: getType === 'coin' ? `Native ${coinTicker}: the matcher pays it after the match.` : null,
-                address: (
-                    <QuickAddressRow
-                        label="Receive at"
-                        help={receiveHelp}
-                        address={getAddress.trim()}
-                        placeholder="Your From address"
-                        onPick={() => setReceivePickerOpen(true)}
-                        pickLabel="Choose receive address"
-                    />
-                ),
+                // The matcher paying native coin is in the You get '?' tip
+                // (getHelp.asset), never a loose line under the card (U57).
             }}
             onFlip={flipSides}
             notice={coinForCoinNotice}
-            rate={rateLine}
+            rate={<>{receiveField}{rateLine}</>}
         />
     );
 
@@ -1090,7 +1101,6 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                         amount={giveAmount}
                         onAmount={setGiveAmount}
                         ownership={giveOwnership}
-                        ownershipToggle={giveOwnershipToggle}
                         coinTicker={coinTicker}
                         help={giveHelp}
                         divisibility={giveDivisibility}
@@ -1107,23 +1117,13 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                             amount={getAmount}
                             onAmount={setGetAmount}
                             ownership={getOwnership}
-                            ownershipToggle={getOwnershipToggle}
                             coinTicker={coinTicker}
                             help={getHelp}
                             divisibility={getDivisibility}
                         />
                         {coinForCoinNotice}
-                        {/* The receive address stays with the get side. */}
-                        <AddressField
-                            label="Receive at"
-                            optional
-                            help={receiveHelp}
-                            value={getAddress}
-                            onChange={(e) => setGetAddress(e.target.value)}
-                            autoComplete="off"
-                            autoCorrect="off"
-                            spellCheck={false}
-                        />
+                        {/* The receive address sits right under the get side. */}
+                        {receiveField}
                         {rateLine}
         </>
     );
@@ -1133,72 +1133,70 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
     // optional section the fields drop their own Optional tags.
     const termsFields = (
         <>
-                        <RadioGroup
-                            legend="Expiration"
-                            help="How long the order stays open for matching. The default window suits most orders; pick a specific time to end it sooner or later. When it expires, what is still escrowed returns to you."
+                        {/* A choice among a few named options is the icon dropdown (G44);
+                            Expires always shows and follows it (operator 2026-11-13). */}
+                        <ExpirationFields
                             name="order-exp"
-                            value={expMode}
-                            onChange={setExpMode}
-                            options={[
-                                { value: 'default', label: 'Default window' },
-                                { value: 'custom', label: 'Expire at a specific time' },
-                            ]}
+                            mode={expMode}
+                            input={expInput}
+                            onChange={(mode, input) => { setExpMode(mode); setExpInput(input); }}
+                            help="How long the order stays open for matching. When it expires, what is still escrowed returns to you."
+                            expiresHelp="The order is valid until this time. Set by the Expiration choice, or pick a time to expire at a specific time."
                         />
-                        {expMode === 'custom' ? (
-                            <Input
-                                label="Expires"
-                                type="datetime-local"
-                                help="The order is valid until this wall-clock time. Must be in the future."
-                                value={expInput}
-                                onChange={(e) => setExpInput(e.target.value)}
-                            />
-                        ) : null}
-                        <Input
-                            label="Memo"
-                            help="A short public note stored with the order on chain. Anyone can read it."
-                            maxLength={MAX_MEMO_LENGTH}
-                            value={memo}
-                            onChange={(e) => setMemo(e.target.value)}
-                            autoComplete="off"
-                        />
-                        <div className={styles.choiceGroup}>
-                            <p className={styles.choiceGroupLabel}>
-                                Restrict who can match
-                                <InfoTip aria="About Restrict who can match" label="An allow list limits which addresses can match this order and a block list shuts addresses out. Both are address lists you published (see My Lists)." />
-                            </p>
-                            <div className={styles.choiceButtons}>
-                                <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('allow')}>
-                                    {allowListIdx ? `Allow-List #${allowListIdx}${allowListCount != null ? ` (${allowListCount})` : ''}` : 'Set Allow-List'}
-                                </Button>
-                                {allowListIdx ? <Button variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => { setAllowListIdx(''); setAllowListCount(null); }}>Clear</Button> : null}
-                                <Button variant="secondary" size="sm" icon={<Icon.TokenListIcon />} onClick={() => setListPickerFor('block')}>
-                                    {blockListIdx ? `Block-List #${blockListIdx}${blockListCount != null ? ` (${blockListCount})` : ''}` : 'Set Block-List'}
-                                </Button>
-                                {blockListIdx ? <Button variant="secondary" size="sm" icon={<Icon.TrashIcon />} onClick={() => { setBlockListIdx(''); setBlockListCount(null); }}>Clear</Button> : null}
-                            </div>
-                        </div>
                         {autopayEligible ? (
                             <>
                                 <Switch
-                                    label={<strong>Enable auto-pay</strong>}
+                                    label={<strong>Auto pay</strong>}
                                     help="We watch for matches on this order and pay each one automatically."
                                     checked={autopayEnabled}
                                     onChange={(e) => setAutopayEnabled(e.target.checked)}
                                 />
-                                {autopayArm && exposure && Number.isFinite(Number(exposure.total)) ? (
-                                    <p className={styles.hintLeft}>
-                                        Even if the service that reports matches were fully compromised, auto-pay could send
-                                        at most the combined amounts you give across all your orders with auto-pay on.
-                                    </p>
+                                {/* Notes sit in the shared warning card, never as loose paragraphs.
+                                    G120: a static note with the field, there whether the
+                                    switch is on or off. */}
+                                {exposure && Number.isFinite(Number(exposure.total)) ? (
+                                    <WarningCard data-autopay-exposure-note="">
+                                        <WarningLine>
+                                            Even if the service that reports matches were fully compromised, auto pay could send
+                                            at most the combined amounts you give across all your orders with auto pay on.
+                                        </WarningLine>
+                                    </WarningCard>
                                 ) : null}
                             </>
                         ) : giveIsNative ? (
-                            <p className={styles.hintLeft}>
-                                {isWatcherMode
-                                    ? 'Watcher and hardware wallets cannot auto-pay; you will be notified to pay any match manually.'
-                                    : 'Hardware wallets cannot auto-pay; you will be notified to pay any match manually.'}
-                            </p>
+                            <WarningCard>
+                                <WarningLine>
+                                    {isWatcherMode
+                                        ? 'Wallets that sign on another phone or a hardware wallet cannot use auto pay; you will be notified to pay any match manually.'
+                                        : 'Hardware wallets cannot use auto pay; you will be notified to pay any match manually.'}
+                                </WarningLine>
+                            </WarningCard>
                         ) : null}
+        </>
+    );
+
+    // The Lists section: who may match the order.
+    const listsFields = (
+        <>
+                        {/* Allow and block lists are picker fields like Token, never grey buttons. */}
+                        <ListField
+                            label="Allow list"
+                            help="Only addresses on this list can match the order. Pick an address list you published in My Lists."
+                            placeholder="None set"
+                            valueText={allowListIdx ? `${pickedListText(allowListIdx, allowListPick)}${allowListCount != null ? ` · ${allowListCount} member${allowListCount === 1 ? '' : 's'}` : ''}` : null}
+                            onOpenPicker={() => setListPickerFor('allow')}
+                            onClear={() => { setAllowListIdx(''); setAllowListCount(null); }}
+                            clearLabel="Clear allow list"
+                        />
+                        <ListField
+                            label="Block list"
+                            help="Addresses on this list cannot match the order. Pick an address list you published in My Lists."
+                            placeholder="None set"
+                            valueText={blockListIdx ? `${pickedListText(blockListIdx, blockListPick)}${blockListCount != null ? ` · ${blockListCount} member${blockListCount === 1 ? '' : 's'}` : ''}` : null}
+                            onOpenPicker={() => setListPickerFor('block')}
+                            onClear={() => { setBlockListIdx(''); setBlockListCount(null); }}
+                            clearLabel="Clear block list"
+                        />
         </>
     );
 
@@ -1209,10 +1207,6 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             onSubmit={handleReview}
             noValidate
             data-form-standard="create-order"
-            // The Quick | Full switch sits 8px above From.
-            view={view}
-            onViewChange={setView}
-            viewLabel="Order form view"
             status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
             from={(
                 /*
@@ -1250,10 +1244,12 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                     value={feePick}
                     onChange={setFeePick}
                     customEstimate={feeCustomEstimate}
-                    protocolSummary={protocolSummary}
                     fees={{
                         quote: protocolFeeQuote,
                         pending: protocolFeePending,
+                        waiting: protocolFeeWaiting,
+                        // An order inside the free period costs no protocol fee.
+                        free: expirationWithinFreePeriod(expMode, expInput),
                         nativeFeeProps: { ...nativeFee.toggleProps, coinTicker },
                     }}
                 />
@@ -1264,7 +1260,6 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 <FormAction
                     icon={<Icon.MarketIcon />}
                     loading={confirmAction.composing}
-                    disabled={!fromAddress || confirmAction.composing}
                 >
                     Place Order
                 </FormAction>
@@ -1278,23 +1273,24 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 {...bind('order')}
                 summary={orderSummary}
             >
+                {/* One form either way (operator 2026-11-13): Quick | Full only
+                    restyles this section's give and get inputs. */}
+                <ViewSwitch value={view} onChange={setView} label="Order input style" inSection />
                 {view === 'quick' ? quickOrder : fullOrder}
             </FormSection>
-            {/* Quick keeps both ownership switches in one optional
-                section; Full shows each beside its side's fields. */}
-            {view === 'quick' ? (
-                <FormSection
-                    id="ownership"
-                    title="Ownership"
-                    icon={Icon.KeyIcon}
-                    optional
-                    {...bind('ownership')}
-                    summary={giveOwnership || getOwnership ? 'Single fill' : 'Token sides only'}
-                >
-                    {giveOwnershipToggle}
-                    {getOwnershipToggle}
-                </FormSection>
-            ) : null}
+            {/* Both ownership switches live in one optional section in both styles. */}
+            <FormSection
+                id="ownership"
+                title="Ownership"
+                icon={Icon.KeyIcon}
+                optional
+                {...bind('ownership')}
+                summary={giveOwnership || getOwnership ? 'Single fill' : 'Token sides only'}
+            >
+                {/* Ownership is a token-side choice: a coin side carries no switch. */}
+                {giveType === 'token' ? giveOwnershipToggle : null}
+                {getType === 'token' ? getOwnershipToggle : null}
+            </FormSection>
             <FormSection
                 id="options"
                 title="Order Terms"
@@ -1305,6 +1301,22 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
             >
                 {termsFields}
             </FormSection>
+            <FormSection
+                id="lists"
+                title="Lists"
+                icon={Icon.ListIcon}
+                optional
+                {...bind('lists')}
+                summary={listsSummary}
+            >
+                {listsFields}
+            </FormSection>
+            <MemoSection
+                {...bind('memo')}
+                maxLength={MAX_MEMO_LENGTH}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+            />
         </FormFrame>,
     );
 }
@@ -1359,7 +1371,7 @@ function SideFields({
 
 // The typed-name escape hatch inside the Asset picker page: a ticker or ^ID
 // the list does not hold is used as typed. Read through context so the list
-// page component keeps one identity across renders. Exported so Cross Chain
+// page component keeps one identity across renders. Exported so Cross-Chain
 // Order's Get token picker offers the same "Use typed name" option.
 export const TypedNameContext = createContext(/** @type {{ query: string, onUse: (tick: string) => void } | null} */ (null));
 
@@ -1424,14 +1436,5 @@ function OrderAssetPicker({ purpose, walletId, title, chainId, coinTicker, scope
                 onBack={onBack}
             />
         </TypedNameContext.Provider>
-    );
-}
-
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
     );
 }

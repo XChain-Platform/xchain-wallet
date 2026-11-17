@@ -25,6 +25,7 @@
 
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/firstPaint.js';
 import '../../i18n/locales/en/commandPalette.js';
 import '../../i18n/locales/en/governance.js';
 import '../../i18n/locales/en/issue.js';
@@ -36,7 +37,7 @@ import '../../i18n/locales/en/settings.js';
 import '../../i18n/locales/en/ui.js';
 import '../../i18n/locales/en/walletMenu.js';
 import { Icon } from '../../ui/index.js';
-import { visibleWalletMenu, walletMenuFooter } from '../walletMenu.js';
+import { visibleWalletMenu, walletLockAction } from '../walletMenu.js';
 
 // Categories double as the Tab-cycle groups in the palette (§33.4). Order
 // here is the order they render in when the query is empty. 'Suggested' holds
@@ -156,8 +157,45 @@ const CATALOGUE_COMMAND_META = {
     wizard: { subtitleKey: 'palette.createToken.subtitle', keywords: ['issue', 'new token', 'mint', 'launch'] },
     'publish-file': { subtitleKey: 'palette.createPublishFile.subtitle', keywords: ['file', 'upload', 'publish', 'gated', 'encrypted', 'content'] },
     'sign-message': { subtitleKey: 'palette.signMessage.subtitle', keywords: ['sign', 'message', 'attest'] },
+    // Rows the grouped full menu added (2026-11-13) keep the subtitle and
+    // keywords of the palette command they replace.
+    'dispenser-explorer': { subtitleKey: 'palette.navBrowseDispensers.subtitle', keywords: ['browse', 'dispenser', 'buy', 'search', 'vending', 'shop'] },
+    broadcast: { subtitleKey: 'palette.createBroadcast.subtitle', keywords: ['broadcast', 'announce'] },
+    'link-form': { keywords: ['link', 'cross chain', 'history'] },
+    'my-orders': { subtitleKey: 'palette.navMyOrders.subtitle', keywords: ['orders', 'open', 'dex', 'cancel', 'edit'] },
+    'my-swaps': { subtitleKey: 'palette.navMySwaps.subtitle', keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'] },
+    dispenser: { subtitleKey: 'palette.createDispenser.subtitle', keywords: ['dispenser', 'vending', 'sell'] },
+    'contract-deploy': { keywords: ['contract', 'deploy', 'publish', 'vm'] },
+    'governance-polls': { subtitleKey: 'palette.navGovernance.subtitle', keywords: ['vote', 'poll', 'proposal'] },
+    'governance-delegations': { keywords: ['vote', 'delegate', 'delegation', 'governance'] },
+    'multisig-sign': { subtitleKey: 'palette.navMultisigSign.subtitle', keywords: ['multisig', 'cosigner', 'approve', 'psbt'] },
+    'cosigner-accounts': { subtitleKey: 'palette.navCoSignerAccounts.subtitle', keywords: ['agent', 'agent accounts', 'automated', 'cosigner', 'co-sign', 'musig2', 'policy', 'bot'] },
+    'pair-signer': { keywords: ['hardware', 'ledger', 'trezor', 'pair', 'signer'] },
+    'verify-signature': { subtitleKey: 'palette.signVerify.subtitle', keywords: ['verify', 'signature', 'check'] },
+    'sign-psbt': { subtitleKey: 'palette.signPsbt.subtitle', keywords: ['psbt', 'sign', 'watcher', 'air-gapped'] },
+    'wallet-picker': { subtitleKey: 'palette.walletSwitch.subtitle', keywords: ['wallet', 'switch', 'change'] },
+    'account-picker': { keywords: ['account', 'switch', 'change'] },
+    'add-wallet': { keywords: ['wallet', 'new', 'import', 'create'] },
+    'connected-sites': { subtitleKey: 'palette.navConnectedSites.subtitle', keywords: ['dapps', 'permissions', 'connections'] },
+    'parallel-compose': { subtitleKey: 'commandPalette.actionQueue.subtitle', keywords: ['action', 'queue', 'parallel', 'cross chain'] },
+    advanced: { subtitleKey: 'palette.createAdvanced.subtitle', keywords: ['advanced', 'raw', 'expert'] },
+    swap: { subtitleKey: 'palette.tradeSwap.subtitle', keywords: ['swap', 'order', 'exchange'] },
+    'create-order': { subtitleKey: 'palette.tradeOrder.subtitle', keywords: ['order', 'limit', 'dex', 'sell', 'buy', 'native'] },
+    'cross-chain-swap': { subtitleKey: 'palette.tradeXchainSwap.subtitle', keywords: ['cross chain', 'bridge', 'atomic'] },
+    'cross-chain-order': { subtitleKey: 'palette.tradeXchainOrder.subtitle', keywords: ['cross chain', 'order', 'limit', 'federation', 'partial'] },
+    'batch-compose': { keywords: ['batch', 'bundle', 'many'] },
+    coinpay: { subtitleKey: 'palette.tradeCoinpay.subtitle', keywords: ['coinpay', 'pay', 'settle'] },
+    oracle: { subtitleKey: 'palette.createOraclePrice.subtitle', keywords: ['oracle', 'price', 'fiat', 'quote', 'feed'] },
+    'bridge-move': { subtitleKey: 'palette.createBridgeMove.subtitle', keywords: ['bridge', 'cross chain', 'move', 'chain', 'xbridge', 'migrate', 'port'] },
+    'add-account': { keywords: ['account', 'new', 'add'] },
+    settings: { subtitleKey: 'components.totalBalanceHero.openSettings', keywords: ['preferences', 'options', 'config'] },
+    airdrop: { subtitleKey: 'palette.createAirdrop.subtitle', keywords: ['airdrop', 'distribute', 'bulk'] },
+    'governance-create-poll': { keywords: ['poll', 'vote', 'proposal', 'new', 'governance'] },
+    'compose-message': { keywords: ['message', 'write', 'send', 'compose', 'chat'] },
 };
 
+// A menu row takes the id of the palette command it replaces, so search lists
+// that destination once (the dedupe in buildCommands drops the later copy).
 const CATALOGUE_COMMAND_IDS = {
     'market-activity': 'nav-marketplace',
     'dispensers-list': 'nav-dispensers',
@@ -168,6 +206,34 @@ const CATALOGUE_COMMAND_IDS = {
     wizard: 'create-token',
     'publish-file': 'create-publish-file',
     'sign-message': 'sign-message',
+    'dispenser-explorer': 'nav-browse-dispensers',
+    broadcast: 'create-broadcast',
+    'my-orders': 'nav-my-orders',
+    'my-swaps': 'nav-my-swaps',
+    dispenser: 'create-dispenser',
+    'governance-polls': 'nav-governance',
+    'multisig-sign': 'nav-multisig-sign',
+    'cosigner-accounts': 'nav-cosigner-accounts',
+    'verify-signature': 'sign-verify',
+    'sign-psbt': 'sign-psbt',
+    'connected-sites': 'nav-connected-sites',
+    'parallel-compose': 'create-action-queue',
+    advanced: 'create-advanced',
+    swap: 'trade-swap',
+    'create-order': 'trade-order',
+    'cross-chain-swap': 'trade-xchain-swap',
+    'cross-chain-order': 'trade-xchain-order',
+    coinpay: 'trade-coinpay',
+    oracle: 'create-oracle-price',
+    'bridge-move': 'create-bridge-move',
+    airdrop: 'create-airdrop',
+};
+
+const SIDEBAR_SEARCH_TITLE_KEYS = {
+    markets: 'components.leftNav.exchangeDex',
+    'my-tokens': 'components.leftNav.myTokens',
+    'governance-polls': 'components.leftNav.governance',
+    'bet-markets': 'components.leftNav.bettingMarkets',
 };
 
 /**
@@ -269,6 +335,9 @@ export function buildCommands(ctx) {
                 searchGroup: 'Menu',
                 searchOnlyTitle: true,
                 title: row.label,
+                ...(SIDEBAR_SEARCH_TITLE_KEYS[row.id]
+                    ? { searchTitle: t(SIDEBAR_SEARCH_TITLE_KEYS[row.id]) }
+                    : {}),
                 ...(meta.subtitleKey ? { subtitle: t(meta.subtitleKey) } : {}),
                 keywords: meta.keywords || [],
                 Icon: Icon[row.icon],
@@ -278,18 +347,6 @@ export function buildCommands(ctx) {
         }
     }
 
-    const settingsRow = walletMenuFooter().find((row) => row.id === 'settings');
-    list.push({
-        id: 'nav-settings',
-        category: 'Navigate',
-        searchGroup: 'Menu',
-        searchOnlyTitle: true,
-        title: settingsRow.label,
-        subtitle: t('components.totalBalanceHero.openSettings'),
-        keywords: ['preferences', 'options', 'config'],
-        Icon: Icon[settingsRow.icon],
-        run: go('settings'),
-    });
 
     list.push(
         ...(hasDex ? [
@@ -392,7 +449,7 @@ export function buildCommands(ctx) {
         list.push({ id: 'wallet-switch', category: 'Wallet', title: t('components.bottomTabBar.switchWallet'), subtitle: t('palette.walletSwitch.subtitle'), keywords: ['wallet', 'account', 'change'], Icon: Icon.UsersIcon, run: () => ctx.switchWallet() });
     }
     if (typeof ctx.lock === 'function') {
-        const lockRow = walletMenuFooter().find((row) => row.id === 'lock');
+        const lockRow = walletLockAction();
         list.push({ id: 'wallet-lock', category: 'Wallet', searchGroup: 'Menu', searchOnlyTitle: true, title: lockRow.label, subtitle: t('palette.walletLock.subtitle'), keywords: ['lock', 'logout', 'secure'], Icon: Icon[lockRow.icon], run: () => ctx.lock() });
     }
     if (typeof ctx.openHelp === 'function') {

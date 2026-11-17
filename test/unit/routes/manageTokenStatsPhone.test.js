@@ -10,13 +10,14 @@ const css = readFileSync(
     'utf8',
 );
 
-describe('ManageToken phone action grid', () => {
-    it('draws its action tiles on the coin page grid, with no grid of its own', () => {
+describe('issuer actions phone action list', () => {
+    it('draws its actions as the shared action list (G101), with no grid or tiles of its own', () => {
         const source = readFileSync(
-            join(process.cwd(), 'packages/core/src/shared/routes/ManageToken.jsx'),
+            join(process.cwd(), 'packages/core/src/shared/components/TokenOwnerActions.jsx'),
             'utf8',
         );
-        expect(source).toMatch(/className=\{tokenDetailStyles\.assetActionGrid\}/);
+        expect(source).toMatch(/<ActionList label=\{group\.title\}>/);
+        expect(source).not.toMatch(/QuickActionTile|assetActionGrid/);
         expect(css).not.toMatch(/\.approvedActionGrid\b|\.approvedActionTile\b/);
         expect(css).not.toContain('.statsStrip');
     });

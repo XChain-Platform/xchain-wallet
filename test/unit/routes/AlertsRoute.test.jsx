@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expectNoSeriousAxeViolations } from '../../a11y/helpers/axe.js';
@@ -87,7 +89,8 @@ describe('AlertsRoute', () => {
         const search = screen.getByRole('searchbox', { name: 'Search notifications' });
         fireEvent.change(search, { target: { value: 'BTC' } });
 
-        expect(screen.getByText('1 notifications match')).toBeTruthy();
+        // The count is announced, never drawn between the header and the list (G95).
+        expect(screen.getByText('1 notifications match')).toHaveClass('sr-only');
         expect(screen.getAllByText('BTC')).toHaveLength(2);
         expect(screen.getAllByText('BTC').every((node) => node.tagName === 'MARK')).toBe(true);
         expect(screen.queryByText('Send still pending')).toBeNull();
@@ -159,12 +162,55 @@ describe('AlertsRoute', () => {
         }));
     });
 
+    it('ends only rows that open a page in the trailing chevron, inside a rounded list card', () => {
+        const { container } = mount({ alerts: [{ ...rows[0], action: { label: 'Open price', onSelect: vi.fn() } }, rows[1]] });
+        const opens = screen.getByText('BTC rose above $120,000').closest('li');
+        const marksRead = screen.getByText('Send still pending').closest('li');
+        // G97: a drill-in row ends in the chevron; a row that only marks itself read has none.
+        expect(opens.querySelector('[data-alert-chevron]')).toBeTruthy();
+        expect(opens.querySelector('[data-alert-chevron]')).toHaveClass(routeStyles.chevron);
+        expect(marksRead.querySelector('[data-alert-chevron]')).toBeNull();
+        // G07: each day's rows sit in one list card.
+        const list = container.querySelector('ul');
+        expect(list.className).toContain(routeStyles.list);
+    });
+
+    it('gives every row the same trailing block: time and dot, then a chevron-wide slot as the last child', () => {
+        const { container } = mount({ alerts: [{ ...rows[0], action: { label: 'Open price', onSelect: vi.fn() } }, ...rows.slice(1)] });
+        const grids = [...container.querySelectorAll(`.${routeStyles.rowGrid}`)];
+        expect(grids).toHaveLength(rows.length);
+        for (const grid of grids) {
+            const kids = [...grid.children];
+            expect(kids).toHaveLength(4);
+            // Time and dot sit in the meta block directly before the final slot, on every row.
+            expect(kids[2]).toHaveClass(routeStyles.meta);
+            expect(kids[3]).toHaveClass(routeStyles.chevron);
+        }
+    });
+
+    it('pins the row grid to four columns ending in the chevron width, with the meta block right aligned', () => {
+        const css = readFileSync(resolvePath(process.cwd(), 'packages/core/src/shared/routes/AlertsRoute.module.css'), 'utf8');
+        const rule = (name) => css.match(new RegExp(`\\.${name}\\s*\\{([^}]*)\\}`))?.[1] || '';
+        expect(rule('rowGrid')).toMatch(/grid-template-columns:[^;]*auto\s+calc\(var\(--xc-space-8\)\s*\/\s*3\)/);
+        expect(css).not.toContain('rowGridOpens');
+        expect(rule('meta')).toMatch(/justify-content:\s*flex-end/);
+    });
+
     it('loads delivered inbox rows through the shell messaging path', async () => {
         messaging = { listAlertInbox: vi.fn(async () => [{ id: 'message', type: 'messages', title: 'New message', message: 'Open the conversation.', at: now + 1, read: false }]) };
         mount({ alerts: [] });
 
         expect(await screen.findByText('New message')).toBeTruthy();
         expect(screen.getByText('Messages')).toBeTruthy();
+    });
+
+    it('drops a stored read payment-due row once its notice has cleared', async () => {
+        const dead = { id: 'payment-due:bitcoin:7', type: 'payments', title: 'Payment due', message: 'Pay the order.', at: now, read: true };
+        messaging = { listAlertInbox: vi.fn(async () => [dead, rows[0]]) };
+        mount({ walletId: 'wallet-1', alerts: [] });
+
+        expect(await screen.findByText('BTC rose above $120,000')).toBeTruthy();
+        expect(screen.queryByText('Payment due')).toBeNull();
     });
 
     it('shows one plain empty state and has no serious accessibility violations', async () => {

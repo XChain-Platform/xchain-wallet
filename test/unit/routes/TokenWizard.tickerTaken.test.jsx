@@ -18,6 +18,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 // The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
+import { ownedTokensFor, pickParentToken } from '../../helpers/issueParentPicker.js';
 
 const CHAIN = 'bitcoin-regtest';
 const OWNER = 'bcrt1qexampleexampleexampleexampleexample0';
@@ -42,6 +43,7 @@ function mountWizard(getTokenInfo) {
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'unlocked' }),
         listContacts: vi.fn().mockResolvedValue([]),
         getTokenInfo,
+        getOwnedTokens: ownedTokensFor(vi.fn, OWNER, ['PARENT']),
         composeForConfirm: vi.fn().mockResolvedValue({
             psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
         }),
@@ -156,7 +158,7 @@ describe('Issue Token ticker availability', () => {
         ));
         const messaging = mountWizard(getTokenInfo);
         await reachForm('Subtoken');
-        fireEvent.change(screen.getByLabelText('Parent ticker'), { target: { value: 'PARENT' } });
+        await pickParentToken('PARENT');
         fireEvent.change(nameField(), { target: { value: 'CHILD' } });
         fireEvent.change(supplyField(), { target: { value: '5' } });
 

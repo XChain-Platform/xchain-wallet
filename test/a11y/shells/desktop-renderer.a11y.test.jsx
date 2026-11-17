@@ -144,7 +144,7 @@ describe('desktop renderer accessibility', () => {
 
         await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' });
         screen.getByRole('navigation', { name: 'Primary navigation' });
-        screen.getByRole('status', { name: 'Watch-only wallet' });
+        screen.getByRole('status', { name: 'Another phone signs for this wallet' });
         screen.getByRole('heading', { name: 'Home' });
         await expectNoSeriousAxeViolations(container);
     });
@@ -157,7 +157,7 @@ describe('desktop renderer accessibility', () => {
 
         await screen.findByRole('heading', { name: 'Settings' });
         // Settings lists groups now, so the page is loaded once its search box is.
-        await screen.findByRole('searchbox', { name: 'Search settings' });
+        await screen.findByRole('button', { name: 'Filter settings' });
         await expectNoSeriousAxeViolations(container);
     });
 });

@@ -81,7 +81,8 @@ describe('ListCreateForm screen rules', () => {
             .not.toBeInTheDocument();
         expect(screen.queryByText(/A bigger list is a bigger transaction/, { selector: 'p' }))
             .not.toBeInTheDocument();
-        expect(screen.getByText(/^Action size: .* bytes\.$/, { selector: 'p' })).toBeInTheDocument();
+        // The action-size counter stays hidden until the list is near the limit.
+        expect(screen.queryByText(/^Action size:/, { selector: 'p' })).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'About Addresses' }));
         const tip = screen.getByRole('tooltip');
@@ -117,17 +118,18 @@ describe('ListCreateForm screen rules', () => {
         expect(screen.getByRole('tooltip')).toHaveTextContent('512 UTF-8 bytes');
     });
 
-    it('uses list-specific Memo help', async () => {
+    it('draws the lone Memo with no label row or tip, its count in the section header', async () => {
         mount();
         await screen.findByLabelText('Memo');
 
-        // Memo is an optional closed section.
+        // Memo is an optional closed section holding only the memo (ruling
+        // 2026-11-13): the title names the field, so it has no tip of its own.
         fireEvent.click(screen.getByRole('button', { name: /^Memo\b/, expanded: false }));
-        fireEvent.click(screen.getByRole('button', { name: 'About Memo' }));
-        const tip = screen.getByRole('tooltip');
-        expect(tip).toHaveTextContent('stored on-chain with this list creation action');
-        expect(tip).toHaveTextContent("separate from the list's name and description");
-        expect(tip).not.toHaveTextContent(MEMO_HINT);
+        expect(screen.queryByRole('button', { name: 'About Memo' })).toBeNull();
+        const memo = screen.getByRole('textbox', { name: 'Memo' });
+        fireEvent.change(memo, { target: { value: 'hi' } });
+        expect(document.querySelector('[data-form-section="memo"] [data-section-count]')).toHaveTextContent('2 / 250');
+        expect(screen.queryByText(MEMO_HINT)).toBeNull();
     });
 
     it('renders Publish List as an explicit green action with an icon', async () => {
@@ -148,11 +150,10 @@ describe('ListCreateForm screen rules', () => {
 
         fireEvent.change(screen.getByLabelText('Addresses'), { target: { value: ADDRESS.address } });
         fireEvent.click(formSubmit);
-        const reviewSubmit = await screen.findByRole('button', { name: /^Create Unsigned Transaction$/ });
-        expect(reviewSubmit).not.toBe(formSubmit);
-        expect(reviewSubmit).toHaveClass(buttonStyles.success);
-        expect(reviewSubmit.querySelector('svg')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Back' }).querySelector('svg')).toBeInTheDocument();
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-reject')).toHaveTextContent('Reject');
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent('Approve');
+        expect(screen.queryByRole('button', { name: /^Create Unsigned Transaction$/ })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument();
     });
 
@@ -173,18 +174,74 @@ describe('ListCreateForm screen rules', () => {
         await waitFor(() => expect(memoHeader).toHaveAttribute('aria-expanded', 'true'));
     });
 
-    it('gives the contact picker add action an icon', async () => {
+    it('lists contacts like the Contacts page rows: tile, name, address, chevron, no checkboxes', async () => {
         mount({
             contacts: [{
                 id: 'contact-1',
-                name: 'Alice',
+                name: 'Aaron Calloway',
                 entries: [{ chain: 'bitcoin', address: ADDRESS.address, label: 'Primary' }],
             }],
         });
-        fireEvent.click(await screen.findByRole('button', { name: 'Add From Contacts' }));
-        fireEvent.click(await screen.findByRole('checkbox', { name: /Alice/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Add from Contacts' }));
+        const row = await screen.findByRole('button', { name: 'Aaron Calloway' });
+        expect(row).toHaveTextContent('AC');
+        expect(row).toHaveTextContent('Aaron Calloway');
+        expect(row.textContent).toContain(ADDRESS.address.slice(0, 6));
+        expect(row.querySelector('[aria-hidden="true"] svg')).toBeInTheDocument();
+        expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+        expect(screen.queryByRole('button', { name: /^Add (\d+ Contacts?|Contacts)$/ })).toBeNull();
+    });
 
-        const add = screen.getByRole('button', { name: 'Add 1 Selected' });
-        expect(add.querySelector('svg')).toBeInTheDocument();
+    it('adds the tapped contact address, returns to the form and marks it Added on reopen', async () => {
+        const A1 = ADDRESS.address;
+        const A2 = 'bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3';
+        mount({
+            contacts: [
+                { id: 'c1', name: 'Alice', entries: [{ chain: 'bitcoin', address: A1 }] },
+                { id: 'c2', name: 'Bob', entries: [{ chain: 'bitcoin', address: A2 }] },
+            ],
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Add from Contacts' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
+        const field = await screen.findByLabelText('Addresses');
+        expect(field.value).toBe(A1);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add from Contacts' }));
+        // Alice is already in the list: marked, muted and no longer tappable.
+        await screen.findByRole('button', { name: 'Bob' });
+        expect(screen.queryByRole('button', { name: 'Alice' })).toBeNull();
+        expect(screen.getByText('Added')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Bob' }));
+        const again = await screen.findByLabelText('Addresses');
+        expect(again.value).toBe(`${A1}\n${A2}`);
+    });
+
+    it('filters the contact picker with the Contacts page search', async () => {
+        const A1 = ADDRESS.address;
+        const A2 = 'bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3';
+        const A3 = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+        mount({
+            contacts: [
+                { id: 'c1', name: 'Alice', entries: [{ chain: 'bitcoin', address: A1 }] },
+                { id: 'c2', name: 'Bob', entries: [{ chain: 'bitcoin', address: A2 }] },
+                { id: 'c3', name: 'Carol', entries: [{ chain: 'bitcoin', address: A3 }] },
+            ],
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Add from Contacts' }));
+        await screen.findByRole('button', { name: 'Alice' });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Filter contacts' }));
+        fireEvent.change(await screen.findByLabelText('Search contacts'), { target: { value: 'carol' } });
+        expect(screen.queryByRole('button', { name: 'Alice' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Bob' })).toBeNull();
+        fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: '' } });
+        expect(screen.getByRole('button', { name: 'Alice' })).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'carol' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Carol' }));
+        const field = await screen.findByLabelText('Addresses');
+        expect(field.value).toBe(A3);
+        expect(field.value).not.toContain(A1);
+        expect(field.value).not.toContain(A2);
     });
 });

@@ -5,7 +5,7 @@
 
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +26,7 @@ const viteConfig = readFileSync(join(repo, 'packages', 'web', 'vite.config.js'),
 const files = execFileSync(
     'git', ['ls-files', 'packages/**/*.css'],
     { cwd: repo, encoding: 'utf8' },
-).trim().split('\n').filter((file) => file.endsWith('.css'));
+).trim().split('\n').filter((file) => file.endsWith('.css') && existsSync(join(repo, file)));
 
 assert.match(
     viteConfig,

@@ -3,18 +3,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The poll page's ballot, the parallel action queue and the operator
-// publisher sit on the Form Standard, and each routes its fee through the
-// shared Network fee section, so the fee shows its fiat value like every
-// other form.
+// The poll page's ballot and the parallel action queue sit on the Form
+// Standard, and each routes its fee through the shared Network fee section,
+// so the fee shows its fiat value like every other form.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PollDetail } from '../../../packages/core/src/shared/routes/PollDetail.jsx';
 import { ParallelComposer } from '../../../packages/core/src/shared/routes/ParallelComposer.jsx';
-import { OperatorPublisherMode } from '../../../packages/core/src/shared/components/OperatorPublisherMode.jsx';
 
 const useFeeFiatMock = vi.hoisted(() => vi.fn());
 vi.mock('../../../packages/core/src/shared/hooks/useFeeFiat.js', () => ({
@@ -42,12 +40,13 @@ function titles(root = document) {
 }
 
 function openFee() {
-    fireEvent.click(screen.getByRole('button', { name: /^Network fee/, expanded: false }));
+    fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/, expanded: false }));
 }
 
 describe('Poll page ballot', () => {
-    it('casts through From, the ballot, Memo, a Network fee section with fiat, and one Vote action', async () => {
+    it('casts on Cast Vote through From, the vote, Memo, a Network fee section with fiat, and one Sign Vote action', async () => {
         const chain = 'bitcoin-mainnet';
+        const governanceVotes = vi.fn().mockResolvedValue([]);
         render(
             <MessagingProvider shell="web" messaging={{
                 governancePoll: vi.fn().mockResolvedValue({
@@ -57,20 +56,26 @@ describe('Poll page ballot', () => {
                 getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
                 getAddressesByChain: vi.fn().mockResolvedValue({ [chain]: [ADDRESS] }),
                 getActiveAddresses: vi.fn().mockResolvedValue({ [chain]: { id: ADDRESS.id } }),
-                governanceVotes: vi.fn().mockResolvedValue([]),
+                governanceVotes,
                 getSettings: vi.fn().mockResolvedValue({}),
                 signerReady: vi.fn().mockResolvedValue({ ready: true }),
             }}>
                 <PollDetail walletId="wallet-1" chainId={chain} pollIndex={7} onBack={vi.fn()} />
             </MessagingProvider>,
         );
-        await screen.findByRole('checkbox', { name: '0: A' });
-        const form = screen.getByRole('form', { name: 'Vote' });
-        expect(titles(form)).toEqual(['From', 'Memo', 'Network fee']);
+        // The page reads this wallet's own vote per address, then settles.
+        await waitFor(() => expect(governanceVotes).toHaveBeenCalledWith({ chainId: chain, query: ADDRESS.address, type: 'address' }));
+        await act(async () => { for (let i = 0; i < 8; i += 1) await Promise.resolve(); });
+        // The poll page holds no form; a choice row opens the Cast Vote form.
+        expect(document.querySelector('form')).toBeNull();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Vote for A' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Vote for A' }));
+        const form = await screen.findByRole('form', { name: 'Cast Vote' });
+        expect(titles(form)).toEqual(['From', 'Vote', 'Memo', 'Advanced', 'Speed and Fees']);
         openFee();
         expect(screen.getAllByText(/~\$0\.42/).length).toBeGreaterThan(0);
-        const vote = screen.getByRole('button', { name: 'Vote' });
-        expect(vote.querySelector('svg')).not.toBeNull();
+        const sign = screen.getByRole('button', { name: 'Sign Vote' });
+        expect(sign.querySelector('svg')).not.toBeNull();
         expect(form.querySelectorAll('button[type="submit"]')).toHaveLength(1);
     });
 });
@@ -122,40 +127,10 @@ describe('Parallel action queue', () => {
         expect(screen.queryByRole('checkbox')).toBeNull();
         fireEvent.click(signAll);
         const form = await screen.findByRole('form', { name: 'Sign parallel actions' });
-        expect(titles(form)).toEqual(['Network fee']);
+        // Each queued row is its own confirmation, so the queue page offers
+        // no Advanced choices (FeeSection advanced={false}).
+        expect(titles(form)).toEqual(['Speed and Fees']);
         openFee();
         expect(screen.getAllByText(/~\$0\.42/).length).toBeGreaterThan(0);
-    });
-});
-
-describe('Operator publisher', () => {
-    it('publishes through From, the feed update, a Network fee section with fiat, and one action', async () => {
-        const chain = 'bitcoin-mainnet';
-        const messaging = {
-            getAddressesByChain: vi.fn().mockResolvedValue({ [chain]: [ADDRESS] }),
-            getSettings: vi.fn().mockResolvedValue({}),
-            signerReady: vi.fn().mockResolvedValue({ ready: true }),
-        };
-        render(
-            <MessagingProvider shell="web" messaging={messaging}>
-                <OperatorPublisherMode
-                    walletId="wallet-1"
-                    chainId={chain}
-                    address={ADDRESS.address}
-                    feed={{ action_index: 41 }}
-                    messaging={messaging}
-                    variant="page"
-                />
-            </MessagingProvider>,
-        );
-        fireEvent.click(screen.getByRole('button', { name: 'Enter publisher mode' }));
-        const form = await screen.findByRole('form', { name: 'Publisher mode' });
-        expect(titles(form)).toEqual(['From', 'Feed Update', 'Network fee']);
-        expect(screen.getByRole('button', { name: /^Feed Update/ })).toHaveAttribute('aria-expanded', 'true');
-        openFee();
-        expect(screen.getAllByText(/~\$0\.42/).length).toBeGreaterThan(0);
-        const publish = screen.getByRole('button', { name: 'Publish Value' });
-        expect(publish.querySelector('svg')).not.toBeNull();
-        expect(form.querySelectorAll('button[type="submit"]')).toHaveLength(1);
     });
 });

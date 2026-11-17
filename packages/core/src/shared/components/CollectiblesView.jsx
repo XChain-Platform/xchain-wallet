@@ -49,10 +49,13 @@ import '../../i18n/locales/en/settings.js';
  * @param {Set<string> | null} [props.automaticHiddenKeys]
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]
  * @param {boolean} [props.allowRemoteImages]
+ * @param {string | null} [props.selectedKey] `chainId:tick` of the card whose detail shows beside the grid (wide Home, G115)
+ * @param {'default' | 'large'} [props.size] `large` is Home's NFTs tab (operator 2026-11-15): big images to browse, two across on a phone and more as the list widens, the name under each
  */
 export function CollectiblesView({
     rows,
     demo = false,
+    size = 'default',
     emptyTitle = t('home.tabs.noCollectiblesYet'),
     emptyBody = t('components.collectiblesView.collectiblesAppearHereAfterThis'),
     onReceive,
@@ -65,6 +68,7 @@ export function CollectiblesView({
     automaticHiddenKeys,
     onToggleHide,
     allowRemoteImages = true,
+    selectedKey = null,
 }) {
     const [hiddenExpanded, setHiddenExpanded] = useState(false);
 
@@ -99,19 +103,21 @@ export function CollectiblesView({
         : visible;
 
     return (
-        <div className={styles.wrap}>
+        <div className={styles.wrap} data-size={size === 'large' ? 'large' : undefined}>
             <div className={styles.grid} role="list" aria-label={t('components.collectiblesView.collectibles')}>
                 {sortedRows.map((r) => (
                     <CollectibleCard
                         key={`${r.chainId}:${r.tick}`}
                         row={r}
                         demo={demo}
+                        large={size === 'large'}
                         pinned={pinnedKeys ? pinnedKeys.has(`${r.chainId}:${r.tick}`) : false}
                         hidden={false}
                         onSelect={onSelectToken}
                         onTogglePin={onTogglePin}
                         onToggleHide={onToggleHide}
                         allowRemoteImages={allowRemoteImages}
+                        selected={selectedKey === `${r.chainId}:${r.tick}`}
                     />
                 ))}
             </div>
@@ -137,6 +143,7 @@ export function CollectiblesView({
                             key={`hidden:${r.chainId}:${r.tick}`}
                             row={r}
                             demo={demo}
+                            large={size === 'large'}
                             pinned={pinnedKeys ? pinnedKeys.has(`${r.chainId}:${r.tick}`) : false}
                             hidden
                             onSelect={onSelectToken}
@@ -153,7 +160,7 @@ export function CollectiblesView({
     );
 }
 
-function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onToggleHide, allowRemoteImages }) {
+function CollectibleCard({ row, demo, large = false, pinned, hidden, onSelect, onTogglePin, onToggleHide, allowRemoteImages, selected = false }) {
     const [failedImageUrl, setFailedImageUrl] = useState(null);
     const [failedChainIconUrl, setFailedChainIconUrl] = useState(null);
     const chainIconUrl = branding.chainIconSmallUrl(row.chainId);
@@ -200,8 +207,10 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
         <div
             className={`${styles.card} ${clickable ? styles.cardClickable : ''} ${pinned ? styles.cardPinned : ''} ${hidden ? styles.cardHidden : ''}`}
             role="listitem"
+            data-selected={selected ? 'true' : undefined}
         >
             <CardContent
+                aria-current={clickable && selected ? 'true' : undefined}
                 // The clickable card is a native button on the shared Button
                 // base; the ghost look and large size keep it out of the boxed
                 // outline rule, and .cardContent lays the card out on top.
@@ -252,8 +261,9 @@ function CollectibleCard({ row, demo, pinned, hidden, onSelect, onTogglePin, onT
                     ) : null}
                 </div>
                 <div className={styles.meta}>
-                    <div className={styles.name} title={row.displayName}>{row.displayName}</div>
-                    <div className={styles.subtitle}>{row.tick}</div>
+                    <div className={styles.name} title={row.displayName || row.tick}>{row.displayName || row.tick}</div>
+                    {/* The large grid is for browsing images: the name alone sits under each. */}
+                    {large ? null : <div className={styles.subtitle}>{row.tick}</div>}
                 </div>
             </CardContent>
             {typeof onTogglePin === 'function' ? (

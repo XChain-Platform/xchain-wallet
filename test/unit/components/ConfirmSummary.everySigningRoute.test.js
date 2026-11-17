@@ -8,12 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Every surface that signs an action reaches the shared confirm screen
-// through <ActionConfirmScreen>, and the confirm screen states what is being
-// confirmed only from what the form tells it. This scan walks every shell's
-// source and fails when a call site passes no summary, a summary that can be
-// null, or one without its action verb, so a new signing form cannot reach
-// the confirm screen with an empty hero.
+// Every surface that signs an action reaches the shared Confirm Standard
+// through <ActionConfirmScreen> or <ConfirmActionModal>, and states what is
+// being confirmed only from what the form tells it. This scan walks every
+// shell's source and fails when an action call site passes no summary, a
+// summary that can be null, or one without its action verb.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,9 +28,9 @@ const NOT_SIGNING = new Set([
     'packages/web/src/style-guide/sections/ConfirmAndResultSections.jsx',
 ]);
 
-// The only files allowed to render <ConfirmActionModal> themselves: the
-// action adapter, and the message and PSBT variants, whose input is a text or
-// a PSBT the wallet did not build rather than a composed action.
+// These adapters render the modal for a specialized input. Message and PSBT
+// confirmations do not use an action summary, while ActionConfirmScreen has
+// already checked the summary at its own call site.
 const MODAL_ADAPTERS = new Set([
     'packages/core/src/shared/components/ActionConfirmScreen.jsx',
     'packages/core/src/shared/components/MessageConfirmScreen.jsx',
@@ -157,18 +156,16 @@ function judgeSummary(expr, fileSrc, tagIndex) {
 
 function scan() {
     const sites = [];
-    const strayModals = [];
     for (const file of sourceFiles()) {
         const rel = path.relative(ROOT, file).split(path.sep).join('/');
         const raw = fs.readFileSync(file, 'utf8');
         if (!raw.includes('ConfirmActionModal') && !raw.includes('ActionConfirmScreen')) continue;
         const src = stripComments(raw);
         const lineOf = (index) => src.slice(0, index).split('\n').length;
-        for (const m of src.matchAll(/<ConfirmActionModal\b/g)) {
-            if (!MODAL_ADAPTERS.has(rel)) strayModals.push(`${rel}:${lineOf(m.index)}`);
-        }
         if (NOT_SIGNING.has(rel)) continue;
-        for (const m of src.matchAll(/<ActionConfirmScreen\b/g)) {
+        for (const m of src.matchAll(/<(ActionConfirmScreen|ConfirmActionModal)\b/g)) {
+            const surface = m[1];
+            if (surface === 'ConfirmActionModal' && MODAL_ADAPTERS.has(rel)) continue;
             const tag = openingTag(src, m.index);
             const prop = /\ssummary=\{/.exec(tag);
             let problem = null;
@@ -178,26 +175,27 @@ function scan() {
                 const value = balanced(tag, prop.index + prop[0].length - 1);
                 problem = value ? judgeSummary(value.slice(1, -1), src, m.index) : 'summary prop does not close';
             }
-            sites.push({ site: `${rel}:${lineOf(m.index)}`, problem });
+            sites.push({ site: `${rel}:${lineOf(m.index)}`, surface, problem });
         }
     }
-    return { sites, strayModals };
+    return { sites };
 }
 
 describe('every signing route passes a confirm summary', () => {
-    const { sites, strayModals } = scan();
+    const { sites } = scan();
 
     it('finds the signing call sites', () => {
         // A floor, so a scan that silently matches nothing cannot pass.
         expect(sites.length).toBeGreaterThan(50);
     });
 
-    it('passes each <ActionConfirmScreen> a summary object with its verb', () => {
+    it('passes each action confirm surface a summary object with its verb', () => {
         const missing = sites.filter((s) => s.problem).map((s) => `${s.site}: ${s.problem}`);
         expect(missing).toEqual([]);
     });
 
-    it('reaches <ConfirmActionModal> only through its adapters', () => {
-        expect(strayModals).toEqual([]);
+    it('covers both approved Confirm Standard entry points', () => {
+        expect(new Set(sites.map((site) => site.surface)))
+            .toEqual(new Set(['ActionConfirmScreen', 'ConfirmActionModal']));
     });
 });

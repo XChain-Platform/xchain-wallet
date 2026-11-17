@@ -1,13 +1,16 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// Settings > Automatic donations (§36, ruling 2026-11-14): layout 1's header
+// above layout 4's Donation and Totals groups. One wallet-wide fiat setting,
+// changed in place on SettingsInlineRow rows; None turns donations off (no
+// switch) and Custom opens an amount field in place.
+
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { resolveAdsPlanForNextTx, stepAdsAccumulator } from '../../../packages/core/src/flows/ads.js';
-import { seedSettingsForChains } from '../../../packages/core/src/flows/seedSettings.js';
-import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+import { selectOption } from '../../helpers/selectOption.js';
 
 let settings;
 let update;
@@ -16,253 +19,207 @@ vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     useSettings: () => ({ settings, loading: false, error: null, update }),
 }));
 
-const { AdsSection } = await import(
+const { AdsSection, normalizeAdsAmount } = await import(
     '../../../packages/core/src/shared/components/settings/AdsSection.jsx'
 );
 const { AdsNotice } = await import(
     '../../../packages/core/src/shared/components/AdsNotice.jsx'
 );
 
-function bitcoinSettings({
-    enabled = true,
-    accumulatedSats = 12_345,
-    chainId = 'bitcoin-mainnet',
-} = {}) {
-    const networkKind = defaultRegistry().get(chainId)?.networkKind || 'mainnet';
-    const seeded = seedSettingsForChains(
-        { ...createDefaultSettings(), activeNetwork: networkKind },
-        defaultRegistry(),
-        [chainId],
-    );
-    return {
-        ...seeded,
-        ads: {
-            ...seeded.ads,
-            enabled,
-            perChain: {
-                ...seeded.ads.perChain,
-                [chainId]: {
-                    ...seeded.ads.perChain[chainId],
-                    accumulatedSats,
-                },
-            },
-        },
-    };
+function settingsWith(ads = {}, extra = {}) {
+    const s = createDefaultSettings();
+    return { ...s, ...extra, ads: { ...s.ads, ...ads } };
+}
+
+function row(id) {
+    return document.querySelector(`[data-settings-row-id="${id}"]`);
+}
+function trigger(id) {
+    return within(row(id)).getByRole('combobox');
 }
 
 beforeEach(() => {
-    settings = bitcoinSettings();
+    settings = settingsWith({ queued: '3.45', donated: '12.4', donationCount: 3 });
     update = vi.fn(async () => settings);
 });
 
 afterEach(() => cleanup());
 
-describe('Automatic Donation System settings', () => {
-    it('aligns its explanation with onboarding and exposes amount, cadence, and pending total', () => {
-        render(
-            <>
-                <AdsSection />
-                <AdsNotice onContinue={() => {}} />
-            </>,
+describe('header', () => {
+    it('keeps the heart hero, amount and whole rule in the Notice Standard', () => {
+        render(<AdsSection />);
+        const hero = screen.getByTestId('ads-hero');
+        expect(hero).toHaveAttribute('data-tone', 'info');
+        expect(hero).toHaveAttribute('role', 'note');
+        expect(hero.querySelector('.lucide-heart')).not.toBeNull();
+        expect(hero).toHaveTextContent('$0.05 per transaction');
+        expect(hero).toHaveTextContent(
+            'Each mainnet transaction adds $0.05. When the total reaches $5.00 it goes to Protocol with your next mainnet send that can cover it.',
         );
-
-        expect(screen.getAllByText(/It sets aside a small amount when you send a transaction and sends it as one donation once it adds up/)).toHaveLength(2);
-        expect(screen.getByLabelText('Bitcoin per-transaction amount').value).toBe('1000');
-        expect(screen.getByLabelText('Bitcoin trigger threshold').value).toBe('25000');
-        expect(screen.getByText(/About 25 outgoing transactions to reach the threshold, then sent with the next one/)).toBeTruthy();
-        expect(screen.getByText('Pending donation').nextElementSibling.textContent)
-            .toBe(`${(12_345).toLocaleString()} sats`);
+        expect(document.querySelector('[role="progressbar"], progress')).toBeNull();
     });
 
-    it('does not repeat the active network kind in its chain heading', () => {
-        settings = bitcoinSettings({ chainId: 'bitcoin-testnet' });
+    it('says donations are off at None', () => {
+        settings = settingsWith({ perTransaction: '0' });
         render(<AdsSection />);
-
-        expect(screen.getByText('Bitcoin')).toBeTruthy();
-        expect(screen.queryByText(/testnet/i)).toBeNull();
+        expect(screen.getByTestId('ads-hero')).toHaveTextContent('Automatic Donations off');
+        expect(screen.getByTestId('ads-hero')).toHaveTextContent('Nothing is added while Per transaction is None.');
     });
 
-    it('labels its switch as an action instead of repeating the page title', () => {
+    it('has no on and off switch', () => {
         render(<AdsSection />);
-
-        const toggle = screen.getByRole('switch', { name: 'Turn on Automatic Donation System' });
-        expect(toggle.closest('label')).toHaveTextContent(/^Turn on/);
-        expect(screen.queryByText('Automatic Donation System')).toBeNull();
-    });
-
-    it('writes the switch and both donation choices', () => {
-        render(<AdsSection />);
-
-        fireEvent.click(screen.getByRole('switch', { name: 'Turn on Automatic Donation System' }));
-        const amount = screen.getByLabelText('Bitcoin per-transaction amount');
-        fireEvent.change(amount, { target: { value: '2000' } });
-        fireEvent.blur(amount);
-        const threshold = screen.getByLabelText('Bitcoin trigger threshold');
-        fireEvent.change(threshold, { target: { value: '50000' } });
-        fireEvent.blur(threshold);
-
-        expect(update).toHaveBeenNthCalledWith(1, { ads: { enabled: false } });
-        expect(update).toHaveBeenNthCalledWith(2, {
-            ads: { perChain: { 'bitcoin-mainnet': { perTxAmountSats: 2000 } } },
-        });
-        expect(update).toHaveBeenNthCalledWith(3, {
-            ads: { perChain: { 'bitcoin-mainnet': { triggerAmountSats: 50000 } } },
-        });
-    });
-
-    it('keeps amount fields stable on wheel input and rejects exponent notation', () => {
-        render(<AdsSection />);
-
-        const amount = screen.getByLabelText('Bitcoin per-transaction amount');
-        const threshold = screen.getByLabelText('Bitcoin trigger threshold');
-        expect(amount.type).toBe('text');
-        expect(amount.inputMode).toBe('numeric');
-        expect(amount).toHaveAttribute('enterkeyhint', 'done');
-        expect(amount).toHaveAttribute('autocomplete', 'off');
-        expect(threshold.type).toBe('text');
-        expect(threshold.inputMode).toBe('numeric');
-        expect(threshold).toHaveAttribute('enterkeyhint', 'done');
-        expect(threshold).toHaveAttribute('autocomplete', 'off');
-
-        fireEvent.wheel(amount, { deltaY: -100 });
-        expect(amount.value).toBe('1000');
-
-        fireEvent.change(amount, { target: { value: '1e3' } });
-        fireEvent.blur(amount);
-        expect(amount.value).toBe('1000');
-        expect(update).not.toHaveBeenCalled();
-    });
-
-    it('states what the setting does once, in the toggle card, whether it is on or off', () => {
-        for (const enabled of [true, false]) {
-            settings = bitcoinSettings({ enabled });
-            const { container, unmount } = render(<AdsSection />);
-            expect(screen.getAllByText(/sets aside a small amount when you send a transaction/)).toHaveLength(1);
-            expect(screen.queryByRole('status')).toBeNull();
-            expect(container.textContent).not.toMatch(/New outgoing transactions/);
-            unmount();
-        }
-    });
-
-    it('explains the threshold and makes the off state unambiguous', () => {
-        settings = bitcoinSettings({ enabled: false });
-        render(<AdsSection />);
-
-        expect(screen.getByRole('switch', { name: 'Turn on Automatic Donation System' }).checked).toBe(false);
-        expect(screen.queryByRole('status')).toBeNull();
-        expect(screen.queryByText(/^(On|Off)\. New outgoing transactions/)).toBeNull();
-        expect(screen.getByLabelText('Bitcoin per-transaction amount').disabled).toBe(true);
-        expect(screen.getByLabelText('Bitcoin trigger threshold').disabled).toBe(true);
-
-        fireEvent.click(screen.getByRole('button', { name: 'Trigger threshold help' }));
-        const tip = screen.getByRole('tooltip').textContent;
-        expect(tip).toMatch(/A sat is the smallest unit/);
-        expect(tip).toMatch(/one network fee/);
-        expect(tip.match(/[.!?](?:\s|$)/g)).toHaveLength(2);
-    });
-
-    it('does not set aside more after ADS is turned off', () => {
-        const disabled = bitcoinSettings({ enabled: false });
-        const next = stepAdsAccumulator(disabled, 'bitcoin-mainnet', {
-            donationIncluded: false,
-            chainRegistry: defaultRegistry(),
-        });
-
-        expect(next).toBe(disabled);
-        expect(next.ads.perChain['bitcoin-mainnet'].accumulatedSats).toBe(12_345);
+        expect(screen.queryByRole('switch')).toBeNull();
     });
 });
 
-// The donation recipient picker: DONATE1, DONATE2 or DONATE3 per chain. DONATE3 is
-// stored under the registry's own name for it, EXPLORER, because that is the only
-// spelling the donation flow honours; a stored 'DONATE3' would silently send nothing.
-describe('Automatic Donation System donation recipient', () => {
-    const chainIds = ['bitcoin-mainnet', 'litecoin-mainnet'];
-    const roleValues = ['DONATE1', 'DONATE2', 'EXPLORER'];
+describe('Donation group', () => {
+    it('lists Per transaction, Send at and Donate to as inline rows with their lines', () => {
+        render(<AdsSection />);
+        const group = screen.getByRole('list', { name: 'Donation' });
+        expect(within(group).getByText('Per transaction')).toBeTruthy();
+        expect(within(group).getByText('None turns automatic donations off')).toBeTruthy();
+        expect(within(group).getByText('Send at')).toBeTruthy();
+        expect(within(group).getByText('Queued total that sends it')).toBeTruthy();
+        expect(within(group).getByText('Donate to')).toBeTruthy();
+        expect(within(group).getByText('Who receives it')).toBeTruthy();
+        expect(trigger('ads-per-transaction')).toHaveTextContent('$0.05');
+        expect(trigger('ads-send-at')).toHaveTextContent('$5');
+        expect(trigger('ads-donate-to')).toHaveTextContent('Protocol');
+        fireEvent.click(screen.getByRole('button', { name: 'About Send at' }));
+        expect(screen.getByText(/The default is \$5\.00, about 100 transactions/)).toBeTruthy();
+    });
 
-    function settingsWith(perChainPatch = {}) {
-        const seeded = seedSettingsForChains(
-            { ...createDefaultSettings(), activeNetwork: 'mainnet' },
-            defaultRegistry(),
-            chainIds,
-        );
-        const perChain = { ...seeded.ads.perChain };
-        for (const [chainId, patch] of Object.entries(perChainPatch)) {
-            perChain[chainId] = { ...perChain[chainId], ...patch };
+    it('offers the ruled presets and Custom', () => {
+        render(<AdsSection />);
+        fireEvent.click(trigger('ads-per-transaction'));
+        const perTx = Array.from(document.querySelectorAll('[role="option"]')).map((o) => o.textContent.trim());
+        expect(perTx).toEqual(['None', '$0.01', '$0.05', '$0.10', '$0.25', 'Custom']);
+        cleanup();
+        render(<AdsSection />);
+        fireEvent.click(trigger('ads-send-at'));
+        const sendAt = Array.from(document.querySelectorAll('[role="option"]')).map((o) => o.textContent.trim());
+        expect(sendAt).toEqual(['$5', '$10', '$25', '$50', '$100', 'Custom']);
+        cleanup();
+        render(<AdsSection />);
+        fireEvent.click(trigger('ads-donate-to'));
+        const recipientOptions = Array.from(document.querySelectorAll('[role="option"]'));
+        const to = recipientOptions.map((o) => o.textContent.trim());
+        expect(to).toEqual(['Protocol', 'Community', 'Explorer']);
+        expect(recipientOptions.every((option) => option.querySelector('svg'))).toBe(true);
+    });
+
+    it('writes each pick with the currency it is in', () => {
+        render(<AdsSection />);
+        selectOption(trigger('ads-per-transaction'), '0.1');
+        selectOption(trigger('ads-send-at'), '50');
+        selectOption(trigger('ads-donate-to'), 'explorer');
+        expect(update).toHaveBeenNthCalledWith(1, { ads: { perTransaction: '0.1', currency: 'USD' } });
+        expect(update).toHaveBeenNthCalledWith(2, { ads: { sendAt: '50', currency: 'USD' } });
+        expect(update).toHaveBeenNthCalledWith(3, { ads: { recipient: 'explorer', currency: 'USD' } });
+    });
+
+    it('None turns donations off', () => {
+        render(<AdsSection />);
+        selectOption(trigger('ads-per-transaction'), '0');
+        expect(update).toHaveBeenCalledWith({ ads: { perTransaction: '0', currency: 'USD' } });
+    });
+
+    it('Custom opens an amount field in place and saves a valid amount', () => {
+        render(<AdsSection />);
+        selectOption(trigger('ads-per-transaction'), 'custom');
+        const field = screen.getByTestId('ads-custom-perTransaction');
+        expect(field.type).toBe('text');
+        expect(field.inputMode).toBe('decimal');
+        expect(row('ads-per-transaction').contains(field)).toBe(true);
+        fireEvent.change(field, { target: { value: '0.07' } });
+        fireEvent.blur(field);
+        expect(update).toHaveBeenCalledWith({ ads: { perTransaction: '0.07', currency: 'USD' } });
+    });
+
+    it('Custom refuses an amount outside the bounds and saves nothing', () => {
+        render(<AdsSection />);
+        selectOption(trigger('ads-send-at'), 'custom');
+        const field = screen.getByTestId('ads-custom-sendAt');
+        for (const value of ['0.5', '1e3', '20000', '12.345', 'abc']) {
+            fireEvent.change(field, { target: { value } });
+            fireEvent.blur(field);
         }
-        return { ...seeded, ads: { ...seeded.ads, enabled: true, perChain } };
-    }
+        expect(update).not.toHaveBeenCalled();
+        expect(row('ads-send-at')).toHaveTextContent('Enter an amount from $1.00 to $10,000.00, with at most two decimals.');
+    });
 
-    const addressesOf = (chainId) => defaultRegistry().get(chainId).adsDonationAddresses;
-    const pickerOf = (name) => screen.getByLabelText(`${name} donation recipient`);
-    const addressOf = (name) => screen.getByLabelText(`${name} donation address`);
+    it('opens with the field showing a stored custom amount', () => {
+        settings = settingsWith({ sendAt: '40' });
+        render(<AdsSection />);
+        expect(trigger('ads-send-at')).toHaveTextContent('Custom');
+        expect(screen.getByTestId('ads-custom-sendAt').value).toBe('40');
+        expect(screen.getByTestId('ads-hero')).toHaveTextContent('When the total reaches $40.00');
+    });
 
-    it('lists the three roles for every chain, with DONATE1 chosen by default', () => {
+    it('shows and writes the display currency while nothing is queued or donated', () => {
+        settings = settingsWith({}, { fiatCurrency: 'EUR' });
+        render(<AdsSection />);
+        expect(screen.getByTestId('ads-hero')).toHaveTextContent('€0.05 per transaction');
+        selectOption(trigger('ads-send-at'), '10');
+        expect(update).toHaveBeenCalledWith({ ads: { sendAt: '10', currency: 'EUR' } });
+    });
+});
+
+describe('Totals group', () => {
+    it('shows the queued and donated totals in fiat', () => {
+        render(<AdsSection />);
+        const group = screen.getByRole('list', { name: 'Totals' });
+        expect(row('ads-queued')).toHaveTextContent('Queued');
+        expect(row('ads-queued')).toHaveTextContent('Sent with a transaction at $5.00');
+        expect(row('ads-queued')).toHaveTextContent('$3.45');
+        expect(row('ads-donated')).toHaveTextContent('Donated so far');
+        expect(row('ads-donated')).toHaveTextContent('3 donations');
+        expect(row('ads-donated')).toHaveTextContent('$12.40');
+        expect(group.contains(row('ads-donated'))).toBe(true);
+    });
+
+    it('says when nothing has been donated yet', () => {
         settings = settingsWith();
         render(<AdsSection />);
-
-        for (const [chainId, name] of [['bitcoin-mainnet', 'Bitcoin'], ['litecoin-mainnet', 'Litecoin']]) {
-            const picker = pickerOf(name);
-            const options = Array.from(picker.options);
-            expect(options.map((o) => o.textContent))
-                .toEqual(['DONATE1 · protocol', 'DONATE2 · community', 'DONATE3 · explorer']);
-            expect(options.map((o) => o.value)).toEqual(roleValues);
-            expect(options.every((o) => !o.disabled)).toBe(true);
-            expect(picker.value).toBe('DONATE1');
-            expect(addressOf(name).value).toBe(addressesOf(chainId).DONATE1);
-        }
+        expect(row('ads-donated')).toHaveTextContent('No donations yet');
+        expect(row('ads-donated')).toHaveTextContent('$0.00');
     });
 
-    it('persists the picked role for that chain only', () => {
-        settings = settingsWith();
+    it('groups thousands in totals and donation counts', () => {
+        settings = settingsWith({ queued: '12345.67', donated: '98765.43', donationCount: 12345 });
         render(<AdsSection />);
-
-        fireEvent.change(pickerOf('Bitcoin'), { target: { value: 'DONATE2' } });
-        fireEvent.change(pickerOf('Litecoin'), { target: { value: 'EXPLORER' } });
-
-        expect(update).toHaveBeenNthCalledWith(1, {
-            ads: { perChain: { 'bitcoin-mainnet': { donationAddressRole: 'DONATE2' } } },
-        });
-        expect(update).toHaveBeenNthCalledWith(2, {
-            ads: { perChain: { 'litecoin-mainnet': { donationAddressRole: 'EXPLORER' } } },
-        });
+        expect(row('ads-queued')).toHaveTextContent('$12,345.67');
+        expect(row('ads-donated')).toHaveTextContent('12,345 donations');
+        expect(row('ads-donated')).toHaveTextContent('$98,765.43');
     });
+});
 
-    it('shows the chosen address read-only, the one the next donation is sent to', () => {
-        // Pending past the trigger, so the flow names the address the next donation goes to.
-        settings = settingsWith({
-            'bitcoin-mainnet': { donationAddressRole: 'EXPLORER', accumulatedSats: 100_000_000 },
-            'litecoin-mainnet': { donationAddressRole: 'DONATE2', accumulatedSats: 100_000_000 },
-        });
-        render(<AdsSection />);
-
-        expect(pickerOf('Bitcoin').value).toBe('EXPLORER');
-        const bitcoin = addressOf('Bitcoin');
-        expect(bitcoin.value).toBe(addressesOf('bitcoin-mainnet').EXPLORER);
-        expect(bitcoin.value).toMatch(/^1Donate3/);
-        expect(bitcoin.readOnly).toBe(true);
-        expect(addressOf('Litecoin').value).toBe(addressesOf('litecoin-mainnet').DONATE2);
-        expect(addressOf('Litecoin').readOnly).toBe(true);
-
-        for (const chainId of chainIds) {
-            const plan = resolveAdsPlanForNextTx(settings, chainId, defaultRegistry());
-            expect(plan.donationAddress).toBe(addressOf(chainId.startsWith('bitcoin') ? 'Bitcoin' : 'Litecoin').value);
-        }
+describe('normalizeAdsAmount', () => {
+    it('reads the forms people type', () => {
+        expect(normalizeAdsAmount('05.')).toBe('5');
+        expect(normalizeAdsAmount('.5')).toBe('0.5');
+        expect(normalizeAdsAmount('0.10')).toBe('0.1');
+        expect(normalizeAdsAmount(' 25 ')).toBe('25');
+        expect(normalizeAdsAmount('')).toBeNull();
+        expect(normalizeAdsAmount('.')).toBeNull();
+        expect(normalizeAdsAmount('1e3')).toBeNull();
+        expect(normalizeAdsAmount('-1')).toBeNull();
     });
+});
 
-    it('falls back to DONATE1 for a stored role the donation flow does not know', () => {
-        settings = settingsWith({ 'bitcoin-mainnet': { donationAddressRole: 'DONATE3' } });
-        render(<AdsSection />);
-
-        expect(pickerOf('Bitcoin').value).toBe('DONATE1');
-        expect(addressOf('Bitcoin').value).toBe(addressesOf('bitcoin-mainnet').DONATE1);
-    });
-
-    it('locks the picker while ADS is off', () => {
-        settings = { ...settingsWith(), ads: { ...settingsWith().ads, enabled: false } };
-        render(<AdsSection />);
-
-        expect(pickerOf('Bitcoin').disabled).toBe(true);
-        expect(pickerOf('Litecoin').disabled).toBe(true);
+describe('onboarding notice', () => {
+    it('describes the same rule with the default amounts', () => {
+        render(<AdsNotice onContinue={() => {}} />);
+        const behavior = screen.getByText(/Each mainnet transaction you send adds \$0\.05 to one queue, and when the queue reaches \$5\.00/);
+        const notice = behavior.closest('[data-tone]');
+        const form = screen.getByRole('form', { name: 'Automatic Donations' });
+        const continueButton = screen.getByRole('button', { name: 'Continue' });
+        expect(notice?.dataset.tone).toBe('info');
+        expect(notice?.getAttribute('role')).toBeNull();
+        expect(form).toContainElement(notice);
+        expect(form).toContainElement(continueButton);
+        expect(screen.getByText(/XChain Platform includes automatic donations/)).toBeTruthy();
+        expect(behavior).toHaveTextContent('At the defaults, that is about 100 transactions.');
+        expect(screen.getByText(/Settings → Automatic Donations/)).toBeTruthy();
     });
 });

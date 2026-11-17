@@ -11,7 +11,8 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
 import { DelegateVoteForm } from '../../../packages/core/src/shared/routes/DelegateVoteForm.jsx';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
-import { StakeForm } from '../../../packages/core/src/shared/routes/StakeForm.jsx';
+// The stake-form route: the one Staking form on validator staking.
+import { NetworkStakeRoute as StakeForm } from '../../helpers/stakingFormRoutes.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -174,7 +175,8 @@ describe('protocol form keyboard operation', () => {
         const delegateTo = utils.getByLabelText('Delegate to address');
         const contacts = utils.getByRole('button', { name: 'Open address book' });
         const memoSection = utils.getByRole('button', { name: /^Memo/ });
-        const memoHelp = utils.getByRole('button', { name: 'About Memo' });
+        // A lone memo has no label row, so no ? tip between header and field.
+        expect(utils.queryByRole('button', { name: 'About Memo' })).toBeNull();
         const memo = utils.getByLabelText('Memo');
 
         expect(network).toBeInTheDocument();
@@ -182,16 +184,22 @@ describe('protocol form keyboard operation', () => {
             // The preset token fixes the network, so its picker is shown but not a tab stop.
             fromSection, networkHelp, fromHelp, from, chooseSource,
             delegationSection, tokenHelp, token, delegateHelp, delegateTo, contacts,
-            memoSection, memoHelp, memo,
+            memoSection, memo,
         ]);
 
+        // The memo is a textarea: Enter there neither breaks the line nor
+        // submits, so the last text input (Delegate to) is where Enter submits.
         memo.focus();
+        await user.keyboard('{Enter}');
+        expect(utils.queryByRole('alert')).toBeNull();
+        expect(memo).toHaveValue('');
+        delegateTo.focus();
         await user.keyboard('{Enter}');
         expect(utils.getByRole('alert')).toHaveTextContent('Delegate-to address is required.');
         expect(utils.composeVoteForConfirm).not.toHaveBeenCalled();
 
         fireEvent.change(delegateTo, { target: { value: 'bc1qdevmock03aabbcc' } });
-        memo.focus();
+        delegateTo.focus();
         await user.keyboard('{Enter}');
 
         await expectReviewThenEscape(user, utils, () => utils.getByLabelText('Delegate to address'));
@@ -207,22 +215,25 @@ describe('protocol form keyboard operation', () => {
         const from = utils.getByLabelText('From address');
         const fromHelp = utils.getByRole('button', { name: 'About From address' });
         const chooseSource = utils.getByRole('button', { name: 'Choose source address' });
-        const positionSection = utils.getByRole('button', { name: 'Position' });
+        const positionSection = utils.getByRole('button', { name: 'Staking' });
+        // The one Staking form opens its main section on the action toggle (G109 ruling), then Stake On.
+        const stakeOnHelp = utils.getByRole('button', { name: 'About Stake On' });
+        const pickTarget = utils.getByRole('button', { name: 'Choose what to stake on' });
+        const actionHelp = utils.getByRole('button', { name: 'About Action' });
+        const actionSelect = utils.getByRole('button', { name: 'Action: Stake' });
+        const modeHelp = utils.getByRole('button', { name: 'About Mode' });
+        const modeSelect = utils.getByRole('button', { name: 'Mode: New stake' });
         const amountHelp = utils.getByRole('button', { name: 'About Amount (XCHAIN)' });
         const amount = utils.getByLabelText('Amount (XCHAIN)');
         const useMax = utils.getByRole('button', { name: 'Use max available amount' });
         const pubkeyHelp = utils.getByRole('button', { name: 'About Signing public key' });
         const pubkey = utils.getByLabelText('Signing public key');
-        const modeSection = utils.getByRole('button', { name: /^Stake Mode/ });
-        const modeHelp = utils.getByRole('button', { name: 'About Mode' });
-        const newStake = utils.getByRole('radio', { name: /New stake/ });
-        const topUp = utils.getByRole('radio', { name: /Top up an existing stake/ });
 
         await expectTabSequence(user, [
             fromSection, networkHelp, network, fromHelp, from, chooseSource,
             // Use max is disabled while the balance is unknown, so it is not a tab stop.
-            positionSection, amountHelp, amount, pubkeyHelp, pubkey,
-            modeSection, modeHelp, newStake, topUp,
+            positionSection, actionHelp, actionSelect, stakeOnHelp, pickTarget,
+            modeHelp, modeSelect, amountHelp, amount, pubkeyHelp, pubkey,
         ]);
 
         pubkey.focus();
@@ -249,28 +260,44 @@ describe('protocol form keyboard operation', () => {
         const fromHelp = utils.getByRole('button', { name: 'About From' });
         const chooseSource = utils.getByRole('button', { name: 'Choose source address' });
         const listSection = utils.getByRole('button', { name: 'List' });
+        // The one List form's Action field leads the List section.
+        const actionHelp = utils.getByRole('button', { name: 'About Action' });
+        const action = utils.getByRole('button', { name: /^Action:/ });
         const listTypeHelp = utils.getByRole('button', { name: 'About List type' });
-        const listType = utils.getByLabelText('List type');
+        const listType = utils.getByRole('button', { name: /^List type:/ });
         const tokensHelp = utils.getByRole('button', { name: 'About Tokens' });
         const tokens = utils.getByLabelText('Tokens');
-        const picker = utils.getByRole('button', { name: 'Add From Token Picker' });
+        // The optional tickers file field sits between the box and the picker.
+        const tickersFileHelp = utils.getByRole('button', { name: 'About Tickers file (CSV or TXT)' });
+        const tickersFileName = utils.getByLabelText('Tickers file (CSV or TXT)');
+        const tickersFile = utils.getByRole('button', { name: 'Choose a file' });
+        const picker = utils.getByRole('button', { name: 'Add from Token Picker' });
         const memoSection = utils.getByRole('button', { name: /^Memo/ });
-        const memoHelp = utils.getByRole('button', { name: 'About Memo' });
+        // A lone memo has no label row, so no ? tip between header and field.
+        expect(utils.queryByRole('button', { name: 'About Memo' })).toBeNull();
         const memo = utils.getByLabelText('Memo');
 
         await expectTabSequence(user, [
             fromSection, networkHelp, network, fromHelp, from, chooseSource,
-            listSection, listTypeHelp, listType, tokensHelp, tokens, picker,
-            memoSection, memoHelp, memo,
+            listSection, actionHelp, action, listTypeHelp, listType, tokensHelp, tokens, tickersFileHelp, tickersFileName, tickersFile, picker,
+            memoSection, memo,
         ]);
 
+        // Tokens and the memo are both textareas, where Enter never submits
+        // (in the memo it adds no line break either); the action button
+        // takes Enter.
         memo.focus();
+        await user.keyboard('{Enter}');
+        expect(utils.queryByRole('alert')).toBeNull();
+        expect(memo).toHaveValue('');
+        const submit = document.querySelector('button[type="submit"]');
+        submit.focus();
         await user.keyboard('{Enter}');
         expect(utils.getByRole('alert')).toHaveTextContent('Add at least one token.');
         expect(utils.composeForConfirm).not.toHaveBeenCalled();
 
         fireEvent.change(tokens, { target: { value: 'XCHAIN' } });
-        memo.focus();
+        submit.focus();
         await user.keyboard('{Enter}');
 
         await expectReviewThenEscape(user, utils, () => utils.getByLabelText('Tokens'));

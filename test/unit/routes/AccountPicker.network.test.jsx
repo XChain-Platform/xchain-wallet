@@ -23,7 +23,7 @@ import '../../../packages/core/src/i18n/locales/en/signerSelect.js';
 
 afterEach(cleanup);
 
-const GENERIC = 'Failed to load signers.';
+const GENERIC = 'Failed to load hardware wallets.';
 
 const FAULTS = [
     ['a fetch failure', () => new TypeError('Failed to fetch')],

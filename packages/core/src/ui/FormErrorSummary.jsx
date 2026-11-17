@@ -9,10 +9,49 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useRef } from 'react';
+import { AlertCircleIcon } from './icons/index.jsx';
+import { formErrorList } from './formErrors.js';
+import { NoticeAction } from './StatusMessage.jsx';
 import styles from './FormErrorSummary.module.css';
 import statusStyles from './StatusMessage.module.css';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/ui.js';
+
+/**
+ * Scrolls every scrolling box that holds `node` (the Screen body, a dialog's
+ * panel, the document) back to its top. Plain scrollTop writes, so it works
+ * where scrollTo is missing (jsdom) and never animates past the notice.
+ *
+ * @param {HTMLElement} node
+ */
+export function scrollPageToTop(node) {
+    for (let el = node.parentElement; el; el = el.parentElement) {
+        if (el.scrollTop > 0) el.scrollTop = 0;
+    }
+    const root = typeof document !== 'undefined' ? document.scrollingElement : null;
+    if (root && root.scrollTop > 0) root.scrollTop = 0;
+    // A notice placed lower than the top of its page (an inline Settings
+    // form) is brought back into view; at the top this moves nothing.
+    node.scrollIntoView?.({ block: 'nearest' });
+}
+
+/**
+ * G130 for a reason the form already shows (offline): a press that cannot go
+ * ahead scrolls the page to the form's notice box and focuses it, so the one
+ * notice is seen and read without a second copy in an error summary.
+ *
+ * @param {EventTarget | null | undefined} form  the submitting form (the submit event's currentTarget)
+ * @returns {boolean} true when a notice box was found and revealed
+ */
+export function revealFormStatus(form) {
+    const box = form && typeof form.querySelector === 'function'
+        ? form.querySelector('[data-form-status]')
+        : null;
+    if (!box) return false;
+    scrollPageToTop(box);
+    box.focus?.({ preventScroll: true });
+    return true;
+}
 
 const LABEL_FILLER = new Set(['a', 'an', 'the', 'to', 'of', 'for', 'in', 'on', 'at', 'optional']);
 
@@ -47,31 +86,51 @@ function showsLabel(error) {
 }
 
 /**
- * Focusable error summary. Every field-specific error is a link so the user can
- * move directly from the summary to the control that needs attention. Errors
- * without an id describe a form-level failure.
+ * The form error notice (Notice Standard, 2026-11-15): the danger notice at
+ * the top of a form after a failed Next or submit. Its bold title counts the
+ * problems ("Fix 2 things to continue") and the body lists each one in plain
+ * text. It has no close X, because it clears itself: each line leaves as soon
+ * as its field changes, and the next press validates again. A form-level
+ * failure (no field id) shows as a plain line with no title.
+ *
+ * Pass either `form` (from useFormErrors; FormPage and FormFrame do this for
+ * a form that hands them `errors`) or the older `errors` list with a
+ * `focusKey` that bumps on every submit attempt.
  *
  * @param {object} props
- * @param {{ id?: string, label?: string, message: string }[]} props.errors
- * @param {string | number} props.focusKey submit-attempt key; zero or empty keeps the summary hidden.
- * @param {{ label: string, onAction: () => void | Promise<void> }} [props.recovery]
+ * @param {{ id?: string, label?: string, message: string }[]} [props.errors]
+ * @param {string | number} [props.focusKey] submit-attempt key; zero or empty keeps the summary hidden.
+ * @param {import('./formErrors.js').FormErrors | null} [props.form]
+ * @param {{ label: string, onAction: () => void | Promise<void>, ariaLabel?: string, disabled?: boolean, icon?: import('react').ReactNode }} [props.action]
+ *   the notice's one action (Notice's, a kit secondary sm Button): a one-click fix such as Send's Use max
+ * @param {{ label: string, onAction: () => void | Promise<void> }} [props.recovery]  older name for `action`
  */
-export function FormErrorSummary({ errors, focusKey, recovery }) {
+export function FormErrorSummary({ errors: errorsProp, focusKey: focusKeyProp, form, action, recovery }) {
+    const shownAction = [action, recovery].find((entry) => entry && entry.label && typeof entry.onAction === 'function') || null;
+    const errors = form ? formErrorList(form) : (errorsProp || []);
+    const focusKey = form ? form.attempt : focusKeyProp;
     const summaryRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     const summaryId = useId();
-    const signature = useMemo(
-        () => errors.map((error) => `${error.id || ''}:${error.message}`).join('|'),
-        [errors],
-    );
+    const signature = errors.map((error) => `${error.id || ''}:${error.message}`).join('|');
+    const hasErrors = errors.length > 0;
 
+    // The notice takes focus once per press of Next, never while the user
+    // types: a line leaving because its field changed must not pull the
+    // cursor out of that field.
+    // G129 (operator 2026-11-16): the press also scrolls the page to the top,
+    // so the notice is the first thing seen, whatever the scroll position.
     useEffect(() => {
-        if (errors.length > 0) summaryRef.current?.focus();
-    }, [signature, focusKey, errors.length]);
+        const node = summaryRef.current;
+        if (!hasErrors || !node) return;
+        scrollPageToTop(node);
+        node.focus({ preventScroll: true });
+    }, [focusKey, hasErrors]);
 
-    // The summary names the failing fields, so each of them says so too: a
+    // The notice names the failing fields, so each of them says so too: a
     // screen reader on the field hears that it is invalid and reads the
-    // summary as its description. An attribute the field already carries is
-    // left alone; only what is added here is removed again.
+    // notice as its description, and the field's border turns red. An
+    // attribute the field already carries is left alone; only what is added
+    // here is removed again.
     const fieldIds = useMemo(
         () => (focusKey ? [...new Set(errors.map((error) => error.id).filter(Boolean))] : []),
         // eslint-disable-next-line react-hooks/exhaustive-deps -- `signature` stands for the error list's content
@@ -107,16 +166,9 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
         };
     }, [fieldIds, summaryId]);
 
-    if (!focusKey || errors.length === 0) return null;
+    if (!focusKey || !hasErrors) return null;
 
-    const hasOnlyFieldErrors = errors.every((error) => error.id);
-
-    const focusField = (event, id) => {
-        event.preventDefault();
-        const field = document.getElementById(id);
-        field?.focus();
-        field?.scrollIntoView?.({ block: 'center' });
-    };
+    const namesFields = errors.some((error) => error.id);
 
     return (
         <div
@@ -127,40 +179,28 @@ export function FormErrorSummary({ errors, focusKey, recovery }) {
             aria-label={t('ui.formErrorSummary.formErrors')}
             className={`${statusStyles.row} ${statusStyles.error}`}
             data-variant="error"
+            data-tone="danger"
+            data-form-errors=""
         >
-            <span className={statusStyles.icon} aria-hidden="true">✕</span>
+            <span className={statusStyles.icon} aria-hidden="true"><AlertCircleIcon /></span>
             <div className={statusStyles.text}>
-                {hasOnlyFieldErrors ? (
-                    <p className={styles.heading}>
+                {namesFields ? (
+                    <p className={statusStyles.title}>
                         {errors.length === 1 ? t('ui.formErrorSummary.fixThisField') : t('ui.formErrorSummary.fixTheseFields', { length: errors.length })}
                     </p>
                 ) : null}
-                <ul className={hasOnlyFieldErrors ? styles.list : styles.listBare}>
+                {/* One problem reads as a plain line under the title; several are a bulleted list. */}
+                <ul className={namesFields && errors.length > 1 ? styles.list : styles.listBare}>
                     {errors.map((error, index) => (
-                        <li key={`${error.id || 'form'}-${index}`}>
-                            {error.id ? (
-                                <a
-                                    href={`#${error.id}`}
-                                    onClick={(event) => focusField(event, error.id)}
-                                    className={styles.link}
-                                >
-                                    {showsLabel(error) ? <span>{error.label}: </span> : null}
-                                    <span>{error.message}</span>
-                                </a>
-                            ) : error.message}
+                        <li key={`${error.id || 'form'}-${index}`} data-error-for={error.id || undefined}>
+                            {showsLabel(error) ? <span>{error.label}: </span> : null}
+                            <span>{error.message}</span>
                         </li>
                     ))}
                 </ul>
-                {recovery ? (
-                    <button
-                        type="button"
-                        onClick={() => Promise.resolve(recovery.onAction()).catch(() => {})}
-                        className={styles.recovery}
-                    >
-                        {recovery.label}
-                    </button>
-                ) : null}
             </div>
+            {/* The one action sits where every Notice puts it. */}
+            {shownAction ? <NoticeAction action={shownAction} /> : null}
         </div>
     );
 }

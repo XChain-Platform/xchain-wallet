@@ -17,6 +17,9 @@ import { addEnglish } from '../../store.js';
 const messages = {
     // Copy moved out of JSX literals by the i18n sweep.
     'keyboard.shortcutHelp.keyboardShortcuts': 'Keyboard shortcuts',
+    // The dialog's one-line header is Title Case (G01); list rows keep the
+    // sentence-case key above.
+    'keyboard.shortcutHelp.title': 'Keyboard Shortcuts',
     'keyboard.shortcutHelp.shortcutList': 'Shortcut list',
     'keyboard.shortcutHelp.browserExtension': 'Browser extension',
     'keyboard.shortcutHelp.notSet': 'Not set',

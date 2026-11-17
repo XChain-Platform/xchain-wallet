@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Network, From and the fee selector come from the standard
 // FromSection and FeeSection.
-import { AddressText, Button, Checkbox, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, FormNotice, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
 // The compose stage sits on the Wallet Form Standard frame.
 import {
     FeeSection,
@@ -20,6 +20,7 @@ import {
     FormSection,
     FromSection,
     joinSummary,
+    MemoSection,
     useFormSections,
 } from '../components/formStandard/index.js';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
@@ -32,6 +33,8 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { FileField } from '../components/FileField.jsx';
+import { UploadMethodField, useUploadMethod } from '../components/UploadMethodField.jsx';
+import { publicFileCompiledBytes } from '../../flows/uploadMethod.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import { normalizeGenesisRow } from './ManageToken.jsx';
@@ -46,6 +49,7 @@ import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { extractActionIndex } from '../utils/actionIndexFromTx.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { formatBytes } from '../utils/formatBytes.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
@@ -56,16 +60,19 @@ import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/publishFile.js';
+import '../../i18n/locales/en/uploadMethod.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
 
 const ARTWORK_ACCEPT = ['image/*', 'audio/*', '.svg', '.json', '.txt'];
-// Moderate oversize files reach the exact metadata-aware error below, while
-// unexpectedly large ones stop before FileReader allocates their contents.
-const MAX_READ_BYTES = 32 * 1024;
 const MAX_TITLE_LENGTH = 100;
 const POSITIVE_ACTION_INDEX = /^[1-9]\d*$/;
+
+/** The artwork FILE payload the upload method fee estimate prices. */
+function artworkUploadBytes(file, { title, memo }) {
+    return publicFileCompiledBytes({ name: file.name, type: file.type, title, memo }, file.bytes.length);
+}
 
 function normalizedActionIndex(value) {
     const index = String(value ?? '').trim();
@@ -170,18 +177,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const [title, setTitle] = useState('');
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
+    const reviewErrors = useFormErrors();
 
     const [stage, setStage] = useState(
-        /** @type {'compose' | 'review-file' | 'wait-index' | 'review-link' | 'review-tis' | 'wait-tis' | 'review-desc' | 'done'} */
+        /** @type {'compose' | 'review-file' | 'wait-index' | 'review-link' | 'done'} */
         ('compose'),
     );
-    // Optional continuation: also author the token's information document
-    // on-chain (TIS On-Chain Format) and point DESCRIPTION at it. Two
-    // more signatures (FILE for the JSON doc, then an ISSUE v1 update).
-    const [setAsTokenInfo, setSetAsTokenInfo] = useState(false);
-    const [tisTxid, setTisTxid] = useState(/** @type {string | null} */ (null));
-    const [tisActionIndex, setTisActionIndex] = useState(/** @type {string | null} */ (null));
-    const [descTxid, setDescTxid] = useState(/** @type {string | null} */ (null));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     // A leg that was SIGNED but never reached the network. The confirm
@@ -199,8 +200,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     // returns so it survives the From picker and the review stages. From
     // closed, Artwork open, the rest closed. A refusal names its section and
     // bumps the counter, so that section reopens even after being closed.
-    const formSections = useFormSections({ from: false, artwork: true, memo: false, picture: false, fee: false });
-    const [errorSection, setErrorSection] = useState(/** @type {'from' | 'artwork' | 'memo' | 'picture' | 'fee' | null} */ (null));
+    const formSections = useFormSections({ from: false, artwork: true, memo: false, fee: false });
+    const [errorSection, setErrorSection] = useState(/** @type {'from' | 'artwork' | 'memo' | 'fee' | null} */ (null));
     const [refusalCount, setRefusalCount] = useState(0);
     const refuse = (section, message) => {
         setErrorSection(section);
@@ -262,8 +263,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     }, [addressesByChain, activeByChain, chainId, fromAddressId, issuerAddress]);
 
     useEffect(() => {
-        if (stage === 'review-file' || stage === 'review-link'
-            || stage === 'review-tis' || stage === 'review-desc') {
+        if (stage === 'review-file' || stage === 'review-link') {
             setTimeout(() => passwordRef.current?.focus(), 0);
         }
     }, [stage]);
@@ -299,40 +299,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         const handle = setInterval(tick_, POLL_INTERVAL_MS);
         return () => { cancelled = true; clearInterval(handle); };
     }, [stage, fileTxid, chainId, messaging]);
-
-    // Second wait: the TIS document FILE's action index, needed by the
-    // ISSUE v1 description update.
-    useEffect(() => {
-        if (stage !== 'wait-tis' || !tisTxid) return undefined;
-        let cancelled = false;
-        const started = Date.now();
-        const tick_ = async () => {
-            if (cancelled) return;
-            setWaitElapsed(Math.floor((Date.now() - started) / 1000));
-            if (typeof document !== 'undefined'
-                && document.visibilityState === 'hidden') return;
-            try {
-                const resp = await messaging.getActionByTxid({ chainId, txid: tisTxid });
-                if (cancelled) return;
-                const rawIndex = extractActionIndex(resp);
-                const index = normalizedActionIndex(rawIndex);
-                if (rawIndex && !index) {
-                    setIndexLookupError('The network returned an invalid action number for the token info. The wallet will keep checking.');
-                } else if (index) {
-                    setIndexLookupError(null);
-                    setTisActionIndex(index);
-                    setStage('review-desc');
-                }
-            } catch {
-                if (!cancelled) {
-                    setIndexLookupError('The wallet could not check the token-info record. It will keep trying.');
-                }
-            }
-        };
-        tick_();
-        const handle = setInterval(tick_, POLL_INTERVAL_MS);
-        return () => { cancelled = true; clearInterval(handle); };
-    }, [stage, tisTxid, chainId, messaging]);
 
     const descriptor = chainId ? chainRegistry.get(chainId) : null;
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] || '' : '';
@@ -384,11 +350,29 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const { isWatcherMode } = useWalletMode();
 
-    // §5.6: all four legs sign through the shared confirm lane. The ISSUE
-    // leg is the sharpest case, token administration signed against a
-    // locally rendered summary while every other ISSUE surface in the
-    // wallet composes through the tamper-checked confirm page. This form
-    // refuses watcher mode outright, so there is no legacy lane to keep.
+    // The Upload method Publish file offers (flows/uploadMethod.js): Taproot
+    // envelope by default where a signer can sign the reveal (never hardware)
+    // on a chain whose descriptor does Taproot (BTC yes, DOGE never), Standard
+    // otherwise. The ceiling below and the FILE compose both follow the pick,
+    // so the size offered is the size the encoder can carry. Only the FILE leg
+    // uses it; the LINK leg is a small action on the default lane.
+    const upload = useUploadMethod({
+        descriptor,
+        fromAddress,
+        isWatcherMode,
+        feeEstimate,
+        coinTicker,
+        file: fileMeta,
+        metadata: { title, memo },
+        compiledBytesFor: artworkUploadBytes,
+        standardCap: fileMeta
+            ? flowsLib.maxPublicFileBytes({ name: fileMeta.name, type: fileMeta.type, title, memo }, {})
+            : null,
+    });
+    const envelopePicked = upload.method === 'taproot';
+
+    // Both legs sign through the shared confirm lane. This form refuses
+    // watcher mode outright, so there is no legacy lane to keep.
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     // "In flight" is now the pre-open host compose, not a local flag each
     // leg set by hand around its own dispatch.
@@ -410,14 +394,6 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         passwordRef: passwordValueRef,
         software: 'linkAction',
         hardware: 'linkActionHw',
-    });
-    const submitIssue = useConfirmSubmit({
-        messaging,
-        isHw: hw,
-        signerId: fromAddress?.signerId,
-        passwordRef: passwordValueRef,
-        software: 'issueToken',
-        hardware: 'issueTokenHw',
     });
 
     /**
@@ -490,10 +466,21 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         [fileMeta, title, memo],
     );
 
+    // Sized from the encoding the FILE compose requests, the same call
+    // Publish file makes: the envelope ceiling when the picked method asks
+    // for AUTO, the legacy compiled ceiling for Standard.
     const attachmentCapFor = useCallback(
-        (name, type) => flowsLib.maxPublicFileBytes({ name, type, title, memo }),
-        [title, memo],
+        (name, type) => flowsLib.maxPublicFileBytes(
+            { name, type, title, memo },
+            envelopePicked ? { encoding: 'TAPROOT' } : {},
+        ),
+        [title, memo, envelopePicked],
     );
+    // The legacy ceiling is small enough that a URL is the honest way to
+    // carry larger artwork; at the envelope ceiling that advice would mislead.
+    const largerArtworkAdvice = envelopePicked
+        ? ''
+        : ' For larger artwork, put an image URL in the token\'s description instead.';
 
     const acceptFile = useCallback((file, content) => {
         const bytes = new Uint8Array(content);
@@ -511,18 +498,17 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         const cap = attachmentCapFor(file.name || 'file', type);
         if (bytes.length > cap) {
             refuse('artwork',
-                `That file is ${bytes.length.toLocaleString()} bytes; with this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes. For larger artwork, put an image URL in the token's description instead.`,
+                `That file is ${formatBytes(bytes.length)}; with this title and memo the on-chain ceiling is ${formatBytes(cap, { limit: true })}.${largerArtworkAdvice}`,
             );
             return;
         }
-        if (!imagePreviewDataUrl(bytes)) setSetAsTokenInfo(false);
         setFormError(null);
         setFileMeta({
             name: file.name || 'file',
             type,
             bytes,
         });
-    }, [attachmentCapFor]);
+    }, [attachmentCapFor, largerArtworkAdvice]);
 
     // A picked and a dropped file take the same path: name, type and size
     // checks, then one read whose result only the latest pick may apply.
@@ -541,10 +527,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             refuse('artwork', typeError);
             return;
         }
-        if (file.size > MAX_READ_BYTES) {
-            const cap = attachmentCapFor(file.name || 'file', type);
+        // An oversize file stops here, before FileReader allocates it.
+        const cap = attachmentCapFor(file.name || 'file', type);
+        if (file.size > cap) {
             refuse('artwork',
-                `That file is ${file.size.toLocaleString()} bytes; with this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes. For larger artwork, put an image URL in the token's description instead.`,
+                `That file is ${formatBytes(file.size)}; with this title and memo the on-chain ceiling is ${formatBytes(cap, { limit: true })}.${largerArtworkAdvice}`,
             );
             return;
         }
@@ -558,7 +545,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             if (readId === fileReadIdRef.current) refuse('artwork', 'Could not read that file.');
         };
         reader.readAsArrayBuffer(file);
-    }, [acceptFile, attachmentCapFor]);
+    }, [acceptFile, attachmentCapFor, largerArtworkAdvice]);
 
     // Removing the file also drops any read still in flight.
     const clearFile = useCallback(() => {
@@ -617,14 +604,10 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             refuse('memo', memoTooLong);
             return;
         }
-        if (setAsTokenInfo && !previewUrl) {
-            refuse('picture', 'Choose an image file before making it the token picture.');
-            return;
-        }
         const cap = attachmentCapFor(fileMeta.name, fileMeta.type);
         if (fileMeta.bytes.length > cap) {
             refuse('artwork',
-                `With this title and memo the on-chain ceiling is ${cap.toLocaleString()} bytes and the file is ${fileMeta.bytes.length.toLocaleString()} bytes. Shorten the title or memo.`,
+                `With this title and memo the on-chain ceiling is ${formatBytes(cap, { limit: true })} and the file is ${formatBytes(fileMeta.bytes.length)}. Shorten the title or memo.`,
             );
             return;
         }
@@ -658,8 +641,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     async function handleSignFile(event) {
         event.preventDefault();
         if (submitting || !fileMeta || !fileParams) return;
-        if (!hw && (!signerReady && password.length === 0)) return;
+        if (!hw && !signerReady && password.length === 0) {
+            setSubmitError(null);
+            reviewErrors.validate({ 'attach-content-password': 'Enter your wallet password.' });
+            return;
+        }
         if (hw && hwStatus !== 'available') return;
+        reviewErrors.reset();
         const rawData = latin1Of(fileMeta.bytes);
         await runLegThroughConfirm({
             // The same params flows/fileAction.js builds, so the previewed
@@ -668,7 +656,14 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 action: 'FILE',
                 params: fileParams,
             },
-            encoderOpts: { rawData },
+            // The picked method's request, as Publish file sends it: AUTO with
+            // the signer's asserted tapscript capability for the envelope, no
+            // encoding for Standard, so the ceiling offered above is one the
+            // encoder can carry.
+            encoderOpts: {
+                rawData,
+                ...upload.encoderOpts,
+            },
             dispatch: (prebuiltPsbt) => submitFile({
                 walletId,
                 chainId,
@@ -697,8 +692,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     async function handleSignLink(event) {
         event.preventDefault();
         if (submitting || !fileActionIndex || !issueActionIndex) return;
-        if (!hw && (!signerReady && password.length === 0)) return;
+        if (!hw && !signerReady && password.length === 0) {
+            setSubmitError(null);
+            reviewErrors.validate({ 'attach-content-password': 'Enter your wallet password.' });
+            return;
+        }
         if (hw && hwStatus !== 'available') return;
+        reviewErrors.reset();
         await runLegThroughConfirm({
             // The same params flows/linkAction.js builds from these fields.
             actionData: {
@@ -729,102 +729,9 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 if (!txid) throw new Error('Link broadcast did not return a transaction ID.');
                 setLinkTxid(txid);
                 setPassword('');
-                setStage(setAsTokenInfo ? 'review-tis' : 'done');
-            },
-            fallback: 'Link broadcast failed.',
-        });
-    }
-
-    // The token's information document: minimal TIS JSON (same shape as
-    // sdk.nft.tisDocument; Token_Information_Standard.md On-Chain Format):
-    // NFT intent + the artwork referenced by its on-chain action index.
-    const tisJson = useMemo(() => {
-        if (!fileMeta || !fileActionIndex) return null;
-        const doc = {
-            tick: String(tick),
-            categories: [{ type: 'main', data: 'NFT' }],
-            images: [{
-                data_ref: 'action:' + String(fileActionIndex),
-                type: fileMeta.type,
-                name: fileMeta.name,
-            }],
-        };
-        if (title.trim()) doc.name = title.trim();
-        return JSON.stringify(doc);
-    }, [fileMeta, fileActionIndex, tick, title]);
-
-    async function handleSignTis(event) {
-        event.preventDefault();
-        if (submitting || !tisJson) return;
-        if (!hw && (!signerReady && password.length === 0)) return;
-        if (hw && hwStatus !== 'available') return;
-        // JSON.stringify output may contain non-ASCII (title); encode to
-        // UTF-8 bytes first, then to the Latin-1 binary string the encoder
-        // expects.
-        const rawData = latin1Of(new TextEncoder().encode(tisJson));
-        const tisName = String(tick) + '.json';
-        await runLegThroughConfirm({
-            actionData: {
-                action: 'FILE',
-                params: flowsLib.fileActionParams({
-                    name: tisName, type: 'application/json', title: 'Token information',
-                }),
-            },
-            encoderOpts: { rawData },
-            dispatch: (prebuiltPsbt) => submitFile({
-                walletId,
-                chainId,
-                from: sourceDescriptor(),
-                payFeeInNativeCoin: nativeFee.flag,
-                ...(feePerKb != null ? { feePerKb } : {}),
-                name: tisName,
-                type: 'application/json',
-                title: 'Token information',
-                rawData,
-                prebuiltPsbt,
-            }),
-            onBroadcast: (res) => {
-                const txid = res?.txid || res?.broadcast?.txid;
-                if (!txid) throw new Error('Token-info upload did not return a txid.');
-                setIndexLookupError(null);
-                setTisTxid(txid);
-                setPassword('');
-                setStage('wait-tis');
-            },
-            fallback: 'Token-info upload failed.',
-        });
-    }
-
-    async function handleSignDescribe(event) {
-        event.preventDefault();
-        if (submitting || !tisActionIndex) return;
-        if (!hw && (!signerReady && password.length === 0)) return;
-        if (hw && hwStatus !== 'available') return;
-        // ISSUE v1: edit description (owner-only at the indexer).
-        const issueParams = {
-            VERSION: '1',
-            TICK: String(tick),
-            DESCRIPTION: 'action:' + String(tisActionIndex),
-        };
-        await runLegThroughConfirm({
-            actionData: { action: 'ISSUE', params: issueParams },
-            dispatch: (prebuiltPsbt) => submitIssue({
-                walletId,
-                chainId,
-                from: sourceDescriptor(),
-                payFeeInNativeCoin: nativeFee.flag,
-                ...(feePerKb != null ? { feePerKb } : {}),
-                params: issueParams,
-                prebuiltPsbt,
-            }),
-            onBroadcast: (res) => {
-                const txid = res?.txid || res?.broadcast?.txid;
-                if (!txid) throw new Error('Description update did not return a txid.');
-                setDescTxid(txid);
-                setPassword('');
                 setStage('done');
             },
-            fallback: 'Description update failed.',
+            fallback: 'Link broadcast failed.',
         });
     }
 
@@ -832,7 +739,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         <PageHeader
             onBack={onBack}
             backLabel="Back"
-            title={`Attach Artwork to ${tick}`}
+            title="Attach Artwork"
         />
     );
     const wrap = (children) => (
@@ -845,14 +752,14 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     if (isWatcherMode) {
         return wrap(
             <>
-                <h2 className={styles.successTitle}>Not available in watcher mode</h2>
+                <h2 className={styles.successTitle}>Not available when another phone signs</h2>
                 <p className={styles.hint}>
                     Attaching artwork is a two-phase action. The wallet
                     broadcasts the file, waits for it to be indexed, then
-                    broadcasts the link that makes it official. A
-                    watcher-mode wallet can't observe the file landing
-                    on-chain, so this flow can't be split across an
-                    air-gapped boundary today.
+                    broadcasts the link that makes it official. A wallet
+                    that another phone signs for can't watch the file land
+                    on-chain, so this flow can't be split across two
+                    phones today.
                 </p>
             </>,
         );
@@ -884,24 +791,28 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     if (actionConfirm.open) {
         // The leg in flight names the action; the token it attaches to is
         // the hero.
+        // The file leg names its upload method under the cost card, and its
+        // fee estimate is the picked method's for this file.
+        const fileLeg = stage !== 'review-link';
         const attachSummary = {
-            verb: stage === 'review-link'
-                ? t('components.confirmSummary.verbLink')
-                : stage === 'review-desc'
-                    ? t('components.confirmSummary.verbUpdateDescription')
-                    : t('publishFile.title'),
+            verb: fileLeg
+                ? t('publishFile.title')
+                : t('components.confirmSummary.verbLink'),
             ...(tick ? { ticker: String(tick).toUpperCase() } : {}),
             direction: 'none',
             chainId,
             address: fromAddress?.address,
+            ...(fileLeg ? { notice: upload.confirmLine } : {}),
         };
+        const legFeeAmount = (fileLeg && upload.fee?.coinAmount) || feeEstimate?.coinAmount;
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
                 summary={attachSummary}
                 screenVariant={variant}
-                feeText={feeEstimate?.coinAmount
-                    ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
+                feeEstimate={legFeeAmount ? { coinAmount: legFeeAmount } : null}
+                feeText={legFeeAmount
+                    ? `Network fee: ${legFeeAmount} ${coinTicker}`.trim()
                     : undefined}
                 coinTicker={coinTicker}
                 signerReady={signerReady}
@@ -925,22 +836,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 <code className={styles.txid}>{fileTxid}</code>
                 <p className={styles.successLabel}>Link transaction</p>
                 <code className={styles.txid}>{linkTxid}</code>
-                {tisTxid ? (
-                    <>
-                        <p className={styles.successLabel}>Token-info transaction</p>
-                        <code className={styles.txid}>{tisTxid}</code>
-                    </>
-                ) : null}
-                {descTxid ? (
-                    <>
-                        <p className={styles.successLabel}>Description update</p>
-                        <code className={styles.txid}>{descTxid}</code>
-                    </>
-                ) : null}
                 <p className={styles.hint}>
-                    {descTxid
-                        ? `Once everything confirms, ${tick}'s picture and info live entirely on the network. The explorer and wallets read them with no website involved.`
-                        : `Once the link confirms, the artwork shows up wherever ${tick} is displayed. The explorer and wallets read it straight from the network.`}
+                    {`Once the link confirms, the artwork shows up wherever ${tick} is displayed. The explorer and wallets read it straight from the network.`}
                 </p>
                 <div className={styles.actions}>
                     <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
@@ -987,184 +884,13 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         );
     }
 
-    if (stage === 'wait-tis') {
-        const minutes = Math.floor(waitElapsed / 60);
-        return wrap(
-            <>
-                <h2 className={styles.successTitle}>Token info is on its way</h2>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Token-info transaction</dt>
-                    <dd className={styles.detailsValue}>
-                        <code className={styles.txid}>{tisTxid}</code>
-                    </dd>
-                    <dt className={styles.detailsLabel}>Elapsed</dt>
-                    <dd className={styles.detailsValue}>
-                        {minutes > 0 ? `${minutes} min ${waitElapsed % 60}s` : `${waitElapsed}s`}
-                    </dd>
-                </dl>
-                <p className={styles.hint}>
-                    Waiting for the token-info document to be confirmed and
-                    indexed. Then one final signature points {tick}'s
-                    description at it.
-                </p>
-                {indexLookupError ? (
-                    <StatusMessage variant="error">{indexLookupError}</StatusMessage>
-                ) : null}
-                <div className={styles.actions}>
-                    <Button variant="ghost" icon={<Icon.XIcon />} onClick={onBack}>Close (Keep Waiting)</Button>
-                </div>
-            </>,
-        );
-    }
-
-    if (stage === 'review-tis' && fileMeta && fromAddress) {
-        return wrapForm(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Upload token info"
-                onSubmit={handleSignTis}
-                status={hw && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <>
-                        <Button variant="ghost" type="button" icon={<Icon.XIcon />} onClick={() => setStage('done')} disabled={submitting}>
-                            Skip (Artwork Only)
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="success"
-                            icon={<Icon.UploadIcon />}
-                            loading={submitting}
-                            disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                        >
-                            Upload Token Info
-                        </Button>
-                    </>
-                )}
-            >
-                <p className={styles.summary}>
-                    Store {tick}'s information on the chain: a small document
-                    naming the token and pointing at the artwork you just
-                    attached.
-                </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Document</dt>
-                    <dd className={styles.detailsValue}>{String(tick)}.json</dd>
-                    <dt className={styles.detailsLabel}>Type</dt>
-                    <dd className={styles.detailsValue}>application/json</dd>
-                    <dt className={styles.detailsLabel}>Title</dt>
-                    <dd className={styles.detailsValue}>Token information</dd>
-                    <dt className={styles.detailsLabel}>Contents</dt>
-                    <dd className={styles.detailsValue}><code>{tisJson}</code></dd>
-                    <dt className={styles.detailsLabel}>Artwork referenced</dt>
-                    <dd className={styles.detailsValue}>
-                        {fileMeta.name}
-                        <span className={styles.detailsRef}>#{fileActionIndex}</span>
-                    </dd>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                </dl>
-                <p className={styles.hint}>
-                    Step 3 of 4. After this uploads, one final signature points
-                    {' '}{tick}'s description at it.
-                </p>
-                <SignCredentials
-                    unlocked={signerReady}
-                    fromAddress={fromAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (submitError) setSubmitError(null);
-                    }}
-                    onStatusChange={onHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={submitError}
-                    disabled={submitting}
-                    getSignerStatus={messaging.getSignerStatus}
-                />
-            </FormPage>,
-        );
-    }
-
-    if (stage === 'review-desc' && fromAddress) {
-        return wrapForm(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Update token description"
-                onSubmit={handleSignDescribe}
-                status={hw && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <>
-                        <Button variant="ghost" type="button" icon={<Icon.XIcon />} onClick={() => setStage('done')} disabled={submitting}>
-                            Skip
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="success"
-                            icon={<Icon.PencilIcon />}
-                            loading={submitting}
-                            disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                        >
-                            Update Description
-                        </Button>
-                    </>
-                )}
-            >
-                <p className={styles.summary}>
-                    Point {tick}'s description at the on-chain token info.
-                    this is what the explorer and wallets will read.
-                </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>New description</dt>
-                    {/* The raw string stays visible: this is the exact value being
-                        signed onto the chain, not a label. The gloss explains it
-                        rather than replacing it (XC review #4386). */}
-                    <dd className={styles.detailsValue}>
-                        action:{tisActionIndex}
-                        <span className={styles.detailsNote}>
-                            Points the description at this token&apos;s on-chain info record.
-                        </span>
-                    </dd>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                </dl>
-                <p className={styles.hint}>
-                    Final step. This replaces the token's current description.
-                    Only the token's owner can do this.
-                </p>
-                <SignCredentials
-                    unlocked={signerReady}
-                    fromAddress={fromAddress}
-                    chainId={chainId}
-                    password={password}
-                    onPasswordChange={(v) => {
-                        setPassword(v);
-                        if (submitError) setSubmitError(null);
-                    }}
-                    onStatusChange={onHwStatusChange}
-                    passwordRef={passwordRef}
-                    submitError={submitError}
-                    disabled={submitting}
-                    getSignerStatus={messaging.getSignerStatus}
-                />
-            </FormPage>,
-        );
-    }
-
     if (stage === 'review-file' && fileMeta && fromAddress) {
         return wrapForm(
             <FormPage
                 demoGuard={demoGuard}
                 label="Review artwork upload"
                 onSubmit={handleSignFile}
+                errors={reviewErrors}
                 status={hw && submitError ? (
                     <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
@@ -1187,7 +913,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                             variant="success"
                             icon={<Icon.UploadIcon />}
                             loading={submitting}
-                            disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                            aria-disabled={hw && hwStatus !== 'available' ? 'true' : undefined}
                         >
                             Upload File
                         </Button>
@@ -1218,7 +944,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     <dt className={styles.detailsLabel}>Type</dt>
                     <dd className={styles.detailsValue}>{fileParams.TYPE}</dd>
                     <dt className={styles.detailsLabel}>Size</dt>
-                    <dd className={styles.detailsValue}>{fileMeta.bytes.length.toLocaleString()} bytes</dd>
+                    <dd className={styles.detailsValue}>{formatBytes(fileMeta.bytes.length)}</dd>
                     {fileParams.TITLE ? (
                         <>
                             <dt className={styles.detailsLabel}>Title</dt>
@@ -1231,13 +957,18 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                             <dd className={styles.detailsValue}><code>{fileParams.MEMO}</code></dd>
                         </>
                     ) : null}
+                    <dt className={styles.detailsLabel}>{t('uploadMethod.label')}</dt>
+                    <dd className={styles.detailsValue} data-testid="review-upload-method">{upload.label}</dd>
+                    {upload.feeText ? (
+                        <>
+                            <dt className={styles.detailsLabel}>{t('uploadMethod.review.fee')}</dt>
+                            <dd className={styles.detailsValue} data-testid="review-upload-fee">{upload.feeText}</dd>
+                        </>
+                    ) : null}
                 </dl>
                 <p className={styles.hint}>
-                    This is step 1 of {setAsTokenInfo ? 4 : 2}. The file goes
-                    on-chain first; once it's indexed you'll sign
-                    {setAsTokenInfo
-                        ? ` three more transactions: the link to ${tick}, the token-info document, and the description update.`
-                        : ` one more transaction linking it to ${tick}.`}
+                    This is step 1 of 2. The file goes on-chain first; once
+                    it's indexed you'll sign{` one more transaction linking it to ${tick}.`}
                     {' '}{hw
                         ? 'Each step confirms on your hardware device.'
                         : 'Each step asks for your password.'}
@@ -1253,6 +984,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     }}
                     onStatusChange={onHwStatusChange}
                     passwordRef={passwordRef}
+                    passwordFieldId="attach-content-password"
                     submitError={submitError}
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
@@ -1267,6 +999,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 demoGuard={demoGuard}
                 label="Review artwork link"
                 onSubmit={handleSignLink}
+                errors={reviewErrors}
                 status={hw && submitError ? (
                     <StatusMessage variant="error">{submitError}</StatusMessage>
                 ) : null}
@@ -1276,7 +1009,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                         variant="success"
                         icon={<Icon.LinkIcon />}
                         loading={submitting}
-                        disabled={hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
+                        aria-disabled={hw && hwStatus !== 'available' ? 'true' : undefined}
                     >
                         Link Artwork to {tick}
                     </Button>
@@ -1318,6 +1051,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     }}
                     onStatusChange={onHwStatusChange}
                     passwordRef={passwordRef}
+                    passwordFieldId="attach-content-password"
                     submitError={submitError}
                     disabled={submitting}
                     getSignerStatus={messaging.getSignerStatus}
@@ -1378,8 +1112,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             )}
             /* The standard order. From (closed) holds the Network the
                token fixes and the From address; Artwork (open) holds the
-               fixed Token, Title and the file; then Memo, Token Picture
-               (optional, closed) and the Network fee row. */
+               fixed Token, Title and the file; then Memo (optional,
+               closed) and the Network fee row. */
             from={(
                 <FromSection
                     {...formSections.bind('from')}
@@ -1424,11 +1158,14 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 onOpenPicker={() => {}}
                 disabled
             />
+            {/* How the artwork's bytes ride the chain; the pick sets the
+                ceiling the file field names. */}
+            <UploadMethodField upload={upload} />
             {/* Title comes before the artwork file. */}
             <Input
                 label="Title"
                 optional
-                help={`A short name for the artwork, stored on the chain with the file. If you also make it ${tick}'s picture, it becomes the token's display name. Every character here takes room from the file. It cannot contain | or ;.`}
+                help={`A short name for the artwork, stored on the chain with the file. Every character here takes room from the file. It cannot contain | or ;.`}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 autoComplete="off"
@@ -1438,8 +1175,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 in the label, the file name in the field, Upload or X at its
                 edge. A file dropped on the field takes the same checks. */}
             <FileField
-                label={`Artwork file (up to ${fileLimitBytes.toLocaleString()} bytes)`}
-                help={`${`Stores the artwork on the chain itself and links it to ${tick}. Two signatures: one to upload the file, one to make it official. A compact image (SVG, small PNG/JPEG/WebP) works best. For larger artwork, put an image URL in the token's description instead.`} Up to about ${fileLimitBytes.toLocaleString()} bytes with the current title and memo.`}
+                label={`Artwork file (up to ${formatBytes(fileLimitBytes, { limit: true })})`}
+                help={`${`Stores the artwork on the chain itself and links it to ${tick}. Two signatures: one to upload the file, one to make it official. A compact image (SVG, small PNG/JPEG/WebP) works best.${largerArtworkAdvice}`} Up to about ${formatBytes(fileLimitBytes, { limit: true })} with the current title and memo.`}
                 inputLabel="Choose file to attach"
                 accept={ARTWORK_ACCEPT}
                 fileName={fileMeta?.name || ''}
@@ -1453,7 +1190,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     <dt className={styles.detailsLabel}>Type</dt>
                     <dd className={styles.detailsValue}>{fileMeta.type}</dd>
                     <dt className={styles.detailsLabel}>Size</dt>
-                    <dd className={styles.detailsValue}>{(fileMeta.bytes.length / 1024).toFixed(1)} KB</dd>
+                    <dd className={styles.detailsValue}>{formatBytes(fileMeta.bytes.length)}</dd>
                 </dl>
             ) : null}
             {previewUrl ? (
@@ -1468,49 +1205,15 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 />
             ) : null}
             </FormSection>
-            {/* Memo is its own optional section, closed; the field carries no
-                Optional tag of its own. */}
-            <FormSection
-                id="memo"
-                title="Memo"
-                icon={Icon.MessageIcon}
-                optional
+            {/* Memo is its own optional section, closed, holding only the
+                memo: the section title names the field and carries its count. */}
+            <MemoSection
                 {...formSections.bind('memo')}
                 revealKey={sectionErrorKey('memo')}
-                summary={memo.trim() ? memo.trim() : 'None'}
-            >
-            <Input
-                label="Memo"
                 maxLength={MAX_MEMO_LENGTH}
-                help="A public note stored on the chain with the artwork file. Every character here takes room from the file. It cannot contain | or ;."
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
-                autoComplete="off"
             />
-            </FormSection>
-            {/* The token-picture choice is an optional section, closed. */}
-            <FormSection
-                id="picture"
-                title="Token Picture"
-                icon={Icon.ImageIcon}
-                optional
-                {...formSections.bind('picture')}
-                revealKey={sectionErrorKey('picture')}
-                summary={setAsTokenInfo ? 'On' : 'Off'}
-            >
-            <Checkbox
-                label={(
-                    <>
-                        Also make this {tick}'s picture everywhere
-                        {fileMeta && !previewUrl ? '. Choose an image file to enable this option.' : ''}
-                    </>
-                )}
-                help="Stores the token's info on the chain and points its description at it, so this becomes the token's picture everywhere. It takes two more signatures."
-                checked={setAsTokenInfo}
-                onChange={(e) => setSetAsTokenInfo(e.target.checked)}
-                disabled={Boolean(fileMeta && !previewUrl)}
-            />
-            </FormSection>
         </FormFrame>,
     );
 }

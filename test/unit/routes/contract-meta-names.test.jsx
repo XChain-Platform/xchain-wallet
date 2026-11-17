@@ -243,9 +243,9 @@ describe('the contracts list names a contract off the chain', () => {
             utils = mount(ContractsList, messaging, { onOpenContract() {} });
             await drain();
         });
-        // The user's own contracts sit under the Mine tab.
+        // The user's own contracts sit under the My Contracts tab.
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('tab', { name: /Mine/ }));
+            fireEvent.click(utils.getByRole('tab', { name: 'My Contracts' }));
             await drain();
         });
         expect(utils.container.textContent).toContain('Escrow v1.0.0 (C:BTC:12)');

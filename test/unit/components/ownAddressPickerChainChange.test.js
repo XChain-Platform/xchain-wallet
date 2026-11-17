@@ -16,9 +16,11 @@ const sourceRoot = join(root, 'packages/core/src');
 // of its own and follows a cross-chain pick like any other form.
 const fixedChainHosts = [
     'shared/routes/ContractFundsForm.jsx',
-    'shared/routes/ContractStakeForm.jsx',
     'shared/routes/ExecuteContractForm.jsx',
 ];
+// The one Staking form holds both: a contract target fixes the chain, the
+// network target follows a cross-chain pick.
+const STAKING_FORM = 'shared/routes/StakingForm.jsx';
 
 function sourceFiles(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -63,5 +65,11 @@ describe('own-address picker chain changes', () => {
             expect(own.length, rel).toBeGreaterThan(0);
             expect(own.every((usage) => usage.locked && !usage.switches), rel).toBe(true);
         }
+    });
+
+    it('locks the Staking form picker on a contract and follows a pick on the network', () => {
+        const own = pickerUsages().filter((usage) => usage.rel === STAKING_FORM);
+        expect(own.filter((usage) => usage.locked && !usage.switches)).toHaveLength(1);
+        expect(own.filter((usage) => usage.switches && !usage.locked)).toHaveLength(1);
     });
 });

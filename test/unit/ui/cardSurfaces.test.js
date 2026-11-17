@@ -33,11 +33,12 @@ const SURFACE_PROP = /^(border|padding|background)(-|$)/;
 const CARD_COMPOSES = /^(card|flush)\s+from\s+['"][^'"]*\/Card\.module\.css['"]$/;
 // The exceptions to "no dashed lines": a drop zone while a file is over it
 // (FileField marks that state data-drop-active), a locked square action
-// tile (G12: dashed grey with a small lock), Multisig sessions' Open a signing
-// link (Layout 2 ruling, 2026-11-12: "a dashed row at the bottom"), and Create
-// bet's Add Outcome, dashed in the picked layout 3 mockup build; that last one
-// is not a stated ruling and waits on the operator.
-const DRAG_OVER = /drag-?over|dropZoneActive|data-drop-active=['"]true['"]|\.tile\.square:disabled|^\.openLinkRow$|^\.addOutcome\.addOutcome$/i;
+// tile (G12: dashed grey with a small lock), and Create bet's Add Outcome,
+// dashed in the picked layout 3 mockup build; that last one is not a stated
+// ruling and waits on the operator. FileField's area variant is dashed at
+// rest: the operator picked that drop area for Restore Backup (restore-v2,
+// 2026-11-14). Multisig sessions' dashed Open a signing link row is gone.
+const DRAG_OVER = /drag-?over|dropZoneActive|data-drop-active=['"]true['"]|\.tile\.square:disabled|^\.addOutcome\.addOutcome$|^\.area$/i;
 
 function files(directory, test) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

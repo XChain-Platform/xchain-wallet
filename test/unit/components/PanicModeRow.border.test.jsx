@@ -18,7 +18,8 @@ import { PanicModeRow } from '../../../packages/core/src/shared/components/setti
 afterEach(() => { cleanup(); clearPanicModeState(); vi.restoreAllMocks(); });
 
 describe('PanicModeRow style-guide actions', () => {
-    it('uses danger actions for activation and a ghost action for deactivation', () => {
+    // No grey or ghost buttons (operator 2026-11-13): the secondary action is outlined.
+    it('uses danger actions for activation and an outlined secondary action for deactivation', () => {
         const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
         render(<PanicModeRow />);
         const activate = screen.getByRole('button', { name: 'Activate' });
@@ -29,7 +30,8 @@ describe('PanicModeRow style-guide actions', () => {
         expect(confirm.className).toMatch(/danger/);
         fireEvent.click(confirm);
         const deactivate = screen.getByRole('button', { name: 'Deactivate' });
-        expect(deactivate.className).toMatch(/ghost/);
+        expect(deactivate.className).toMatch(/secondary/);
+        expect(deactivate.className).not.toMatch(/ghost/);
         expect(deactivate.style.border).toBe('');
         expect(warn).not.toHaveBeenCalled();
     });

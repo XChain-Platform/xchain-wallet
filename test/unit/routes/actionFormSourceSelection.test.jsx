@@ -351,7 +351,7 @@ describe('bespoke forms source default', () => {
         });
         const price = await screen.findByLabelText(/^Price/);
         fireEvent.change(price, { target: { value: '1' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'List Name for Sale' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'List Ownership for Sale' }));
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalled());
         return composeForConfirm.mock.calls[0][0].from.address;
     }
@@ -383,8 +383,8 @@ describe('bespoke forms source default', () => {
                 getDispenses: vi.fn().mockResolvedValue({ data: [] }),
             },
         });
-        // Details opens first; the buyer's source sits on the Buy tab.
-        fireEvent.click(await screen.findByRole('tab', { name: 'Buy' }));
+        // Actions opens first; the buyer's source sits on the Buy page its first row opens.
+        fireEvent.click(await screen.findByTestId('dispenser-buy-row'));
         const field = await screen.findByRole('textbox', { name: 'Pay from' });
         await waitFor(() => expect(field.value).toBe(ADDR_ACTIVE.address));
         expect(field).toHaveAttribute('readonly');

@@ -175,7 +175,9 @@ describe.each(SURFACES)('%s ticker grammar', (_label, submit) => {
         // ticker id, so this is the one shape the chain quotes and the wallet
         // still will not author.
         await submit('^999999');
-        expect(await screen.findByText(/reserved for token IDs/)).toBeTruthy();
+        // Listed in the form error notice and under the Ticker field (the
+        // form error standard), so the copy shows more than once.
+        expect((await screen.findAllByText(/reserved for token IDs/)).length).toBeGreaterThan(0);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -185,13 +187,13 @@ describe.each(SURFACES)('%s ticker grammar', (_label, submit) => {
         // not quietly open this. The wizard's Subtoken template is the surface
         // that composes one, and the copy says so.
         await submit('PARENT.CHILD');
-        expect(await screen.findByText(/cannot contain a dot/)).toBeTruthy();
+        expect((await screen.findAllByText(/cannot contain a dot/)).length).toBeGreaterThan(0);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
     it('still refuses a character outside the chain allowlist', async () => {
         await submit('TWO WORDS');
-        expect(await screen.findByText(/can only use/)).toBeTruthy();
+        expect((await screen.findAllByText(/can only use/)).length).toBeGreaterThan(0);
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 

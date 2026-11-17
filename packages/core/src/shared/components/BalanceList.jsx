@@ -21,6 +21,7 @@ import '../../i18n/locales/en/settings.js';
 import styles from './BalanceList.module.css';
 import { addPlainDecimals } from '../../flows/escrowedTokens.js';
 import {
+    compareDecimalStrings,
     decimalFromBaseUnits,
     expandDecimalNotation,
     formatAtomicAmount,
@@ -32,13 +33,8 @@ import {
     formatFiatAmount,
     formatFiatAmountForSpeech,
 } from '../utils/fiatAmountFormat.js';
-import {
-    smallBalanceBaseUnitsFor,
-    tickerForDescriptor,
-} from '../../registry/coinTicker.js';
-import { defaultRegistry } from '../../registry/index.js';
-
-const chainRegistry = defaultRegistry();
+import { tickerForDescriptor } from '../../registry/coinTicker.js';
+import { SMALL_BALANCE_FIAT_DEFAULT } from '../../schemas/settings.js';
 
 export function isAssetImageSourceAllowed(src, allowRemoteImages = true) {
     if (typeof src !== 'string' || src.length === 0) return false;
@@ -70,12 +66,14 @@ export function isAssetImageSourceAllowed(src, allowRemoteImages = true) {
  * @param {Set<string> | null} [props.automaticHiddenKeys] `chainId:tick` keys collapsed by a display preference. These rows stay reachable but have no per-row unhide action because the preference owns their visibility.
  * @param {(key: string, nextHidden: boolean) => void} [props.onToggleHide]  per-row hide/unhide callback; when supplied, each row gains a "hide" entry in its overflow menu
  * @param {Record<string, { status: 'verified' | 'failed' | 'unavailable' | 'pending', reason: string | null }> | null} [props.verifyMap]   SPV proof verdict per `chainId:tick`; token rows render a `<VerifiedBadge>` when an entry exists (§7/§8), except an 'unavailable' verdict, which shows no status text. Native rows are never badged.
- * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`. Collapses dust rows into their own footer section instead of listing them inline.
- * @param {'dust'|'0.0001'|'0.01'|'1'} [props.smallBalanceThreshold] threshold in whole asset units, or the chain-aware dust heuristic
+ * @param {boolean} [props.hideSmallBalances]: `settings.privacy.hideSmallBalances`. Collapses small rows into their own footer section instead of listing them inline.
+ * @param {string} [props.smallBalanceFiat] a row worth less than this amount in the display currency is small (`resolveSmallBalanceFiat(settings)`)
  * @param {'full'|'trim'|'plain'} [props.numberFormat] exact balance amount presentation
  * @param {boolean} [props.showChain]: name each token row's chain in its accessible name (sighted users read it from the overlay badge). Multi-chain row sets enable this automatically; callers can still force it for a single-chain context.
  * @param {boolean} [props.allowRemoteImages] permits issuer-selected image URLs. Privacy-sensitive callers pass false until settings explicitly allow them.
  * @param {(row: BalanceRow) => number} [props.getRowTabIndex] assigns the single tab stop for a composite picker
+ * @param {string | null} [props.selectedKey] `chainId:tick` of the row whose detail shows beside the list (wide Home, G115); that row is marked current
+ * @param {boolean} [props.splitRows] use the wide list-and-detail row surface
  */
 export const BalanceList = memo(function BalanceList({
     rows,
@@ -95,12 +93,14 @@ export const BalanceList = memo(function BalanceList({
     onToggleHide,
     verifyMap,
     hideSmallBalances = false,
-    smallBalanceThreshold = 'dust',
+    smallBalanceFiat = SMALL_BALANCE_FIAT_DEFAULT,
     numberFormat = 'full',
     showChain = false,
     fiatCurrency = 'USD',
     allowRemoteImages = true,
     getRowTabIndex,
+    selectedKey = null,
+    splitRows = false,
 }) {
     const [hiddenExpanded, setHiddenExpanded] = useState(false);
     const [smallExpanded, setSmallExpanded] = useState(false);
@@ -125,14 +125,16 @@ export const BalanceList = memo(function BalanceList({
     };
     const notHidden = rows.filter((row) => !isHidden(row));
     const hidden = rows.filter(isHidden);
-    //A row the user explicitly pinned is never dust to them, so the
-    // pin wins over the dust threshold; everything else under the threshold
-    // moves into its own collapsed section. Collapsed, not dropped: a balance
-    // the wallet knows about but will not show anywhere is a support ticket.
-    const small = hideSmallBalances
-        ? notHidden.filter((r) => !pinnedKeys?.has(`${r.chainId}:${r.tick}`) && isSmallBalanceRow(r, smallBalanceThreshold))
+    // A row the user explicitly pinned is never small to them, so the pin
+    // wins over the threshold; everything else under it moves into its own
+    // collapsed section. Collapsed, not dropped: a balance the wallet knows
+    // about but will not show anywhere is a support ticket.
+    const smallSet = hideSmallBalances
+        ? smallBalanceKeys(notHidden, smallBalanceFiat, pinnedKeys)
+        : new Set();
+    const small = smallSet.size > 0
+        ? notHidden.filter((r) => smallSet.has(`${r.chainId}:${r.tick}`))
         : [];
-    const smallSet = new Set(small.map((r) => `${r.chainId}:${r.tick}`));
     const visible = small.length > 0
         ? notHidden.filter((r) => !smallSet.has(`${r.chainId}:${r.tick}`))
         : notHidden;
@@ -146,7 +148,7 @@ export const BalanceList = memo(function BalanceList({
     return (
         // Every row is a listitem wrapper around its details button and its
         // pin and hide controls, so the container stays a list in both modes.
-        <div className={styles.list} role="list" aria-label={t('balances.balances')}>
+        <div className={styles.list} role="list" aria-label={t('balances.balances')} data-xc-split-list={splitRows ? '' : undefined}>
             {sortedRows.map((r) => {
                 const key = `${r.chainId}:${r.tick}`;
                 const pinned = pinnedKeys ? pinnedKeys.has(key) : false;
@@ -167,6 +169,8 @@ export const BalanceList = memo(function BalanceList({
                         showChain={labelChains}
                         allowRemoteImages={allowRemoteImages}
                         getTabIndex={getRowTabIndex}
+                        selected={selectedKey === key}
+                        splitRow={splitRows}
                     />
                 );
             })}
@@ -202,6 +206,8 @@ export const BalanceList = memo(function BalanceList({
                                 showChain={labelChains}
                                 allowRemoteImages={allowRemoteImages}
                                 getTabIndex={getRowTabIndex}
+                                selected={selectedKey === key}
+                                splitRow={splitRows}
                             />
                         );
                     }) : null}
@@ -239,6 +245,8 @@ export const BalanceList = memo(function BalanceList({
                                 showChain={labelChains}
                                 allowRemoteImages={allowRemoteImages}
                                 getTabIndex={getRowTabIndex}
+                                selected={selectedKey === key}
+                                splitRow={splitRows}
                             />
                         );
                     }) : null}
@@ -248,7 +256,7 @@ export const BalanceList = memo(function BalanceList({
     );
 });
 
-const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, allowRemoteImages, getTabIndex, fiatCurrency = 'USD', numberFormat = 'full' }) {
+const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getActionLabel, pinned, onTogglePin, hidden, onToggleHide, verify, showChain, allowRemoteImages, getTabIndex, fiatCurrency = 'USD', numberFormat = 'full', selected = false, splitRow = false }) {
     const isNative = row.kind === 'native';
     const tokenImageUrl = isAssetImageSourceAllowed(row.imageUrl, allowRemoteImages)
         ? row.imageUrl
@@ -338,10 +346,13 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
             className={`${styles.row} ${pinned ? styles.rowPinned : ''}`}
             role="listitem"
             data-balance-key={pinKey}
+            data-selected={selected ? 'true' : undefined}
+            data-xc-split-row={splitRow ? '' : undefined}
         >
             <ListRow
                 className={`${styles.rowContent} ${clickable ? styles.rowClickable : ''}`}
                 onClick={handleClick}
+                aria-current={selected ? 'true' : undefined}
                 /* A right chevron the size of the page header's Back chevron says
                    the row opens its coin or token page; Back answers it at the same size. */
                 chevron={clickable ? <span className={styles.rowChevron}><Icon.ForwardIcon /></span> : false}
@@ -526,47 +537,52 @@ export function detectSpamCandidates(rows) {
 }
 
 /**
- * Whether a balance row counts as dust for `settings.privacy.hideSmallBalances`.
+ * Whether a balance row counts as small for `settings.privacy.hideSmallBalances`
+ * (operator ruling 2026-11-14): its value in the display currency, quantity
+ * times the row's own price, is under `fiatThreshold`.
  *
- * Zero confirmed quantity is dust only when no pending native funds exist.
- * Above zero, native rows compare against their chain's threshold, and
- * divisible tokens against a ten-thousandth of a unit (the same magnitude the
- * spam heuristic already calls airdrop dust). An indivisible token is never
- * dust: one unit is one whole thing, usually an NFT.
+ * A row with funds pending, held in escrow or not read is never small. A zero
+ * balance always is. A row with no price (no rate, or the zero rate Home's
+ * token lists draw for an unpriced token) is never small by value: Hide
+ * unknown tokens governs tokens with no price. The sum is exact decimal
+ * arithmetic, never floating point.
  *
- * @param {{ chainId: string, tick: string, kind: string, quantity: string | bigint, divisibility: number }} row
- * @param {'dust'|'0.0001'|'0.01'|'1'} [threshold]
+ * @param {{ chainId: string, tick: string, kind: string, quantity: string | bigint, divisibility: number, fiatRate?: number | null }} row
+ * @param {string} [fiatThreshold]   an amount in the display currency ('1')
  * @returns {boolean}
  */
-export function isSmallBalanceRow(row, threshold = 'dust') {
+export function isSmallBalanceRow(row, fiatThreshold = SMALL_BALANCE_FIAT_DEFAULT) {
     if (!row) return false;
     if (row.escrowed || row.unavailable || safeBigInt(row.pendingQuantity) > 0n) return false;
     const q = safeBigInt(row.quantity);
     if (q < 0n) return false;
     if (q === 0n) return true;
-    if (threshold !== 'dust') {
-        return q < decimalUnitsToBaseUnits(threshold, row.divisibility);
-    }
-    if (row.kind === 'native') {
-        const descriptor = chainRegistry.get(row.chainId);
-        const chainThreshold = smallBalanceBaseUnitsFor(
-            descriptor || row.coin || coinFromChainId(row.chainId),
-        );
-        return q < chainThreshold;
-    }
-    const div = Number(row.divisibility) || 0;
-    if (div <= 0) return false;
-    return q < (10n ** BigInt(div)) / 10000n;
+    if (!(typeof row.fiatRate === 'number' && Number.isFinite(row.fiatRate) && row.fiatRate > 0)) return false;
+    const value = fiatValue(q.toString(), row.divisibility, row.fiatRate);
+    if (value === null) return false;
+    return compareDecimalStrings(value, fiatThreshold) === -1;
 }
 
-function decimalUnitsToBaseUnits(value, divisibility) {
-    const div = Math.max(0, Number(divisibility) || 0);
-    const [whole, fraction = ''] = String(value).split('.');
-    const scale = 10n ** BigInt(div);
-    const kept = fraction.slice(0, div).padEnd(div, '0');
-    let result = BigInt(whole || '0') * scale + BigInt(kept || '0');
-    if (fraction.slice(div).replace(/0/g, '')) result += 1n;
-    return result;
+/**
+ * The `chainId:tick` keys of the rows that fold into small balances: the
+ * ones `isSmallBalanceRow` calls small, less any the user pinned. Home's lists
+ * and the Hide Small Balances page both use this, so the page's preview is
+ * exactly what Home folds.
+ *
+ * @param {Array<any>} rows
+ * @param {string} fiatThreshold
+ * @param {Set<string> | null} [pinnedKeys]
+ * @returns {Set<string>}
+ */
+export function smallBalanceKeys(rows, fiatThreshold, pinnedKeys = null) {
+    const keys = new Set();
+    for (const r of rows || []) {
+        if (!r) continue;
+        const key = `${r.chainId}:${r.tick}`;
+        if (pinnedKeys?.has(key)) continue;
+        if (isSmallBalanceRow(r, fiatThreshold)) keys.add(key);
+    }
+    return keys;
 }
 
 /**
@@ -799,9 +815,11 @@ function addEscrowRows(tokenAcc, escrow, { chainId, descriptor }) {
 // The escrow line under a token's amount. Escrow in a closing dispenser is
 // named as such, since it leaves escrow when the close lands.
 export function escrowLine(row) {
-    if (!row.escrowClosing) return `+ ${row.escrowed} in escrow`;
-    if (row.escrowClosing === row.escrowed) return `+ ${row.escrowed} in a closing dispenser`;
-    return `+ ${row.escrowed} in escrow (${row.escrowClosing} in a closing dispenser)`;
+    // The sums stay exact decimals for the comparison; only the text groups.
+    const escrowed = formatDecimalAmount(row.escrowed) || String(row.escrowed);
+    if (!row.escrowClosing) return `+ ${escrowed} in escrow`;
+    if (row.escrowClosing === row.escrowed) return `+ ${escrowed} in a closing dispenser`;
+    return `+ ${escrowed} in escrow (${formatDecimalAmount(row.escrowClosing) || row.escrowClosing} in a closing dispenser)`;
 }
 
 function mkRow({ kind, chainId, descriptor, tick, displayName, divisibility, fiatRate, imageUrl }) {

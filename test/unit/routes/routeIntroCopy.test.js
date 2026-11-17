@@ -38,8 +38,10 @@ describe('route intro copy', () => {
 
         expect(oracle).toContain('help="Dispensers pricing in this currency can use this oracle."');
         expect(pairing).toContain('help={lane.help}');
-        expect(pairing).toContain('<InfoTip label="Pairing codes contain public keys only');
-        expect(roster).toContain("label={t('projectRoster.tokensHelp'");
+        expect(pairing).toContain('<Notice key="public-code" tone="info" title="Public Codes"');
+        // The token list is a text field now (operator 2026-11-15), so its
+        // guidance is that field's own help tip.
+        expect(roster).toContain("help={t('projectRoster.tokensHelp'");
         expect(rosterCopy).toContain('show an "Official" badge in explorers and wallets');
         expect(signer).toContain("help={t('signerSelect.intro')}");
     });
@@ -51,6 +53,6 @@ describe('route intro copy', () => {
         expect(readRoute('OracleForm.jsx')).toContain('typedConfirmationCopy.oracle(');
         expect(readFileSync('packages/core/src/i18n/locales/en/common.js', 'utf8'))
             .toContain("can't be undone for 24 hours");
-        expect(readRoute('SellOwnershipForm.jsx')).toContain('label="Network fee"');
+        expect(readRoute('SellOwnershipForm.jsx')).toContain('<FeeSection');
     });
 });

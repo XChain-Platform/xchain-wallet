@@ -154,7 +154,7 @@ describe('PSBT review validation', () => {
         })).toBeNull();
     });
 
-    it('shows a plain parser-output error and keeps signing disabled', async () => {
+    it('shows a plain parser-output error and keeps signing available to explain the refusal', async () => {
         mount(messagingFor({
             parsePsbtRequest: vi.fn().mockResolvedValue({
                 decomposed: {
@@ -173,11 +173,25 @@ describe('PSBT review validation', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'This transaction spends more than its inputs contain.',
         );
-        expect(screen.getByRole('button', { name: /^Sign transaction$/i })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i })).not.toBeDisabled();
     });
 });
 
 describe('PSBT form input controls', () => {
+    it('reports an empty transaction code on the field and does not sign', async () => {
+        const messaging = mount();
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true });
+
+        const submit = screen.getByRole('button', { name: /^Sign transaction$/i });
+        expect(submit).not.toBeDisabled();
+        fireEvent.click(submit);
+
+        await waitFor(() => expect(document.querySelector('[data-form-errors]'))
+            .toHaveTextContent('Paste the transaction code or choose a .psbt file.'));
+        expect(screen.getByLabelText('Unsigned transaction code')).toHaveAttribute('aria-invalid', 'true');
+        expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
+    });
+
     it('shows help for the transaction network', async () => {
         mount();
 
@@ -295,7 +309,7 @@ describe('PSBT form input controls', () => {
 
         await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/no inputs this wallet can sign/i));
         expect(screen.getAllByRole('alert')).toHaveLength(1);
-        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(false);
         expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
     });
 
@@ -314,7 +328,7 @@ describe('PSBT form input controls', () => {
 
         await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/no inputs this wallet can sign/i));
         expect(screen.getAllByRole('alert')).toHaveLength(1);
-        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(false);
         expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
     });
 
@@ -333,7 +347,7 @@ describe('PSBT form input controls', () => {
 
         await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/already finalized/i));
         expect(screen.getAllByRole('alert')).toHaveLength(1);
-        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(false);
         expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
     });
 
@@ -381,7 +395,7 @@ describe('PSBT signature type review', () => {
         expect(psbtSighashError({ inputs: [inputWith(2, { address: 'someone-else' })] }, OWN)).toBeNull();
     });
 
-    it('refuses before the password step and keeps signing disabled', async () => {
+    it('refuses before the password step while keeping signing available', async () => {
         const messaging = mount(messagingFor({
             parsePsbtRequest: vi.fn().mockResolvedValue({
                 decomposed: {
@@ -398,7 +412,7 @@ describe('PSBT signature type review', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Input 1 asks for a signature that leaves part of the transaction open to change after you sign.',
         );
-        expect(screen.getByRole('button', { name: /^Sign transaction$/i })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i })).not.toBeDisabled();
         expect(messaging.signPsbtUserInitiated).not.toHaveBeenCalled();
     });
 });

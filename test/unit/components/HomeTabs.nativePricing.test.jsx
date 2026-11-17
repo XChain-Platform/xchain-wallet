@@ -21,10 +21,13 @@ import { TotalBalanceHero } from '../../../packages/core/src/shared/components/T
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import {
     configureFiatRateSource,
+    getTokenFiatRate,
     _resetPriceLookupForTests,
 } from '../../../packages/core/src/flows/priceLookup.js';
 import { walletBalances } from '../../../packages/core/src/flows/balances.js';
 import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
+import { showHomeBalances } from '../../helpers/homeBalances.js';
+import { clearWalletHistoryStore } from '../../../packages/core/src/shared/hooks/useWalletHistory.js';
 
 const NOW = Date.parse('2026-10-12T12:00:00Z');
 const FRESH_TS = Math.floor(NOW / 1000) - 60;
@@ -102,6 +105,7 @@ afterEach(() => {
     cleanup();
     _resetPriceLookupForTests();
     clearDemoWalletId();
+    globalThis.localStorage?.clear();
 });
 
 describe('Home native rows on a real wallet', () => {
@@ -207,7 +211,7 @@ describe('Home test-network fiat', () => {
         const chart = await screen.findByRole('img', { name: /Portfolio performance chart/ });
         expect(chart).toHaveAccessibleName(expect.stringMatching(/End \$70,001\.00 USD\./));
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
         expect(document.querySelector('[data-balance-key="bitcoin-regtest:EXAMPLE"]')).toHaveTextContent('$1.00');
         expect(messaging.getNativePricesRequest).not.toHaveBeenCalled();
     });
@@ -223,7 +227,7 @@ describe('Home test-network fiat', () => {
         expect(document.querySelector('[data-balance-key="bitcoin-regtest:BTC"]')).not.toHaveTextContent('$');
         expect(screen.queryByRole('region', { name: 'Portfolio performance' })).toBeNull();
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
         expect(document.querySelector('[data-balance-key="bitcoin-regtest:EXAMPLE"]')).toHaveTextContent('$0.00');
         expect(document.querySelector('[data-balance-key="bitcoin-regtest:EXAMPLE"]')).toBeInTheDocument();
         expect(messaging.getNativePricesRequest).not.toHaveBeenCalled();
@@ -260,34 +264,29 @@ function dexVenue() {
                     }),
                 };
             }
-            if (url.includes('/api/market/MARKET/BTC')) {
+            // One read of every market against BTC: MARKET trades, UNKNOWN
+            // has no market, and SPAM's market must not price the dust row.
+            if (url.includes('/api/markets/BTC')) {
                 return {
                     ok: true,
                     json: async () => ({
-                        data: [{
-                            tick1: 'MARKET',
-                            tick2: 'BTC',
-                            tick1_price: '0.000001',
-                            tick2_price: '1000000',
-                            last_updated: FRESH_TS,
-                        }],
-                    }),
-                };
-            }
-            if (url.includes('/api/market/UNKNOWN/BTC')) {
-                return { ok: true, json: async () => ({ data: [] }) };
-            }
-            if (url.includes('/api/market/SPAM/BTC')) {
-                return {
-                    ok: true,
-                    json: async () => ({
-                        data: [{
-                            tick1: 'SPAM',
-                            tick2: 'BTC',
-                            tick1_price: '1',
-                            tick2_price: '1',
-                            last_updated: FRESH_TS,
-                        }],
+                        data: [
+                            {
+                                tick1: 'MARKET',
+                                tick2: 'BTC',
+                                tick1_price: '0.000001',
+                                tick2_price: '1000000',
+                                last_updated: FRESH_TS,
+                            },
+                            {
+                                tick1: 'SPAM',
+                                tick2: 'BTC',
+                                tick1_price: '1',
+                                tick2_price: '1',
+                                last_updated: FRESH_TS,
+                            },
+                        ],
+                        total: 2,
                     }),
                 };
             }
@@ -298,16 +297,14 @@ function dexVenue() {
 }
 
 describe('Home token rows on a real wallet', () => {
-    it('prices only the DEX-traded token, skips spam-looking dust, and keeps the count aligned', async () => {
+    it('prices only the DEX-traded token on the default view, skips spam-looking dust, and keeps the count aligned', async () => {
         const calls = dexVenue();
         mount({ balances: DEX_BALANCES });
 
         expect(within(hero()).queryByText(/not priced/)).toBeNull();
-        expect(calls).toEqual([]);
-        expect(calls.some((url) => url.includes('/api/market/MARKET/BTC'))).toBe(false);
         expect(document.body.textContent).not.toContain('$80,000.00');
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        // All types, the default: tokens are priced without narrowing to Tokens.
         await waitFor(() => expect(screen.getByText('$0.08 · DEX price')).toBeInTheDocument());
         expect(within(hero()).queryByText(/not priced/)).toBeNull();
         expect(within(hero()).getByText('$0.08')).toBeInTheDocument();
@@ -316,17 +313,22 @@ describe('Home token rows on a real wallet', () => {
         expect(unknown).toBeTruthy();
         expect(within(unknown).queryByText('MARKET')).toBeNull();
         expect(unknown.textContent).toContain('$0.00');
-        expect(calls.some((url) => url.includes('/api/market/MARKET/BTC'))).toBe(true);
+        // One markets read for every token, none per token, none naming SPAM.
+        expect(calls.filter((url) => url.includes('/api/markets/BTC'))).toHaveLength(1);
+        expect(calls.some((url) => url.includes('/api/market/'))).toBe(false);
         expect(calls.some((url) => url.includes('SPAM'))).toBe(false);
+        expect(getTokenFiatRate({ chainCoin: 'bitcoin', tick: 'SPAM' })).toBeNull();
 
-        // Leaving the Tokens tab keeps the known token value in the total and
+        // Changing the Type keeps the known token value in the total and
         // sends no new price request.
-        const callsBeforeCoins = calls.length;
-        fireEvent.click(screen.getByRole('tab', { name: 'Coins' }));
+        const callsBeforeTypes = calls.length;
+        showHomeBalances('coins');
+        await act(async () => {});
+        showHomeBalances('tokens');
         await act(async () => {});
         expect(within(hero()).getByText('$0.08')).toBeInTheDocument();
         expect(within(hero()).queryByText(/not priced/)).toBeNull();
-        expect(calls).toHaveLength(callsBeforeCoins);
+        expect(calls).toHaveLength(callsBeforeTypes);
     });
 
     it('lists an unpriced token beside priced ones with no pricing status text', async () => {
@@ -334,7 +336,7 @@ describe('Home token rows on a real wallet', () => {
         const onSelectToken = vi.fn();
         mount({ balances: DEX_BALANCES, onSelectToken });
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
         await waitFor(() => expect(screen.getByText('$0.08 · DEX price')).toBeInTheDocument());
 
         expect(screen.queryByText('Unpriced tokens')).toBeNull();
@@ -367,7 +369,8 @@ describe('Home cold-load request budget', () => {
         };
     }
 
-    it('keeps a five-address, ten-token wallet at or below five requests before a token tab opens', async () => {
+    it('keeps a five-address, ten-token wallet at or below five requests on the default view, plus one per route for the value chart', async () => {
+        clearWalletHistoryStore();
         const requests = [];
         const addresses = Array.from({ length: 5 }, (_, index) => `bc1qcold${index}`);
         const vault = {
@@ -417,9 +420,17 @@ describe('Home cold-load request budget', () => {
             now: () => NOW,
             explorerUrlByCoin: { bitcoin: 'https://explorer.test' },
             fetch: async (url) => {
+                // The value chart's price series: every held token and the
+                // coin in one read.
+                if (url.includes('/BTC/api/price_history?')) {
+                    requests.push('chart-prices');
+                    return { ok: true, json: async () => ({ series: [], missing: [], quote: 'BTC' }) };
+                }
                 requests.push('fiat-rate');
-                if (url.includes('/api/market/')) {
-                    return { ok: true, json: async () => ({ data: [] }) };
+                // Never a per-token market read: the ten tokens share one.
+                expect(url).not.toContain('/api/market/');
+                if (url.includes('/BTC/api/markets/BTC')) {
+                    return { ok: true, json: async () => ({ data: [], total: 0 }) };
                 }
                 expect(url).toContain('/BTC/api/price_snapshots/FINALIZED/status');
                 return {
@@ -456,6 +467,15 @@ describe('Home cold-load request budget', () => {
                 requests.push('history');
                 return [];
             }),
+            // The value chart's batch history reads: five addresses are one batch.
+            getWalletHistoryBatch: vi.fn(async ({ addresses }) => {
+                requests.push('chart-history');
+                return { amount_unit: 'base', addresses, limit: 100, next_cursor: null, actions: [] };
+            }),
+            getNativeHistoryBatch: vi.fn(async () => {
+                requests.push('chart-native');
+                return { transactions: [], cursor: null, history_from_height: 0, sync: { reorg_count: 0 } };
+            }),
         };
 
         mount({
@@ -466,9 +486,18 @@ describe('Home cold-load request budget', () => {
         });
         // Home shares one native price request across the hero, chart and rows.
         await waitFor(() => expect(requests.filter((name) => name === 'native-prices').length).toBeGreaterThanOrEqual(1));
-        await waitFor(() => expect(requests.filter((name) => name === 'fiat-rate')).toHaveLength(1));
+        // The coin and the ten tokens share one oracle snapshot read, and the
+        // tokens one markets read.
+        await waitFor(() => expect(requests.filter((name) => name === 'fiat-rate')).toHaveLength(2));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(requests.filter((name) => name === 'fiat-rate')).toHaveLength(2);
 
-        expect(requests.length).toBeLessThanOrEqual(5);
+        // The value chart reads one call per route for the whole wallet:
+        // token history, coin history and the tokens' price series.
+        await waitFor(() => expect(requests.filter((name) => name.startsWith('chart-')).sort())
+            .toEqual(['chart-history', 'chart-native', 'chart-prices']));
+        expect(requests.filter((name) => !name.startsWith('chart-')).length).toBeLessThanOrEqual(5);
+        expect(requests.length).toBeLessThanOrEqual(8);
         expect(requests.filter((name) => name === 'balances-batch')).toHaveLength(1);
         expect(messaging.verifyBalance).not.toHaveBeenCalled();
         expect(messaging.getOwnedTokens).not.toHaveBeenCalled();
@@ -476,7 +505,7 @@ describe('Home cold-load request budget', () => {
         expect(messaging.getHoldersForToken).not.toHaveBeenCalled();
         expect(messaging.getAddressHistory).not.toHaveBeenCalled();
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
         await waitFor(() => expect(messaging.verifyBalance).toHaveBeenCalledTimes(10));
         // The Tokens tab lists held tokens only, so it reads no owned tokens.
         expect(messaging.getOwnedTokens).not.toHaveBeenCalled();
@@ -507,7 +536,7 @@ describe('Home hidden-token totals', () => {
         expect(chart).toHaveAccessibleName(expect.stringMatching(/End \$100\.00 USD\./));
         expect(hero()).not.toHaveTextContent('$300.00');
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
         expect(screen.getByRole('button', { name: 'Show 1 hidden token' })).toBeInTheDocument();
     });
 });

@@ -29,6 +29,18 @@ function rule(css, selector) {
     return css.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]+)\\}`))?.[1] || '';
 }
 
+describe('Issue token Divisible toggle spacing', () => {
+    it('leaves exactly 8px (the section padding) under the toggle, by tokens only', () => {
+        const body = rule(issueCss, '.divisibleSwitch.divisibleSwitch');
+        expect(body).toMatch(/margin-block-end:\s*calc\(\(var\(--xc-switch-track-height\) - var\(--xc-switch-hit-size\)\) \/ 2\);/);
+        expect(body).not.toMatch(/\d+px/);
+        const formStandardCss = readFileSync('packages/core/src/shared/components/formStandard/formStandard.module.css', 'utf8');
+        expect(rule(formStandardCss, '.sectionBody')).toMatch(/padding:\s*var\(--xc-space-2\);/);
+        const source = readFileSync('packages/core/src/shared/routes/IssueTokenForm.jsx', 'utf8');
+        expect(source).toMatch(/<Switch\s+className=\{styles\.divisibleSwitch\}[^>]*label=\{t\('issue\.divisible'\)\}/);
+    });
+});
+
 describe('authoring form help text', () => {
     it.each([
         ['IssueTokenForm.module.css', issueCss],

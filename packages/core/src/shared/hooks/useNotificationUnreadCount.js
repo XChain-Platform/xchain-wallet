@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMessaging } from '../useMessaging.js';
+import { isActionRequiredAlert, withoutDeadNoticeAlerts } from '../walletAlerts.js';
 
 /** Fired after a notification is read or recorded, so every counter refreshes at once. */
 export const NOTIFICATIONS_CHANGED_EVENT = 'xc:notifications-changed';
@@ -21,7 +22,16 @@ export function announceNotificationsChanged() {
  * when a notification changes, when the window regains focus, and every 30 s
  * so a notification recorded in the background shows on the bell.
  */
-export function useNotificationUnreadCount({ walletId, alerts = [] } = {}) {
+export function useNotificationUnreadCount(args = {}) {
+    return useNotificationUnreadSummary(args).unread;
+}
+
+/**
+ * The same count, split: `unread` is every unread item, `actionRequired` the
+ * unread ones that need the user to act (payment due, pending airdrop, an
+ * unfinished migration). Dead notice rows are dropped before either count.
+ */
+export function useNotificationUnreadSummary({ walletId, alerts = [] } = {}) {
     const { messaging } = useMessaging();
     const [inbox, setInbox] = useState([]);
 
@@ -46,11 +56,20 @@ export function useNotificationUnreadCount({ walletId, alerts = [] } = {}) {
     }, [messaging, walletId]);
 
     const readById = new Map();
-    for (const row of [...inbox, ...(Array.isArray(alerts) ? alerts : [])]) {
+    const actionById = new Map();
+    // Pass the live notice items (usePendingNoticeAlerts) inside `alerts`; a
+    // stored payment-due or airdrop-pending row without one is dead and not counted.
+    for (const row of [...withoutDeadNoticeAlerts(inbox, alerts), ...(Array.isArray(alerts) ? alerts : [])]) {
         if (!row?.id) continue;
         readById.set(row.id, readById.get(row.id) === true || row.read === true);
+        actionById.set(row.id, isActionRequiredAlert(row));
     }
     let unread = 0;
-    for (const isRead of readById.values()) if (!isRead) unread += 1;
-    return unread;
+    let actionRequired = 0;
+    for (const [id, isRead] of readById) {
+        if (isRead) continue;
+        unread += 1;
+        if (actionById.get(id)) actionRequired += 1;
+    }
+    return { unread, actionRequired };
 }

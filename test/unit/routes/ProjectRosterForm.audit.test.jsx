@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ProjectRosterForm } from '../../../packages/core/src/shared/routes/ProjectRosterForm.jsx';
 
@@ -72,19 +72,21 @@ describe('ProjectRosterForm editing validation', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: /^Create project tokens$/i })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Create and Link' })).toBeDisabled();
         expect(messaging.createList).not.toHaveBeenCalled();
     });
 
     it('keeps protocol-valid spelling and refuses a case-insensitive duplicate', async () => {
         mount();
-        await screen.findByText('No list published yet. This will be the first.');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
         addToken('Wow!');
         addToken('WOW!');
-        expect(await screen.findByText('WOW! is already on the list.')).toBeTruthy();
+        // The notice at the top and the outlined box both carry it.
+        expect(await screen.findAllByText('WOW! is already on the list.')).toHaveLength(2);
+        expect(screen.getByLabelText('Tokens')).toHaveAttribute('aria-invalid', 'true');
         addToken('FLAM1N-H0T-CHEET0S');
 
-        fireEvent.click(screen.getByRole('button', { name: /^Create project tokens$/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
 
         const roster = await screen.findByRole('list', { name: 'Tokens' });
         const rows = screen.getAllByRole('listitem');
@@ -96,9 +98,9 @@ describe('ProjectRosterForm editing validation', () => {
 
     it('returns from review without submitting the compose form again', async () => {
         mount();
-        await screen.findByText('No list published yet. This will be the first.');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
         addToken('VALID');
-        fireEvent.click(screen.getByRole('button', { name: /^Create project tokens$/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
         expect(await screen.findByRole('form', { name: 'Review official token list' })).toBeTruthy();
 
         const clickAllowed = fireEvent.click(screen.getByRole('button', { name: 'Back to Edit' }));
@@ -110,13 +112,13 @@ describe('ProjectRosterForm editing validation', () => {
 
     it('refuses an empty list and an overlong memo before review', async () => {
         mount();
-        await screen.findByText('No list published yet. This will be the first.');
-        fireEvent.click(screen.getByRole('button', { name: /^Create project tokens$/i }));
-        expect(await screen.findByText('Add at least one token to the list.')).toBeTruthy();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
+        expect(await screen.findAllByText('Add at least one token to the list.')).toHaveLength(2);
 
         addToken('VALID');
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'x'.repeat(251) } });
-        fireEvent.click(screen.getByRole('button', { name: /^Create project tokens$/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
         expect(await screen.findByText(/network accepts at most 250/)).toBeTruthy();
         expect(screen.queryByRole('form', { name: 'Review official token list' })).toBeNull();
     });
@@ -127,17 +129,17 @@ describe('ProjectRosterForm editing validation', () => {
         }));
 
         expect(await screen.findByText(/Failed to load the current official-token list/)).toBeTruthy();
-        expect(screen.queryByText('No list published yet. This will be the first.')).toBeNull();
-        expect(screen.queryByRole('button', { name: /project tokens$/i })).toBeNull();
+        expect(screen.queryByText(/Loading the current project token list/)).toBeNull();
+        expect(screen.queryByRole('button', { name: /^(Create and Link|Update List)$/ })).toBeNull();
     });
 
     it('reports a creation-record request failure separately from an unindexed record', async () => {
         mount(messagingWith({
             getGenesisForToken: vi.fn().mockRejectedValue(new Error('offline')),
         }));
-        await screen.findByText('No list published yet. This will be the first.');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
         addToken('VALID');
-        fireEvent.click(screen.getByRole('button', { name: /^Create project tokens$/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
 
         expect(await screen.findByText(/Couldn't load the creation record for PROJ/)).toBeTruthy();
         expect(screen.queryByText(/isn't indexed yet/)).toBeNull();

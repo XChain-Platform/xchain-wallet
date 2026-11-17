@@ -69,26 +69,27 @@ function mount() {
     return render(<MarketView walletId="wallet-1" chainId="bitcoin-mainnet" tick1="XCP" tick2="BTC" onBack={() => {}} />);
 }
 
-const tab = (name) => screen.getByRole('tab', { name });
+// The old Swap | Market tab row is gone: one Swap | Limit | Market order-type
+// toggle inside Trade Details switches the mode.
+const orderType = (name) => screen.getByRole('radio', { name });
 const priceField = () => screen.getByRole('textbox', { name: 'Price' });
-const amountField = () => screen.getByRole('textbox', { name: 'Amount' });
+// The Amount label names its unit, e.g. "Amount (XCP)".
+const amountField = () => screen.getByRole('textbox', { name: /^Amount\b/ });
 
 describe('MarketView Trade page draft', () => {
-    it('keeps the typed price and amount across a switch between Swap and Market', async () => {
+    it('keeps the typed price and amount across a switch to Swap and back', async () => {
         messaging = freshMessaging();
         mount();
         await settle();
-        // Buy opens the Trade page in place; its Market form has the Price and Amount fields.
+        // Buy opens the Trade page in place; its Limit mode has the Price and Amount fields.
         fireEvent.click(screen.getByRole('button', { name: 'Buy' }));
         await settle();
-        fireEvent.click(tab('Market'));
-        await settle();
-        fireEvent.click(screen.getByRole('radio', { name: 'Limit' }));
+        fireEvent.click(orderType('Limit'));
         fireEvent.change(priceField(), { target: { value: '0.00015' } });
         fireEvent.change(amountField(), { target: { value: '4' } });
-        fireEvent.click(tab('Swap'));
+        fireEvent.click(orderType('Swap'));
         await settle();
-        fireEvent.click(tab('Market'));
+        fireEvent.click(orderType('Limit'));
         await settle();
 
         expect(priceField()).toHaveValue('0.00015');
@@ -130,9 +131,7 @@ describe('MarketView Trade page draft', () => {
         await settle();
         fireEvent.click(screen.getByRole('button', { name: 'Buy' }));
         await settle();
-        fireEvent.click(tab('Market'));
-        await settle();
-        fireEvent.click(screen.getByRole('radio', { name: 'Limit' }));
+        fireEvent.click(orderType('Limit'));
         fireEvent.change(priceField(), { target: { value: '0.00015' } });
         // The pair flips on the market page, so leave the Trade page first.
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
@@ -141,9 +140,7 @@ describe('MarketView Trade page draft', () => {
         await settle();
         fireEvent.click(screen.getByRole('button', { name: 'Buy' }));
         await settle();
-        fireEvent.click(tab('Market'));
-        await settle();
-        fireEvent.click(screen.getByRole('radio', { name: 'Limit' }));
+        fireEvent.click(orderType('Limit'));
 
         // A fresh form for the reversed pair: no price carried over, and the
         // units are the reversed pair's (price in XCP, amount in BTC).

@@ -44,7 +44,10 @@ import {
 } from '../../core/src/signers/Signer.js';
 import { assertSignedTxMatchesPsbt } from '../../core/src/signers/verifySignedTx.js';
 import { assertInputSignaturesVerify } from '../../core/src/signers/verifyInputSignatures.js';
-import { CHAIN_ID_TO_TREZOR_COIN, chainIdToTrezorCoin, pathToAddressN, toTrezorSignTransaction } from './trezorFormat.js';
+import {
+    CHAIN_ID_TO_TREZOR_COIN, TREZOR_LTC_TESTNET_COIN, TREZOR_TEST_COINS, TREZOR_TEST_COIN_TYPE,
+    chainIdToTrezorCoin, hardwareNetworkError, pathToAddressN, toTrezorSignTransaction,
+} from './trezorFormat.js';
 // Imported from validate.js rather than the registry barrel so this package
 // does not pull the bundled descriptors in behind it.
 import { FAMILY_MAINNET_COIN_TYPE_SLOT } from '../../core/src/registry/validate.js';
@@ -181,6 +184,7 @@ export class TrezorSigner extends Signer {
      */
     async getAddresses({ chainId, accountIndex, change, startIndex, count, addressType, verify }) {
         const coin = chainIdToTrezorCoin(chainId);
+        assertTrezorAddressType(chainId, coin, addressType);
         const pathAt = (index) => formatBip44Path({
             purpose: bip44PurposeFor(addressType, coin),
             coin,
@@ -350,6 +354,8 @@ export class TrezorSigner extends Signer {
         if (typeof path !== 'string' || !path.startsWith('m/')) {
             throw new Error('TrezorSigner.signMessage: path is required (HW signers have no imported WIFs)');
         }
+        // On a test network the stored address path is the coin's own 1' path,
+        // which Connect's coin-path check accepts, so test networks sign too.
         const coin = chainIdToTrezorCoin(chainId);
         const res = await this._connect.signMessage({ path, coin, message });
         if (!res?.success) {
@@ -519,10 +525,40 @@ function bip44PurposeFor(addressType, coin) {
     if (addressType === 'p2wpkh') return "84'";
     if (addressType === 'p2sh-p2wpkh') return "49'";
     if (addressType === 'p2pkh') return "44'";
-    // Dogecoin + Litecoin legacy default to p2pkh purpose 44'.
-    if (coin === 'doge' || coin === 'ltc') return "44'";
+    // Dogecoin + Litecoin legacy default to p2pkh purpose 44', on every
+    // network: keyed by family so Litecoin Testnet ('tltc') keeps it too.
+    const family = coinFamily(coin);
+    if (family === 'dogecoin' || family === 'litecoin') return "44'";
     // Bitcoin default is native segwit.
     return "84'";
+}
+
+/**
+ * Refuse an address type the device would encode differently from the
+ * wallet. Trezor's Litecoin Testnet coin writes P2SH at version 58 ("Q...")
+ * while the SDK writes 0xc4 ("2..."), so a p2sh-p2wpkh address the device
+ * returned would never match the one the wallet and backend watch.
+ *
+ * @param {string} chainId
+ * @param {string} coin
+ * @param {string | undefined} addressType
+ */
+function assertTrezorAddressType(chainId, coin, addressType) {
+    if (coin === TREZOR_LTC_TESTNET_COIN && addressType === 'p2sh-p2wpkh') {
+        throw hardwareNetworkError(
+            'This Trezor can\'t derive P2SH-P2WPKH addresses on Litecoin testnet - use a native '
+            + 'segwit or legacy address, or a software wallet. (Its firmware writes these '
+            + 'addresses in a different format than the rest of the wallet.)',
+            'HW_ADDRESS_FORMAT_UNSUPPORTED',
+        );
+    }
+}
+
+/** The chain family ('bitcoin', 'litecoin', 'dogecoin') a coin short name belongs to. */
+function coinFamily(coin) {
+    const chainId = Object.keys(CHAIN_ID_TO_TREZOR_COIN)
+        .find((id) => CHAIN_ID_TO_TREZOR_COIN[id] === coin);
+    return chainId ? chainId.split('-')[0] : null;
 }
 
 /**
@@ -556,26 +592,27 @@ function describeAddressN(got) {
 }
 
 /**
- * SLIP-44 coin types for the chains the wallet supports. Mainnet slots only,
- * matching the chain descriptors' parity anchor (coin-type stays at the mainnet
- * slot on every network). Trezor's 'test' coin is intentionally absent: it
- * forces coin-type 1', which diverges from the wallet's 0'-anchored bitcoin
- * derivation, so bitcoin-testnet is rejected upstream in chainIdToTrezorCoin
- * and can never reach this formatter.
+ * SLIP-44 coin type for a Trezor coin. Mainnet coins ('btc', 'ltc', 'doge')
+ * resolve to their family's mainnet slot, matching the chain descriptors'
+ * parity anchor, so a mainnet hardware account derives the same addresses as
+ * the software signer. The test coins ('test', 'regtest', 'tltc') resolve to
+ * their firmware slip44, 1' (operator ruling 2026-11-15: a hardware wallet
+ * uses the device's own test derivation), so Connect's path check and the
+ * firmware's Strict safety checks accept every test-network path.
  *
  * Exported (in addition to its internal use in formatBip44Path) so a parity
- * test can assert this hardware-signer copy of the coin-type slot never
+ * test can assert this hardware-signer copy of the mainnet coin-type slot never
  * diverges from the chain descriptors' derivationPaths, which is the copy
  * the software signer derives against (uuid 980fe12c).
  *
- * There is no longer a copy to diverge: the VALUES come from the registry's
- * FAMILY_MAINNET_COIN_TYPE_SLOT, the one copy bound to the SDK's FAMILY_SLIP44
- * by the cross-repo parity test. The coin short name is resolved back to its
- * chain family through CHAIN_ID_TO_TREZOR_COIN, so support stays decided by
- * that map alone (fail-closed by absence, testnet/regtest still refused
- * upstream in chainIdToTrezorCoin) and no third literal is introduced here.
- * Every chainId sharing a coin short name also shares a family, so the
- * reverse lookup is stable whichever entry it lands on.
+ * There is no longer a copy to diverge: the mainnet VALUES come from the
+ * registry's FAMILY_MAINNET_COIN_TYPE_SLOT, the one copy bound to the SDK's
+ * FAMILY_SLIP44 by the cross-repo parity test. The coin short name is resolved
+ * back to its chain family through CHAIN_ID_TO_TREZOR_COIN, so support stays
+ * decided by that map alone (fail-closed by absence, unsupported networks
+ * refused upstream in chainIdToTrezorCoin). Every chainId sharing a coin short
+ * name also shares a family, so the reverse lookup is stable whichever entry
+ * it lands on.
  * @param {string} coin
  */
 export function coinTypeFor(coin) {
@@ -584,6 +621,7 @@ export function coinTypeFor(coin) {
     if (!chainId) {
         throw new Error(`TrezorSigner: unknown Trezor coin "${coin}"`);
     }
+    if (TREZOR_TEST_COINS.has(coin)) return TREZOR_TEST_COIN_TYPE;
     const family = chainId.split('-')[0];
     const slot = FAMILY_MAINNET_COIN_TYPE_SLOT[family];
     if (!slot) {

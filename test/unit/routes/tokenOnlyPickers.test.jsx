@@ -50,8 +50,11 @@ const TOKEN_ONLY_PICKERS = [
     'AirdropForm.jsx#0',
     'AirdropForm.jsx#1',
     'ContractFundsForm.jsx#0',
-    'ContractStakeForm.jsx#0',
+    'StakingForm.jsx#0',
     'ExecuteContractForm.jsx#0',
+    'ControllerBindForm.jsx#0',
+    'UnbindForm.jsx#0',
+    'GatedPublishForm.jsx#0',
 ];
 
 // The opening tag from `<TokenPicker` to its closing `>`, skipping `>` inside braces.

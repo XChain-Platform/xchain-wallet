@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AboutSection } from '../../../packages/core/src/shared/components/settings/AboutSection.jsx';
-import { WALLET_VERSION } from '../../../packages/core/src/buildInfo.js';
+import { LICENSE_URL, WALLET_VERSION } from '../../../packages/core/src/buildInfo.js';
 
 afterEach(() => cleanup());
 
@@ -70,10 +70,11 @@ describe('AboutSection diagnostics', () => {
                 password: 'hunter2',
                 address: '1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
             });
-            fireEvent.click(screen.getByRole('button', { name: 'Copy Diagnostics' }));
+            fireEvent.click(screen.getByRole('button', { name: /^Copy diagnostics/ }));
 
             // The button label also reads "Copied" now; wait for the status line.
-            await screen.findByText(/^Copied \(\d+ bytes\)/);
+            // Sizes read in KB or MB, never raw bytes.
+            await screen.findByText(/^Copied \(\d+\.\d (KB|MB)\)/);
             const copied = writeText.mock.calls[0][0];
             expect(copied).not.toContain('hunter2');
             expect(copied).not.toContain('1BoatSLRHtKNngkdXEeobR76b53LETtpyT');
@@ -90,7 +91,7 @@ describe('AboutSection diagnostics', () => {
         Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
         try {
             mount();
-            fireEvent.click(screen.getByRole('button', { name: 'Copy Diagnostics' }));
+            fireEvent.click(screen.getByRole('button', { name: /^Copy diagnostics/ }));
 
             expect(await screen.findByText(/Copy is not available here/)).toBeTruthy();
             expect(screen.queryByText(/Copied/)).toBeNull();
@@ -100,30 +101,13 @@ describe('AboutSection diagnostics', () => {
         }
     });
 
-    it('uses the page scroll for long diagnostics and license text', async () => {
+    it('opens the license externally and renders no document content', () => {
         mount();
-        fireEvent.click(screen.getByRole('button', { name: 'Show Preview' }));
-        const preview = await screen.findByText(/"version": "test"/);
-        expect(preview.style.overflow).toBe('');
-        expect(preview.style.maxHeight).toBe('');
-
-        fireEvent.click(screen.getByRole('button', { name: 'Show Full Text' }));
-        const license = document.getElementById('full-license-text');
-        expect(license.style.overflow).toBe('');
-        expect(license.style.maxHeight).toBe('');
-    });
-
-    it('renders license copy as naturally wrapping paragraphs', () => {
-        mount();
-
-        const summary = screen.getByText(/XChain Wallet is free/).parentElement;
-        expect([...summary.querySelectorAll('p')].every((paragraph) => !paragraph.textContent.includes('\n'))).toBe(true);
-
-        fireEvent.click(screen.getByRole('button', { name: 'Show Full Text' }));
-        const license = document.getElementById('full-license-text');
-        const paragraphs = [...license.querySelectorAll('p')];
-        expect(paragraphs.length).toBeGreaterThan(1);
-        expect(paragraphs.every((paragraph) => !paragraph.textContent.includes('\n'))).toBe(true);
+        expect(screen.queryByRole('button', { name: /Show (Full Text|Preview)/ })).toBeNull();
+        expect(document.querySelector('[aria-expanded]')).toBeNull();
+        expect(document.getElementById('full-license-text')).toBeNull();
+        expect(document.getElementById('diagnostic-dump-preview')).toBeNull();
+        expect(screen.getByRole('link', { name: /^License/ })).toHaveAttribute('href', LICENSE_URL);
     });
 
     it('opens the repository issue form without wallet data in the URL', () => {
@@ -135,7 +119,7 @@ describe('AboutSection diagnostics', () => {
         };
         try {
             mount(diagnostics);
-            fireEvent.click(screen.getByRole('button', { name: 'Report a Problem' }));
+            fireEvent.click(screen.getByRole('button', { name: /^Report a problem/ }));
 
             expect(open).toHaveBeenCalledOnce();
             const [url, target, features] = open.mock.calls[0];

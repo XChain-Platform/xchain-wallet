@@ -56,7 +56,7 @@ async function createWalletOffline(page) {
     await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
     await page.getByRole('button', { name: 'Next' }).click();
     const words = await readRecoveryPhrase(page);
-    await page.getByLabel(/written down|saved my recovery phrase/i).check();
+    await page.getByRole('checkbox', { name: /written down|saved my recovery phrase/i }).check();
     await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
     await completeRecoveryPhraseChallenge(page, words);
     await page.getByRole('button', { name: 'Create wallet' }).click();

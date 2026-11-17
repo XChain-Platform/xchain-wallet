@@ -149,7 +149,8 @@ describe('Home with no addresses', () => {
         );
 
         fireEvent.click(await screen.findByRole('button', { name: /Generate an Address/i }));
-        fireEvent.click(await screen.findByRole('button', { name: /^Generate$/ }));
+        // The Add addresses submit reads "Add Address" (was "Generate").
+        fireEvent.click(await screen.findByRole('button', { name: /^Add Address$/ }));
 
         await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledTimes(1));
         expect(generateReceiveAddress.mock.calls[0][0]).toMatchObject({
@@ -169,7 +170,7 @@ describe('Home with no addresses', () => {
         const before = messaging.getWalletBalances.mock.calls.length;
 
         fireEvent.click(await screen.findByRole('button', { name: /Generate an Address/i }));
-        fireEvent.click(await screen.findByRole('button', { name: /^Generate$/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Add Address$/ }));
 
         await waitFor(() => {
             expect(messaging.getWalletBalances.mock.calls.length).toBeGreaterThan(before);
@@ -206,7 +207,7 @@ describe('Import WIF chain picker', () => {
         const importWifRequest = vi.fn(async () => ({ address: { address: 'bcrt1qimported' } }));
         await openImportForm(emptyMessaging({ importWifRequest }));
 
-        const wifField = await screen.findByLabelText(/WIF private key/i);
+        const wifField = await screen.findByLabelText(/WIF private key/i, { selector: 'input' });
         fireEvent.change(wifField, { target: { value: 'cQexampleWifKeyValueForRegtestOnly' } });
         const pwField = screen.queryByLabelText(/Wallet password/i, { selector: 'input' });
         if (pwField) fireEvent.change(pwField, { target: { value: 'correct horse' } });

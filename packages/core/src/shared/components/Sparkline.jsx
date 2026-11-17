@@ -11,6 +11,7 @@
 import { useMemo } from 'react';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { t } from '../../i18n/index.js';
+import styles from './Sparkline.module.css';
 import '../../i18n/locales/en/components.js';
 
 /**
@@ -25,6 +26,9 @@ import '../../i18n/locales/en/components.js';
  * @param {string} [props.label='Price trend']
  * @param {string} [props.rangeLabel]
  * @param {(value: number) => string} [props.formatValue]
+ * @param {boolean} [props.showScale=false]
+ * @param {(value: number) => string} [props.formatScaleValue]
+ * @param {boolean} [props.heroScale=false]
  */
 export function Sparkline({
     series,
@@ -36,28 +40,38 @@ export function Sparkline({
     label = t('components.sparkline.priceTrend'),
     rangeLabel,
     formatValue,
+    showScale = false,
+    formatScaleValue = formatValue,
+    heroScale = false,
 }) {
     const values = useMemo(
         () => Array.isArray(series) ? series.filter(Number.isFinite) : [],
         [series],
     );
+    const scale = useMemo(() => chartScale(values), [values]);
+    const plot = showScale
+        ? { left: 1, right: 76, top: heroScale ? 22 : 8, bottom: heroScale ? 62 : 92 }
+        : { left: edgeToEdge ? 0 : 1, right: edgeToEdge ? 100 : 99, top: 1, bottom: 99 };
     const points = useMemo(() => {
         if (values.length === 0) return null;
-        if (values.length === 1) return '48.00,50.00 52.00,50.00';
+        const middleY = (plot.top + plot.bottom) / 2;
+        if (values.length === 1) {
+            const middleX = (plot.left + plot.right) / 2;
+            return `${(middleX - 2).toFixed(2)},${middleY.toFixed(2)} ${(middleX + 2).toFixed(2)},${middleY.toFixed(2)}`;
+        }
         const min = Math.min(...values);
         const max = Math.max(...values);
         const flat = max === min;
         const range = max - min;
-        const x0 = edgeToEdge ? 0 : 1;
-        const xStep = (edgeToEdge ? 100 : 98) / (values.length - 1);
+        const xStep = (plot.right - plot.left) / (values.length - 1);
         return values
             .map((v, i) => {
-                const x = x0 + i * xStep;
-                const y = flat ? 50 : 99 - ((v - min) / range) * 98;
+                const x = plot.left + i * xStep;
+                const y = flat ? middleY : plot.bottom - ((v - min) / range) * (plot.bottom - plot.top);
                 return `${x.toFixed(2)},${y.toFixed(2)}`;
             })
             .join(' ');
-    }, [values, edgeToEdge]);
+    }, [values, plot.left, plot.right, plot.top, plot.bottom]);
     if (!points) return null;
     const first = values[0];
     const last = values[values.length - 1];
@@ -65,33 +79,97 @@ export function Sparkline({
     const stroke = strokeColor || (tone === 'up'
         ? 'var(--xc-success)'
         : tone === 'down' ? 'var(--xc-danger)' : 'var(--xc-text-muted)');
-    const summary = describeChartSeries(values, { label, rangeLabel, formatValue });
+    const scaleFormatter = formatScaleValue || formatChartValue;
+    const summary = describeChartSeries(values, {
+        label,
+        rangeLabel,
+        formatValue: formatValue || scaleFormatter,
+        formatRangeValue: scaleFormatter,
+        includeRangeExtrema: showScale,
+    });
     return (
-        <svg
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            style={{ display: 'block', width: '100%', height }}
-            role="img"
-            aria-label={summary}
-        >
-            <title>{summary}</title>
-            {areaFill ? <polygon fill={areaFill} stroke="none" points={edgeToEdge ? `0,100 ${points} 100,100` : `1,100 ${points} 99,100`} /> : null}
-            <polyline
-                fill="none"
-                stroke={stroke}
-                strokeWidth={strokeWidth}
-                vectorEffect="non-scaling-stroke"
-                points={points}
-            />
-        </svg>
+        <div className={styles.root} style={{ height }}>
+            <svg
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                className={styles.plot}
+                role="img"
+                aria-label={summary}
+            >
+                <title>{summary}</title>
+                {showScale ? scale.map((mark) => (
+                    <line
+                        key={mark.kind}
+                        className={styles.guide}
+                        data-chart-guide={mark.kind}
+                        x1={plot.left}
+                        x2={plot.right}
+                        y1={mark.position === 'top' ? plot.top : mark.position === 'bottom' ? plot.bottom : (plot.top + plot.bottom) / 2}
+                        y2={mark.position === 'top' ? plot.top : mark.position === 'bottom' ? plot.bottom : (plot.top + plot.bottom) / 2}
+                        vectorEffect="non-scaling-stroke"
+                    />
+                )) : null}
+                {areaFill ? <polygon fill={areaFill} stroke="none" points={`${plot.left},${showScale ? plot.bottom : 100} ${points} ${plot.right},${showScale ? plot.bottom : 100}`} /> : null}
+                <polyline
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    vectorEffect="non-scaling-stroke"
+                    points={points}
+                />
+            </svg>
+            {showScale ? (
+                <div className={`${styles.scale} ${heroScale ? styles.scaleHero : ''}`} aria-hidden="true">
+                    {scale.map((mark) => (
+                        <span
+                            key={mark.kind}
+                            data-chart-scale={mark.kind}
+                            style={{ top: `${mark.position === 'top' ? plot.top : mark.position === 'bottom' ? plot.bottom : (plot.top + plot.bottom) / 2}%` }}
+                        >
+                            {scaleFormatter(mark.value)}
+                        </span>
+                    ))}
+                </div>
+            ) : null}
+        </div>
     );
+}
+
+/** Return the high, middle and low marks, or one middle mark for a flat line. */
+export function chartScale(series) {
+    const values = Array.isArray(series) ? series.filter(Number.isFinite) : [];
+    if (values.length === 0) return [];
+    const low = Math.min(...values);
+    const high = Math.max(...values);
+    if (high === low) return [{ kind: 'flat', value: high, position: 'middle' }];
+    return [
+        { kind: 'high', value: high, position: 'top' },
+        { kind: 'middle', value: low + ((high - low) / 2), position: 'middle' },
+        { kind: 'low', value: low, position: 'bottom' },
+    ];
+}
+
+/** Compact locale-aware chart label in fiat or coin units. */
+export function formatCompactChartValue(value, { locale, currency, unit } = {}) {
+    const options = {
+        notation: 'compact',
+        maximumSignificantDigits: 3,
+        ...(currency ? { style: 'currency', currency: String(currency).toUpperCase(), currencyDisplay: 'narrowSymbol' } : {}),
+    };
+    let amount;
+    try {
+        amount = new Intl.NumberFormat(locale, options).format(value);
+    } catch {
+        amount = new Intl.NumberFormat('en-US', { notation: 'compact', maximumSignificantDigits: 3 }).format(value);
+    }
+    return unit ? `${amount} ${unit}` : amount;
 }
 
 /**
  * Builds a concise text alternative for a numeric chart series.
  *
  * @param {number[]} series
- * @param {{ label?: string, rangeLabel?: string, formatValue?: (value: number) => string }} [options]
+ * @param {{ label?: string, rangeLabel?: string, formatValue?: (value: number) => string, formatRangeValue?: (value: number) => string, includeRangeExtrema?: boolean }} [options]
  * @returns {string}
  */
 export function describeChartSeries(series, options = {}) {
@@ -99,6 +177,8 @@ export function describeChartSeries(series, options = {}) {
         label = t('components.sparkline.priceTrend'),
         rangeLabel,
         formatValue = formatChartValue,
+        formatRangeValue = formatValue,
+        includeRangeExtrema = false,
     } = options;
     const values = Array.isArray(series) ? series.filter(Number.isFinite) : [];
     if (values.length === 0) return `${label}. No data.`;
@@ -112,7 +192,10 @@ export function describeChartSeries(series, options = {}) {
     const pctDisplay = start !== 0 ? percentChangeDisplay((delta / start) * 100) : null;
     const percentage = pctDisplay ? ` (${pctDisplay.text})` : '';
     const selectedRange = rangeLabel ? ` Range ${rangeLabel}.` : '';
-    return `${label}.${selectedRange} Values range from ${formatValue(low)} to ${formatValue(high)}. Start ${formatValue(start)}. End ${formatValue(end)}. Change ${change}${percentage}.`;
+    const rangeSummary = includeRangeExtrema
+        ? `Range high ${formatRangeValue(high)}, low ${formatRangeValue(low)}.`
+        : `Values range from ${formatValue(low)} to ${formatValue(high)}.`;
+    return `${label}.${selectedRange} ${rangeSummary} Start ${formatValue(start)}. End ${formatValue(end)}. Change ${change}${percentage}.`;
 }
 
 function formatChartValue(value) {

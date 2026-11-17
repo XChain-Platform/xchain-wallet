@@ -202,10 +202,12 @@ test('desktop forms use the available width and keep shared geometry', async ({ 
 
         await test.step(`${viewport.name} / license or terms`, async () => {
             await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
-            await page.getByRole('main').getByRole('button', { name: /^About v?\d/ }).click();
-            await expect(page.getByRole('heading', { name: 'About', exact: true }))
+            // The top row of Settings, named for the product (2026-11-15).
+            await page.getByRole('main').getByRole('button', { name: /^About\b/ }).click();
+            await expect(page.getByRole('heading', { name: /^About\b/ }))
                 .toBeVisible({ timeout: 30_000 });
-            await page.getByRole('button', { name: 'Show Full Text', exact: true }).click();
+            // The full text is a page of its own, opened by About's License row.
+            await page.getByRole('main').getByRole('button', { name: /^License\b/ }).first().click();
             const terms = page.locator('#full-license-text');
             await expect(terms).toBeVisible();
             await expectTermsUseContentWidth(terms, `${viewport.name} license or terms`);

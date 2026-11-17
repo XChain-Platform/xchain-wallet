@@ -61,6 +61,14 @@ export const SIGNER_KINDS = ['trezor', 'ledger'];
  * @property {string | null} firmwareVersion    last-observed firmware (null until first connect)
  * @property {string} pairedAt             ISO timestamp
  * @property {string} lastSeenAt           ISO timestamp, bumped on each successful interaction
+ * @property {Record<string, LedgerIdentity>} [identities]   Ledger only, optional: one
+ *           per chain, keyed by chainId (signers/ledgerIdentity.js). Added
+ *           without a version bump: a record without it still validates, and
+ *           a reader that does not know it ignores it.
+ *
+ * @typedef {Object} LedgerIdentity
+ * @property {string} path          the first address path the device gave on that chain
+ * @property {string} fingerprint   16 hex: SHA-256 of that address's compressed public key, first 8 bytes (no key is stored)
  */
 
 /**
@@ -72,6 +80,7 @@ export const SIGNER_KINDS = ['trezor', 'ledger'];
  * @param {string} input.deviceIdentifier
  * @param {string} [input.label]
  * @param {string | null} [input.firmwareVersion]
+ * @param {Record<string, LedgerIdentity>} [input.identities]
  * @returns {SignerRecord}
  */
 export function createSignerRecord(input) {
@@ -88,6 +97,7 @@ export function createSignerRecord(input) {
         firmwareVersion: input.firmwareVersion ?? null,
         pairedAt: now,
         lastSeenAt: now,
+        ...(isPlainObject(input.identities) ? { identities: { ...input.identities } } : {}),
     };
 }
 
@@ -139,5 +149,16 @@ export function validateSignerRecord(record) {
     );
     check(errors, 'pairedAt', isIsoTimestamp(r.pairedAt), 'must be an ISO timestamp');
     check(errors, 'lastSeenAt', isIsoTimestamp(r.lastSeenAt), 'must be an ISO timestamp');
+    if (r.identities !== undefined) {
+        check(
+            errors,
+            'identities',
+            isPlainObject(r.identities)
+                && Object.values(r.identities).every((entry) => isPlainObject(entry)
+                    && isNonEmptyString(entry.path) && entry.path.startsWith('m/')
+                    && typeof entry.fingerprint === 'string' && /^[0-9a-f]{16}$/.test(entry.fingerprint)),
+            'must map each chain id to { path, fingerprint } (16 hex)',
+        );
+    }
     return result(errors);
 }

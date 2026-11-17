@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 const CHAIN_A = 'bitcoin-mainnet';
 const CHAIN_B = 'litecoin-mainnet';
@@ -43,6 +43,7 @@ vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BatchComposerForm } from '../../../packages/core/src/shared/routes/BatchComposerForm.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 
 afterEach(() => cleanup());
 
@@ -73,25 +74,24 @@ describe('BatchComposerForm own-address picker', () => {
             </MessagingProvider>,
         );
 
-        // The standard From section (closed on load) labels the field
-        // "From address"; open it to reach the picker icon.
-        const field = await screen.findByLabelText('From address');
-        expect(field).toHaveValue(ADDRESS_A.address);
-        expect(field).toHaveAttribute('readonly');
+        // Transaction 1's own Network and From row (layout 1 has no page
+        // From section) names its address and opens the picker.
+        const fromRowName = 'Change the network and From address of transaction 1';
+        const fromRow = await screen.findByRole('button', { name: fromRowName });
+        expect(within(fromRow).getByLabelText(ADDRESS_A.address)).toBeTruthy();
+        expect(fromRow).toHaveTextContent('From, on Bitcoin');
         expect(screen.queryByRole('combobox', { name: 'From address' })).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
-        fireEvent.click(screen.getByRole('button', { name: 'Choose from address' }));
+        fireEvent.click(fromRow);
         expect(screen.getByTestId('own-address-picker')).toHaveAttribute('data-chain-id', CHAIN_A);
         expect(screen.getByRole('button', { name: 'Switch picker network' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Pick Litecoin source' }));
 
-        expect(await screen.findByLabelText('From address')).toHaveValue(ADDRESS_B.address);
-        expect(screen.getByRole('button', { name: /^Network:/ })).toHaveTextContent('Litecoin');
+        const picked = await screen.findByRole('button', { name: fromRowName });
+        expect(within(picked).getByLabelText(ADDRESS_B.address)).toBeTruthy();
+        expect(picked).toHaveTextContent('From, on Litecoin');
         expect(screen.queryByRole('switch', { name: /Pay protocol fee in/, hidden: true })).toBeNull();
-        fireEvent.change(screen.getByRole('combobox', { name: 'Action' }), {
-            target: { value: 'BROADCAST' },
-        });
+        selectOption(screen.getByRole('combobox', { name: 'Action' }), 'BROADCAST');
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
 
         await waitFor(() => expect(messaging.validateAction).toHaveBeenCalledWith({

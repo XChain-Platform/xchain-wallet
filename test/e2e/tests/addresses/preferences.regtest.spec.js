@@ -53,13 +53,13 @@ test.describe('ADDRESS v0 preferences on regtest', () => {
                 name: 'On-chain preferences',
             }))
                 .toBeVisible({ timeout: 30_000 });
-            await main.getByRole('radio', { name: 'Destroy the fee (reduces supply)' }).check();
-            await main.getByRole('checkbox', {
-                name: 'Require a memo on any send to this address',
-            }).check();
-            await main.getByRole('radio', {
-                name: 'Anyone may open a dispenser funded by this address',
-            }).check();
+            // Each preference is the themed dropdown (G119): open it, pick the option.
+            await main.getByRole('button', { name: /^How the protocol fee is handled: / }).click();
+            await main.getByRole('option', { name: 'Destroy (reduces supply)' }).click();
+            await main.getByRole('button', { name: /^Require memo on incoming sends: / }).click();
+            await main.getByRole('option', { name: 'Yes' }).click();
+            await main.getByRole('button', { name: /^Who may open dispensers: / }).click();
+            await main.getByRole('option', { name: 'Anyone' }).click();
             await main.getByLabel('Memo', { exact: true }).fill(MEMO);
             await main.getByRole('button', { name: 'Update preferences', exact: true }).click();
 

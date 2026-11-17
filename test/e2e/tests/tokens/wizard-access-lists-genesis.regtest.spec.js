@@ -44,9 +44,11 @@ async function approveAndReadTxid(page, what) {
 async function publishAddressList(page, member) {
     await openPaletteCommand(page, 'Create a list');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('List type')).toBeVisible({ timeout: 30_000 });
+    await expect(main.getByRole('button', { name: /^List type:/ })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
-    await main.getByLabel('List type').selectOption('2');
+    // List type is the themed dropdown: open it, then pick Addresses.
+    await main.getByRole('button', { name: /^List type:/ }).click();
+    await main.getByRole('option', { name: 'Addresses', exact: true }).click();
     await main.getByLabel('Addresses', { exact: true }).fill(member);
     await expect(main).toContainText('1 valid address');
     await main.getByRole('button', { name: 'Publish List', exact: true }).click();
@@ -66,7 +68,10 @@ async function publishAddressList(page, member) {
 
 async function chooseList(page, kind, actionIndex) {
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: `Choose ${kind}-list` }).click();
+    // G114: the Allow list and Block list fields open the picker and read
+    // "None set" until a list is chosen.
+    const field = kind === 'allow' ? 'Allow list' : 'Block list';
+    await main.getByRole('button', { name: `${field}: None set` }).click();
     const row = page.getByRole('button', {
         name: new RegExp(`^Address list #${actionIndex}\\b`),
     });

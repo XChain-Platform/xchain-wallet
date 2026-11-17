@@ -53,6 +53,7 @@ import {
     test,
 } from '../../fixtures/wallet.js';
 import { LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import { NATIVE_FEE_ONLY } from '../../fixtures/priceSeed.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
@@ -207,7 +208,9 @@ test.describe('the PC-26 gated SEND guard', () => {
 
         await test.step('the issuer publishes a gated file against the tick', async () => {
             await openPaletteCommand(issuer, 'Publish file');
-            await issuer.getByRole('radio', { name: /Encrypted & token-gated/ }).click();
+            // Publish as is the themed dropdown (G119).
+            await issuer.getByRole('button', { name: /^Publish as: / }).click();
+            await issuer.getByRole('option', { name: /^Encrypted & token-gated/ }).click();
             // PublishFileForm pins role="listitem" on this owned-token row (it
             // sits inside a role="list" container), so it answers to
             // 'listitem', not 'button', in the accessibility tree. A listitem
@@ -310,7 +313,7 @@ test.describe('the PC-26 gated SEND guard', () => {
 
             await openPaletteCommand(holder, 'Advanced action');
             await selectVenueChain(holder);
-            await holder.getByLabel('Action', { exact: true }).selectOption('SEND');
+            await pickOption(holder.getByLabel('Action', { exact: true }), 'SEND');
 
             // The tick-specific "HAS active gated content" line only renders
             // once `useGatedTickNotice` has a TICK to check (it is debounced

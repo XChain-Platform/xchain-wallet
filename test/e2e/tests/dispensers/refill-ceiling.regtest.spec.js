@@ -158,7 +158,7 @@ async function signedTxid(page) {
     await expectConfirmModal(page);
     await page.getByTestId('confirm-approve').click();
     const main = page.getByRole('main');
-    await expect(main.getByRole('heading', { name: 'Refill submitted' }),
+    await expect(main.getByTestId('result-screen-notice').filter({ hasText: 'Refill submitted' }),
         'the refill never reached its own success screen')
         .toBeVisible({ timeout: 180_000 });
     await expect(main).toContainText(/[0-9a-f]{64}/, { timeout: 60_000 });
@@ -305,11 +305,13 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Refill amount').fill(String(REFILL));
             await signButton.click();
 
-            await expect(page.getByTestId('preflight-chip'),
+            await expect(page.getByTestId('confirm-status'),
                 'the confirm page dry run did not refuse a sixth refill')
-                .toHaveText('Will likely fail', { timeout: 120_000 });
-            await expect(page.getByTestId('confirm-approve'),
-                'Approve is offered on a refill the network refuses').toBeDisabled();
+                .toHaveAttribute('data-state', 'fail', { timeout: 120_000 });
+            // G130: Approve keeps its colour; a tap says why and sends nothing.
+            await page.getByTestId('confirm-approve').click();
+            await expect(page.getByTestId('confirm-blocked'),
+                'Approve went ahead on a refill the network refuses').toBeVisible();
 
             // The money half: nothing was signed, so nothing moved and no fee was paid.
             expect(await giveRemaining(dispenserIndex),

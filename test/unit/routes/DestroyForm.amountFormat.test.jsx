@@ -100,7 +100,11 @@ describe('DestroyForm amount format and help tips', () => {
         await waitFor(() => expect(field.value).toBe('1'));
         fireEvent.change(field, { target: { value: '1.5' } });
         expect(await screen.findByText(/whole number|decimal place/i)).toBeInTheDocument();
-        await waitFor(() => expect(screen.getByRole('button', { name: /^Destroy$/ })).toBeDisabled());
+        // G22: Destroy stays enabled; a press with the bad amount is refused.
+        const destroy = screen.getByRole('button', { name: /^Destroy$/ });
+        expect(destroy).not.toBeDisabled();
+        fireEvent.click(destroy);
+        await waitFor(() => expect(screen.getAllByText(/whole number|decimal place/i).length).toBeGreaterThan(0));
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -108,5 +112,15 @@ describe('DestroyForm amount format and help tips', () => {
         mountDestroy({ initialTick: '' });
         await amountField();
         expect(screen.getByRole('button', { name: 'Use max available amount' })).toBeDisabled();
+    });
+
+    it('keeps Destroy enabled and marks each empty required field on press (G22)', async () => {
+        mountDestroy({ initialTick: '' });
+        await amountField();
+        const destroy = screen.getByRole('button', { name: /^Destroy$/ });
+        expect(destroy).not.toBeDisabled();
+        fireEvent.click(destroy);
+        expect(await screen.findByText('Pick the token to destroy.')).toBeInTheDocument();
+        expect(screen.getByText('Enter how much to destroy.')).toBeInTheDocument();
     });
 });

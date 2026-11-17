@@ -169,21 +169,21 @@ describe('TokenDetail supply chart', () => {
 describe('TokenDetail Exchange action', () => {
     it('opens trading regardless of whether the current balance is zero', () => {
         const { onBuy } = renderDetail({ history: [] });
-        fireEvent.click(screen.getByRole('button', { name: 'Exchange' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Exchange\b/ }));
         expect(onBuy).toHaveBeenCalledTimes(1);
 
         cleanup();
         const zero = renderDetail({ history: [], quantity: '0' });
-        fireEvent.click(screen.getByRole('button', { name: 'Exchange' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Exchange\b/ }));
         expect(zero.onBuy).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('button', { name: 'Sell on DEX' })).toBeNull();
     });
 
-    // A shell with no trading surface gets no Exchange tile at all (absent,
+    // A shell with no trading surface gets no Exchange row at all (absent,
     // not greyed), as the store builds drop the DEX rows.
     it('is absent when the shell has no trading surface', () => {
         renderDetail({ history: [], onBuy: null });
-        expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Exchange' })).toBeNull();
+        expect(screen.getByRole('button', { name: /^Send\b/ })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Exchange\b/ })).toBeNull();
     });
 });

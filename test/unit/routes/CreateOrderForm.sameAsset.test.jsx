@@ -92,7 +92,7 @@ import { openOrderSection, pickOrderAsset } from '../../helpers/orderAssetPicker
 
 async function renderForm() {
     render(<CreateOrderForm walletId="wallet-1" onBack={vi.fn()} />);
-    await screen.findByDisplayValue('mSourceAddress');
+    await screen.findAllByDisplayValue('mSourceAddress');
 }
 
 beforeEach(() => {

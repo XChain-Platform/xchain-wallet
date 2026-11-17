@@ -58,7 +58,7 @@
 // two reads is that, not this spec - restart the indexer and re-run.
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openIssueSection, openPaletteCommand, pickIssuePreset, submitTokenWizard, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, pickIssueParent, pickIssuePreset, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -226,24 +226,21 @@ async function approveAndGetTxid(page) {
 
 /** The composed PSBT's own network fee, in satoshis, off the confirm screen. */
 async function screenNetworkFeeSats(page) {
-    const text = await page.getByTestId('confirm-fee').innerText();
+    const text = await page.getByTestId('confirm-fee-network').innerText();
     const coin = Number(text.match(/([\d.]+)\s*[A-Z]{3,5}/)?.[1]);
     expect(Number.isFinite(coin), `unparseable network fee line: ${text}`).toBe(true);
     return Math.round(coin * 1e8);
 }
 
 /**
- * The protocol-fee row inside the balance projection, in satoshis, or null.
- *
- * Read out of the deltas panel because that is where that fix put it.
+ * The protocol-fee fact in the Confirm Standard card, in satoshis, or null.
  */
 async function projectedProtocolFeeSats(page) {
-    const deltas = page.getByTestId('action-intent-deltas');
-    if (await deltas.count() === 0) return null;
-    const text = await deltas.innerText();
-    // The row reads "Protocol fee 0.00001 BTC": amount first, then the coin
-    // ticker. An XCHAIN fee does not match, since it is not a coin amount.
-    const coin = text.match(/Protocol fee\s*([\d.,]+)\s*[A-Z]{3,5}\b/)?.[1];
+    const fee = page.getByTestId('confirm-fee-protocol');
+    if (await fee.count() === 0) return null;
+    const text = await fee.innerText();
+    // A 3-5 letter coin ticker matches; XCHAIN does not.
+    const coin = text.match(/^([\d.,]+)\s*[A-Z]{3,5}\b/)?.[1];
     return coin === undefined ? null : Math.round(Number(coin.replace(/,/g, '')) * 1e8);
 }
 
@@ -321,8 +318,7 @@ async function fillSubtoken(page, { parent, child, supply }) {
         message: 'the Issue Token form\'s From section names no signing address at all',
     }).toMatch(REGTEST_ADDRESS_RE);
 
-    await expect(main.getByLabel('Parent ticker')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Parent ticker').fill(parent);
+    await pickIssueParent(main, parent);
     await main.getByLabel('Subtoken name').fill(child);
     await main.getByLabel('Max supply', { exact: true }).fill(String(supply));
     // The coin lane: the screen's native fee line and the payer's coin delta

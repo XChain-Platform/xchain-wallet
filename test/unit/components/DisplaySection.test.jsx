@@ -13,11 +13,10 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DisplaySection } from '../../../packages/core/src/shared/components/settings/DisplaySection.jsx';
 import layoutStyles from '../../../packages/core/src/shared/components/settings/DisplaySection.module.css';
-import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import formStyles from '../../../packages/core/src/ui/FormPage.module.css';
-import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 import { unknownTokenKeys } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
 import { TokenPicker } from '../../../packages/core/src/shared/routes/TokenPicker.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 
 afterEach(() => cleanup());
 
@@ -56,29 +55,20 @@ function setup(overrides = {}, messagingOverrides = {}) {
 }
 
 describe('DisplaySection', () => {
-    it('uses compact descriptions without repeating section titles', async () => {
+    it('uses compact descriptions and leaves the token lists to the Tokens page', async () => {
         setup({
             pinnedTokens: ['bitcoin-mainnet:BTC'],
             hiddenTokens: ['litecoin-mainnet:LTC'],
         });
 
         expect(await screen.findByText('Pinned and escrowed balances stay visible.')).toBeTruthy();
-        expect(screen.getByText('Float to the top; reorder or unpin here.')).toBeTruthy();
-        expect(screen.getByText('Collapse under "Show N hidden"; unhide here.')).toBeTruthy();
-        expect(screen.queryByText(/Pinned tokens float/)).toBeNull();
-        expect(screen.queryByText(/Hidden tokens collapse/)).toBeNull();
-    });
-
-    it('uses the shared medium control size across the watched-token row', async () => {
-        setup();
-
-        const chain = await screen.findByRole('button', { name: /^Network:/ });
-        const ticker = screen.getByRole('textbox', { name: 'Token ticker' });
-        const action = screen.getByRole('button', { name: 'Watch Token' });
         expect(screen.getByRole('group', { name: 'Display settings' })).toHaveClass(formStyles.fullWidth);
-        expect(chain.parentElement.className).toMatch(/(?:^|\s)_?md_/);
-        expect(ticker.parentElement.parentElement).toHaveClass(inputStyles.md);
-        expect(action).toHaveClass(buttonStyles.md);
+        // The watched, pinned and hidden lists and the old in-page add form are gone.
+        expect(screen.queryByRole('region', { name: /Watched tokens/ })).toBeNull();
+        expect(screen.queryByRole('region', { name: /Pinned tokens/ })).toBeNull();
+        expect(screen.queryByRole('region', { name: /Hidden tokens/ })).toBeNull();
+        expect(screen.queryByRole('textbox', { name: 'Token ticker' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Watch Token' })).toBeNull();
     });
 
     it('puts written help tips on every balance and row-affordance setting', async () => {
@@ -88,7 +78,7 @@ describe('DisplaySection', () => {
         const tips = [
             ['Hide small balances', 'Pinned and escrowed balances stay visible.'],
             ['Hide unknown tokens', 'Collapse tokens without a name or image'],
-            ['Small-balance threshold', "Use each network's relay limit"],
+            ['Small-balance threshold', 'A balance with no price is never hidden by its value'],
             ['Balance number format', 'Change displayed formatting without changing stored or submitted values.'],
             ['Show pin button on rows', 'A star pins or unpins the token on Home.'],
             ['Show hide button on rows', "Moves the token to Home's Hidden section."],
@@ -101,54 +91,18 @@ describe('DisplaySection', () => {
         }
     });
 
-    it('offers the standard network field, a labelled ticker with help, and a green Watch token with an icon', async () => {
-        setup({ pinnedTokens: ['bitcoin-mainnet:XCP'], hiddenTokens: ['bitcoin-mainnet:PEPE'] });
-        const network = await screen.findByRole('button', { name: /^Network:/ });
-        expect(screen.queryByRole('combobox', { name: 'Token network' })).toBeNull();
-        expect(network.getAttribute('aria-haspopup')).toBe('dialog');
-        const ticker = screen.getByRole('textbox', { name: 'Token ticker' });
-        expect(ticker.closest('form')).toHaveTextContent('Ticker');
-        expect(screen.getByRole('button', { name: /^About Ticker$/i })).toBeTruthy();
-        const watch = screen.getByRole('button', { name: 'Watch Token' });
-        expect(watch).toHaveClass(buttonStyles.success);
-        expect(watch.querySelector('svg')).not.toBeNull();
-        for (const name of ['Move up bitcoin-mainnet:XCP', 'Reset List Preferences', 'Reset to Defaults', 'Unhide All']) {
-            const button = screen.queryByRole('button', { name: new RegExp(name.replace('bitcoin-mainnet:XCP', 'XCP'), 'i') });
+    it('keeps the reset buttons iconed and the threshold rows on the shared field row', async () => {
+        setup();
+        await screen.findByRole('combobox', { name: 'Small-balance threshold' });
+        for (const name of ['Reset List Preferences', 'Reset to Defaults']) {
+            const button = screen.queryByRole('button', { name: new RegExp(name, 'i') });
             expect(button?.querySelector('svg')).not.toBeNull();
         }
-    });
-
-    it('uses the shared form surface for equal-height watched-token controls', async () => {
-        setup({ pinnedTokens: ['bitcoin-mainnet:XCP'] });
-        const ticker = await screen.findByRole('textbox', { name: 'Token ticker' });
-        const tickerField = ticker.parentElement.parentElement;
-        const watchForm = ticker.closest('form');
-
-        expect(tickerField.className).toMatch(/(?:^|\s)_?md_/);
-        expect(watchForm).toHaveClass(formStyles.form);
-        expect(watchForm).not.toHaveClass(layoutStyles.fieldRow);
-        expect(watchForm.style.background).toBe('');
-        expect(watchForm.style.border).toBe('');
-        // The form is a column, so a flex basis on the label would be a 280px height.
-        const watchLabel = within(watchForm).getByText('Token to watch');
-        expect(watchLabel.style.flex).toBe('');
-        expect(watchLabel.parentElement.style.flex).toBe('');
-        expect(tickerField.parentElement).toHaveClass(layoutStyles.watchControls);
-        expect(screen.getByRole('button', { name: 'Watch Token' }).className).toMatch(/(?:^|\s)_?md_/);
         const thresholdRow = screen.getByRole('combobox', { name: 'Small-balance threshold' }).parentElement.parentElement.parentElement;
         expect(thresholdRow).toHaveClass(layoutStyles.fieldRow);
         expect(thresholdRow.style.background).toBe('var(--xc-settings-row-bg, var(--xc-card-bg))');
         expect(thresholdRow.style.border).toBe('var(--xc-settings-row-border, var(--xc-card-border))');
         expect(screen.getByRole('combobox', { name: 'Balance number format' }).parentElement.parentElement.parentElement).toHaveClass(layoutStyles.fieldRow);
-
-        const search = screen.getByRole('searchbox', { name: 'Search pinned and hidden tokens' });
-        fireEvent.change(search, { target: { value: 'X' } });
-        const clear = screen.getByRole('button', { name: 'Clear settings token search' });
-        const searchRow = clear.parentElement;
-
-        expect(search.parentElement.parentElement.className).toMatch(/(?:^|\s)_?md_/);
-        expect(searchRow.style.alignItems).toBe('center');
-        expect(clear.className).toMatch(/(?:^|\s)_?md_/);
     });
 
     it('persists every balance display control through settings updates', async () => {
@@ -160,20 +114,21 @@ describe('DisplaySection', () => {
         expect(screen.queryByRole('heading', { name: 'Display options' })).toBeNull();
         expect(screen.getByRole('region', { name: 'Balance display' })).toBeTruthy();
         expect(screen.getByRole('region', { name: 'Row affordances' })).toBeTruthy();
-        expect(screen.getByRole('region', { name: 'Watched tokens (0)' })).toBeTruthy();
         fireEvent.click(hide);
         fireEvent.click(hideUnknown);
         const threshold = screen.getByRole('combobox', { name: 'Small-balance threshold' });
         const numberFormat = screen.getByRole('combobox', { name: 'Balance number format' });
-        expect(threshold.className).toMatch(/input/);
-        expect(numberFormat.className).toMatch(/input/);
-        fireEvent.change(threshold, { target: { value: '0.01' } });
-        fireEvent.change(numberFormat, { target: { value: 'trim' } });
+        // Both are the shared themed dropdown trigger (ruling G96).
+        expect(threshold.className).toMatch(/trigger/);
+        expect(numberFormat.className).toMatch(/trigger/);
+        // The amount is in the display currency (operator ruling 2026-11-14).
+        selectOption(threshold, '10');
+        selectOption(numberFormat, 'trim');
 
         await waitFor(() => {
             expect(messaging.updateSettings).toHaveBeenCalledWith({ privacy: { hideSmallBalances: true } });
             expect(messaging.updateSettings).toHaveBeenCalledWith({ hideUnknownTokens: true });
-            expect(messaging.updateSettings).toHaveBeenCalledWith({ smallBalanceThreshold: '0.01' });
+            expect(messaging.updateSettings).toHaveBeenCalledWith({ smallBalanceFiat: '10' });
             expect(messaging.updateSettings).toHaveBeenCalledWith({ numberFormat: 'trim' });
         });
     });
@@ -192,6 +147,7 @@ describe('DisplaySection', () => {
             showPinAffordance: true,
             showHideAffordance: true,
             smallBalanceThreshold: '1',
+            smallBalanceFiat: '10',
             numberFormat: 'plain',
         });
 
@@ -210,6 +166,7 @@ describe('DisplaySection', () => {
             showPinAffordance: false,
             showHideAffordance: false,
             smallBalanceThreshold: 'dust',
+            smallBalanceFiat: '1',
             numberFormat: 'full',
             privacy: { hideSmallBalances: false },
         }));
@@ -295,90 +252,6 @@ describe('DisplaySection', () => {
             chainId: 'bitcoin-mainnet',
             tick: 'HIDDEN',
         }));
-    });
-
-    it('looks up a watched ticker on its selected network, refuses missing and duplicate tokens, and removes it', async () => {
-        const getTokenInfo = vi.fn(({ tick }) => Promise.resolve({
-            canonicalTick: tick === 'WOW' ? 'WOW' : null,
-        }));
-        const messaging = setup({}, { getTokenInfo });
-        await screen.findByRole('heading', { name: 'Watched tokens (0)' });
-
-        expect(screen.getAllByRole('option').map((option) => option.textContent))
-            .not.toContain('Dogecoin (testnet)');
-
-        fireEvent.click(screen.getByRole('button', { name: /^Network:/ }));
-        fireEvent.click(await screen.findByRole('button', { name: /^Select Dogecoin testnet/i }));
-        fireEvent.change(screen.getByRole('textbox', { name: 'Token ticker' }), { target: { value: 'MISSING' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Watch Token' }));
-
-        expect(await screen.findByText('Token "MISSING" was not found on Dogecoin.')).toBeTruthy();
-        expect(getTokenInfo).toHaveBeenLastCalledWith({
-            chainId: 'dogecoin-testnet',
-            tick: 'MISSING',
-            demo: false,
-        });
-
-        fireEvent.change(screen.getByRole('textbox', { name: 'Token ticker' }), { target: { value: 'WOW' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Watch Token' }));
-
-        await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({
-            watchedTokens: ['dogecoin-testnet:WOW'],
-            hiddenTokens: [],
-        }));
-        expect(await screen.findByText('Dogecoin:WOW')).toBeTruthy();
-
-        fireEvent.change(screen.getByRole('textbox', { name: 'Token ticker' }), { target: { value: 'WOW' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Watch Token' }));
-        expect(await screen.findByText('WOW is already watched on Dogecoin.')).toBeTruthy();
-        expect(getTokenInfo).toHaveBeenCalledTimes(2);
-
-        fireEvent.click(screen.getByRole('button', { name: 'Remove watched token Dogecoin:WOW' }));
-        await waitFor(() => expect(messaging.updateSettings).toHaveBeenLastCalledWith({ watchedTokens: [] }));
-        expect(screen.queryByText('Dogecoin:WOW')).toBeNull();
-    });
-
-    it('does not apply a watched-token lookup after its ticker changes', async () => {
-        let resolveLookup;
-        const getTokenInfo = vi.fn(() => new Promise((resolve) => { resolveLookup = resolve; }));
-        const messaging = setup({}, { getTokenInfo });
-        await screen.findByRole('heading', { name: 'Watched tokens (0)' });
-
-        const ticker = screen.getByLabelText('Token ticker');
-        fireEvent.change(ticker, { target: { value: 'OLD' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Watch Token' }));
-        fireEvent.change(ticker, { target: { value: 'NEW' } });
-        resolveLookup({ canonicalTick: 'OLD' });
-        await Promise.resolve();
-        await Promise.resolve();
-
-        expect(messaging.updateSettings).not.toHaveBeenCalled();
-        expect(ticker).toHaveValue('NEW');
-        expect(screen.queryByText(/OLD is now shown/)).toBeNull();
-        expect(screen.getByRole('button', { name: 'Watch Token' })).toBeEnabled();
-    });
-
-    it('debounces token-list search across ticker and network name with clear and keyboard controls', async () => {
-        setup({
-            pinnedTokens: ['bitcoin-mainnet:XCP'],
-            hiddenTokens: ['litecoin-mainnet:LTC'],
-        });
-
-        const search = await screen.findByRole('searchbox', { name: 'Search pinned and hidden tokens' });
-        fireEvent.change(search, { target: { value: 'liteCOIN' } });
-        expect(screen.getByText('Bitcoin:XCP')).toBeInTheDocument();
-        await waitFor(() => expect(screen.queryByText('Bitcoin:XCP')).toBeNull());
-        expect(screen.getByText('Litecoin:LTC')).toBeInTheDocument();
-
-        fireEvent.change(search, { target: { value: 'missing' } });
-        expect(await screen.findByText('No pinned tokens match "missing".')).toBeInTheDocument();
-        expect(screen.getByText('No hidden tokens match "missing".')).toBeInTheDocument();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Clear settings token search' }));
-        expect(search).toHaveValue('');
-        expect(screen.getByText('Bitcoin:XCP')).toBeInTheDocument();
-        fireEvent.keyDown(search, { key: 'ArrowDown' });
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Unpin Bitcoin:XCP' }));
     });
 
     it('keeps the hide-unknown-tokens option but words it without pricing status', async () => {

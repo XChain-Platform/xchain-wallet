@@ -133,13 +133,16 @@ const navJsxSrc = readFileSync(
 );
 assert.ok(/const \[layoutRef, tier\] = useLayoutTier\(\);/.test(navJsxSrc),
     'FullLayoutWithNav resolves its own tier');
-assert.ok(/data-xc-tier=\{tier\}/.test(navJsxSrc),
+// A rail-width window showing names publishes the full tier (operator 2026-11-13).
+assert.ok(/data-xc-tier=\{[^}]*\btier\}/.test(navJsxSrc),
     'FullLayoutWithNav publishes the tier as data-xc-tier for the CSS');
 assert.ok(/const sidebar = showsSidebar\(tier\) \? nav : null;/.test(navJsxSrc),
     'the sidebar slot is mounted only on tiers that show a sidebar');
 assert.ok(/const bar = showsBottomBar\(tier\) \? bottomBar : null;/.test(navJsxSrc),
     'the bottom bar slot is mounted only on the compact tier');
-assert.ok(/\{sidebar \? <aside className=\{styles\.sidebar\}>\{sidebar\}<\/aside>/.test(navJsxSrc),
+// G100: the aside also carries the side menu's id and measure ref, and a
+// collapsed menu unmounts its rows; the slot is still the tier-resolved one.
+assert.ok(/\{sidebar \? \(\s*<aside id=\{SIDE_MENU_ID\} ref=\{asideRef\} className=\{styles\.sidebar\}>[\s\S]{0,200}?\{sidebar\}[\s\S]{0,80}?<\/aside>/.test(navJsxSrc),
     'the tier-resolved sidebar is what renders');
 assert.ok(/\$\{bar \? styles\.layoutWithBottomBar : ''\}/.test(navJsxSrc),
     'the 56px bottom padding follows the tier-resolved bar, not the raw prop');

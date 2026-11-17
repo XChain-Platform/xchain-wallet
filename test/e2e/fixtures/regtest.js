@@ -66,6 +66,7 @@ import {
 export { openFromAddress, FROM_ADDRESS_LABEL };
 import { kdfStepTimeout } from '../timeout-budget.js';
 import { rateLimitDelayMs, venueVerdict } from './venueHealth.js';
+import { pickOption } from './pickOption.js';
 import { compareDecimal, subtractDecimal } from '../../../packages/core/src/shared/utils/mintHeadroom.js';
 import {
     MIN_SEED_MARGIN_SECONDS,
@@ -1181,10 +1182,10 @@ export async function selectVenueChain(scope, field = 'Network') {
  */
 export async function payProtocolFeeInCoin(scope) {
     if (REGTEST_COIN !== 'RBTC') return;
-    const toggle = scope.getByRole('switch', { name: /^Pay protocol fee in \S+ instead of XCHAIN$/ });
-    // The switch lives in the Network fee section, which starts closed.
+    const toggle = scope.getByRole('switch', { name: /^Pay protocol fee in \S+$/ });
+    // The switch lives in the Fees section, which starts closed.
     if (!(await toggle.isVisible().catch(() => false))) {
-        const header = scope.getByRole('button', { name: /^Network fee\b/ }).first();
+        const header = scope.getByRole('button', { name: /^Speed and Fees\b/ }).first();
         if ((await header.count()) > 0 && (await header.getAttribute('aria-expanded')) !== 'true') {
             await header.click();
         }
@@ -1234,7 +1235,7 @@ export async function readFromAddress(main) {
  * Fills a plain (no template) Issue Token form and presses Issue Token.
  *
  * Fills the ticker and the Max supply field, optionally puts the protocol fee
- * on the coin lane (its switch sits in the Network fee section, which this
+ * on the coin lane (its switch sits in the Fees section, which this
  * opens), and clicks the Issue Token button. It does not wait for the
  * confirmation screen: callers assert that outcome themselves, because a
  * refused submission stays on the form with an alert.
@@ -1253,7 +1254,7 @@ export async function issuePlainToken(main, { ticker, supply, description, feeIn
         await main.getByLabel('Token description', { exact: true }).fill(description);
     }
     if (feeInCoin) {
-        await openIssueSection(main, 'Network fee');
+        await openIssueSection(main, 'Speed and Fees');
         await payProtocolFeeInCoin(main);
     }
     if (password !== undefined) {
@@ -1730,11 +1731,15 @@ export async function expectConfirmModal(page, what = 'this action', timeoutMs =
  * @param {string} recipient  the full address the sentence must name
  */
 export async function expectIntentSentence(page, words, recipient) {
-    const sentence = page.getByTestId('action-intent').locator('p').first();
-    await expect(sentence).toContainText(words);
-    await expect(sentence.locator(`[aria-label="${recipient}"]`),
-        'the intent sentence names a different recipient than the one entered')
-        .toHaveCount(1);
+    // Confirm Standard (G127): the action sentence ends at "to" and the
+    // address line under it is the one place the recipient is shown. The
+    // sentence leaves out the chain name, so " on <chain>" in the caller's
+    // words is dropped before matching.
+    const sentence = page.getByTestId('confirm-sentence');
+    await expect(sentence).toContainText(String(words).replace(/ on [^ ]+(?: [^ ]+)? to\s*$/, ' to').trim());
+    await expect(page.getByTestId('confirm-address').locator(`[title="${recipient}"], [aria-label="${recipient}"]`),
+        'the confirm page names a different recipient than the one entered')
+        .not.toHaveCount(0);
 }
 
 /**
@@ -1850,7 +1855,7 @@ export async function mintXchain(page, amount) {
     // the balance this helper promises would never appear.
     await selectVenueChain(page);
 
-    await page.getByLabel('Action', { exact: true }).selectOption('MINT');
+    await pickOption(page.getByLabel('Action', { exact: true }), 'MINT');
     await page.getByRole('textbox', { name: 'TICK', exact: true }).fill('XCHAIN');
     await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
     await page.getByRole('button', { name: 'Sign action' }).click();
@@ -2038,17 +2043,28 @@ export async function waitForTokenBalance(address, tick, min, timeoutMs = INDEX_
     throw new Error(`${tick} balance never reached ${min} for ${address} (last=${last})`);
 }
 
-export function activeNetworkControl(page) {
-    return page.getByRole('combobox', { name: 'Active network', exact: true });
+/**
+ * The environment row on the Network page (Network and Fees > Network). The
+ * page lists Mainnet, Testnet and Regtest as rows named "Select <Name>"; there
+ * is no dropdown. Click the row, then confirm the switch dialog.
+ */
+export function networkOption(page, network) {
+    const label = network.charAt(0).toUpperCase() + network.slice(1);
+    return page.getByRole('button', { name: `Select ${label}`, exact: true });
 }
 
 /**
  * Turns Developer Mode on from the Settings index and returns to it. Without
- * it the Active network select offers Mainnet and Testnet but not Regtest.
+ * it the Network page offers Mainnet and Testnet but not Regtest.
  * Idempotent: a wallet that already has it on is left alone.
+ *
+ * Settings is a list of group rows and each group page a list of setting rows
+ * (G08), so Developer mode sits on Advanced > Developer mode and Back is
+ * pressed twice (row page, then group page) to land on the index.
  */
 export async function enableDeveloperMode(page) {
-    await page.getByRole('button', { name: /^Developer mode/ }).click();
+    await page.getByRole('button', { name: /^Advanced\b/ }).click();
+    await page.getByRole('button', { name: /^Developer mode\b/ }).click();
     const devToggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
     await expect(devToggle).toBeVisible();
     if (!(await devToggle.isChecked())) {
@@ -2059,7 +2075,11 @@ export async function enableDeveloperMode(page) {
         await devToggle.click();
         await expect(devToggle).toBeChecked();
     }
-    await page.getByRole('button', { name: 'Back to settings' }).click();
+    const back = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
+    await back.click();
+    await expect(page.getByRole('button', { name: /^Developer mode\b/ })).toBeVisible();
+    await back.click();
+    await expect(page.getByRole('button', { name: /^Network and Fees\b/ })).toBeVisible();
 }
 
 /**
@@ -2071,9 +2091,8 @@ export async function enableDeveloperMode(page) {
  *   - Regtest chains are HIDDEN until Developer Mode is on
  *     (NetworkSection deliberately filters the option), so dev mode has
  *     to be enabled first.
- *   - The network control is an inline `kind: 'panel'` section on the
- *     Settings index (a `<select aria-label="Active network">`), NOT a
- *     drill row like Developer Mode.
+ *   - The network control lives on Network and Fees > Network (a row page
+ *     listing the Mainnet, Testnet and Regtest rows), not on the Settings index.
  *
  * The switch reloads the page (NetworkSection does this on purpose so
  * chain-scoped effects re-derive), and a reload re-locks the vault, so
@@ -2086,12 +2105,14 @@ export async function switchToRegtest(page, password) {
     await openSettings(page);
 
     await enableDeveloperMode(page);
+    await page.getByRole('button', { name: /^Network and Fees\b/ }).click();
+    await page.getByRole('button', { name: /^Network\s*(?:Mainnet|Testnet|Regtest|-)$/ }).click();
 
     // This select now derives an address on each chain of the
     // network it switches to. Before that fix it only moved a filter,
     // stranding the wallet with no addresses and no UI path to make one -
     // so if this ever regresses, the funding step below is where it shows.
-    await activeNetworkControl(page).selectOption('regtest');
+    await networkOption(page, 'regtest').click();
     // The switch reloads the wallet, so Settings asks first.
     const confirm = page.getByRole('dialog', { name: 'Switch to Regtest?' });
     // Settings derives the regtest addresses before it reloads, and until the
@@ -2183,10 +2204,11 @@ export async function readReceiveAddress(page) {
         const filter = page.getByRole('button', { name: /^Filter by network/ });
         await expect(filter, 'the address picker has no network filter').toBeVisible({ timeout: 30_000 });
         await filter.click();
-        // The filter's options are coin FAMILIES ("Bitcoin" / "Litecoin" /
-        // "Dogecoin"), not network-qualified names, so a venue's chain label is
-        // already the exact option text and no mapping is needed.
-        await page.getByRole('option', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
+        // The filter opens the full-screen network list. Its rows are coin
+        // FAMILIES ("Select Bitcoin" / "Select Litecoin" / "Select Dogecoin"),
+        // not network-qualified names, so a venue's chain label names the row.
+        await page.getByRole('dialog', { name: 'Network' })
+            .getByRole('button', { name: `Select ${REGTEST_CHAIN_LABEL}`, exact: true }).click();
 
         await page.getByRole('list', { name: 'Addresses' })
             .getByRole('button', { name: /^View address / }).first().click();

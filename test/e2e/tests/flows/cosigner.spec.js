@@ -8,6 +8,7 @@ import {
     test,
     createWallet,
 } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -140,8 +141,8 @@ async function configurePolicy(page) {
     await page.getByRole('checkbox', { name: 'Issue', exact: true }).check();
 
     const perAction = page.getByRole('group', { name: 'Per-action amount limits' });
-    await perAction.getByRole('button', { name: 'Add limit', exact: true }).click();
-    await perAction.getByLabel('Action', { exact: true }).selectOption('SEND');
+    await perAction.getByRole('button', { name: 'Add Limit', exact: true }).click();
+    await pickOption(perAction.getByLabel('Action', { exact: true }), 'SEND');
     await perAction.getByLabel('Token', { exact: true }).fill('BTC');
     await perAction.getByRole('textbox', { name: /^Max amount/ }).fill('0.25');
 
@@ -152,7 +153,7 @@ async function configurePolicy(page) {
     await rolling.getByLabel('Max actions per window', { exact: true }).fill('4');
 
     const threshold = page.getByRole('group', { name: 'Extra-confirmation threshold' });
-    await threshold.getByRole('button', { name: 'Add threshold', exact: true }).click();
+    await threshold.getByRole('button', { name: 'Add Threshold', exact: true }).click();
     await threshold.getByLabel('Token', { exact: true }).fill('BTC');
     await threshold.getByLabel('Warn above', { exact: true }).fill('1.5');
 }
@@ -189,21 +190,21 @@ async function walkCoSignerScreens(page, viewport) {
     await expectScreen(page, 'New agent account', `${viewport.name} expanded policy editor`);
 
     // The form opens a review of every value before anything is created.
-    await page.getByRole('button', { name: 'Create agent account', exact: true }).click();
+    await page.getByRole('button', { name: 'Create Agent Account', exact: true }).click();
     await expectScreen(page, 'Review agent account', `${viewport.name} provisioning check`);
     await expect(definitionValue(page, 'Account name')).toHaveText(ACCOUNT_NAME);
 
-    const create = page.getByRole('button', { name: 'Create agent account', exact: true });
+    const create = page.getByRole('button', { name: 'Create Agent Account', exact: true });
     await expect(create).toBeEnabled();
     await create.click();
     await expectScreen(page, 'New agent account', `${viewport.name} provisioning review`);
     await expectReviewAtTop(page, `${viewport.name} provisioning`);
 
-    await page.getByRole('button', { name: 'View account', exact: true }).click();
+    await page.getByRole('button', { name: 'View Account', exact: true }).click();
     await expectScreen(page, 'Agent account', `${viewport.name} account detail`);
     await expect(page.getByText(ACCOUNT_NAME, { exact: true })).toBeVisible();
-    await expect(definitionValue(page, 'Allowed actions')).toHaveText('Send, Issue');
-    await expect(definitionValue(page, 'Rolling limit')).toHaveText('4 actions per 12h');
+    // The account page no longer shows Allowed actions or Rolling limit rows
+    // (ruling 2026-11-15); the rules editor below checks the stored values.
 
     await page.getByRole('button', { name: 'Edit policy', exact: true }).click();
     await expectScreen(page, 'Agent account', `${viewport.name} policy editor`);
@@ -216,11 +217,9 @@ async function walkCoSignerScreens(page, viewport) {
 
     await page.getByLabel('Account name', { exact: true }).fill(UPDATED_ACCOUNT_NAME);
     await page.getByLabel('Max actions per window', { exact: true }).fill('6');
-    await page.getByRole('button', { name: 'Update policy', exact: true }).click();
+    await page.getByRole('button', { name: 'Update Policy', exact: true }).click();
     await expectScreen(page, 'Agent account', `${viewport.name} updated account detail`);
     await expect(page.getByText(UPDATED_ACCOUNT_NAME, { exact: true })).toBeVisible();
-    await expect(definitionValue(page, 'Allowed actions')).toHaveText('Send, Issue');
-    await expect(definitionValue(page, 'Rolling limit')).toHaveText('6 actions per 12h');
 
     await page.getByRole('button', { name: 'Back to previous screen' }).click();
     await expectScreen(page, 'Agent accounts', `${viewport.name} populated account list`);

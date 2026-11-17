@@ -118,7 +118,9 @@ describe('Sign message draft autosave', () => {
         }));
         mountForm();
         await screen.findByRole('button', { name: 'Restore' });
-        fireEvent.click(screen.getByRole('button', { name: 'Discard saved draft' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Discard draft' }));
+        expect(localStorage.getItem(KEY)).toBeNull();
+        expect(screen.queryByTestId('draft-notice')).toBeNull();
         fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'after discard' } });
         await waitFor(() => {
             expect(localStorage.getItem(KEY)).toContain('after discard');

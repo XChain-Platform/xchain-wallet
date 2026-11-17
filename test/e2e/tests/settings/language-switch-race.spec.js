@@ -24,6 +24,7 @@ import {
     unlockedShell,
 } from '../../fixtures/wallet.js';
 import { enterDemoWallet } from '../../fixtures/responsive.js';
+import { expectDropdownValue, pickOption, rapidPicks } from '../../fixtures/pickOption.js';
 
 const FAMILY = process.env.PROBE_FAMILY || '';
 const PSEUDO_CHUNK = '**/locales/pseudo-rtl/**';
@@ -43,13 +44,20 @@ async function settle(page) {
 
 async function openLanguageWithDeveloperMode(page) {
     await gotoSection(page, 'Settings');
-    await page.getByRole('main').getByRole('button', { name: /^Developer mode/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Advanced\b/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Developer mode\b/ }).click();
     const developerMode = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
     if (!(await developerMode.isChecked())) {
         await developerMode.click();
         await expect(developerMode).toBeChecked();
     }
-    await page.getByRole('button', { name: 'Back to settings' }).click();
+    // Back twice: row page to the Advanced group page, then to the index.
+    const back = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
+    await back.click();
+    await back.click();
+    // Language is a row on the Appearance group page.
+    await page.getByRole('main').getByRole('button', { name: /^Appearance\b/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Language\b/ }).click();
     await expect(languageSelect(page)).toBeVisible();
 }
 
@@ -133,39 +141,24 @@ test.describe('race', () => {
 
         // First pass: the pseudo chunk is still cold, so the middle pick is async.
         const started = Date.now();
-        await select.evaluate((el) => {
-            for (const value of ['en', 'pseudo-rtl', 'en']) {
-                el.value = value;
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-        });
+        await rapidPicks(select, ['en', 'pseudo-rtl', 'en']);
         expect(Date.now() - started).toBeLessThan(100);
         await settle(page);
         await page.waitForLoadState('networkidle');
         let s = await expectLocale(page, 'en', 'cold chunk race');
 
         // Warm the chunk, then race again with every pick synchronous.
-        await select.selectOption('pseudo-rtl');
+        await pickOption(select, 'pseudo-rtl');
         await expectLocale(page, 'pseudo-rtl', 'warm pick');
-        await languageSelect(page).evaluate((el) => {
-            for (const value of ['en', 'pseudo-rtl', 'en']) {
-                el.value = value;
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-        });
+        await rapidPicks(languageSelect(page), ['en', 'pseudo-rtl', 'en']);
         s = await expectLocale(page, 'en', 'warm chunk race');
         await expect.poll(async () => (await snapshot(page)).cached).toBe('en');
 
         // Ending on the RTL pick instead.
-        await languageSelect(page).evaluate((el) => {
-            for (const value of ['pseudo-rtl', 'en', 'pseudo-rtl']) {
-                el.value = value;
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-        });
+        await rapidPicks(languageSelect(page), ['pseudo-rtl', 'en', 'pseudo-rtl']);
         await expectLocale(page, 'pseudo-rtl', 'race ending on RTL');
         await expect.poll(async () => (await snapshot(page)).cached).toBe('pseudo-rtl');
-        await expect(languageSelect(page)).toHaveValue('pseudo-rtl');
+        await expectDropdownValue(languageSelect(page), 'pseudo-rtl');
 
         await reloadAndOpen(page);
         s = await expectLocale(page, 'pseudo-rtl', 'after reload');
@@ -179,30 +172,25 @@ test.describe('race', () => {
         const select = languageSelect(page);
         await select.dblclick();
         await page.keyboard.press('Escape');
-        await select.selectOption('pseudo-rtl');
-        await languageSelect(page).selectOption('pseudo-rtl');
-        await languageSelect(page).evaluate((el) => {
-            for (let i = 0; i < 5; i += 1) {
-                el.value = 'pseudo-rtl';
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-        });
+        await pickOption(select, 'pseudo-rtl');
+        await pickOption(languageSelect(page), 'pseudo-rtl');
+        await rapidPicks(languageSelect(page), Array(5).fill('pseudo-rtl'));
         await expectLocale(page, 'pseudo-rtl', 'repeat RTL picks');
         await expect.poll(async () => (await snapshot(page)).cached).toBe('pseudo-rtl');
         await languageSelect(page).dblclick();
         await page.keyboard.press('Escape');
-        await languageSelect(page).selectOption('en');
-        await languageSelect(page).selectOption('en');
+        await pickOption(languageSelect(page), 'en');
+        await pickOption(languageSelect(page), 'en');
         await expectLocale(page, 'en', 'repeat English picks');
         await expect.poll(async () => (await snapshot(page)).cached).toBe('en');
-        await expect(languageSelect(page)).toHaveValue('en');
+        await expectDropdownValue(languageSelect(page), 'en');
     });
 
     test('two tabs of one context end on the last pick', async ({ page, context }) => {
         test.setTimeout(300_000);
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
         await openLanguageWithDeveloperMode(page);
-        await languageSelect(page).selectOption('pseudo-rtl');
+        await pickOption(languageSelect(page), 'pseudo-rtl');
         await expectLocale(page, 'pseudo-rtl', 'tab one picks RTL');
 
         const second = await context.newPage();
@@ -215,7 +203,7 @@ test.describe('race', () => {
         test.info().annotations.push({ type: 'tab-two', description: secondUnlocked ? 'unlocked' : 'locked' });
 
         // Tab one switches back last; a reload of either tab shows that pick.
-        await languageSelect(page).selectOption('en');
+        await pickOption(languageSelect(page), 'en');
         await expectLocale(page, 'en', 'tab one picks English');
         await expect.poll(async () => (await snapshot(page)).cached).toBe('en');
         await reloadAndOpen(second);
@@ -239,16 +227,16 @@ test.describe('network', () => {
             if (block) return route.fulfill({ status: 404, body: 'missing' });
             return route.continue();
         });
-        await languageSelect(page).selectOption('pseudo-rtl');
+        await pickOption(languageSelect(page), 'pseudo-rtl');
         await expect.poll(() => requests).toBeGreaterThan(0);
         await settle(page);
         await expectLocale(page, 'en', 'after 404');
-        await expect(languageSelect(page)).toHaveValue('en');
+        await expectDropdownValue(languageSelect(page), 'en');
         expect((await snapshot(page)).cached).toBe('en');
 
         block = false;
         const before = requests;
-        await languageSelect(page).selectOption('pseudo-rtl');
+        await pickOption(languageSelect(page), 'pseudo-rtl');
         await expect.poll(() => requests, {
             message: 'the retry after a 404 requests the locale chunk again',
             timeout: 15_000,
@@ -269,17 +257,17 @@ test.describe('network', () => {
         });
 
         // Slow chunk, then English before it lands: English must stay.
-        await languageSelect(page).selectOption('pseudo-rtl');
+        await pickOption(languageSelect(page), 'pseudo-rtl');
         await expect.poll(() => delayed).toBeGreaterThan(0);
         await expectLocale(page, 'en', 'while the chunk is delayed');
-        await languageSelect(page).selectOption('en');
+        await pickOption(languageSelect(page), 'en');
         await page.waitForLoadState('networkidle');
         await expect.poll(() => page.evaluate(() => document.documentElement.dir), { timeout: 20_000 }).toBe('ltr');
         await expectLocale(page, 'en', 'after the delayed chunk lands behind a newer pick');
         expect((await snapshot(page)).cached).toBe('en');
 
         // Slow chunk with no newer pick: it applies when it lands.
-        await languageSelect(page).selectOption('pseudo-rtl');
+        await pickOption(languageSelect(page), 'pseudo-rtl');
         await expect.poll(async () => (await snapshot(page)).dir, { timeout: 20_000 }).toBe('rtl');
         await expectLocale(page, 'pseudo-rtl', 'after the delayed chunk lands');
         await expect.poll(async () => (await snapshot(page)).cached).toBe('pseudo-rtl');
@@ -296,15 +284,15 @@ test.describe('network', () => {
             return offline ? route.abort('internetdisconnected') : route.continue();
         });
         await context.setOffline(true);
-        await languageSelect(page).selectOption('pseudo-rtl');
+        await pickOption(languageSelect(page), 'pseudo-rtl');
         await settle(page);
         await expectLocale(page, 'en', 'offline pick');
-        await expect(languageSelect(page)).toHaveValue('en');
+        await expectDropdownValue(languageSelect(page), 'en');
 
         await context.setOffline(false);
         offline = false;
         const before = requests;
-        await languageSelect(page).selectOption('pseudo-rtl');
+        await pickOption(languageSelect(page), 'pseudo-rtl');
         await expect.poll(() => requests, {
             message: 'the pick after reconnect requests the locale chunk again',
             timeout: 15_000,
@@ -322,7 +310,7 @@ test.describe('lifecycle', () => {
         await watchRawKeys(page);
         await createWallet(page);
         await openLanguageWithDeveloperMode(page);
-        await languageSelect(page).selectOption('pseudo-rtl');
+        await pickOption(languageSelect(page), 'pseudo-rtl');
         await expectLocale(page, 'pseudo-rtl', 'picked');
         await page.evaluate(() => {
             window.dispatchEvent(new CustomEvent('xchain:native-font-scale', { detail: { fontScale: 1.5 } }));

@@ -126,7 +126,7 @@ describe('sensitive route lifecycle', () => {
         );
 
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
-        fireEvent.change(screen.getByLabelText(/^Confirm/), { target: { value: PASSWORD } });
+        fireEvent.change(screen.getByLabelText(/^Confirm( password)?$/i),{ target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
         fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
         expect(within(screen.getByRole('list', { name: 'Recovery phrase' })).getByText('yellow'))

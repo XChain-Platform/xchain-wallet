@@ -36,7 +36,7 @@ export function FormStatusScope({ children }) {
             const had = prev[id];
             if (!entry && !had) return prev;
             if (entry && had && had.text === entry.text && had.variant === entry.variant
-                && had.role === entry.role && had.lead === entry.lead && had.testId === entry.testId) return prev;
+                && had.role === entry.role && had.lead === entry.lead && had.title === entry.title && had.testId === entry.testId) return prev;
             const next = { ...prev };
             if (entry) next[id] = entry; else delete next[id];
             return next;
@@ -50,12 +50,13 @@ export function FormStatusScope({ children }) {
     );
 }
 
-/** A StatusMessage element as one line of the group, or null for any other node. */
+/** A Notice (StatusMessage) element as one line of the group, or null for any other node. */
 function noticeEntry(node, key) {
     if (!isValidElement(node) || node.type !== StatusMessage) return null;
-    const { children, variant, lead, recovery, details, role, testId, id } = node.props;
-    if (children === null || children === undefined || children === '') return null;
-    return { key, id, children, variant, lead, recovery, details, role, testId };
+    const { children, tone, variant, title, lead, action, recovery, details, role, testId, id, onDismiss } = node.props;
+    const noBody = children === null || children === undefined || children === '';
+    if (noBody && !title) return null;
+    return { key, id, children, variant: tone || variant, title, lead, recovery: action || recovery, details, role, testId, onDismiss };
 }
 
 /**
@@ -93,9 +94,10 @@ export function FormStatusSlot({ status }) {
             key: id,
             variant: entry.variant,
             role: entry.role,
-            lead: entry.lines ? undefined : entry.lead,
+            title: entry.title || entry.lead,
             testId: entry.testId,
-            children: entry.lines ? <NoticeLines lead={entry.lead} lines={entry.lines} /> : entry.text,
+            onDismiss: entry.onDismiss,
+            children: entry.lines ? <NoticeLines lines={entry.lines} /> : entry.text,
         });
     }
     // The shell's reachability sentence joins a form that has a notice of its

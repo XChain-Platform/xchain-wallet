@@ -38,31 +38,20 @@ const FORM_PARTS = [
     'components/FeesCard.jsx',
     'components/TickItemsEditor.jsx',
     'components/TileLookFields.jsx',
+    'components/formStandard/AdvancedSection.jsx',
     'routes/SignerSelectForm.jsx',
 ];
 
 // Fields that need no help of their own, keyed form|component|label source.
 const NO_HELP = {
-    'routes/ControllerBindForm.jsx|Checkbox|actionClass':
-        'One action class in the Action class group, whose legend carries the help.',
-    'routes/ListCreateForm.jsx|Checkbox|<span> <strong>{r.name}</strong>{r.label ? ` (${':
-        'A contact row on the Add from Contacts picker page, not a field of the form.',
-    'routes/ListForkForm.jsx|Checkbox|<code>{item}</code>':
-        'One current member in the members group, whose label row carries the help.',
     'routes/PollDetail.jsx|Checkbox|<span className={detailStyles.optionLabel}>{i}: ':
         'One ballot option in the ballot group, whose label row carries the help.',
-    'routes/Send.jsx|Checkbox|<span className={styles.coinControlValue}> <span':
+    'components/formStandard/AdvancedSection.jsx|Checkbox|<span className={styles.coinControlValue}> <span':
         'One coin in the coin-control list; the Coin control switch above carries the help.',
-    'routes/SweepForm.jsx|Checkbox|`${c.label}${preview ? ` (${categoryCount(previe':
-        'One holding kind in the What to sweep group, whose label row carries the help.',
-    'routes/TokenAdminForm.jsx|Checkbox|bridgeCoinDisplay(coin)':
-        'One network in the Destination networks group, whose label row carries the help.',
-    'routes/UnionListForm.jsx|Checkbox|candidateName(candidate)':
-        'One list in the Union List pick list; each row names the list it adds.',
-    'routes/IssueTokenForm.jsx|Switch|lock.label':
-        'A lock row shows its approved effect text as the switch description, under the Irreversible Locks header.',
-    'routes/TokenAdminForm.jsx|Switch|`${f.label}${isLocked ? \' (already locked)\' : \'\'':
-        'A lock row shows its effect text as the switch description, as the Issue form lock rows do.',
+    'routes/ListCreateForm.jsx|Checkbox|unionCandidateName(candidate)':
+        'One list in the union member-list pick list; each row names the list it adds.',
+    'routes/ControllerBindForm.jsx|Checkbox|<span className={styles.actionClassLabel}> <span':
+        'One class in the Action class group, whose legend carries the one help tip (operator 2026-11-14).',
     'routes/CrossChainOrderForm.jsx|TokenField|(Token)':
         'The TokenField inside the local TokenFieldWithHelp wrapper, which draws the help tip itself.',
     'components/FeesCard.jsx|Switch|<span className={styles.visuallyHidden}> {t(\'flo':
@@ -174,7 +163,6 @@ describe('transaction form field help', () => {
         expect(files.length).toBeGreaterThan(55);
         expect(fields.length).toBeGreaterThan(350);
         expect(files.some((file) => file.endsWith('routes/Send.jsx'))).toBe(true);
-        expect(files.some((file) => file.endsWith('components/OperatorPublisherMode.jsx'))).toBe(true);
     });
 
     it('gives every labelled field a ? help tip or a listed reason', () => {
@@ -182,6 +170,47 @@ describe('transaction form field help', () => {
             .filter((field) => !(field.key in NO_HELP))
             .map((field) => `${field.key} (line ${field.line})`);
         expect(missing).toEqual([]);
+    });
+
+    // The one field with no ? tip by ruling (2026-11-13): a memo alone in its
+    // Memo section. The section title already says Memo, so MemoSection draws
+    // the field with no label row (no second Memo, no tip) and puts the count
+    // in the header. A Memo section with more in it keeps labelled fields.
+    it('draws a memo alone in its Memo section through MemoSection, with no label or tip', () => {
+        const handRolled = [];
+        for (const file of files) {
+            const source = readFileSync(file, 'utf8');
+            const ast = parse(source, { sourceType: 'module', plugins: ['jsx'] });
+            visit(ast.program, (node) => {
+                if (node.type !== 'JSXElement' || node.openingElement.name.name !== 'FormSection') return;
+                const idAttr = node.openingElement.attributes.find((a) => a.type === 'JSXAttribute' && a.name.name === 'id');
+                if (idAttr?.value?.value !== 'memo') return;
+                const fields = [];
+                visit({ type: 'Body', children: node.children }, (child) => {
+                    if (child.type === 'JSXOpeningElement' && FIELDS.has(child.name.name)) fields.push(child.name.name);
+                });
+                if (fields.length === 1 && fields[0] === 'Input') {
+                    handRolled.push(`${relative(SHARED, file)}:${node.loc.start.line}`);
+                }
+            });
+        }
+        expect(handRolled).toEqual([]);
+
+        const memoSource = readFileSync(join(SHARED, 'components/formStandard/MemoSection.jsx'), 'utf8');
+        const memoAst = parse(memoSource, { sourceType: 'module', plugins: ['jsx'] });
+        const inputs = [];
+        visit(memoAst.program, (node) => {
+            // The memo is an auto-growing Textarea (one line, up to three).
+            if (node.type === 'JSXOpeningElement' && ['Input', 'Textarea'].includes(node.name.name)) inputs.push(node);
+        });
+        expect(inputs).toHaveLength(1);
+        expect(inputs[0].name.name).toBe('Textarea');
+        const names = inputs[0].attributes.filter((a) => a.type === 'JSXAttribute').map((a) => a.name.name);
+        expect(names).not.toContain('label');
+        expect(names).not.toContain('help');
+        expect(names).toContain('aria-label');
+        expect(names).toContain('maxLength');
+        expect(names).toContain('autoGrow');
     });
 
     it('lists only fields that still exist without help, each with a reason', () => {

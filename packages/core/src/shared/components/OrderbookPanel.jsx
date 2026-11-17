@@ -22,8 +22,10 @@
 //     burning explorer bandwidth for off-screen tabs. WS push is
 //     Phase 4+ work once the explorer exposes a stream.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StatusMessage } from '@xchain-wallet/core/ui';
+import { rowMatchesQuery } from '../utils/marketRowSearch.js';
+import '../../i18n/locales/en/market.js';
 import { useMessaging } from '../useMessaging.js';
 import { normalizeOrderbook } from '../../market/orderbook.js';
 import { sampleOrderbookFor } from '../../market/sampleMarketData.js';
@@ -57,8 +59,11 @@ const POLL_INTERVAL_MS = 5000;
  * @param {'columns' | 'split'} [props.layout]   'split' puts bids and asks side by side in one table
  * @param {string | null} [props.lastPrice]      The split book's last-trade line under the levels
  * @param {'positive' | 'negative' | 'neutral'} [props.lastDirection]
+ * @param {boolean} [props.bare]   the Market page's Book tab: only the column header row and the
+ *   book rows, with no title, Spread line or last-trade line (operator 2026-11-13)
+ * @param {string} [props.query]   the Market page's search, narrowing the levels by price or size
  */
-export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPrice, layout = 'columns', lastPrice = null, lastDirection = 'neutral' }) {
+export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPrice, layout = 'columns', lastPrice = null, lastDirection = 'neutral', bare = false, query = '' }) {
     const { messaging } = useMessaging();
     const [book, setBook] = useState(/** @type {any} */ ({ bids: [], asks: [], maxCumulative: '0' }));
     const [loading, setLoading] = useState(true);
@@ -107,7 +112,18 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
         };
     }, [messaging, chainId, tick1, tick2, demo, retryKey]);
 
-    const hasLevels = book.bids.length > 0 || book.asks.length > 0;
+    const hasBook = book.bids.length > 0 || book.asks.length > 0;
+    const shownBook = useMemo(() => {
+        if (!query.trim()) return book;
+        const matches = (level) => rowMatchesQuery(query, [
+            level.displayPrice,
+            level.displaySize,
+            formatBookNumber(level.displayPrice),
+            formatBookNumber(level.displaySize),
+        ]);
+        return { ...book, bids: book.bids.filter(matches), asks: book.asks.filter(matches) };
+    }, [book, query]);
+    const hasLevels = shownBook.bids.length > 0 || shownBook.asks.length > 0;
 
     return (
         <section
@@ -120,7 +136,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                 padding: 'var(--xc-card-pad)',
             }}
         >
-            {layout === 'split' ? (
+            {bare ? null : layout === 'split' ? (
                 /* The title line carries the spread on its right. */
                 <div className={styles.splitHead}>
                     <p className={styles.splitTitle}>{t('components.orderbookPanel.orderBook')}</p>
@@ -131,10 +147,10 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
             )}
             {hasLevels && layout === 'split' ? (
                 <SplitBook
-                    book={book}
+                    book={shownBook}
                     onPickPrice={onPickPrice}
                     tick2={tick2}
-                    lastPrice={lastPrice}
+                    lastPrice={bare ? null : lastPrice}
                     lastDirection={lastDirection}
                 />
             ) : null}
@@ -143,7 +159,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                     <LevelsColumn
                         title={t('components.orderbookPanel.buyBids')}
                         side="bid"
-                        levels={book.bids}
+                        levels={shownBook.bids}
                         maxCumulative={book.maxCumulative}
                         onPickPrice={onPickPrice}
                         tick2={tick2}
@@ -152,7 +168,7 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                     <LevelsColumn
                         title={t('components.orderbookPanel.sellAsks')}
                         side="ask"
-                        levels={book.asks}
+                        levels={shownBook.asks}
                         maxCumulative={book.maxCumulative}
                         onPickPrice={onPickPrice}
                         tick2={tick2}
@@ -163,7 +179,8 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
             {loading ? (
                 <StatusMessage variant="status">{t('components.orderbookPanel.loadingOrderBook')}</StatusMessage>
             ) : null}
-            {loadError && !pageShowsError ? (
+            {/* A bare panel never shows its own error or Try Again (G91). */}
+            {loadError && !pageShowsError && !bare ? (
                 <StatusMessage
                     variant="error"
                     recovery={{
@@ -174,9 +191,14 @@ export function OrderbookPanel({ chainId, tick1, tick2, demo = false, onPickPric
                     {loadError}
                 </StatusMessage>
             ) : null}
-            {!loading && !loadError && book.bids.length === 0 && book.asks.length === 0 ? (
+            {!loading && !loadError && !hasBook ? (
                 <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
                     {t('components.openOrdersPanel.noOpenOrdersOnThis')}
+                </p>
+            ) : null}
+            {hasBook && !hasLevels ? (
+                <p style={{ margin: '0.25rem 0 0', color: 'var(--xc-text-muted)', fontSize: '0.75rem' }}>
+                    {t('market.filter.noMatches')}
                 </p>
             ) : null}
         </section>

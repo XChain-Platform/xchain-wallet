@@ -1,143 +1,62 @@
-.countdown {
-    font-weight: 600;
-    overflow-wrap: anywhere;
-}
+/* The poll page draws its hero, tab strip, pick, results and lists from the
+   shared outcome page sheet (components/outcomeDetail); these are the pieces
+   only a ballot has. */
 
-/* Question, then "TOKEN on Network · Closes in N" with the status pill. */
-.pollHead {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-    min-width: 0;
-}
-
-.question {
-    margin: 0;
-    color: var(--xc-text);
-    font-size: var(--xc-text-lg);
-    font-weight: 600;
-    overflow-wrap: anywhere;
-}
-
-.metaLine {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
-.metaText {
-    min-width: 0;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    overflow-wrap: anywhere;
-}
-
-/* The result card: outcome, leading option, one stacked bar, totals, turnout. */
-.resultCard {
-    composes: card from '../../ui/Card.module.css';
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
-.outcome {
-    margin: 0;
-    color: var(--xc-text);
-    font-size: var(--xc-text-lg);
-    font-weight: 700;
-}
-
-.leading {
-    margin: 0;
-    color: var(--xc-text);
-    font-weight: 600;
-    overflow-wrap: anywhere;
-}
-
-.stackedBar {
-    display: flex;
-    height: var(--xc-space-2);
-    overflow: hidden;
-    background: var(--xc-bg-muted);
-    border-radius: var(--xc-radius-pill);
-}
-
-.segment {
-    height: 100%;
-}
-
-.turnout {
-    margin: 0;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-}
-
-.cardLabel {
-    margin: 0;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-}
-
+/* What this wallet voted, the last lines of Result. */
 .receipt {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-1);
     min-width: 0;
-    padding-top: var(--xc-space-2);
-    border-top: 1px solid var(--xc-border);
 }
 
-.resultList {
+/* "You voted: ..." with a check, one line per voting address. */
+.youVoted {
     display: flex;
-    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--xc-space-1);
+    min-width: 0;
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+}
+
+.youVotedIcon {
+    --xc-icon-size: var(--xc-icon-sm);
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--xc-success);
+}
+
+.youVotedText {
+    min-width: 0;
+    overflow-wrap: break-word;
+}
+
+/* Cast Vote: the chosen options, with Change at the end of the row. */
+.chosen {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
     gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.chosenList {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: var(--xc-space-1);
     min-width: 0;
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
-.resultItem {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: var(--xc-space-1) var(--xc-space-2);
-    min-width: 0;
-    font-size: var(--xc-text-sm);
-}
-
-.swatch {
-    flex: 0 0 auto;
-    width: 0.625rem;
-    height: 0.625rem;
-    border-radius: 2px;
-}
-
-.resultOption {
-    flex: 1 1 12rem;
-    min-width: 0;
+.chosenItem {
     color: var(--xc-text);
     font-weight: 600;
-    overflow-wrap: anywhere;
-}
-
-.resultValues {
-    display: flex;
-    flex: 0 1 auto;
-    flex-wrap: wrap;
-    gap: var(--xc-space-1) var(--xc-space-3);
-    min-width: 0;
-    color: var(--xc-text-muted);
-    font-variant-numeric: tabular-nums;
-}
-
-.resultValues > span {
-    min-width: 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 .ballotForm,
@@ -153,7 +72,7 @@
 .ballotLabelRow {
     display: flex;
     align-items: center;
-    gap: var(--xc-space-1);
+    gap: 0; /* the tip's own start margin (--xc-label-help-gap) spaces it */
 }
 
 .ballotOptions {
@@ -174,7 +93,7 @@
 }
 
 .splitOptionInput :global(label) {
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 .optionRow {
@@ -190,12 +109,5 @@
 
 .optionLabel {
     flex: 1 1 auto;
-    overflow-wrap: anywhere;
-}
-
-@media not all and (min-width: 400px) {
-    .resultValues {
-        flex: 1 1 100%;
-        justify-content: space-between;
-    }
+    overflow-wrap: break-word;
 }

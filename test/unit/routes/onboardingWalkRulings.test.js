@@ -52,10 +52,12 @@ describe('recovery phrase card and spacing', () => {
     });
 
     it('puts the copy note directly under the box and Verify directly under the checkbox', () => {
-        expect(create).toMatch(/<div className=\{styles\.phraseStack\}>\s*<MnemonicGrid[^>]*\/>\s*<p className=\{styles\.copyHint\}>/);
-        expect(create).toMatch(/<div className=\{styles\.confirmActions\}>\s*<Checkbox[\s\S]*?\/>\s*<Button\s+variant="success"\s+onClick=\{handleStartVerify\}/);
-        // One shared rule lays the three stacks out; the gap is the one token step.
-        expect(createCss).toMatch(/\.phraseStack,\s*\.confirmActions,\s*\.quizActions\s*\{[^}]*gap: var\(--xc-space-2\);[^}]*\}/);
+        expect(create).toMatch(/<div className=\{styles\.phraseStack\}>\s*<MnemonicGrid[\s\S]*?\/>\s*<p className=\{styles\.copyHint\}>/);
+        // 2026-11-14: the checkbox and Verify joined the phrase stack, so the
+        // hint, the checkbox and the button all sit one gap apart in it.
+        expect(create).toMatch(/<p className=\{styles\.copyHint\}>[\s\S]*?<\/p>\s*<Checkbox[\s\S]*?\/>\s*<Button\s+variant="success"\s+onClick=\{handleStartVerify\}/);
+        // One shared rule lays the stacks out; the gap is the one token step.
+        expect(createCss).toMatch(/\.phraseStack,\s*\.quizActions\s*\{[^}]*gap: var\(--xc-space-2\);[^}]*\}/);
         // Neither stack adds a margin of its own on top of that gap.
         expect(rule(createCss, '.copyHint')).toMatch(/margin: 0/);
         expect(rule(createCss, '.confirmRow')).toMatch(/margin: 0/);
@@ -92,17 +94,19 @@ describe('pair role choices', () => {
     const pairCss = read(`${routes}PairPartnerWallet.module.css`);
 
     it('opens with an overview and a step indicator', () => {
-        expect(pair).toMatch(/if \(stage === 'role'\) \{[\s\S]*?<StepIndicator[\s\S]*?className=\{styles\.overview\}/);
+        // G01: the step count is the header subtitle; G120 puts the overview in one notice.
+        expect(pair).toMatch(/subtitle=\{<StepIndicator \{\.\.\.step\} \/>\}/);
+        expect(pair).toMatch(/if \(stage === 'role'\) \{[\s\S]*?<Notice tone="info" title="How Pairing Works"/);
     });
 
     it('sets each description directly under its own button', () => {
-        const blocks = pair.match(/<div className=\{styles\.roleChoice\}>\s*<Button[\s\S]*?<\/Button>\s*<p className=\{styles\.fullWidthText\}>[^<]+<\/p>\s*<\/div>/g);
-        expect(blocks).toHaveLength(2);
+        const choices = pair.match(/<ActionListItem[\s\S]*?description="This phone stays/g);
+        expect(choices).toHaveLength(2);
     });
 
     it('spaces the pairs wider than the button-to-text gap', () => {
-        expect(rule(pairCss, '.roleChoices')).toMatch(/gap: var\(--xc-space-5\)/);
-        expect(rule(pairCss, '.roleChoice')).toMatch(/gap: var\(--xc-space-1\)/);
+        expect(pair).toMatch(/<ActionList label="Phone signer roles">/);
+        expect(pairCss).not.toMatch(/\.roleChoices|\.roleChoice/);
     });
 });
 
@@ -127,16 +131,14 @@ describe('Locked screen field-to-button gap', () => {
 describe('wallet menu row height', () => {
     const css = read('packages/core/src/shared/commandPalette/CommandPalette.module.css');
 
-    it('sizes Settings and Lock with the same rule as every group row', () => {
-        // One selector list carries the shared row look; the footer adds only width.
-        expect(css).toMatch(/\.walletGroupList \.walletRow,\s*\.walletFooter \.walletFooterRow\s*\{[^}]*white-space: nowrap/);
-        const footerOnly = rule(css, '.walletFooter .walletFooterRow');
-        expect(footerOnly).toMatch(/inline-size: 100%/);
-        expect(footerOnly).not.toMatch(/block-size|height|padding-block|margin-block|line-height/);
+    it('sizes Settings with the same rule as every group row', () => {
+        // Settings is a group row now; one rule carries the row look.
+        expect(css).toMatch(/\.walletGroupList \.walletRow\s*\{[^}]*white-space: normal/);
+        expect(css).not.toMatch(/walletFooter/);
     });
 
-    it('applies the compact row height to both lists through one variable', () => {
-        expect(css).toMatch(/\.walletGroupList \.walletRow,\s*\.walletFooter \.walletFooterRow\s*\{\s*--xc-button-height: var\(--xc-wallet-menu-row-h\);\s*min-block-size: var\(--xc-wallet-menu-row-h\);\s*block-size: var\(--xc-wallet-menu-row-h\);/);
+    it('applies the compact row height to the rows through one variable', () => {
+        expect(css).toMatch(/\.walletGroupList \.walletRow\s*\{\s*--xc-button-height: var\(--xc-wallet-menu-row-h\);\s*min-block-size: var\(--xc-wallet-menu-row-h\);\s*block-size: var\(--xc-wallet-menu-row-h\);/);
     });
 
     it('draws the Settings label on one line', () => {

@@ -99,7 +99,7 @@ describe('AirdropForm after the recipient list is broadcast', () => {
         await flushTimers();
         fireEvent.click(screen.getByRole('button', { name: /^Review recipients$/i }));
         await flushTimers();
-        fireEvent.click(screen.getByRole('button', { name: /^Sign/ }));
+        fireEvent.click(screen.getByTestId('confirm-approve'));
         await flushTimers();
         fireEvent.click(screen.getByTestId('confirm-approve'));
         await flushTimers();

@@ -73,6 +73,10 @@ describe('blocksDurationText', () => {
         expect(blocksDurationText(1008, 600)).toBe('7 days');
         expect(blocksDurationText(144, 600)).toBe('1 day');
         expect(blocksDurationText(null, 600)).toBeNull();
+        // 999999999 placeholder close block minus a ~908k tip: absurd day count.
+        expect(blocksDurationText(999999999 - 908415, 600)).toBeNull();
+        expect(blocksDurationText(365 * 144, 600)).toBe('365 days');
+        expect(blocksDurationText(366 * 144 + 144, 600)).toBeNull();
         expect(blocksDurationText(5, null)).toBeNull();
     });
 });

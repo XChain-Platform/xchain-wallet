@@ -16,6 +16,7 @@ import {
     openSettings,
     test,
 } from '../../fixtures/wallet.js';
+import { dropdownValue, expectDropdownValue } from '../../fixtures/pickOption.js';
 
 const VIEWPORT = { width: 1280, height: 800 };
 const INTERACTIVE_SELECTOR = [
@@ -217,7 +218,7 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             // A new wallet has no contacts; save one so the recipient field
             // has a suggestion to offer.
             await gotoSection(page, 'Contacts');
-            await page.getByRole('button', { name: 'Create first contact' }).click();
+            await page.getByRole('button', { name: 'Add contact', exact: true }).click();
             await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Erin');
             await page.getByRole('textbox', { name: 'Address', exact: true })
                 .fill('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4');
@@ -257,11 +258,11 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
 
             // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
             const addressType = form.getByLabel('Address type', { exact: true });
-            const originalType = await addressType.inputValue();
+            const originalType = await dropdownValue(addressType);
             await addressType.focus();
             await page.keyboard.press('Alt+ArrowDown');
             await page.keyboard.press('Escape');
-            await expect(addressType).toHaveValue(originalType);
+            await expectDropdownValue(addressType, originalType);
             await expect(form).toBeVisible();
 
             await expectEnterSubmissionBoundaries(page, {
@@ -319,15 +320,16 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
 
         await test.step('Settings password security', async () => {
             await openSettings(page);
-            const walletRow = page.getByRole('main').getByRole('button', { name: /^This wallet/ });
-            await expect(walletRow).toBeVisible();
-            await walletRow.click();
-            const changePassword = page.getByRole('main').getByRole('button', { name: 'Change…' });
-            await expect(changePassword).toBeVisible();
-            await changePassword.click();
+            const securityRow = page.getByRole('main').getByRole('button', { name: /^Security/ }).first();
+            await expect(securityRow).toBeVisible();
+            await securityRow.click();
+            // The Wallet password page opens straight on its form.
+            const passwordRow = page.getByRole('main').getByRole('button', { name: /^Wallet password\b/ }).first();
+            await expect(passwordRow).toBeVisible();
+            await passwordRow.click();
 
-            const heading = page.getByRole('heading', { name: 'Change wallet password' });
-            const form = heading.locator('xpath=ancestor::form');
+            // The direct page has no section heading, so the form is found by its label.
+            const form = page.getByRole('form', { name: 'Change wallet password' });
             await expect(form).toBeVisible();
             await expectVisualTabOrderAndFocusRings(page, form, 'Settings password security');
             await expectHeaderMenuEscapeKeepsForm(page, form, 'Settings password security');

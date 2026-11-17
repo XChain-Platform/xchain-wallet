@@ -8,8 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The Privacy row summary counts every switch the Privacy panel shows,
-// including the ones that default on when the stored value is absent.
+// The privacy switches sit on their group rows (2026-11-13) and read the
+// stored state, including the switches that default on when nothing is
+// stored for them. Haptic feedback lives on Appearance, Labels survive
+// restore on Backup and Recovery and Hardware cross-check on Security; each
+// still writes its settings.privacy key.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup, fireEvent, screen } from '@testing-library/react';
@@ -21,7 +24,7 @@ import {
 let privacy = {};
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     useSettings: () => ({
-        settings: { privacy, autolockMinutes: 5, notifications: {} },
+        settings: { privacy, autolockMinutes: 5, notifications: {}, grace: { testSendThresholdSats: '0' } },
         loading: false,
         error: null,
         update: async () => {},
@@ -34,27 +37,28 @@ const { MessagingProvider } = await import('../../../packages/core/src/shared/Me
 const messaging = {
     getSettings: () => new Promise(() => {}),
     listConnectedSites: () => Promise.resolve([]),
+    listContacts: () => Promise.resolve([]),
 };
 
-// The Privacy group page lists one row per switch with its own On or Off
-// subtitle; this opens it and returns the rows as "TitleSubtitle" strings.
-function summaryText() {
-    const { container } = render(
+// Opens one group page from the menu.
+function openGroup(name) {
+    render(
         <MessagingProvider shell="web" messaging={messaging}>
             <Settings onBack={() => {}} />
         </MessagingProvider>,
     );
-    fireEvent.click(screen.getByRole('button', { name: /^Privacy/ }));
-    return Array.from(container.querySelectorAll('li')).map((li) => li.textContent).join('|');
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }));
 }
+
+const on = (name) => screen.getByRole('switch', { name }).checked;
 
 afterEach(() => {
     cleanup();
     resetShellCapabilities();
 });
 
-describe('Privacy row summary', () => {
-    it('counts the default-on switches when nothing is stored for them', () => {
+describe('privacy switches on their group rows', () => {
+    it('shows the default-on switches on when nothing is stored for them', () => {
         privacy = {
             torRouting: false,
             changeAddressRotation: false,
@@ -62,36 +66,56 @@ describe('Privacy row summary', () => {
             blurOnBlur: false,
             labelsSurviveRestore: false,
         };
-        const rows = summaryText();
-        expect(rows).toContain('Coin price dataOn');
-        expect(rows).toContain('Token metadataOn');
-        expect(rows).toContain('Haptic feedbackOn');
-        expect(rows).toContain('Change-address rotationOff');
-        expect(rows).toContain('Labels survive restoreOff');
-        expect(rows).toContain('Blur when the window loses focusOff');
-        expect(rows).toContain('Hardware cross-checkOff');
+        openGroup('Privacy and Sites');
+        expect(on('Coin price data')).toBe(true);
+        expect(on('Token metadata')).toBe(true);
+        expect(on('Change-address rotation')).toBe(false);
+        expect(on('Blur when the window loses focus')).toBe(false);
+        cleanup();
+        openGroup('Appearance');
+        expect(on('Haptic feedback')).toBe(true);
+        cleanup();
+        openGroup('Backup and Recovery');
+        expect(on('Labels survive restore')).toBe(false);
+        cleanup();
+        openGroup('Security');
+        expect(on('Hardware cross-check')).toBe(false);
     });
 
-    it('drops a default-on switch once it is stored false', () => {
+    it('turns a default-on switch off once it is stored false', () => {
         privacy = { hapticsEnabled: false, priceDataEnabled: false, metadataFetchEnabled: false };
-        const rows = summaryText();
-        expect(rows).toContain('Coin price dataOff');
-        expect(rows).toContain('Token metadataOff');
-        expect(rows).toContain('Haptic feedbackOff');
+        openGroup('Privacy and Sites');
+        expect(on('Coin price data')).toBe(false);
+        expect(on('Token metadata')).toBe(false);
+        cleanup();
+        openGroup('Appearance');
+        expect(on('Haptic feedback')).toBe(false);
     });
 
     it('reads the stored on state of the switches that default off', () => {
-        privacy = { alwaysRequireHwExplicitConfirm: true, changeAddressRotation: true };
-        const rows = summaryText();
-        expect(rows).toContain('Hardware cross-checkAlways required');
-        expect(rows).toContain('Change-address rotationOn');
+        privacy = { alwaysRequireHwExplicitConfirm: true, changeAddressRotation: true, labelsSurviveRestore: true };
+        openGroup('Privacy and Sites');
+        expect(on('Change-address rotation')).toBe(true);
+        cleanup();
+        openGroup('Security');
+        expect(on('Hardware cross-check')).toBe(true);
+        cleanup();
+        openGroup('Backup and Recovery');
+        expect(on('Labels survive restore')).toBe(true);
     });
 
-    it('reports Tor routing only where the shell can proxy', () => {
+    it('offers Tor routing only where the shell can proxy', () => {
         privacy = { torRouting: true };
-        expect(summaryText()).toContain('Tor routingNot available here');
+        openGroup('Privacy and Sites');
+        const unavailable = screen.getByRole('switch', { name: 'Tor routing' });
+        expect(unavailable.checked).toBe(false);
+        expect(unavailable.disabled).toBe(true);
+        expect(screen.getByText('Desktop app only, not available here')).toBeTruthy();
         cleanup();
         setShellCapabilities({ socksProxy: true });
-        expect(summaryText()).toContain('Tor routingOn');
+        openGroup('Privacy and Sites');
+        const live = screen.getByRole('switch', { name: 'Tor routing' });
+        expect(live.checked).toBe(true);
+        expect(live.disabled).toBe(false);
     });
 });

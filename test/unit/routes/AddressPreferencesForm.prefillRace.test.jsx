@@ -126,7 +126,7 @@ describe('AddressPreferencesForm keeps choices made before the prefill returns',
         pick(FEE_FIELD, 'Destroy (reduces supply)');
         fireEvent.click(screen.getByRole('button', { name: /^Update preferences$/i }));
 
-        expect(await screen.findByText('Destroy the fee (reduces supply) - CHANGED')).toBeTruthy();
+        expect(await screen.findByText('Destroy the fee (reduces supply) - changed')).toBeTruthy();
         expect(screen.getByText('Memo required on incoming sends (unchanged)')).toBeTruthy();
         expect(screen.getByText('Anyone may open a dispenser here (unchanged)')).toBeTruthy();
     });

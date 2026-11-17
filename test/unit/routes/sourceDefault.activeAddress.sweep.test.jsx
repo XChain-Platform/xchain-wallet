@@ -34,7 +34,7 @@ import { publishWalletModes, resetWalletModes } from '../../../packages/core/src
 import { BroadcastForm } from '../../../packages/core/src/shared/routes/BroadcastForm.jsx';
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
-import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
+import { ListForkRoute as ListForkForm } from '../../helpers/listFormRoutes.jsx';
 import { ProjectRosterForm } from '../../../packages/core/src/shared/routes/ProjectRosterForm.jsx';
 import { AirdropForm } from '../../../packages/core/src/shared/routes/AirdropForm.jsx';
 import { AttachContentForm } from '../../../packages/core/src/shared/routes/AttachContentForm.jsx';
@@ -117,6 +117,16 @@ async function reviewAddress() {
     return span.getAttribute('title');
 }
 
+// G127 renders the signing address once on the Confirm Standard source line.
+async function confirmSourceAddress() {
+    const source = await screen.findByTestId('confirm-source');
+    const span = source.querySelector('span[title]');
+    if (!span) throw new Error('confirm screen has no source address');
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    return span.getAttribute('title');
+}
+
 async function pickFile(label) {
     const input = await screen.findByLabelText(label);
     const file = new File(['hello'], 'note.txt', { type: 'text/plain' });
@@ -190,10 +200,10 @@ const FORMS = [
         props: { listRef: { chainId: CHAIN, actionIndex: '5', type: '1', items: ['AAA'] }, onDone() {} },
         walletMode: 'watcher',
         read: async () => {
-            const add = await screen.findByLabelText('Add tokens');
+            const add = await screen.findByLabelText('Tokens');
             fireEvent.change(add, { target: { value: 'BBB' } });
             submitFormOf(add);
-            return reviewAddress();
+            return confirmSourceAddress();
         },
     },
     {
@@ -202,11 +212,11 @@ const FORMS = [
         props: { chainId: CHAIN, tick: 'JDOG' },
         read: async () => {
             // Tokens join the roster through the token picker (mocked above).
-            await screen.findByText('No list published yet. This will be the first.');
+            await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
             fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
             fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: 'AAA' } });
             fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
-            fireEvent.click(screen.getByRole('button', { name: 'Create Project Tokens' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
             return reviewAddress();
         },
     },

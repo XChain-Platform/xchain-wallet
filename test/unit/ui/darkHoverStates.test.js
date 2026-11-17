@@ -20,7 +20,9 @@ describe('dark palette hover states', () => {
     it('draws the notice recovery action with the shared secondary Button', () => {
         const jsx = read('packages/core/src/ui/StatusMessage.jsx');
         const css = read('packages/core/src/ui/StatusMessage.module.css');
-        expect((jsx.match(/variant="secondary"/g) || []).length).toBeGreaterThanOrEqual(2);
+        // One NoticeAction serves the lone notice and each line of a group.
+        expect((jsx.match(/variant="secondary"/g) || []).length).toBeGreaterThanOrEqual(1);
+        expect(jsx).toMatch(/function NoticeAction\b[\s\S]*?<Button[\s\S]*?variant="secondary"/);
         expect(css).not.toMatch(/\.recovery[^{]*\{[^}]*(?:background|border|color):/);
     });
 

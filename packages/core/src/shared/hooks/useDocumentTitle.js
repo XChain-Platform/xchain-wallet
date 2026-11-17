@@ -13,20 +13,20 @@ const KNOWN_ROUTES = new Set([
     'bridge-settings', 'bridge-move', 'pause-token', 'lock-address',
     'description', 'transfer', 'broadcast', 'oracle', 'dispenser',
     'dispensers-list', 'dispenser-detail', 'dispenser-explorer', 'dividend',
-    'airdrop', 'advanced', 'migrate-bip39', 'pair-signer',
-    'markets', 'markets-picker', 'market', 'create-order', 'my-orders',
-    'my-swaps', 'coinpay', 'obligations', 'swap', 'sell-name', 'messaging',
+    'airdrop', 'advanced', 'migrate-bip39', 'pair-signer', 'pair-partner',
+    'markets', 'markets-picker', 'market', 'create-order', 'my-orders', 'order-detail',
+    'edit-order', 'cancel-order', 'my-swaps', 'swap-detail', 'edit-swap', 'cancel-swap', 'coinpay', 'obligations', 'swap', 'sell-name', 'messaging',
     'compose-message', 'contacts', 'lists', 'list-detail', 'list-create',
-    'list-fork', 'list-share', 'list-transfer', 'list-rename', 'list-union',
-    'shared-lists', 'contracts-list', 'contract-detail', 'contract-stake',
+    'list-fork', 'list-share', 'list-transfer', 'list-rename', 'list-look',
+    'contracts-list', 'contract-detail', 'contract-stake',
     'contract-deploy', 'contract-execute', 'contract-deposit',
     'contract-withdraw', 'controller-bind', 'controller-unbind', 'staking-dashboard',
     'stake-detail', 'stake-new', 'stake-form', 'staking-unstake',
     'staking-claim', 'staking-delegate', 'staking-revoke',
-    'operator-dashboard', 'history', 'action-detail', 'link-form',
+    'history', 'action-detail', 'link-form',
     'attach-content', 'gated-publish', 'publish-file', 'project-roster',
     'parallel-compose', 'batch-compose', 'cross-chain-swap',
-    'cross-chain-order', 'multisig-create', // no cross-chain templates route
+    'cross-chain-order', 'multisig-create', 'multisig-share', // no cross-chain templates route
     'multisig-sign', 'cosigner-accounts', 'cosigner-provision',
     'cosigner-detail', 'addresses', 'address-preferences', 'view-private-key',
     'add-wallet', 'add-account', 'wallet-picker', 'account-picker',
@@ -43,26 +43,35 @@ const KNOWN_ROUTES = new Set([
 // Every other route reads as its id in sentence case, the way headings do.
 const ROUTE_LABELS = {
     alerts: 'Notifications',
-    'send-picker': 'Send',
+    // The picker's heading is "Asset" (G60); the window title follows it.
+    'send-picker': 'Asset',
     // Every label below is Title Case, matching its page heading.
     actions: 'All Actions',
     lock: 'Lock Token',
     description: 'Update Description',
     transfer: 'Transfer Ownership',
     'markets-picker': 'Choose Asset', // matches the page title
-    'list-union': 'Create Union List',
+    // The one List form, opened on an action: the title is that action's heading.
+    'list-rename': 'Edit List',
+    'list-fork': 'Edit List',
+    'list-look': 'Edit Look',
+    'list-share': 'Share List',
+    'list-transfer': 'Transfer List',
     'contract-deploy': 'Publish Contract',
     'stake-new': 'New Stake',
     'link-form': 'Link Actions',
     'parallel-compose': 'Action Queue',
     'batch-compose': 'Batch',
     'multisig-create': 'Create Multisig',
+    'multisig-share': 'Share Wallet as Cosigner',
     'pair-signer': 'Pair Hardware Wallet',
+    // The two-phone pairing, opened from Settings, Advanced.
+    'pair-partner': 'Use Another Phone as a Signer',
     'compose-message': 'New Message',
     markets: 'Decentralized Exchange',
     market: 'Marketplace',
     'market-activity': 'Marketplace',
-    'dispensers-list': 'My Dispensers',
+    'dispensers-list': 'Dispensers',
     lists: 'My Lists',
     obligations: 'Payments Due',
     'contracts-list': 'Contracts',
@@ -71,7 +80,8 @@ const ROUTE_LABELS = {
     'governance-delegations': 'My Delegations',
     'governance-clear-delegation': 'Clear Vote Delegation',
     'bet-markets': 'Betting',
-    wizard: 'Issue a Token',
+    // The window title names the page header's title (U25).
+    wizard: 'Issue Token',
     issue: 'Issue Token',
     sweep: 'Sweep Address',
     oracle: 'My Oracle',
@@ -91,10 +101,14 @@ const ROUTE_LABELS = {
     'account-picker': 'My Accounts',
     'migrate-bip39': 'Upgrade Wallet',
     'sign-psbt': 'Sign Transaction',
-    'multisig-sign': 'Multisig Signing Sessions',
+    'multisig-sign': 'Multisig Sessions',
     'cosigner-accounts': 'Agent Accounts',
     'cosigner-provision': 'New Agent Account',
     'cosigner-detail': 'Agent Account',
+    'swap-detail': 'Swap Details',
+    // The one asset page names its coin or token (below); until it does, "Token".
+    'token-detail': 'Token',
+    'manage-token': 'Token',
 };
 
 const ONBOARDING_LABELS = {
@@ -102,7 +116,7 @@ const ONBOARDING_LABELS = {
     create: 'Create Wallet',
     import: 'Import Wallet',
     'import-freewallet': 'Import FreeWallet',
-    'pair-partner': 'Pair an Offline Signer',
+    'pair-partner': 'Use Another Phone as a Signer',
 };
 
 // Title case: short articles, conjunctions and prepositions stay lowercase
@@ -119,8 +133,13 @@ function labelForRoute(route) {
 
 // A screen with sub-screens of its own (Settings) names the one it is showing
 // here, so the window reads as the heading on screen. Only the view that owns
-// the sub-screens uses it.
-const SECTIONED_VIEWS = new Set(['settings']);
+// the sub-screens uses it. The asset page uses it the same way to name the
+// coin or token it shows.
+const SECTIONED_VIEWS = new Set([
+    'settings', 'token-detail', 'manage-token',
+    // The one Staking form names the action its Action field shows.
+    'stake-form', 'staking-unstake', 'staking-claim', 'staking-delegate', 'staking-revoke', 'contract-stake',
+]);
 const MAX_SECTION_LENGTH = 60;
 let activeSection = null;
 const sectionListeners = new Set();

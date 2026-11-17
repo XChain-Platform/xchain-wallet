@@ -8,14 +8,15 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act as domAct, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { selectOption, selectOptionDetails } from '../../helpers/selectOption.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MyLists } from '../../../packages/core/src/shared/routes/MyLists.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
 import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
-import betStyles from '../../../packages/core/src/shared/routes/IssueTokenForm.module.css';
 import createBetStyles from '../../../packages/core/src/shared/routes/CreateBetFeedForm.module.css';
-import betDetailStyles from '../../../packages/core/src/shared/routes/BetFeedDetail.module.css';
+import outcomeStyles from '../../../packages/core/src/shared/components/outcomeDetail/OutcomeDetail.module.css';
+import outcomeListStyles from '../../../packages/core/src/shared/routes/OutcomeList.module.css';
 import betCardStyles from '../../../packages/core/src/shared/components/BetMarketCard.module.css';
 import betListStyles from '../../../packages/core/src/shared/routes/BetFeedsList.module.css';
 import { ContractsList } from '../../../packages/core/src/shared/routes/ContractsList.jsx';
@@ -111,10 +112,10 @@ describe('BetFeedsList market cards', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Filter bet markets' }, { timeout: 10_000 }));
         const status = screen.getByRole('combobox', { name: 'Status' });
         expect(status).toHaveValue('open');
-        expect(screen.getByRole('option', { name: 'Taking bets' }).selected).toBe(true);
-        fireEvent.change(status, { target: { value: 'all' } });
+        expect(selectOptionDetails(status).find((o) => o.label === 'Taking bets').selected).toBe(true);
+        selectOption(status, 'all');
         expect(status).toHaveValue('all');
-        expect(screen.getByRole('option', { name: 'All markets' }).selected).toBe(true);
+        expect(selectOptionDetails(status).find((o) => o.label === 'All markets').selected).toBe(true);
     }, 20_000);
 });
 
@@ -203,13 +204,13 @@ describe('bet screens at phone widths', () => {
         utils = await mountAtWidth(width, (
             <BetFeedDetail walletId="w1" chainId={chainId} feedIndex="7" onBack={() => {}} />
         ));
-        // The bet form shows only on the Bet tab; Details is the default.
+        // The Bet tab is one list card with a row per outcome.
         fireEvent.click(await screen.findByRole('tab', { name: 'Bet' }));
-        expect(await screen.findByRole('group', { name: 'Outcome to back' }))
-            .toHaveClass(betDetailStyles.outcomeSegments);
-        // The odds rows sit on the Details tab.
+        expect(await screen.findByRole('list', { name: 'Outcome to back' }))
+            .toHaveClass(outcomeListStyles.list);
+        // The facts sit on the Details tab, one per wrapping row.
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
-        expect(utils.container.querySelector(`.${betStyles.betOddsRow}`)).toBeTruthy();
+        expect(utils.container.querySelector(`.${outcomeStyles.factRow}`)).toBeTruthy();
         utils.unmount();
 
         utils = await mountAtWidth(width, (
@@ -219,11 +220,13 @@ describe('bet screens at phone widths', () => {
         expect((await screen.findByLabelText('Outcome 1')).closest(`.${createBetStyles.outcomeRow}`)).toBeTruthy();
         utils.unmount();
 
-        // My bets is a tab of Bet Markets (view 'bets').
+        // My bets is the All list narrowed (ruling 2026-11-13): the same card
+        // and grid at phone width.
         utils = await mountAtWidth(width, (
             <BetFeedsList walletId="w1" view="bets" onOpenMarket={() => {}} onBack={() => {}} />
         ));
-        expect(await screen.findByText(`from ${address.address}`)).toHaveClass(betStyles.betLongText);
+        expect(await screen.findByText(longLabel)).toHaveClass(betCardStyles.question);
+        expect(utils.container.querySelector(`ul.${betListStyles.marketList}`)).toBeTruthy();
         utils.unmount();
     }, 20_000);
 
@@ -236,8 +239,14 @@ describe('bet screens at phone widths', () => {
 
         expect(narrow).toMatch(/\.betActions\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
         expect(narrow).toMatch(/\.betActions > \*\s*\{[^}]*width:\s*100%/s);
-        expect(narrow).toMatch(/\.betOddsRow\s*\{[^}]*flex-direction:\s*column/s);
-        expect(css).toMatch(/\.betLongText\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+        // The market's question is the shared outcome hero's title and its odds
+        // are the outcome page's fact rows; both wrap a long unbroken label.
+        const outcomeCss = readFileSync(resolve(
+            here,
+            '../../../packages/core/src/shared/components/outcomeDetail/OutcomeDetail.module.css',
+        ), 'utf8');
+        expect(outcomeCss).toMatch(/\.question\s*\{[^}]*overflow-wrap:\s*break-word/s);
+        expect(outcomeCss).toMatch(/\.factRow\s*\{[^}]*flex-wrap:\s*wrap/s);
     });
 });
 
@@ -276,13 +285,14 @@ describe('ContractsList filter field sizing', () => {
             );
 
             // The user's own contracts sit under the Mine tab.
-            fireEvent.click(await screen.findByRole('tab', { name: /Mine/ }));
+            fireEvent.click(await screen.findByRole('tab', { name: /My Contracts|Mine/ }));
             const card = await screen.findByRole('button', { name: new RegExp(`^Open ${contractName}`) });
             expect(card).toHaveClass(contractStyles.contractRow);
             expect(card).toHaveTextContent(contractName);
-            // The network choice is a field in the title-line filter menu.
+            // The network choice is the standard Network field in the
+            // title-line filter menu (operator ruling 2026-11-13).
             fireEvent.click(screen.getByRole('button', { name: 'Filter contracts' }));
-            expect(screen.getByRole('combobox', { name: 'Network' })).toHaveValue('all');
+            expect(screen.getByRole('button', { name: 'Network: All networks' })).toBeInTheDocument();
         } finally {
             if (widthDescriptor) Object.defineProperty(window, 'innerWidth', widthDescriptor);
         }
@@ -294,6 +304,9 @@ describe('ContractsList filter field sizing', () => {
         // The search box lives in the shared title-line filter menu, so the page owns no input.
         expect(source).not.toMatch(/<Input\b/);
         expect(source).toMatch(/<ListFilterMenu[\s\S]*?searchLabel="Search contracts"/);
-        expect(source).toMatch(/className=\{`\$\{styles\.entry\} \$\{contractStyles\.contractRow\}`\}/);
+        // Rows are shared ListRows in one list card (G07), ending in the standard chevron (G97).
+        expect(source).toMatch(/<ListRow\s+className=\{contractStyles\.contractRow\}[\s\S]*?chevron/);
+        // No network heading over the rows; the icon's badge names the network (U12).
+        expect(source).not.toMatch(/<ChainBadge\b/);
     });
 });

@@ -107,7 +107,10 @@ describe('ControllerBindForm multi-class binds', () => {
         const { messaging } = mount({ overrides: { advancedAction } });
         await fillMultiClassBind();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Sign: bind controller' }));
+        expect(screen.getByTestId('confirm-facts')).toHaveTextContent('Action classes');
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
+        expect(screen.queryByText(/Estimate unavailable/)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
         await waitFor(() => expect(advancedAction).toHaveBeenCalledTimes(2));
         expect(messaging.buildControllerBindParams.mock.calls.slice(0, 2).map(([request]) => request.actionClass))
@@ -120,14 +123,35 @@ describe('ControllerBindForm multi-class binds', () => {
             .toBeLessThan(messaging.buildControllerBindParams.mock.invocationCallOrder[1]);
         expect(messaging.getAddressUtxos.mock.invocationCallOrder[0])
             .toBeGreaterThan(advancedAction.mock.invocationCallOrder[0]);
-        expect(await screen.findByText(/Sent: tx-transfer/)).toBeTruthy();
-        expect(screen.getByText(/Failed:/)).toBeTruthy();
+        expect(await screen.findByText(/sent: tx-transfer/i)).toBeTruthy();
+        expect(screen.getByText(/failed:/i)).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Sign: bind controller' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(advancedAction).toHaveBeenCalledTimes(3));
         expect(messaging.buildControllerBindParams.mock.calls.map(([request]) => request.actionClass))
             .toEqual(['transfer', 'burn', 'burn']);
         expect(advancedAction.mock.calls[2][0].password).toBe('one password');
+        expect(await screen.findByText('Bind sequence completed. The network will apply each controller change shortly.')).toBeTruthy();
+    });
+
+    it('Back on the hardware sign page returns to the review with no failure, and the class signs again', async () => {
+        const back = Object.assign(new Error('Signing stopped from the hardware wallet page (HW_SIGN_BACK).'), { code: 'HW_SIGN_BACK' });
+        const advancedAction = vi.fn()
+            .mockResolvedValueOnce({ txid: 'tx-transfer' })
+            .mockRejectedValueOnce(back)
+            .mockResolvedValueOnce({ txid: 'tx-burn' });
+        mount({ overrides: { advancedAction } });
+        await fillMultiClassBind();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+        await waitFor(() => expect(advancedAction).toHaveBeenCalledTimes(2));
+        expect(await screen.findByText(/sent: tx-transfer/i)).toBeTruthy();
+        expect(screen.queryByText(/failed:/i)).toBeNull();
+        expect(screen.queryByText(/HW_SIGN_BACK/)).toBeNull();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+        await waitFor(() => expect(advancedAction).toHaveBeenCalledTimes(3));
         expect(await screen.findByText('Bind sequence completed. The network will apply each controller change shortly.')).toBeTruthy();
     });
 
@@ -147,14 +171,19 @@ describe('ControllerBindForm multi-class binds', () => {
 
         expect(token).toHaveAccessibleName(/^Token: ALPHA/);
         expect(document.body.textContent).not.toContain('does not own');
+        expect(screen.getByRole('heading', { name: 'Bind Controller' })).toBeTruthy();
         fireEvent.click(token);
 
-        // The picker title is Title Case.
+        // The standard token picker opens with its own title, not the form's,
+        // and lists only the tokens this wallet owns.
         expect(await screen.findByRole('heading', { name: 'Select Token' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'ALPHA' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'BETA' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'NOTOWNED' })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'BETA' }));
+        expect(screen.queryByRole('heading', { name: 'Bind Controller' })).toBeNull();
+        const row = (tick) => (name) => name.startsWith(`Select ${tick} on Bitcoin,`);
+        expect(await screen.findByRole('button', { name: row('ALPHA') })).toBeTruthy();
+        expect(screen.getByRole('button', { name: row('BETA') })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: row('NOTOWNED') })).toBeNull();
+        expect(screen.getAllByRole('button', { name: (name) => name.startsWith('Select ') })).toHaveLength(2);
+        fireEvent.click(screen.getByRole('button', { name: row('BETA') }));
 
         expect(await screen.findByRole('button', { name: /^Token: BETA/ })).toBeTruthy();
         expect(await screen.findByDisplayValue(SECOND.address)).toBeTruthy();

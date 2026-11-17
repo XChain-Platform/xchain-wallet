@@ -231,7 +231,7 @@ export function pollResultSummary(rows, options) {
 
 /**
  * "in 3 days", "in 4 h", "in 20 min" for a block count at the chain's
- * target block interval; null when either is unknown.
+ * target block interval; null when either is unknown or the span passes a year.
  *
  * @param {number | null} blocks
  * @param {number | null} blockSeconds
@@ -242,6 +242,9 @@ export function blocksDurationText(blocks, blockSeconds) {
     if (secs < 3600) return `${Math.max(1, Math.round(secs / 60))} min`;
     if (secs < 86400) return `${Math.round(secs / 3600)} h`;
     const days = Math.round(secs / 86400);
+    // Past a year the count is not a useful countdown (a far-future or
+    // placeholder close block); callers fall back to showing the block.
+    if (days > 365) return null;
     return `${days} day${days === 1 ? '' : 's'}`;
 }
 

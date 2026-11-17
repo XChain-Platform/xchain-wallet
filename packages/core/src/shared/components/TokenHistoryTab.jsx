@@ -16,9 +16,14 @@
 // the address count, never the rows. The rows are scoped the way History is
 // when opened from this asset (historyEntryScope.js): the chain for every
 // asset, plus History's own search match on the tick for a non-native one.
+//
+// The rows are one flat list, newest first, with no day headings (operator
+// ruling 2026-11-15); each row keeps its own relative time ("2 hours ago").
+// A token page reads its rows once for the hero's balance line and hands them
+// in as `history`, so the tab adds no second read.
 
 import { useEffect, useMemo, useState } from 'react';
-import { EmptyState, SectionHeader, Skeleton } from '@xchain-wallet/core/ui';
+import { EmptyState, Skeleton } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../useMessaging.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
@@ -26,7 +31,6 @@ import { readActiveAccount } from '../utils/activeAccountMemory.js';
 import { historyResponseRows, normalizeHistoryRow, recentActivityEntries } from '../utils/historyRow.js';
 import { applyHistoryFilters } from '../utils/historyFilter.js';
 import { historyScopeForAsset } from '../utils/historyEntryScope.js';
-import { groupHistoryItemsByLocalDay } from '../utils/historyGrouping.js';
 import { ActivityEntryRow } from './HomeTabs.jsx';
 import homeTabsStyles from './HomeTabs.module.css';
 import styles from './TokenHistoryTab.module.css';
@@ -50,15 +54,18 @@ function namesTick(entry, tick) {
 }
 
 /**
- * Load this wallet's rows for one asset on one chain.
+ * Load this wallet's rows for one asset on one chain. With `enabled` false
+ * nothing is read and the entries stay null.
  *
- * @returns {{ entries: any[] | null, failed: boolean }} entries is null while loading
+ * @returns {{ entries: any[] | null, failed: boolean, addresses?: string[] }} entries is null while
+ *   loading; addresses are this wallet's own addresses on the chain, as read
  */
-function useTokenHistory({ messaging, walletId, chainId, tick, isNative }) {
+export function useTokenHistory({ messaging, walletId, chainId, tick, isNative, enabled = true }) {
     const [state, setState] = useState(
-        /** @type {{ entries: any[] | null, failed: boolean }} */ ({ entries: null, failed: false }),
+        /** @type {{ entries: any[] | null, failed: boolean, addresses?: string[] }} */ ({ entries: null, failed: false }),
     );
     useEffect(() => {
+        if (!enabled) return undefined;
         if (!walletId || !chainId) {
             setState({ entries: [], failed: false });
             return undefined;
@@ -70,9 +77,11 @@ function useTokenHistory({ messaging, walletId, chainId, tick, isNative }) {
         let cancelled = false;
         setState({ entries: null, failed: false });
         const { searchQuery } = historyScopeForAsset({ chainId, tick, kind: isNative ? 'native' : 'token' });
+        let addresses = [];
         Promise.resolve(messaging.getAddressesByChain(walletId, readActiveAccount(walletId) || undefined))
             .then((byChain) => {
                 const addrs = Array.isArray(byChain?.[chainId]) ? byChain[chainId] : [];
+                addresses = addrs.map((a) => a?.address).filter(Boolean);
                 return Promise.allSettled(addrs.filter((a) => a?.address).map((a) => (
                     Promise.resolve(messaging.getAddressHistory({ chainId, address: a.address }))
                         .then((response) => historyResponseRows(response)
@@ -92,18 +101,19 @@ function useTokenHistory({ messaging, walletId, chainId, tick, isNative }) {
                 // the wallet's addresses) lists once, newest first, pending on top.
                 const ordered = recentActivityEntries(onChain, Number.POSITIVE_INFINITY);
                 if (!searchQuery) {
-                    setState({ entries: ordered, failed: false });
+                    setState({ entries: ordered, failed: false, addresses });
                     return;
                 }
                 const searched = new Set(applyHistoryFilters(ordered, { searchQuery }));
                 setState({
                     entries: ordered.filter((e) => searched.has(e) || namesTick(e, searchQuery)),
                     failed: false,
+                    addresses,
                 });
             })
             .catch(() => { if (!cancelled) setState({ entries: [], failed: true }); });
         return () => { cancelled = true; };
-    }, [messaging, walletId, chainId, tick, isNative]);
+    }, [messaging, walletId, chainId, tick, isNative, enabled]);
     return state;
 }
 
@@ -113,13 +123,15 @@ function useTokenHistory({ messaging, walletId, chainId, tick, isNative }) {
  * @param {string} props.chainId
  * @param {string} props.tick
  * @param {boolean} [props.isNative]  the chain's own coin, scoped to the whole chain
+ * @param {{ entries: any[] | null, failed: boolean }} [props.history]  rows the page already read;
+ *   left out, the tab reads its own
  * @param {(entry: any) => void} [props.onSelectEntry] opens one row's detail
  */
-export function TokenHistoryTab({ walletId, chainId, tick, isNative = false, onSelectEntry }) {
+export function TokenHistoryTab({ walletId, chainId, tick, isNative = false, history: suppliedHistory = null, onSelectEntry }) {
     const { messaging } = useMessaging();
     const tokenInfo = useTokenInfo({ chainId, tick, skip: isNative, demo: isDemoWallet(walletId) });
-    const history = useTokenHistory({ messaging, walletId, chainId, tick, isNative });
-    const [nowMs] = useState(Date.now);
+    const ownHistory = useTokenHistory({ messaging, walletId, chainId, tick, isNative, enabled: !suppliedHistory });
+    const history = suppliedHistory || ownHistory;
     const divisibility = isNative ? 8 : (Number.isInteger(tokenInfo?.divisibility) ? tokenInfo.divisibility : 8);
     const imageUrl = !isNative && typeof tokenInfo?.imageUrl === 'string' && tokenInfo.imageUrl ? tokenInfo.imageUrl : null;
 
@@ -130,10 +142,6 @@ export function TokenHistoryTab({ walletId, chainId, tick, isNative = false, onS
     const assetLookup = useMemo(() => new Map([[`${chainId}|${tick}`, {
         divisibility, imageUrl, displayName: tick,
     }]]), [chainId, tick, divisibility, imageUrl]);
-    const dayGroups = useMemo(
-        () => groupHistoryItemsByLocalDay((history.entries || []).map((entry) => ({ kind: 'entry', entry })), nowMs),
-        [history.entries, nowMs],
-    );
 
     if (history.entries === null) {
         return (
@@ -153,24 +161,23 @@ export function TokenHistoryTab({ walletId, chainId, tick, isNative = false, onS
         );
     }
     return (
-        <ul className={styles.timeline} aria-label={t('tokenDetail.history.label', { tick })}>
-            {dayGroups.map((group) => (
-                <li key={group.key} className={styles.day}>
-                    <SectionHeader as="h2" title={group.label} />
-                    <ul className={`${homeTabsStyles.demoList} ${homeTabsStyles.activityList}`}>
-                        {group.items.map(({ entry }) => (
-                            <ActivityEntryRow
-                                key={entry.key}
-                                entry={entry}
-                                walletAddresses={walletAddresses}
-                                assetLookup={assetLookup}
-                                chainTip={null}
-                                allowRemoteImages={Boolean(imageUrl)}
-                                onSelectEntry={onSelectEntry}
-                            />
-                        ))}
-                    </ul>
-                </li>
+        // One list card of rows, newest first; no day headings.
+        <ul
+            className={`${homeTabsStyles.demoList} ${homeTabsStyles.activityList}`}
+            aria-label={t('tokenDetail.history.label', { tick })}
+            data-history-flat=""
+        >
+            {history.entries.map((entry) => (
+                <ActivityEntryRow
+                    key={entry.key}
+                    entry={entry}
+                    walletAddresses={walletAddresses}
+                    assetLookup={assetLookup}
+                    chainTip={null}
+                    allowRemoteImages={Boolean(imageUrl)}
+                    onSelectEntry={onSelectEntry}
+                    chevron
+                />
             ))}
         </ul>
     );

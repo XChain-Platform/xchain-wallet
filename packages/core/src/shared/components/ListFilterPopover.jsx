@@ -18,9 +18,10 @@ import styles from './ListFilterPopover.module.css';
  * @param {string} props.label                    accessible name of the button and panel
  * @param {boolean} [props.active]                true when a filter is applied
  * @param {'sm' | 'md'} [props.size]              button size; 'sm' matches a header action
+ * @param {boolean} [props.closeOnSubmit]         close the panel when a form inside it submits (a search box), so the results show
  * @param {import('react').ReactNode} props.children  the panel controls
  */
-export function ListFilterPopover({ label, active = false, size = 'md', children }) {
+export function ListFilterPopover({ label, active = false, size = 'md', closeOnSubmit = false, children }) {
     const [open, setOpen] = useState(false);
     const wrapRef = useRef(null);
     const triggerRef = useRef(null);
@@ -28,16 +29,23 @@ export function ListFilterPopover({ label, active = false, size = 'md', children
 
     useEffect(() => {
         if (!open) return undefined;
+        // The Network choice opens a full-screen list portaled outside the
+        // panel; a press, Escape or focus inside it belongs to that list, so
+        // the panel stays open under it and the pick reaches its handler.
+        const inPickerLayer = (event) => Boolean(event.target?.closest?.('[data-picker-layer]'));
         const onPointerDown = (event) => {
+            if (inPickerLayer(event)) return;
             if (!wrapRef.current?.contains(event.target)) setOpen(false);
         };
         const onKeyDown = (event) => {
             if (event.key !== 'Escape') return;
+            if (inPickerLayer(event)) return;
             event.preventDefault();
             setOpen(false);
             triggerRef.current?.focus();
         };
         const onFocusIn = (event) => {
+            if (inPickerLayer(event)) return;
             if (!wrapRef.current?.contains(event.target)) setOpen(false);
         };
         window.addEventListener('mousedown', onPointerDown);
@@ -73,7 +81,7 @@ export function ListFilterPopover({ label, active = false, size = 'md', children
                 {null}
             </Button>
             {open ? (
-                <div className={styles.panel} role="dialog" aria-label={label} style={panelTop == null ? undefined : { '--xc-filter-panel-top': `${panelTop}px` }}>
+                <div className={styles.panel} role="dialog" aria-label={label} onSubmit={closeOnSubmit ? () => setOpen(false) : undefined} style={panelTop == null ? undefined : { '--xc-filter-panel-top': `${panelTop}px` }}>
                     {children}
                 </div>
             ) : null}

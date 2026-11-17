@@ -16,6 +16,8 @@
 //   - `wallet.lock`     Clear the session key and signal teardown.
 //   - `wallet.create`   Fresh install: onboard with a generated mnemonic.
 //   - `wallet.import`   Fresh install: onboard with an existing mnemonic.
+//   - `wallet.create.hardware`    Fresh install: onboard with a hardware wallet.
+//   - `wallet.hardware.balances`  The connect flow's account balances, vault or not.
 //
 // Anything outside `PRE_HOST_MESSAGE_TYPES` falls through to the host
 // listener. `ChromeRuntimeAdapter` imports that set to know which types
@@ -34,8 +36,11 @@ import {
     ChromeStorageBackend,
 } from '../storage/index.js';
 import { handleWalletUnlock } from './walletUnlock.js';
+import { handlePhraseReset, handleRecoveryStatus, handleVerifyBackup } from './walletRecovery.js';
 import { handleWalletLock } from './walletLock.js';
 import {
+    handleHardwareWalletBalances,
+    handleWalletCreateHardware,
     handleWalletCreateWithMnemonic,
     handleWalletImport,
     handleWalletImportBackup,
@@ -61,9 +66,16 @@ import { VaultIncompleteError, vaultErrorKind } from '@xchain-wallet/core/storag
  *   onLocked?: (result: { secretsCleared: boolean }) => Promise<void> | void,
  *   isLockPending?: () => boolean,
  *   startLabelSyncRestore?: (opts: object) => string,
+ *   lockedAutopay?: { status: () => object, end: (reason: string) => Promise<boolean> },
+ *   beforeSessionStart?: (type: string) => Promise<unknown> | unknown,
+ *   readSettings?: () => Promise<unknown> | unknown,
+ *   priceOracle?: { getNativePrices: Function } | null,
+ *   onPhraseRecoveryReconcile?: (pending: Promise<boolean>) => void,   handed the off-path recovery-record write a create, import, unlock or reset starts (tests await it)
  * }} PreHostDispatchDeps
  *
  * @typedef {Object} PreHostDeps
+ * @property {{ status: () => object, end: (reason: string) => Promise<boolean> }} [lockedAutopay]   PC-16 Phase B controller: plain status and Stop for the Locked screen
+ * @property {(type: string) => Promise<unknown> | unknown} [beforeSessionStart]   runs before an unlock, create or import opens a vault (ends locked auto pay first)
  * @property {() => Promise<void> | void} [onUnlocked]
  * @property {(result: { secretsCleared: boolean }) => Promise<void> | void} [onLocked]   receives whether both secret clears succeeded, so a shell can keep its auto-lock retry record when they did not
  * @property {() => boolean} [isLockPending]   true while a refused lock's secret clear awaits its retry; status then reads locked
@@ -71,6 +83,7 @@ import { VaultIncompleteError, vaultErrorKind } from '@xchain-wallet/core/storag
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} [chainRegistry]
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} [sdkRegistry]
  * @property {import('@xchain-wallet/core').signers.SignerPool | (() => import('@xchain-wallet/core').signers.SignerPool)} [signerPool]
+ * @property {() => Promise<unknown> | unknown} [readSettings]   the open vault's settings or null; wallet.hardware.balances honours their price-data switch
  */
 
 /** Types the pre-host listener owns. `ChromeRuntimeAdapter` ignores these. */
@@ -85,6 +98,30 @@ export const PRE_HOST_MESSAGE_TYPES = new Set([
     // to an open vault, and putting the same string in this set would take it
     // away from the host and break the shipping add lane.
     'wallet.importBackup.fresh',
+    // PC-16 Phase B: the Locked screen's auto pay line and its Stop button.
+    // Pre-host because they run with the vault closed; trusted senders only,
+    // like every type here, and never on the public bridge.
+    'autopay.locked.status',
+    'autopay.locked.stop',
+    // Fresh install whose first wallet is a hardware wallet. The add to an
+    // open vault is the host-registered 'wallet.hardware.add'.
+    'wallet.create.hardware',
+    // The connect flow's accounts step reads balances before any vault
+    // exists on a fresh install, so this read answers in every session state.
+    'wallet.hardware.balances',
+    // Forgot Password (operator ruling 2026-11-16): the lock screen asks which
+    // ways back exist, resets with a recovery phrase (a session start), and
+    // proves a backup file restores before anything is erased.
+    'wallet.recovery.status',
+    'wallet.recovery.resetWithPhrase',
+    'wallet.recovery.verifyBackup',
+]);
+
+// Types that open a vault. Locked auto pay ends before any of them runs, so
+// its vault is closed before another one opens.
+const SESSION_START_TYPES = new Set([
+    'wallet.unlock', 'wallet.create', 'wallet.import', 'wallet.importBackup.fresh',
+    'wallet.create.hardware', 'wallet.recovery.resetWithPhrase',
 ]);
 
 /**
@@ -136,9 +173,13 @@ export function attachSessionMetaListener(deps = {}, chromeRuntime) {
                         ? deps.signerPool()
                         : deps.signerPool,
                     onUnlocked: deps.onUnlocked,
+                onPhraseRecoveryReconcile: deps.onPhraseRecoveryReconcile,
                     onLocked: deps.onLocked,
                     isLockPending: deps.isLockPending,
                     startLabelSyncRestore: deps.startLabelSyncRestore,
+                    lockedAutopay: deps.lockedAutopay,
+                    beforeSessionStart: deps.beforeSessionStart,
+                    readSettings: deps.readSettings,
                 });
                 sendResponse({ ok: true, result });
             } catch (err) {
@@ -177,7 +218,15 @@ export async function dispatchPreHost(type, request, deps) {
     if (!deps?.metaBackend) {
         throw new Error('dispatchPreHost: metaBackend is required');
     }
+    if (SESSION_START_TYPES.has(type) && typeof deps.beforeSessionStart === 'function') {
+        await deps.beforeSessionStart(type);
+    }
     switch (type) {
+        case 'autopay.locked.status':
+            return deps.lockedAutopay ? deps.lockedAutopay.status() : { active: false };
+        case 'autopay.locked.stop':
+            if (deps.lockedAutopay) await deps.lockedAutopay.end('stopped');
+            return deps.lockedAutopay ? deps.lockedAutopay.status() : { active: false };
         case 'session.status':
             return handleSessionStatus({
                 storageBackend: deps.storageBackend,
@@ -196,6 +245,27 @@ export async function dispatchPreHost(type, request, deps) {
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,
                 onUnlocked: deps.onUnlocked,
+                onPhraseRecoveryReconcile: deps.onPhraseRecoveryReconcile,
+            });
+        case 'wallet.recovery.status':
+            return handleRecoveryStatus({ metaBackend: deps.metaBackend });
+        case 'wallet.recovery.resetWithPhrase':
+            return handlePhraseReset(request, {
+                storageBackend: deps.storageBackend,
+                sessionBackend: deps.sessionBackend,
+                signingSecretBackend: deps.signingSecretBackend,
+                metaBackend: deps.metaBackend,
+                unlockThrottleStore: deps.unlockThrottleStore,
+                signerPool: deps.signerPool,
+                chainRegistry: deps.chainRegistry,
+                sdkRegistry: deps.sdkRegistry,
+                onUnlocked: deps.onUnlocked,
+                onPhraseRecoveryReconcile: deps.onPhraseRecoveryReconcile,
+            });
+        case 'wallet.recovery.verifyBackup':
+            return handleVerifyBackup(request, {
+                resolveBackupContent: deps.resolveBackupContent,
+                metaBackend: deps.metaBackend,
             });
         case 'wallet.lock':
             return handleWalletLock(request, {
@@ -213,6 +283,7 @@ export async function dispatchPreHost(type, request, deps) {
                 sdkRegistry: deps.sdkRegistry,
                 signerPool: deps.signerPool,
                 onUnlocked: deps.onUnlocked,
+                onPhraseRecoveryReconcile: deps.onPhraseRecoveryReconcile,
             });
         case 'wallet.importBackup.fresh':
             return handleWalletImportBackup(request, {
@@ -225,6 +296,7 @@ export async function dispatchPreHost(type, request, deps) {
                 resolveBackupContent: deps.resolveBackupContent,
                 signerPool: deps.signerPool,
                 onUnlocked: deps.onUnlocked,
+                onPhraseRecoveryReconcile: deps.onPhraseRecoveryReconcile,
             });
         case 'wallet.import':
             return handleWalletImport(request, {
@@ -235,7 +307,26 @@ export async function dispatchPreHost(type, request, deps) {
                 chainRegistry: deps.chainRegistry,
                 sdkRegistry: deps.sdkRegistry,
                 onUnlocked: deps.onUnlocked,
+                onPhraseRecoveryReconcile: deps.onPhraseRecoveryReconcile,
                 startLabelSyncRestore: deps.startLabelSyncRestore,
+            });
+        case 'wallet.create.hardware':
+            return handleWalletCreateHardware(request, {
+                storageBackend: deps.storageBackend,
+                sessionBackend: deps.sessionBackend,
+                signingSecretBackend: deps.signingSecretBackend,
+                metaBackend: deps.metaBackend,
+                chainRegistry: deps.chainRegistry,
+                sdkRegistry: deps.sdkRegistry,
+                onUnlocked: deps.onUnlocked,
+                onPhraseRecoveryReconcile: deps.onPhraseRecoveryReconcile,
+            });
+        case 'wallet.hardware.balances':
+            return handleHardwareWalletBalances(request, {
+                chainRegistry: deps.chainRegistry,
+                sdkRegistry: deps.sdkRegistry,
+                readSettings: deps.readSettings,
+                ...('priceOracle' in deps ? { priceOracle: deps.priceOracle } : {}),
             });
         default:
             throw new Error(`pre-host: no dispatcher for "${type}"`);

@@ -22,12 +22,16 @@ const wsRoot = join(here, '..', '..', '..');
 const read = (...p) => readFileSync(join(wsRoot, ...p), 'utf8');
 
 const cmp = read('packages', 'core', 'src', 'ui', 'ChainPicker.jsx');
+// ChainPicker draws the Network field (operator ruling 2026-11-13: every
+// network choice opens the full-screen list), so the field owns the wrap.
+const field = read('packages', 'core', 'src', 'ui', 'NetworkField.jsx');
 const css = read('packages', 'core', 'src', 'ui', 'ChainPicker.module.css');
 
 // --- size prop, wired like the other fields -----------------------------
 
 assert.match(cmp, /size = 'md'/, 'ChainPicker defaults size to md');
-assert.match(cmp, /\$\{styles\[size\]/, 'ChainPicker applies the size class to the wrap');
+assert.match(cmp, /<NetworkField[\s\S]*size=\{size\}/, 'ChainPicker hands its size to the Network field');
+assert.match(field, /\$\{styles\[size\]/, 'the Network field applies the size class to the wrap');
 
 // --- trigger matches the Input size contract ----------------------------
 
@@ -39,7 +43,7 @@ assert.match(css, /\.lg \.trigger\s*\{[^}]*min-height:\s*48px/s, 'lg trigger is 
 // --- single-line trigger (the two-line stack is gone) -------------------
 
 assert.doesNotMatch(css, /\.triggerSub\b/, 'old two-line triggerSub removed');
-assert.doesNotMatch(cmp, /styles\.triggerKind/, 'network-kind suffix is not rendered');
-assert.doesNotMatch(cmp, /styles\.triggerSub/, 'no two-line sub in the trigger');
+assert.doesNotMatch(field, /styles\.triggerKind/, 'network-kind suffix is not rendered');
+assert.doesNotMatch(field, /styles\.triggerSub/, 'no two-line sub in the trigger');
 
 console.log('chain-picker-size smoke OK');

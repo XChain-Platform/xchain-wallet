@@ -15,7 +15,7 @@
 // name another chain, and that the form opens on the last-used chain.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, act as domAct, fireEvent } from '@testing-library/react';
+import { render, act as domAct, fireEvent, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
@@ -126,14 +126,16 @@ function recordingMessaging({
     return { messaging, calls };
 }
 
-async function mountForm({ formProps = { initialChainId: 'bitcoin-mainnet' }, ...opts } = {}) {
+// The Token field takes no typed text (G122), so the priced ticker arrives as
+// the form's initialTick; oracleFormPickers.test.jsx drives the picker itself.
+async function mountForm({ formProps = { initialChainId: 'bitcoin-mainnet' }, tick = 'PEPECASH', ...opts } = {}) {
     const { messaging, calls } = recordingMessaging(opts);
     let utils;
     await domAct(async () => {
         utils = render(React.createElement(
             MessagingProvider,
             { shell: 'web', messaging },
-            React.createElement(OracleForm, { walletId: 'w', onBack() {}, ...formProps }),
+            React.createElement(OracleForm, { walletId: 'w', onBack() {}, initialTick: tick, ...formProps }),
         ));
         await drainMicrotasks();
     });
@@ -144,6 +146,9 @@ async function step(fn) {
     await domAct(async () => { fn(); await drainMicrotasks(); });
 }
 
+// The Token field, named by its current pick ("Token: PEPECASH on Bitcoin").
+const tokenField = (utils, tick = 'PEPECASH') => utils.getByRole('button', { name: new RegExp(`^Token: ${tick} on `) });
+
 async function fill(utils, { tick = 'PEPECASH', value = '0.05', fee, memo, coin } = {}) {
     if (coin) {
         // The priced token's network is the standard network field: open its
@@ -152,13 +157,20 @@ async function fill(utils, { tick = 'PEPECASH', value = '0.05', fee, memo, coin 
         await step(() => fireEvent.click(utils.getByRole('button', { name: /^Priced token network:/ })));
         await step(() => fireEvent.click(utils.getByRole('button', { name: new RegExp(`^Select ${chainName}\\b`) })));
     }
-    await step(() => fireEvent.change(utils.getByLabelText(/^Token ticker/), { target: { value: tick } }));
+    // The ticker came in at mount; the Token field shows it.
+    expect(tokenField(utils, tick)).toBeTruthy();
     await step(() => fireEvent.change(utils.getByLabelText(/^Price of one/), { target: { value } }));
-    if (fee) await step(() => fireEvent.change(utils.getByLabelText(/^Usage fee/), { target: { value: fee } }));
+    if (fee) {
+        // Custom is the sixth stop of the usage fee slider; it opens the one entry.
+        await step(() => fireEvent.change(utils.getByLabelText(/^Usage fee/, { selector: 'input[type="range"]' }), { target: { value: '5' } }));
+        await step(() => fireEvent.change(utils.getByLabelText(/^Custom usage fee/, { selector: 'input' }), { target: { value: fee } }));
+    }
     if (memo) await step(() => fireEvent.change(utils.getByLabelText(/^Memo/), { target: { value: memo } }));
 }
 
 const approveButton = (utils) => utils.container.querySelector('[data-testid="confirm-approve"]');
+const confirmFactValue = (utils, label) => within(utils.getByTestId('confirm-facts'))
+    .getByText(label, { selector: 'dt' }).nextElementSibling;
 
 async function publishAndApprove(utils, label = /^Publish price$/i) {
     await step(() => fireEvent.click(utils.getByRole('button', { name: label })));
@@ -171,7 +183,7 @@ const indexOf = (calls, method) => calls.findIndex((c) => c.method === method);
 describe('OracleForm publishes through the confirm lane', () => {
     it('runs the network pre-flight before it signs, and signs the composed bytes', async () => {
         const { utils, calls } = await mountForm();
-        await fill(utils, { fee: '0.01' });
+        await fill(utils, { fee: '1' });
         await publishAndApprove(utils);
 
         const compose = calls.find((c) => c.method === 'composeForConfirm');
@@ -192,7 +204,10 @@ describe('OracleForm publishes through the confirm lane', () => {
         await publishAndApprove(utils);
 
         expect(calls.some((c) => c.method === 'preflight')).toBe(true);
-        expect(approveButton(utils)?.disabled, 'Approve stays disabled on a hard refusal').toBe(true);
+        // G130: Approve keeps its colour; the tap was answered at the top of
+        // the page and signed nothing.
+        expect(approveButton(utils)?.disabled, 'Approve never looks disabled').toBe(false);
+        expect(utils.getByTestId('confirm-blocked')).toHaveTextContent("This will fail, so Approve won't send it.");
         expect(calls.some((c) => c.method === 'oraclePriceAction' || c.method === 'oraclePriceActionHw')).toBe(false);
     });
 
@@ -217,7 +232,9 @@ describe('OracleForm publishes through the confirm lane', () => {
         const { utils, calls } = await mountForm({ walletMode: 'watcher' });
         await fill(utils);
         await step(() => fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Create Unsigned Transaction' })));
+        expect(utils.getByTestId('confirm-sentence')).toHaveTextContent('Publish oracle price 1 PEPECASH = 0.05 USD');
+        expect(utils.getByRole('button', { name: 'Reject' })).toBeTruthy();
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Approve' })));
 
         expect(calls.find((c) => c.method === 'buildActionPsbtRequest').args.actionData.action).toBe('PRICE');
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
@@ -227,7 +244,7 @@ describe('OracleForm publishes through the confirm lane', () => {
 describe('OracleForm review shows the decoder rows', () => {
     it('lists the memo and the fee as a percent on the watcher review', async () => {
         const { utils } = await mountForm({ walletMode: 'watcher' });
-        await fill(utils, { fee: '0.01', memo: 'wallet QA oracle test' });
+        await fill(utils, { fee: '1', memo: 'wallet QA oracle test' });
         await step(() => fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i })));
 
         expect(utils.getByText('Memo')).toBeTruthy();
@@ -237,7 +254,7 @@ describe('OracleForm review shows the decoder rows', () => {
 
     it('lists the memo and the fee as a percent on the confirm page', async () => {
         const { utils } = await mountForm({ describe: true });
-        await fill(utils, { fee: '0.01', memo: 'wallet QA oracle test' });
+        await fill(utils, { fee: '1', memo: 'wallet QA oracle test' });
         await step(() => fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i })));
 
         expect(utils.getByText('wallet QA oracle test')).toBeTruthy();
@@ -256,45 +273,45 @@ describe('OracleForm review shows the decoder rows', () => {
         await fill(utils);
         await step(() => fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i })));
 
-        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.00001234 BTC');
+        expect(utils.getByTestId('confirm-fee-network').textContent).toBe('0.00001234 BTC');
     });
 
     it('keeps price and fee precision in review exactly as they are built', async () => {
         const { utils, calls } = await mountForm({ walletMode: 'watcher' });
-        await fill(utils, { value: '0.05000000', fee: '0.010000000000000000' });
+        await fill(utils, { value: '0.05000000', fee: '1.0000000000000000' });
         await step(() => fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i })));
 
         expect(utils.getByText('0.05000000 USD')).toBeTruthy();
-        expect(utils.getByText(/0\.010000000000000000 \(1% of a dispenser's projected proceeds\)/)).toBeTruthy();
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Create Unsigned Transaction' })));
+        expect(utils.getByText(/0\.01 \(1% of a dispenser's projected proceeds\)/)).toBeTruthy();
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Approve' })));
         expect(calls.find((call) => call.method === 'buildActionPsbtRequest').args.actionData.params)
-            .toMatchObject({ VALUE: '0.05000000', FEE: '0.010000000000000000' });
+            .toMatchObject({ VALUE: '0.05000000', FEE: '0.01' });
     });
 });
 
 describe('OracleForm review exits', () => {
     it('Reject returns from confirm with every draft value kept', async () => {
         const { utils, calls } = await mountForm();
-        await fill(utils, { tick: 'PEPECASH', value: '0.05000000', fee: '0.01', memo: 'keep this' });
+        await fill(utils, { tick: 'PEPECASH', value: '0.05000000', fee: '1', memo: 'keep this' });
         await step(() => fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i })));
         await step(() => fireEvent.click(utils.getByTestId('confirm-reject')));
 
         expect(calls.some((call) => call.method === 'oraclePriceAction')).toBe(false);
-        expect(utils.getByLabelText(/^Token ticker/)).toHaveValue('PEPECASH');
+        expect(tokenField(utils)).toBeTruthy();
         expect(utils.getByLabelText(/^Price of one/)).toHaveValue('0.05000000');
-        expect(utils.getByLabelText(/^Usage fee/)).toHaveValue('0.01');
+        expect(utils.getByLabelText(/^Custom usage fee/, { selector: 'input' })).toHaveValue('1');
         expect(utils.getByLabelText(/^Memo/)).toHaveValue('keep this');
     });
 
     it('Back returns from watcher review with every draft value kept', async () => {
         const { utils } = await mountForm({ walletMode: 'watcher' });
-        await fill(utils, { tick: 'PEPECASH', value: '0.05000000', fee: '0.01', memo: 'keep this' });
+        await fill(utils, { tick: 'PEPECASH', value: '0.05000000', fee: '1', memo: 'keep this' });
         await step(() => fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i })));
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' })));
 
-        expect(utils.getByLabelText(/^Token ticker/)).toHaveValue('PEPECASH');
+        expect(tokenField(utils)).toBeTruthy();
         expect(utils.getByLabelText(/^Price of one/)).toHaveValue('0.05000000');
-        expect(utils.getByLabelText(/^Usage fee/)).toHaveValue('0.01');
+        expect(utils.getByLabelText(/^Custom usage fee/, { selector: 'input' })).toHaveValue('1');
         expect(utils.getByLabelText(/^Memo/)).toHaveValue('keep this');
     });
 });
@@ -322,7 +339,7 @@ describe('OracleForm compose failures', () => {
 
         expect(utils.getByText(shown)).toBeTruthy();
         expect(utils.container.textContent || '').not.toMatch(hidden);
-        expect(utils.getByLabelText(/^Token ticker/)).toHaveValue('PEPECASH');
+        expect(tokenField(utils)).toBeTruthy();
         expect(utils.getByLabelText(/^Price of one/)).toHaveValue('0.05');
     });
 });
@@ -336,7 +353,8 @@ describe('OracleForm wording for a quote still maturing', () => {
         expect(utils.getByText('Pending price')).toBeTruthy();
         expect(utils.queryByText('Current price')).toBeNull();
         expect(utils.queryByText(/current price keeps selling/i)).toBeNull();
-        expect(utils.getByText(/Nothing sells on this pair yet/)).toBeTruthy();
+        expect(confirmFactValue(utils, 'Pending price')).toHaveTextContent('0.05 USD');
+        expect(confirmFactValue(utils, 'Affected dispensers')).toHaveTextContent('None open');
     });
 
     it('keeps the current-price wording when a quote is live', async () => {
@@ -345,7 +363,9 @@ describe('OracleForm wording for a quote still maturing', () => {
         await step(() => fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i })));
 
         expect(utils.getByText('Current price')).toBeTruthy();
-        expect(utils.getByText(/current price keeps selling/i)).toBeTruthy();
+        expect(confirmFactValue(utils, 'Current price')).toHaveTextContent('0.05 USD');
+        expect(utils.getByTestId('confirm-status')).toHaveAttribute('data-state', 'unknownAction');
+        expect(utils.getByTestId('confirm-warning')).toHaveTextContent(/current price keeps selling/i);
     });
 });
 
@@ -375,7 +395,8 @@ describe('OracleForm cross-chain COIN', () => {
         await fill(utils, { coin: 'BTC' });
         await step(() => fireEvent.click(utils.getByRole('button', { name: /^Publish price$/i })));
         expect(utils.queryByText(/No open dispensers price/)).toBeNull();
-        expect(utils.getByText(/Could not check which dispensers use this oracle/)).toBeTruthy();
+        expect(confirmFactValue(utils, 'Affected dispensers')).toHaveTextContent('Could not check');
+        expect(utils.getByTestId('confirm-warning')).toHaveTextContent(/could not check which dispensers use this oracle/i);
     });
 });
 

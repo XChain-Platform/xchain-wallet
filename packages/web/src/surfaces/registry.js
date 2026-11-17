@@ -86,8 +86,18 @@ export const SURFACE_VIEWS = Object.freeze({
         'market-activity',
         'swap',
         'my-swaps',
+        // One swap, opened from its My Swaps row.
+        'swap-detail',
+        // Swap Details' Edit and Cancel forms.
+        'edit-swap',
+        'cancel-swap',
         'create-order',
         'my-orders',
+        // One order, opened from its My Orders row.
+        'order-detail',
+        // Order detail's Edit and Cancel forms.
+        'edit-order',
+        'cancel-order',
         'cross-chain-swap',
         'cross-chain-order',
     ]),
@@ -116,7 +126,13 @@ export const SURFACE_MODULES = Object.freeze({
         'shared/routes/MarketActivity.jsx',
         'shared/routes/CreateOrderForm.jsx',
         'shared/routes/MyOrdersView.jsx',
+        'shared/routes/OrderDetail.jsx',
+        'shared/routes/EditOrderForm.jsx',
+        'shared/routes/CancelOrderForm.jsx',
         'shared/routes/MySwapsView.jsx',
+        'shared/routes/SwapDetail.jsx',
+        'shared/routes/EditSwapForm.jsx',
+        'shared/routes/CancelSwapForm.jsx',
         'shared/routes/SwapForm.jsx',
         'shared/routes/CrossChainSwapForm.jsx',
         'shared/routes/CrossChainOrderForm.jsx',

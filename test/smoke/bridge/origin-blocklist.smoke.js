@@ -153,14 +153,18 @@ assert.ok(/messaging\.blockOrigin\(\{ origin/.test(sectionSrc),
     'per-row Block button calls messaging.blockOrigin');
 assert.ok(/messaging\.unblockOrigin\(\{ origin\b/.test(sectionSrc),
     'Unblock button calls messaging.unblockOrigin');
-assert.ok(/Blocked origins/.test(sectionSrc),
-    'subsection heading renders');
-assert.ok(/BlockedOriginsPanel/.test(sectionSrc),
-    'BlockedOriginsPanel component defined / mounted');
-assert.ok(/placeholder="https:\/\/example\.com/.test(sectionSrc),
+// The runner's English-copy loader swaps t('key') for its English text, so
+// accept the key (a direct run) or the text (the runner and the push gate).
+assert.ok(/settings\.connectedSites\.blockedSites|Blocked sites/.test(sectionSrc),
+    'the Blocked list card is named Blocked sites');
+assert.ok(/function BlockedList\(/.test(sectionSrc) && /<BlockedList\b/.test(sectionSrc),
+    'BlockedList component defined / mounted');
+assert.ok(/placeholder=(?:\{t\('settings\.connectedSites\.httpsExampleComOrExample'\)\}|\{?["'`]https:\/\/example\.com or \*\.example\.com["'`]\}?)/.test(sectionSrc),
     'manual-block input has an origin placeholder');
 assert.ok(/onSubmit=\{onManualBlockSubmit\}/.test(sectionSrc),
     'manual-block form wires submit handler');
+assert.ok(/normalizeBlocklistEntry\(trimmed\)/.test(sectionSrc),
+    'manual-block form refuses an entry the blocklist normalizer rejects');
 
 // 9. Spec union + docs.
 const specSrc = read('packages/bridge-spec/src/index.ts');

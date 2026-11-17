@@ -12,6 +12,7 @@ import {
     dismissIntroCarousel,
     expect,
     gotoSection,
+    openFormSection,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -26,22 +27,28 @@ test('a custom fee rate above the chain maximum is refused on a 360 px compose f
     await page.setViewportSize({ width: 360, height: 780 });
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
     await gotoSection(page, 'Messaging');
-    await page.getByRole('button', { name: 'New Conversation' }).click();
+    await page.getByRole('button', { name: 'New message', exact: true }).click();
 
     const main = page.getByRole('main');
     await main.getByLabel('Address', { exact: true }).fill(RECIPIENT);
     await main.getByLabel('Message', { exact: true }).fill('Fee bound check.');
-    await main.getByRole('button', { name: /^Edit fee rate/ }).click();
+    // The Fees section starts closed; its slider's last stop is Custom, which
+    // opens the Network fee line's one editor (G113) and no rate box.
+    await openFormSection(main, 'Speed and Fees');
+    await main.getByRole('slider', { name: 'Network fee' }).press('End');
+    await expect(main.getByRole('textbox', { name: /^Custom fee rate/ })).toHaveCount(0);
 
-    const rate = main.getByRole('textbox', { name: /^Custom fee rate/ });
-    await rate.fill('99999999');
+    // A BTC estimate assumes 250 vB: 1 BTC is far above the 1,000 sat/vB
+    // ceiling, and 0.000005 BTC is 2 sat/vB.
+    const fee = main.getByRole('textbox', { name: /^Network fee amount/ });
+    await fee.fill('1');
     await expect(main.getByRole('alert').filter({ hasText: /no higher than/ })).toBeVisible();
-    await expect(rate).toHaveAttribute('aria-invalid', 'true');
-    expect(await rate.evaluate((input) => input.validationMessage)).toMatch(/^Enter a rate no higher than/);
+    await expect(fee).toHaveAttribute('aria-invalid', 'true');
+    expect(await fee.evaluate((input) => input.validationMessage)).toMatch(/^Enter a rate no higher than/);
 
     const { scrollWidth, clientWidth } = await documentOverflow(page);
     expect(scrollWidth, 'the document scrolls sideways').toBeLessThanOrEqual(clientWidth + 1);
 
-    await rate.fill('2');
-    expect(await rate.evaluate((input) => input.validationMessage)).toBe('');
+    await fee.fill('0.000005');
+    expect(await fee.evaluate((input) => input.validationMessage)).toBe('');
 });

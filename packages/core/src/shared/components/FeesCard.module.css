@@ -72,29 +72,24 @@
     color: var(--xc-text-muted);
 }
 
-.labelWithHelp,
 .figures {
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-2);
-}
-
-.protocolHelp {
-    block-size: var(--xc-fees-control-size);
-}
-
-.protocolHelp > button {
-    block-size: var(--xc-fees-control-size);
-    min-block-size: var(--xc-fees-control-size);
-}
-
-.figures {
     grid-area: figures;
     flex-wrap: wrap;
     justify-content: flex-end;
     color: var(--xc-text);
     font-variant-numeric: tabular-nums;
     text-align: end;
+}
+
+/* The unverified-fee safety text: a plain muted line under the protocol row. */
+.hint {
+    margin: 0;
+    padding-block: var(--xc-space-2);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
 }
 
 .fiat {

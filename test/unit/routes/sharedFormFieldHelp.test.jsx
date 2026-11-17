@@ -18,11 +18,14 @@ import { BridgeMoveForm } from '../../../packages/core/src/shared/routes/BridgeM
 import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
 import { BatchComposerForm } from '../../../packages/core/src/shared/routes/BatchComposerForm.jsx';
 import { ContractFundsForm } from '../../../packages/core/src/shared/routes/ContractFundsForm.jsx';
-import { ContractStakeForm } from '../../../packages/core/src/shared/routes/ContractStakeForm.jsx';
 import { DeployContractForm } from '../../../packages/core/src/shared/routes/DeployContractForm.jsx';
-import { StakeForm } from '../../../packages/core/src/shared/routes/StakeForm.jsx';
-import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
-import { DelegationActionForm } from '../../../packages/core/src/shared/routes/DelegationActionForm.jsx';
+// The staking routes render the one Staking form on their target and action.
+import {
+    ContractStakeRoute as ContractStakeForm,
+    NetworkDelegationRoute as DelegationActionForm,
+    NetworkPositionRoute as StakingActionForm,
+    NetworkStakeRoute as StakeForm,
+} from '../../helpers/stakingFormRoutes.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 
@@ -164,9 +167,12 @@ describe('Network, Token and Checkbox field help on trading, contract and stakin
         await expectTip('About Token', 'Every bet and every payout is in this token.');
     });
 
-    it('Batch composer: Network tip', async () => {
+    // Batch (layout 1) picks each transaction's network with its From on the
+    // own-address picker, so it has no Network field; its Action field keeps
+    // its tip.
+    it('Batch composer: Action tip', async () => {
         mount(BatchComposerForm, {});
-        await expectTip('About Network', 'The chain the whole batch is sent on.');
+        await expectTip('About Action', 'One sub-action included in this single BATCH transaction.');
     });
 
     it('Contract funds: Network and Token tips follow the mode', async () => {
@@ -203,5 +209,10 @@ describe('Network, Token and Checkbox field help on trading, contract and stakin
 
     it('Execute contract: the deposit token help is a dictionary key', () => {
         expect(en['execute.depositTokenHelp']).toMatch(/same transaction, before the method runs/);
+    });
+
+    it('Execute contract: the deposit token field is labelled Token inside the Deposit section', () => {
+        expect(en['execute.deposit']).toBe('Deposit');
+        expect(en['execute.tokenLabel']).toBe('Token');
     });
 });

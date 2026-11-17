@@ -132,9 +132,12 @@ async function mount(dispenser, {
         });
     }
     vi.useRealTimers();
-    // The page opens on Details and shows only the chosen tab, so the buy
-    // form needs the Buy tab picked.
-    fireEvent.click(await screen.findByRole('tab', { name: /^Buy$/ }));
+    // Every viewer opens on Actions; a buyer's first row opens the Buy page.
+    // A row this wallet cannot buy from is dimmed and the press does nothing;
+    // the owner has no Buy row at all.
+    await screen.findByRole('list', { name: 'Dispenser actions' });
+    const buyRow = screen.queryByTestId('dispenser-buy-row');
+    if (buyRow) fireEvent.click(buyRow);
     return messaging;
 }
 
@@ -183,11 +186,16 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         expect(screen.getByTestId('confirm-source')).toHaveTextContent(BUYER.slice(0, 6));
         // The confirm screen's own title is the only review heading.
         expect(screen.queryByText('Review purchase')).toBeNull();
-        const review = screen.getByTestId('buy-review-summary');
+        const review = screen.getByTestId('confirm-facts');
         expect(review).toHaveTextContent('Price per fill2.00000000 DOGE');
         expect(review).toHaveTextContent('Fills3');
-        expect(review).toHaveTextContent('You pay6 DOGE');
         expect(review).toHaveTextContent('You receive300 DOGESWAP');
+        // No Total block (G127 revised 2026-11-16): the 6 DOGE payment is
+        // said by the sentence or the You send row, the fee by its own row.
+        expect(screen.queryByTestId('confirm-total')).toBeNull();
+        expect(screen.getByTestId('confirm-modal').textContent).toMatch(/(^|[^\d.])6 DOGE/);
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent('DOGE');
+        expect(screen.queryByTestId('preflight-chip')).toBeNull();
         fireEvent.change(await screen.findByLabelText(/Password/i, { selector: 'input' }), { target: { value: 'pw' } });
         const approve = screen.getByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
@@ -211,6 +219,12 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         expect(messaging.sendAssetHw).not.toHaveBeenCalled();
         expect(await screen.findByText(/Buy submitted/)).toBeInTheDocument();
         expect(screen.getByText(/You paid 6 DOGE/)).toBeInTheDocument();
+        // The shared result screen: notice first, the txid as a fact row when
+        // there is one, the open-dispenser caveat in a WarningCard, then Done.
+        expect(screen.getByTestId('result-screen-notice')).toHaveTextContent(/Buy submitted/);
+        expect(screen.getByText(/If the dispenser is still open when this confirms/).closest('[data-warning-line]'))
+            .not.toBeNull();
+        expect(screen.getByRole('button', { name: 'Done' }).querySelector('svg')).toBeTruthy();
     });
 
     it('shows a failed buy in house copy, not the encoder wording', async () => {
@@ -285,7 +299,8 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         expect(messaging.sendAssetHw).not.toHaveBeenCalled();
         expect(await screen.findByText('Unsigned transaction, ready for signing'))
             .toBeInTheDocument();
-        expect(screen.queryByRole('heading', { name: 'Buy submitted' })).toBeNull();
+        // The submitted screen's lead is not a heading, so match its text.
+        expect(screen.queryByText(/Buy submitted/)).toBeNull();
     });
 
     it('blocks a fill count the native balance cannot cover', async () => {
@@ -293,8 +308,9 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
         await mount(COIN_PAID);
         await screen.findByText(/10 DOGE available/);
         fireEvent.change(await dispensesField(), { target: { value: '6' } });
-        await waitFor(async () => expect(await buyButton()).toBeDisabled());
-        expect(await screen.findByTestId('preflight-chip')).toHaveTextContent(/Will likely fail/);
+        await waitFor(async () => expect(await buyButton()).toBeEnabled());
+        expect(await screen.findByRole('alert')).toHaveTextContent(/This buy pays 12 DOGE/);
+        expect(screen.queryByTestId('preflight-chip')).toBeNull();
     });
 
     it('shows per-fill terms and validates whole, available fills before review', async () => {
@@ -308,11 +324,11 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
 
         fireEvent.change(await dispensesField(), { target: { value: '1.5' } });
         expect(screen.getByRole('alert')).toHaveTextContent(/whole number of fills/i);
-        expect(screen.getByRole('button', { name: /^Buy Dispenses$/ })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^Buy Dispenses$/ })).toBeEnabled();
 
         fireEvent.change(await dispensesField(), { target: { value: '3' } });
         expect(screen.getByRole('alert')).toHaveTextContent(/Only 2 complete fills remain/);
-        expect(await buyButton()).toBeDisabled();
+        expect(await buyButton()).toBeEnabled();
     });
 
     it.each([
@@ -356,16 +372,19 @@ describe('coin-paid dispenser: Buy from this wallet', () => {
 });
 
 describe('dispenser owned by the viewer', () => {
+    // The owner's action list starts at Refill: there is no Buy row to open.
     it('shows no Buy control and no pay-here panel on a coin-paid dispenser', async () => {
         await mount(COIN_PAID, { addresses: [buyerAddress, ownerAddress] });
-        await screen.findByText('This wallet owns this dispenser, so it does not buy from it here.');
+        await screen.findByRole('button', { name: /^Refill(?! Dispenser$)/ });
+        expect(screen.queryByTestId('dispenser-buy-row')).toBeNull();
         expect(noBuyButton()).toBeNull();
         expect(screen.queryByText(/Pay to buy/)).toBeNull();
     });
 
     it('shows no Buy control on a token-paid dispenser', async () => {
         await mount(TOKEN_PAID, { addresses: [buyerAddress, ownerAddress] });
-        await screen.findByText('This wallet owns this dispenser, so it does not buy from it here.');
+        await screen.findByRole('button', { name: /^Refill(?! Dispenser$)/ });
+        expect(screen.queryByTestId('dispenser-buy-row')).toBeNull();
         expect(noBuyButton()).toBeNull();
     });
 });
@@ -385,9 +404,11 @@ describe('Buy through the shared Confirm screen: failure paths', () => {
         await waitFor(() => expect(messaging.preflight).toHaveBeenCalledTimes(1));
         fireEvent.change(await screen.findByLabelText(/Password/i, { selector: 'input' }), { target: { value: 'pw' } });
         expect(await screen.findByText(/The network would refuse this action/)).toBeInTheDocument();
+        // G130: Approve keeps its colour; the tap says why at the top.
         const approve = screen.getByTestId('confirm-approve');
-        expect(approve).toBeDisabled();
+        expect(approve).toBeEnabled();
         fireEvent.click(approve);
+        expect(screen.getByTestId('confirm-blocked')).toBeInTheDocument();
         expect(messaging.sendToken).not.toHaveBeenCalled();
         expect(messaging.sendAssetHw).not.toHaveBeenCalled();
         expect(screen.queryByText(/Buy submitted/)).toBeNull();

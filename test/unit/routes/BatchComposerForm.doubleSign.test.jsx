@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BatchComposerForm } from '../../../packages/core/src/shared/routes/BatchComposerForm.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const FROM = {
@@ -35,7 +36,7 @@ describe('BatchComposerForm double sign', () => {
             composeForConfirm,
         };
         render(<MessagingProvider shell="web" messaging={messaging}><BatchComposerForm walletId="w" onBack={() => {}} /></MessagingProvider>);
-        fireEvent.change(await screen.findByRole('combobox', { name: 'Action' }), { target: { value: 'BROADCAST' } });
+        selectOption(await screen.findByRole('combobox', { name: 'Action' }), 'BROADCAST');
         // The action names how many transactions the review holds.
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
         const sign = await screen.findByRole('button', { name: 'Sign Batch' });

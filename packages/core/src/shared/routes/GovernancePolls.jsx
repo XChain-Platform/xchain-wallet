@@ -10,20 +10,26 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-    Button, ChainBadge, EmptyState, Icon, ListPage, ListRow, NetworkField, PageHeader, Screen, StatusMessage,
+    Button, ChainBadge, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, Select, StatusMessage,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGovernanceChainIds } from '../hooks/useGovernanceAddressesPresent.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/governance.js';
-import '../../i18n/locales/en/send.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { pollOutcome, pollRowForDisplay } from './pollDisplay.js';
 // Shared with the poll page, so a decided yes/no poll reads the same in both.
 import { PollStatusPill } from './PollStatusPill.jsx';
 import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
+import {
+    LIST_DETAIL_MIN_WIDTH,
+    ListDetailSplit,
+    listDetailStyles,
+    useWideContent,
+} from '../components/PanelSplit.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
+import { PollDetail } from './PollDetail.jsx';
 import addMenuStyles from './AddressList.module.css';
 import styles from './IssueTokenForm.module.css';
 import local from './GovernancePolls.module.css';
@@ -86,8 +92,11 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     const [pollsReload, setPollsReload] = useState(0);
     // The standard filter's search text.
     const [query, setQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
     // Home's network filter; 'all' lists polls from every chain.
     const [networkFilter, setNetworkFilter] = useState('all');
+    const [selectedPollKey, setSelectedPollKey] = useState(/** @type {string | null} */ (null));
+    const [layoutRef, wideContent] = useWideContent(LIST_DETAIL_MIN_WIDTH, true);
     // The plus menu (Create poll, Delegate votes).
     const [addOpen, setAddOpen] = useState(false);
     const addRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -151,10 +160,20 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     const allRows = currentPollState?.rows ?? null;
     // Search matches the question, the token and the poll number.
     const q = query.trim().toLowerCase();
-    const rows = allRows && q
-        ? allRows.filter((p) => [p.question, p.tick, String(p.action_index ?? '')].some((v) => String(v || '').toLowerCase().includes(q)))
-        : allRows;
+    const rows = allRows?.filter((p) => {
+        const status = p.poll_status || 'open';
+        const statusMatches = statusFilter === 'all'
+            || (statusFilter === 'closed' ? status !== 'open' && status !== 'pending' : status === statusFilter);
+        const queryMatches = !q
+            || [p.question, p.tick, String(p.action_index ?? '')].some((v) => String(v || '').toLowerCase().includes(q));
+        return statusMatches && queryMatches;
+    }) ?? allRows;
     const pollError = currentPollState?.error ?? null;
+    const pollKey = (poll) => `${poll?.chainId || chainId}:${String(poll?.action_index ?? '')}`;
+    const shownPoll = wideContent && allRows?.length
+        ? allRows.find((poll) => pollKey(poll) === selectedPollKey) || rows?.[0] || allRows[0]
+        : null;
+    const showPanel = Boolean(shownPoll);
 
     // Title line: Delegate votes, the standard filter (search, network) and a plus
     // for Create poll at the far right.
@@ -168,6 +187,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                     <ListFilterMenu
                         query={query}
                         onQueryChange={setQuery}
+                        active={statusFilter !== 'all'}
                         chainRegistry={chainRegistry}
                         coinFamilies={[...new Set(pollChains.map((cid) => coinFromChainId(cid)))]}
                         networkFilter={networkFilter}
@@ -176,6 +196,18 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                         searchPlaceholder={t('governance.searchPlaceholder')}
                         searchLabel={t('governance.searchLabel')}
                     >
+                        <Select
+                            label={t('governance.statusFilter.label')}
+                            help={t('governance.statusFilter.help')}
+                            size="md"
+                            value={statusFilter}
+                            onChange={(event) => setStatusFilter(event.target.value)}
+                        >
+                            <Select.Option value="all" icon={<Icon.ListIcon />}>{t('governance.statusFilter.all')}</Select.Option>
+                            <Select.Option value="open" icon={<Icon.PlayIcon />}>{t('governance.statusFilter.open')}</Select.Option>
+                            <Select.Option value="pending" icon={<Icon.ClockIcon />}>{t('governance.statusFilter.pending')}</Select.Option>
+                            <Select.Option value="closed" icon={<Icon.LockIcon />}>{t('governance.statusFilter.closed')}</Select.Option>
+                        </Select>
                     </ListFilterMenu>
                     <div className={addMenuStyles.addMenuWrap} ref={addRef}>
                         <Button
@@ -218,7 +250,42 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
             ) : null}
         />
     );
-    const wrap = (children) => <Screen variant={variant} header={header}>{children}</Screen>;
+    const wrap = (children) => {
+        if (!showPanel) {
+            return (
+                <Screen variant={variant} header={header}>
+                    <div ref={layoutRef} className={listDetailStyles.layoutRoot} data-list-detail="list">
+                        {children}
+                    </div>
+                </Screen>
+            );
+        }
+        const detailChainId = shownPoll.chainId || chainId;
+        return (
+            <Screen variant={variant} header={header} bodyClassName={listDetailStyles.twoPanelBody}>
+                <ListDetailSplit
+                    measureRef={layoutRef}
+                    storageKey="governance"
+                    resizeLabel="Resize the governance list"
+                    resizeHint="Drag to resize the governance list, or press Enter to reset."
+                    layoutName="two-panel"
+                    list={children}
+                    listLabel="Governance polls"
+                    detailLabel={shownPoll.question || t('governance.pollNumber', { id: String(shownPoll.action_index) })}
+                    detail={(
+                        <PollDetail
+                            key={pollKey(shownPoll)}
+                            embedded
+                            walletId={walletId}
+                            chainId={detailChainId}
+                            pollIndex={shownPoll.action_index}
+                            onBack={() => {}}
+                        />
+                    )}
+                />
+            </Screen>
+        );
+    };
 
     if (noChain) {
         return wrap(
@@ -270,17 +337,26 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
 
             {rows && rows.length > 0 ? (
                 /* Safari needs an explicit list role because this class removes list styling. */
-                <ul className={local.pollList} role="list">
+                <ul className={local.pollList} role="list" data-xc-split-list={showPanel ? '' : undefined}>
                     {rows.map((p) => {
                         const id = p.action_index;
                         const label = p.question || (Array.isArray(p.options) ? p.options.join(' / ') : String(p.options || ''));
+                        const selected = showPanel && pollKey(p) === pollKey(shownPoll);
                         return (
-                            <li key={String(id)}>
-                                {/* Question first; token and network under it; plain time; one status. */}
+                            <li key={pollKey(p)}>
+                                {/* Question first; the token under it (the leading badge
+                                    is the only network indicator, U12, G61); plain time;
+                                    one status; the drill-in chevron (G97). */}
                                 <ListRow
                                     type="button"
-                                    onClick={() => onOpenPoll(p.chainId || chainId, id)}
+                                    onClick={() => {
+                                        if (wideContent) setSelectedPollKey(pollKey(p));
+                                        else onOpenPoll(p.chainId || chainId, id);
+                                    }}
                                     className={local.pollCard}
+                                    data-xc-split-row={showPanel ? '' : undefined}
+                                    aria-current={selected ? 'true' : undefined}
+                                    chevron
                                     leading={(() => {
                                         const d = chainRegistry.get(p.chainId || chainId);
                                         return d ? <ChainBadge descriptor={d} size="md" showName={false} /> : <span className={local.pollIcon} aria-hidden="true"><Icon.HandshakeIcon /></span>;
@@ -289,7 +365,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                                     subtitle={(
                                         <>
                                             <span className={`${styles.hint} ${local.pollText}`} style={{ display: 'block' }}>
-                                                {t('governance.pollOnNetwork', { tick: p.tick || t('common.notAvailable'), network: chainRegistry.get(p.chainId || chainId)?.displayName || t('send.rbf.thisChain') })}
+                                                {p.tick || t('common.notAvailable')}
                                             </span>
                                             <span className={`${styles.hint} ${local.pollText}`} style={{ display: 'block' }}>
                                                 {whenText(p)}

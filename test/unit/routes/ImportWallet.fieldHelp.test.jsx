@@ -31,16 +31,16 @@ describe('ImportWallet field help', () => {
     it('gives every recovery phrase field a help tip', () => {
         renderImport();
 
-        expectHelpFor(['Recovery phrase', 'Wallet name', 'Password', 'Confirm password']);
+        expectHelpFor(['Wallet type', 'Recovery phrase', 'Wallet name', 'Password', 'Confirm password']);
     });
 
     it('gives every FreeWallet field a help tip', () => {
         renderImport({ variant: 'freewallet' });
 
-        expectHelpFor(['Recovery phrase', 'Wallet name', 'Password', 'Confirm password']);
+        expectHelpFor(['Wallet type', 'Recovery phrase', 'Wallet name', 'Password', 'Confirm password']);
         const tip = screen.getByRole('button', { name: 'About Recovery phrase' });
         expect(document.getElementById(tip.getAttribute('aria-describedby')))
-            .toHaveTextContent('Enter your 12-word FreeWallet recovery phrase.');
+            .toHaveTextContent('Enter a 12-word legacy recovery phrase.');
         expect(screen.getByText('0 / 12 words')).toBeInTheDocument();
     });
 
@@ -49,38 +49,40 @@ describe('ImportWallet field help', () => {
 
         expect(screen.getByRole('button', { name: 'About Password' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About Confirm' })).toBeInTheDocument();
-        expect(screen.getByText('At least 8 characters.')).toBeInTheDocument();
+        // U57: the length rule is static help, so it sits in the tip, not under the field.
+        expect(screen.queryByText('At least 8 characters.')).toBeNull();
+        const tip = screen.getByRole('button', { name: 'About Password' });
+        expect(document.getElementById(tip.getAttribute('aria-describedby')))
+            .toHaveTextContent('At least 8 characters.');
     });
 
-    it('gives every private key field a help tip', () => {
+    it('keeps help on editable private key fields and removes it from the derived address', () => {
         renderImport();
         fireEvent.click(screen.getByRole('tab', { name: 'Private key' }));
 
+        expect(screen.getByRole('heading', { name: 'Import Private Key' })).toBeInTheDocument();
+
         expectHelpFor([
+            'Coin',
             'Coin network',
-            'Private key type',
+            'Address type',
             'WIF private key',
-            'Address',
             'Wallet name',
             'Password',
             'Confirm password',
         ]);
+        expect(screen.queryByRole('button', { name: 'About Address' })).not.toBeInTheDocument();
     });
 
-    it('gives every encrypted backup field a help tip and keeps both descriptions under their fields', () => {
+    it('gives the backup password a help tip that says the wallet keeps its own password', () => {
         renderImport();
         fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
 
-        expectHelpFor([
-            'Backup file',
-            'Backup file contents',
-            'Backup password',
-            'Password of the wallet in this backup',
-            'Password for this device',
-        ]);
-        expect(screen.getByRole('button', { name: 'Choose Backup File' }).nextElementSibling)
-            .toHaveTextContent('Choose or drop a backup file');
-        expect(document.getElementById('xc-backup-content-description'))
-            .toHaveTextContent('Paste backup file contents here');
+        // The drop area is a picker, not a labelled field: its title says
+        // what to do, so it carries no tip of its own.
+        expectHelpFor(['Backup password']);
+        const tip = screen.getByRole('button', { name: 'About Backup password' });
+        expect(document.getElementById(tip.getAttribute('aria-describedby')))
+            .toHaveTextContent(/keeps its own password here; you can change it later in Security/);
     });
 });

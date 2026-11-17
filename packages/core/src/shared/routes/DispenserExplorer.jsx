@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, EmptyState, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { AddressText, Button, EmptyState, Icon, ListPage, NetworkField, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -25,7 +25,7 @@ import { actionRowIdentity, explorerPage, uniqueRows } from '../utils/pagedRows.
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { isValidAddressAnyNetwork } from '../utils/addressValidation.js';
 import { tickerForDescriptor } from '../../registry/coinTicker.js';
-import { ListFilterPopover } from '../components/ListFilterPopover.jsx';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import {
     DispenserExplorerCard,
@@ -58,9 +58,9 @@ const BROWSE_TABS = [
 /**
  * Dispenser explorer (§40.7.2 buyer-facing browse surface).
  *
- * One large search field, the Network filter in the
- * title bar, and with nothing typed a Popular | Newest | Best deals list of
- * dispenser cards.
+ * The title bar's filter holds the search box and the Network filter. With
+ * nothing typed the page is the Popular | Newest | Best deals toggle, first
+ * under the header, over one list card of three-line dispenser rows.
  *
  * The explorer backend doesn't expose an "all dispensers" wildcard; every
  * query is scoped to a token or an address. So:
@@ -320,6 +320,7 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
 
     function handleSearch(event) {
         event.preventDefault();
+        if (searchDisabledReason) return;
         runSearch();
     }
 
@@ -402,26 +403,40 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
         });
     }
 
-    // The title bar's filter icon holds Network; the body has no
-    // Network field and no By token / By address switch.
+    // The title bar's filter icon holds the search box and Network; the body
+    // has neither, so the Popular | Newest | Best deals toggle sits first under
+    // the header. Enter submits the search from the standard menu search field.
     const filterPopover = (
-        <ListFilterPopover label="Filter dispensers" active={chainFilter !== 'all'}>
-            {/* Options name the chain alone; the active network is set in Settings. */}
-            <Select
+        <ListFilterMenu
+            query={query}
+            onQueryChange={handleQueryChange}
+            searchPlaceholder="Search a token or seller address"
+            searchLabel="Search a token or seller address"
+            label="Filter dispensers"
+            active={chainFilter !== 'all' || Boolean(lastQueried)}
+            onSearchKeyDown={(event) => {
+                if (event.key === 'Enter') handleSearch(event);
+            }}
+        >
+            {searchDisabledReason ? (
+                <p id="dispenser-search-disabled-reason" className="sr-only">
+                    {searchDisabledReason}
+                </p>
+            ) : null}
+            {/* The standard Network field: it opens the full-screen network
+                list (operator ruling 2026-11-13), with All networks first. */}
+            <NetworkField
                 label="Network"
+                help="Shows only the dispensers on the network you pick, or on every network."
                 size="md"
                 value={chainFilter}
-                onChange={(e) => handleChainFilterChange(e.target.value)}
-                className={local.chainSelect}
-            >
-                <option value="all">{t('common.allNetworks')}</option>
-                {chains.map((cid) => (
-                    <option key={cid} value={cid}>
-                        {chainRegistry.get(cid)?.displayName || cid.split('-')[0]}
-                    </option>
-                ))}
-            </Select>
-        </ListFilterPopover>
+                onChange={handleChainFilterChange}
+                chainIds={chains}
+                chainRegistry={chainRegistry}
+                allOption
+                notSource
+            />
+        </ListFilterMenu>
     );
     const header = (
         <PageHeader
@@ -429,59 +444,9 @@ export function DispenserExplorer({ onOpenDispenser, onBack }) {
             title="Dispenser Explorer"            trailing={filterPopover}
         />
     );
-    // One large search field. The magnifier is the submit button
-    // (the phone keyboard's Search key submits too); the X clears back to the
-    // browse list.
-    const searchForm = (
-        <form className={local.searchForm} onSubmit={handleSearch} aria-label="Dispenser search" noValidate>
-            <div className={local.searchField}>
-                <Button
-                    type="submit"
-                    variant="ghost"
-                    className={local.searchSubmit}
-                    aria-label={searching ? 'Searching' : 'Search'}
-                    title="Search"
-                    disabled={Boolean(searchDisabledReason) || searching}
-                    aria-describedby={searchDisabledReason ? 'dispenser-search-disabled-reason' : undefined}
-                    icon={<Icon.SearchIcon />}
-                />
-                <Input
-                    type="search"
-                    size="md"
-                    enterKeyHint="search"
-                    className={local.searchInput}
-                    placeholder="Search a token or seller address"
-                    aria-label="Search a token or seller address"
-                    value={query}
-                    onChange={(e) => handleQueryChange(e.target.value)}
-                    autoComplete="off"
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                />
-                {query ? (
-                    <Button
-                        variant="ghost"
-                        className={local.searchClear}
-                        aria-label="Clear"
-                        title="Clear"
-                        onClick={clearSearch}
-                        icon={<Icon.XIcon />}
-                    />
-                ) : null}
-            </div>
-            {searchDisabledReason ? (
-                <p id="dispenser-search-disabled-reason" className="sr-only">
-                    {searchDisabledReason}
-                </p>
-            ) : null}
-        </form>
-    );
-
     return (
         <Screen variant={variant} header={header}>
             <ListPage>
-            {searchForm}
             {lastQueried ? (
                 <ResultsPane
                     rowsByChain={rowsByChain}
@@ -543,7 +508,8 @@ function BrowsePane({ tab, onTabChange, browse, ready, noNetworks, onOpenDispens
     } else {
         body = (
             <>
-                <p className={local.rankNote}>{current.note}</p>
+                {/* The tabs sit directly above the list (G41); the order each
+                    tab uses is its tooltip, not a loose line between them. */}
                 <div className={local.cardList}>
                     {sorted.map(({ cid, row }, index) => (
                         <DispenserExplorerCard
@@ -562,9 +528,9 @@ function BrowsePane({ tab, onTabChange, browse, ready, noNetworks, onOpenDispens
         <section className={local.browse} aria-label="Browse dispensers">
             <Tabs
                 aria-label="Dispenser order"
-                items={BROWSE_TABS.map(({ id, label, Glyph }) => ({
+                items={BROWSE_TABS.map(({ id, label, Glyph, note }) => ({
                     id,
-                    label: <span className={local.tabLabel}><Glyph />{label}</span>,
+                    label: <span className={local.tabLabel} title={note}><Glyph />{label}</span>,
                 }))}
                 value={tab}
                 onChange={onTabChange}

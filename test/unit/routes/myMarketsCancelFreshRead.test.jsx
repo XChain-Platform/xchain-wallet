@@ -19,7 +19,7 @@ import { render, act as domAct, fireEvent, cleanup, within } from '@testing-libr
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MyOrdersView } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
-import { MySwapsView } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
+import { MySwapsWithDetail, swapRowButton } from '../mySwapsWithDetail.jsx';
 
 const CHAIN = 'dogecoin-testnet';
 const OWN = 'ndDEAAyn7DcGeaQ6chBWH2vaSdYAXVGNhc';
@@ -61,16 +61,27 @@ const VIEWS = [
         feeds: (rows) => ({
             getOrdersForAddress: () => Promise.resolve({ data: rows }),
             getOrderCancelsForAddress: () => Promise.resolve({ data: [] }),
+            // The explorer's order detail: the order's own fields and its state.
             getOrderDetail: ({ actionIndex }) => Promise.resolve({
-                action: 'ORDER', action_index: actionIndex, status: 'valid',
+                ...marketRow(actionIndex), action: 'ORDER',
                 state: { give_remaining: '500', get_remaining: '10', expiration: String(FUTURE), status: 'open' },
             }),
             listAutopayOrders: () => Promise.resolve([]),
         }),
+        // Cancel and Edit live on the order's detail page, which its row opens.
+        openDetail: async (utils) => {
+            // The row is found by its order key (the ring layout's row names the trade, not its number).
+            const row = utils.getByRole('list', { name: 'Orders' }).querySelector('[data-order-row$=":700"]');
+            await step(() => fireEvent.click(within(row).getByRole('button')));
+            await step(() => {});
+        },
+        // The detail page's action rows (G101) are named by their title, then their description.
+        actionLabel: (label) => new RegExp(`^${label} order`),
     },
     {
         name: 'My swaps',
-        Component: MySwapsView,
+        // The list with its rows opening Swap Details, as the shells wire it.
+        Component: MySwapsWithDetail,
         action: 'SWAP',
         indexKey: 'SWAP_ACTION_INDEX',
         noun: 'swap',
@@ -81,7 +92,18 @@ const VIEWS = [
         feeds: (rows) => ({
             getSwapsForAddress: () => Promise.resolve({ data: rows }),
             getSwapCancelsForAddress: () => Promise.resolve({ data: [] }),
+            // The explorer's swap detail: the swap's own fields and its state.
+            getSwapDetail: ({ actionIndex }) => Promise.resolve({
+                ...marketRow(actionIndex), action: 'SWAP',
+                state: { expiration: String(FUTURE), status: 'open' },
+            }),
         }),
+        // Cancel and Edit live on the swap's details page, which its row opens.
+        openDetail: async (utils) => {
+            await step(() => fireEvent.click(swapRowButton(within, utils, 700)));
+            await step(() => {});
+        },
+        actionLabel: (label) => new RegExp(`^${label} swap`),
     },
 ];
 
@@ -160,7 +182,12 @@ async function step(fn) {
     await domAct(async () => { fn(); await drain(); });
 }
 
-async function openAction(utils, label) {
+async function openAction(utils, label, view) {
+    if (view?.openDetail) {
+        // The detail page is already open; its action buttons name the order.
+        await step(() => fireEvent.click(utils.getByRole('button', { name: view.actionLabel(label) })));
+        return;
+    }
     const row = within(utils.getByRole('list', { name: /^Open / })).getByText('#700', { exact: false }).closest('li');
     await step(() => fireEvent.click(within(row).getByRole('button', { name: label })));
 }
@@ -174,13 +201,16 @@ const RECHECKS = {
 describe.each(VIEWS)('$name re-reads the offer fresh before a cancel', (view) => {
     it('asks for fresh reads at the re-check and ordinary reads for the list', async () => {
         const { utils, calls } = await mount(view);
+        // The list's reads, and the detail page's where a row opens one, are
+        // ordinary reads; only the re-check before signing is fresh.
+        if (view.openDetail) await view.openDetail(utils);
         const listed = calls.length;
         for (const name of RECHECKS[view.name]) {
             for (const c of calls.slice(0, listed).filter((x) => x.method === name)) {
                 expect(c.args?.fresh, name + ' on list load').toBeUndefined();
             }
         }
-        await openAction(utils, 'Cancel');
+        await openAction(utils, 'Cancel', view);
         await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` })));
 
         expect(calls.find((c) => c.method === 'composeForConfirm'), 'the cancel composes').toBeTruthy();

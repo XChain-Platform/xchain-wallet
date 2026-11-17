@@ -138,12 +138,16 @@ vi.mock('@xchain-wallet/core/shared/routes/ContactsList.jsx', () => ({
     ),
 }));
 vi.mock('@xchain-wallet/core/shared/routes/DispensersList.jsx', () => ({
-    DispensersList: ({ onOpenDispenser, onBack }) => (
-        <section>
-            <h1>Dispensers screen</h1>
-            <button type="button" onClick={() => onOpenDispenser('bitcoin-mainnet', '7')}>Open dispenser</button>
-            <button type="button" onClick={onBack}>Back from dispensers</button>
-        </section>
+    DispensersList: ({ onOpenDispenser, onBack, selectedDispenser, renderDispenserPage }) => (
+        renderDispenserPage && selectedDispenser
+            ? renderDispenserPage(selectedDispenser, { measureRef: () => {} })
+            : (
+                <section>
+                    <h1>Dispensers screen</h1>
+                    <button type="button" onClick={() => onOpenDispenser('bitcoin-mainnet', '7')}>Open dispenser</button>
+                    <button type="button" onClick={onBack}>Back from dispensers</button>
+                </section>
+            )
     ),
 }));
 vi.mock('@xchain-wallet/core/shared/routes/DispenserDetail.jsx', () => ({
@@ -337,11 +341,13 @@ describe('desktop renderer shell', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
         expect(await screen.findByRole('heading', { name: 'Settings screen' })).toBeInTheDocument();
 
+        // A menu pick is a root page (G06): the history starts over on
+        // Contacts, so Back from it lands on Home, not on Settings.
         const settingsMenu = boot.commandPaletteProps.menu;
         act(() => { settingsMenu.onSelect('contacts'); });
         expect(await screen.findByRole('heading', { name: 'Contacts screen' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back from contacts' }));
-        expect(await screen.findByRole('heading', { name: 'Settings screen' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Home screen' })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Lock wallet' }));
         expect(await screen.findByRole('form', { name: 'Unlock wallet' })).toBeInTheDocument();
@@ -388,7 +394,7 @@ describe('desktop renderer shell', () => {
         expect(boot.marketsProps.selectedAsset).toMatchObject({ tick: 'CUSTOM' });
     });
 
-    it('walks Back through the true history after choosing Dispensers from a dispenser drilldown', async () => {
+    it('walks Back through a drilldown, and starts over when Dispensers is picked from the menu again', async () => {
         window.xchainWalletBridge = createPreloadBridge();
         render(<App />);
         await screen.findByRole('form', { name: 'Unlock wallet' });
@@ -398,22 +404,24 @@ describe('desktop renderer shell', () => {
 
         act(() => { boot.commandPaletteProps.menu.onSelect('dispensers-list'); });
         await screen.findByRole('heading', { name: 'Dispensers screen' });
+        // A row on the list is a push: Back returns to the list.
+        fireEvent.click(screen.getByRole('button', { name: 'Open dispenser' }));
+        await screen.findByRole('heading', { name: 'Dispenser detail screen' });
+        fireEvent.click(screen.getByRole('button', { name: /^Back from dispenser detail/ }));
+        await screen.findByRole('heading', { name: 'Dispensers screen' });
+
+        // Picking Dispensers from the menu over a drilldown is a root (G06):
+        // the history starts over, so Back lands on Home.
         fireEvent.click(screen.getByRole('button', { name: 'Open dispenser' }));
         await screen.findByRole('heading', { name: 'Dispenser detail screen' });
         act(() => { boot.commandPaletteProps.menu.onSelect('dispensers-list'); });
-        await screen.findByRole('heading', { name: 'Dispensers screen' });
-        // Back returns to the page the user came from: the dispenser detail,
-        // then the first Dispensers list, then Home.
-        fireEvent.click(screen.getByRole('button', { name: 'Back from dispensers' }));
-        await screen.findByRole('heading', { name: 'Dispenser detail screen' });
-        fireEvent.click(screen.getByRole('button', { name: /^Back from dispenser detail/ }));
         await screen.findByRole('heading', { name: 'Dispensers screen' });
         fireEvent.click(screen.getByRole('button', { name: 'Back from dispensers' }));
 
         expect(await screen.findByRole('heading', { name: 'Home screen' })).toBeInTheDocument();
     });
 
-    it('preserves the Contacts origin when the active row is selected again', async () => {
+    it('starts over on a menu pick and ignores a repeat pick of the root on screen', async () => {
         window.xchainWalletBridge = createPreloadBridge();
         render(<App />);
         await screen.findByRole('form', { name: 'Unlock wallet' });
@@ -426,9 +434,10 @@ describe('desktop renderer shell', () => {
         act(() => { boot.commandPaletteProps.menu.onSelect('contacts'); });
         await screen.findByRole('heading', { name: 'Contacts screen' });
         act(() => { boot.commandPaletteProps.menu.onSelect('contacts'); });
+        expect(screen.getByRole('heading', { name: 'Contacts screen' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Back from contacts' }));
 
-        expect(await screen.findByRole('heading', { name: 'Settings screen' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Home screen' })).toBeInTheDocument();
     });
 
     it('leaves the unlocked screen at once when auto-lock fires, before main answers', async () => {

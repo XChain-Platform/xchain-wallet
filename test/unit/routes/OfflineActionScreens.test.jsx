@@ -180,13 +180,13 @@ describe.each([
 });
 
 describe('TokenWizard offline submit', () => {
-    it('keeps Issue Token off and composes nothing while offline', async () => {
+    it('keeps Issue Token enabled but composes nothing while offline (G130)', async () => {
         const composeForConfirm = vi.fn();
         renderScreen(messagingWith({ composeForConfirm }), <TokenWizard walletId={WALLET_ID} onBack={() => {}} />);
         await screen.findByText('Creating a token needs a network connection.');
         fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'OFFLINE' } });
         const issue = screen.getByRole('button', { name: 'Issue Token' });
-        expect(issue).toBeDisabled();
+        expect(issue).toBeEnabled();
         fireEvent.submit(screen.getByRole('form', { name: 'Issue Token' }));
         expect(screen.getAllByText('Creating a token needs a network connection.')).toHaveLength(1);
         expect(composeForConfirm).not.toHaveBeenCalled();
@@ -230,17 +230,19 @@ describe('TokenDetail', () => {
 
     it('disables Send and Exchange with reasons when only the probe is offline', async () => {
         renderScreen(detailMessaging(), detail());
-        // The Actions tab (open by default) holds the action tiles.
-        const actions = within(await screen.findByRole('group', { name: 'Actions for CACHE' }));
-        expect(actions.getByRole('button', { name: 'Exchange' })).toBeDisabled();
-        expect(screen.getByText('Exchange needs a network connection.')).toBeInTheDocument();
+        // The Actions tab (open by default) holds the action list; a locked row
+        // says why in place of its description.
+        const actions = within(await screen.findByRole('list', { name: 'Actions for CACHE' }));
+        const exchange = actions.getByRole('button', { name: /^Exchange\b/ });
+        expect(exchange).toHaveAttribute('aria-disabled', 'true');
+        expect(within(exchange).getByText('Exchange needs a network connection.')).toBeInTheDocument();
     });
 
     it('keeps Exchange enabled when the probe is healthy', async () => {
         reachability.overall = 'normal';
         renderScreen(detailMessaging(), detail());
-        const actions = within(await screen.findByRole('group', { name: 'Actions for CACHE' }));
-        expect(actions.getByRole('button', { name: 'Exchange' })).toBeEnabled();
+        const actions = within(await screen.findByRole('list', { name: 'Actions for CACHE' }));
+        expect(actions.getByRole('button', { name: /^Exchange\b/ })).not.toHaveAttribute('aria-disabled');
         expect(screen.queryByText('Exchange needs a network connection.')).toBeNull();
     });
 });

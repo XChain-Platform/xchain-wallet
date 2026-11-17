@@ -347,8 +347,8 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
 
-            const claimBtn = page.getByRole('group', { name: 'Stake actions' })
-                .getByRole('button', { name: 'Claim', exact: true });
+            const claimBtn = page.getByRole('list', { name: 'Stake actions' })
+                .getByRole('button', { name: /^Claim\b/ });
             await expect(claimBtn).toBeVisible({ timeout: 30_000 });
             await expect(claimBtn).toBeEnabled();
             await claimBtn.click();
@@ -384,8 +384,8 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             const row = page.getByRole('button', { name: /^Open Validator stake, / });
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
-            const claimBtn = page.getByRole('group', { name: 'Stake actions' })
-                .getByRole('button', { name: 'Claim', exact: true });
+            const claimBtn = page.getByRole('list', { name: 'Stake actions' })
+                .getByRole('button', { name: /^Claim\b/ });
             await expect(claimBtn).toBeEnabled({ timeout: 30_000 });
             await claimBtn.click();
 

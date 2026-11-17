@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
 let messaging;
@@ -57,15 +57,19 @@ afterEach(() => cleanup());
 describe('Connected sites list text', () => {
     it('replaces bidi overrides in a site name with a visible placeholder', async () => {
         render(<ConnectedSitesSection />);
-        const heading = await screen.findByRole('heading', { name: /name$/ });
-        expect(heading.textContent).not.toMatch(/[‪-‮]/);
+        const title = await screen.findByText(/name$/);
+        expect(title.textContent).not.toMatch(/[‪-‮]/);
+        expect(title.textContent).toContain('␦');
+        // The site detail's identity card names it the same way.
+        fireEvent.click(title.closest('button'));
+        const heading = await screen.findByRole('heading', { level: 2, name: /name$/ });
         expect(heading.textContent).toContain('␦');
     });
 
     it('caps a site name and wraps a long origin', async () => {
         render(<ConnectedSitesSection />);
-        const heading = await screen.findByRole('heading', { name: /^N+…$/ });
-        expect(heading.textContent.length).toBeLessThanOrEqual(120);
+        const title = await screen.findByText(/^N+…$/);
+        expect(title.textContent.length).toBeLessThanOrEqual(120);
         const origin = await screen.findByText(`https://${'a'.repeat(240)}.com`);
         expect(origin.style.overflowWrap).toBe('anywhere');
         expect(origin.getAttribute('dir')).toBe('ltr');

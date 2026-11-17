@@ -36,7 +36,7 @@ async function mount(props = {}) {
             <WalletDetails walletId={wallet.id} onBack={() => {}} {...props} />
         </MessagingProvider>,
     );
-    await screen.findByRole('button', { name: 'Exit demo & wipe' });
+    await screen.findByRole('button', { name: /^Exit demo & wipe/ });
     return messaging;
 }
 
@@ -55,7 +55,7 @@ afterEach(() => {
 describe('WalletDetails demo exit confirmation', () => {
     it('does not exit until the user explicitly confirms', async () => {
         await mount();
-        fireEvent.click(screen.getByRole('button', { name: 'Exit demo & wipe' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Exit demo & wipe/ }));
 
         const dialog = screen.getByRole('dialog');
         expect(exitDemoWallet).not.toHaveBeenCalled();
@@ -65,7 +65,7 @@ describe('WalletDetails demo exit confirmation', () => {
 
     it('cancels without exiting', async () => {
         await mount();
-        fireEvent.click(screen.getByRole('button', { name: 'Exit demo & wipe' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Exit demo & wipe/ }));
         fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
 
         expect(exitDemoWallet).not.toHaveBeenCalled();
@@ -75,7 +75,7 @@ describe('WalletDetails demo exit confirmation', () => {
     it('keeps the confirmation open and retryable after a failed exit', async () => {
         exitDemoWallet.mockRejectedValueOnce(new Error('vault is busy'));
         await mount();
-        fireEvent.click(screen.getByRole('button', { name: 'Exit demo & wipe' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Exit demo & wipe/ }));
         const dialog = screen.getByRole('dialog');
         fireEvent.click(within(dialog).getByRole('button', { name: 'Exit Demo & Wipe' }));
 

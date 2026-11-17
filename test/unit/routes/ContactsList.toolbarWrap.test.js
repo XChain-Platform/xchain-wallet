@@ -18,7 +18,8 @@ const source = readFileSync(
     'utf8',
 );
 const addressListSource = readCss('packages/core/src/shared/routes/AddressList.jsx');
-const tabsCss = readCss('packages/core/src/ui/Tabs.module.css');
+// Tabs draw the shared view-toggle look from SegmentedControl.module.css.
+const tabsCss = readCss('packages/core/src/ui/SegmentedControl.module.css');
 const listPageCss = readFileSync(
     resolve(process.cwd(), 'packages/core/src/ui/ListPage.module.css'),
     'utf8',
@@ -33,8 +34,10 @@ function rule(text, selector) {
 const toolbarCss = readCss('packages/core/src/shared/components/ListToolbar.module.css');
 
 describe('list toolbar at phone width', () => {
-    it('puts the contacts search, network filter and sort in the shared ListToolbar', () => {
-        expect(source).toMatch(/toolbar=\{\(\s*<ListToolbar\b[\s\S]*?<NetworkFilterDropdown[\s\S]*?<Select[\s\S]*?<\/ListToolbar>/);
+    it('puts the contacts search, network filter and sort in the title bar filter panel (G95)', () => {
+        expect(source).toMatch(/<ListFilterMenu\b[\s\S]*?searchLabel="Search contacts"[\s\S]*?<NetworkFilterDropdown[\s\S]*?<Select[\s\S]*?<\/ListFilterMenu>/);
+        expect(source).not.toMatch(/<ListToolbar\b/);
+        expect(source).not.toMatch(/toolbar=\{/);
     });
 
     it('lets the toolbar wrap', () => {
@@ -68,14 +71,11 @@ describe('list toolbar control alignment', () => {
     it('uses the shared medium Input for every route search field', () => {
         const toolbar = readCss('packages/core/src/shared/components/ListToolbar.jsx');
         expect(toolbar).toMatch(/<Input[\s\S]*?type="search"[\s\S]*?size="md"/);
-        for (const name of ['MyLists', 'ContactsList', 'MessagingInbox']) {
-            expect(readCss(`packages/core/src/shared/routes/${name}.jsx`)).toMatch(/<ListToolbar\b/);
-        }
         // Lists that moved their search to the title-bar filter panel get the same
         // medium Input from the shared ListFilterMenu, never a toolbar of their own.
         const filterMenu = readCss('packages/core/src/shared/components/ListFilterMenu.jsx');
         expect(filterMenu).toMatch(/<Input[\s\S]*?size="md"/);
-        for (const name of ['DispensersList', 'StakingList', 'AddressList']) {
+        for (const name of ['DispensersList', 'StakingList', 'AddressList', 'ContactsList', 'MyLists', 'SharedListDirectory']) {
             const route = readCss(`packages/core/src/shared/routes/${name}.jsx`);
             expect(route).toMatch(/<ListFilterMenu\b/);
             expect(route).not.toMatch(/<ListToolbar\b/);
@@ -83,10 +83,10 @@ describe('list toolbar control alignment', () => {
         mediumControl(routeCss('AddressList'), '.searchField input');
     });
 
-    it('keeps the shared medium-height underline tabs and picks address types from the filter panel', () => {
+    it('keeps the shared medium-height view toggle and picks address types from the filter panel', () => {
         expect(addressListSource).toMatch(/<IconSelect[\s\S]*?value=\{sourceFilter\}/);
-        expect(rule(tabsCss, '.tabs')).toMatch(/min-height:\s*var\(--xc-control-h-md\)/);
-        expect(rule(tabsCss, '.tab')).toMatch(/min-height:\s*var\(--xc-control-h-md\)/);
-        expect(rule(tabsCss, '.tab')).toMatch(/border-bottom:\s*2px solid transparent/);
+        expect(rule(tabsCss, '.segmented')).toMatch(/height:\s*var\(--xc-control-h-md\)/);
+        expect(rule(tabsCss, '.segment')).toMatch(/height:\s*100%/);
+        expect(rule(tabsCss, '.segment')).toMatch(/border:\s*0/);
     });
 });

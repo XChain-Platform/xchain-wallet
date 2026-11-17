@@ -65,7 +65,8 @@ describe('swap form expiration at review time', () => {
         fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '3' } });
         await openSection('Swap Terms');
-        fireEvent.click(screen.getByRole('radio', { name: 'Expire at a specific time' }));
+        fireEvent.click(screen.getByRole('combobox', { name: /^Expiration/ }));
+        fireEvent.click(screen.getByRole('option', { name: 'Expire at a specific time' }));
 
         const now = Date.now();
         fireEvent.change(screen.getByLabelText('Expires'), { target: { value: localInput(new Date(now + 5 * 60_000)) } });

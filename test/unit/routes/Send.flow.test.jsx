@@ -615,7 +615,9 @@ describe('Send flow with mocked messaging', () => {
             getActiveAddresses: vi.fn().mockResolvedValue({}),
             getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
             signerReady: vi.fn().mockResolvedValue({ ready: false }),
-            getContractByActionIndex: vi.fn().mockResolvedValue(null),
+            getContractByActionIndex: vi.fn().mockResolvedValue({
+                data: { abi: { version: 1, methods: { pay: { params: [{ name: 'memo', type: 'string' }] } } } },
+            }),
             buildActionPsbtRequest: vi.fn().mockResolvedValue({ psbtHex: PSBT }),
         };
         const messaging = new Proxy(base, {
@@ -641,14 +643,19 @@ describe('Send flow with mocked messaging', () => {
         );
 
         expect(await screen.findByLabelText('Method')).toHaveValue('pay');
-        expect(screen.getByLabelText('Arguments')).toHaveValue(argument);
+        expect(screen.getByLabelText('memo (string)')).toHaveValue(argument);
         expect(document.querySelector('img[src="x"]')).toBeNull();
         expect(globalThis.contractLinkRan).toBeUndefined();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
-        const review = await screen.findByRole('form', { name: 'Review Contract Call' });
-        expect(review).toHaveTextContent(argument);
+        const review = await screen.findByTestId('confirm-modal');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Call Contract');
+        expect(screen.getByTestId('confirm-facts')).toHaveTextContent(argument);
+        expect(screen.getByTestId('confirm-status')).toHaveAttribute('data-state', 'notChecked');
+        expect(screen.getByTestId('confirm-reject')).toHaveTextContent('Reject');
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent('Approve');
+        expect(review).toHaveAccessibleName('Confirm Call Contract');
         expect(document.querySelector('img[src="x"]')).toBeNull();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -702,6 +709,18 @@ describe('Send flow with mocked messaging', () => {
         expect(warnings).toHaveTextContent(
             'The network fee is more than 10% of the BTC amount you are sending.',
         );
+        const notice = warnings.closest('[data-testid="confirm-warning"]');
+        expect(notice).not.toBeNull();
+        // The short warning sits after the details in the scrolling page;
+        // the docked footer holds only Reject and Approve (G127 revised).
+        expect(warnings.closest('[data-testid="confirm-decision"]')).toBeNull();
+        expect(notice.closest('main')).not.toBeNull();
+        const facts = screen.getByTestId('confirm-facts');
+        expect(facts.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getAllByText('This sends more than 90% of your BTC balance.')).toHaveLength(1);
+        expect(screen.getAllByText(
+            'The network fee is more than 10% of the BTC amount you are sending.',
+        )).toHaveLength(1);
 
         await approveWithPassword(messaging);
         expect(messaging.sendToken).toHaveBeenCalledWith(expect.objectContaining({ amount: '0.91' }));
@@ -727,7 +746,7 @@ describe('Send flow with mocked messaging', () => {
         expect(document.activeElement).toBe(screen.getByLabelText(/^Amount \(/));
         await user.keyboard('{Enter}');
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Enter a recipient address.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent('Enter a recipient address.');
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
         fireEvent.change(destination, { target: { value: TO } });
@@ -1123,13 +1142,13 @@ describe('Send flow with mocked messaging', () => {
             tick: 'BTC',
             amount: AMOUNT,
         }));
-        expect(within(confirm).getByTestId('confirm-chain-badge')).toHaveTextContent('Bitcoin');
-        expect(within(confirm).getByTestId('confirm-source')).toHaveTextContent(FROM);
-        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`Send ${AMOUNT} BTC`);
-        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`TokenBTC`);
-        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`Amount${AMOUNT}`);
-        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`To${TO}`);
-        expect(within(confirm).getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
+        // Confirm Standard (G127): the sentence says the amount and token, the
+        // address line is the recipient, From names the spender, and the fee
+        // is a facts row; every address whole in its title.
+        expect(within(confirm).getByTestId('confirm-source').getAttribute('title')).toBe(FROM);
+        expect(within(confirm).getByTestId('confirm-sentence')).toHaveTextContent(`Send ${AMOUNT} BTC to`);
+        expect(within(confirm).getByTestId('confirm-address').querySelector(`[title="${TO}"]`)).not.toBeNull();
+        expect(within(confirm).getByTestId('confirm-fee-network')).toHaveTextContent('0.00001234 BTC');
         expect(within(confirm).getByLabelText('Password')).toBeInTheDocument();
 
         await approveWithPassword(messaging);
@@ -1315,23 +1334,22 @@ describe('Send flow with mocked messaging', () => {
 
         const review = await screen.findByRole('form', { name: 'Review payment' });
         expect(scroller.scrollTop).toBe(0);
-        expect(screen.getByRole('heading', { name: 'Review and Send' })).toHaveFocus();
-        expect(review).toHaveTextContent(`Send ${AMOUNT} BTC on Bitcoin to ${TO}`);
-        expect(review).toHaveTextContent('Network');
-        expect(review).toHaveTextContent('Bitcoin');
-        expect(review).toHaveTextContent('From');
-        expect(review).toHaveTextContent('bc1qse…ndersa');
-        expect(review).toHaveTextContent('Token');
-        expect(review).toHaveTextContent('BTC');
-        expect(review).toHaveTextContent('Amount');
-        expect(review).toHaveTextContent(AMOUNT);
-        expect(review).toHaveTextContent('Destination');
-        expect(review).toHaveTextContent(TO);
-        expect(review).toHaveTextContent('Network fee');
+        expect(screen.getByRole('heading', { name: 'Confirm' })).toHaveFocus();
+        expect(within(review).getByTestId('confirm-sentence')).toHaveTextContent(`Send ${AMOUNT} BTC`);
+        expect(within(review).getByTestId('confirm-address')).toContainElement(
+            within(review).getByLabelText(TO),
+        );
+        // No Total block (G127 revised 2026-11-16).
+        expect(within(review).queryByTestId('confirm-total-main')).toBeNull();
+        expect(within(review).getByTestId('confirm-source')).toHaveAttribute('title', FROM);
+        expect(within(review).getByTestId('confirm-fee-network')).toHaveTextContent('0.000015 BTC');
+        expect(within(review).queryByText(/Technical details/)).not.toBeInTheDocument();
+        expect(review.querySelector('details')).toBeNull();
         expect(within(review).queryByLabelText('Password')).not.toBeInTheDocument();
 
-        expect(review).toHaveTextContent('Watcher mode: this prepares the transaction for your offline signer.');
-        fireEvent.click(within(review).getByRole('button', { name: 'Send' }));
+        expect(review).toHaveTextContent('Another phone signs for this wallet: this prepares the transaction for it.');
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
         expect(messaging.buildSendPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
@@ -1346,6 +1364,23 @@ describe('Send flow with mocked messaging', () => {
         expect(await screen.findByTestId('result-screen-notice'))
             .toHaveTextContent('Unsigned transaction, ready for signing');
         expect(screen.getByLabelText('Unsigned transaction code')).toHaveValue(PSBT);
+    });
+
+    it('puts watcher send warnings after the details, with only the buttons docked', async () => {
+        mount({ walletMode: 'watcher' });
+        fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.91' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        const warnings = await screen.findByTestId('send-unusual-warnings');
+        const notice = warnings.closest('[data-testid="confirm-warning"]');
+        const decision = screen.getByTestId('confirm-decision');
+        expect(warnings).toHaveTextContent('This sends more than 90% of your BTC balance.');
+        expect(notice.closest('main')).not.toBeNull();
+        expect([...decision.children]).toEqual([screen.getByTestId('confirm-buttons')]);
+        const facts = screen.getByTestId('confirm-facts');
+        expect(facts.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getAllByText('This sends more than 90% of your BTC balance.')).toHaveLength(1);
     });
 
     it('submits only one watcher build when the review form submits twice', async () => {
@@ -1388,7 +1423,7 @@ describe('Send flow with mocked messaging', () => {
         active.resolve({ [CHAIN_ID]: { id: 'active', address: FROM } });
         await Promise.resolve();
         expect(review).toHaveTextContent('bc1q11…abcdef');
-        fireEvent.click(within(review).getByRole('button', { name: 'Send' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledWith(
             expect.objectContaining({ from: expect.objectContaining({ address: SAVED_LOOKALIKE }) }),
@@ -1404,7 +1439,7 @@ describe('Send flow with mocked messaging', () => {
             overrides: { buildSendPsbtRequest: vi.fn(() => build.promise) },
         });
         await fillSendForm();
-        fireEvent.click(await screen.findByRole('button', { name: 'Send' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
 
         messaging.unmountView();

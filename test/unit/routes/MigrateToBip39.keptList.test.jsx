@@ -78,7 +78,6 @@ function mount(messaging, props = {}) {
 
 async function upgradeToDone(messaging) {
     const mounted = mount(messaging);
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password1' } });
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'password1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Generate Recovery Phrase' }));
@@ -86,7 +85,7 @@ async function upgradeToDone(messaging) {
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
     // The page title stays Upgrade Wallet; the step line names the check.
-    await screen.findByText('Step 4 of 4: Check your copy');
+    await screen.findByText('Step 3 of 3: Check your copy');
     for (const input of screen.getAllByLabelText(/^Word \d+$/)) {
         const position = Number(input.labels[0].textContent.match(/\d+/)[0]);
         fireEvent.change(input, { target: { value: WORDS[position - 1] } });
@@ -150,7 +149,8 @@ describe('MigrateToBip39 keeps its sweep list outside the screen', () => {
 
         mount(messaging);
         await waitFor(() => expect(screen.getAllByRole('button', { name: 'Review Sweep' })).toHaveLength(3));
-        expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
+        // The kept list, not a fresh first step.
+        expect(screen.queryByRole('button', { name: 'Generate Recovery Phrase' })).toBeNull();
     });
 
     it('starts a fresh upgrade once every row is swept, but shows the finished list on the way back from the last sweep', async () => {
@@ -169,7 +169,7 @@ describe('MigrateToBip39 keeps its sweep list outside the screen', () => {
         back.unmount();
 
         mount(messaging);
-        expect(screen.getByText('Step 1 of 4: Why upgrade')).toBeInTheDocument();
+        expect(screen.getByText('Step 1 of 3: Set up the new wallet')).toBeInTheDocument();
     });
 
     it('Dismiss list stops offering the list', async () => {
@@ -181,7 +181,7 @@ describe('MigrateToBip39 keeps its sweep list outside the screen', () => {
         first.unmount();
 
         mount(messaging);
-        expect(screen.getByText('Step 1 of 4: Why upgrade')).toBeInTheDocument();
+        expect(screen.getByText('Step 1 of 3: Set up the new wallet')).toBeInTheDocument();
     });
 
     it('drops a kept list whose destination wallet is gone and starts over', async () => {
@@ -189,7 +189,7 @@ describe('MigrateToBip39 keeps its sweep list outside the screen', () => {
         const messaging = makeMessaging({ wallets: ['wallet-old'] });
 
         mount(messaging);
-        await screen.findByText('Step 1 of 4: Why upgrade');
+        await screen.findByText('Step 1 of 3: Set up the new wallet');
         expect(readMigrationSweeps('wallet-old')).toBeNull();
         expect(screen.queryByRole('button', { name: 'Review Sweep' })).toBeNull();
     });

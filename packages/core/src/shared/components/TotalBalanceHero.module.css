@@ -35,13 +35,6 @@
     color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
 }
 
-.scope {
-    font-weight: 500;
-    margin-inline-start: var(--xc-space-1);
-    color: color-mix(in srgb, var(--xc-on-accent) 60%, transparent);
-    text-transform: none;
-    letter-spacing: 0;
-}
 
 /* Home's slot for the one balance actions menu. */
 .actions {

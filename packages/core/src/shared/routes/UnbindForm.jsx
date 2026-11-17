@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, EmptyState, FormNotice, Icon, Input, ListPage, ListRow, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { FormNotice, Icon, ListPage, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -22,8 +22,9 @@ import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { TokenField } from '../components/TokenField.jsx';
-import { TickerIcon } from '../components/TickerIcon.jsx';
-import { contactsPickerStyles as pickerStyles } from '../components/ContactsPickerScreen.jsx';
+import { CONTROLLER_TARGET_ICONS, controllerClassIcon } from '../components/controllerIcons.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
+import { coinFromChainId } from '../components/BalanceList.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -53,6 +54,7 @@ import {
     FormSection,
     FromSection,
     joinSummary,
+    MemoSection,
     useFormSections,
 } from '../components/formStandard/index.js';
 
@@ -148,6 +150,8 @@ export function UnbindForm({
     const [formErrorSection, setFormErrorSection] = useState(/** @type {string | null} */ (null));
     const [fieldError, setFieldError] = useState(/** @type {{ field: string, message: string } | null} */ (null));
     const [attempt, setAttempt] = useState(0);
+    // Set by an Unbind press (G22): an empty Token then shows red.
+    const [attempted, setAttempted] = useState(false);
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const [watcherBuilding, setWatcherBuilding] = useState(false);
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
@@ -441,6 +445,16 @@ export function UnbindForm({
         event.preventDefault();
         if (isBlockedWatchOnlySource || (isHwSource && hwStatus !== 'available')) return;
         setAttempt((n) => n + 1);
+        setAttempted(true);
+        // G22: an empty Token is marked on the field and takes the cursor
+        // (while owned tokens still load the field is busy, not empty).
+        if (target === 'token' && ownedTokens !== null && !selectedTick) {
+            setFieldError(null);
+            setFormError(null);
+            setFormErrorSection(null);
+            setTimeout(() => document.getElementById('unbind-token')?.focus(), 0);
+            return;
+        }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { refuse(feeStop.formError, 'fee'); return; }
         if (!fromAddress) { refuse(t('unbindForm.noSourceSelected'), 'from'); return; }
@@ -502,7 +516,7 @@ export function UnbindForm({
                     <ResultScreen
                         state="unsigned"
                         result={result}
-                        onBuildAnother={() => { setResult(null); setStage('form'); }}
+                        onBuildAnother={() => { setResult(null); setAttempted(false); setStage('form'); }}
                         onDone={finish}
                     />
                 </ListPage>,
@@ -534,6 +548,7 @@ export function UnbindForm({
                 }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? t('unbindForm.networkFee', { amount: feeEstimate.coinAmount, coin: coinTicker }).trim()
                     : undefined}
@@ -569,15 +584,26 @@ export function UnbindForm({
         );
     }
 
+    // The standard picker, limited to the tokens this wallet owns on the
+    // network; picking one also moves From to its owner address.
     if (tokenPickerOpen) {
         return (
-            <UnbindTokenPickerScreen
-                variant={variant}
-                chainId={chainId}
-                tokens={ownedTokens}
-                onPick={(token) => {
-                    setSelectedTick(token.tick);
-                    setFromAddressId(token.ownerAddressId);
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                kindFilter="tokens"
+                kindLocked
+                rows={ownedTokens === null ? null : ownedTokens.map((token) => ({ chainId, tick: token.tick }))}
+                emptyTitle={t('unbindForm.noTokensTitle')}
+                emptyBody={t('unbindForm.noTokensBody')}
+                networkFilter={coinFromChainId(chainId)}
+                chainIdFilter={chainId}
+                onSelect={(sel) => {
+                    const token = ownedTokens?.find((row) => row.tick === sel.tick);
+                    if (token) {
+                        setSelectedTick(token.tick);
+                        setFromAddressId(token.ownerAddressId);
+                    }
                     setTokenPickerOpen(false);
                 }}
                 onBack={() => setTokenPickerOpen(false)}
@@ -610,6 +636,7 @@ export function UnbindForm({
             addressHelp={t('unbindForm.fromHelp')}
             onOpenPicker={target === 'address' ? () => setSourcePickerOpen(true) : undefined}
             pickerLabel={t('unbindForm.choosePicker')}
+            pickerLockedReason={t('unbindForm.pickerLocked')}
             missing={sourceError ? <FormNotice variant="error">{sourceError}</FormNotice> : null}
             revealKey={revealFor('from') || (hwBlocked ? 'hw' : 0)}
         >
@@ -654,7 +681,10 @@ export function UnbindForm({
         trimmedController ? `#${trimmedController}` : null,
         actionClass,
     );
-    const controllerHasError = Boolean(revealFor('controller') || errorFor('actionClass'));
+    // G22 mark: shown once Unbind was pressed, cleared once a token is picked.
+    const tokenMark = attempted && target === 'token' && ownedTokens !== null && !selectedTick
+        ? t('unbindForm.tokenRequired') : undefined;
+    const controllerHasError = Boolean(revealFor('controller') || errorFor('actionClass') || tokenMark);
 
     return wrap(
         <FormFrame
@@ -666,10 +696,12 @@ export function UnbindForm({
             ) : isBlockedWatchOnlySource ? (
                 <StatusMessage variant="error">{WATCH_ONLY_SIGNING_MESSAGE}</StatusMessage>
             ) : null}
-            action={action(!fromAddress
-                || isBlockedWatchOnlySource
+            // G22: never disabled for an empty field (a press marks the Token
+            // and refuses a missing source); a watch-only or unready hardware
+            // source and busy reads still hold it.
+            action={action(isBlockedWatchOnlySource
                 || hwBlocked
-                || (target === 'token' && (ownedTokens === null || !selectedTick))
+                || (target === 'token' && ownedTokens === null)
                 || actionConfirm.composing
                 || watcherBuilding)}
             from={fromSection}
@@ -713,13 +745,15 @@ export function UnbindForm({
                     }}
                 >
                     {ownedTokens === null || ownedTokens.length > 0
-                        ? <option value="token">{t('unbindForm.token')}</option>
+                        ? <Select.Option value="token" icon={CONTROLLER_TARGET_ICONS.token}>{t('unbindForm.token')}</Select.Option>
                         : null}
-                    <option value="address">{t('unbindForm.targetAddress')}</option>
+                    <Select.Option value="address" icon={CONTROLLER_TARGET_ICONS.address}>{t('unbindForm.targetAddress')}</Select.Option>
                 </Select>
 
                 {target === 'token' ? (
                     <TokenField
+                        id="unbind-token"
+                        error={tokenMark}
                         label={t('unbindForm.token')}
                         help={t('unbindForm.tokenHelp')}
                         value={ownedTokens !== null && selectedTick ? { chainId, tick: selectedTick } : null}
@@ -727,19 +761,10 @@ export function UnbindForm({
                         disabled={ownedTokens === null}
                         onOpenPicker={() => setTokenPickerOpen(true)}
                     />
-                ) : (
-                    <p className={styles.hintLeft} data-testid="unbind-address-subject">
-                        {t('unbindForm.addressSubject')}
-                        {fromAddress ? <>{' '}<AddressText address={fromAddress.address} /></> : null}
-                    </p>
-                )}
+                ) : null}
 
-                {/* An unbind names no controller, so a known one is shown, never asked for. */}
-                <p className={styles.hintLeft} data-testid="unbind-controller">
-                    {trimmedController
-                        ? t('unbindForm.boundController', { controller: trimmedController })
-                        : t('unbindForm.controllerResolved')}
-                </p>
+                {/* No explainer lines under the fields (operator 2026-11-13): the From row
+                    names the address and the ? tips say what an unbind does. */}
 
                 <Select
                     label={t('unbindForm.actionClass')}
@@ -751,8 +776,12 @@ export function UnbindForm({
                         if (errorFor('actionClass')) setFieldError(null);
                     }}
                 >
-                    {(actionClasses.includes(actionClass) ? actionClasses : [...actionClasses, actionClass])
-                        .map((value) => <option key={value} value={value}>{value}</option>)}
+                    {/* Listed A to Z (operator 2026-11-13); the default choice is unchanged. */}
+                    {(actionClasses.includes(actionClass) ? [...actionClasses] : [...actionClasses, actionClass])
+                        .sort((a, b) => a.localeCompare(b))
+                        .map((value) => (
+                            <Select.Option key={value} value={value} icon={controllerClassIcon(value)}>{value}</Select.Option>
+                        ))}
                 </Select>
                 {actionClass === 'all' || actionClass === 'ownership' ? (
                     <p className={styles.hintLeft}>
@@ -763,60 +792,24 @@ export function UnbindForm({
                 {isWatcherMode ? <p className={styles.hintLeft}>{t('unbindForm.watcherNote')}</p> : null}
             </FormSection>
 
-            <FormSection
-                id="memo"
-                title={t('unbindForm.memo')}
-                icon={Icon.MessageIcon}
-                optional
+            {/* Memo holds only the memo: the section title names the field
+                and carries its count. */}
+            <MemoSection
                 {...formSections.bind('memo')}
+                title={t('unbindForm.memo')}
                 revealKey={errorFor('memo') ? attempt : 0}
                 summary={memo.trim() || t('unbindForm.none')}
-            >
-                <Input
-                    label={t('unbindForm.memo')}
-                    maxLength={MAX_MEMO_LENGTH}
-                    help={t('unbindForm.memoHelp')}
-                    value={memo}
-                    error={errorFor('memo')}
-                    onChange={(e) => {
-                        setMemo(e.target.value);
-                        if (errorFor('memo')) setFieldError(null);
-                    }}
-                    autoComplete="off"
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                />
-            </FormSection>
+                maxLength={MAX_MEMO_LENGTH}
+                value={memo}
+                error={errorFor('memo')}
+                onChange={(e) => {
+                    setMemo(e.target.value);
+                    if (errorFor('memo')) setFieldError(null);
+                }}
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+            />
         </FormFrame>,
-    );
-}
-
-function UnbindTokenPickerScreen({ variant, chainId, tokens, onPick, onBack }) {
-    const header = <PageHeader onBack={onBack} title={t('unbindForm.pickTokenTitle')} />;
-    const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            <ListPage>{children}</ListPage>
-        </Screen>
-    );
-    if (tokens === null) return wrap(<p className={styles.hint}>{t('unbindForm.loadingTokens')}</p>);
-    if (tokens.length === 0) {
-        return wrap(<EmptyState title={t('unbindForm.noTokensTitle')} body={t('unbindForm.noTokensBody')} />);
-    }
-    return wrap(
-        <ul className={pickerStyles.abList}>
-            {tokens.map((token) => (
-                <li key={`${token.ownerAddressId}:${token.tick}`}>
-                    <ListRow
-                        type="button"
-                        className={pickerStyles.abRow}
-                        onClick={() => onPick(token)}
-                        aria-label={token.tick}
-                        leading={<TickerIcon chainId={chainId} tick={token.tick} size={32} />}
-                        title={token.tick}
-                    />
-                </li>
-            ))}
-        </ul>,
     );
 }

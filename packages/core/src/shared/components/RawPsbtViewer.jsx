@@ -121,7 +121,9 @@ export function RawPsbtViewer({ developerMode, psbtHex, actionFields }) {
             <div className={styles.body}>
                 {hasPsbt ? (
                     <section className={styles.section} aria-label={t('components.watcherResultPanel.unsignedTransactionHex2')}>
-                        <p className={styles.label}>{t('components.watcherResultPanel.unsignedTransactionHex2')}</p>
+                        <p className={styles.label}>
+                            {t('components.watcherResultPanel.unsignedTransactionHex2')}
+                        </p>
                         <Textarea
                             className={styles.hex}
                             readOnly

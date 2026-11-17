@@ -8,12 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/walletPicker.js';
 import '../../i18n/locales/en/settings.js';
+import '../../i18n/locales/en/walletDetails.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
@@ -21,6 +23,20 @@ import pickerStyles from './WalletPicker.module.css';
 import listStyles from './CoSignerAccountList.module.css';
 import { IdentityAvatar } from '../components/WalletIdentity.jsx';
 import { readWalletTile, tileRadius, walletTileText } from '../utils/walletTile.js';
+
+/**
+ * The wallet's kind on its My Wallets row: Hardware wallet, Legacy, Imported
+ * key or BIP39. A hardware wallet has no phrase, so it never reads as BIP39;
+ * its word is the one Wallet Details uses for a connected hardware wallet.
+ * @param {{ format?: string } | null | undefined} wallet
+ * @returns {string}
+ */
+export function walletKindLabel(wallet) {
+    if (wallet?.format === 'hardware') return t('walletDetails.originLabel.connectedHardware');
+    if (wallet?.format === 'counterwallet-legacy') return t('walletPicker.legacy');
+    if (wallet?.format === 'wif-only') return t('walletPicker.importedKey');
+    return t('walletPicker.bip39');
+}
 
 /**
  * WalletPicker: full-screen list of all wallets in the vault, with
@@ -90,14 +106,56 @@ export function WalletPicker({
 
     const switching = switchingWalletId !== null;
 
-    // A plus at the far right of the title line adds a wallet.
+    const [query, setQuery] = useState('');
+    const needle = query.trim().toLowerCase();
+    // The wallet records carry no addresses, so addresses are read only once a
+    // search is first typed: one host read answers for every wallet, kept for
+    // the rest of the visit, never per keystroke and never per wallet.
+    const [addressesByWallet, setAddressesByWallet] = useState(/** @type {Map<string, string>} */ (new Map()));
+    const addressReadStarted = useRef(false);
+    useEffect(() => {
+        if (needle === '' || !wallets || addressReadStarted.current) return undefined;
+        if (typeof messaging.getAddressesByWallet !== 'function') return undefined;
+        addressReadStarted.current = true;
+        Promise.resolve()
+            .then(() => messaging.getAddressesByWallet())
+            .then((byWallet) => {
+                const pairs = Object.entries(byWallet && typeof byWallet === 'object' ? byWallet : {})
+                    .map(([walletId, list]) => [
+                        walletId,
+                        (Array.isArray(list) ? list : []).map((address) => String(address || '').toLowerCase()).filter(Boolean).join('\n'),
+                    ]);
+                setAddressesByWallet(new Map(pairs));
+            })
+            .catch(() => {});
+        return undefined;
+    }, [needle, wallets, messaging]);
+
+    const visibleWallets = useMemo(() => {
+        if (!wallets || needle === '') return wallets;
+        return wallets.filter((w) => {
+            const hay = `${w.name || ''}\n${walletKindLabel(w)}\n${addressesByWallet.get(w.id) || ''}`.toLowerCase();
+            return hay.includes(needle);
+        });
+    }, [wallets, needle, addressesByWallet]);
+
+    // The filter and a plus sit at the far right of the title line; the plus adds a wallet.
     const header = (
         <PageHeader
             onBack={onBack}
             backDisabled={switching}
             title={t('walletPicker.title')}
             trailing={(
-                <Button variant="ghost" size="sm" icon={<Icon.PlusIcon />} onClick={onAddWallet} disabled={switching} aria-label={t('walletPicker.add')} title={t('walletPicker.add')} />
+                <>
+                    <ListFilterMenu
+                        query={query}
+                        onQueryChange={setQuery}
+                        searchPlaceholder={t('routes.addressList.search')}
+                        searchLabel={t('walletPicker.searchLabel')}
+                        label={t('walletPicker.filter')}
+                    />
+                    <Button variant="ghost" size="sm" icon={<Icon.PlusIcon />} onClick={onAddWallet} disabled={switching} aria-label={t('walletPicker.add')} title={t('walletPicker.add')} />
+                </>
             )}
         />
     );
@@ -137,11 +195,13 @@ export function WalletPicker({
                     <div className={styles.entryDescription}>{t('common.loading')}</div>
                 ) : wallets.length === 0 ? (
                     <EmptyState title={t('walletPicker.emptyTitle')} body={t('walletPicker.emptyBody')} />
+                ) : visibleWallets.length === 0 ? (
+                    <EmptyState title={t('walletPicker.noMatchTitle')} body={t('walletPicker.noMatchBody')} />
                 ) : (
                     // One list card; a row opens that wallet's page.
                     /* Safari needs an explicit list role because this class removes list styling. */
                     <ul className={listStyles.list} role="list" aria-label={t('walletPicker.title')}>
-                    {wallets.map((w, index) => {
+                    {visibleWallets.map((w, index) => {
                     const active = w.id === activeWalletId;
                     return (
                         <li key={`${w.id}:${index}`}>
@@ -162,7 +222,7 @@ export function WalletPicker({
                                     <span className={pickerStyles.rowMeta}>
                                         <span>
                                             {w.origin === 'demo' ? t('walletPicker.demoPrefix') : ''}
-                                            {w.format === 'counterwallet-legacy' ? t('walletPicker.legacy') : w.format === 'wif-only' ? t('walletPicker.importedKey') : t('walletPicker.bip39')}
+                                            {walletKindLabel(w)}
                                             {typeof w.accountCount === 'number' ? ` · ${t('walletPicker.accountCount', { count: w.accountCount })}` : ''}
                                             {/* A stored passphrase unlocks with the wallet password alone, so
                                                 only a record not yet captured earns the badge. */}

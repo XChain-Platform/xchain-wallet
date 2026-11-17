@@ -35,7 +35,7 @@ import {
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 // The Wallet Form Standard frame.
-import { FormAction, FormFrame, FormSection, joinSummary, summaryAddress } from '../components/formStandard/index.js';
+import { FormAction, FormFrame, FormSection, SummaryAddress, joinSummaryParts } from '../components/formStandard/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { useSettings } from '../hooks/useSettings.js';
@@ -236,7 +236,10 @@ export function VerifySignatureForm({ onBack }) {
 
     // The closed summary names the network and the signer address.
     const networkName = chainId ? (chainRegistry.get(chainId)?.displayName || chainId) : '';
-    const signatureSummary = joinSummary(networkName, summaryAddress(address)) || null;
+    const signatureSummary = joinSummaryParts([
+        networkName,
+        String(address || '').trim() ? <SummaryAddress address={address} /> : null,
+    ]) || null;
 
     // The Wallet Form Standard. Verify never sends or signs, so it
     // has no From section; the network names the chain of a typed (often

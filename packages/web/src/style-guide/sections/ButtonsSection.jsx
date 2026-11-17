@@ -68,7 +68,8 @@ export function ButtonsSection() {
                     ))}
                 </div>
             </LiveExample>
-            <LiveExample label="Loading and disabled">
+            {/* G130: a disabled button looks the same as an enabled one. */}
+            <LiveExample label="Loading and disabled (no disabled look)">
                 <div style={stack}>
                     <div style={row}>
                         <span style={tag}>loading</span>

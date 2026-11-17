@@ -505,9 +505,9 @@ async function deployGuard(page, source, guardSource = GUARD_SOURCE) {
 
     await main.getByLabel('Code source').fill(guardSource);
     // A source the validator rejects can never deploy, so a green validation is
-    // the cheap precondition that keeps a later failure meaningful.
-    await main.getByRole('button', { name: 'Validate Code' }).click();
-    await expect(main.getByText('Syntax OK.')).toBeVisible({ timeout: 30_000 });
+    // the cheap precondition that keeps a later failure meaningful. The form
+    // validates by itself once typing pauses.
+    await expect(main.getByTestId('deploy-code-status')).toContainText(/^✓Valid, .+ of 64 KB/, { timeout: 30_000 });
     await main.getByLabel('Gas limit').fill(DEPLOY_GAS);
     await main.getByRole('button', { name: 'Publish', exact: true }).click();
 
@@ -946,11 +946,10 @@ test.describe(`token controller bindings on ${REGTEST_CHAIN_LABEL}`, () => {
             // (FEE_QUOTE_CONTROLLER_UNSUPPORTED), so the honest chip is "Local
             // checks only". A wallet that trusted a guard-less verdict would
             // print "Looks good" over an action the chain is about to reject.
-            await expect(page.getByTestId('preflight-panel'),
+            await expect(page.getByTestId('confirm-status'),
                 'the confirm screen claims a network verdict on a controller-bound action, which '
                 + 'the public dry-run refuses to produce')
-                .toHaveAttribute('data-dryrun', 'unreached');
-            await expect(page.getByTestId('preflight-chip')).toHaveText('Local checks only');
+                .toHaveAttribute('data-state', 'notChecked');
 
             const refused = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(refused.action)).toBe('SEND');

@@ -113,11 +113,11 @@ describe('LinkForm action preview validation', () => {
         await waitFor(() => expect(screen.getByRole('button', { name: 'Link Actions' })).toBeEnabled());
         fireEvent.click(screen.getByRole('button', { name: 'Link Actions' }));
 
-        expect(fireEvent.click(await screen.findByRole('button', { name: 'Back' }))).toBe(false);
+        fireEvent.click(await screen.findByRole('button', { name: 'Reject' }));
         const restored = await screen.findAllByLabelText('Action number');
         expect(restored[0]).toHaveValue('10');
         expect(restored[1]).toHaveValue('20');
-        expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
     });
 
     it('labels the review previews in plain words and never shows raw action JSON', async () => {
@@ -145,9 +145,9 @@ describe('LinkForm action preview validation', () => {
         await waitFor(() => expect(screen.getByRole('button', { name: 'Link Actions' })).toBeEnabled());
         fireEvent.click(screen.getByRole('button', { name: 'Link Actions' }));
 
-        expect(await screen.findByText('First action')).toBeInTheDocument();
-        expect(screen.getByText('Second action')).toBeInTheDocument();
-        expect(screen.getByText('Action details unavailable')).toBeInTheDocument();
+        expect(await screen.findByText('Action 1')).toBeInTheDocument();
+        expect(screen.getByText('Action 2')).toBeInTheDocument();
+        expect(screen.getByText(/details unavailable/i)).toBeInTheDocument();
         expect(document.body.textContent).not.toMatch(/Side [AB] decoded|tx_hash/);
     });
 });

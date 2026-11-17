@@ -55,7 +55,7 @@ describe('SharedListDirectory buttons and home network', () => {
     it('draws an icon on Choose list and Load more', async () => {
         mount({ lists: Array.from({ length: 22 }, (_, index) => entry(index + 1)) });
 
-        const choose = (await screen.findAllByRole('button', { name: 'Choose List' }))[0];
+        const choose = (await screen.findAllByRole('button', { name: /^Choose list\b/ }))[0];
         expect(choose.querySelector('svg')).not.toBeNull();
         expect(screen.getByRole('button', { name: 'Load More' }).querySelector('svg')).not.toBeNull();
     });
@@ -63,13 +63,13 @@ describe('SharedListDirectory buttons and home network', () => {
     it('draws an icon on Open list', async () => {
         mount({ mode: 'browse', lists: [entry(1)], onOpenList: vi.fn() });
 
-        expect((await screen.findByRole('button', { name: 'Open List' })).querySelector('svg')).not.toBeNull();
+        expect((await screen.findByRole('button', { name: /^Open list\b/ })).querySelector('svg')).not.toBeNull();
     });
 
     it('shows only the chain icon for the home network, never the chain name', async () => {
         mount({ lists: [entry(1)] });
 
-        const row = await screen.findByRole('listitem');
+        const row = await screen.findByRole('listitem', { name: /^Token list / });
         const home = within(row).getByText('Home network').nextElementSibling;
         expect(home.querySelector('svg, img, [role="img"]')).not.toBeNull();
         expect(home.textContent.trim()).toBe('');

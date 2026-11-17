@@ -532,8 +532,8 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             // The coin lane: FUNDING carries this leg's protocol fee, and the
             // wallet holds no XCHAIN, so the Bitcoin default (XCHAIN) would be
             // refused for insufficient funds before the ticker is ever tested.
-            // The fee switch sits in the Network fee section, closed until opened.
-            await openIssueSection(main, 'Network fee');
+            // The fee switch sits in the Fees section, closed until opened.
+            await openIssueSection(main, 'Speed and Fees');
             await payProtocolFeeInCoin(main);
             await submitTokenWizard(page);
 
@@ -768,8 +768,8 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             // measured reason the second test in this file cannot run on this
             // venue, taken off the screen rather than argued from source.
             const main = await openWizardDetails(page);
-            // The fee lane sits in the Network fee section, closed until opened.
-            await openIssueSection(main, 'Network fee');
+            // The fee lane sits in the Fees section, closed until opened.
+            await openIssueSection(main, 'Speed and Fees');
             const xchainSwitch = main.getByRole('switch', { name: /instead of XCHAIN/ });
 
             if (NATIVE_FEE_MANDATORY) {
@@ -891,8 +891,8 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             // Left OFF, which is the default (`useNativeFee` seeds optIn false
             // and Bitcoin is the one chain where `mandatory` does not override
             // it), so this is the lane an ordinary Bitcoin user composes in.
-            // The switch sits in the Network fee section, closed until opened.
-            await openIssueSection(main, 'Network fee');
+            // The switch sits in the Fees section, closed until opened.
+            await openIssueSection(main, 'Speed and Fees');
             await expect(main.getByRole('switch', { name: /instead of XCHAIN/ })).not.toBeChecked();
             await main.getByLabel('Ticker', { exact: true }).fill(TICK);
             await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));

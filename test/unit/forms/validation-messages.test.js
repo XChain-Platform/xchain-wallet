@@ -11,6 +11,7 @@ import {
     render,
     screen,
     waitFor,
+    within,
 } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
@@ -195,7 +196,9 @@ describe('Send field validation', () => {
         fireEvent.change(to, { target: { value: recipient } });
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
-        const message = await screen.findByText('Enter a recipient address.');
+        // The form error notice lists it and the To field says it under
+        // itself (the form error standard), so the copy shows twice.
+        const [message] = await screen.findAllByText('Enter a recipient address.');
         expectPlainCopy(message);
     });
 
@@ -233,9 +236,26 @@ describe('Send field validation', () => {
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '2' } });
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
-        const message = await screen.findByText('Amount exceeds the available balance.');
+        // G130: Send is enabled, so the press runs validation and the message
+        // shows on the field and in the error summary at the top (G129).
+        const [message] = await screen.findAllByText('Amount exceeds the available balance.');
         expectPlainCopy(message);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('offers Use Max on the form error notice for an amount refusal', async () => {
+        // The Notice Standard's one action: the error notice carries the
+        // one-click fix the old summary offered, and it leaves with the entry.
+        mountSend({ quantity: '100000000' });
+        fireEvent.change(await screen.findByLabelText(/^To$/), {
+            target: { value: BITCOIN_TO },
+        });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        const notice = await screen.findByRole('alert', { name: 'Form errors' });
+        fireEvent.click(within(notice).getByRole('button', { name: 'Use Max' }));
+        await waitFor(() => expect(screen.queryByRole('alert', { name: 'Form errors' })).toBeNull());
     });
 });
 
@@ -290,15 +310,16 @@ describe('Create dispenser field validation', () => {
         fireEvent.change(give, { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.click(screen.getByRole('button', { name: /Dispenser Terms/ }));
-        fireEvent.change(screen.getByLabelText('Priced in fiat'), {
-            target: { value: 'USD' },
-        });
+        // G122: the Fiat currency field opens its picker page.
+        fireEvent.click(screen.getByRole('button', { name: /^Fiat currency:/ }));
+        fireEvent.click(within(screen.getByRole('list', { name: 'Fiat currencies' })).getByRole('button', { name: /USD/ }));
         fireEvent.change(screen.getByLabelText(/^Fiat amount/), {
             target: { value: '12.345' },
         });
         fireEvent.click(screen.getByRole('button', { name: 'Create Dispenser' }));
 
-        const precision = await screen.findByText(
+        // Listed in the form error notice and under the field itself.
+        const [precision] = await screen.findAllByText(
             'Fiat amount can have at most 2 decimal places, like 12.34 or 3.',
         );
         expectPlainCopy(precision);
@@ -310,7 +331,7 @@ describe('Contacts field validation', () => {
     it('rejects empty and whitespace-only fields with plain copy', async () => {
         const messaging = mountContacts();
         await screen.findByText('No contacts yet');
-        fireEvent.click(screen.getByRole('button', { name: 'Create first contact' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
 
         fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
         const emptyName = await screen.findByText('Name is required.');

@@ -17,6 +17,7 @@ import '../i18n/locales/en/ui.js';
  * @param {import('react').ReactNode} props.label
  * @param {import('react').ReactNode} [props.description]
  * @param {import('react').ReactNode} [props.help] help for this setting on this form, shown from an InfoTip beside the label text
+ * @param {import('react').ReactNode} [props.icon] a leading icon, centred vertically on the row
  * @param {boolean} props.checked
  * @param {(event: import('react').ChangeEvent<HTMLInputElement>) => void} props.onChange
  * @param {boolean} [props.disabled]
@@ -27,6 +28,7 @@ export function Switch({
     label,
     description,
     help,
+    icon,
     checked,
     onChange,
     disabled = false,
@@ -52,6 +54,7 @@ export function Switch({
 
     return (
         <label className={rootClassName} htmlFor={inputId}>
+            {icon != null ? <span className={styles.icon} aria-hidden="true">{icon}</span> : null}
             <span className={styles.copy}>
                 {hasHelp ? (
                     // The tip sits outside the labelled span, so the switch's name

@@ -77,6 +77,7 @@ describe('ui/icons/iconForLabel', () => {
         ['Transfer ownership', HandshakeIcon],   // "transfer" → Handshake
         ['Verify signature', VerifyIcon],        // "verify" → shield-check
         ['Multisig signing', MultisigIcon],
+        ['Multisig sessions', MultisigIcon],
         ['Addresses', AddressIcon],
         ['Contracts', ContractIcon],
         ['Call method', ContractIcon],

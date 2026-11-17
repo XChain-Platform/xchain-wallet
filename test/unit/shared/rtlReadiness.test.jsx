@@ -51,7 +51,11 @@ describe('RTL-safe machine-readable fields', () => {
         );
 
         expect(screen.getByLabelText('Destination')).toHaveAttribute('dir', 'ltr');
-        expect(screen.getByLabelText(address)).toHaveAttribute('dir', 'ltr');
+        // The AddressText, and the field's own fit display of the address at
+        // rest (G99), both read left to right.
+        const displays = screen.getAllByLabelText(address);
+        expect(displays.length).toBeGreaterThan(0);
+        for (const display of displays) expect(display).toHaveAttribute('dir', 'ltr');
     });
 
     it('places intrinsic-width trailing controls at the logical input end', () => {
@@ -64,27 +68,26 @@ describe('RTL-safe machine-readable fields', () => {
             />,
         );
 
-        // Max sits inside the field's trailing edge. The reserved input
-        // padding and the action inset are logical properties, so no
-        // physical left or right value is written for either direction.
+        // Max is the Input's own in-field icon at its trailing edge. The
+        // reserved input padding and the action inset are logical properties,
+        // so no physical left or right value is written for either direction.
         const input = screen.getByRole('textbox', { name: 'Amount (BTC)' });
         const max = screen.getByRole('button', { name: 'Use max available amount' });
         expect(input.style.paddingRight).toBe('');
-        expect(input.style.paddingInlineEnd).toContain('--amount-action-width');
+        expect(input.style.paddingLeft).toBe('');
         expect(max.style.position).toBe('');
         expect(max.style.left).toBe('');
         expect(max.style.right).toBe('');
         expect(input).toHaveAttribute('dir', 'ltr');
         // The input is left to right, so under a right-to-left page its inline
-        // end is the right edge while the action sits at the left. The same
-        // room is handed to the stylesheet, which moves it to the inline start.
-        expect(input.style.getPropertyValue('--amount-end-room')).toBe(input.style.paddingInlineEnd);
+        // end is the right edge while the action sits at the left. The
+        // stylesheet moves the Input's own field-action room to the inline
+        // start, on the input itself, where the Input's G112 action inset
+        // (--xc-control-action-inset) resolves.
         expect(amountFieldStyles).toMatch(
-            /:global\(html\[dir='rtl'\]\) \.amountFieldWrap input\s*\{[^}]*padding-inline-start:\s*var\(--amount-end-room, var\(--xc-control-padding-x\)\)[^}]*text-align:\s*end/s,
+            /:global\(html\[dir='rtl'\]\) \.amountFieldWrap input\s*\{[^}]*padding-inline-start:\s*calc\(var\(--xc-control-action-inset\) \+ var\(--xc-tap-min\) \+ var\(--xc-field-icon-gap\)\)[^}]*text-align:\s*end/s,
         );
-        expect(amountFieldStyles).toMatch(
-            /\.amountFieldWrap \.maxAction\s*\{[^}]*flex:\s*none[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
-        );
+        expect(amountFieldStyles).not.toMatch(/--amount-end-room/);
     });
 });
 

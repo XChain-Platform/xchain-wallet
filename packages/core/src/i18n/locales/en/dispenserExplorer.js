@@ -17,7 +17,6 @@ import { addEnglish } from '../../store.js';
 const messages = {
     'dispenserExplorer.loadMoreFor': 'Load more results for {name}',
     'dispenserExplorer.cardLabel': '{give} for {price}, {chain}',
-    'dispenserExplorer.cardLabelSeller': '{give} for {price}, {chain}, seller {seller}',
     'dispenserExplorer.terms': 'Dispenser terms',
     'dispenserExplorer.forPrice': ' for ',
     'dispenserExplorer.opened': 'Opened {when}',

@@ -131,7 +131,8 @@ assert.ok(
 );
 assert.ok(
     /useActionConfirmFlow\(\{ messaging, walletId, slice: 'bespokeFlows' \}\)/.test(src)
-        && /compose: \(\) => messaging\.composeMessageForConfirm\(base\)/.test(src),
+        // G98: the Advanced section's choices wrap the compose request.
+        && /compose: \(\) => messaging\.composeMessageForConfirm\(withAdvancedOptions\(base\)\)/.test(src),
     'ComposeMessage composes its encrypted payload through the shared confirm flow',
 );
 assert.ok(
@@ -227,8 +228,9 @@ for (const [shell, appPath] of [
 
 const inboxSrc = readFileSync(join(sharedRoutes, 'MessagingInbox.jsx'), 'utf8');
 assert.ok(/onCompose/.test(inboxSrc), 'MessagingInbox accepts onCompose prop');
-assert.ok(/New Conversation/.test(inboxSrc),
-    'MessagingInbox renders "New conversation" button when no counterparty selected');
+// The Messaging redesign moved New Message to a plus button in the header.
+assert.ok(/icon=\{<Icon\.PlusIcon \/>\}\s*aria-label="New message"[\s\S]{0,80}onClick=\{\(\) => onCompose\(\)\}/.test(inboxSrc),
+    'MessagingInbox renders a header plus button that starts a new message');
 assert.ok(/Reply/.test(inboxSrc),
     'MessagingInbox renders "Reply" button when counterparty selected');
 

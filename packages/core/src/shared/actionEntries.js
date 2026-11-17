@@ -223,7 +223,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
     {
         id: 'multisig-sign',
         handler: 'onMultisigSign',
-        label: 'Multisig signing',
+        label: 'Multisig sessions',
         description: 'Collect approvals for a shared-wallet payment. Add your signature to complete or advance the signing round.',
     },
     {

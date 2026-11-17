@@ -14,24 +14,26 @@
     min-width: 0;
 }
 
-/* Wide screens: one centred column (the card stays readable instead of
-   stretching across the window). */
-@media (min-width: 834px) {
-    .layout {
-        width: 100%;
-        max-width: 760px;
-        margin-inline: auto;
-    }
+.layout {
+    width: 100%;
 }
 
-/* The card's own order: token, price, then the move and holdings line. */
+/* The card's own order: token, the change pill above the main figure (G10,
+   as on Home), the price, then the holdings line. */
 .hero.hero.hero {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
         'token'
+        'move'
         'price'
         'meta';
     row-gap: var(--xc-space-1);
+}
+
+.move {
+    grid-area: move;
+    display: flex;
+    position: relative;
 }
 
 /* The token and its name are the market picker: a plain block on the card. */
@@ -54,11 +56,17 @@
     color: var(--xc-on-accent);
 }
 
-.tokenButtonContent {
+.tokenButtonContent,
+.tokenIdentity {
     display: flex;
     align-items: center;
     gap: var(--xc-space-3);
     min-width: 0;
+}
+
+.tokenIdentity {
+    grid-area: token;
+    color: var(--xc-on-accent);
 }
 
 .tokenText {
@@ -153,20 +161,14 @@
 }
 
 /* The three tabs share the row evenly, icon left of the word, on one line
-   down to the 360px popup. */
-.panelTabs {
-    width: 100%;
-}
-
-.panelTab.panelTab {
-    flex: 1 1 0;
-    min-width: 0;
-    gap: var(--xc-space-2);
+   down to the 360px popup; at the narrowest widths the side padding gives
+   way first. */
+.panelTabs [role='tab'] {
     white-space: nowrap;
 }
 
 @media (max-width: 420px) {
-    .panelTab.panelTab {
+    .panelTabs [role='tab'] {
         padding-inline: var(--xc-space-1);
         gap: var(--xc-space-1);
     }
@@ -179,41 +181,12 @@
     min-width: 0;
 }
 
-/* One tab's list: a card with its title and count, a plain line, the rows. */
+/* One tab's list: a card holding just the rows (no title or count row). */
 .listCard {
     composes: flush from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
     overflow: hidden;
-}
-
-.listHead {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-3) var(--xc-space-3) 0;
-}
-
-.listTitle {
-    margin: 0;
-    font-size: var(--xc-text-md);
-    font-weight: 700;
-    color: var(--xc-text);
-}
-
-.listCount {
-    flex: 0 0 auto;
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    color: var(--xc-text-muted);
-}
-
-.listExplain {
-    margin: var(--xc-space-1) 0 var(--xc-space-1);
-    padding: 0 var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
 }
 
 .list {
@@ -294,13 +267,55 @@ button.row:hover:not(:disabled) {
     color: var(--xc-brand-purple);
 }
 
-/* The row's Buy or Sell button keeps its full label; the price gives way. */
+/* The offer's price keeps its full figure; the kind and amount give way. */
 .rowTrailing.rowTrailing {
     flex: 0 0 auto;
     max-width: none;
 }
 
-.rowAction.rowAction {
+.offerKind {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.offerKind svg {
+    width: 14px;
+    height: 14px;
     flex: 0 0 auto;
+}
+
+/* Right side of an offer row: price in the side colour over the quote coin. */
+.offerPrice {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: end;
     white-space: nowrap;
+}
+
+.offerPrice[data-side='buy'] {
+    color: var(--xc-success);
+}
+
+.offerPrice[data-side='sell'] {
+    color: var(--xc-danger-fg);
+}
+
+.offerPriceMain {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    font-weight: 700;
+}
+
+.offerPriceMain svg {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 auto;
+}
+
+.offerPriceUnit {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
 }

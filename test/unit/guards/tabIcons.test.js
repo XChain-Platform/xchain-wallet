@@ -7,8 +7,10 @@
 //
 //   1. Every tab carries an icon: a `role="tab"` element renders an icon (an
 //      `icon` prop or the shared tabIcon wrapper), and every item of a
-//      `<Tabs items>` bar or of a tab array (`tabs`, `tabItems`, `sectionItems`,
-//      `detailTabs`, `subtabs`) has an icon in its label or an `icon` field.
+//      `<Tabs items>` bar, a `<SegmentedControl items>` view toggle or a tab
+//      array (`tabs`, `tabItems`, `sectionItems`, `detailTabs`, `subtabs`) has
+//      an icon in its label or an `icon` field. Every view toggle shares one
+//      look, icon plus label in every item (operator ruling 2026-11-13).
 //   2. The same meaning uses the same icon everywhere: an Actions tab uses
 //      ZapIcon, a Details tab uses InfoIcon, and an Activity or History tab
 //      uses HistoryIcon.
@@ -37,6 +39,8 @@ const relPath = (key) => key.replace(/^(\.\.\/)+/, '');
 const EXCEPTIONS = new Map([
     ['packages/core/src/ui/Tabs.jsx',
         'the shared tab primitive renders each item label as given; every <Tabs items> use is checked at its call site'],
+    ['packages/core/src/ui/SegmentedControl.jsx',
+        'the shared toggle primitive renders each item label as given; every <SegmentedControl items> use is checked at its call site'],
     ['packages/core/src/shared/components/PortfolioChart.jsx',
         'the chart range pills (1D, 1W, 1M) are time ranges, a short text pill each, not view tabs'],
     ['packages/core/src/shared/routes/OnboardingCarousel.jsx',
@@ -56,11 +60,14 @@ const TAB_ARRAY_NAMES = /^(tabs|tabItems|sectionItems|detailTabs|subtabs)$/;
 // Text that shows an icon is drawn: an Icon.X element or reference, a
 // tabLabel/tabIcon helper call, a Glyph component, an `icon` field or the
 // shared tabIcon class.
-const ICON_TEXT = /\bIcon\.\w+Icon\b|\btab(Label|Icon)\(|Glyph\b|\bicon\s*[:=]|\.tabIcon\b|\blabelIcon\b/;
+const ICON_TEXT = /\bIcon\.\w+Icon\b|<\w+Icon\b|\btab(Label|Icon)\(|Glyph\b|\bicon\s*[:=]|\.tabIcon\b|\blabelIcon\b/;
+
+// The shared view-toggle primitives whose `items` the guard reads.
+const TOGGLE_ELEMENTS = new Set(['Tabs', 'SegmentedControl']);
 
 function isTabsElement(node) {
     const name = node.openingElement.name;
-    return name.type === 'JSXIdentifier' && name.name === 'Tabs';
+    return name.type === 'JSXIdentifier' && TOGGLE_ELEMENTS.has(name.name);
 }
 
 function attr(opening, name) {
@@ -103,7 +110,7 @@ function tabId(obj) {
  */
 export function findTabIconViolations(code, file) {
     const violations = [];
-    if (!/role=["']tab["']|<Tabs\b|(tabs|tabItems|sectionItems|detailTabs|subtabs)\s*=/.test(code)) return violations;
+    if (!/role=["']tab["']|<Tabs\b|<SegmentedControl\b|(tabs|tabItems|sectionItems|detailTabs|subtabs)\s*=/.test(code)) return violations;
     const ast = parse(code, { sourceType: 'module', plugins: PARSER_PLUGINS });
     const slice = (node) => code.slice(node.start, node.end);
     const at = (node) => `${file}:${node.loc.start.line}`;
@@ -142,7 +149,7 @@ export function findTabIconViolations(code, file) {
                 } else if (expr.type === 'ArrayExpression') {
                     addObjects(expr);
                 } else if (!ICON_TEXT.test(slice(expr))) {
-                    violations.push(`${at(expr)}: <Tabs items> is built without icons`);
+                    violations.push(`${at(expr)}: <${opening.name.name} items> is built without icons`);
                 }
             }
         },
@@ -185,7 +192,7 @@ describe('tab icons', () => {
         for (const file of EXCEPTIONS.keys()) {
             const entry = Object.entries(sources).find(([key]) => relPath(key) === file);
             expect(entry, `${file} no longer exists`).toBeTruthy();
-            expect(/role=["']tab["']|<Tabs\b/.test(entry[1]), `${file} has no tab bar`).toBe(true);
+            expect(/role=["'](tab|radiogroup)["']|<Tabs\b|<SegmentedControl\b/.test(entry[1]), `${file} has no tab bar`).toBe(true);
         }
     });
 
@@ -199,6 +206,13 @@ describe('tab icons', () => {
         const rawTab = `const x = <button role="tab">Label</button>;`;
         expect(findTabIconViolations(rawTab, 'x.jsx')).toHaveLength(1);
         const good = `const tabs = [{ id: 'details', label: tabLabel(Icon.InfoIcon, 'Details') }];`;
+        expect(findTabIconViolations(good, 'x.jsx')).toEqual([]);
+    });
+
+    it('flags a SegmentedControl view toggle whose items carry no icon', () => {
+        const bare = `const x = <SegmentedControl items={[{ id: 'buy', label: 'Buy' }, { id: 'sell', label: <BuyGlyph /> }]} />;`;
+        expect(findTabIconViolations(bare, 'x.jsx')).toEqual(['x.jsx:1: tab "buy" has no icon']);
+        const good = `const x = <SegmentedControl items={[{ id: 'quick', label: <><ZapIcon /><span>Quick</span></> }]} />;`;
         expect(findTabIconViolations(good, 'x.jsx')).toEqual([]);
     });
 });

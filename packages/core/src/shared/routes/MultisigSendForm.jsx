@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 // FormPage, Button and FeeSelector come through the standard frame.
-import { AddressField, FormNotice, Icon, Input } from '@xchain-wallet/core/ui';
+import { AddressField, FormNotice, Icon, Input, useFormErrors } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 // The Wallet Form Standard frame (From, Payment, Network fee, action).
 import {
@@ -19,7 +19,8 @@ import {
     FormFrame,
     FormSection,
     FromSection,
-    summaryAddress,
+    SummaryAddress,
+    joinSummaryParts,
     useFormSections,
 } from '../components/formStandard/index.js';
 import {
@@ -66,6 +67,7 @@ export function MultisigSendForm({
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(null);
     const [resolved, setResolved] = useState(multisig || null);
+    const formErrors = useFormErrors();
     // The standard sections' open state; From and the fee start
     // closed, Payment open. A fee refusal reopens the fee row on each try.
     const formSections = useFormSections({ from: false, payment: true, fee: false });
@@ -101,10 +103,21 @@ export function MultisigSendForm({
 
     async function submit(event) {
         event.preventDefault();
-        if (busy || taproot || !resolved || !to.trim() || !amountSats || amountSats <= 0n || !feeRate) return;
+        if (busy || taproot || !resolved) return;
+        if (!formErrors.validate({
+            'multisig-send-to': !to.trim() ? 'Enter the destination address.' : null,
+            'multisig-send-amount': !amountSats || amountSats <= 0n
+                ? `Enter an amount above 0 ${tickerForDescriptor(descriptor)}.`
+                : null,
+            'form:fee': !feeRate ? 'Choose a network fee.' : null,
+        })) return;
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: selectedEstimate });
         // A custom-fee refusal opens the Network fee section.
-        if (feeStop) { setError(feeStop.formError); setFeeErrorKey((k) => k + 1); return; }
+        if (feeStop) {
+            formErrors.validate({ 'form:fee': feeStop.formError });
+            setFeeErrorKey((k) => k + 1);
+            return;
+        }
         setBusy(true);
         setError(null);
         try {
@@ -126,10 +139,10 @@ export function MultisigSendForm({
 
     // Closed-section summary, "0.001 BTC to bc1q...0a2".
     const ticker = tickerForDescriptor(descriptor);
-    const paymentSummary = [
+    const paymentSummary = joinSummaryParts([
         amount.trim() ? `${amount.trim()} ${ticker}` : null,
-        to.trim() ? `to ${summaryAddress(to.trim())}` : null,
-    ].filter(Boolean).join(' ') || null;
+        to.trim() ? <>to <SummaryAddress address={to.trim()} /></> : null,
+    ], ' ') || null;
 
     // The standard order. From (closed) holds the network, which the
     // multisig decides, and the multisig address with its signature
@@ -139,12 +152,13 @@ export function MultisigSendForm({
             id="multisig-send-form"
             label="Send from multisig"
             onSubmit={submit}
+            errors={formErrors}
             status={error ? <FormNotice variant="error">{error}</FormNotice> : null}
             action={(
                 <FormAction
                     icon={<Icon.SendIcon />}
                     loading={busy}
-                    disabled={busy || taproot || !resolved || !to.trim() || !amountSats || amountSats <= 0n || !feeRate}
+                    disabled={taproot || !resolved}
                 >
                     Start Signing
                 </FormAction>
@@ -173,6 +187,10 @@ export function MultisigSendForm({
                     onChange={setFeePick}
                     customEstimate={selectedEstimate}
                     revealKey={feeErrorKey}
+                    formErrorKey="form:fee"
+                    // A co-signer session fixes its inputs and change when it
+                    // starts, so none of the Advanced options can apply.
+                    advanced={false}
                 />
             )}
         >
@@ -185,6 +203,7 @@ export function MultisigSendForm({
             >
                 {taproot ? <FormNotice variant="warning">{TAPROOT_MESSAGE}</FormNotice> : null}
                 <AddressField
+                    id="multisig-send-to"
                     label="To"
                     help={t('multisig.send.toHelp')}
                     value={to}
@@ -192,6 +211,7 @@ export function MultisigSendForm({
                     autoComplete="off"
                 />
                 <Input
+                    id="multisig-send-amount"
                     label={`Amount (${ticker})`}
                     help={t('multisig.send.amountHelp')}
                     inputMode="decimal"

@@ -346,37 +346,34 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
             await expect(banner, 'the pending detail page is titled with an action index it cannot have')
                 .not.toContainText('Send #');
 
+            // Operator ruling 2026-11-13: the four-step status bar alone says
+            // where a pending action is, with no second pending notice.
+            const bar = page.getByRole('list', { name: 'Transaction Status' });
+            await expect(bar, 'the detail page has no status bar').toBeVisible({ timeout: 30_000 });
+            await expect(bar.locator('li[aria-current="step"]'),
+                'the status bar does not mark the step the pending entry is on')
+                .toHaveCount(1);
+            await expect(bar.locator('li[data-step="processed"]'),
+                'a pending entry reads as processed')
+                .toHaveAttribute('data-state', 'todo');
             await expect(page.getByText('Pending, not yet validated by the service.'),
-                'the pending detail branch did not render its pre-validation line, which is the one '
-                + 'thing the user has to be told about an entry the indexer has not judged yet')
-                .toBeVisible({ timeout: 30_000 });
-
-            await expect(page.getByRole('region', { name: 'Pending transaction' }),
-                'the pending panel is missing from the detail view').toBeVisible();
+                'the retired pending notice is back on the detail page')
+                .toHaveCount(0);
         });
 
-        await test.step('CLAIM 3B: a shell without replaceTx WITHHOLDS Speed up and Cancel', async () => {
-            // This drives the shared DetailCard through the real web shell.
+        await test.step('CLAIM 3B: a shell without replaceTx WITHHOLDS Speed Up and Cancel Transaction', async () => {
             // The pending send is eligible for replacement, but the shell has
             // no callable replacement transport, so neither dead control may
-            // be offered.
-            const options = page.getByRole('group', { name: 'Transaction actions' });
-            await expect(options, 'the pending entry has no action options from which to verify the shell gate')
-                .toBeVisible({ timeout: 30_000 });
-
-            await options.getByRole('button', { name: 'More' }).click();
-            const menu = options.getByRole('menu');
-            await expect(menu.getByRole('menuitem', { name: 'Speed up transaction' }),
+            // be offered: neither Speed up nor Cancel transaction is a row of
+            // the Actions view's action list (G101), the view the page opens on.
+            const actions = page.getByRole('list', { name: 'Actions for this transaction' });
+            await expect(actions, 'the Actions view did not open first').toBeVisible();
+            await expect(actions.getByRole('button', { name: /^Speed up/ }),
                 'Speed up is offered even though the web shell cannot replace a transaction')
                 .toHaveCount(0);
-            await expect(menu.getByRole('menuitem', { name: 'Cancel transaction' }),
+            await expect(actions.getByRole('button', { name: /^Cancel transaction/ }),
                 'Cancel is offered even though the web shell cannot replace a transaction')
                 .toHaveCount(0);
-
-            // Closed again on purpose: an open menu carries a click-outside
-            // handler that would eat CLAIM 4's first interaction.
-            await options.getByRole('button', { name: 'More' }).click();
-            await expect(menu, 'the More menu stayed open').toHaveCount(0);
 
             expect(await blocksMined(), 'a block was mined while the miner was supposed to be '
                 + 'parked, so the shell gate above was not measured against an unconfirmed transaction')

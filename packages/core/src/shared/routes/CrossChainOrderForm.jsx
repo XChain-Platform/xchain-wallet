@@ -11,25 +11,26 @@
 import { t } from '../../i18n/index.js';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AddressField, AddressText, Button, ChainBadge, CopyButton, FormNotice, FormPage, Icon, InfoTip, Input, ListPage, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
-// Cross Chain Order renders through the shared Give/Get standard (Quick and
+import { AddressField, AddressText, Button, ChainBadge, CopyButton, FormNotice, FormPage, Icon, InfoTip, ListPage, PageHeader, Screen, SectionHeader, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
+import { ExpirationFields, expirationParam, expirationWithinFreePeriod } from '../components/expirationChoice.jsx';
+// Cross-Chain Order renders through the shared Give/Get standard (Quick and
 // Full views of one state), with Receive at beside the get side. The give
 // network sits in From; the get token decides the get network.
 import {
     GiveGetQuick,
     OwnershipToggle,
-    QuickAddressRow,
     RateLine,
     useGiveGetView,
+    ViewSwitch,
 } from '../components/giveGet/index.js';
 // The Wallet Form Standard frame (From, Cross-Chain Order, Ownership, Order Terms, Network fee, action).
-import { FeeSection, FormAction, FormFrame, FormSection, FromSection, joinSummary } from '../components/formStandard/index.js';
-import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, MemoSection, joinSummary } from '../components/formStandard/index.js';
+import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
 // The "Use typed name" option Create order's Asset picker offers, so
 // a ^ID reference (or a ticker the list does not hold) can be the Get token.
 import { TypedNameContext, TypedNameListPage } from './CreateOrderForm.jsx';
 import { formatLocalDateTime } from '../utils/dateTime.js';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { decoder as decoderLib, registry as registryLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/crossChainOrder.js';
 import '../../i18n/locales/en/crossChainSwap.js';
@@ -39,6 +40,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { useConfirmAction } from '../hooks/useConfirmAction.js';
 import { prebuiltPsbtFromComposed } from '../../flows/prebuiltPsbtFromComposed.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { resolvePreflightPrivacy } from '../../schemas/settings.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
@@ -69,9 +71,11 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 // descriptor.coin is long-form; ORDER serializes the short-form ticker in
 // GIVE_COIN / GET_COIN.
@@ -81,12 +85,15 @@ const PROTOCOL_COIN_TICKER = {
     dogecoin: 'DOGE',
 };
 
-// datetime-local string -> Unix seconds (the indexer compares ORDER
-// EXPIRATION as a wall-clock Unix timestamp, not a block height).
-function localInputToUnix(localStr) {
-    const ms = Date.parse(String(localStr));
-    if (!Number.isFinite(ms)) return null;
-    return Math.floor(ms / 1000);
+// The indexer compares ORDER EXPIRATION as a wall-clock Unix timestamp, not
+// a block height. 'default' (3 months) sends none; every other choice needs
+// a valid future Expires.
+function expirationRefusal(mode, input, nowSec = Math.floor(Date.now() / 1000)) {
+    if (mode === 'default') return null;
+    if (!String(input || '').trim()) return 'Pick an expiration date and time, or choose a common term.';
+    const unix = Number(expirationParam(mode, input));
+    if (!unix || unix <= nowSec) return 'Expiration must be a future date and time.';
+    return null;
 }
 
 const isPlainPositive = (v) => /^\d+(\.\d+)?$/.test(String(v).trim())
@@ -171,7 +178,8 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     const [getTick, setGetTick] = useState('');
     const [getAmount, setGetAmount] = useState('');
     const [getOwnership, setGetOwnership] = useState(false);
-    const [expMode, setExpMode] = useState(/** @type {'default' | 'custom'} */ ('default'));
+    // 'default' is 3 months; the presets fill expInput, which Expires shows.
+    const [expMode, setExpMode] = useState(/** @type {'default' | '6m' | '9m' | '1y' | 'custom'} */ ('default'));
     const [expInput, setExpInput] = useState('');
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
@@ -185,8 +193,11 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     // early return, so a picker page or the confirm screen never resets them.
     // Only the Cross-Chain Order section starts open; the last view is remembered.
     const giveGetView = useGiveGetView('crossChainOrder', {
-        sections: { from: false, order: true, ownership: false, options: false, fee: false },
+        sections: { from: false, order: true, ownership: false, options: false, memo: false, fee: false },
     });
+    // Counts review attempts, so a section holding an error reopens on
+    // every attempt even after the user closed it (the standard's revealKey).
+    const [reviewAttempt, setReviewAttempt] = useState(0);
     // What the Get token picker's search box holds, for its
     // "Use typed name" option (a ^ID reference or an unlisted ticker).
     const [getTypedQuery, setGetTypedQuery] = useState('');
@@ -255,12 +266,9 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     const feePerKb = (feeEstimate && feeEstimate.unit && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
-    const feeText = feeEstimate
-        ? `${feeEstimate.coinAmount} ${giveCoinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-        : 'Estimate unavailable';
-
     const [stage, setStage] = useState(/** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'));
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const formErrors = useFormErrors();
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
@@ -289,10 +297,8 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         p.GET_TICK = getTick.trim().toUpperCase();
         if (getOwnership) p.GET_OWNERSHIP = '1'; else p.GET_AMOUNT = getAmount.trim();
         p.GET_ADDRESS = getAddress.trim();
-        if (expMode === 'custom' && expInput.trim()) {
-            const unix = localInputToUnix(expInput.trim());
-            if (unix) p.EXPIRATION = String(unix);
-        }
+        const expiration = expirationParam(expMode, expInput);
+        if (expiration) p.EXPIRATION = expiration;
         if (memo.trim()) p.MEMO = memo.trim();
         return p;
     }, [giveCoinTicker, giveTick, giveAmount, giveOwnership, getCoinTicker, getTick, getAmount, getOwnership, getAddress, expMode, expInput, memo]);
@@ -354,42 +360,64 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     const missingRequiredTerm = !giveTick.trim() || (!giveOwnership && !giveAmount)
         || !getTick.trim() || (!getOwnership && !getAmount) || !getAddress.trim();
     const quoteActionData = useMemo(() => {
-        const customExpirationValid = expMode !== 'custom'
-            || Boolean(localInputToUnix(expInput.trim())
-                && localInputToUnix(expInput.trim()) > Math.floor(Date.now() / 1000));
         if (!giveChainId || !fromAddress || !getChainId || missingRequiredTerm
-            || validationError || !customExpirationValid) return null;
+            || validationError || expirationRefusal(expMode, expInput)) return null;
         return { action: 'ORDER', params: actionParams };
     }, [actionParams, expInput, expMode, fromAddress, getChainId, giveChainId,
         missingRequiredTerm, validationError]);
-    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+    const { quote: protocolFeeQuote, pending: protocolFeePending, waiting: protocolFeeWaiting } = useProtocolFeeQuote({
         messaging,
         chainId: giveChainId,
         source: fromAddress?.address,
         actionData: quoteActionData,
     });
+    const legacyDecoded = useMemo(() => (
+        stage === 'review' || stage === 'submitting'
+            ? decoderLib.decodeAction({ action: 'ORDER', params: actionParams, chainId: giveChainId, chainRegistry })
+            : null
+    ), [actionParams, giveChainId, stage]);
+    const quotedProtocolFee = normalizeProtocolFee(protocolFeeQuote);
+    const legacyComposed = legacyDecoded ? {
+        action: 'ORDER',
+        chainId: giveChainId,
+        decoded: legacyDecoded,
+        quote: protocolFeeQuote,
+        protocolFeeKnownFree: quotedProtocolFee.known && quotedProtocolFee.free,
+    } : null;
 
     function guardBeforeSign() {
-        if (!giveChainId || !fromAddress) { setFormError('Pick a source address first.'); return false; }
-        if (!getChainId) { setFormError('Pick the network where you want to get assets.'); return false; }
-        if (!giveTick.trim()) { setFormError('Enter the ticker to give.'); return false; }
-        if (!giveOwnership && !isPlainPositive(giveAmount)) { setFormError('Enter a positive amount to give.'); return false; }
-        if (!getTick.trim()) { setFormError('Enter the ticker to get.'); return false; }
-        if (!getOwnership && !isPlainPositive(getAmount)) { setFormError('Enter a positive amount to get.'); return false; }
-        const ga = getAddress.trim();
-        if (!ga) { setFormError(`Receive address on ${getDescriptor?.displayName || 'the get network'} is required.`); return false; }
-        if (validationError) { setFormError(validationError); return false; }
-        if (expMode === 'custom') {
-            const raw = expInput.trim();
-            if (!raw) { setFormError('Pick an expiration date and time, or switch to the default window.'); return false; }
-            const unix = localInputToUnix(raw);
-            if (!unix || unix <= Math.floor(Date.now() / 1000)) { setFormError('Expiration must be a future date and time.'); return false; }
-        }
+        const expRefusal = expirationRefusal(expMode, expInput);
         const m = memo.trim();
-        if (m.includes('|') || m.includes(';')) { setFormError('Memo cannot contain "|" or ";".'); return false; }
         const memoError = memoLengthError(m);
-        if (memoError) { setFormError(memoError); return false; }
-        return true;
+        const validationField = /^Give amount/i.test(validationError || '')
+            ? 'cross-chain-order-give-amount'
+            : /^Give|cannot give/i.test(validationError || '')
+                ? 'cross-chain-order-give-token'
+                : /^Get amount/i.test(validationError || '')
+                    ? 'cross-chain-order-get-amount'
+                    : /^Get|cannot get|networks must differ/i.test(validationError || '')
+                        ? 'cross-chain-order-get-token'
+                        : /address/i.test(validationError || '')
+                            ? 'cross-chain-order-receive'
+                            : /Memo/i.test(validationError || '')
+                                ? 'xorder-memo'
+                                : 'form:order';
+        const problems = {
+            'cross-chain-order-from': (!giveChainId || !fromAddress) ? 'Pick a source address first.' : null,
+            'cross-chain-order-give-token': !giveTick.trim() ? 'Enter the ticker to give.' : null,
+            'cross-chain-order-give-amount': !giveOwnership && !isPlainPositive(giveAmount) ? 'Enter a positive amount to give.' : null,
+            'cross-chain-order-get-token': !getChainId
+                ? 'Pick the network where you want to get assets.'
+                : (!getTick.trim() ? 'Enter the ticker to get.' : null),
+            'cross-chain-order-get-amount': !getOwnership && !isPlainPositive(getAmount) ? 'Enter a positive amount to get.' : null,
+            'cross-chain-order-receive': !getAddress.trim()
+                ? `Receive address on ${getDescriptor?.displayName || 'the get network'} is required.`
+                : null,
+            'xorder-expires': expRefusal,
+            'xorder-memo': m.includes('|') || m.includes(';') ? 'Memo cannot contain "|" or ";".' : memoError,
+        };
+        if (validationError && !problems[validationField]) problems[validationField] = validationError;
+        return formErrors.validate(problems);
     }
 
     const extraBaseFor = (composed) => ({
@@ -410,7 +438,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 chainId: giveChainId,
                 source: from.address,
                 preflightOpts: { mode: resolvePreflightPrivacy(settings) === 'local' ? 'local' : 'report' },
-                compose: () => messaging.composeForConfirm({
+                compose: () => messaging.composeForConfirm(withAdvancedOptions({
                     walletId, chainId: giveChainId, from,
                     actionData: { action: 'ORDER', params: actionParams },
                     // The opt-in must reach COMPOSE so the FEE_DESTINATION
@@ -419,7 +447,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                         payFeeInNativeCoin: nativeFee.flag,
                         ...(feePerKb != null ? { feePerKb } : {}),
                     },
-                }),
+                })),
                 preflight: (o) => messaging.preflight({ chainId: giveChainId, ...o }),
                 // §4.6: the input-liveness half of the Approve-time re-check,
                 // the same one useActionConfirmFlow.run gives every migrated form.
@@ -472,24 +500,14 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         }
     }
 
-    // Open, in place, the standard section that holds a refused field.
-    function revealRefusal() {
-        const { setSectionOpen } = giveGetView;
-        if (!giveChainId || !fromAddress) setSectionOpen('from', true);
-        setSectionOpen('order', true);
-        const m = memo.trim();
-        const unix = expMode === 'custom' ? localInputToUnix(expInput.trim()) : null;
-        const expBad = expMode === 'custom' && (!unix || unix <= Math.floor(Date.now() / 1000));
-        if (expBad || m.includes('|') || m.includes(';') || memoLengthError(m) || memoCharacterError(m)) {
-            setSectionOpen('options', true);
-        }
-    }
-
+    // Each review attempt bumps the counter; every section holding an
+    // error reopens through its own revealKey.
     function handleReview(event) {
         event.preventDefault();
+        setReviewAttempt((n) => n + 1);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); giveGetView.setSectionOpen('fee', true); return; }
-        if (!guardBeforeSign()) { revealRefusal(); return; }
+        if (feeStop && !formErrors.validate({ 'form:cross-chain-order-fee': feeStop.formError })) return;
+        if (!guardBeforeSign()) return;
         setFormError(null);
         if (singleEncode) { void openConfirmModal(); return; }
         setStage('review');
@@ -574,9 +592,10 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={handleBack}
             backDisabled={stage === 'submitting'}
-            title={stage === 'review' || stage === 'submitting' ? 'Review Order' : 'Cross Chain Order'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review Order' : 'Cross-Chain Order'}
             /* No My orders button on the form: the standard allows one action,
                and My orders has its own page and nav entry. The broadcast panel
                still links to it. */
@@ -624,7 +643,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 <p className={styles.hint}>{t('crossChainOrder.success.hint', { tick: giveTick.trim().toUpperCase() })}</p>
                 <div className={styles.actions}>
                     {onManageOrders ? <Button variant="secondary" icon={<Icon.MarketIcon />} onClick={onManageOrders}>My Orders</Button> : null}
-                    <Button variant="primary" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </ListPage>,
         );
@@ -642,6 +661,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 }}
                 screenVariant={variant}
                 chainLabel={giveDescriptor?.displayName || giveChainId}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount ? `Network fee: ${feeEstimate.coinAmount} ${giveCoinTicker}`.trim() : undefined}
                 signerReady={signerReady}
                 password={password}
@@ -756,67 +776,41 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review cross-chain order"
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <>
-                        <Button variant="secondary" icon={<Icon.PencilIcon />} onClick={() => { setStage('form'); setSubmitError(null); }} disabled={stage === 'submitting'}>Edit</Button>
-                        <Button
-                            type="submit"
-                            variant="success"
-                            icon={isWatcherMode ? <Icon.DocumentIcon />
-                                : isHwSource ? <Icon.SignIcon /> : <Icon.MarketIcon />}
-                            loading={stage === 'submitting'}
-                            disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                        >
-                            {isWatcherMode ? 'Create Unsigned Transaction' : 'Place Order'}
-                        </Button>
-                    </>
-                )}
-            >
-                <p className={styles.summary}>
-                    Review the offered and requested assets before signing.
-                </p>
-                {/* Native definition list remains because the UI kit has no read-only detail-list primitive. */}
-                <dl className={styles.detailsList}>
-                    {giveDescriptor ? <DetailRow label="Give network" value={<ChainBadge descriptor={giveDescriptor} size="sm" />} /> : null}
-                    <DetailRow label="From" value={<AddressText address={fromAddress.address} />} />
-                    <DetailRow label="Give" value={giveOwnership ? `ownership of ${actionParams.GIVE_TICK}` : `${actionParams.GIVE_AMOUNT} ${actionParams.GIVE_TICK}`} />
-                    {getDescriptor ? <DetailRow label="Get network" value={<ChainBadge descriptor={getDescriptor} size="sm" />} /> : null}
-                    <DetailRow label="Get" value={getOwnership ? `ownership of ${actionParams.GET_TICK}` : `${actionParams.GET_AMOUNT} ${actionParams.GET_TICK}`} />
-                    <DetailRow label="Receive at" value={<AddressText address={actionParams.GET_ADDRESS} />} />
-                    <DetailRow label="Expiration" value={expMode === 'custom' && expInput.trim() ? new Date(expInput).toLocaleString() : 'Default window'} />
-                    {actionParams.MEMO ? <DetailRow label="Memo" value={actionParams.MEMO} /> : null}
-                    <DetailRow label="Network fee" value={feeText} />
-                    <DetailRow
-                        label="Protocol fee"
-                        value={`If charged, paid in ${nativeFee.flag ? giveCoinTicker : 'XCHAIN'}; the network fee is separate.`}
-                    />
-                </dl>
-                {isWatcherMode ? (
-                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={giveChainId}
-                        password={password}
-                        onPasswordChange={(v) => { setPassword(v); if (submitError) setSubmitError(null); }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-            </FormPage>,
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setStage('form'); setSubmitError(null); }}
+                decoded={legacyDecoded}
+                chainLabel={giveDescriptor?.displayName || giveChainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={giveCoinTicker}
+                credentials={<p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>}
+                credentialsReady
+                summary={{
+                    verb: t('components.confirmSummary.verbPlaceOrder'),
+                    ...orderGiveParts(actionParams, giveCoinTicker),
+                    chainId: giveChainId,
+                    address: fromAddress?.address,
+                    ...(!nativeFee.flag && quotedProtocolFee.known ? {
+                        protocolFee: {
+                            amount: quotedProtocolFee.free ? '0' : String(quotedProtocolFee.amount ?? ''),
+                            ticker: 'XCHAIN',
+                        },
+                    } : {}),
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: giveCoinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -863,15 +857,13 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         : 'Enter both amounts to see the rate';
     const rateLine = <RateLine text={rateText} />;
 
-    // One line naming every non-default term, else "Default terms".
+    // Order Terms reads the expiry: "3 months" or "Expires <time>".
     const termsParts = [];
-    if (expMode === 'custom') {
-        const unix = localInputToUnix(expInput.trim());
-        termsParts.push(expInput.trim() && unix ? `Expires ${formatLocalDateTime(unix)}` : 'Custom expiry');
-    }
-    if (memo.trim()) termsParts.push('Memo');
+    const expParam = expirationParam(expMode, expInput);
+    if (expMode === 'default') termsParts.push('3 months');
+    else termsParts.push(expParam ? `Expires ${formatLocalDateTime(Number(expParam))}` : 'Custom expiry');
     // The standard's summaries join their parts with ", ".
-    const termsSummary = termsParts.length ? joinSummary(...termsParts) : 'Default terms';
+    const termsSummary = joinSummary(...termsParts);
 
     const sideSummary = (tick, amount, ownership) => {
         const upper = tick.trim().toUpperCase();
@@ -889,12 +881,15 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
     // useGiveGetView above the early returns, so a picker page keeps it.
     // `main` flags Order as the form's main section (data-form-main).
     const bind = (id) => ({ open: Boolean(sections[id]), onOpenChange: (open) => setSectionOpen(id, open), main: id === 'order' });
-    // An XCHAIN protocol fee joins the Network fee row's summary; paid
-    // in the coin it is part of the open card's total instead.
-    const protocolFee = normalizeProtocolFee(protocolFeeQuote);
-    const protocolSummary = protocolFee.known && !protocolFee.free && !nativeFee.flag
-        ? `${protocolFee.amount} XCHAIN`
-        : undefined;
+
+    // Which section holds an error, so each review attempt reopens it.
+    const termsHasError = Boolean(expirationRefusal(expMode, expInput));
+    const memoError = memo.includes('|') || memo.includes(';')
+        ? 'Memo cannot contain "|" or ";".'
+        : (memoLengthError(memo.trim()) || memoCharacterError(memo.trim()) || null);
+    const feeHasError = Boolean(customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate }));
+    const orderHasError = Boolean(validationError || formError) && !termsHasError && !memoError && !feeHasError;
+    const revealOn = (hasError) => (hasError ? reviewAttempt : 0);
 
     // The ownership switches, built once and shown in whichever view is open.
     // Flipping one clears that side's amount.
@@ -931,8 +926,33 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
         <FormNotice variant="error">No address on this network. Use Receive to generate one first.</FormNotice>
     ) : null;
 
-    // The Quick body of the main section: the give and get cards
-    // (Receive at stays on the get card), the flip and the rate.
+    // Receive at: a standard address field right under You get in both views.
+    // It holds this wallet's address on the get chain until edited. A typed
+    // address that is not valid on that chain errors at once (it also holds
+    // Place Order); an empty one errors once a review attempt has refused it.
+    const receiveFieldError = receiveAddressError
+        || (reviewAttempt > 0 && !getAddress.trim() && getChainId
+            ? `Receive address on ${getDescriptor?.displayName || 'the get network'} is required.`
+            : null);
+    const receiveField = (
+        <AddressField
+            id="cross-chain-order-receive"
+            label="Receive at"
+            help={receiveHelp}
+            value={getAddress}
+            onChange={(e) => setGetAddress(e.target.value)}
+            error={receiveFieldError || undefined}
+            icon={getChainId ? 'addresses' : undefined}
+            iconLabel="Choose receive address"
+            onIconClick={getChainId ? () => setReceivePickerOpen(true) : undefined}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+        />
+    );
+
+    // The Quick body of the main section: the give and get cards, the
+    // flip, then Receive at and the rate.
     const quickOrder = (
         <GiveGetQuick
             give={{
@@ -965,20 +985,10 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 amountLabel: 'Get amount',
                 ownership: getOwnership,
                 ownershipHint: 'The matcher hands over this token name.',
-                address: (
-                    <QuickAddressRow
-                        label="Receive at"
-                        help={receiveHelp}
-                        address={getAddress.trim()}
-                        placeholder="Pick an address on the get network"
-                        onPick={getChainId ? () => setReceivePickerOpen(true) : undefined}
-                        pickLabel="Choose receiving address"
-                    />
-                ),
             }}
             onFlip={getChainId ? flipSides : undefined}
             flipLabel="Flip give and get, networks included"
-            rate={rateLine}
+            rate={<>{receiveField}{rateLine}</>}
         />
     );
 
@@ -995,6 +1005,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                         />
                         {!giveOwnership ? (
                             <AmountField
+                                id="cross-chain-order-give-amount"
                                 label="Give amount"
                                 help="The amount of the give token placed in escrow. The order waits on the network's order book and may fill in parts. Use Cross-chain swap for one all-or-nothing fill."
                                 amount={giveAmount}
@@ -1006,22 +1017,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                                 balanceText={giveBalanceText}
                             />
                         ) : null}
-                        {giveOwnershipToggle}
                         {/* No Get network field; the picked get token sets it. */}
-                        <AddressField
-                            label="Receive at"
-                            help={receiveHelp}
-                            value={getAddress}
-                            onChange={(e) => setGetAddress(e.target.value)}
-                            /* The book icon opens the same own-address page as Quick. */
-                            icon={getChainId ? 'addresses' : undefined}
-                            onIconClick={getChainId ? () => setReceivePickerOpen(true) : undefined}
-                            iconLabel="Choose receiving address"
-                            placeholder="Automatically filled from your wallet on the get network"
-                            autoComplete="off"
-                            autoCorrect="off"
-                            spellCheck={false}
-                        />
                         {/* Get token opens the same picker as Quick, so its
                             chain decides the get network; a typed name named no chain. */}
                         <TokenFieldWithHelp
@@ -1033,6 +1029,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                         />
                         {!getOwnership ? (
                             <AmountField
+                                id="cross-chain-order-get-amount"
                                 label="Get amount"
                                 help="The total amount of the get token required in exchange for the offered asset."
                                 amount={getAmount}
@@ -1041,43 +1038,28 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                                 onAmountFieldChange={amountInput(setGetAmount)}
                             />
                         ) : null}
-                        {getOwnershipToggle}
+                        {/* The receive address sits right under the get side. */}
+                        {receiveField}
                         {rateLine}
         </>
     );
 
     // The Order Terms fields, one optional section in both views, so Quick's
     // terms row expands in place and never switches to Full. The section
-    // carries the Optional tag, so the fields carry none.
+    // carries the Optional tag, so the fields carry none. Receive at stays
+    // with the get side in the Cross-Chain Order section.
     const termsFields = (
         <>
-                        <RadioGroup
-                            legend="Expiration"
-                            help="Choose the default order window or set the exact date and time when this order stops accepting fills."
+                        {/* A choice among a few named options is the icon dropdown (G44);
+                            Expires always shows and follows it (operator 2026-11-13). */}
+                        <ExpirationFields
                             name="xorder-exp"
-                            value={expMode}
-                            onChange={setExpMode}
-                            options={[
-                                { value: 'default', label: 'Default window' },
-                                { value: 'custom', label: 'Expire at a specific time' },
-                            ]}
-                        />
-                        {expMode === 'custom' ? (
-                            <Input
-                                label="Expires"
-                                type="datetime-local"
-                                help="The order is valid until this wall-clock time. Must be in the future."
-                                value={expInput}
-                                onChange={(e) => setExpInput(e.target.value)}
-                            />
-                        ) : null}
-                        <Input
-                            label="Memo"
-                            help="An optional note stored with this cross-chain order."
-                            maxLength={MAX_MEMO_LENGTH}
-                            value={memo}
-                            onChange={(e) => setMemo(e.target.value)}
-                            autoComplete="off"
+                            id="xorder-expires"
+                            mode={expMode}
+                            input={expInput}
+                            onChange={(mode, input) => { setExpMode(mode); setExpInput(input); }}
+                            help="Pick a common term or set the exact date and time when this order stops accepting fills."
+                            expiresHelp="When the order stops accepting fills. Set by the Expiration choice, or pick a time to expire at a specific time."
                         />
         </>
     );
@@ -1087,17 +1069,13 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             demoGuard={demoGuard}
             label="Create cross-chain order"
             onSubmit={handleReview}
+            errors={formErrors}
             data-form-standard="cross-chain-order"
             // The review composes the terms as they stand at Review, so the
             // fields hold still until the confirm page opens.
             inert={confirmAction.composing ? '' : undefined}
             aria-busy={confirmAction.composing ? 'true' : undefined}
-            // The Quick | Full switch sits 8px above From.
-            view={view}
-            onViewChange={setView}
-            viewLabel="Cross Chain Order form view"
             status={[
-                validationError ? <StatusMessage key="validation" variant="error">{validationError}</StatusMessage> : null,
                 formError ? <StatusMessage key="form" variant="error">{formError}</StatusMessage> : null,
             ]}
             from={(
@@ -1113,9 +1091,12 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     onNetworkChange={handleGiveChainChange}
                     networkHelp={giveNetworkHelp}
                     address={fromAddress?.address || null}
+                    addressId="cross-chain-order-from"
+                    formErrorKey="cross-chain-order-from"
                     onOpenPicker={() => setSourcePickerOpen(true)}
                     pickerLabel="Choose source address"
                     addressHelp={fromHelp}
+                    revealKey={revealOn(!fromAddress)}
                     missing={noAddressNotice}
                 />
             )}
@@ -1128,10 +1109,13 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                     value={feePick}
                     onChange={setFeePick}
                     customEstimate={feeCustomEstimate}
-                    protocolSummary={protocolSummary}
+                    revealKey={revealOn(feeHasError)}
                     fees={{
                         quote: protocolFeeQuote,
                         pending: protocolFeePending,
+                        waiting: protocolFeeWaiting,
+                        // An order inside the free period costs no protocol fee.
+                        free: expirationWithinFreePeriod(expMode, expInput),
                         nativeFeeProps: { ...nativeFee.toggleProps, coinTicker: giveCoinTicker },
                     }}
                 />
@@ -1140,8 +1124,6 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 <FormAction
                     icon={<Icon.MarketIcon />}
                     loading={confirmAction.composing}
-                    disabled={!fromAddress || confirmAction.composing
-                        || (!!validationError && !(missingRequiredTerm && validationError === receiveAddressError))}
                 >
                     Place Order
                 </FormAction>
@@ -1150,38 +1132,48 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             {/* The main section, open, holds both sides in either view. */}
             <FormSection
                 id="order"
-                title="Cross Chain Order"
+                title="Cross-Chain Order"
                 icon={Icon.MarketIcon}
                 {...bind('order')}
+                revealKey={revealOn(orderHasError)}
                 summary={orderSummary}
             >
+                {/* One form either way (operator 2026-11-13): Quick | Full only
+                    restyles this section's give and get inputs. */}
+                <ViewSwitch value={view} onChange={setView} label="Order input style" inSection />
                 {view === 'quick' ? quickOrder : fullOrder}
             </FormSection>
-            {/* Quick keeps both ownership switches in one optional
-                section; Full shows each beside its side's fields. */}
-            {view === 'quick' ? (
-                <FormSection
-                    id="ownership"
-                    title="Ownership"
-                    icon={Icon.KeyIcon}
-                    optional
-                    {...bind('ownership')}
-                    summary={giveOwnership || getOwnership ? 'Ownership' : 'Amounts'}
-                >
-                    {giveOwnershipToggle}
-                    {getOwnershipToggle}
-                </FormSection>
-            ) : null}
+            {/* Both ownership switches live in one optional section in both styles. */}
+            <FormSection
+                id="ownership"
+                title="Ownership"
+                icon={Icon.KeyIcon}
+                optional
+                {...bind('ownership')}
+                summary={giveOwnership || getOwnership ? 'Ownership' : 'Amounts'}
+            >
+                {giveOwnershipToggle}
+                {getOwnershipToggle}
+            </FormSection>
             <FormSection
                 id="options"
                 title="Order Terms"
                 icon={Icon.FilterIcon}
                 optional
                 {...bind('options')}
+                revealKey={revealOn(termsHasError)}
                 summary={termsSummary}
             >
                 {termsFields}
             </FormSection>
+            <MemoSection
+                inputId="xorder-memo"
+                {...bind('memo')}
+                revealKey={revealOn(Boolean(memoError))}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                maxLength={MAX_MEMO_LENGTH}
+            />
         </FormFrame>,
     );
 }

@@ -56,14 +56,14 @@ afterEach(() => {
 
 describe('Home Activity tab', () => {
     // Home no longer has an Activity tab: History holds the same list, so
-    // Home shows only the Coins, Tokens, NFTs and DeFi tabs.
+    // Home shows only the Balances, NFTs and DeFi tabs.
     it('has no Activity tab for a real wallet with no history', async () => {
         const onHistory = vi.fn();
         mountHome(onHistory);
 
-        expect(await screen.findByRole('tab', { name: 'Coins' })).toBeTruthy();
+        expect(await screen.findByRole('tab', { name: 'Balances' })).toBeTruthy();
         expect(screen.getAllByRole('tab').map((tab) => tab.textContent))
-            .toEqual(['Coins', 'Tokens', 'NFTs', 'DeFi']);
+            .toEqual(['Balances', 'NFTs', 'DeFi']);
         expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'See all activity' })).toBeNull();
         expect(onHistory).not.toHaveBeenCalled();
@@ -74,7 +74,7 @@ describe('Home Activity tab', () => {
         markDemoWallet(WALLET.id);
         const { messaging } = mountHome(onHistory);
 
-        expect(await screen.findByRole('tab', { name: 'Coins' })).toBeTruthy();
+        expect(await screen.findByRole('tab', { name: 'Balances' })).toBeTruthy();
         expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
         expect(screen.queryByRole('list', { name: 'Recent activity' })).toBeNull();
         expect(messaging.getAddressHistory).not.toHaveBeenCalled();

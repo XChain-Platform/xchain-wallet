@@ -39,7 +39,7 @@ const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = {
     id: 'a1', address: 'bc1qexample', publicKey: '02ab', derivationPath: "m/84'/0'/0'/0/0", source: 'hd', signerId: 's1',
 };
-const NOTICE = 'Auto-pay runs inside this wallet: a match is paid only while the wallet is open and unlocked.';
+const NOTICE = 'Auto pay runs inside this wallet: a match is paid while the wallet is open, even when it\'s locked.';
 
 const messaging = {
     getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
@@ -65,7 +65,7 @@ function panel(shell) {
 async function mount(shell = 'web') {
     publishWalletModes({ wallets: [{ id: 'w', walletMode: 'full' }], activeWalletId: 'w' });
     const utils = render(panel(shell));
-    expect(await screen.findByRole('checkbox', { name: /Enable auto-pay/ })).toBeChecked();
+    expect(await screen.findByRole('switch', { name: 'Auto pay' })).toBeChecked();
     return {
         openConfirm() {
             state.open = true;
@@ -98,7 +98,7 @@ describe('PlaceOrderPanel auto-pay notice', () => {
 
     it('carries no notice once auto-pay is turned off', async () => {
         const { openConfirm } = await mount();
-        fireEvent.click(screen.getByRole('checkbox', { name: /Enable auto-pay/ }));
+        fireEvent.click(screen.getByRole('switch', { name: 'Auto pay' }));
         openConfirm();
         expect(state.confirmProps.summary?.notice).toBeUndefined();
     });

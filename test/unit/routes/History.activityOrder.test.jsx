@@ -121,11 +121,9 @@ describe('History activity order', () => {
             'doge:5900000',
         ]);
 
-        // The pending rows sit under the pending heading, above every day.
-        const headings = [...view.container.querySelectorAll('h2, h3, [role="heading"]')].map((h) => h.textContent);
-        const firstDay = headings.findIndex((text) => /Today|Yesterday|\d/.test(text));
-        const pendingHeading = headings.findIndex((text) => /Pending/i.test(text));
-        expect(pendingHeading).toBeGreaterThanOrEqual(0);
-        expect(firstDay === -1 || pendingHeading < firstDay).toBe(true);
+        // One flat list: no pending or day headings sit among the rows, so
+        // the order above is all that sets the pending rows apart.
+        const timeline = view.container.querySelector('ul[aria-label="History"]');
+        expect(timeline.querySelectorAll('h2, h3, [role="heading"], [data-xc-section-header]')).toHaveLength(0);
     });
 });

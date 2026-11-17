@@ -75,6 +75,17 @@ vi.mock('../../../packages/core/src/shared/hooks/useConfirmAction.js', () => ({
     }),
 }));
 
+vi.mock('../../../packages/core/src/shared/components/ListPickerScreen.jsx', () => ({
+    ListPickerScreen: ({ title, onSelect }) => (
+        <button
+            type="button"
+            onClick={() => onSelect({ actionIndex: '7', name: title.includes('Allow') ? 'Team wallets' : undefined, memberCount: 4 })}
+        >
+            List row {title}
+        </button>
+    ),
+}));
+
 vi.mock('../../../packages/core/src/shared/hooks/useSignerInfo.js', () => ({
     useSignerInfo: () => null,
 }));
@@ -100,7 +111,7 @@ import { openOrderSection, pickOrderAsset, showFullOrderView } from "../../helpe
 
 async function renderForm() {
     render(<CreateOrderForm walletId="wallet-1" onBack={vi.fn()} onManageOrders={vi.fn()} />);
-    await screen.findByDisplayValue("mSourceAddress");
+    await screen.findAllByDisplayValue("mSourceAddress");
 }
 
 const hasIcon = (button) => button.querySelector("svg") !== null;
@@ -134,10 +145,10 @@ describe("CreateOrderForm shared rulings", () => {
         showFullOrderView();
         await renderForm();
         expect(screen.queryByText(/Both sides of this order settle on the same chain/)).toBeNull();
-        expect(screen.getByDisplayValue("mSourceAddress").labels[0].textContent).toBe("From address");
+        expect(screen.getByLabelText("From address").labels[0].textContent).toBe("From address");
         openOrderSection("From");
         fireEvent.click(screen.getByRole("button", { name: "About From address" }));
-        expect(screen.getByRole("tooltip")).toHaveTextContent("use Cross-chain order");
+        expect(screen.getByRole("tooltip")).toHaveTextContent("use Cross-Chain Order");
     });
 
     it("gives every field label a help tip", async () => {
@@ -145,7 +156,8 @@ describe("CreateOrderForm shared rulings", () => {
         await renderForm();
         openOrderSection("From");
         openOrderSection("Order Terms");
-        for (const name of ["About From address", "About Network", "About Receive at", "About Expiration", "About Memo"]) {
+        // Memo is its own section with no label row or tip, as on every form.
+        for (const name of ["About From address", "About Network", "About Receive at", "About Expiration", "About Expires"]) {
             expect(screen.getByRole("button", { name })).toBeTruthy();
         }
         // Each side's Asset and Amount carry their own tip.
@@ -176,11 +188,26 @@ describe("CreateOrderForm shared rulings", () => {
         expect(screen.queryByRole("button", { name: "My Orders" })).toBeNull();
     });
 
-    it("puts icons on the access-list buttons and a tip on the restrict group", async () => {
+    it("draws the allow and block lists as picker fields with icons and the expiration as a dropdown", async () => {
         await renderForm();
         openOrderSection("Order Terms");
-        expect(hasIcon(screen.getByRole("button", { name: "Set Allow-List" }))).toBe(true);
-        expect(hasIcon(screen.getByRole("button", { name: "Set Block-List" }))).toBe(true);
+        // Allow and block lists live in their own Lists section (operator 2026-11-13).
+        openOrderSection("Lists");
+        expect(screen.queryByRole("button", { name: "Set Allow-List" })).toBeNull();
+        expect(hasIcon(screen.getByRole("button", { name: "Allow list: None set" }))).toBe(true);
+        expect(hasIcon(screen.getByRole("button", { name: "Block list: None set" }))).toBe(true);
+        // A picked list shows its name (G114); an unnamed one reads List #N.
+        fireEvent.click(screen.getByRole("button", { name: "Allow list: None set" }));
+        fireEvent.click(screen.getByRole("button", { name: "List row Choose Allow-List" }));
+        expect(screen.getByRole("button", { name: "Allow list: Team wallets (List #7) · 4 members" })).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Block list: None set" }));
+        fireEvent.click(screen.getByRole("button", { name: "List row Choose Block-List" }));
+        expect(screen.getByRole("button", { name: "Block list: List #7 · 4 members" })).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Clear allow list" }));
+        fireEvent.click(screen.getByRole("button", { name: "Clear block list" }));
+        // G44: a choice among a few named options is the icon dropdown, not radios.
+        expect(screen.queryByRole("radio", { name: "Expire at a specific time" })).toBeNull();
+        expect(screen.getByRole("combobox", { name: /Expiration/ })).toBeTruthy();
         expect(screen.queryByText(/Allow\/block lists are address lists you published/)).toBeNull();
     });
 });

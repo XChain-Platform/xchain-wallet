@@ -529,8 +529,7 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
             for (const expected of [PER_TX, PER_TX * 2]) {
                 await composeMint(page, PER_TX);
                 await expectConfirmScreen(page);
-                await expect(page.getByTestId('preflight-panel'))
-                    .not.toHaveAttribute('data-verdict', 'fail');
+                await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'pass');
 
                 const action = await waitForIndexedAction(await approveAndGetTxid(page));
                 expect(String(action.status),
@@ -566,10 +565,9 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
                 // the confirm screen's pre-send check. That check must name the
                 // cap and hold Approve until the signer explicitly overrides it.
                 await expectConfirmScreen(page);
-                const panel = page.getByTestId('preflight-panel');
-                await expect(panel).toHaveAttribute('data-verdict', 'fail', { timeout: 90_000 });
-                await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
-                await expect(panel,
+                const warning = page.getByTestId('confirm-status');
+                await expect(warning).toHaveAttribute('data-state', 'fail', { timeout: 90_000 });
+                await expect(warning,
                     'the wallet did not quote the network\'s verdict for the per-address cap')
                     .toContainText(/would be refused because .*MINT_ADDRESS_MAX/i);
                 await expect(page.getByTestId('confirm-approve'),

@@ -1,50 +1,81 @@
-/* Styles this screen owns. The blue card, icon tabs, panel and fact rows come
-   from BetFeedDetail.module.css so the two betting pages match. */
+/* Styles this screen owns. The fact rows come from BetFeedDetail.module.css
+   so the two betting pages match. */
 
-/* No reserved band under the figures; as on Home, the card is as tall as its
-   text and range chips, and the chart fills it from behind. */
-.heroStack {
-    min-height: 0;
+/* The identity card (G16): an outlined white card, the oracle's mark
+   centred at 64px with its network badge, the name in bold, the address and
+   the type line muted. No chart and no blue card. */
+.identityCard {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
+    color: var(--xc-text);
+    text-align: center;
 }
 
-.heroAddress {
+/* The broadcast glyph in a soft circle. */
+.identityMark {
+    --xc-icon-size: 32px;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--xc-info-bg);
+    color: var(--xc-info-text);
+}
+
+/* The network badge in the mark's lower corner. */
+.networkPip {
+    position: absolute;
+    inset-block-end: 0;
+    inset-inline-end: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--xc-surface-raised);
+    box-shadow: 0 0 0 1.5px var(--xc-bg-muted);
+    object-fit: cover;
+    display: block;
+}
+
+.identityName {
+    /* Each line spans the card, so an AddressText in it measures the
+       card's width, not its own, and shows whole when it fits (G99). */
+    align-self: stretch;
+    min-width: 0;
     margin: 0;
-    font-size: var(--xc-text-xs);
-    color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
-    font-variant-numeric: tabular-nums;
+    color: var(--xc-text);
+    font-size: var(--xc-text-lg);
+    font-weight: 800;
     overflow-wrap: anywhere;
 }
 
-/* Actions: equal buttons in one row, however many there are. */
-.actions {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
-    gap: var(--xc-space-2);
-}
-
-.action.action {
+.identityAddress,
+.identityLine {
+    align-self: stretch;
     min-width: 0;
-    width: 100%;
-    padding-inline: var(--xc-space-2);
-    white-space: nowrap;
-}
-
-/* A group heading inside a tab: an icon, the name and its count. */
-.groupHead {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    margin: var(--xc-space-1) 2px 0;
-    font-size: var(--xc-text-xs);
-    font-weight: 700;
+    margin: 0;
     color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+    overflow-wrap: anywhere;
 }
 
-.groupIcon {
-    --xc-icon-size: var(--xc-icon-sm);
-    display: inline-flex;
-    flex: 0 0 auto;
+/* The oracle's AddressText under its name, or as the title when it has no
+   name: the line's own colour (and the title's size and weight), ahead of
+   the kit's AddressText look. It fits its line (G99). */
+.identityAddress > [aria-label] {
+    color: inherit;
+}
+
+.identityAddressTitle[aria-label] {
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
 }
 
 /* One market per row inside a single framed list. */
@@ -121,9 +152,8 @@ button.marketRow:focus-visible {
 .chipPending { background: var(--xc-warning-bg); color: var(--xc-warning-text); }
 .chipSettled { background: var(--xc-info-bg); color: var(--xc-info-text); }
 .chipRefunded { background: var(--xc-bg-muted); color: var(--xc-text-muted); }
-.chipExpired { background: var(--xc-danger-bg); color: var(--xc-danger-text); }
 
-/* A plain-language note on the shared card (the caveat, the dispute rule). */
+/* A plain-language note on the shared card (the not-a-guarantee caveat). */
 .note {
     composes: card from '../../ui/Card.module.css';
     display: flex;

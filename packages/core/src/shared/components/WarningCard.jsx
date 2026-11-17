@@ -8,13 +8,15 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The wallet's one look for a security warning, taken from the license
-// screen: a padded card of plain lines, with the lines that protect the
-// user's money as red-edged callouts. Security warnings use it so they all
-// read alike; the license terms compose the same line styles. BodyParagraph
-// is the same start-aligned line at body size for explanation pages outside
-// a card.
+// A padded card of plain explanation lines, taken from the license screen.
+// A line that protects the user's money is a danger Notice (the Notice
+// Standard, 2026-11-15): WarningLine critical renders one, so an untouched
+// call site shows the standard red notice. New code puts a danger Notice on
+// its own, outside any card, and keeps WarningCard for plain lines only.
+// BodyParagraph is the same start-aligned line at body size for explanation
+// pages outside a card.
 
+import { Notice } from '../../ui/StatusMessage.jsx';
 import styles from './WarningCard.module.css';
 
 const join = (...names) => names.filter(Boolean).join(' ');
@@ -33,18 +35,35 @@ export function WarningCard({ children, className, ...rest }) {
 }
 
 /**
- * One line of a warning. `critical` draws it as a red-edged callout.
+ * One line of a warning. `critical` draws it as a static danger Notice (no
+ * live region: it is part of the page from the first paint); a plain line is
+ * a paragraph.
  *
  * @param {object} props
  * @param {boolean} [props.critical]
+ * @param {boolean} [props.edge]  false drops the notice's own margin, for a container whose gap spaces it (critical only)
  * @param {string} [props.className]
  * @param {import('react').ReactNode} props.children
  */
-export function WarningLine({ critical = false, className, children, ...rest }) {
+export function WarningLine({ critical = false, edge = true, className, children, ...rest }) {
+    if (critical) {
+        return (
+            <Notice
+                {...rest}
+                tone="danger"
+                role="note"
+                flush={!edge}
+                className={className}
+                data-warning-line="critical"
+            >
+                {children}
+            </Notice>
+        );
+    }
     return (
         <p
-            className={join(critical ? styles.critical : styles.paragraph, className)}
-            data-warning-line={critical ? 'critical' : 'plain'}
+            className={join(styles.paragraph, className)}
+            data-warning-line="plain"
             {...rest}
         >
             {children}

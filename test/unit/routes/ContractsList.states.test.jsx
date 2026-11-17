@@ -102,7 +102,7 @@ describe('ContractsList states', () => {
         });
 
         // The user's own published contracts sit under the Mine tab.
-        fireEvent.click(await screen.findByRole('tab', { name: /Mine/ }));
+        fireEvent.click(await screen.findByRole('tab', { name: /My Contracts|Mine/ }));
         const rows = await screen.findAllByRole('button', { name: /Escrow/ });
         fireEvent.click(rows[0]);
         expect(onOpenContract).toHaveBeenCalledWith(CHAIN, '7');

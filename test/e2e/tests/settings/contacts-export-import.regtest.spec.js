@@ -167,7 +167,8 @@ test.describe('Settings: contacts export / import', () => {
                 // nothing at all.
                 await openPaletteCommand(page, 'Contacts');
                 await contactRow(page, CONTACT_NAME).click();
-                await page.getByRole('button', { name: 'Delete', exact: true }).click();
+                await page.getByRole('list', { name: 'Contact actions' })
+                    .getByRole('button', { name: /^Delete\b/ }).click();
                 // Deleting a contact goes through `useConfirmModal`, whose
                 // panel is a `role="dialog"` named by its title. Scoped to the
                 // dialog rather than picked off the page by label, because the

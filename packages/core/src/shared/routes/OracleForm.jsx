@@ -14,7 +14,14 @@ import '../../i18n/locales/en/components.js';
 // The publishing Network and address and the fee selector come from the
 // standard FromSection and FeeSection, not ui/FormSection (a different,
 // non-collapsible block).
-import { AddressText, Button, ChainBadge, FieldNote, FormNotice, FormPage, Icon, Input, NetworkField, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FieldNote, FormNotice, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// The priced token and the fiat currency are picker fields that open full
+// pages (G122), never a typed ticker or a dropdown.
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
+import { FiatCurrencyField } from '../components/FiatCurrencyField.jsx';
+import { FiatCurrencyPicker } from '../components/FiatCurrencyPicker.jsx';
+import { PROTOCOL_FIAT_CODES } from '../utils/fiatCurrencies.js';
 // The Wallet Form Standard frame.
 import {
     FeeSection,
@@ -23,6 +30,7 @@ import {
     FormSection,
     FromSection,
     joinSummary,
+    MemoSection,
     useFormSections,
 } from '../components/formStandard/index.js';
 import {
@@ -31,6 +39,7 @@ import {
     flows as flowsLib,
 } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { groupDecodedAmounts } from '../utils/amountFormat.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { typedConfirmationCopy } from '../utils/typedConfirmationCopy.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -39,6 +48,7 @@ import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { tickerForCoin, isProtocolCoinTicker } from '../../registry/coinTicker.js';
 import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
@@ -55,12 +65,64 @@ import {
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { oraclePriceFeeError, oraclePriceValueError } from '../../flows/oraclePriceAction.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
+import { StopSlider } from '../components/StopSlider.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import styles from './IssueTokenForm.module.css';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 
+// The usage fee is typed as a percent; the protocol carries a fraction of at
+// most 18 decimals, so a percent takes at most 16. Both conversions move the
+// decimal point on the digit string, so nothing passes through a float.
+const FEE_PERCENT_RE = /^[0-9]+(\.[0-9]{1,16})?$/;
+// Stop slider stops: Free is a blank fee (no FEE param), the rest are exact
+// percent text; Custom opens one entry that takes any valid percent.
+const FEE_STOPS = [
+    { id: 'free', label: 'Free', percent: '' },
+    { id: '0.5', label: '0.5%', percent: '0.5' },
+    { id: '1', label: '1%', percent: '1' },
+    { id: '2', label: '2%', percent: '2' },
+    { id: '5', label: '5%', percent: '5' },
+    { id: 'custom', label: 'Custom', percent: null },
+];
+
+/** Exact percent text -> protocol fraction text ("1" -> "0.01"); '' when not a valid percent. */
+export function usageFeePercentToFraction(percent) {
+    const p = String(percent ?? '').trim();
+    if (!FEE_PERCENT_RE.test(p)) return '';
+    const [whole, frac = ''] = p.split('.');
+    const digits = (whole.replace(/^0+/, '') || '0').padStart(3, '0') + frac;
+    const cut = digits.length - frac.length - 2;
+    const intPart = (digits.slice(0, cut).replace(/^0+/, '') || '0');
+    const fracPart = digits.slice(cut).replace(/0+$/, '');
+    return fracPart ? `${intPart}.${fracPart}` : intPart;
+}
+/** Protocol fraction text -> percent text ("0.0025" -> "0.25"); '' when not a fraction. */
+export function usageFeeFractionToPercent(fraction) {
+    const f = String(fraction ?? '').trim();
+    if (!/^[0-9]+(\.[0-9]+)?$/.test(f)) return '';
+    const [whole, frac = ''] = f.split('.');
+    const shifted = frac.padEnd(2, '0');
+    const intPart = ((whole === '0' ? '' : whole) + shifted.slice(0, 2)).replace(/^0+/, '') || '0';
+    const fracPart = shifted.slice(2).replace(/0+$/, '');
+    return fracPart ? `${intPart}.${fracPart}` : intPart;
+}
+
+/** Error text in percent for a typed usage fee, or null when it is blank or valid. */
+export function usageFeePercentError(percent) {
+    const p = String(percent ?? '').trim();
+    if (!p) return null;
+    if (!FEE_PERCENT_RE.test(p)) {
+        return 'Usage fee must be a percent from 0 to 100, with at most 16 decimal places.';
+    }
+    const fraction = usageFeePercentToFraction(p);
+    // Backstop: the protocol's own fraction check on the converted value.
+    if (oraclePriceFeeError(fraction)) return 'Usage fee can be at most 100%.';
+    return null;
+}
+
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -78,7 +140,7 @@ const UNCHECKED_CONSUMERS = Object.freeze({ supported: false, dispensers: Object
 // The 12 fiats the protocol prices in (xchain-indexer config FIATS, mirrored
 // in the SDK's VALID_FIAT_CODES). A publish naming anything else is rejected
 // on chain with 'invalid: FIAT (unsupported)'.
-const FIAT_CODES = ['USD', 'CAD', 'AUD', 'MXN', 'GBP', 'JPY', 'CNY', 'CHF', 'BRL', 'INR', 'EUR', 'KRW'];
+const FIAT_CODES = PROTOCOL_FIAT_CODES;
 
 // Above this move against the publisher's own last published price, the
 // republish needs a typed confirm. The basis is deliberately their own prior
@@ -188,9 +250,23 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     const [fiat, setFiat] = useState('USD');
     const [value, setValue] = useState('');
     const [fee, setFee] = useState('');
+    // True once the Custom stop is picked, so typing 1 there does not snap away.
+    const [feeCustom, setFeeCustom] = useState(false);
     const [memo, setMemo] = useState('');
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+    // The Token and Fiat currency fields each open a full picker page.
+    const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+    const [fiatPickerOpen, setFiatPickerOpen] = useState(false);
+    // The tokens this wallet owns on the priced token's network, which the
+    // Token picker lists first (the getOwnedTokens read My tokens shows); any
+    // other token is found by the picker's platform search, since an oracle
+    // may price any token. `rows` is null while loading, `failed` says a read
+    // failed so an empty list is not shown as "you own none".
+    const [ownedTokens, setOwnedTokens] = useState(
+        /** @type {{ rows: Array<{ chainId: string, tick: string }> | null, failed: boolean }} */
+        ({ rows: null, failed: false }),
+    );
     const [typedConfirm, setTypedConfirm] = useState('');
     // The standard sections' open state, held here so it survives
     // the address picker page and the review. Only Price starts open. Each
@@ -228,6 +304,39 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
             });
         return () => { cancelled = true; };
     }, [chainId, oracleAddress, messaging, walletId, reloadToken]);
+
+    // Read when the Token picker opens (and again on each open), so a token
+    // issued since the last look lists. A demo wallet owns nothing and never
+    // sends its addresses to an explorer.
+    useEffect(() => {
+        if (!tokenPickerOpen || !priceChainId) return undefined;
+        if (flowsLib.isDemoWallet(walletId)) { setOwnedTokens({ rows: [], failed: false }); return undefined; }
+        if (typeof messaging?.getOwnedTokens !== 'function') { setOwnedTokens({ rows: [], failed: true }); return undefined; }
+        const sources = (addressesByChain?.[priceChainId] || [])
+            .filter((source) => typeof source?.address === 'string' && source.address);
+        if (sources.length === 0) { setOwnedTokens({ rows: [], failed: false }); return undefined; }
+        let cancelled = false;
+        setOwnedTokens((prev) => (prev.rows && !prev.failed ? prev : { rows: null, failed: false }));
+        Promise.all(sources.map((source) => Promise.resolve()
+            .then(() => messaging.getOwnedTokens({ chainId: priceChainId, address: source.address }))
+            .then((rows) => ({ rows: Array.isArray(rows) ? rows : [], failed: false }))
+            .catch(() => ({ rows: [], failed: true }))))
+            .then((batches) => {
+                if (cancelled) return;
+                const seen = new Set();
+                const merged = [];
+                for (const batch of batches) {
+                    for (const row of batch.rows) {
+                        const owned = String(row?.tick || '').trim();
+                        if (!owned || seen.has(owned)) continue;
+                        seen.add(owned);
+                        merged.push({ chainId: priceChainId, tick: owned });
+                    }
+                }
+                setOwnedTokens({ rows: merged, failed: batches.some((batch) => batch.failed) });
+            });
+        return () => { cancelled = true; };
+    }, [tokenPickerOpen, priceChainId, addressesByChain, messaging, walletId]);
 
     // Dispensers priced by this address. `supported: false` means the lane
     // could not be queried at all, which must not read as "none": an
@@ -317,8 +426,10 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         if (fiat) p.FIAT = fiat;
         const v = value.trim();
         if (v) p.VALUE = v;
+        // The field holds a percent; the protocol takes the exact fraction.
+        // An unparseable entry is sent as typed so the pre-sign guard names it.
         const f = fee.trim();
-        if (f) p.FEE = f;
+        if (f) p.FEE = usageFeePercentToFraction(f) || f;
         const m = memo.trim();
         if (m) p.MEMO = m;
         return p;
@@ -326,9 +437,9 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action: 'PRICE', params: actionParams, chainId: chainId || undefined, chainRegistry,
-        });
+        }));
     }, [stage, actionParams, chainId]);
 
     const prefillFromFeed = useCallback((feed) => {
@@ -337,21 +448,21 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         setFiat(feed.fiat);
         const source = feed.pending || feed.live || feed.stale;
         setValue(source?.value ? String(source.value) : '');
-        setFee(source?.fee ? String(source.fee) : '');
+        setFee(source?.fee ? usageFeeFractionToPercent(source.fee) : '');
         setFormError(null);
     }, [coinTicker]);
 
     function guardBeforeSign() {
         if (!chainId || !fromAddress) { setFormError('Pick a publishing address first.'); return false; }
-        if (!tick) { setFormError('Enter the token ticker this oracle prices.'); return false; }
-        const tickerError = tickerReferenceError(tick, { noun: 'Token ticker', allowRef: true });
+        if (!tick) { setFormError('Choose the token this oracle prices.'); return false; }
+        // A picked token always passes; a ticker from a link or a feed may not.
+        const tickerError = tickerReferenceError(tick, { noun: 'Token', allowRef: true });
         if (tickerError) { setFormError(tickerError); return false; }
-        if (!FIAT_CODES.includes(fiat)) { setFormError('Pick a supported currency.'); return false; }
+        if (!FIAT_CODES.includes(fiat)) { setFormError('Pick a supported fiat currency.'); return false; }
         const v = value.trim();
         const valueError = oraclePriceValueError(v);
         if (valueError) { setFormError(valueError); return false; }
-        const f = fee.trim();
-        const feeError = oraclePriceFeeError(f);
+        const feeError = usageFeePercentError(fee);
         if (feeError) { setFormError(feeError); return false; }
         const m = memo.trim();
         if (m.includes('|') || m.includes(';')) { setFormError('Memo cannot contain "|" or ";".'); return false; }
@@ -458,6 +569,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
@@ -477,27 +589,95 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
         </Screen>
     );
 
-    // The oracle-only facts that must sit in front of the signature on both
-    // lanes: the 24h rail, the deviation gate and the dispensers that reprice.
-    const publishNotes = (
-        <OraclePublishNotes
-            isFirstPublish={isFirstPublish}
-            hasLiveQuote={hasLiveQuote}
-            hasStaleQuote={hasStaleQuote}
-            priorQuote={priorQuote}
-            priorLabel={priorLabel}
-            fiat={fiat}
-            tick={tick}
-            deviationPct={deviationPct}
-            needsTypedConfirm={needsTypedConfirm}
-            typedConfirm={typedConfirm}
-            onTypedConfirmChange={setTypedConfirm}
-            consumers={consumerView}
-            pairConsumers={pairConsumers}
-            crossChain={crossChain}
-            priceCoin={priceCoin}
+    const publishFacts = useMemo(() => [
+        ...(priorQuote ? [{
+            label: priorLabel,
+            value: `${priorQuote.value} ${fiat}${
+                priorLabel === 'Stale price'
+                    ? ` (${staleAgeText(priorQuote.secondsSinceEffective)})`
+                    : ''
+            }${deviationPct != null ? ` (${fmtPct(deviationPct)})` : ''}`,
+        }] : []),
+        {
+            label: 'Affected dispensers',
+            value: consumerView && !consumerView.supported
+                ? 'Could not check'
+                : pairConsumers.length > 0
+                    ? `${pairConsumers.length} open`
+                    : 'None open',
+        },
+        ...pairConsumers.map((dispenser) => ({
+            label: `Dispenser ${String(dispenser.action_index)}`,
+            value: `${dispenser.address || dispenser.source} · ${dispenser.give_amount} ${tick} per dispense`,
+        })),
+    ], [consumerView, deviationPct, fiat, pairConsumers, priorLabel, priorQuote, tick]);
+    const publishWarnings = useMemo(() => {
+        const activation = isFirstPublish
+            ? 'This is the first price for this pair. It will not price anything for 24 hours, and a dispenser pointed at it before then cannot settle.'
+            : hasLiveQuote
+                ? 'This price takes effect in 24 hours and cannot be withdrawn before then. The current price keeps selling until this one matures.'
+                : hasStaleQuote
+                    ? 'This price takes effect in 24 hours and cannot be withdrawn before then. Nothing sells on this pair until it matures.'
+                    : 'This price takes effect in 24 hours and cannot be withdrawn before then. An earlier pending price takes effect first.';
+        return [
+            activation,
+            ...(needsTypedConfirm ? [`This is a ${fmtPct(deviationPct)} move from the last published price. Check the decimal point before approving.`] : []),
+            ...(consumerView && !consumerView.supported ? [
+                `The wallet could not check which dispensers use this oracle. Treat the publish as if buyers are watching${crossChain ? `; dispensers selling ${priceCoin} tokens are not visible from this network` : ''}.`,
+            ] : pairConsumers.length > 0 ? [
+                `${pairConsumers.length} open dispenser${pairConsumers.length === 1 ? '' : 's'} will use this price once it takes effect.`,
+            ] : []),
+        ];
+    }, [consumerView, crossChain, deviationPct, hasLiveQuote, hasStaleQuote, isFirstPublish, needsTypedConfirm, pairConsumers.length, priceCoin]);
+    const reviewDecoded = useMemo(() => (decoded ? {
+        ...decoded,
+        warnings: [...(decoded.warnings || []), ...publishWarnings],
+    } : null), [decoded, publishWarnings]);
+    const legacyComposed = useMemo(() => (reviewDecoded ? {
+        action: 'PRICE',
+        chainId,
+        decoded: reviewDecoded,
+        protocolFeeKnownFree: true,
+    } : null), [chainId, reviewDecoded]);
+    const confirmComposed = useMemo(() => {
+        const composed = actionConfirm.confirmAction.composed;
+        if (!composed) return composed;
+        return {
+            ...composed,
+            decoded: {
+                ...(composed.decoded || {}),
+                warnings: [...(composed.decoded?.warnings || []), ...publishWarnings],
+            },
+        };
+    }, [actionConfirm.confirmAction.composed, publishWarnings]);
+    const pricedAsset = String(actionParams.TICK || actionParams.COIN || '').toUpperCase();
+    const confirmPriceSummary = {
+        verb: t('components.confirmSummary.verbPublishPrice'),
+        ...(pricedAsset && actionParams.VALUE
+            ? {
+                target: t('components.confirmSummary.priceTarget', {
+                    asset: pricedAsset,
+                    value: actionParams.VALUE,
+                    fiat: String(actionParams.FIAT || '').toUpperCase(),
+                }).trim(),
+            }
+            : {}),
+        direction: 'none',
+        chainId,
+        address: fromAddress?.address,
+        facts: publishFacts,
+    };
+    const typedGate = needsTypedConfirm ? (
+        <Input
+            label="Type PUBLISH to confirm"
+            help={typedConfirmationCopy.oracle(fmtPct(deviationPct))}
+            value={typedConfirm}
+            onChange={(event) => setTypedConfirm(event.target.value)}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
         />
-    );
+    ) : null;
 
     // The load error, the loading line and every result lay out through
     // FormPage like the form itself, so no state draws straight into Screen.
@@ -515,29 +695,13 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
 
     if (actionConfirm.open) {
         const credsReady = isHwSource ? hwStatus === 'available' : (signerReady || password.length > 0);
-        // The price being published: what is priced, at what value.
-        const pricedAsset = String(actionParams.TICK || actionParams.COIN || '').toUpperCase();
-        const priceSummary = {
-            verb: t('components.confirmSummary.verbPublishPrice'),
-            ...(pricedAsset && actionParams.VALUE
-                ? {
-                    target: t('components.confirmSummary.priceTarget', {
-                        asset: pricedAsset,
-                        value: actionParams.VALUE,
-                        fiat: String(actionParams.FIAT || '').toUpperCase(),
-                    }).trim(),
-                }
-                : {}),
-            direction: 'none',
-            chainId,
-            address: fromAddress?.address,
-        };
         return (
             <ActionConfirmScreen
-                confirmAction={actionConfirm.confirmAction}
-                summary={priceSummary}
+                confirmAction={{ ...actionConfirm.confirmAction, composed: confirmComposed }}
+                summary={confirmPriceSummary}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -547,7 +711,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 onPasswordChange={setPassword}
                 // Approve also waits on the typed PUBLISH when the move is large.
                 credentialsReady={typedConfirmOk && credsReady}
-                extraCredentials={publishNotes}
+                extraCredentials={typedGate}
                 hwSource={isHwSource ? fromAddress : null}
                 hwStatus={hwStatus}
                 onHwStatusChange={onHwStatusChange}
@@ -582,7 +746,7 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 actions={(
                     <>
                         <Button variant="secondary" onClick={handleBuildAnother}>Publish Another</Button>
-                        <Button variant="primary" onClick={onBack}>Done</Button>
+                        <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                     </>
                 )}
             >
@@ -602,54 +766,35 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review price publish"
-                onSubmit={handleSubmit}
-                intro={decoded?.summary}
-                status={submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant={needsTypedConfirm ? 'danger' : 'primary'}
-                        loading={stage === 'submitting'}
-                        disabled={!typedConfirmOk}
-                    >
-                        Create Unsigned Transaction
-                    </Button>
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setTypedConfirm(''); setStage('form'); }}
+                decoded={reviewDecoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentialsReady={typedConfirmOk}
+                credentials={(
+                    <>
+                        <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
+                        {typedGate}
+                    </>
                 )}
-            >
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Network</dt>
-                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>Publishing as</dt>
-                    <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
-                    {/* The decoder's rows, so Memo and the fee as a percent show
-                        here exactly as they will on any other confirm surface. */}
-                    {(decoded?.details || []).map((d) => <DetailRow key={d.label} label={d.label} value={d.value} />)}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}` : 'Estimate unavailable'}
-                    />
-                </dl>
-
-                {publishNotes}
-
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-
-                <p className={styles.hint}>
-                    {t('common.watcherBuildsUnsigned')}
-                </p>
-            </FormPage>,
+                summary={confirmPriceSummary}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -663,6 +808,58 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 onChainChange={setChainId}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
+            />
+        );
+    }
+
+    // The standard token picker on the priced token's network: the tokens
+    // this wallet owns list first, and a typed search finds any token there,
+    // since an oracle may price any token. A pick is the TICK, and its chain
+    // is the COIN, so the two can never disagree.
+    if (tokenPickerOpen) {
+        const networkName = chainRegistry.get(priceChainId)?.displayName || priceCoin;
+        const failedEmpty = ownedTokens.failed && Array.isArray(ownedTokens.rows) && ownedTokens.rows.length === 0;
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                kindFilter="tokens"
+                kindLocked
+                chainIdFilter={priceChainId || undefined}
+                title="Select Token"
+                rows={ownedTokens.rows}
+                searchPlatform
+                emptyTitle={failedEmpty ? "Couldn't load your tokens" : `No tokens you own on ${networkName}`}
+                emptyBody={`Search to find any token on ${networkName} to price.`}
+                onSelect={(sel) => {
+                    if (sel?.tick) {
+                        const pickedCoin = tickerForCoin(chainRegistry.get(sel.chainId)?.coin);
+                        if (pickedCoin && isProtocolCoinTicker(pickedCoin)) {
+                            setCoinPick(pickedCoin === coinTicker ? '' : pickedCoin);
+                        }
+                        setTicker(String(sel.tick).toUpperCase());
+                        setFormError(null);
+                    }
+                    setTokenPickerOpen(false);
+                }}
+                onBack={() => setTokenPickerOpen(false)}
+            />
+        );
+    }
+
+    // The fiat currencies the protocol prices in, on the shared picker page;
+    // the pick is the same ISO code the dropdown submitted.
+    if (fiatPickerOpen) {
+        return (
+            <FiatCurrencyPicker
+                variant={variant}
+                codes={FIAT_CODES}
+                value={fiat}
+                onSelect={(code) => {
+                    if (code) setFiat(code);
+                    setFiatPickerOpen(false);
+                }}
+                onBack={() => setFiatPickerOpen(false)}
             />
         );
     }
@@ -780,23 +977,21 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                     {`Cross-chain: a ${coinTicker} transaction publishing the price of a ${priceCoin} token.`}
                 </p>
             ) : null}
-            <Input
-                label="Token ticker"
+            {/* The standard token field: tapping it opens the token
+                picker; the field never takes typed text. */}
+            <TokenField
+                id="oracle-token"
+                label="Token"
                 help={`The ${priceCoin} token you are pricing. Its network can differ from the publishing network.`}
-                value={ticker}
-                onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
+                value={tick && priceChainId ? { chainId: priceChainId, tick } : null}
+                onOpenPicker={() => setTokenPickerOpen(true)}
             />
-            <Select
-                label="Currency"
+            <FiatCurrencyField
+                id="oracle-fiat"
                 help="Dispensers pricing in this currency can use this oracle."
                 value={fiat}
-                onChange={(e) => setFiat(e.target.value)}
-            >
-                {FIAT_CODES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </Select>
+                onOpenPicker={() => setFiatPickerOpen(true)}
+            />
             <Input
                 label={`Price of one ${tick || 'token'} in ${fiat}`}
                 help="The price published for one token in the selected currency, with up to 8 decimal places."
@@ -880,138 +1075,47 @@ export function OracleForm({ walletId, onBack, initialChainId, initialFromAddres
                 optional
                 {...formSections.bind('usage')}
                 revealKey={revealFor('usage')}
-                summary={fee.trim() || 'None'}
+                summary={fee.trim() ? `${fee.trim()}%` : 'None'}
             >
-                <Input
+                <StopSlider
                     label="Usage fee"
-                    help="Fraction charged when someone opens a dispenser with this oracle. For example, 0.01 means 1%. The fee scales with escrow. Leave blank for none."
-                    inputMode="decimal"
-                    value={fee}
-                    onChange={(e) => setFee(e.target.value)}
-                    autoComplete="off"
-                />
+                    infoAria="How the usage fee works"
+                    infoLabel="Percent charged when someone opens a dispenser with this oracle. The fee scales with escrow. The usage fee should be very small: most oracles charge well under 1%. Free charges nothing."
+                    stops={FEE_STOPS}
+                    activeId={feeCustom ? 'custom' : (FEE_STOPS.find((s) => s.percent !== null && s.percent === fee.trim())?.id || 'custom')}
+                    pill={fee.trim() ? `${fee.trim()}%` : 'Free'}
+                    valueText={fee.trim() ? `${fee.trim()} percent` : 'Free, 0 percent'}
+                    onPick={(id) => {
+                        const stop = FEE_STOPS.find((s) => s.id === id);
+                        if (!stop) return;
+                        if (stop.percent === null) { setFeeCustom(true); return; }
+                        setFeeCustom(false);
+                        setFee(stop.percent);
+                    }}
+                >
+                    {(feeCustom || (fee.trim() && !FEE_STOPS.some((s) => s.percent === fee.trim()))) ? (
+                        <Input
+                            label="Custom usage fee"
+                            help="A percent from 0 to 100. Keep it very small."
+                            hint="Keep the usage fee very small."
+                            inputMode="decimal"
+                            value={fee}
+                            onChange={(e) => setFee(e.target.value)}
+                            autoComplete="off"
+                            fieldAction={<span className={styles.fieldUnit}>%</span>}
+                        />
+                    ) : null}
+                </StopSlider>
             </FormSection>
-            <FormSection
-                id="memo"
-                title="Memo"
-                icon={Icon.MessageIcon}
-                optional
+            {/* Memo holds only the memo: the section title names the field
+                and carries its count. */}
+            <MemoSection
                 {...formSections.bind('memo')}
                 revealKey={revealFor('memo')}
-                summary={memo.trim() || 'None'}
-            >
-                <Input
-                    label="Memo"
-                    maxLength={MAX_MEMO_LENGTH}
-                    help="A short note recorded on-chain with this price publication."
-                    value={memo}
-                    onChange={(e) => setMemo(e.target.value)}
-                    autoComplete="off"
-                />
-            </FormSection>
+                maxLength={MAX_MEMO_LENGTH}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+            />
         </FormFrame>,
-    );
-}
-
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
-    );
-}
-
-/**
- * The oracle-specific facts shown in front of the signature: when the quote
- * takes effect, the typed confirm for a large move, and which dispensers will
- * reprice. Rendered on the confirm page and on the watcher review alike.
- */
-function OraclePublishNotes({
-    isFirstPublish, hasLiveQuote, hasStaleQuote, priorQuote, priorLabel, fiat, tick, deviationPct,
-    needsTypedConfirm, typedConfirm, onTypedConfirmChange,
-    consumers, pairConsumers, crossChain, priceCoin,
-}) {
-    return (
-        <>
-            {priorQuote ? (
-                <dl className={styles.detailsList}>
-                    <DetailRow
-                        label={priorLabel}
-                        value={`${priorQuote.value} ${fiat}${
-                            priorLabel === 'Stale price'
-                                ? ` (${staleAgeText(priorQuote.secondsSinceEffective)})`
-                                : ''
-                        }${deviationPct != null ? ` (${fmtPct(deviationPct)})` : ''}`}
-                    />
-                </dl>
-            ) : null}
-
-            <StatusMessage variant="warning" role="alert">
-                <p>
-                    <strong>
-                        {isFirstPublish
-                            ? 'This is the first price for this pair, and it will not price anything for 24 hours.'
-                            : 'This price takes effect in 24 hours and cannot be withdrawn before then.'}
-                    </strong>{' '}
-                    {isFirstPublish
-                        ? 'A dispenser pointed at this oracle before then cannot settle at all; every attempt is recorded invalid. Publish a day before you need buyers.'
-                        : hasLiveQuote
-                            ? 'The current price keeps selling until this one matures, and the only way to correct a mistake is another publish, which also takes 24 hours.'
-                            : hasStaleQuote
-                                ? 'The previous effective price is stale, so nothing sells on this pair until a pending price matures. The only way to correct a mistake is another publish, which also takes 24 hours.'
-                            : 'Nothing sells on this pair yet: your earlier price is still pending and takes effect first, then this one replaces it. The only way to correct a mistake is another publish, which also takes 24 hours.'}
-                </p>
-            </StatusMessage>
-
-            {needsTypedConfirm ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
-                        <strong>That is a {fmtPct(deviationPct)} move</strong> from your last published
-                        price of {priorQuote?.value} {fiat}. Check the decimal point before signing.
-                    </p>
-                </StatusMessage>
-            ) : null}
-
-            {consumers && !consumers.supported ? (
-                <p className={styles.hint}>
-                    Could not check which dispensers use this oracle, so this list may be
-                    incomplete. Treat the publish as if buyers are watching.
-                    {crossChain ? ` Dispensers selling ${priceCoin} tokens are not visible from this network.` : ''}
-                </p>
-            ) : pairConsumers.length > 0 ? (
-                <StatusMessage variant="warning" role="alert">
-                    <p>
-                        {pairConsumers.length} open dispenser{pairConsumers.length === 1 ? '' : 's'} price
-                        {pairConsumers.length === 1 ? 's' : ''} {tick} from this oracle and will sell at the
-                        new price once it takes effect:
-                    </p>
-                    <details>
-                        <summary>Affected dispensers ({pairConsumers.length})</summary>
-                        <ul>
-                            {pairConsumers.map((d) => (
-                                <li key={d.action_index} className={styles.hint}>
-                                    <AddressText address={d.address || d.source} /> · {d.give_amount} {tick} per dispense
-                                </li>
-                            ))}
-                        </ul>
-                    </details>
-                </StatusMessage>
-            ) : (
-                <p className={styles.hint}>No open dispensers price {tick} from this oracle right now.</p>
-            )}
-
-            {needsTypedConfirm ? (
-                <Input
-                    label="Type PUBLISH to confirm"
-                    help={typedConfirmationCopy.oracle(fmtPct(deviationPct))}
-                    value={typedConfirm}
-                    onChange={(e) => onTypedConfirmChange(e.target.value)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                />
-            ) : null}
-        </>
     );
 }

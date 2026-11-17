@@ -26,7 +26,8 @@
 //      problem: a create whose params drift is signed rather than caught.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, act as domAct, fireEvent } from '@testing-library/react';
+import { render, act as domAct, fireEvent, within } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
@@ -247,8 +248,27 @@ async function openBetTab(utils) {
     });
 }
 
+// The Bet tab lists every outcome as one row button ("Bet on Home, ...");
+// tapping one opens the Place Bet step with it chosen, where the stake and
+// Place Bet are. Already on Place Bet, its own outcome picker is used.
+async function openPlaceBet(utils, outcomeLabel) {
+    await domAct(async () => {
+        const list = utils.queryByRole('list', { name: 'Outcome to back' });
+        if (list) {
+            const rows = within(list).getAllByRole('button');
+            fireEvent.click(rows.find((row) => row.getAttribute('aria-label').startsWith(`Bet on ${outcomeLabel},`)));
+        } else {
+            selectOption(utils.getByRole('button', { name: /^Outcome: / }), { label: new RegExp(`^${outcomeLabel}`) });
+        }
+        await drain();
+    });
+}
+
 const typeIn = (utils, label, value) => {
-    fireEvent.change(utils.getByLabelText(label), { target: { value } });
+    const control = utils.getByLabelText(label);
+    // Dropdowns are the themed Select: pick the option rather than typing a value.
+    if (control.hasAttribute('data-xc-select')) selectOption(control, value);
+    else fireEvent.change(control, { target: { value } });
 };
 
 // Fill the minimum a valid market needs. The token field is a picker, so the
@@ -283,9 +303,7 @@ describe('CreateBetFeedForm: the live market-cost quote', () => {
         // the case the display exists for: the user changed a safety margin, not
         // a price, and the price moved.
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText('Time to Publish the Result'), {
-                target: { value: String(YEAR_WINDOW) },
-            });
+            selectOption(utils.getByLabelText('Time to Publish the Result'), String(YEAR_WINDOW));
             await drain();
         });
         const second = calls.filter((c) => c.method === 'betProjectFeedCreateFee').pop();
@@ -446,7 +464,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         // Nothing is signed by opening the confirm page.
         expect(calls.some((c) => c.method === 'createMarketAction')).toBe(false);
         expect(utils.getByTestId('confirm-modal')).toBeTruthy();
-        expect(utils.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.000015 BTC');
+        expect(utils.getByTestId('confirm-fee-network')).toHaveTextContent('0.000015 BTC');
 
         await domAct(async () => {
             typeIn(utils, 'Password', 'hunter2');
@@ -566,7 +584,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils);
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText('Time to Publish the Result'), { target: { value: 'custom' } });
+            selectOption(utils.getByLabelText('Time to Publish the Result'), 'custom');
             await drain();
         });
         await domAct(async () => {
@@ -637,10 +655,7 @@ describe('BetFeedDetail states what a win would pay', () => {
     }
 
     async function stakeOn(utils, outcomeLabel, amount) {
-        await domAct(async () => {
-            fireEvent.click(button(utils, new RegExp(`^${outcomeLabel}$`)));
-            await drain();
-        });
+        await openPlaceBet(utils, outcomeLabel);
         await domAct(async () => {
             typeIn(utils, 'Stake (PEPECREATURE)', amount);
             await drain();
@@ -705,7 +720,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(utils.queryByTestId('bet-projection')).toBeNull();
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /^Away$/));
+            fireEvent.click(utils.getByRole('button', { name: /^Bet on Away,/ }));
             await drain();
         });
         expect(utils.queryByTestId('bet-projection')).toBeNull();
@@ -843,10 +858,7 @@ describe('every BET surface renders the confirm page it opens', () => {
             await drain();
         });
         await openBetTab(utils);
-        await domAct(async () => {
-            fireEvent.click(button(utils, /^Home$/));
-            await drain();
-        });
+        await openPlaceBet(utils, 'Home');
         await domAct(async () => {
             typeIn(utils, 'Stake (PEPECREATURE)', '5');
             await drain();
@@ -885,7 +897,7 @@ describe('every BET surface renders the confirm page it opens', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /^Resolve$/));
+            fireEvent.click(button(utils, /^Resolve/));
             await drain();
         });
         await domAct(async () => {
@@ -943,7 +955,8 @@ describe('BET carries the native-coin fee lane', () => {
         });
         await fillMarket(utils);
 
-        expect(utils.container.textContent).toContain('0 LTC');
+        // Inside the free days the Protocol fee line says Free (operator 2026-11-13).
+        expect(utils.container.querySelector('[data-fees-row="protocol"]').textContent).toContain('Free');
         const feeSwitch = utils.getByLabelText('Pay protocol fee in LTC');
         expect(feeSwitch.checked).toBe(true);
         expect(feeSwitch.disabled).toBe(true);
@@ -951,9 +964,7 @@ describe('BET carries the native-coin fee lane', () => {
         // Lengthen the publish window past the free days and the same row turns
         // definite, with the figure the quote returned.
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText('Time to Publish the Result'), {
-                target: { value: String(YEAR_WINDOW) },
-            });
+            selectOption(utils.getByLabelText('Time to Publish the Result'), String(YEAR_WINDOW));
             await drain();
         });
         expect(utils.container.textContent).toContain('Priced at review');
@@ -991,9 +1002,7 @@ describe('BET carries the native-coin fee lane', () => {
         // hides the switch when the quote prices the action at zero,
         // because both settings would then pay nothing.
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText('Time to Publish the Result'), {
-                target: { value: String(YEAR_WINDOW) },
-            });
+            selectOption(utils.getByLabelText('Time to Publish the Result'), String(YEAR_WINDOW));
             await drain();
         });
 
@@ -1030,10 +1039,7 @@ describe('BET carries the native-coin fee lane', () => {
             await drain();
         });
         await openBetTab(utils);
-        await domAct(async () => {
-            fireEvent.click(button(utils, /^Home$/));
-            await drain();
-        });
+        await openPlaceBet(utils, 'Home');
         await domAct(async () => {
             typeIn(utils, 'Stake (PEPECREATURE)', '5');
             await drain();
@@ -1076,7 +1082,7 @@ describe('BET carries the native-coin fee lane', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /^Resolve$/));
+            fireEvent.click(button(utils, /^Resolve/));
             await drain();
         });
         await domAct(async () => {

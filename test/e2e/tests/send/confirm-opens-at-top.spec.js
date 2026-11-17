@@ -44,7 +44,7 @@ async function expectConfirmAtTop(page) {
         'the confirm scroll container must start at the top')
         .toBe(0);
 
-    const summary = confirm.getByTestId('action-intent')
+    const summary = confirm.getByTestId('confirm-sentence')
         .or(confirm.getByText(VALID_BTC, { exact: false }))
         .or(confirm.getByText('Review action', { exact: true }))
         .first();

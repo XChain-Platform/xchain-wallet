@@ -9,17 +9,18 @@
 // contact legal@dankest.llc.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressField, Button, ChainBadge, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 // The Wallet Form Standard frame (From, main section, Network fee, one action).
-import { FeeSection, FormAction, FormFrame, FormSection, FromSection, summaryAddress, useFormSections } from '../components/formStandard/index.js';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, MemoSection, SummaryAddress, joinSummaryParts, useFormSections } from '../components/formStandard/index.js';
+import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
+import { decoder as decoderLib, registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { titleCase } from '../utils/titleCase.js';
-import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -37,15 +38,17 @@ import {
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
+// Review and done facts as label-left value-right rows, never stacked uppercase labels.
+import facts from './FactRows.module.css';
 import { isValidAddressForChain } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
-import '../../i18n/locales/en/governance.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -92,7 +95,6 @@ function DelegateVoteFormState({ mode = 'delegate', walletId, chainId: initialCh
     const isClear = mode === 'clear' && Boolean(clear?.tick && clear?.address);
     const verb = isClear ? 'Clear vote delegation' : 'Delegate votes';
     // Title Case button label for the same action as `verb`.
-    const actionLabel = isClear ? t('governance.action.clearDelegation') : t('governance.action.delegateVotes');
     // The main action names what it does, with its own icon.
     const submitLabel = isClear ? 'Clear Delegation' : 'Delegate Votes';
     const submitIcon = isClear ? <Icon.TrashIcon /> : <Icon.UsersIcon />;
@@ -201,6 +203,23 @@ function DelegateVoteFormState({ mode = 'delegate', walletId, chainId: initialCh
         ...(!isClear && { delegateTo: delegateTo.trim() }),
         ...(memo.trim() && { memo: memo.trim() }),
     }), [delegateTo, isClear, memo, tick]);
+    const legacyWireParams = useMemo(() => ({
+        VERSION: '3',
+        TICK: voteParams.tick,
+        DELEGATE_TO: voteParams.delegateTo || '',
+        ...(voteParams.memo && { MEMO: voteParams.memo }),
+    }), [voteParams]);
+    const legacyDecoded = useMemo(() => (
+        stage === 'review' || stage === 'submitting'
+            ? decoderLib.decodeAction({ action: 'VOTE', params: legacyWireParams, chainId: chainId || undefined, chainRegistry })
+            : null
+    ), [stage, legacyWireParams, chainId]);
+    const legacyComposed = useMemo(() => (legacyDecoded ? {
+        action: 'VOTE',
+        chainId,
+        decoded: legacyDecoded,
+        protocolFeeKnownFree: true,
+    } : null), [chainId, legacyDecoded]);
 
     // Compose + tamper-check + pre-flight all run HOST-side; Approve signs the
     // byte-identical prebuilt PSBT. Reject is a calm no-op back to the form.
@@ -224,14 +243,14 @@ function DelegateVoteFormState({ mode = 'delegate', walletId, chainId: initialCh
                 // delegate/clear builder, host-side. A client-side mirror of
                 // that encoding would be SIGNED rather than caught: the tamper
                 // check verifies the PSBT against whatever the encoder was handed.
-                compose: () => messaging.composeVoteForConfirm({
+                compose: () => messaging.composeVoteForConfirm(withAdvancedOptions({
                     walletId,
                     chainId,
                     from,
                     builder: isClear ? 'clearVoteDelegationParams' : 'delegateVoteParams',
                     params: voteParams,
                     ...(feePerKb != null ? { feePerKb } : {}),
-                }),
+                })),
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId,
                     chainId,
@@ -351,7 +370,7 @@ function DelegateVoteFormState({ mode = 'delegate', walletId, chainId: initialCh
                 res = await messaging.buildActionPsbtRequest({
                     chainId,
                     from: base.from,
-                    actionData: { action: 'VOTE', params: { VERSION: '3', TICK: voteParams.tick, DELEGATE_TO: voteParams.delegateTo || '', ...(voteParams.memo && { MEMO: voteParams.memo }) } },
+                    actionData: { action: 'VOTE', params: legacyWireParams },
                     ...(feePerKb != null ? { encoderOpts: { feePerKb } } : {}),
                 });
             } else {
@@ -380,6 +399,7 @@ function DelegateVoteFormState({ mode = 'delegate', walletId, chainId: initialCh
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
@@ -414,9 +434,9 @@ function DelegateVoteFormState({ mode = 'delegate', walletId, chainId: initialCh
                         ? `Delegation cleared. Your ${voteParams.tick} voting weight stops flowing once the network records the action.`
                         : `Delegation set. Your ${voteParams.tick} voting weight flows to the delegate for polls you do not vote on directly.`}
                 </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Transaction ID</dt>
-                    <dd className={styles.detailsValue}>{String(txid || 'n/a')}</dd>
+                <dl className={facts.list}>
+                    <dt className={facts.label}>Transaction ID</dt>
+                    <dd className={facts.value}>{String(txid || 'n/a')}</dd>
                 </dl>
                 <div className={styles.actions}><Button variant="success" icon={<Icon.CheckIcon />} onClick={onDone || onBack}>Done</Button></div>
             </ListPage>,
@@ -424,72 +444,39 @@ function DelegateVoteFormState({ mode = 'delegate', walletId, chainId: initialCh
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label={`Review ${verb.toLowerCase()}`}
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            icon={isHwSource ? <Icon.SignIcon /> : submitIcon}
-                            loading={stage === 'submitting'}
-                            disabled={isWatcherMode ? false : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                        >
-                            {isWatcherMode
-                                ? t('governance.action.createUnsignedFor', { action: actionLabel })
-                                : actionLabel}
-                        </Button>
-                    </>
-                )}
-            >
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Network</dt>
-                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
-                    <dt className={styles.detailsLabel}>Token</dt>
-                    <dd className={styles.detailsValue}>{voteParams.tick}</dd>
-                    {!isClear ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Delegate to</dt>
-                            <dd className={styles.detailsValue}><AddressText address={voteParams.delegateTo} /></dd>
-                        </>
-                    ) : null}
-                    {voteParams.memo ? (<><dt className={styles.detailsLabel}>Memo</dt><dd className={styles.detailsValue}>{voteParams.memo}</dd></>) : null}
-                    <dt className={styles.detailsLabel}>Network fee</dt>
-                    <dd className={styles.detailsValue}>
-                        {feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    </dd>
-                </dl>
-                {isWatcherMode ? (
-                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => { setPassword(v); if (submitError) setSubmitError(null); }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                )}
-            </FormPage>,
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setStage('form'); }}
+                decoded={legacyDecoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentials={<p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>}
+                credentialsReady
+                summary={{
+                    verb: isClear
+                        ? t('components.confirmSummary.verbClearDelegation')
+                        : t('components.confirmSummary.verbDelegateVotes'),
+                    ...(voteParams.tick ? { ticker: voteParams.tick.toUpperCase() } : {}),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    ...(voteParams.delegateTo ? { recipient: voteParams.delegateTo } : {}),
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -513,6 +500,7 @@ function DelegateVoteFormState({ mode = 'delegate', walletId, chainId: initialCh
                 summary={delegateVoteSummary}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -578,11 +566,11 @@ function DelegateVoteFormState({ mode = 'delegate', walletId, chainId: initialCh
     const memoHasError = Boolean(formError && /^Memo/i.test(formError));
     const delegationHasError = Boolean(formError && !feeHasError && !fromHasError && !memoHasError);
     const sectionErrorKey = (hasError) => (hasError ? validationAttempt + 1 : 0);
-    const delegationSummary = [
+    const delegationSummary = joinSummaryParts([
         tick.trim() ? tick.trim().toUpperCase() : null,
-        !isClear && delegateTo.trim() ? `to ${summaryAddress(delegateTo)}` : null,
-        isClear && clear.delegate ? `from ${summaryAddress(clear.delegate)}` : null,
-    ].filter(Boolean).join(' ') || 'No token yet';
+        !isClear && delegateTo.trim() ? <>to <SummaryAddress address={delegateTo} /></> : null,
+        isClear && clear.delegate ? <>from <SummaryAddress address={clear.delegate} /></> : null,
+    ], ' ') || 'No token yet';
 
     return wrap(
         <FormFrame
@@ -614,9 +602,11 @@ function DelegateVoteFormState({ mode = 'delegate', walletId, chainId: initialCh
                     lockNetwork={Boolean(presetTick) || isClear}
                     networkHelp="The chain the delegation is recorded on. Your From address and the fee are on this network, and the governance token must live on it."
                     address={fromAddress?.address || null}
-                    // A clear is fixed to the delegation's own address: no picker.
+                    // A clear is fixed to the delegation's own address: the
+                    // picker icon shows, locked, with the reason.
                     onOpenPicker={isClear ? undefined : () => setSourcePickerOpen(true)}
                     pickerLabel="Choose source address"
+                    pickerLockedReason="The delegation's own address signs this clear"
                     addressHelp="The address whose voting weight you delegate or take back. It sends this action and pays the network fee."
                     revealKey={sectionErrorKey(fromHasError)}
                 />
@@ -673,26 +663,15 @@ function DelegateVoteFormState({ mode = 'delegate', walletId, chainId: initialCh
             ) : null}
             </FormSection>
 
-            {/* Memo is its own optional section; inside it the field
-                drops its own Optional tag. */}
-            <FormSection
-                id="memo"
-                title="Memo"
-                icon={Icon.MessageIcon}
-                optional
+            {/* Memo is its own optional section holding only the memo, so
+                the section title names the field and carries its count. */}
+            <MemoSection
                 {...formSections.bind('memo')}
                 revealKey={sectionErrorKey(memoHasError)}
-                summary={memo.trim() ? memo.trim() : 'None'}
-            >
-            <Input
-                label="Memo"
-                maxLength={MAX_MEMO_LENGTH}
-                help="A short public note stored with this delegation on chain. Anyone can read it."
                 value={memo}
+                maxLength={MAX_MEMO_LENGTH}
                 onChange={(e) => setMemo(e.target.value)}
-                autoComplete="off"
             />
-            </FormSection>
         </FormFrame>,
     );
 }

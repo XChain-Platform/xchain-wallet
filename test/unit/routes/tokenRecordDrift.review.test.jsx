@@ -138,18 +138,19 @@ describe('Review re-reads the token', () => {
                 <SleepForm walletId="w" mode="tick" initialChainId={CHAIN} initialTick="gate" onBack={() => {}} />
             </MessagingProvider>,
         );
-        await screen.findByText('Paused indefinitely');
+        // The paused token offers only Resume.
+        const resume = await screen.findByRole('button', { name: 'Resume Token' });
         getTokenInfo.mockResolvedValue({
             chainId: CHAIN, tick: 'gate', creator: SLEEP_ADDRESS.address, locks: { sleep: true },
         });
-        fireEvent.click(screen.getByRole('radio', { name: 'Resume now (unpause)' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Resume Token' }));
+        await waitFor(() => expect(resume).toBeEnabled());
+        fireEvent.click(resume);
 
         expect(await screen.findByText(CHANGED)).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('Sell name stops when the name changed owner after the form opened', async () => {
+    it('Sell Ownership stops when the name changed owner after the form opened', async () => {
         const getTokenInfo = vi.fn().mockResolvedValue({
             chainId: CHAIN, tick: 'alpha', creator: ADDRESS.address, locks: {},
         });
@@ -160,7 +161,7 @@ describe('Review re-reads the token', () => {
             </MessagingProvider>,
         );
         const price = await screen.findByLabelText(/^Price/);
-        const button = screen.getByRole('button', { name: 'List Name for Sale' });
+        const button = screen.getByRole('button', { name: 'List Ownership for Sale' });
         fireEvent.change(price, { target: { value: '5' } });
         await waitFor(() => expect(button).toBeEnabled());
         getTokenInfo.mockResolvedValue({

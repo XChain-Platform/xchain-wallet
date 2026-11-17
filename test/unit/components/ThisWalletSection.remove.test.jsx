@@ -111,7 +111,7 @@ describe('ThisWalletSection removal completion', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
         const confirmation = screen.getByRole('textbox', { name: 'Confirm wallet name' });
         expect(screen.getByText('Remove Active Wallet?')).toBeTruthy();
-        expect(screen.getByText(/Its accounts, addresses, signers, and pending transactions will be deleted/)).toBeTruthy();
+        expect(screen.getByText(/Its accounts, addresses, hardware wallet links, and pending transactions will be deleted/)).toBeTruthy();
         expect(screen.queryByText(/Removing this wallet/)).toBeNull();
         expect(screen.getByText(/This can't be undone/)).toBeTruthy();
         expect(confirmation).toHaveAttribute('enterkeyhint', 'done');

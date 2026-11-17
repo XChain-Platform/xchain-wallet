@@ -152,9 +152,11 @@ assert.ok(
     /retryRef\.current = handleCopyDiagnostics/.test(aboutSrc),
     'AboutSection records the copy action as retry on copy failure',
 );
+// The diagnostics preview toggle is gone (Copy reads the prepared dump that
+// loads at mount), so the other re-runnable action is Report a Problem.
 assert.ok(
-    /retryRef\.current = handleTogglePreview/.test(aboutSrc),
-    'AboutSection records the preview action as retry on preview failure',
+    /retryRef\.current = handleReportProblem/.test(aboutSrc),
+    'AboutSection records the report action as retry when it cannot open',
 );
 assert.ok(
     /recovery=\{retryRef\.current \? \{ label: (?:'Try Again'|t\('common\.tryAgain'\)), onAction: retryRef\.current \} : undefined\}/.test(aboutSrc),

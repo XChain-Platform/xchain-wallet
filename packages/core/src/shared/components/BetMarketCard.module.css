@@ -1,16 +1,18 @@
 /* The Bet Markets gauge card. The card is one button, so
-   every block inside is a span set to block or flex layout. */
+   every block inside is a span set to block or flex layout. It holds only
+   the question, the odds and the pool line, compact: 8px insets and gaps. */
 
 .card {
     composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
+    gap: var(--xc-space-2);
     width: 100%;
     min-width: 0;
     min-height: var(--xc-tap-min);
     box-sizing: border-box;
     margin: 0;
+    padding: var(--xc-space-2);
     text-align: start;
     font: inherit;
     color: var(--xc-text);
@@ -27,79 +29,6 @@
     outline-offset: 2px;
 }
 
-.top {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
-.tile {
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    width: 2.25rem;
-    height: 2.25rem;
-    border-radius: var(--xc-radius-md);
-    background: color-mix(in srgb, var(--xc-brand-blue) 12%, var(--xc-surface));
-    color: var(--xc-brand-blue);
-}
-
-.tile svg {
-    width: 1.1rem;
-    height: 1.1rem;
-}
-
-.topText {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-width: 0;
-}
-
-.ref {
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    overflow-wrap: anywhere;
-}
-
-.when {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-}
-
-.status {
-    flex: 0 0 auto;
-    align-self: flex-start;
-    border-radius: var(--xc-radius-pill);
-    padding: 0.15rem 0.55rem;
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    white-space: nowrap;
-    background: var(--xc-bg-muted);
-    color: var(--xc-text-muted);
-}
-
-.status_open {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
-}
-
-.status_closed {
-    background: var(--xc-warning-bg);
-    color: var(--xc-warning-text);
-}
-
-.status_settled {
-    background: color-mix(in srgb, var(--xc-success) 18%, transparent);
-    color: var(--xc-success);
-}
-
-.status_refunded {
-    background: var(--xc-danger-bg);
-    color: var(--xc-danger-text);
-}
-
 .question {
     display: block;
     font-size: var(--xc-text-md);
@@ -109,18 +38,26 @@
     overflow-wrap: anywhere;
 }
 
+/* The odds and the pool line: the button's description. */
+.detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
 .gauge {
     display: flex;
     align-items: center;
-    gap: var(--xc-space-4);
+    gap: var(--xc-space-2);
     min-width: 0;
 }
 
 .donut {
     position: relative;
     flex: 0 0 auto;
-    width: 84px;
-    height: 84px;
+    width: 64px;
+    height: 64px;
 }
 
 .donut svg {
@@ -131,7 +68,7 @@
 
 .donutCenter {
     position: absolute;
-    inset: 12px;
+    inset: 9px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -141,14 +78,14 @@
 }
 
 .donutPct {
-    font-size: var(--xc-text-lg);
+    font-size: var(--xc-text-sm);
     font-weight: 700;
     line-height: 1.1;
 }
 
 .donutLabel {
     max-width: 100%;
-    font-size: 0.68rem;
+    font-size: 0.62rem;
     line-height: 1.15;
     color: var(--xc-text-muted);
     overflow: hidden;
@@ -196,7 +133,7 @@
 .foot {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: var(--xc-space-2);
     min-width: 0;
     padding-top: var(--xc-space-2);
@@ -242,9 +179,21 @@
     color: var(--xc-brand-purple);
 }
 
+/* The wallet's stake summary and the chevron, pinned to the row's right end. */
+.right {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    margin-inline-start: auto;
+    flex: 0 0 auto;
+}
+
+.right .chip {
+    white-space: nowrap;
+}
+
 .chevron {
     display: inline-flex;
-    margin-inline-start: auto;
     color: var(--xc-accent-text);
 }
 

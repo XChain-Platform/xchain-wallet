@@ -131,7 +131,7 @@ async function warmIssue(source, expected, feeMode = 'xchain') {
 async function scanBothVerdicts(page, own, width) {
     await warmIssue(own, true, 'native');
     await composeIssue(page, { nativeFee: true });
-    await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
+    await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'pass');
     await scan(page, `Confirm surface (ready, ${width})`);
     await page.getByTestId('confirm-reject').click();
 
@@ -143,7 +143,7 @@ async function scanBothVerdicts(page, own, width) {
     // most likely to be reading carefully. An unlabelled override control
     // here is a consent problem, not a lint finding.
     await composeIssue(page, { nativeFee: false });
-    await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
+    await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'fail');
     await expect(page.getByTestId('ack-DRYRUN_INVALID')).toBeVisible();
     await scan(page, `Confirm surface (pre-flight fail, ${width})`);
 }

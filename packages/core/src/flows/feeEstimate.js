@@ -530,9 +530,10 @@ function formatRate(unit, value) {
     return `${trimNumber(value)} ${unit}`;
 }
 
+// A rate as display text: eight places at most, thousands grouped.
 function trimNumber(n) {
     const s = Number(n.toFixed(8)).toString();
-    return s;
+    return formatWithThousands(s) || s;
 }
 
 /**

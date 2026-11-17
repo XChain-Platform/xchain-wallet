@@ -62,7 +62,7 @@ describe('Send memo characters', () => {
         fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
         fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
         fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: '1' } });
-        fireEvent.click(screen.getByText('Advanced'));
+        fireEvent.click(screen.getByText('Advanced', { selector: '[data-form-section-title]' }));
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'hi‮evil' } });
 
         expect(screen.getAllByText('Memo cannot contain text-direction control characters.').length).toBeGreaterThan(0);

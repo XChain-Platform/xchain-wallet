@@ -29,15 +29,21 @@ async function openPaletteRoute(page, title) {
     await expect(palette).toBeHidden();
 }
 
-async function expectDemoGuard(page, submitName) {
+// No demo notice shows before the user acts (operator ruling 2026-11-13);
+// submitting the form is refused, and the refusal is the only demo message.
+async function expectDemoGuard(page, formName) {
     const main = page.getByRole('main');
-    const note = main.getByRole('status').filter({ hasText: DEMO_NOTE });
 
     await expect(page.getByRole('status', { name: 'Demo wallet', exact: true })).toHaveCount(0);
-    await expect(note).toHaveCount(1);
-    await expect(note).toContainText(DEMO_NOTE);
-    await expect(note.getByRole('button', { name: /Create (?:a )?real wallet/i })).toBeVisible();
-    await expect(main.getByRole('button', { name: submitName, exact: true })).toBeDisabled();
+    await expect(main.getByText(DEMO_NOTE)).toHaveCount(0);
+    await expect(main.getByRole('button', { name: /Create (?:a )?real wallet/i })).toHaveCount(0);
+
+    // requestSubmit stands in for the press (or Enter) whether or not the
+    // empty form's own validation has its action enabled yet.
+    await main.getByRole('form', { name: formName, exact: true }).evaluate((form) => form.requestSubmit());
+    const refusal = main.getByTestId('demo-guard-refusal');
+    await expect(refusal).toContainText(DEMO_NOTE);
+    await expect(refusal.getByRole('button', { name: /Create (?:a )?real wallet/i })).toBeVisible();
 }
 
 async function trackEncoderRequests(page) {
@@ -50,25 +56,26 @@ async function trackEncoderRequests(page) {
     return encoderRequests;
 }
 
-test('demo Send uses an inline guard without contacting an encoder', async ({ page }) => {
+test('demo Send shows no notice and refuses without contacting an encoder', async ({ page }) => {
     test.slow();
     const encoderRequests = await trackEncoderRequests(page);
 
     await gotoSection(page, 'Send');
     await expect(page.getByRole('form', { name: 'Send', exact: true })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
     await expectDemoGuard(page, 'Send');
 
     expect(encoderRequests, 'demo actions must not request an encoder').toEqual([]);
 });
 
-test('demo Swap and Create token use an inline guard without contacting an encoder', async ({ page }) => {
+test('demo Swap and Create token show no notice and refuse without contacting an encoder', async ({ page }) => {
     test.slow();
     const encoderRequests = await trackEncoderRequests(page);
 
     await test.step('Swap', async () => {
         await openPaletteRoute(page, 'Swap');
         await expect(page.getByRole('form', { name: 'Swap tokens', exact: true })).toBeVisible();
-        await expectDemoGuard(page, 'Create swap');
+        await expectDemoGuard(page, 'Swap tokens');
     });
 
     await test.step('Create token', async () => {

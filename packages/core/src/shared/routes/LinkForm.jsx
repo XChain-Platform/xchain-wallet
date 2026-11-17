@@ -8,14 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 // The From address and the fee selector render inside the
 // standard FromSection and FeeSection.
-import { AddressText, Button, ChainBadge, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, FormPage, Icon, Input, ListPage, NetworkField, PageHeader, Screen, Spinner, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
-import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
+import { isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -30,15 +30,17 @@ import {
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
-import { humanizeError } from '../utils/humanizeError.js';
 import { explorerErrorCode } from '../../sdk/explorerErrors.js';
+import { flattenActionDetails } from '../utils/historyRow.js';
 import styles from './IssueTokenForm.module.css';
+import facts from './FactRows.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 // Link actions is laid out on the Wallet Form Standard frame.
 import {
@@ -47,10 +49,12 @@ import {
     FormFrame,
     FormSection,
     FromSection,
+    MemoSection,
     useFormSections,
 } from '../components/formStandard/index.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 // Protocol coin tickers for the LINK serialization. The chain
 // descriptor's `coin` is long-form ('bitcoin' / 'litecoin' /
@@ -70,6 +74,15 @@ const COIN_DISPLAY_TICKER = {
     dogecoin: 'DOGE',
 };
 
+// An action number is looked up once the user stops typing for this long, or
+// at once when the field loses focus, so a number typed digit by digit costs
+// one explorer read rather than one per keystroke.
+const LOOKUP_DEBOUNCE_MS = 350;
+const WHOLE_NUMBER = /^\d+$/;
+
+// The field error for a number no action on that network holds.
+const NO_SUCH_ACTION = 'No action with this number';
+
 /**
  * §42.8.1 LINK creation: two-action composer.
  *
@@ -81,11 +94,14 @@ const COIN_DISPLAY_TICKER = {
  * rendering on History works regardless of which side the user
  * opens.
  *
- * Decoded preview: when the user types a valid action_index the
- * form fetches that side's ACTION via `messaging.getActionByIndex`
- * (debounced, cached per (chainId, actionIndex) pair) and renders
- * a one-line decoded summary so the user can confirm they're
- * linking the right pair before signing.
+ * Action lookup: once an action number is complete (the field loses
+ * focus, or the user pauses typing) the form reads that side's action
+ * through `messaging.getActionByIndex`, the explorer read every other
+ * action view uses, once per (chainId, actionIndex) pair. A found
+ * action shows a read-only summary under its fields (what it is, its
+ * subject, its block and its sender) so the user can see they are
+ * linking, say, an image to a token; a number no action holds gets the
+ * field's own error.
  *
  * @param {object} props
  * @param {string} props.walletId
@@ -143,6 +159,39 @@ export function LinkForm({ walletId, onBack }) {
     const [previewCache, setPreviewCache] = useState(
         /** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}),
     );
+    // The same map, readable synchronously, so a debounce timer and a blur
+    // that both fire for one number see the read the other started.
+    const previewCacheRef = useRef(/** @type {Record<string, { loading: boolean, action: any | null, error: string | null }>} */ ({}));
+    const putPreview = useCallback((key, entry) => {
+        previewCacheRef.current = { ...previewCacheRef.current, [key]: entry };
+        setPreviewCache(previewCacheRef.current);
+    }, []);
+
+    // One explorer read per (network, number): a number already being read,
+    // found or known missing is never read again; only a failed read retries.
+    const lookUpAction = useCallback((chainId, actionIndex) => {
+        if (!chainId || !WHOLE_NUMBER.test(actionIndex)) return;
+        const key = `${chainId}:${actionIndex}`;
+        const known = previewCacheRef.current[key];
+        if (known && !known.error) return;
+        putPreview(key, { loading: true, action: null, error: null });
+        messaging.getActionByIndex({ chainId, actionIndex })
+            .then((action) => {
+                if (!mountedRef.current) return;
+                putPreview(key, { loading: false, action: action || null, error: null });
+            })
+            .catch((err) => {
+                if (!mountedRef.current) return;
+                // The explorer answers 404 for a number no action holds: that is a
+                // missing action, not a failed lookup.
+                const missing = explorerErrorCode(err) === 'EXPLORER_HTTP_404';
+                putPreview(key, { loading: false, action: null, error: missing ? null : (err?.message || String(err)) });
+            });
+    }, [messaging, putPreview]);
+
+    const fieldIdBase = useId();
+    const actionInputId1 = `${fieldIdBase}-action-1`;
+    const actionInputId2 = `${fieldIdBase}-action-2`;
 
     // The active map and the settings read are best-effort: a host without
     // `getActiveAddresses` / `getSettings`, or one whose call fails, still
@@ -223,49 +272,19 @@ export function LinkForm({ walletId, onBack }) {
     const ticker2 = descriptor2 ? PROTOCOL_COIN_TICKER[descriptor2.coin] || '' : '';
     const hw = isHwSource(fromAddress);
 
+    // Each keystroke restarts its side's timer, so only the number the user
+    // stops on is read; a blur reads it at once (see ActionCard).
     useEffect(() => {
-        if (!chain1Id || !/^\d+$/.test(actionIndex1)) return;
-        const key = `${chain1Id}:${actionIndex1}`;
-        if (previewCache[key]?.loading || previewCache[key]?.action) return;
-        const t = setTimeout(() => {
-            setPreviewCache((p) => ({ ...p, [key]: { loading: true, action: null, error: null } }));
-            messaging.getActionByIndex({ chainId: chain1Id, actionIndex: actionIndex1 })
-                .then((action) => {
-                    if (!mountedRef.current) return;
-                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action, error: null } }));
-                })
-                .catch((err) => {
-                    if (!mountedRef.current) return;
-                    // The explorer answers 404 for a number no action holds: that is a
-                    // missing action, not a failed lookup.
-                    const missing = explorerErrorCode(err) === 'EXPLORER_HTTP_404';
-                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: missing ? null : (err?.message || String(err)) } }));
-                });
-        }, 350);
-        return () => clearTimeout(t);
-    }, [chain1Id, actionIndex1, messaging]);
+        if (!chain1Id || !WHOLE_NUMBER.test(actionIndex1)) return undefined;
+        const timer = setTimeout(() => lookUpAction(chain1Id, actionIndex1), LOOKUP_DEBOUNCE_MS);
+        return () => clearTimeout(timer);
+    }, [chain1Id, actionIndex1, lookUpAction]);
 
     useEffect(() => {
-        if (!chain2Id || !/^\d+$/.test(actionIndex2)) return;
-        const key = `${chain2Id}:${actionIndex2}`;
-        if (previewCache[key]?.loading || previewCache[key]?.action) return;
-        const t = setTimeout(() => {
-            setPreviewCache((p) => ({ ...p, [key]: { loading: true, action: null, error: null } }));
-            messaging.getActionByIndex({ chainId: chain2Id, actionIndex: actionIndex2 })
-                .then((action) => {
-                    if (!mountedRef.current) return;
-                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action, error: null } }));
-                })
-                .catch((err) => {
-                    if (!mountedRef.current) return;
-                    // The explorer answers 404 for a number no action holds: that is a
-                    // missing action, not a failed lookup.
-                    const missing = explorerErrorCode(err) === 'EXPLORER_HTTP_404';
-                    setPreviewCache((p) => ({ ...p, [key]: { loading: false, action: null, error: missing ? null : (err?.message || String(err)) } }));
-                });
-        }, 350);
-        return () => clearTimeout(t);
-    }, [chain2Id, actionIndex2, messaging]);
+        if (!chain2Id || !WHOLE_NUMBER.test(actionIndex2)) return undefined;
+        const timer = setTimeout(() => lookUpAction(chain2Id, actionIndex2), LOOKUP_DEBOUNCE_MS);
+        return () => clearTimeout(timer);
+    }, [chain2Id, actionIndex2, lookUpAction]);
 
     // Focus the password field when we land on the review stage so the
     // user can sign without reaching for the mouse.
@@ -300,10 +319,14 @@ export function LinkForm({ walletId, onBack }) {
         }
         if (preview1?.error) return 'Could not verify Action 1. Check the number and try again.';
         if (preview2?.error) return 'Could not verify Action 2. Check the number and try again.';
-        if (preview1 && !preview1.loading && !preview1.action) return 'No action was found for Action 1 at that number.';
-        if (preview2 && !preview2.loading && !preview2.action) return 'No action was found for Action 2 at that number.';
         return null;
     }, [ticker1, ticker2, actionIndex1, actionIndex2, memoTooLong, preview1, preview2]);
+
+    // A number the explorer holds no action for is the field's own error
+    // (shown under that field, never repeated in the banner), and it still
+    // stops Review.
+    const missing1 = isMissingAction(preview1);
+    const missing2 = isMissingAction(preview2);
 
     const { isWatcherMode } = useWalletMode();
 
@@ -352,6 +375,11 @@ export function LinkForm({ walletId, onBack }) {
         COIN2_ACTION_INDEX: actionIndex2,
         MEMO: memo.trim() || '',
     }), [ticker1, actionIndex1, ticker2, actionIndex2, memo]);
+    const legacyComposed = useMemo(() => ({
+        action: 'LINK',
+        chainId: submitChainId,
+        protocolFeeKnownFree: true,
+    }), [submitChainId]);
 
     // §5.6: the signing lanes compose ONE PSBT host-side and approve it on
     // the shared confirm page; watcher keeps the legacy review stage.
@@ -439,6 +467,14 @@ export function LinkForm({ walletId, onBack }) {
         // The live banner above the form already states this problem; copying it
         // into formError printed the same sentence twice.
         if (validationError) return;
+        // The field already shows "No action with this number"; Review only
+        // reopens the Link section and puts the cursor in that field.
+        if (missing1 || missing2) {
+            setFormErrorSection('link');
+            const fieldId = missing1 ? actionInputId1 : actionInputId2;
+            setTimeout(() => document.getElementById(fieldId)?.focus(), 0);
+            return;
+        }
         if (previewPending) {
             setFormError('Wait for both action previews to finish loading.');
             setFormErrorSection('link');
@@ -588,7 +624,7 @@ export function LinkForm({ walletId, onBack }) {
                     Once mined, History shows both actions as linked.
                 </p>
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </>,
         );
@@ -635,6 +671,7 @@ export function LinkForm({ walletId, onBack }) {
                 }}
                 screenVariant={variant}
                 chainLabel={null}
+                feeEstimate={feeCoinTicker ? feeEstimate : null}
                 feeText={feeEstimate?.coinAmount && feeCoinTicker
                     ? `Network fee: ${feeEstimate.coinAmount} ${feeCoinTicker}`
                     : undefined}
@@ -652,119 +689,53 @@ export function LinkForm({ walletId, onBack }) {
         );
     }
 
-    // Review + submitting: show a summary dl, the decoded sub-action
-    // previews, credentials, and the sign button. No form fields are
-    // editable here; the user goes back to the form stage to change anything.
     if (stage === 'review' || stage === 'submitting') {
-        const preview1Key = chain1Id && /^\d+$/.test(actionIndex1) ? `${chain1Id}:${actionIndex1}` : null;
-        const preview2Key = chain2Id && /^\d+$/.test(actionIndex2) ? `${chain2Id}:${actionIndex2}` : null;
-        const preview1 = preview1Key ? previewCache[preview1Key] : null;
-        const preview2 = preview2Key ? previewCache[preview2Key] : null;
-
-        return wrapForm(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review link"
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || hw) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <>
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={stage === 'submitting'}
-                            onClick={(event) => {
-                                event.preventDefault();
-                                setStage('form');
-                            }}
-                        >
-                            Back
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            icon={<Icon.SignIcon />}
-                            loading={stage === 'submitting'}
-                            disabled={isWatcherMode
-                                ? false
-                                : hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)}
-                        >
-                            {isWatcherMode ? 'Create Unsigned Transaction' : 'Sign Link'}
-                        </Button>
-                    </>
-                )}
-            >
-                <p className={styles.summary}>
-                    Link action #{actionIndex1} to action #{actionIndex2}
-                    {memo.trim() ? `, memo: "${memo.trim()}"` : ''}
-                </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Network</dt>
-                    <dd className={styles.detailsValue}>
-                        {submitDescriptor
-                            ? <ChainBadge descriptor={submitDescriptor} size="sm" showName={false} />
-                            : 'Selected network'}
-                    </dd>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    <dt className={styles.detailsLabel}>Linking</dt>
-                    <dd className={styles.detailsValue}>
-                        Action #{actionIndex1} {'↔'} action #{actionIndex2}
-                    </dd>
-                    <dt className={styles.detailsLabel}>First action</dt>
-                    <dd className={`${styles.detailsValue} ${styles.linkReviewAction}`}>
-                        {preview1?.loading
-                            ? 'Loading…'
-                            : preview1?.error
-                                ? humanizeError(preview1.error, 'load that action').message
-                                : preview1?.action
-                                    ? decodePreview(preview1.action)
-                                    : '(preview not loaded)'}
-                    </dd>
-                    <dt className={styles.detailsLabel}>Second action</dt>
-                    <dd className={`${styles.detailsValue} ${styles.linkReviewAction}`}>
-                        {preview2?.loading
-                            ? 'Loading…'
-                            : preview2?.error
-                                ? humanizeError(preview2.error, 'load that action').message
-                                : preview2?.action
-                                    ? decodePreview(preview2.action)
-                                    : '(preview not loaded)'}
-                    </dd>
-                    <dt className={styles.detailsLabel}>Network fee</dt>
-                    <dd className={styles.detailsValue}>
-                        {feeEstimate && feeCoinTicker
-                            ? `${feeEstimate.coinAmount} ${feeCoinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    </dd>
-                </dl>
-
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={submitChainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                )}
-            </FormPage>,
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setStage('form'); setSubmitError(null); }}
+                decoded={null}
+                chainLabel={submitDescriptor?.displayName || submitChainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={feeCoinTicker || ''}
+                credentials={<p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>}
+                credentialsReady
+                summary={{
+                    verb: t('components.confirmSummary.verbLink'),
+                    target: t('components.confirmSummary.linkTarget', {
+                        coin1: linkParams.COIN1,
+                        index1: linkParams.COIN1_ACTION_INDEX,
+                        coin2: linkParams.COIN2,
+                        index2: linkParams.COIN2_ACTION_INDEX,
+                    }),
+                    direction: 'none',
+                    chainId: submitChainId,
+                    address: fromAddress?.address,
+                    facts: [
+                        {
+                            label: 'Action 1',
+                            value: `${ticker1} #${actionIndex1}: ${preview1?.action ? decodePreview(preview1.action) : 'Details unavailable'}`,
+                        },
+                        {
+                            label: 'Action 2',
+                            value: `${ticker2} #${actionIndex2}: ${preview2?.action ? decodePreview(preview2.action) : 'Details unavailable'}`,
+                        },
+                        ...(memo.trim() ? [{ label: 'Memo', value: memo.trim() }] : []),
+                    ],
+                }}
+                networkFee={feeEstimate?.coinAmount && feeCoinTicker ? {
+                    amount: String(feeEstimate.coinAmount), ticker: feeCoinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -777,7 +748,8 @@ export function LinkForm({ walletId, onBack }) {
     const sideSummary = (ticker, index) => [ticker, index ? `#${index}` : ''].filter(Boolean).join(' ');
     const linkSummary = [sideSummary(ticker1, actionIndex1), sideSummary(ticker2, actionIndex2)]
         .filter(Boolean).join(' to ') || null;
-    const linkHasError = Boolean((validationError && !memoTooLong) || (formError && formErrorSection === 'link'));
+    const linkHasError = Boolean((validationError && !memoTooLong) || missing1 || missing2
+        || (formError && formErrorSection === 'link'));
 
     return wrapForm(
         <FormFrame
@@ -850,73 +822,65 @@ export function LinkForm({ walletId, onBack }) {
             <div className={styles.linkActions} data-xc-preserve-nested-cards>
                 <ActionCard
                     number="1"
+                    inputId={actionInputId1}
                     chainIds={chainIds}
                     chainId={chain1Id}
                     onChainChange={(value) => { setChain1Id(value); setFormError(null); }}
                     actionIndex={actionIndex1}
                     onActionIndexChange={(value) => { setActionIndex1(value); setFormError(null); }}
-                    previewCache={previewCache}
+                    onLookup={() => lookUpAction(chain1Id, actionIndex1)}
+                    preview={preview1}
                 />
-                <div className={styles.linkConnector} aria-hidden="true">
-                    <Icon.LinkIcon />
+                {/* A link-only marker sits fully in the gap. It has no arrows
+                    or control behaviour, and names the pair for a screen reader. */}
+                <div className={styles.linkConnector}>
+                    <span
+                        className={styles.linkConnectorBadge}
+                        role="img"
+                        aria-label="Action 1 is linked to Action 2"
+                        title="Action 1 is linked to Action 2"
+                    >
+                        <Icon.LinkIcon />
+                    </span>
                 </div>
                 <ActionCard
                     number="2"
+                    inputId={actionInputId2}
                     chainIds={chainIds}
                     chainId={chain2Id}
                     onChainChange={(value) => { setChain2Id(value); setFormError(null); }}
                     actionIndex={actionIndex2}
                     onActionIndexChange={(value) => { setActionIndex2(value); setFormError(null); }}
-                    previewCache={previewCache}
+                    onLookup={() => lookUpAction(chain2Id, actionIndex2)}
+                    preview={preview2}
                 />
             </div>
             </FormSection>
 
-            {/* Memo is its own optional closed section; the section carries the
-                Optional tag, not the field. */}
-            <FormSection
-                id="memo"
-                title="Memo"
-                icon={Icon.MessageIcon}
-                optional
+            {/* Memo is its own optional closed section holding only the memo:
+                the section title names the field and carries its count. */}
+            <MemoSection
                 {...formSections.bind('memo')}
                 revealKey={sectionErrorKey(Boolean(memoTooLong))}
                 summary={trimmedMemo || 'None'}
-            >
-                <Input
-                    label="Memo"
-                    maxLength={MAX_MEMO_LENGTH}
-                    help={MEMO_HINT}
-                    error={memoTooLong || undefined}
-                    value={memo}
-                    onChange={(e) => setMemo(e.target.value)}
-                />
-            </FormSection>
+                maxLength={MAX_MEMO_LENGTH}
+                error={memoTooLong || undefined}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+            />
         </FormFrame>,
     );
 }
 
-/** One referenced action and its explorer lookup result. */
-function ActionCard({ number, chainIds, chainId, onChainChange, actionIndex, onActionIndexChange, previewCache }) {
-    const descriptor = chainId ? chainRegistry.get(chainId) : null;
-    const previewKey = chainId && /^\d+$/.test(actionIndex)
-        ? `${chainId}:${actionIndex}`
-        : null;
-    const preview = previewKey ? previewCache[previewKey] : null;
-
-    const checkText = actionIndex && !/^\d+$/.test(actionIndex)
-        ? 'This must be a whole number.'
-        : preview?.loading
-            ? 'Looking up that action…'
-            : preview?.error
-                ? humanizeError(preview.error, 'load that action').message
-                : preview?.action
-                    ? foundActionText(preview.action)
-                    : preview
-                        ? 'No action was found at that number.'
-                        : descriptor && actionIndex
-                            ? 'Enter the action number from the explorer to see a preview…'
-                            : '';
+/**
+ * One referenced action: its network, its number, and what the explorer holds
+ * at that number. The number field shows the standard loading spinner while
+ * the read runs and the standard field error when no action has that number;
+ * a found action is summarised under the fields.
+ */
+function ActionCard({ number, inputId, chainIds, chainId, onChainChange, actionIndex, onActionIndexChange, onLookup, preview }) {
+    const loading = Boolean(preview?.loading);
+    const missing = isMissingAction(preview);
 
     return (
         <fieldset className={styles.linkActionCard}>
@@ -940,42 +904,149 @@ function ActionCard({ number, chainIds, chainId, onChainChange, actionIndex, onA
                 </div>
 
                 <Input
+                    id={inputId}
                     className={styles.linkActionIndex}
                     label="Action number"
                     help="The number shown next to the action on the explorer."
                     value={actionIndex}
                     onChange={(e) => onActionIndexChange(e.target.value.replace(/\D/g, ''))}
+                    // Leaving the field is the user saying the number is complete.
+                    onBlur={onLookup}
                     inputMode="numeric"
                     placeholder="e.g. 12345"
+                    aria-busy={loading ? 'true' : undefined}
+                    fieldAction={loading ? (
+                        <Spinner size="sm" role="status" aria-label={`Looking up Action ${number}`} />
+                    ) : null}
+                    error={missing ? NO_SUCH_ACTION : undefined}
+                    // Keyed to the number, so a second missing number shows the
+                    // error again after typing dismissed the first.
+                    errorKey={`${chainId}:${actionIndex}`}
                 />
             </div>
 
-            {checkText ? (
-                <div className={`${styles.linkActionCheck} ${preview?.action ? styles.linkActionFound : ''}`}>
-                    {checkText}
-                </div>
-            ) : null}
+            {preview?.action ? <ActionSummary number={number} action={preview.action} /> : null}
         </fieldset>
     );
 }
 
-function foundActionText(action) {
-    const actionName = action?.action || action?.ACTION;
-    const amount = action?.amount ?? action?.AMOUNT;
-    const ticker = action?.tick ?? action?.TICK;
-    const block = action?.block_index ?? action?.BLOCK_INDEX ?? action?.blockIndex;
-    const summary = [actionName ? String(actionName).toUpperCase() : actionName, amount, ticker]
-        .filter((part) => part !== undefined && part !== null && String(part).trim() !== '')
-        .map(String)
-        .join(' ');
-    const blockText = formatBlockIndex(block);
-    return `Found: ${summary || 'Action details unavailable'}${blockText ? `, block ${blockText}` : ''}`;
+/** True once a finished lookup found nothing at that number (a failed read is not "missing"). */
+function isMissingAction(preview) {
+    return Boolean(preview && !preview.loading && !preview.action && !preview.error);
+}
+
+// What an action is, in the words a person would use. The few that a link
+// most often ties together get a fuller name than the History label; every
+// other action falls back to that shared label.
+const ACTION_TYPE_WORDS = /** @type {Record<string, string>} */ ({
+    ISSUE: 'Token issuance',
+    MINT: 'Token mint',
+    SEND: 'Token send',
+    DESTROY: 'Token destroy',
+    DIVIDEND: 'Dividend payment',
+});
+
+/** The first non-empty value of a field, read lower-case or upper-case. */
+function actionField(row, ...names) {
+    for (const name of names) {
+        const value = row?.[name] ?? row?.[name.toUpperCase()];
+        if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+    }
+    return undefined;
+}
+
+function actionTypeWords(row) {
+    const name = String(actionField(row, 'action') || '').toUpperCase();
+    if (!name) return 'Action details unavailable';
+    // A FILE's `type` is its media type, so an image says so.
+    if (name === 'FILE') {
+        return /^image\//i.test(String(actionField(row, 'type') || '')) ? 'Image upload' : 'File upload';
+    }
+    return ACTION_TYPE_WORDS[name] || actionDisplayLabel(name);
+}
+
+/**
+ * The one thing the action is about: a file's name, a token (with the amount
+ * for a send), a broadcast's text, or the address it went to.
+ *
+ * @returns {{ label: string, text?: string, address?: string } | null}
+ */
+function actionSubject(row) {
+    const name = String(actionField(row, 'action') || '').toUpperCase();
+    if (name === 'FILE') {
+        const file = actionField(row, 'name', 'title');
+        return file ? { label: 'File', text: String(file) } : null;
+    }
+    const tick = actionField(row, 'tick');
+    if (tick) {
+        const amount = actionField(row, 'amount');
+        return { label: 'Token', text: name === 'SEND' && amount ? `${amount} ${tick}` : String(tick) };
+    }
+    const text = actionField(row, 'message', 'text', 'title', 'name');
+    if (text && typeof text !== 'object') return { label: 'Text', text: String(text) };
+    const destination = actionField(row, 'destination');
+    if (typeof destination === 'string') return { label: 'To', address: destination };
+    return null;
+}
+
+/**
+ * The found action as read-only facts in one standard card (G121: no help
+ * icons, one line per fact, a long value truncating with its full text in a
+ * title), so the user can see what Action 1 and Action 2 actually are.
+ */
+function ActionSummary({ number, action }) {
+    const row = flattenActionDetails(action);
+    const type = actionTypeWords(row);
+    const subject = actionSubject(row);
+    const block = formatBlockIndex(actionField(row, 'block_index', 'blockIndex'));
+    const seconds = Number(actionField(row, 'timestamp', 'block_time'));
+    const time = !block && Number.isFinite(seconds) && seconds > 0
+        ? new Date(seconds * 1000).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+        : '';
+    const sender = actionField(row, 'source');
+
+    return (
+        <dl
+            className={`${facts.list} ${styles.linkActionSummary}`}
+            aria-label={`Action ${number} details`}
+            data-link-action-summary=""
+        >
+            <dt className={facts.label} title="Type">Type</dt>
+            <dd className={facts.value} title={type}>{type}</dd>
+            {subject ? (
+                <>
+                    <dt className={facts.label} title={subject.label}>{subject.label}</dt>
+                    <dd className={facts.value} title={subject.address || subject.text}>
+                        {subject.address ? <AddressText address={subject.address} /> : subject.text}
+                    </dd>
+                </>
+            ) : null}
+            {block ? (
+                <>
+                    <dt className={facts.label} title="Block">Block</dt>
+                    <dd className={facts.value} title={block}>{block}</dd>
+                </>
+            ) : time ? (
+                <>
+                    <dt className={facts.label} title="Time">Time</dt>
+                    <dd className={facts.value} title={time}>{time}</dd>
+                </>
+            ) : null}
+            {typeof sender === 'string' ? (
+                <>
+                    <dt className={facts.label} title="Sent by">Sent by</dt>
+                    <dd className={facts.value} title={sender}><AddressText address={sender} /></dd>
+                </>
+            ) : null}
+        </dl>
+    );
 }
 
 function formatBlockIndex(block) {
     if (block === undefined || block === null || String(block).trim() === '') return '';
     const text = String(block).trim();
-    return /^\d+$/.test(text) ? BigInt(text).toLocaleString('en-US') : text;
+    // A block number is an identifier: shown raw, never grouped (G123).
+    return text;
 }
 
 function decodePreview(action) {

@@ -190,9 +190,10 @@ describe('My tokens controls and supply status', () => {
         // The type picker is an icon dropdown inside the title-bar filter panel.
         fireEvent.click(screen.getByRole('button', { name: 'Filter tokens' }));
         // IconSelect names its trigger by the field label plus the current pick
-        // and takes no aria-label, so the trigger is found by its listbox popup.
-        const typeButton = () => screen.getByRole('dialog', { name: 'Filter tokens' })
-            .querySelector('button[aria-haspopup="listbox"]');
+        // and takes no aria-label, so the trigger is found by its listbox popup;
+        // Home's network picker comes before it (G04), so Type is the last one.
+        const typeButton = () => [...screen.getByRole('dialog', { name: 'Filter tokens' })
+            .querySelectorAll('button[aria-haspopup="listbox"]')].at(-1);
         expect(typeButton()).toHaveTextContent('All tokens');
         fireEvent.click(typeButton());
         expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([

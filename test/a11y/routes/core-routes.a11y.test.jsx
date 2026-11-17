@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { afterAll, afterEach, beforeAll, describe, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
@@ -123,6 +123,39 @@ describe('high-use route accessibility', () => {
             <Send walletId="wallet-1" onBack={() => {}} />,
         );
         await screen.findByLabelText('To');
+        await expectNoSeriousAxeViolations(container);
+    });
+
+    it('scans the Send Multi tab with its add-recipient form open', async () => {
+        const { container } = renderRoute(
+            <Send walletId="wallet-1" onBack={() => {}} />,
+        );
+        await screen.findByLabelText('To');
+        fireEvent.click(screen.getByRole('tab', { name: 'Multi' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Add Recipient' }));
+        await screen.findByRole('group', { name: 'New recipient' });
+        await expectNoSeriousAxeViolations(container);
+    });
+
+    it('scans the Send Advanced tab with recipient lines typed, then the Multi rows they become', async () => {
+        const host = messaging({
+            getAddressBalances: vi.fn().mockResolvedValue({
+                native: { tick: 'BTC', quantity: '100000000', divisibility: 8 },
+                tokens: [{ tick: 'XCHAIN', quantity: '500000000000', divisibility: 8 }],
+            }),
+        });
+        const { container } = renderRoute(<Send walletId="wallet-1" onBack={() => {}} />, host);
+        await screen.findByLabelText('To');
+        fireEvent.click(screen.getByRole('tab', { name: 'Advanced' }));
+        fireEvent.change(screen.getByLabelText('Recipients'), {
+            target: { value: `${ADDRESS},XCHAIN,1250\nbc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq,XCHAIN,250` },
+        });
+        await expectNoSeriousAxeViolations(container);
+        // The same lines as Multi's standard summary rows: one full-row edit
+        // target with the complete address whenever it fits.
+        fireEvent.click(screen.getByRole('tab', { name: 'Multi' }));
+        await screen.findByRole('button', { name: /^Edit recipient 2:/ });
+        expect(screen.queryByRole('button', { name: 'Remove Recipient 2' })).toBeNull();
         await expectNoSeriousAxeViolations(container);
     });
 

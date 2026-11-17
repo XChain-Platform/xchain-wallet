@@ -90,14 +90,16 @@ describe('web multi-tab safety', () => {
             React.createElement(Locked, { onUnlocked: vi.fn() }),
         ));
 
-        // The lock screen shows only the logo, the product name and the password
-        // field, so no wallet name appears before or after the other tab switches.
-        expect(screen.getByRole('heading', { name: 'XChain Wallet' })).toBeTruthy();
+        // The logo is the only visible brand. The hidden product h1 remains
+        // stable, and no wallet name appears before or after the tab switch.
+        expect(screen.getByRole('heading', { name: 'XChain Wallet', hidden: true }))
+            .toHaveClass('sr-only');
         expect(screen.queryByText('Primary')).toBeNull();
         writeActiveWallet('wallet-2', 'Savings');
         act(() => window.dispatchEvent(new StorageEvent('storage', { key: 'xc:activeWallet' })));
 
-        expect(screen.getByRole('heading', { name: 'XChain Wallet' })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'XChain Wallet', hidden: true }))
+            .toHaveClass('sr-only');
         expect(screen.queryByText('Savings')).toBeNull();
         expect(screen.queryByText('Primary')).toBeNull();
     });

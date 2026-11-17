@@ -45,9 +45,9 @@ const CHAIN = 'bitcoin-regtest';
 const MINE = 'bcrt1qmineminemineminemineminemineminemine0';
 const NOTICE = /Token details could not be loaded from the explorer/;
 
-/** Returns the Manage token tile, which the Actions tab (open by default) shows to the owner. */
+/** Returns the Manage token row, which the Actions tab (open by default) shows to the owner. */
 async function findManage() {
-    return screen.findByRole('button', { name: 'Manage token' });
+    return screen.findByRole('button', { name: /^Manage token\b/ });
 }
 
 function renderDetail(getTokenInfo) {

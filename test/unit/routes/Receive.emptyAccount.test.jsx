@@ -89,7 +89,7 @@ describe('Receive with no addresses on any chain', () => {
 
         // Add addresses takes over the screen, preselecting an active chain
         // even though the account occupies none.
-        const generate = await screen.findByRole('button', { name: /^Generate$/ });
+        const generate = await screen.findByRole('button', { name: /^Add Address$/ });
         fireEvent.click(generate);
 
         await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledTimes(1));
@@ -115,7 +115,7 @@ describe('Receive with no addresses on any chain', () => {
         renderReceive(messaging);
 
         fireEvent.click(await screen.findByRole('button', { name: /Generate an address/i }));
-        fireEvent.click(await screen.findByRole('button', { name: /^Generate$/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Add Address$/ }));
 
         const address = await screen.findByDisplayValue('bcrt1qexample');
         const addressLabel = document.querySelector(`label[for="${address.id}"]`);

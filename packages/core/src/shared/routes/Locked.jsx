@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { Button, FormPage, Icon, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Icon, Input, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 // Direct module imports, not the flows barrel: the barrel keeps every flow
 // module in the startup bundle, and this screen is part of first paint.
@@ -25,9 +25,16 @@ import {
     isBiometricSupported,
     isBiometricRegistered,
     unlockWithBiometric,
+    retireBiometricAfterPasswordChange,
 } from '../../flows/biometricUnlock.js';
 import { tripDuressIfMatch } from '../../flows/duressPassphrase.js';
-import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
+import {
+    cancelEraseSchedule,
+    eraseRemainingMs,
+    getEraseSchedule,
+    isEraseDue,
+    runDueErase,
+} from '../../flows/eraseSchedule.js';
 import {
     getDemoWalletId,
     getDemoWalletPassword,
@@ -48,10 +55,10 @@ import {
 } from '../utils/activeWalletMemory.js';
 // The demo-exit confirm opens only on a tap, so it and its styles load on demand.
 import { DemoExitConfirmOnDemand as DemoExitConfirm } from '../components/onDemandOverlays.js';
+import { useLockedAutopayNotice } from '../components/LockedAutopayNotice.jsx';
 import { useIdlePreload } from '../utils/onDemandComponent.js';
-import { useFocusTrap } from '../utils/focusTrap.js';
-import { useBackHandler } from '../../ui/backStack.js';
 import { useNativeExitRoot } from '../hooks/useNativeExitRoot.js';
+import { ForgotPassword } from './ForgotPassword.jsx';
 import styles from './Locked.module.css';
 import { t } from '../../i18n/index.js';
 
@@ -87,9 +94,18 @@ export function Locked({ onUnlocked, lockReason = null }) {
 
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
+    // PC-16 Phase B: "Auto pay is on for N orders, up to <cap>" with Stop.
+    const autopayNotice = useLockedAutopayNotice(messaging);
 
     const [password, setPassword] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    // G130 and G129: Unlock Wallet is never disabled for an empty password; the
+    // tap marks the field red and the error summary leads the form. The
+    // wrong-password message stays in `error`, under the field.
+    const unlockErrors = useFormErrors();
+    // The password field's id keys its error entry. Unique per mount: two
+    // popups can draw this screen in one document.
+    const UNLOCK_PASSWORD_ID = `locked-password-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
     // §15.6 step 2. The unlock reply, not this screen, decides whether a
     // passphrase is ever asked for: the vault is sealed until the password
     // lands, so only the host can tell which wallets are still awaiting the
@@ -120,15 +136,22 @@ export function Locked({ onUnlocked, lockReason = null }) {
     const [demoWipeError, setDemoWipeError] = useState(/** @type {string | null} */ (null));
     const [demoConfirmOpen, setDemoConfirmOpen] = useState(false);
     const [forgotOpen, setForgotOpen] = useState(false);
-    const [restoreLane, setRestoreLane] = useState(
-        /** @type {'mnemonic' | 'backup' | null} */ (null),
+    // Forgot Password's Erase Everything waits 48 hours (flows/eraseSchedule.js).
+    const [eraseSchedule, setEraseSchedule] = useState(getEraseSchedule);
+    const [eraseNow, setEraseNow] = useState(() => Date.now());
+    const [eraseRunning, setEraseRunning] = useState(false);
+    const [eraseRunError, setEraseRunError] = useState(/** @type {string | null} */ (null));
+    // Set by the erase notice's Cancel Erase: the unlock button then says what it does.
+    const [cancelEraseIntent, setCancelEraseIntent] = useState(false);
+    // A result the user is told about before the app opens: an erase cancelled
+    // by this unlock, or a password reset with a recovery phrase.
+    const [resultNotice, setResultNotice] = useState(
+        /** @type {{ title: string, body: string, tone?: 'success' | 'danger' } | null} */ (null),
     );
-    const [wipeConfirmText, setWipeConfirmText] = useState('');
-    const [wipeBusy, setWipeBusy] = useState(false);
-    const [wipeError, setWipeError] = useState(/** @type {string | null} */ (null));
+    const pendingNoticeRef = useRef(/** @type {{ title: string, body: string, tone?: 'success' | 'danger' } | null} */ (null));
     const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const forgotTriggerRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
-    const forgotDialogRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+    const refocusForgotRef = useRef(false);
     const haptic = useHaptic();
 
     const clearUnlockingNoteTimer = useCallback(() => {
@@ -165,41 +188,54 @@ export function Locked({ onUnlocked, lockReason = null }) {
         }
     }
 
-    // §26.4: last-resort escape for a real wallet whose owner has lost
-    // the password. The vault blob is encrypted under the master key, so
-    // there's no surgical "reset password" path; the only option is to
-    // wipe the device-side wallet and re-import from seed or encrypted
-    // backup elsewhere. Gated behind a type-WIPE confirmation so a
-    // misclick can't destroy a real wallet.
-    async function handleForgotPasswordWipe() {
-        if (wipeBusy) return;
-        if (!restoreLane) return;
-        if (!isExactTypedConfirmation(wipeConfirmText, 'WIPE')) return;
-        setWipeBusy(true);
-        setWipeError(null);
-        try {
-            await wipeWalletStorage();
-            setForgotPasswordRestoreIntent(restoreLane);
-            if (typeof window !== 'undefined') window.location.reload();
-        } catch {
-            setWipeError('Could not erase wallet data. Close and reopen the app, then try again.');
-            setWipeBusy(false);
-        }
-    }
-
-    function handleForgotPasswordCancel() {
-        if (wipeBusy) return;
+    // Leave Forgot Password for the lock screen; focus returns to its button.
+    function closeForgotPassword() {
         setForgotOpen(false);
-        setRestoreLane(null);
-        setWipeConfirmText('');
-        setWipeError(null);
+        refocusForgotRef.current = true;
     }
 
-    useFocusTrap(forgotDialogRef, {
-        active: forgotOpen,
-        restoreFocusRef: forgotTriggerRef,
-    });
-    useBackHandler(forgotOpen ? handleForgotPasswordCancel : undefined, wipeBusy, 'screen');
+    // Erase Everything's due time has passed and nobody unlocked: this app
+    // start performs the erase, then offers restore (operator ruling
+    // 2026-11-16). The demo wallet never schedules one; its exit stays immediate.
+    // runDueErase re-reads every store the record lives in and refuses while
+    // another tab holds the vault, so this boot's copy alone never erases.
+    const eraseStartedRef = useRef(false);
+    useEffect(() => {
+        if (eraseStartedRef.current || demoWalletId || !isEraseDue(eraseSchedule)) return;
+        eraseStartedRef.current = true;
+        (async () => {
+            try {
+                const ran = await runDueErase(async () => {
+                    setEraseRunning(true);
+                    await wipeWalletStorage();
+                });
+                if (!ran) return;
+                setForgotPasswordRestoreIntent('mnemonic');
+                if (typeof window !== 'undefined' && typeof window.location?.reload === 'function') {
+                    window.location.reload();
+                }
+            } catch {
+                setEraseRunError(t('locked.forgot.eraseFailed'));
+                setEraseRunning(false);
+                eraseStartedRef.current = false;
+            }
+        })();
+    }, [demoWalletId, eraseSchedule]);
+
+    // The notice's time left, refreshed each minute while an erase waits.
+    useEffect(() => {
+        if (!eraseSchedule) return undefined;
+        const handle = window.setInterval(() => setEraseNow(Date.now()), 30_000);
+        return () => window.clearInterval(handle);
+    }, [eraseSchedule]);
+
+    // The page unmounts the button that opened it, so focus returns to it
+    // once the lock screen is back.
+    useEffect(() => {
+        if (forgotOpen || !refocusForgotRef.current) return;
+        refocusForgotRef.current = false;
+        forgotTriggerRef.current?.focus();
+    }, [forgotOpen]);
     // The unlock screen is the bottom of the app, so Android Back leaves it
     // the way Home does.
     useNativeExitRoot(true, true);
@@ -384,7 +420,47 @@ export function Locked({ onUnlocked, lockReason = null }) {
         setCaptureIndex(0);
         setCaptureValue('');
         setCaptureError(null);
+        // Something this unlock did that the user must hear about first (an
+        // erase it cancelled, a password reset): the notice page's Continue
+        // finishes the unmount.
+        const notice = pendingNoticeRef.current;
+        if (notice) {
+            pendingNoticeRef.current = null;
+            setResultNotice(notice);
+            return;
+        }
         onUnlocked?.();
+    }
+
+    /**
+     * Forgot Password's phrase reset unlocked the wallet under a new password.
+     * A biometric enrolment wraps the old one, so it is retired, as after a
+     * password change.
+     *
+     * @param {any} reply
+     * @param {string} newPassword
+     * @param {{ skippedWalletIds?: string[] }} result
+     */
+    function handlePasswordReset(reply, newPassword, result) {
+        const skipped = Array.isArray(result?.skippedWalletIds) ? result.skippedWalletIds.length : 0;
+        pendingNoticeRef.current = {
+            title: t('locked.forgot.phrase.doneTitle'),
+            body: skipped > 0
+                ? t('locked.forgot.phrase.doneSkipped', { count: skipped })
+                : t('locked.forgot.phrase.doneBody'),
+        };
+        void Promise.resolve()
+            .then(() => retireBiometricAfterPasswordChange({ vaultRekeyed: true }))
+            .catch(() => { /* the enrolment fails closed at its next use */ });
+        setForgotOpen(false);
+        return afterUnlock(reply, newPassword);
+    }
+
+    /** @param {import('../../flows/eraseSchedule.js').EraseSchedule} schedule */
+    function handleEraseScheduled(schedule) {
+        setEraseSchedule(schedule);
+        setEraseNow(Date.now());
+        closeForgotPassword();
     }
 
     /**
@@ -394,7 +470,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
      * @param {any} reply       the host's unlock reply
      * @param {string} opened   the password that opened the vault
      */
-    function afterUnlock(reply, opened) {
+    async function afterUnlock(reply, opened) {
         clearUnlockingNoteTimer();
         setShowUnlockingNote(false);
         setError(null);
@@ -402,6 +478,27 @@ export function Locked({ onUnlocked, lockReason = null }) {
         setLockout({ failedAttempts: 0, lockedUntilMs: 0 });
         setRemainingMs(0);
         haptic.success();
+        // Any successful unlock proves the owner is here, so it cancels a
+        // scheduled erase and says so. The cancel is awaited: one the store
+        // refused would otherwise read as done and still fire at a later start.
+        if (getEraseSchedule()) {
+            setCancelEraseIntent(false);
+            const prior = pendingNoticeRef.current;
+            try {
+                await cancelEraseSchedule();
+                setEraseSchedule(null);
+                const cancelled = t('locked.erase.cancelledBody');
+                pendingNoticeRef.current = prior
+                    ? { ...prior, body: `${prior.body} ${cancelled}` }
+                    : { title: t('locked.erase.cancelledTitle'), body: cancelled };
+            } catch {
+                setEraseSchedule(getEraseSchedule());
+                const failed = t('locked.erase.cancelFailedBody');
+                pendingNoticeRef.current = prior
+                    ? { ...prior, body: `${prior.body} ${failed}`, tone: 'danger' }
+                    : { title: t('locked.erase.cancelFailedTitle'), body: failed, tone: 'danger' };
+            }
+        }
         const queue = Array.isArray(reply?.passphraseCaptureNeeded)
             ? reply.passphraseCaptureNeeded.filter((w) => w && typeof w.id === 'string')
             : [];
@@ -422,15 +519,22 @@ export function Locked({ onUnlocked, lockReason = null }) {
 
     async function handleSubmit(event) {
         event.preventDefault();
-        if (unlockInFlightRef.current || busy || password.length === 0 || isLockedOut) return;
+        if (unlockInFlightRef.current || busy || isLockedOut) return;
+        if (password.length === 0) {
+            setError(null);
+            unlockErrors.validate({ [UNLOCK_PASSWORD_ID]: t('locked.enterYourPassword') });
+            haptic.error();
+            return;
+        }
         if (refreshLockout() > 0) return;
+        unlockErrors.reset();
         unlockInFlightRef.current = true;
         setBusy(true);
         setError(null);
         try {
             await nextPaint();
             const reply = await messaging.unlockWallet(password);
-            afterUnlock(reply, password);
+            await afterUnlock(reply, password);
         } catch (err) {
             const isBadPassword = err?.name === 'InvalidPasswordError';
             if (isBadPassword) {
@@ -485,7 +589,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
             // Biometrics unwrap the password, never the passphrase, so this
             // path reaches step 2 exactly like a typed unlock does.
             const reply = await messaging.unlockWallet(unwrapped);
-            afterUnlock(reply, unwrapped);
+            await afterUnlock(reply, unwrapped);
         } catch (err) {
             // End the biometric path after any refusal so cancellations,
             // lockouts, and changed enrollment cannot reopen prompt loops.
@@ -504,7 +608,13 @@ export function Locked({ onUnlocked, lockReason = null }) {
      */
     async function handleCapture(event) {
         event.preventDefault();
-        if (busy || captureValue.length === 0 || !captureWallet) return;
+        if (busy || !captureWallet) return;
+        // G130: Continue stays enabled; an empty passphrase is said on the field.
+        if (captureValue.length === 0) {
+            setCaptureError(t('locked.enterThePassphrase'));
+            haptic.error();
+            return;
+        }
         setBusy(true);
         setCaptureError(null);
         try {
@@ -556,22 +666,29 @@ export function Locked({ onUnlocked, lockReason = null }) {
             <img
                 src={branding.logoUrl()}
                 alt=""
+                width="152"
+                height="94"
                 className={styles.logo}
+                data-locked-logo=""
             />
-            {/* The lock screen shows only the logo, the product name
-                and the password field; no wallet name or other custom text. */}
-            <h1
-                style={{
-                    maxWidth: '100%',
-                    margin: 0,
-                    color: 'var(--xc-text)',
-                    fontSize: 'var(--xc-text-xl)',
-                    fontWeight: 700,
-                    overflowWrap: 'anywhere',
-                }}
-            >
-                {inCaptureStep ? t('locked.saveWalletPassphrase') : branding.PRODUCT_NAME}
-            </h1>
+            {inCaptureStep ? (
+                <h1
+                    style={{
+                        maxWidth: '100%',
+                        margin: 0,
+                        color: 'var(--xc-text)',
+                        fontSize: 'var(--xc-text-xl)',
+                        fontWeight: 700,
+                        overflowWrap: 'anywhere',
+                    }}
+                >
+                    {t('locked.saveWalletPassphrase')}
+                </h1>
+            ) : (
+                // Match onboarding: the logo is the visible brand while the
+                // product name remains the page heading for assistive technology.
+                <h1 className="sr-only">{branding.PRODUCT_NAME}</h1>
+            )}
         </div>
     );
 
@@ -590,6 +707,33 @@ export function Locked({ onUnlocked, lockReason = null }) {
         </StatusMessage>
     ) : null;
 
+    // G120 danger notice for a scheduled erase: the time left and one action,
+    // Cancel Erase, which asks for the password through this same form, so the
+    // lockout ladder and the duress check guard it like any unlock.
+    const eraseLeftMs = eraseRemainingMs(eraseSchedule, eraseNow);
+    const eraseNotice = eraseSchedule && !demoWalletId ? (
+        <StatusMessage
+            key="erase-scheduled"
+            tone="danger"
+            className={styles.lockoutBanner}
+            title={t('locked.erase.scheduledTitle')}
+            action={eraseRunning ? undefined : {
+                label: t('locked.erase.cancel'),
+                onAction: () => {
+                    setCancelEraseIntent(true);
+                    inputRef.current?.focus();
+                },
+            }}
+        >
+            {eraseRunning
+                ? t('locked.erase.running')
+                : eraseLeftMs > 0
+                    ? t('locked.erase.scheduledBody', { time: formatCountdown(eraseLeftMs) })
+                    : t('locked.erase.dueBody')}
+            {eraseRunError ? <span role="alert">{' '}{eraseRunError}</span> : null}
+        </StatusMessage>
+    ) : null;
+
     const lockReasonNotice = lockReason === 'auto-lock-unsaved' ? (
         <StatusMessage key="lock-reason" variant="warning" className={styles.lockoutBanner}>
             {t('locked.autoLockUnsaved')}
@@ -601,7 +745,9 @@ export function Locked({ onUnlocked, lockReason = null }) {
             label={t('locked.unlockWallet')}
             className={styles.unlockForm}
             onSubmit={handleSubmit}
+            errors={unlockErrors}
             status={[
+                eraseNotice,
                 lockReasonNotice,
                 busy && !inCaptureStep && showUnlockingNote ? (
                     <p key="unlocking" className={styles.unlockingNote} aria-live="polite">
@@ -609,20 +755,24 @@ export function Locked({ onUnlocked, lockReason = null }) {
                     </p>
                 ) : null,
                 lockoutBanner,
+                // PC-16 Phase B: armed auto pay still paying while locked.
+                autopayNotice,
             ]}
             actions={(
                 <div className={styles.unlockActions}>
-                    {/* During a lockout the banner says how long to wait and the
-                        button only goes disabled, so the countdown is said once. */}
+                    {/* Always green and enabled (G130): an empty password is
+                        answered by the tap. During a lockout the banner says how
+                        long to wait and the button ignores taps without changing
+                        its look, so the countdown is said once. */}
                     <Button
                         type="submit"
                         variant="success"
                         block
                         icon={<Icon.UnlockIcon />}
                         loading={busy}
-                        disabled={password.length === 0 || isLockedOut}
+                        disabled={isLockedOut}
                     >
-                        {t('locked.unlockWallet2')}
+                        {cancelEraseIntent && eraseSchedule ? t('locked.erase.cancelAndUnlock') : t('locked.unlockWallet2')}
                     </Button>
                     {biometricAvailable ? (
                         <Button
@@ -638,12 +788,10 @@ export function Locked({ onUnlocked, lockReason = null }) {
                     ) : null}
                     {demoWalletId ? (
                         <div className={styles.demoExitBlock}>
-                            <p className={styles.demoExitNote}>
-                                {t('locked.thisIsADemoWallet')}
-                            </p>
                             <Button
                                 type="button"
                                 variant="danger"
+                                block
                                 icon={<Icon.TrashIcon />}
                                 onClick={() => { setDemoWipeError(null); setDemoConfirmOpen(true); }}
                             >
@@ -664,96 +812,19 @@ export function Locked({ onUnlocked, lockReason = null }) {
                         </div>
                     ) : (
                         <div className={styles.forgotBlock}>
+                            {/* A button like Unlock above it, with a help icon (the
+                                lock icon read as part of Unlock). It opens the
+                                Forgot Password page. */}
                             <Button
                                 ref={forgotTriggerRef}
                                 type="button"
-                                variant="link"
-                                size="sm"
-                                icon={<Icon.LockIcon />}
+                                variant="secondary"
+                                block
+                                icon={<Icon.InfoIcon />}
                                 onClick={() => setForgotOpen(true)}
-                                aria-expanded={forgotOpen}
-                                aria-controls="locked-forgot-password-panel"
-                                hidden={forgotOpen}
-                                style={{ alignSelf: 'center' }}
                             >
                                 {t('locked.forgotPassword')}
                             </Button>
-                            {forgotOpen ? (
-                                <div
-                                    ref={forgotDialogRef}
-                                    id="locked-forgot-password-panel"
-                                    className={styles.wipeConfirm}
-                                    role="alertdialog"
-                                    aria-modal="false"
-                                    aria-label={t('locked.restoreWalletAccess')}
-                                >
-                                    {!restoreLane ? (
-                                        <>
-                                            <p className={styles.wipeNote}>
-                                                <strong>{t('locked.yourPasswordCannotBeRecovered')}</strong>{' '}
-                                                {t('locked.youCanRestoreTheWallet')}
-                                            </p>
-                                            <Button
-                                                type="button"
-                                                variant="secondary"
-                                                icon={<Icon.KeyIcon />}
-                                                onClick={() => setRestoreLane('mnemonic')}
-                                            >
-                                                {t('locked.useRecoveryPhrase')}
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant="secondary"
-                                                icon={<Icon.UploadIcon />}
-                                                onClick={() => setRestoreLane('backup')}
-                                            >
-                                                {t('locked.useBackupFile')}
-                                            </Button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <StatusMessage variant="warning" role={null} className={styles.wipeWarning}>
-                                                <strong>{t('locked.thisPermanentlyDeletesEveryWallet')}</strong>
-                                            </StatusMessage>
-                                            <p className={styles.wipeNote}>
-                                                {t('locked.fundsOnTheBlockchainAre')} {restoreLane === 'backup' ? t('locked.encryptedBackupFile') : t('locked.recoveryPhrase')} {t('locked.forEveryWalletYouNeed')} {restoreLane === 'backup' ? t('locked.backupFileRestore') : t('locked.recoveryPhraseRestore')} {t('locked.form')}
-                                            </p>
-                                            <Input
-                                                type="text"
-                                                label={t('vaultUnavailable.wipeConfirm')}
-                                                help={t('common.typedConfirmationHint', { word: 'WIPE' })}
-                                                value={wipeConfirmText}
-                                                onChange={(e) => setWipeConfirmText(e.target.value)}
-                                                autoComplete="off"
-                                                autoCapitalize="characters"
-                                                disabled={wipeBusy}
-                                            />
-                                            <Button
-                                                type="button"
-                                                variant="danger"
-                                                icon={<Icon.TrashIcon />}
-                                                onClick={handleForgotPasswordWipe}
-                                                loading={wipeBusy}
-                                                disabled={wipeBusy || !isExactTypedConfirmation(wipeConfirmText, 'WIPE')}
-                                            >
-                                                {t('locked.eraseVaultAndRestore')}
-                                            </Button>
-                                        </>
-                                    )}
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        onClick={handleForgotPasswordCancel}
-                                        disabled={wipeBusy}
-                                        autoFocus
-                                    >
-                                        {t('common.cancel')}
-                                    </Button>
-                                    {wipeError ? (
-                                        <StatusMessage variant="error" className={styles.wipeError}>{wipeError}</StatusMessage>
-                                    ) : null}
-                                </div>
-                            ) : null}
                         </div>
                     )}
                 </div>
@@ -772,7 +843,13 @@ export function Locked({ onUnlocked, lockReason = null }) {
             {/* The wrong-password message appears under the field and the actions
                 keep the form gap below it, so no idle space is reserved. */}
             <div className={styles.passwordField}>
+                {demoWalletId ? (
+                    <StatusMessage variant="info" role={null} className={styles.demoNotice}>
+                        {t('locked.thisIsADemoWallet')}
+                    </StatusMessage>
+                ) : null}
                 <Input
+                    id={UNLOCK_PASSWORD_ID}
                     ref={inputRef}
                     type="password"
                     revealable
@@ -812,7 +889,6 @@ export function Locked({ onUnlocked, lockReason = null }) {
                         type="submit"
                         variant="primary"
                         loading={busy}
-                        disabled={captureValue.length === 0}
                     >
                         {t('adsNotice.continue')}
                     </Button>
@@ -830,6 +906,7 @@ export function Locked({ onUnlocked, lockReason = null }) {
                 type="password"
                 revealable
                 label={t('locked.passphrase')}
+                help={t('locked.passphraseHelp')}
                 value={captureValue}
                 onChange={(e) => {
                     setCaptureValue(e.target.value);
@@ -841,6 +918,48 @@ export function Locked({ onUnlocked, lockReason = null }) {
             />
         </FormPage>
     ) : null;
+
+    // The Forgot Password pages (ForgotPassword.jsx): Back is the only way
+    // out. They list the ways back this device offers, in the ruled order.
+    if (forgotOpen && !demoWalletId && !captureWallet && !resultNotice) {
+        return (
+            <ForgotPassword
+                variant={variant}
+                messaging={messaging}
+                onClose={closeForgotPassword}
+                onPasswordReset={handlePasswordReset}
+                onEraseScheduled={handleEraseScheduled}
+            />
+        );
+    }
+
+    // What this unlock did that the user must hear about before the app opens.
+    if (resultNotice) {
+        return (
+            <Screen variant={variant}>
+                <div className={styles.centre}>
+                    <FormPage
+                        label={resultNotice.title}
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            setResultNotice(null);
+                            onUnlocked?.();
+                        }}
+                        actions={(
+                            <Button type="submit" variant="success" block icon={<Icon.ArrowRightIcon />}>
+                                {t('adsNotice.continue')}
+                            </Button>
+                        )}
+                    >
+                        {hero}
+                        <StatusMessage tone={resultNotice.tone ?? 'success'} role="status" title={resultNotice.title}>
+                            {resultNotice.body}
+                        </StatusMessage>
+                    </FormPage>
+                </div>
+            </Screen>
+        );
+    }
 
     const body = captureForm || form;
     // The wrong-password line has no idle space between the field and Unlock,

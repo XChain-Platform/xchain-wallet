@@ -150,11 +150,15 @@ describe('CreateBetFeedForm lays out every page state through a template', () =>
     it('puts the submitted-market summary, transaction id and Done inside one template', async () => {
         const utils = await mount();
         await buildMarket(utils);
-        const summary = byText(utils.container, 'p', 'Market submitted');
+        // The shared result screen: notice, a fact row, the note in a WarningCard.
+        const summary = utils.container.querySelector('[data-testid="result-screen-notice"]');
+        expect(summary?.textContent).toContain('Market submitted');
         expectInsideTemplate(summary);
         const page = summary.closest(templateSelector());
         expect(page.textContent).toContain('Transaction ID');
         expect(page.textContent).toContain('market-txid');
+        expect(page.querySelector('[data-bet-create-permanent]')?.textContent).toContain('permanent');
+        expect(page.querySelector('dt')).toBeNull();
         expectInsideTemplate(byText(page, 'button', 'Done'));
     });
 

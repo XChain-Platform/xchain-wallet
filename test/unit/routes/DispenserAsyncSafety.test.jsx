@@ -268,16 +268,17 @@ describe('dispenser async safety', () => {
         });
         render(provider(<DispenserExplorer onOpenDispenser={() => {}} onBack={() => {}} />, messaging));
 
+        // The search box lives in the title bar's filter panel.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter dispensers' }));
         await waitFor(() => expect(screen.getByText('Enter a token or seller address to search.')).toBeTruthy());
         fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'XCHAIN' } });
-        const form = screen.getByRole('searchbox').closest('form');
-        await waitFor(() => expect(screen.getByRole('button', { name: /search/i })).toBeEnabled());
-        fireEvent.submit(form);
-        fireEvent.submit(form);
+        await waitFor(() => expect(screen.queryByText('Enter a token or seller address to search.')).toBeNull());
+        fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
 
         await waitFor(() => expect(getDispensersForToken.mock.calls.length).toBeGreaterThan(1));
         const callsWhilePending = getDispensersForToken.mock.calls.length;
-        fireEvent.submit(form);
+        // Submitting the same search again while it is pending stays deduplicated.
+        fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
         expect(getDispensersForToken).toHaveBeenCalledTimes(callsWhilePending);
         await act(async () => response.resolve({ data: [] }));
     });
@@ -290,9 +291,10 @@ describe('dispenser async safety', () => {
         });
         render(provider(<DispenserExplorer onOpenDispenser={() => {}} onBack={() => {}} />, messaging));
 
+        fireEvent.click(screen.getByRole('button', { name: 'Filter dispensers' }));
         await waitFor(() => expect(screen.getByText('Enter a token or seller address to search.')).toBeTruthy());
         fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'XCHAIN' } });
-        fireEvent.submit(screen.getByRole('searchbox').closest('form'));
+        fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
         await waitFor(() => expect(messaging.getDispensersForToken.mock.calls.length).toBeGreaterThan(1));
 
         await act(async () => window.dispatchEvent(new CustomEvent('xc:settings-changed', {
@@ -375,7 +377,9 @@ describe('dispenser async safety', () => {
             messaging,
         ));
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
+        // Close is a row of the Actions tab's action list (G101); its name
+        // carries its description, so it is matched by its leading title.
+        fireEvent.click(await screen.findByRole('button', { name: /^Close(?! Dispenser$)/ }));
         const submit = await screen.findByRole('button', { name: 'Create Unsigned Transaction' });
         const form = submit.closest('form');
         fireEvent.submit(form);
@@ -445,8 +449,8 @@ describe('dispenser async safety', () => {
             messaging,
         ));
 
-        // The detail page opens on Details; buying is the Buy tab.
-        fireEvent.click(await screen.findByRole('tab', { name: /^Buy/ }));
+        // The detail page opens on Actions; buying is the Buy page its first row opens.
+        fireEvent.click(await screen.findByTestId('dispenser-buy-row'));
         const buy = await screen.findByRole('button', { name: 'Create Unsigned Transaction' });
         await waitFor(() => expect(buy).toBeEnabled());
         fireEvent.click(buy);

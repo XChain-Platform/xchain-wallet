@@ -95,8 +95,9 @@ assert.ok(/projects/.test(tokenInfoSrc),
     'normalizeTokenInfo carries the explorer projects[] field');
 const tokenDetail = readFileSync(join(sharedRoutes, 'TokenDetail.jsx'), 'utf8');
 assert.ok(/<DetailRow label="Projects">/.test(tokenDetail), 'TokenDetail renders project membership in Details');
-const manageSrc = readFileSync(join(sharedRoutes, 'ManageToken.jsx'), 'utf8');
-assert.ok(!/officialBanner/.test(manageSrc), 'ManageToken omits the Official banner from its identity box');
+// The issuer's actions are groups on the one asset page (TokenOwnerActions.jsx).
+const manageSrc = readFileSync(join(sharedRoutes, '..', 'components', 'TokenOwnerActions.jsx'), 'utf8');
+assert.ok(!/officialBanner/.test(manageSrc), 'the issuer groups draw no Official banner');
 
 // --- Background host ---
 
@@ -135,8 +136,8 @@ for (const [shell, appPath] of [
         `${shell} App.jsx imports ProjectRosterForm`);
     assert.ok(app.includes("'project-roster'"),
         `${shell} tracks 'project-roster' sub-route`);
-    assert.ok(/onManageRoster=\{\(\) => openForm\('project-roster'\)\}/.test(app),
-        `${shell} ManageToken wires onManageRoster`);
+    assert.ok(/onManageRoster: \(ctx\) => openOwnerForm\('project-roster', ctx\)/.test(app),
+        `${shell} the asset page wires onManageRoster`);
 }
 
 console.log(

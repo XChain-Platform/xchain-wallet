@@ -94,11 +94,14 @@ describe('BackupSection encrypted export', () => {
         expect(screen.getByText(/configured download location, usually the Downloads folder/i)).toBeTruthy();
         fillPasswords('short', 'short');
         expect(screen.getByText('Backup password must be at least 8 characters.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Export Backup' })).toBeDisabled();
+        // G130: Export Backup stays enabled; a press is refused with the reason.
+        expect(screen.getByRole('button', { name: 'Export Backup' })).toBeEnabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Export Backup' }));
+        expect(screen.getByRole('alert', { name: /form errors/i })).toBeTruthy();
 
         fillPasswords('long-enough', 'long-enougH');
-        expect(screen.getByText('Backup passwords don\'t match.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Export Backup' })).toBeDisabled();
+        expect(screen.getAllByText('Backup passwords don\'t match.').length).toBeGreaterThan(0);
+        fireEvent.click(screen.getByRole('button', { name: 'Export Backup' }));
         expect(messaging.exportBackupFile).not.toHaveBeenCalled();
 
         fillPasswords('long-enough');

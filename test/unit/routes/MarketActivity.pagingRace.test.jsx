@@ -21,7 +21,8 @@ const offer = (idx) => ({
     action_index: idx, status: 'valid', current_status: 'open', give_tick: 'XCHAIN', get_tick: null,
     get_coin: 'BTC', escrow_remaining: '100', give_amount: '5', get_amount: '0.01',
 });
-const OFFER_TEXT = '5 XCHAIN per 0.01 BTC';
+// Each offer row shows its unit price (0.01 BTC for 5 XCHAIN) on the right.
+const OFFER_TEXT = 'BTC each';
 
 describe('Marketplace paging', () => {
     it('keeps a load-more click made before the market change effects have flushed', async () => {

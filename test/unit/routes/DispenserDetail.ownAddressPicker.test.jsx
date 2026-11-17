@@ -118,8 +118,8 @@ afterEach(cleanup);
 describe('DispenserDetail own-address picker', () => {
     it('locks payment picks to the dispenser network and reviews the picked payer', async () => {
         const messaging = mount();
-        // The buy panel shows only on the Buy tab; Details is the default.
-        fireEvent.click(await screen.findByRole('tab', { name: /^Buy$/ }));
+        // The buy panel is the Buy page a buyer's first action row opens.
+        fireEvent.click(await screen.findByTestId('dispenser-buy-row'));
         const field = await screen.findByRole('textbox', { name: 'Pay from' });
         expect(field).toHaveAttribute('readonly');
         expect(field).toHaveValue(BUYER_ONE);

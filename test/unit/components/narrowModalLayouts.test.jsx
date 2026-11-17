@@ -73,6 +73,9 @@ describe('320x568 modal inventory', () => {
             ...modalFiles(UI_DIR),
         ].sort()).toEqual([
             'GatedFileViewer.jsx',
+            // The hardware sign page covers the Confirm page it opens over,
+            // which stays mounted underneath for Back, so it is a full-page modal.
+            'HardwareSignPage.jsx',
             'NetworkPicker.jsx',
             'OverlaySurface.jsx',
         ]);
@@ -159,7 +162,7 @@ describe('320x568 modal renders', () => {
             />,
         );
 
-        const dialog = screen.getByRole('dialog', { name: 'Wallet menu' });
+        const dialog = screen.getByRole('dialog', { name: 'Command Palette' });
         const header = screen.getByRole('button', { name: 'Close command palette' }).closest('header');
         expect(header.parentElement).toBe(dialog.firstElementChild);
         expect(header.querySelector('[aria-hidden="true"]')).toBeTruthy();
@@ -271,12 +274,8 @@ describe('320x568 modal layout contracts', () => {
     });
 
     it('bounds route dialogs while keeping export actions outside the scroller', () => {
-        const contacts = readFileSync('packages/core/src/shared/routes/ContactsList.module.css', 'utf8');
-        const contactCard = rule(contacts, '.modalCard');
-        expect(contactCard).toMatch(/max-height:\s*calc\(/);
-        expect(contactCard).toMatch(/min-height:\s*0/);
-        expect(contactCard).toMatch(/overflow-y:\s*auto/);
-
+        // Contacts' add-address dialog is now the Add Address page (2026-11-15),
+        // so the History dialog is the route dialog left to bound.
         const history = readFileSync('packages/core/src/shared/routes/History.jsx', 'utf8');
         expect(history).toMatch(/const MODAL_CARD = \{[^}]*minHeight:\s*0[^}]*overflow:\s*'hidden'/s);
         expect(history).toMatch(/const MODAL_BODY = \{[^}]*flex:\s*'1 1 auto'[^}]*minHeight:\s*0[^}]*overflowY:\s*'auto'/s);
@@ -307,14 +306,7 @@ describe('320x568 modal layout contracts', () => {
         expect(shortcutPanel).toMatch(/min-height:\s*0/);
         expect(rule(shortcut, '.body')).toMatch(/min-height:\s*0/);
         expect(rule(shortcut, '.body')).toMatch(/overflow-y:\s*auto/);
-
-        const contacts = readFileSync(join(ROUTE_DIR, 'ContactsList.module.css'), 'utf8');
-        expect(rule(contacts, '.modalOverlay')).toMatch(/box-sizing:\s*border-box/);
-        const contactCard = rule(contacts, '.modalCard');
-        expect(contactCard).toMatch(/box-sizing:\s*border-box/);
-        expect(contactCard).toMatch(/max-height:\s*100%/);
-        expect(contactCard).toMatch(/min-height:\s*0/);
-        expect(contactCard).toMatch(/overflow-y:\s*auto/);
+        // Contacts no longer draws a dialog of its own (the Add Address page).
     });
 });
 
@@ -324,7 +316,10 @@ describe('desktop live resize contracts', () => {
         const layout = css('LeftNav.module.css');
         expect(tierSource).toMatch(/useLayoutEffect\(\(\) => \{/);
         expect(tierSource).toMatch(/useState\('compact'\)/);
-        expect(layout).toMatch(/\.sidebar\s*\{[^}]*transition:\s*flex-basis 120ms ease-out/s);
+        // G100: the side menu animates its width between states, switched on
+        // only after the first frame (so a reload paints in place) and off
+        // during a drag.
+        expect(layout).toMatch(/\.layout\[data-xc-side-menu-motion='on'\] > \.sidebar\s*\{[^}]*transition:\s*width 120ms ease-out/s);
         expect(layout).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.sidebar\s*\{[^}]*transition:\s*none/s);
     });
 });

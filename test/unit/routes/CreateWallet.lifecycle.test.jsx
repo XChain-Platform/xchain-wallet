@@ -75,6 +75,7 @@ function enterPasswordStep({ passphrase = false } = {}) {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
     if (passphrase) {
+        fireEvent.click(screen.getByRole('button', { name: /^Extra Passphrase/ }));
         fireEvent.click(screen.getByRole('switch', { name: /^Use an extra passphrase/ }));
         fireEvent.change(screen.getByLabelText('Extra passphrase'), {
             target: { value: BIP39_PASSPHRASE },
@@ -87,6 +88,7 @@ function enterPasswordStep({ passphrase = false } = {}) {
 }
 
 function startQuiz() {
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
     fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
 }
@@ -169,15 +171,18 @@ describe('CreateWallet lifecycle guards', () => {
         }
         fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 
-        const error = await screen.findByRole('alert');
+        const error = await screen.findByRole('alert', { name: 'Form errors' });
         expect(error).toHaveTextContent('Word 6 does not match your written copy.');
         expect(error).not.toHaveTextContent('absent');
+        // Only the wrong word is outlined; the right ones stay clean.
+        expect(screen.getByLabelText('Word 6')).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByLabelText('Word 2')).not.toHaveAttribute('aria-invalid', 'true');
         expect(importMnemonic).not.toHaveBeenCalled();
 
         fireEvent.change(screen.getByLabelText('Word 6'), { target: { value: 'absent' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 
-        await screen.findByRole('heading', { name: 'Automatic Donation System' });
+        await screen.findByRole('heading', { name: 'Automatic Donations' });
         expect(importMnemonic).toHaveBeenCalledWith(expect.objectContaining({ mnemonic: PHRASE }));
         expect(readActiveWallet()).toBe('wallet-1');
     });
@@ -241,7 +246,7 @@ describe('CreateWallet lifecycle guards', () => {
         expect(mocks.nextPaint).toHaveBeenCalledTimes(1);
 
         await act(async () => releasePaint());
-        await screen.findByRole('heading', { name: 'Automatic Donation System' });
+        await screen.findByRole('heading', { name: 'Automatic Donations' });
         expect(importMnemonic).toHaveBeenCalledTimes(1);
     });
 
@@ -253,7 +258,7 @@ describe('CreateWallet lifecycle guards', () => {
         answerQuiz();
 
         fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
-        await screen.findByRole('heading', { name: 'Automatic Donation System' });
+        await screen.findByRole('heading', { name: 'Automatic Donations' });
         await waitFor(() => {
             const stateValues = [...hookValues.values()];
             expect(stateValues).not.toContain(PASSWORD);

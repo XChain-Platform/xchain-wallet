@@ -12,7 +12,7 @@ import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Network, From and the fee selector come from the standard
 // FromSection and FeeSection.
-import { AddressText, Button, CopyButton, FormNotice, FormPage, Icon, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { Button, CopyButton, FormNotice, FormPage, Icon, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 // Broadcast sits on the Wallet Form Standard frame.
 import {
     FeeSection,
@@ -30,10 +30,11 @@ import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/routes.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
+import { groupDecodedAmounts } from '../utils/amountFormat.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { SignCredentials } from '../components/SignCredentials.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -57,6 +58,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 // '|' separates fields and ';' separates actions on the wire, so neither can
 // appear in text the user typed. The form says so in its own words rather than
@@ -235,13 +237,19 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         // nothing read and, worse, read like the confirm surface still
         // depended on form state.
         if (stage !== 'review' && stage !== 'submitting') return null;
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action: 'BROADCAST',
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
-        });
+        }));
     }, [stage, actionConfirm.open, actionParams, chainId]);
+    const legacyComposed = useMemo(() => ({
+        action: 'BROADCAST',
+        chainId,
+        decoded,
+        protocolFeeKnownFree: true,
+    }), [chainId, decoded]);
 
     function handleReview(event) {
         event.preventDefault();
@@ -512,81 +520,44 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 )}
                 <div className={styles.actions}>
                     <Button type="button" onClick={handleBuildAnother}>Broadcast Another</Button>
-                    <Button type="button" variant="primary" onClick={onDone || onBack}>Done</Button>
+                    <Button type="button" variant="success" icon={<Icon.CheckIcon />} onClick={onDone || onBack}>Done</Button>
                 </div>
             </FormPage>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review broadcast"
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        icon={<Icon.SignIcon />}
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode ? 'Broadcast' : 'Sign'}
-                    </Button>
-                )}
-            >
-                <p className={styles.summary}>{decoded?.summary}</p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {(decoded?.details || []).map((d) => (
-                        <DetailRow key={d.label} label={d.label} value={d.value} />
-                    ))}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                </dl>
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-            </FormPage>,
+        const broadcastText = neutralizeControlText(String(actionParams.MESSAGE || '').trim(), { maxLength: 80 });
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setStage('form'); setSubmitError(null); }}
+                decoded={decoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentials={<p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>}
+                credentialsReady
+                summary={{
+                    verb: t('routes.manageToken.broadcast'),
+                    ...(broadcastText ? { target: broadcastText } : {}),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -607,6 +578,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 confirmAction={actionConfirm.confirmAction}
                 summary={broadcastSummary}
                 screenVariant={variant}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -661,9 +633,9 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
                 <FormAction
                     icon={<Icon.BroadcastIcon />}
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress
-                        || !!messageLengthError
-                        || actionConfirm.composing}
+                    // G22: never disabled for a field; a press with no
+                    // address or an over-long message is refused with its reason.
+                    disabled={actionConfirm.composing}
                 >
                     Broadcast
                 </FormAction>
@@ -733,14 +705,5 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
             />
             </FormSection>
         </FormFrame>,
-    );
-}
-
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
     );
 }

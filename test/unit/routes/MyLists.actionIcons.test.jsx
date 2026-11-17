@@ -8,8 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Every button on My lists carries an icon (U63), Shared lists included:
-// its label matches no auto-icon pattern, so the route passes one.
+// Every button on My lists carries an icon (U63).
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -17,7 +16,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { MyLists } from '../../../packages/core/src/shared/routes/MyLists.jsx';
 
 describe('MyLists page actions', () => {
-    it('gives Shared lists, Create union list and Create list an icon', async () => {
+    it('gives the filter and the Create list plus an icon', async () => {
         render(
             <MessagingProvider shell="web" messaging={{
                 getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [{ address: 'bc1qowner' }] }),
@@ -36,9 +35,14 @@ describe('MyLists page actions', () => {
             </MessagingProvider>,
         );
         await waitFor(() => expect(screen.getByRole('button', { name: /Road trip/ })).toBeTruthy());
-        for (const name of ['Shared Lists', 'Create Union List', 'Create List']) {
+        // The title bar holds only the filter and the Create list plus, each an
+        // icon button; Shared lists and Create union list are gone (operator
+        // 2026-11-13).
+        for (const name of ['Filter lists', 'Create list']) {
             const button = screen.getByRole('button', { name });
             expect(button.querySelector('svg'), name).not.toBeNull();
         }
+        expect(screen.queryByRole('button', { name: 'Shared Lists' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Create Union List' })).toBeNull();
     });
 });

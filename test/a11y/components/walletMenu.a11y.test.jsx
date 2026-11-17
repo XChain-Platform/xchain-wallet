@@ -20,11 +20,13 @@ import {
     cleanup, fireEvent, render, screen, waitFor,
 } from '@testing-library/react';
 import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
-import { visibleWalletMenu, walletMenuFooter } from '../../../packages/core/src/shared/walletMenu.js';
+import { visibleWalletMenu, walletLockAction } from '../../../packages/core/src/shared/walletMenu.js';
 import { expectNoSeriousAxeViolations } from '../helpers/axe.js';
 
 const GATES = {
     isSignerMode: false, hasDexSurface: true, hasVmAddress: true, hasBtcAddress: true,
+    // Every row of the grouped full menu, the two governance rows included.
+    hasGovernanceAddress: true,
 };
 const CURRENT_VIEW = 'history';
 
@@ -137,15 +139,13 @@ describe('wallet menu accessibility', () => {
         }
     });
 
-    it('renders the footer rows as buttons named by their label', async () => {
+    it('renders Lock wallet as a named, tooltipped header button left of Close, outside the listbox', async () => {
         await renderMenu();
-        for (const row of walletMenuFooter()) {
-            // Relies on data-wallet-menu-row="settings" and "lock".
-            const el = rowEl(row.id);
-            expect(el, `footer ${row.id}`).not.toBeNull();
-            expect(el.tagName).toBe('BUTTON');
-            expect(screen.getAllByRole('button', { name: row.label }), `name of ${row.id}`).toContain(el);
-        }
+        const lock = screen.getByRole('button', { name: walletLockAction().label });
+        expect(lock).toHaveAttribute('title', 'Lock wallet');
+        expect(lock).not.toHaveAttribute('tabindex', '-1');
+        expect(lock.closest('[role="listbox"]')).toBeNull();
+        expect(lock.nextElementSibling ?? lock.parentElement.nextElementSibling).not.toBeNull();
     });
 
     it('boxes each group under a heading', async () => {

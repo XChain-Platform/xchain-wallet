@@ -14,16 +14,36 @@
     border-top: 1px solid var(--xc-border);
 }
 
-/* Network and holdings on one line under the rule line, wrapping at phone width. */
+/* What the account holds, on its own line under the rule line. */
 .rowFacts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0 var(--xc-space-2);
+    display: block;
 }
 
-.rowFacts > span + span::before {
-    content: '·';
-    margin-inline-end: var(--xc-space-2);
+/* The network badge and the status pill at the row's trailing edge. */
+.rowTrailing {
+    display: flex;
+    gap: var(--xc-space-2);
+    align-items: center;
+    flex-shrink: 0;
+}
+
+/* The status as an outlined pill, the same as the account page's (U65). */
+.statusPill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: 999px;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    line-height: 1.6;
+    white-space: nowrap;
+}
+
+.statusActive {
+    border-color: var(--xc-success);
+    color: var(--xc-success);
+    font-weight: 600;
 }
 
 .rowIcon {

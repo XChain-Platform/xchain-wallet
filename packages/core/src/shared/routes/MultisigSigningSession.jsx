@@ -11,15 +11,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { base58check, bech32 } from '@scure/base';
 import { sha256 } from '@noble/hashes/sha2';
-import { Screen, PageHeader, AddressText, Button, ChainBadge, EmptyState, FieldIconButton, Input, ListPage, ListRow, AnimatedQrFrames, MultisigBadge, NetworkField, QrScanner, StatusMessage, Textarea, Icon } from '@xchain-wallet/core/ui';
+import { Screen, PageHeader, AddressText, Button, ChainBadge, EmptyState, FieldIconButton, FormErrorSummary, FormErrorsContext, FormPage, Input, ListPage, ListRow, AnimatedQrFrames, MultisigBadge, NetworkField, QrScanner, StatusMessage, Tabs, Textarea, Icon, useFormErrors } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib, schemas, uri as uriLib } from '@xchain-wallet/core';
 import { formatActivityTime } from '../utils/dateTime.js';
 import { MultisigSendForm } from './MultisigSendForm.jsx';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
+import { ActionsDetailsToggle } from '../components/ActionsDetailsToggle.jsx';
 import listStyles from './MultisigSigningSession.module.css';
 import { formatNativeBaseUnits, tickerForCoin } from '../../registry/coinTicker.js';
+import { formatWithThousands } from '../utils/amountFormat.js';
 import { ADDRESS_PARAMS } from '../utils/addressValidation.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
+import { useDemoGuard, useWalletSource } from '../hooks/useDemoGuard.jsx';
 import { withAutoLockHold } from '../hooks/autoLockGuard.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { copyText } from '../clipboard.js';
@@ -86,16 +90,34 @@ function sessionPill(session) {
     };
 }
 
+// An open session waits on your signature when one of this wallet's keys
+// (the record's optional `localPubkeys`) has not yet contributed to the
+// current step. A record that does not name this wallet's keys counts as
+// waiting on the other cosigners.
+function needsYourSignature(session) {
+    if (!WAITING_STATUSES.has(session.status)) return false;
+    const local = new Set(Array.isArray(session.localPubkeys) ? session.localPubkeys : []);
+    if (local.size === 0) return false;
+    return contributionProgress(session).unsigned.some((pk) => local.has(pk));
+}
+
+// The page's three tabs, in toggle order.
+const SESSION_TABS = /** @type {const} */ (['ready', 'waiting', 'done']);
+const SESSION_TABS_ID = 'multisig-sessions-tabs';
+const SESSION_PANEL_ID = 'multisig-sessions-panel';
+
 /**
- * Split sessions into the three list groups, newest first in each.
+ * Split sessions into the three tabs, newest first in each: Ready (your
+ * signature, or ready to finalize or send), Waiting (on other cosigners)
+ * and Done (sent or cancelled).
  * @param {any[]} sessions
  */
 export function groupSigningSessions(sessions) {
     const newestFirst = [...(sessions || [])].sort((a, b) => String(b.updatedAt || b.createdAt || '')
         .localeCompare(String(a.updatedAt || a.createdAt || '')));
     return {
-        ready: newestFirst.filter((s) => READY_STATUSES.has(s.status)),
-        waiting: newestFirst.filter((s) => WAITING_STATUSES.has(s.status)),
+        ready: newestFirst.filter((s) => READY_STATUSES.has(s.status) || needsYourSignature(s)),
+        waiting: newestFirst.filter((s) => WAITING_STATUSES.has(s.status) && !needsYourSignature(s)),
         done: newestFirst.filter((s) => !READY_STATUSES.has(s.status) && !WAITING_STATUSES.has(s.status)),
     };
 }
@@ -296,7 +318,11 @@ function replyMismatchMessage(envelope, session) {
  * @param {string} [props.initialLink]
  */
 export function MultisigSigningSession({ walletId, onBack, initialSessionId, initialLink }) {
-    const { messaging, shell } = useMessaging();
+    const { shell } = useMessaging();
+    // A demo wallet reads sample sessions through its source, and every
+    // action that would change a session is refused by the demo guard.
+    const { messaging } = useWalletSource(walletId);
+    const demoGuard = useDemoGuard(walletId, { onBack });
     const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
 
@@ -313,20 +339,26 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
     const [scannerOpen, setScannerOpen] = useState(false);
     const [signPassword, setSignPassword] = useState('');
     const [signResult, setSignResult] = useState(/** @type {string | null} */ (null));
-    const [linkInput, setLinkInput] = useState(initialLink || '');
+    const signErrors = useFormErrors();
+    const pasteErrors = useFormErrors();
+    const trackerErrors = useFormErrors();
     const [linkStatus, setLinkStatus] = useState(/** @type {string | null} */ (null));
-    // The list's folded Done group, the dashed Open-a-signing-link row (open
-    // at once when the page was handed a link), and its scanner.
-    const [doneOpen, setDoneOpen] = useState(false);
-    const [linkOpen, setLinkOpen] = useState(Boolean(initialLink));
-    const [linkScannerOpen, setLinkScannerOpen] = useState(false);
+    // The list tab the user picked; null shows Ready, or the first tab with
+    // sessions when Ready has none.
+    const [listTab, setListTab] = useState(/** @type {'ready' | 'waiting' | 'done' | null} */ (null));
+    // The Open Signing Link page, opened from the header's link button, or at
+    // once (prefilled and opening) when the page was handed a link. `key`
+    // remounts the page for each newly handed link.
+    const [linkPage, setLinkPage] = useState(/** @type {{ value: string, auto: boolean, key: number } | null} */ (
+        initialLink ? { value: initialLink, auto: true, key: 1 } : null));
     // Start a signing session from this page: pick the multisig, then the
     // action, then the action's own form.
     const [starting, setStarting] = useState(false);
     const listRequestId = useRef(0);
     const activeRequestId = useRef(0);
     const mountedRef = useRef(false);
-    const initialLinkRef = useRef(null);
+    // The link the page mounted with is already on the Open Signing Link page.
+    const initialLinkRef = useRef(initialLink || null);
 
     // (error-recovery sweep remainder): each error surface offers a
     // one-click "Try again" against whatever action last failed. The
@@ -375,30 +407,49 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
         await refreshList();
     }, [refreshActive, refreshList]);
 
-    const importSigningLink = useCallback(async (text) => {
-        if (busy || typeof text !== 'string' || text.trim().length === 0) return;
+    // Open a signing link from the Open Signing Link page. On success the
+    // page closes onto the imported session and this returns null. A link
+    // that does not parse, or that the wallet refuses for what it carries,
+    // comes back as the link field's error; any other failure comes back as
+    // the form's error. A demo wallet refuses before reading the link.
+    const openSigningLink = useCallback(async (text) => {
+        if (busy) return null;
+        if (demoGuard.blocked) {
+            demoGuard.refuse();
+            return null;
+        }
+        let envelope;
+        try {
+            envelope = parseMultisigSessionLink(text);
+        } catch (err) {
+            return { field: true, message: userFacingMessage(err, t('multisig.signingLink.invalid')) };
+        }
         setBusy(true);
         setError(null);
         setLinkStatus(null);
         try {
-            const envelope = parseMultisigSessionLink(text);
             const result = await withAutoLockHold(() => messaging.importMultisigSigningRequest({
                 walletId,
                 envelope,
             }));
             if (!result?.sessionId) throw new Error(t('multisig.signingLink.openFailed'));
+            setLinkPage(null);
             setActiveId(result.sessionId);
             setView('tracker');
             await refreshList();
+            return null;
         } catch (err) {
             if (err?.userFacing !== true) {
                 console.error('Multisig signing link import failed:', err); // eslint-disable-line no-console
             }
-            fail(userFacingMessage(err, t('multisig.signingLink.openFailed')), null);
+            return {
+                field: err?.userFacing === true,
+                message: userFacingMessage(err, t('multisig.signingLink.openFailed')),
+            };
         } finally {
             setBusy(false);
         }
-    }, [busy, messaging, walletId, refreshList, fail]);
+    }, [busy, demoGuard, messaging, walletId, refreshList]);
 
     // Two surfaces can apply the same reply at once, and the one that loses
     // holds a stale session: its refusal is developer text and a retry of the
@@ -436,14 +487,26 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
         return () => { activeRequestId.current += 1; };
     }, [activeId, refreshActive]);
 
+    // A link handed in after the page mounted (a deep link while it is open)
+    // opens the Open Signing Link page again, prefilled and opening.
     useEffect(() => {
         if (!initialLink || initialLinkRef.current === initialLink) return;
         initialLinkRef.current = initialLink;
-        void importSigningLink(initialLink);
-    }, [initialLink, importSigningLink]);
+        setActiveId(null);
+        setStarting(false);
+        setLinkPage((page) => ({ value: initialLink, auto: true, key: (page?.key || 1) + 1 }));
+    }, [initialLink]);
+
+    // A demo wallet's sample sessions cannot change: each action that would
+    // change one answers with the demo guard's refusal instead.
+    function refusedInDemo() {
+        if (!demoGuard.blocked) return false;
+        demoGuard.refuse();
+        return true;
+    }
 
     async function handleAggregate() {
-        if (!active || busy) return;
+        if (!active || busy || refusedInDemo()) return;
         setBusy(true);
         setError(null);
         try {
@@ -458,7 +521,7 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
     }
 
     async function handleCancel() {
-        if (!active || busy) return;
+        if (!active || busy || refusedInDemo()) return;
         setCanceling(true);
         setBusy(true);
         setError(null);
@@ -476,7 +539,13 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
 
     async function handleFinalize() {
         // Require distinct configured cosigners even if persisted status is stale.
-        if (!active || busy || !hasFinalizationThreshold(active)) return;
+        if (!active || busy) return;
+        if (!hasFinalizationThreshold(active)) {
+            trackerErrors.fail('Collect enough distinct cosigner signatures before finalizing.', 'form:signatures');
+            return;
+        }
+        if (refusedInDemo()) return;
+        trackerErrors.reset();
         setBusy(true);
         setError(null);
         try {
@@ -491,7 +560,7 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
     }
 
     async function handleBroadcast() {
-        if (!active || busy) return;
+        if (!active || busy || refusedInDemo()) return;
         setBusy(true);
         setError(null);
         try {
@@ -569,6 +638,7 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
         setCollectorState(createXcwCollector());
         setPasteInput('');
         setPasteResult(null);
+        pasteErrors.reset();
     }
 
     // Camera scanner frame handler: each detected QR string goes
@@ -595,6 +665,10 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
         // decoded envelope (reuses verification + contributeMultisig*
         // dispatch + busy / refresh choreography).
         setScannerOpen(false);
+        if (demoGuard.blocked) {
+            demoGuard.refuse();
+            return;
+        }
         setBusy(true);
         let envelope = null;
         try {
@@ -641,10 +715,15 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
         } finally {
             setBusy(false);
         }
-    }, [active, busy, collectorState, messaging, refreshAfterAction, recheckReply, fail]);
+    }, [active, busy, collectorState, demoGuard, messaging, refreshAfterAction, recheckReply, fail]);
 
     async function handleSignLocally() {
-        if (!active || busy || signPassword.length === 0) return;
+        if (!active || busy || refusedInDemo()) return;
+        if (!signErrors.validate({
+            'multisig-sign-password': signPassword.length === 0
+                ? 'Enter your wallet password to sign.'
+                : null,
+        })) return;
         setBusy(true);
         setError(null);
         setSignResult(null);
@@ -667,7 +746,12 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
     }
 
     async function handlePasteSubmit() {
-        if (!active || busy) return;
+        if (!active || busy || refusedInDemo()) return;
+        if (!pasteErrors.validate({
+            'multisig-reply-chunks': pasteInput.trim().length === 0
+                ? 'Paste or scan the cosigner reply chunks.'
+                : null,
+        })) return;
         setBusy(true);
         setError(null);
         setPasteResult(null);
@@ -769,24 +853,51 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
     // The list's title line carries the plus that starts a new session.
     const header = (
         <PageHeader
+            // An open session's Back returns to the session list in place.
+            nested={Boolean(activeId)}
             onBack={() => (activeId ? setActiveId(null) : onBack())}
-            title={activeId ? 'Multisig Signing' : 'Multisig Signing Sessions'}
+            title={activeId ? 'Multisig Signing' : 'Multisig Sessions'}
             trailing={activeId ? null : (
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={<Icon.PlusIcon />}
-                    onClick={() => setStarting(true)}
-                    aria-label={t('multisig.start.button')}
-                    title={t('multisig.start.button')}
-                />
+                <>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<Icon.ExternalLinkIcon />}
+                        onClick={() => setLinkPage((page) => ({ value: '', auto: false, key: (page?.key || 1) + 1 }))}
+                        aria-label={t('multisig.signingLink.openTitle')}
+                        title={t('multisig.signingLink.openTitle')}
+                    />
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<Icon.PlusIcon />}
+                        onClick={() => setStarting(true)}
+                        aria-label={t('multisig.start.button')}
+                        title={t('multisig.start.button')}
+                    />
+                </>
             )}
         />
     );
 
-    const wrap = (children) => (
+    // A refused demo action leads the page (null until refused), above the
+    // list's tabs when it has them.
+    const wrap = (children, toolbar, errors = null) => (
         <Screen variant={variant} header={header}>
-            <ListPage>{children}</ListPage>
+            <FormErrorsContext.Provider value={errors}>
+                <ListPage
+                    notices={(demoGuard.note || errors?.hasErrors) ? (
+                        <>
+                            {demoGuard.note}
+                            {errors ? <FormErrorSummary form={errors} /> : null}
+                        </>
+                    ) : null}
+                    toolbar={toolbar}
+                >
+                    {children}
+                </ListPage>
+            </FormErrorsContext.Provider>
+            {demoGuard.dialog}
         </Screen>
     );
 
@@ -797,6 +908,21 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                 <div className={styles.actions}>
                 </div>
             </>,
+        );
+    }
+
+    if (linkPage && !activeId) {
+        return (
+            <OpenSigningLinkPage
+                key={linkPage.key}
+                variant={variant}
+                initialValue={linkPage.value}
+                autoOpen={linkPage.auto}
+                busy={busy}
+                demoGuard={demoGuard}
+                onBack={() => setLinkPage(null)}
+                onOpen={openSigningLink}
+            />
         );
     }
 
@@ -837,106 +963,73 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                 </li>
             );
         };
-        const group = (id, title, rows) => (rows.length > 0 ? (
-            <li className={listStyles.group}>
-                <h2 id={`signing-group-${id}`} className={listStyles.groupHeading}>
-                    <span>{title}</span>
-                    <span className={listStyles.groupCount}>{rows.length}</span>
-                </h2>
-                <ul className={listStyles.rows} aria-labelledby={`signing-group-${id}`}>
-                    {rows.map(sessionRow)}
-                </ul>
-            </li>
-        ) : null);
+        const errorNotice = error
+            ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage>
+            : null;
+        // No sessions at all: the one page-wide empty state that names both
+        // header buttons, with no tabs above it.
+        if (sessions.length === 0) {
+            return wrap(
+                <>
+                    {!error ? (
+                        <EmptyState
+                            title={t('multisig.sessions.emptyTitle')}
+                            body={t('multisig.sessions.emptyBody')}
+                        />
+                    ) : null}
+                    {errorNotice}
+                </>,
+            );
+        }
+        // The Ready | Waiting | Done toggle (at most four tabs, G42): the
+        // user's pick, else Ready, else the first tab that has sessions.
+        const shownTab = listTab
+            || SESSION_TABS.find((id) => groups[id].length > 0)
+            || 'ready';
+        const rows = groups[shownTab];
+        const tabsToolbar = (
+            <div className={listStyles.tabsRow}>
+                <Tabs
+                    id={SESSION_TABS_ID}
+                    aria-label={t('multisig.sessions.tabsLabel')}
+                    panelId={SESSION_PANEL_ID}
+                    items={[
+                        { id: 'ready', label: t('multisig.sessions.tabReady'), icon: <Icon.SignIcon /> },
+                        { id: 'waiting', label: t('multisig.sessions.tabWaiting'), icon: <Icon.ClockIcon /> },
+                        { id: 'done', label: t('multisig.sessions.tabDone'), icon: <Icon.CheckIcon /> },
+                    ]}
+                    value={shownTab}
+                    onChange={setListTab}
+                />
+            </div>
+        );
+        // Each tab's own empty line.
+        const emptyTab = {
+            ready: { title: t('multisig.sessions.emptyReadyTitle'), body: t('multisig.sessions.emptyReadyBody') },
+            waiting: { title: t('multisig.sessions.emptyWaitingTitle'), body: t('multisig.sessions.emptyWaitingBody') },
+            done: { title: t('multisig.sessions.emptyDoneTitle'), body: t('multisig.sessions.emptyDoneBody') },
+        }[shownTab];
         return wrap(
             <>
-                {sessions.length === 0 && !error ? (
-                    <EmptyState
-                        title={t('multisig.sessions.emptyTitle')}
-                        body={t('multisig.sessions.emptyBody')}
-                    />
-                ) : (
-                    <ul aria-label={t('multisig.sessions.listLabel')} className={`${listStyles.rows} ${listStyles.groups}`}>
-                        {group('ready', t('multisig.sessions.groupReady'), groups.ready)}
-                        {group('waiting', t('multisig.sessions.groupWaiting'), groups.waiting)}
-                        {groups.done.length > 0 ? (
-                            <li className={listStyles.group}>
-                                <button
-                                    type="button"
-                                    className={listStyles.doneToggle}
-                                    aria-expanded={doneOpen}
-                                    onClick={() => setDoneOpen((open) => !open)}
-                                >
-                                    <span>{t('multisig.sessions.groupDone', { count: groups.done.length })}</span>
-                                    <span className={`${listStyles.doneChevron} ${doneOpen ? listStyles.doneChevronOpen : ''}`} aria-hidden="true">
-                                        <Icon.ForwardIcon />
-                                    </span>
-                                </button>
-                                {doneOpen ? (
-                                    <ul className={listStyles.rows} aria-label={t('multisig.sessions.groupDone', { count: groups.done.length })}>
-                                        {groups.done.map(sessionRow)}
-                                    </ul>
-                                ) : null}
-                            </li>
-                        ) : null}
-                    </ul>
-                )}
-                {linkOpen ? (
-                    <section className={styles.signingLinkBlock} aria-labelledby="open-signing-link-title">
-                        <p id="open-signing-link-title" className={styles.successTitle}>
-                            {t('multisig.signingLink.openTitle')}
-                        </p>
-                        {linkScannerOpen ? (
-                            <QrScanner
-                                onFrame={(text) => {
-                                    setLinkScannerOpen(false);
-                                    setLinkInput(text);
-                                    void importSigningLink(text);
-                                }}
-                                alt={t('multisig.signingLink.scan')}
-                            />
-                        ) : null}
-                        <Input
-                            label={t('multisig.signingLink.openLabel')}
-                            help={t('multisig.signingLink.openHint')}
-                            value={linkInput}
-                            onChange={(event) => setLinkInput(event.target.value)}
-                            autoComplete="off"
-                            fieldAction={(
-                                <FieldIconButton
-                                    icon={<Icon.ScanIcon />}
-                                    label={linkScannerOpen ? t('multisig.signingLink.stopScan') : t('multisig.signingLink.scan')}
-                                    aria-pressed={linkScannerOpen}
-                                    onClick={() => setLinkScannerOpen((v) => !v)}
-                                    disabled={busy}
-                                />
-                            )}
-                        />
-                        <div className={styles.actions}>
-                            <Button
-                                variant="primary"
-                                icon={<Icon.LinkIcon />}
-                                onClick={() => importSigningLink(linkInput)}
-                                loading={busy}
-                                disabled={linkInput.trim().length === 0}
-                            >
-                                {t('multisig.signingLink.open')}
-                            </Button>
-                        </div>
-                    </section>
-                ) : (
-                    <button
-                        type="button"
-                        className={listStyles.openLinkRow}
-                        onClick={() => setLinkOpen(true)}
-                    >
-                        <Icon.LinkIcon />
-                        <span>{t('multisig.signingLink.openTitle')}</span>
-                        <span className={listStyles.openLinkHint}>{t('multisig.signingLink.openRowHint')}</span>
-                    </button>
-                )}
-                {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
+                <div
+                    role="tabpanel"
+                    id={SESSION_PANEL_ID}
+                    aria-labelledby={`${SESSION_TABS_ID}-tab-${shownTab}`}
+                >
+                    {rows.length === 0 ? (
+                        <EmptyState title={emptyTab.title} body={emptyTab.body} />
+                    ) : (
+                        // One rounded list card with divider lines, each row
+                        // ending in the standard chevron (G07, U41).
+                        /* Safari needs an explicit list role because this class removes list styling. */
+                        <ul aria-label={t('multisig.sessions.listLabel')} className={listStyles.list} role="list">
+                            {rows.map(sessionRow)}
+                        </ul>
+                    )}
+                </div>
+                {errorNotice}
             </>,
+            tabsToolbar,
         );
     }
 
@@ -974,6 +1067,7 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                     <section className={styles.signingLinkBlock}>
                         <Input
                             label={t('multisig.signingLink.label')}
+                            help={t('multisig.signingLink.labelHelp')}
                             value={exportData.link}
                             readOnly
                         />
@@ -1060,6 +1154,7 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                     this wallet's built-in signer.
                 </p>
                 <Input
+                    id="multisig-sign-password"
                     type="password"
                     aria-label="Wallet password"
                     value={signPassword}
@@ -1073,11 +1168,13 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                     <Button variant="ghost" onClick={() => { setSignPassword(''); setView('tracker'); }}>
                         Back to Tracker
                     </Button>
-                    <Button variant="primary" onClick={handleSignLocally} loading={busy} disabled={signPassword.length === 0}>
-                        Sign With My Key
+                    <Button variant="primary" onClick={handleSignLocally} loading={busy}>
+                        Sign with My Key
                     </Button>
                 </div>
             </>,
+            null,
+            signErrors,
         );
     }
 
@@ -1096,7 +1193,9 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                     <QrScanner onFrame={handleScannerFrame} alt="Cosigner reply QR scanner" />
                 ) : null}
                 <Textarea
+                    id="multisig-reply-chunks"
                     label="Cosigner reply chunks"
+                    help="The cosigner's reply as XCW text, one chunk per line. The camera button fills this in from their QR."
                     aria-label="Cosigner reply chunks"
                     value={pasteInput}
                     onChange={(e) => setPasteInput(e.target.value)}
@@ -1104,7 +1203,7 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                     style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}
                     fieldAction={(
                         <FieldIconButton
-                            icon={<Icon.ScanIcon />}
+                            icon={<Icon.QrCodeIcon />}
                             label={scannerOpen ? 'Stop scanner' : 'Scan with camera'}
                             aria-pressed={scannerOpen}
                             onClick={() => setScannerOpen((v) => !v)}
@@ -1125,11 +1224,13 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                     <Button variant="danger" onClick={resetCollector} disabled={busy}>
                         Clear Received Reply
                     </Button>
-                    <Button variant="primary" onClick={handlePasteSubmit} loading={busy} disabled={pasteInput.trim().length === 0}>
+                    <Button variant="primary" onClick={handlePasteSubmit} loading={busy}>
                         Submit Chunks
                     </Button>
                 </div>
             </>,
+            null,
+            pasteErrors,
         );
     }
 
@@ -1156,6 +1257,136 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                 ? 'Required signatures are collected. The transaction must be finalized before it can be broadcast.'
                 : null;
 
+    // The session's actions as one list (G101). Export, Import and Sign open
+    // their step views; Cancel runs at once and is the red row.
+    const importsPartial = isMusig2 && active.status === 'collecting-sigs';
+    const actionRows = [
+        !isTerminal && Array.isArray(exportFrames) ? (
+            <ActionListItem
+                key="export"
+                icon={<Icon.ShareIcon />}
+                title={active.status === 'finalized' ? 'Export signed transaction' : 'Export signing request'}
+                description={active.status === 'finalized'
+                    ? 'Show the QR a wallet scans to broadcast it'
+                    : 'Show the QR and link a cosigner scans to sign'}
+                onClick={() => setView('export-qr')}
+                disabled={busy}
+            />
+        ) : null,
+        canCollect ? (
+            <ActionListItem
+                key="import"
+                icon={<Icon.ScanIcon />}
+                title={importsPartial ? 'Import partial signature' : 'Import cosigner reply'}
+                description={importsPartial
+                    ? "Scan or paste a cosigner's step 2 signature"
+                    : "Scan or paste a cosigner's reply"}
+                onClick={() => { resetCollector(); setView('paste-inbox'); }}
+                disabled={busy}
+            />
+        ) : null,
+        canCollect && !isWatcherMode ? (
+            <ActionListItem
+                key="sign"
+                icon={<Icon.SignIcon />}
+                title="Sign with my key"
+                description="Add this wallet's signature with your password"
+                onClick={() => { setSignResult(null); setView('sign-locally'); }}
+                disabled={busy}
+            />
+        ) : null,
+        !isTerminal ? (
+            <ActionListItem
+                key="cancel"
+                icon={<Icon.XIcon />}
+                tone="danger"
+                title="Cancel session"
+                description={canceling ? 'Cancelling the session…' : 'Close this session and stop collecting signatures'}
+                onClick={handleCancel}
+                disabled={busy}
+            />
+        ) : null,
+    ].filter(Boolean);
+
+    // The flow's next step (Combine, Finalize or Broadcast) stays the one
+    // green main button above the list, as a form's submit does (G20, G50):
+    // each status shows at most one of them.
+    let mainButton = null;
+    if (canAggregate && !isTerminal) {
+        mainButton = (
+            <Button variant="primary" block onClick={handleAggregate} loading={busy && !canceling} disabled={busy} icon={<Icon.MultisigIcon />}>
+                Combine Replies
+            </Button>
+        );
+    } else if (active.status === 'ready-to-finalize') {
+        mainButton = (
+            <Button variant="primary" block onClick={handleFinalize} loading={busy && !canceling} icon={<Icon.CheckIcon />}>
+                Finalize Transaction
+            </Button>
+        );
+    } else if (active.status === 'finalized') {
+        mainButton = (
+            <Button variant="primary" block onClick={handleBroadcast} loading={busy && !canceling} disabled={busy}>
+                Broadcast Transaction
+            </Button>
+        );
+    }
+    const actionCount = actionRows.length + (mainButton ? 1 : 0);
+
+    const actionsPanel = (
+        <>
+            {mainButton}
+            {actionRows.length > 0 ? <ActionList>{actionRows}</ActionList> : null}
+            {!isTerminal && isWatcherMode ? (
+                <p className={styles.hint}>
+                    Watcher mode exports signing data but never asks for a password or adds a local signature.
+                </p>
+            ) : null}
+        </>
+    );
+
+    // Details: who has replied or signed, who is pending, and each MuSig2 step's count.
+    const detailsPanel = (
+        <>
+            {isMusig2 ? (
+                <p className={styles.hint}>
+                    Step 1: Cosigners responded: {nonceCount} of {active.threshold}
+                    {active.aggNonce ? ' (combined)' : ''}
+                    <br />
+                    Step 2: Signatures collected: {signatureCount} of {active.threshold}
+                    {active.aggregatedSchnorrSig ? ' (combined)' : ''}
+                </p>
+            ) : null}
+            {contributed.length > 0 ? (
+                <>
+                    <p className={styles.hint}>{isResponseStep ? 'Responded cosigners:' : 'Signed cosigners:'}</p>
+                    <ul aria-label={isResponseStep ? 'Responded cosigners' : 'Signed cosigners'}>
+                        {contributed.map((pk) => (
+                            <li key={pk}>{cosignerNameLine(active, pk)}<code className={styles.cosignerKey}>{pk}</code></li>
+                        ))}
+                    </ul>
+                </>
+            ) : (
+                <p className={styles.hint}>{isResponseStep ? 'No cosigners have replied yet.' : 'No cosigners have signed yet.'}</p>
+            )}
+            {unsigned.length > 0 ? (
+                <>
+                    <p className={styles.hint}>{remaining > 0 ? 'Pending cosigners:' : 'Cosigners who have not signed:'}</p>
+                    <ul aria-label={remaining > 0 ? 'Pending cosigners' : 'Cosigners who have not signed'}>
+                        {unsigned.map((pk) => (
+                            <li key={pk}>{cosignerNameLine(active, pk)}<code className={styles.cosignerKey}>{pk}</code></li>
+                        ))}
+                    </ul>
+                </>
+            ) : (
+                <p className={styles.hint}>All cosigners have contributed.</p>
+            )}
+            {stepLabel ? (
+                <p className={styles.hint} data-testid="multisig-step-label">{stepLabel}</p>
+            ) : null}
+        </>
+    );
+
     return wrap(
         <>
             <p
@@ -1172,15 +1403,6 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                 />
                 {' · '}{statusLabel(active.status)}
             </p>
-            {isMusig2 ? (
-                <p className={styles.hint}>
-                    Step 1: Cosigners responded: {nonceCount} of {active.threshold}
-                    {active.aggNonce ? ' (combined)' : ''}
-                    <br />
-                    Step 2: Signatures collected: {signatureCount} of {active.threshold}
-                    {active.aggregatedSchnorrSig ? ' (combined)' : ''}
-                </p>
-            ) : null}
             {active.actionSummary ? (
                 <p className={styles.hint}>{active.actionSummary}</p>
             ) : null}
@@ -1194,18 +1416,18 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                             return (
                                 <li key={`${output.scriptPubKeyHex}:${index}`}>
                                     <code>{output.address || outputAddress(output.scriptPubKeyHex, active.chainId) || output.scriptPubKeyHex}</code>
-                                    {' '}{formatNativeBaseUnits(output.value, coin)} {tickerForCoin(coin)}
+                                    {' '}{formatWithThousands(formatNativeBaseUnits(output.value, coin))} {tickerForCoin(coin)}
                                     {isChange ? ' (Change back to this multisig)' : ''}
                                 </li>
                             );
                         })}
                     </ul>
                     <p className={styles.hint}>
-                        Network fee: {formatNativeBaseUnits(
+                        Network fee: {formatWithThousands(formatNativeBaseUnits(
                             decodedSpend.input.amount
                                 - decodedSpend.outputs.reduce((sum, output) => sum + output.value, 0n),
                             String(active.chainId || '').split('-')[0],
-                        )}{' '}
+                        ))}{' '}
                         {tickerForCoin(String(active.chainId || '').split('-')[0])}
                     </p>
                 </section>
@@ -1220,88 +1442,129 @@ export function MultisigSigningSession({ walletId, onBack, initialSessionId, ini
                             : remaining === 1 ? 'signature' : 'signatures'} required.`}
                 </p>
             ) : null}
-            {contributed.length > 0 ? (
-                <>
-                    <p className={styles.hint}>{isResponseStep ? 'Responded cosigners:' : 'Signed cosigners:'}</p>
-                    <ul aria-label={isResponseStep ? 'Responded cosigners' : 'Signed cosigners'}>
-                        {contributed.map((pk) => (
-                            <li key={pk}><code className={styles.cosignerKey}>{pk}</code></li>
-                        ))}
-                    </ul>
-                </>
-            ) : (
-                <p className={styles.hint}>{isResponseStep ? 'No cosigners have replied yet.' : 'No cosigners have signed yet.'}</p>
-            )}
-            {unsigned.length > 0 ? (
-                <>
-                    <p className={styles.hint}>{remaining > 0 ? 'Pending cosigners:' : 'Cosigners who have not signed:'}</p>
-                    <ul aria-label={remaining > 0 ? 'Pending cosigners' : 'Cosigners who have not signed'}>
-                        {unsigned.map((pk) => (
-                            <li key={pk}><code className={styles.cosignerKey}>{pk}</code></li>
-                        ))}
-                    </ul>
-                </>
-            ) : (
-                <p className={styles.hint}>All cosigners have contributed.</p>
-            )}
-            {stepLabel ? (
-                <p className={styles.hint} data-testid="multisig-step-label">{stepLabel}</p>
-            ) : null}
             {error ? <StatusMessage variant="error" recovery={errorRecovery}>{error}</StatusMessage> : null}
+            {/* More than one action: the Actions | Details toggle, Actions
+                first (G102). One action or none (a cancelled or broadcast
+                session): the plain layout, actions then facts. */}
+            {actionCount > 1 ? (
+                <ActionsDetailsToggle actions={actionsPanel} details={detailsPanel} />
+            ) : (
+                <>
+                    {actionsPanel}
+                    {detailsPanel}
+                </>
+            )}
+            {/* Back to the list is the page's step-back, not an action row. */}
             <div className={styles.actions}>
                 <Button variant="ghost" onClick={() => setActiveId(null)} disabled={busy}>
                     Back to Sessions
                 </Button>
-                {!isTerminal && Array.isArray(exportFrames) ? (
-                    <Button variant="ghost" onClick={() => setView('export-qr')} disabled={busy}>
-                        {active.status === 'finalized' ? 'Export Signed Transaction' : 'Export Signing Request'}
-                    </Button>
-                ) : null}
-                {canCollect ? (
-                    <Button variant="ghost" onClick={() => { resetCollector(); setView('paste-inbox'); }} disabled={busy}>
-                        {isMusig2 && active.status === 'collecting-sigs'
-                            ? 'Import Partial Signature'
-                            : 'Import Cosigner Reply'}
-                    </Button>
-                ) : null}
-                {canCollect && !isWatcherMode ? (
-                    <Button variant="ghost" onClick={() => { setSignResult(null); setView('sign-locally'); }} disabled={busy}>
-                        Sign With My Key
-                    </Button>
-                ) : null}
-                {!isTerminal && isWatcherMode ? (
-                    <p className={styles.hint}>
-                        Watcher mode exports signing data but never asks for a password or adds a local signature.
-                    </p>
-                ) : null}
-                {!isTerminal ? (
-                    <Button variant="danger" onClick={handleCancel} loading={canceling} disabled={busy}>
-                        Cancel Session
-                    </Button>
-                ) : null}
-                {canAggregate && !isTerminal ? (
-                    <Button variant="primary" onClick={handleAggregate} loading={busy && !canceling} disabled={busy} icon={<Icon.MultisigIcon />}>
-                        Combine Replies
-                    </Button>
-                ) : null}
-                {active.status === 'ready-to-finalize' ? (
-                    <Button variant="primary" onClick={handleFinalize} loading={busy && !canceling} disabled={busy || !canFinalize} icon={<Icon.CheckIcon />}>
-                        Finalize Transaction
-                    </Button>
-                ) : null}
-                {active.status === 'finalized' ? (
-                    <Button variant="primary" onClick={handleBroadcast} loading={busy && !canceling} disabled={busy}>
-                        Broadcast Transaction
-                    </Button>
-                ) : null}
             </div>
         </>,
+        null,
+        trackerErrors,
     );
 }
 
 function shortPk(pk) {
     if (typeof pk !== 'string' || pk.length < 12) return pk;
     return `${pk.slice(0, 8)}…${pk.slice(-4)}`;
+}
+
+// A cosigner's display name above its key, when the session record names
+// its cosigners (the demo wallet's sample sessions do).
+function cosignerNameLine(session, pk) {
+    const name = session?.cosignerNames?.[pk];
+    return typeof name === 'string' && name ? <span className={listStyles.cosignerName}>{name}</span> : null;
+}
+
+const SIGNING_LINK_FIELD_ID = 'multisig-signing-link';
+
+/**
+ * The Open Signing Link page: its own page under the sessions list, with
+ * the link field (paste, or scan with the field's QR button) and the action
+ * that opens the session the link carries. Pressing it with an empty field
+ * or a link that is not a signing request marks the field (form error
+ * standard); Back returns to the list.
+ *
+ * @param {object} props
+ * @param {string} props.variant
+ * @param {string} props.initialValue
+ * @param {boolean} props.autoOpen  open `initialValue` at once (a link handed to the page)
+ * @param {boolean} props.busy
+ * @param {ReturnType<typeof useDemoGuard>} props.demoGuard
+ * @param {() => void} props.onBack
+ * @param {(text: string) => Promise<{ field: boolean, message: string } | null>} props.onOpen
+ */
+function OpenSigningLinkPage({ variant, initialValue, autoOpen, busy, demoGuard, onBack, onOpen }) {
+    const formErrors = useFormErrors();
+    const [value, setValue] = useState(initialValue || '');
+    const [scannerOpen, setScannerOpen] = useState(false);
+    const autoOpenedRef = useRef(false);
+
+    const submit = useCallback(async (text) => {
+        const link = String(text || '').trim();
+        if (!formErrors.validate({ [SIGNING_LINK_FIELD_ID]: link ? null : t('multisig.signingLink.required') })) return;
+        const outcome = await onOpen(link);
+        if (!outcome) return;
+        if (outcome.field) formErrors.validate({ [SIGNING_LINK_FIELD_ID]: outcome.message });
+        else formErrors.fail(outcome.message);
+    }, [formErrors, onOpen]);
+
+    useEffect(() => {
+        if (!autoOpen || autoOpenedRef.current || !initialValue) return;
+        autoOpenedRef.current = true;
+        void submit(initialValue);
+    }, [autoOpen, initialValue, submit]);
+
+    return (
+        <Screen
+            variant={variant}
+            header={<PageHeader nested onBack={onBack} title={t('multisig.signingLink.open')} />}
+        >
+            <FormPage
+                errors={formErrors}
+                demoGuard={demoGuard}
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    void submit(value);
+                }}
+                actions={(
+                    <Button type="submit" variant="primary" icon={<Icon.LinkIcon />} loading={busy}>
+                        {t('multisig.signingLink.open')}
+                    </Button>
+                )}
+            >
+                {scannerOpen ? (
+                    <QrScanner
+                        onFrame={(text) => {
+                            setScannerOpen(false);
+                            setValue(text);
+                            void submit(text);
+                        }}
+                        alt={t('multisig.signingLink.scan')}
+                    />
+                ) : null}
+                <Input
+                    id={SIGNING_LINK_FIELD_ID}
+                    label={t('multisig.signingLink.openLabel')}
+                    help={t('multisig.signingLink.openHint')}
+                    value={value}
+                    onChange={(event) => setValue(event.target.value)}
+                    autoComplete="off"
+                    fieldAction={(
+                        <FieldIconButton
+                            icon={<Icon.QrCodeIcon />}
+                            label={scannerOpen ? t('multisig.signingLink.stopScan') : t('multisig.signingLink.scan')}
+                            aria-pressed={scannerOpen}
+                            onClick={() => setScannerOpen((open) => !open)}
+                            disabled={busy}
+                        />
+                    )}
+                />
+            </FormPage>
+        </Screen>
+    );
 }
 
 /**
@@ -1362,8 +1625,10 @@ function SessionStartFlow({ walletId, variant, onCancel, onSessionStarted }) {
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging]);
 
+    // Every step of starting a session sits inside the sessions page, so
+    // each Back steps in place.
     const screenFor = (title, onBack, children) => (
-        <Screen variant={variant} header={<PageHeader onBack={onBack} title={title} />}>
+        <Screen variant={variant} header={<PageHeader nested onBack={onBack} title={title} />}>
             <ListPage>{children}</ListPage>
         </Screen>
     );
@@ -1378,7 +1643,7 @@ function SessionStartFlow({ walletId, variant, onCancel, onSessionStarted }) {
                 onSessionStarted={onSessionStarted}
                 onChangeSource={() => setStep('multisig')}
                 wrapPage={(page) => (
-                    <Screen variant={variant} header={<PageHeader onBack={() => setStep('action')} title={t('multisig.start.sendTitle')} />}>
+                    <Screen variant={variant} header={<PageHeader nested onBack={() => setStep('action')} title={t('multisig.start.sendTitle')} />}>
                         {page}
                     </Screen>
                 )}

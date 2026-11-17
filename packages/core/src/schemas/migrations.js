@@ -19,6 +19,7 @@ import { CURRENT_VERSION as ACCOUNT_VERSION } from './account.js';
 import { CURRENT_VERSION as ADDRESS_VERSION } from './address.js';
 import { CURRENT_VERSION as CONTACT_VERSION } from './contact.js';
 import { CURRENT_VERSION as CONNECTED_SITE_VERSION } from './connectedSite.js';
+import { withSiteIconFields } from './siteIcon.js';
 import { CURRENT_VERSION as SETTINGS_VERSION } from './settings.js';
 import { CURRENT_VERSION as PENDING_TX_VERSION } from './pendingTx.js';
 import { CURRENT_VERSION as MULTISIG_VERSION } from './multisigConfig.js';
@@ -34,6 +35,110 @@ import { CURRENT_VERSION as AUTOPAY_ORDER_VERSION } from './autopayOrder.js';
 import { CURRENT_VERSION as AUTOPAY_LEASE_VERSION } from './autopayLease.js';
 import { randomUUID } from '../util/uuid.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
+import {
+    ADS_DEFAULT_PER_TRANSACTION,
+    ADS_DEFAULT_RECIPIENT,
+    TEST_SEND_FIAT_DEFAULT,
+    TEST_SEND_FIAT_MAX,
+    TEST_SEND_FIAT_OFF,
+    createDefaultAdsSettings,
+} from './settings.js';
+
+// The v3 donation roles and the v4 recipient each one became.
+const LEGACY_ADS_ROLE_RECIPIENT = { DONATE1: 'protocol', DONATE2: 'community', EXPLORER: 'explorer' };
+
+// This file sits in the vault import graph and a change to it triggers the
+// every-OS release rehearsal, so it must not import the registry or the price
+// lookup. The prices a v3 queue and a v4 sats threshold convert at come in
+// through ctx (`adsRateFor`, `testSendRateFor`); flows/legacyRates.js builds
+// that ctx. A caller that passes none has no price: queues drop and the test
+// send takes its default.
+const noPrice = () => null;
+
+// sats * rate / 10^decimals in hundredths of the currency, rounded half up,
+// in integer arithmetic (the rate is carried at 1e-10 precision).
+function legacySatsToFiatCents(sats, decimals, rate) {
+    let units;
+    try { units = BigInt(sats); } catch { return 0n; }
+    if (units <= 0n) return 0n;
+    const rateScaled = BigInt(Math.round(rate * 1e10));
+    const denominator = (10n ** BigInt(decimals)) * (10n ** 10n);
+    const numerator = units * rateScaled * 100n;
+    return (numerator + denominator / 2n) / denominator;
+}
+
+function centsToDecimal(cents) {
+    const whole = cents / 100n;
+    const frac = String(cents % 100n).padStart(2, '0').replace(/0+$/, '');
+    return frac ? `${whole}.${frac}` : String(whole);
+}
+
+/**
+ * v3 -> v4 donations: the per-network switch, amounts and sats queues become
+ * one wallet-wide fiat setting. Exported for its unit test.
+ *
+ * - On when the v3 switch was on (an absent `enabled` is the old default, on)
+ *   and some network still added an amount; on comes back at the default
+ *   per-transaction amount, off as an explicit 0.
+ * - The recipient is the first network's non-default choice, else Protocol.
+ * - Each mainnet queue converts at the price this process holds for its coin;
+ *   a queue with no price, and every test-network queue, is dropped.
+ *
+ * @param {any} r   the stored (sparse) or full v3 record
+ * @param {{ adsRateFor?: (chainId: string, currency: string) => ({ rate: number, decimals: number } | null) }} [ctx]
+ */
+export function migrateLegacyAds(r, ctx) {
+    const legacy = r && typeof r.ads === 'object' && r.ads !== null ? r.ads : {};
+    const perChain = legacy.perChain && typeof legacy.perChain === 'object' ? legacy.perChain : {};
+    const states = Object.entries(perChain).filter(([, s]) => s && typeof s === 'object');
+    const switchOn = legacy.enabled !== false;
+    const addsSomewhere = states.length === 0
+        || states.some(([, s]) => s.perTxAmountSats == null || Number(s.perTxAmountSats) > 0);
+    const currency = typeof r?.fiatCurrency === 'string' && r.fiatCurrency ? r.fiatCurrency : 'USD';
+    const roles = states
+        .map(([, s]) => s.donationAddressRole)
+        .filter((role) => Object.prototype.hasOwnProperty.call(LEGACY_ADS_ROLE_RECIPIENT, role));
+    const pickedRole = roles.find((role) => role !== 'DONATE1') ?? roles[0];
+    const rateFor = typeof ctx?.adsRateFor === 'function' ? ctx.adsRateFor : noPrice;
+    let queuedCents = 0n;
+    for (const [chainId, s] of states) {
+        const price = rateFor(chainId, currency);
+        if (!price) continue;
+        queuedCents += legacySatsToFiatCents(s.accumulatedSats, price.decimals, price.rate);
+    }
+    return {
+        ...createDefaultAdsSettings(currency),
+        perTransaction: switchOn && addsSomewhere ? ADS_DEFAULT_PER_TRANSACTION : '0',
+        recipient: pickedRole ? LEGACY_ADS_ROLE_RECIPIENT[pickedRole] : ADS_DEFAULT_RECIPIENT,
+        queued: centsToDecimal(queuedCents),
+    };
+}
+
+/**
+ * v4 -> v5 test send (operator ruling 2026-11-14): the sats threshold
+ * becomes an amount in the display currency. Off stays Off; any other value
+ * converts at the price this process holds, rounded to a whole amount (at
+ * least 1), or becomes the $1,000 default when there is no price. Exported
+ * for its unit test.
+ *
+ * @param {any} r   the stored (sparse) or full v4 record
+ * @param {{ testSendRateFor?: (currency: string) => ({ rate: number, decimals: number } | null) }} [ctx]
+ * @returns {string}   the v5 `grace.testSendThresholdFiat`
+ */
+export function migrateLegacyTestSend(r, ctx) {
+    let sats;
+    try { sats = BigInt(String(r?.grace?.testSendThresholdSats ?? '0').trim() || '0'); } catch { sats = 0n; }
+    if (sats <= 0n) return TEST_SEND_FIAT_OFF;
+    const currency = typeof r?.fiatCurrency === 'string' && r.fiatCurrency ? r.fiatCurrency : 'USD';
+    const rateFor = typeof ctx?.testSendRateFor === 'function' ? ctx.testSendRateFor : noPrice;
+    const price = rateFor(currency);
+    if (!price) return TEST_SEND_FIAT_DEFAULT;
+    const cents = legacySatsToFiatCents(sats, price.decimals, price.rate);
+    let whole = (cents + 50n) / 100n;
+    if (whole < 1n) whole = 1n;
+    const max = BigInt(TEST_SEND_FIAT_MAX);
+    return String(whole > max ? max : whole);
+}
 
 /**
  * A step sees the record and an optional context object that carries
@@ -202,6 +307,17 @@ export const settingsMigrations = {
             fees,
         };
     },
+    // v3 -> v4: automatic donations become one wallet-wide fiat queue
+    // (operator ruling 2026-11-14); see migrateLegacyAds.
+    3: (r, ctx) => ({ ...r, schemaVersion: 4, ads: migrateLegacyAds(r, ctx) }),
+    // v4 -> v5: the new-recipient test-send threshold moves from sats to the
+    // display currency (operator ruling 2026-11-14); see migrateLegacyTestSend.
+    // Off is the default, so a sparse record that was Off stays as it was.
+    4: (r, ctx) => {
+        const fiat = migrateLegacyTestSend(r, ctx);
+        if (fiat === TEST_SEND_FIAT_OFF) return { ...r, schemaVersion: 5 };
+        return { ...r, schemaVersion: 5, grace: { ...r.grace, testSendThresholdFiat: fiat } };
+    },
 };
 /** @type {MigrationMap} */
 export const pendingTxMigrations = {
@@ -319,9 +435,17 @@ export const migrateWallet = (r, ctx) => migrate(r, walletMigrations, WALLET_VER
 export const migrateAccount = (r) => migrate(r, accountMigrations, ACCOUNT_VERSION);
 export const migrateAddress = (r) => migrate(r, addressMigrations, ADDRESS_VERSION);
 export const migrateContact = (r) => migrate(r, contactMigrations, CONTACT_VERSION);
+// Site icons arrived inside v1 (the autoApproved precedent): a record written
+// before them reads back with `icon` and `iconCapturedAt` null, and a value
+// that fails the site icon checks (a tampered backup) is dropped to null.
 export const migrateConnectedSite = (r) =>
-    migrate(r, connectedSiteMigrations, CONNECTED_SITE_VERSION);
-export const migrateSettings = (r) => migrate(r, settingsMigrations, SETTINGS_VERSION);
+    withSiteIconFields(migrate(r, connectedSiteMigrations, CONNECTED_SITE_VERSION));
+/**
+ * @param {any} r
+ * @param {{ adsRateFor?: (chainId: string, currency: string) => ({ rate: number, decimals: number } | null) }} [ctx]
+ *   the v3 -> v4 donation-queue price source; defaults to the rate this process holds
+ */
+export const migrateSettings = (r, ctx) => migrate(r, settingsMigrations, SETTINGS_VERSION, ctx);
 export const migratePendingTx = (r) => migrate(r, pendingTxMigrations, PENDING_TX_VERSION);
 export const migrateMultisigConfig = (r) =>
     migrate(r, multisigConfigMigrations, MULTISIG_VERSION);

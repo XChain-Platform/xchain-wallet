@@ -128,3 +128,13 @@
 :root [data-xc-menu-list="rows"] li > .card {
     border: 1px solid transparent;
 }
+
+/* In a wide list-and-detail split the scroller already supplies the 8px gap
+   under its header line. The narrow layout's list-card frame must not add a
+   border before the first row. Hosts opt in only while their split is shown.
+   This comes last so nested-card rules cannot restore the narrow frame. */
+[data-xc-split-list] {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}

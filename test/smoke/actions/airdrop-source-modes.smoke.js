@@ -51,7 +51,8 @@ const src = readFileSync(formPath, 'utf8');
 assert.match(src, /const \[sourceMode, setSourceMode\] = useState\(/, 'AirdropForm tracks sourceMode state');
 assert.match(src, /\('paste'\)/, "sourceMode defaults to 'paste'");
 for (const opt of ['paste', 'existing', 'holders']) {
-    assert.match(src, new RegExp(`<option value="${opt}">`), `Select offers the ${opt} option`);
+    // A themed Select.Option with its icon since G119; a plain option also counts.
+    assert.match(src, new RegExp(`<(?:Select\\.Option|option) value="${opt}"[\\s>]`), `Select offers the ${opt} option`);
 }
 assert.match(src, /label="Airdrop to"/, 'source-mode Select is labeled "Airdrop to"');
 
@@ -101,7 +102,16 @@ assert.match(src, /\blistType,/, 'createPendingAirdrop call sites forward listTy
 // --- 4. Holder-snapshot honesty + no min-balance field -----------------
 
 assert.match(src, /current, not final/i, 'review stage labels the holder count as current, not final');
-assert.match(src, /only (?:fixed|locked in) when the airdrop transaction confirms/, 'binding time is stated explicitly');
+assert.match(
+    src,
+    /holder set is fixed only when the transaction confirms/,
+    'the Confirm Standard warning states the holder binding time explicitly',
+);
+assert.match(
+    src,
+    /decoded=\{airdropReviewDecoded\}/,
+    'the holder warning is passed to ConfirmActionModal for its shared warning slot',
+);
 assert.doesNotMatch(src, /AIRDROP\s+transaction\s+executes|database hits|fee tick|execute time/,
     'airdrop copy uses plain words, not protocol jargon');
 assert.match(src, /preview, not a (?:guarantee|promise)/i, 'holder count is explicitly framed as a preview, not a promise');
@@ -144,7 +154,7 @@ if (existsSync(airdropDocPath)) {
 
 // --- 6. Watcher-mode block stays unconditional (pre-PC-11 invariant) --
 
-assert.match(src, /if \(isWatcherMode\) \{[\s\S]+?Not available in watcher mode/,
+assert.match(src, /if \(isWatcherMode\) \{[\s\S]+?Not available when another phone signs/,
     'watcher-mode block still fires unconditionally, before any stage-based return');
 assert.doesNotMatch(src, /messaging\.buildActionPsbtRequest\(/,
     'AirdropForm still intentionally never routes through buildActionPsbtRequest, for any source mode');

@@ -8,16 +8,25 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Account Details' Extended public keys row reaches the export page: the row
+// Account Details' Extended public keys row reaches the keys page: the row
 // shows for the active account, every shell opens Settings on the
-// wallet-xpub page from it, and that page exports the active account's keys.
+// wallet-xpub page from it, and that page shows the active account's keys at
+// once, with copy and QR, no intro step and no password (ruling 2026-11-15).
 
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AccountDetails } from '../../../packages/core/src/shared/routes/AccountDetails.jsx';
 import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
+
+const { qrToDataURL } = vi.hoisted(() => ({
+    qrToDataURL: vi.fn(async () => 'data:image/png;base64,cHVia2V5'),
+}));
+
+vi.mock('qrcode', () => ({
+    default: { toDataURL: qrToDataURL },
+}));
 
 const WALLET = { id: 'wallet-1', name: 'Main', format: 'bip39' };
 const ACCOUNTS = [
@@ -68,6 +77,23 @@ describe('Account Details Extended public keys', () => {
         expect(screen.queryByRole('button', { name: /Extended public keys/ })).toBeNull();
     });
 
+    it('leaves the row off a hardware wallet account, whose keys stay on the device', async () => {
+        const listWallets = vi.fn().mockResolvedValue([{ id: WALLET.id, name: 'My Trezor', format: 'hardware' }]);
+        withMessaging({ listAccounts: vi.fn().mockResolvedValue(ACCOUNTS), listWallets }, (
+            <AccountDetails
+                walletId={WALLET.id}
+                accountId="account-2"
+                activeAccountId="account-2"
+                onBack={() => {}}
+                onExtendedKeys={vi.fn()}
+            />
+        ));
+
+        await screen.findByText('Savings');
+        await waitFor(() => expect(listWallets).toHaveBeenCalled());
+        await waitFor(() => expect(screen.queryByRole('button', { name: /Extended public keys/ })).toBeNull());
+    });
+
     for (const file of [
         'packages/web/src/App.jsx',
         'packages/desktop/renderer/App.jsx',
@@ -82,34 +108,113 @@ describe('Account Details Extended public keys', () => {
 });
 
 describe('Settings wallet-xpub page', () => {
-    it('exports the active account keys behind the wallet password', async () => {
-        const xpub = `xpub${'A'.repeat(107)}`;
-        const messaging = {
+    const XPUB = `xpub${'A'.repeat(107)}`;
+    const TPUB = `tpub${'B'.repeat(107)}`;
+
+    beforeEach(() => {
+        qrToDataURL.mockClear();
+        Object.defineProperty(globalThis.navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText: vi.fn(async () => {}) },
+        });
+    });
+
+    function settingsMessaging(pairingPayloadRequest) {
+        return {
             getSettings: vi.fn().mockResolvedValue({}),
             listConnectedSites: vi.fn().mockResolvedValue([]),
-            pairingPayloadRequest: vi.fn().mockResolvedValue({
-                xpubs: { 'bitcoin-mainnet': { xpub, path: "m/84'/0'/1'" } },
-            }),
+            pairingPayloadRequest,
         };
-        withMessaging(messaging, (
+    }
+
+    function openKeysPage(messaging, wallet = WALLET) {
+        return withMessaging(messaging, (
             <Settings
                 onBack={() => {}}
-                activeWallet={WALLET}
+                activeWallet={wallet}
                 activeAccount={ACCOUNTS[1]}
                 initialSubpageId="wallet-xpub"
                 reload={vi.fn()}
             />
         ));
+    }
 
-        expect((await screen.findAllByRole('heading', { name: /Extended Public Keys/i })).length).toBeGreaterThan(0);
-        fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
-        fireEvent.change(screen.getByLabelText('Confirm wallet password'), { target: { value: 'pw' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Export Keys' }));
+    it('shows the active account keys at once, with no intro step and no password', async () => {
+        const messaging = settingsMessaging(vi.fn().mockResolvedValue({
+            payload: {
+                keys: [
+                    { chainId: 'bitcoin-mainnet', addressType: 'p2wpkh', path: "m/84'/0'/1'", xpub: XPUB },
+                    { chainId: 'bitcoin-testnet', addressType: 'p2wpkh', path: "m/84'/1'/1'", xpub: TPUB },
+                ],
+            },
+        }));
+        openKeysPage(messaging);
 
-        await waitFor(() => expect(messaging.pairingPayloadRequest).toHaveBeenCalledWith(expect.objectContaining({
-            walletId: WALLET.id,
-            accountIndex: 1,
-            publicExport: true,
-        })));
+        expect(await screen.findByText(XPUB)).toBeInTheDocument();
+        expect(screen.getByText(TPUB)).toBeInTheDocument();
+        expect(screen.getByText(/reveal every address and balance of this account\. They can't move funds/i)).toBeInTheDocument();
+        expect(await screen.findByAltText('QR code for Bitcoin extended public key')).toBeInTheDocument();
+        expect(qrToDataURL).toHaveBeenCalledWith(XPUB, expect.any(Object));
+
+        // No intro row, no Export button, no password field anywhere.
+        expect(screen.queryByRole('button', { name: 'Export…' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Export Keys' })).toBeNull();
+        expect(screen.queryByLabelText('Confirm wallet password')).toBeNull();
+        expect(document.querySelector('input[type="password"]')).toBeNull();
+
+        // The request asks for this account's public keys and carries no password.
+        expect(messaging.pairingPayloadRequest).toHaveBeenCalledTimes(1);
+        const request = messaging.pairingPayloadRequest.mock.calls[0][0];
+        expect(request).toEqual({ walletId: WALLET.id, accountIndex: 1, publicExport: true });
+        expect('password' in request).toBe(false);
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Copy Extended Public Key' })[0]);
+        await waitFor(() => expect(globalThis.navigator.clipboard.writeText).toHaveBeenCalledWith(XPUB));
+    });
+
+    it('shows only public extended keys when the host returns anything else', async () => {
+        const privateKey = `xprv${'C'.repeat(107)}`;
+        const messaging = settingsMessaging(vi.fn().mockResolvedValue({
+            payload: { keys: [{ chainId: 'bitcoin-mainnet', path: "m/84'/0'/1'", xpub: privateKey }] },
+        }));
+        openKeysPage(messaging);
+
+        expect(await screen.findByText('This wallet returned no valid extended public keys.')).toBeInTheDocument();
+        expect(screen.queryByText(privateKey)).toBeNull();
+        expect(screen.queryByRole('img', { name: /extended public key/i })).toBeNull();
+    });
+
+    it('says why when the session cannot read the keys, without asking for a password', async () => {
+        const messaging = settingsMessaging(vi.fn().mockRejectedValue(new Error('Unlock this wallet again to show its extended public keys.')));
+        openKeysPage(messaging);
+
+        expect(await screen.findByText('Unlock this wallet again to show its extended public keys.')).toBeInTheDocument();
+        expect(screen.queryByLabelText('Confirm wallet password')).toBeNull();
+    });
+
+    it('says a hardware wallet keeps its keys on the device and reads nothing', async () => {
+        const messaging = settingsMessaging(vi.fn());
+        openKeysPage(messaging, { id: 'wallet-hw', name: 'My Trezor', format: 'hardware' });
+
+        expect(await screen.findByText("This wallet's keys stay on its hardware device.")).toBeInTheDocument();
+        expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
+    });
+
+    it('says a private-key-only wallet has no extended keys and reads nothing', async () => {
+        const messaging = settingsMessaging(vi.fn());
+        openKeysPage(messaging, { id: 'wallet-wif', name: 'Imported key', format: 'wif-only' });
+
+        expect(await screen.findByText('Not available for a private-key-only wallet.')).toBeInTheDocument();
+        expect(messaging.pairingPayloadRequest).not.toHaveBeenCalled();
+    });
+
+    it('shows the keys of a paired watcher wallet the same way', async () => {
+        const messaging = settingsMessaging(vi.fn().mockResolvedValue({
+            payload: { keys: [{ chainId: 'bitcoin-mainnet', addressType: 'p2wpkh', path: "m/84'/0'/1'", xpub: XPUB }] },
+        }));
+        openKeysPage(messaging, { ...WALLET, walletMode: 'watcher' });
+
+        expect(await screen.findByText(XPUB)).toBeInTheDocument();
+        expect(screen.queryByLabelText('Confirm wallet password')).toBeNull();
     });
 });

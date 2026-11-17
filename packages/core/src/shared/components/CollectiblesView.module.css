@@ -12,6 +12,29 @@
     align-items: stretch;
 }
 
+/* Home's NFTs tab (operator 2026-11-15): large images to browse, three across
+   at phone, popup and side panel widths (a container under 31rem). Wider
+   containers keep each tile about a phone three-across tile (6.75rem to
+   7.5rem) and add columns as the width allows. The container query measures
+   the list's own width, not the window, so a narrow pane in a wide window
+   still reads three across. A webview without container queries (Chrome
+   102) keeps the three-across grid at every width. */
+.wrap[data-size='large'] .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@supports (container-type: inline-size) and (width: 1cqw) {
+    .wrap[data-size='large'] {
+        container-type: inline-size;
+    }
+
+    @container (min-width: 31rem) {
+        .wrap[data-size='large'] .grid {
+            grid-template-columns: repeat(auto-fill, minmax(6.75rem, 7.5rem));
+        }
+    }
+}
+
 .card {
     composes: flush from '../../ui/Card.module.css';
     position: relative;
@@ -89,6 +112,19 @@
 .cardPinned {
     border-color: var(--xc-control-selected);
     box-shadow: var(--xc-shadow-accent-ring);
+}
+
+/* The card whose detail shows beside the grid on wide Home (G115): an
+   accent outline inside its edge, so the card's own surface stays as drawn. */
+.card[data-selected='true'] {
+    outline: 2px solid var(--xc-accent-primary);
+    outline-offset: -2px;
+}
+
+@media (forced-colors: active) {
+    .card[data-selected='true'] {
+        outline-color: Highlight;
+    }
 }
 
 .cardHidden {
@@ -176,6 +212,15 @@
     overflow-wrap: break-word;
     word-break: normal;
     line-height: 1.2;
+}
+
+/* Home's three-across tiles are narrow: the name keeps one readable line with
+   an ellipsis (the full name is the title and the card's accessible name). */
+.wrap[data-size='large'] .name {
+    font-size: var(--xc-text-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .subtitle {

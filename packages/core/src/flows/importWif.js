@@ -28,6 +28,7 @@ import {
 } from '../crypto/index.js';
 import { createAddress } from '../schemas/address.js';
 import { WalletNotFoundError } from './unlockWallet.js';
+import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
 import { RAW_HEX_KEY, isRawHexPrivateKey, wifFailureMessage } from './_wifFailureMessage.js';
 import { importedKeyAddressType } from './_importedKeyAddressType.js';
 
@@ -112,7 +113,10 @@ export async function importWif({
     // vault master key directly (SoftwareSigner.getMasterKey()) instead
     // of the password. One of the two is required.
     const hasSessionKey = sessionMasterKey instanceof Uint8Array && sessionMasterKey.length > 0;
+    // A hardware wallet holds no keys at all (the schema refuses importedKeys
+    // on one), so a private key cannot join it; no password would change that.
     if (!hasSessionKey && (typeof password !== 'string' || password.length === 0)) {
+        refuseHardwareWallet(await hardwareWalletRecord(vault, walletId), 'importing a private key');
         throw new Error('importWif: password or masterKey is required');
     }
     if (!chainRegistry) throw new Error('importWif: chainRegistry is required');
@@ -134,6 +138,7 @@ export async function importWif({
 
     const walletRecord = await vault.wallets.get(walletId);
     if (!walletRecord) throw new WalletNotFoundError(walletId);
+    refuseHardwareWallet(walletRecord, 'importing a private key');
 
     // Validate WIF via SDK (checksum + network match) and derive the address
     // before any expensive work; fast failure on bad input.

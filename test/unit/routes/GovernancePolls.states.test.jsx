@@ -10,6 +10,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { GovernancePolls } from '../../../packages/core/src/shared/routes/GovernancePolls.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
+import listRowStyles from '../../../packages/core/src/ui/ListRow.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = { address: 'bc1qexampleexampleexampleexampleexampleex' };
@@ -136,7 +137,12 @@ describe('GovernancePolls states', () => {
             expect(row).not.toBeNull();
             // The leading icon is the chain badge, named for the poll's network.
             expect(item.querySelector('[aria-label="Bitcoin"]')).not.toBeNull();
+            // A drill-in row ends in the trailing chevron (G97).
+            expect(row.querySelector(`.${listRowStyles.chevron} svg`)).not.toBeNull();
         }
+        // The badge is the only network indicator: the line under the question is the token alone (U12, G61).
+        expect(screen.getAllByText('VOTE')).toHaveLength(2);
+        expect(screen.queryByText(/ on Bitcoin/)).toBeNull();
 
         // Create poll and Delegate votes are plus-menu items, each with an icon, and no
         // success-styled button sits on the page.

@@ -39,34 +39,82 @@ import {
 // it, see the guard in toLedgerCreatePayment.
 const SIGHASH_ALL = 1;
 
-// Name the refused networks the way the UI does ("Bitcoin testnet"), never by
-// chainId; trezorFormat.js keeps the same two labels so the wording matches.
-const REFUSED_NETWORK_LABELS = Object.freeze({
+// Name networks the way the UI does ("Bitcoin testnet"), never by chainId;
+// trezorFormat.js keeps the same labels so the wording matches.
+const NETWORK_LABELS = Object.freeze({
+    'bitcoin-mainnet': 'Bitcoin',
     'bitcoin-testnet': 'Bitcoin testnet',
     'bitcoin-regtest': 'Bitcoin regtest',
+    'litecoin-mainnet': 'Litecoin',
+    'litecoin-testnet': 'Litecoin testnet',
+    'litecoin-regtest': 'Litecoin regtest',
+    'dogecoin-mainnet': 'Dogecoin',
+    'dogecoin-testnet': 'Dogecoin testnet',
+    'dogecoin-regtest': 'Dogecoin regtest',
+});
+
+// Which networks Ledger signs (operator ruling 2026-11-15: a hardware wallet
+// uses each device's own native test derivation). Sources, read 2026-11-15:
+// LedgerHQ/app-bitcoin-new and LedgerHQ/app-bitcoin-legacy Makefiles, and
+// @ledgerhq/hw-app-btc 10.21.1 (Btc.js, BtcNew.js).
+//   - Bitcoin testnet and regtest sign in the Bitcoin Test app, which the
+//     device OS restricts to coin type 1' paths (PATH_APP_LOAD_PARAMS "*/1'").
+//     LedgerSigner derives both networks there, so the device's own addresses
+//     are the account's addresses. hw-app-btc takes 'bitcoin_testnet' and
+//     'bitcoin_regtest' as currencies and speaks the new protocol for both.
+//   - The Test app writes addresses with Bitcoin testnet parameters. Regtest
+//     shares its base58 versions (111, 196) and differs only in the segwit
+//     prefix (tb vs bcrt), which LedgerSigner rewrites; see regtestAddress.
+//   - Litecoin (*/2') and Dogecoin (*/3') ship as mainnet apps only; the
+//     legacy repo builds no Litecoin or Dogecoin testnet variant, and routing a
+//     test network through a mainnet app would show mainnet-form addresses
+//     (ltc1, D...), so those networks stay refused.
+const NO_TEST_APP_REASON = (coin) => `Ledger has no ${coin} test network app.`;
+
+/**
+ * Per-network support for Ledger, one row per XChain network: whether the
+ * device can derive and sign it (mainnet at the wallet's mainnet paths, the
+ * Bitcoin test networks at the Bitcoin Test app's 1' paths) and the one-line
+ * reason when it cannot. core/src/flows/hardwareWallet.js builds
+ * HARDWARE_NETWORK_SUPPORT, the connect flow's red-X / green-check table,
+ * from this.
+ *
+ * @type {Readonly<Record<string, { supported: boolean, reason: string|null }>>}
+ */
+export const LEDGER_NETWORK_SUPPORT = Object.freeze({
+    'bitcoin-mainnet': Object.freeze({ supported: true, reason: null }),
+    'bitcoin-testnet': Object.freeze({ supported: true, reason: null }),
+    'bitcoin-regtest': Object.freeze({ supported: true, reason: null }),
+    'litecoin-mainnet': Object.freeze({ supported: true, reason: null }),
+    'litecoin-testnet': Object.freeze({ supported: false, reason: NO_TEST_APP_REASON('Litecoin') }),
+    'litecoin-regtest': Object.freeze({ supported: false, reason: NO_TEST_APP_REASON('Litecoin') }),
+    'dogecoin-mainnet': Object.freeze({ supported: true, reason: null }),
+    'dogecoin-testnet': Object.freeze({ supported: false, reason: NO_TEST_APP_REASON('Dogecoin') }),
+    'dogecoin-regtest': Object.freeze({ supported: false, reason: NO_TEST_APP_REASON('Dogecoin') }),
 });
 
 /**
- * The refusal for bitcoin-testnet and bitcoin-regtest, worded like Trezor's
- * (trezorFormat.js chainIdToTrezorCoin) so both vendors say the same thing.
- *
- * The chain descriptors pin SLIP-44 coin-type 0' on every Bitcoin network for
- * software-signer parity, but the Bitcoin Test app forces 1', so a device
- * derivation there yields addresses the rest of the wallet cannot see. Do not
- * "fix" this by mapping either network to the Test app.
+ * The refusal for a network Ledger cannot sign, worded like Trezor's
+ * (trezorFormat.js chainIdToTrezorCoin) so both vendors say the same thing,
+ * with `err.code` 'HW_NETWORK_UNSUPPORTED' for callers to branch on. The name
+ * predates the Litecoin and Dogecoin rows; it serves every refused network.
  *
  * @param {string} chainId
  * @returns {Error}
  */
 export function unsupportedBitcoinNetworkError(chainId) {
-    const label = Object.prototype.hasOwnProperty.call(REFUSED_NETWORK_LABELS, chainId)
-        ? REFUSED_NETWORK_LABELS[chainId]
+    const label = Object.prototype.hasOwnProperty.call(NETWORK_LABELS, chainId)
+        ? NETWORK_LABELS[chainId]
         : 'this network';
-    return new Error(
-        `This hardware device can't be used on ${label} - use a software wallet for this network. `
-        + '(On this network the device would derive a different set of addresses than the '
-        + 'rest of the wallet, so any funds would appear missing.)',
+    const row = Object.prototype.hasOwnProperty.call(LEDGER_NETWORK_SUPPORT, chainId)
+        ? LEDGER_NETWORK_SUPPORT[chainId]
+        : null;
+    const why = row?.reason ?? 'No Ledger app signs this network.';
+    const err = new Error(
+        `This hardware device can't be used on ${label} - use a software wallet for this network. (${why})`,
     );
+    err.code = 'HW_NETWORK_UNSUPPORTED';
+    return err;
 }
 
 /**
@@ -79,25 +127,23 @@ export function unsupportedBitcoinNetworkError(chainId) {
  */
 export function chainIdToLedgerCurrency(chainId) {
     // Ledger currencies map to installed device apps. There are Bitcoin,
-    // Bitcoin Test, Litecoin, and Dogecoin apps, but NO Litecoin-testnet,
-    // Dogecoin-testnet, or regtest apps. Those chainIds fall through to the
-    // throw, and the wallet uses a software signer for them.
-    //
-    // Refuse bitcoin-testnet and bitcoin-regtest for derivation parity, not for
-    // a missing app (see unsupportedBitcoinNetworkError above).
+    // Bitcoin Test, Litecoin, and Dogecoin apps, but NO Litecoin or Dogecoin
+    // test network app. Bitcoin testnet and regtest both run in the Bitcoin
+    // Test app; every other test network is refused with a typed error naming
+    // the vendor reason (LEDGER_NETWORK_SUPPORT).
     switch (chainId) {
         case 'bitcoin-mainnet': return 'bitcoin';
+        case 'bitcoin-testnet': return 'bitcoin_testnet';
+        case 'bitcoin-regtest': return 'bitcoin_regtest';
         case 'litecoin-mainnet': return 'litecoin';
         case 'dogecoin-mainnet': return 'dogecoin';
-        case 'bitcoin-testnet':
-        case 'bitcoin-regtest':
-            throw unsupportedBitcoinNetworkError(chainId);
         default:
-            throw new Error(
-                `ledgerFormat: unsupported chainId "${chainId}". No Ledger app `
-                + 'exists for Litecoin/Dogecoin testnet or regtest; use a software '
-                + 'wallet for this network.',
-            );
+            if (Object.prototype.hasOwnProperty.call(LEDGER_NETWORK_SUPPORT, chainId)) {
+                throw unsupportedBitcoinNetworkError(chainId);
+            }
+            throw Object.assign(new Error(
+                `ledgerFormat: unsupported chainId "${chainId}"; use a software wallet for this network.`,
+            ), { code: 'HW_NETWORK_UNSUPPORTED' });
     }
 }
 

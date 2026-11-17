@@ -17,6 +17,7 @@ import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AdvancedActionsForm } from '../../../packages/core/src/shared/routes/AdvancedActionsForm.jsx';
+import { selectOption, selectOptionValues } from '../../helpers/selectOption.js';
 
 const BTC = 'bitcoin-mainnet';
 const FROM = {
@@ -54,9 +55,9 @@ describe('AdvancedActionsForm blank form', () => {
         // Network sits in the closed From section; open it so its help shows.
         fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
         expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
-        await waitFor(() => expect(document.querySelector('option[value="BROADCAST"]')).toBeTruthy());
-        const picker = document.querySelector('option[value="BROADCAST"]').closest('select');
-        fireEvent.change(picker, { target: { value: 'BROADCAST' } });
+        const picker = await screen.findByRole('combobox', { name: 'Action' });
+        await waitFor(() => expect(selectOptionValues(picker)).toContain('BROADCAST'));
+        selectOption(picker, 'BROADCAST');
         await screen.findByLabelText('MESSAGE');
         fireEvent.click(screen.getByRole('button', { name: 'Sign Action' }));
 

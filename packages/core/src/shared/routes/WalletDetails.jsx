@@ -9,10 +9,11 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useState } from 'react';
-import { Button, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
-// The standard list card and row icon.
+import { Button, Icon, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
+import { ActionsDetailsToggle } from '../components/ActionsDetailsToggle.jsx';
+// The standard list card, which the identity card draws on.
 import listStyles from './CoSignerAccountList.module.css';
-import homeTabsStyles from '../components/HomeTabs.module.css';
 import { IdentityAvatar } from '../components/WalletIdentity.jsx';
 import { readWalletTile, tileRadius, walletTileText } from '../utils/walletTile.js';
 import { isDemoWallet, getDemoWalletExpiry } from '@xchain-wallet/core/flows';
@@ -25,7 +26,6 @@ import '../../i18n/locales/en/accountPicker.js';
 import '../../i18n/locales/en/addressDiscovery.js';
 import '../../i18n/locales/en/history.js';
 import '../../i18n/locales/en/renameWallet.js';
-import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/settings.js';
 import '../../i18n/locales/en/walletDetails.js';
 import '../../i18n/locales/en/walletPicker.js';
@@ -34,6 +34,8 @@ import { walletModeLabel } from '../components/WalletModeField.jsx';
 import styles from './ActionsMenu.module.css';
 import pickerStyles from './WalletPicker.module.css';
 import { pendingMigrationSweeps } from '../../flows/migrationSweeps.js';
+import { isHardwareWallet } from '../../flows/hardwareWallet.js';
+import { HardwareWalletDetails } from '../components/HardwareWalletDetails.jsx';
 
 // Re-exported for the callers and tests that reached for it here before
 // the demo-exit primitives were pulled into one module.
@@ -56,10 +58,14 @@ export { isVaultEmpty } from '../utils/demoGraduation.js';
  * @param {() => void} [props.onExited]              fires after a successful demo wipe so the host can refresh App state
  * @param {(wallet: any) => void} [props.onExportBackup]  opens the Export Backup page for this wallet
  * @param {(wallet: any) => void} [props.onRemoveWallet]  opens the Remove Wallet page for this wallet
+ *
+ * A hardware wallet gets its own page instead (hw-4 layout 1): no phrase,
+ * backup, export or address check, and Unlink in place of Remove.
+ * @param {(walletId: string) => void} [props.onUnlinked]  a hardware wallet that was not active was unlinked; the host leaves the page
+ * @param {(wallet: any, signer: any) => void} [props.onReconnect]  a hardware wallet's Reconnect row
+ * @param {(wallet: any) => void} [props.onOpenAccounts]  a hardware wallet's Accounts row: the shared My Accounts page for that wallet (G131)
  */
-export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, onExited, activeWalletId, onMakeActive, onOpenSettings, onShowRecoveryPhrase, onExportBackup, onRemoveWallet }) {
-    // The page opens on its Actions tab.
-    const [tab, setTab] = useState('actions');
+export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, onExited, activeWalletId, onMakeActive, onOpenSettings, onShowRecoveryPhrase, onExportBackup, onRemoveWallet, onUnlinked, onReconnect, onOpenAccounts }) {
     const [madeActive, setMadeActive] = useState(false);
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
@@ -198,6 +204,24 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
         );
     }
 
+    if (isHardwareWallet(wallet)) {
+        return (
+            <HardwareWalletDetails
+                wallet={wallet}
+                accountCount={accountCount}
+                onBack={onBack}
+                onRename={onRename}
+                activeWalletId={madeActive ? wallet.id : activeWalletId}
+                onMakeActive={typeof onMakeActive === 'function'
+                    ? (w) => { onMakeActive(w); setMadeActive(true); }
+                    : undefined}
+                onUnlinked={onUnlinked}
+                onReconnect={onReconnect}
+                onOpenAccounts={onOpenAccounts}
+            />
+        );
+    }
+
     const formatLabel = wallet.format === 'counterwallet-legacy' ? 'FreeWallet (Counterwallet legacy)' : 'BIP39';
     const originLabel = walletOriginLabel(wallet.origin);
     const created = wallet.createdAt ? new Date(wallet.createdAt) : null;
@@ -214,17 +238,18 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
     const walletModeText = walletModeLabel(wallet.walletMode);
     const typeShort = wallet.format === 'counterwallet-legacy' ? 'Legacy' : wallet.format === 'wif-only' ? 'Imported key' : 'BIP39';
     const accountsText = accountCount === null ? '…' : `${accountCount} ${accountCount === 1 ? 'account' : 'accounts'}`;
+    // One ActionList row (G101): icon square, title, the line saying what it
+    // does, and the chevron; a destructive row takes the danger tone.
     const actionRow = (key, label, IconC, onClick, extra = {}) => (
-        <li key={key}>
-            <ListRow
-                type="button"
-                onClick={onClick}
-                disabled={exitBusy || extra.disabled}
-                leading={<span className={listStyles.rowIcon} aria-hidden="true" style={extra.danger ? { color: 'var(--xc-danger)' } : undefined}><IconC /></span>}
-                title={extra.danger ? <span style={{ color: 'var(--xc-danger)' }}>{label}</span> : label}
-                chevron
-            />
-        </li>
+        <ActionListItem
+            key={key}
+            icon={<IconC />}
+            title={label}
+            description={extra.description}
+            onClick={onClick}
+            disabled={exitBusy || extra.disabled}
+            tone={extra.danger ? 'danger' : 'default'}
+        />
     );
     const toSettings = () => (typeof onOpenSettings === 'function' ? onOpenSettings() : undefined);
 
@@ -236,67 +261,51 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                 {discoveryRun > 0 ? <AddressDiscoveryNotice key={discoveryRun} /> : null}
                 {/* The identity card is three lines: name; type and
                     accounts; Active or Not active. */}
-                <div className={listStyles.list} style={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-start', textAlign: 'start', gap: 'var(--xc-space-3)', alignItems: 'center', padding: 'var(--xc-space-3)' }}>
+                {/* 8px inside the card (G80); the Active bubble is the one
+                    My Wallets draws (G07). */}
+                <div className={listStyles.list} data-identity-card="" style={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-start', textAlign: 'start', gap: 'var(--xc-space-2)', alignItems: 'center', padding: 'var(--xc-space-2)' }}>
                     <span aria-hidden="true" style={{ '--xc-avatar-shape': tileRadius(readWalletTile(wallet.id).shape), display: 'inline-flex' }}><IdentityAvatar name={wallet.name || 'Wallet'} text={walletTileText(wallet.name)} seed={wallet.id} context="list" variant="asset" tone={readWalletTile(wallet.id).colour} src={readWalletTile(wallet.id).image || null} /></span>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                        <strong style={{ fontSize: 'var(--xc-text-md, 1rem)', overflowWrap: 'anywhere' }}>{wallet.name || t('walletPicker.unnamed')}</strong>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--xc-space-2)', flexWrap: 'wrap', color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-sm)' }}>
+                    <div className={pickerStyles.identityText}>
+                        <strong className={pickerStyles.identityName}>{wallet.name || t('walletPicker.unnamed')}</strong>
+                        <span className={pickerStyles.identityMeta}>
                             <span>{typeShort} · {accountsText}</span>
                             {isActive ? (
-                                <span style={{
-                                    fontSize: 'var(--xc-text-xs)',
-                                    fontWeight: 700,
-                                    padding: '1px 8px',
-                                    borderRadius: '999px',
-                                    background: 'var(--xc-success-bg, #e3f6ea)',
-                                    color: 'var(--xc-success, green)',
-                                }}>
-                                    {t('settings.developer.active')}
-                                </span>
+                                <span className={pickerStyles.activeBadge}>{t('settings.developer.active')}</span>
                             ) : null}
                         </span>
                     </div>
                 </div>
-                <Tabs
-                    items={[
-                        { id: 'actions', label: (<span className={homeTabsStyles.tabWithIcon}><span className={homeTabsStyles.tabIcon} aria-hidden="true"><Icon.ZapIcon /></span>{t('routes.manageToken.actions')}</span>) },
-                        { id: 'details', label: (<span className={homeTabsStyles.tabWithIcon}><span className={homeTabsStyles.tabIcon} aria-hidden="true"><Icon.InfoIcon /></span>{t('components.reachabilityLine.details')}</span>) },
-                    ]}
-                    value={tab}
-                    onChange={setTab}
-                />
-                {tab === 'actions' ? (
-                    <>
-                        {/* Safari needs an explicit list role because this class removes list styling. */}
-                        <ul className={listStyles.list} role="list" aria-label={t('walletDetails.actionsList')}>
-                            {!isActive && typeof onMakeActive === 'function'
-                                ? actionRow('active', 'Set as active wallet', Icon.CheckIcon, () => { onMakeActive(wallet); setMadeActive(true); })
-                                : null}
-                            {onRename ? actionRow('rename', t('renameWallet.title'), Icon.PencilIcon, () => onRename(wallet)) : null}
-                            {wallet.format !== 'wif-only' ? actionRow('phrase', 'Show recovery phrase', Icon.KeyIcon, () => (typeof onShowRecoveryPhrase === 'function' ? onShowRecoveryPhrase(wallet) : toSettings())) : null}
-                            {actionRow('backup', t('walletDetails.exportBackupAction'), Icon.DownloadIcon || Icon.CopyIcon, () => (typeof onExportBackup === 'function' ? onExportBackup(wallet) : toSettings()))}
-                            {canCheckAddresses ? actionRow('discover', t('addressDiscovery.action'), Icon.SearchIcon, handleCheckAddresses, { disabled: discoveryStarting }) : null}
-                            {wallet.format === 'counterwallet-legacy' && onMigrateToBip39
-                                ? actionRow('migrate', pendingMigrationSweeps(wallet.id) ? t('walletDetails.continueMigration') : t('walletDetails.upgradeRecovery'), Icon.MigrateIcon, onMigrateToBip39)
-                                : null}
-                        </ul>
-                        {/* Safari needs an explicit list role because this class removes list styling. */}
-                        <ul className={listStyles.list} role="list" aria-label={t('send.recipient.remove')}>
-                            {isDemo
-                                ? actionRow('exit-demo', t('walletDetails.exitDemo'), Icon.TrashIcon, () => { setExitError(null); setExitConfirmOpen(true); }, { danger: true })
-                                : actionRow('remove', 'Remove wallet', Icon.TrashIcon, () => (typeof onRemoveWallet === 'function' ? onRemoveWallet(wallet) : toSettings()), { danger: true })}
-                        </ul>
-                        {exitError && !exitConfirmOpen ? <StatusMessage variant="error">{exitError}</StatusMessage> : null}
-                        {exitConfirmOpen ? (
-                            <DemoExitConfirm
-                                busy={exitBusy}
-                                error={exitError}
-                                onConfirm={handleExitDemo}
-                                onCancel={() => { setExitConfirmOpen(false); setExitError(null); }}
-                            />
-                        ) : null}
-                    </>
-                ) : (
+                <ActionsDetailsToggle
+                    actions={(
+                        <>
+                            {/* One list card; the destructive row comes last, in red (G101). */}
+                            <ActionList label={t('walletDetails.actionsList')}>
+                                {!isActive && typeof onMakeActive === 'function'
+                                    ? actionRow('active', 'Set as active wallet', Icon.CheckIcon, () => { onMakeActive(wallet); setMadeActive(true); }, { description: t('walletDetails.action.setActive') })
+                                    : null}
+                                {onRename ? actionRow('rename', t('renameWallet.title'), Icon.PencilIcon, () => onRename(wallet), { description: t('walletDetails.action.rename') }) : null}
+                                {wallet.format !== 'wif-only' ? actionRow('phrase', 'Show recovery phrase', Icon.KeyIcon, () => (typeof onShowRecoveryPhrase === 'function' ? onShowRecoveryPhrase(wallet) : toSettings()), { description: t('walletDetails.action.recoveryPhrase') }) : null}
+                                {actionRow('backup', t('walletDetails.exportBackupAction'), Icon.DownloadIcon || Icon.CopyIcon, () => (typeof onExportBackup === 'function' ? onExportBackup(wallet) : toSettings()), { description: t('walletDetails.action.exportBackup') })}
+                                {canCheckAddresses ? actionRow('discover', t('addressDiscovery.action'), Icon.SearchIcon, handleCheckAddresses, { disabled: discoveryStarting, description: t('walletDetails.action.checkAddresses') }) : null}
+                                {wallet.format === 'counterwallet-legacy' && onMigrateToBip39
+                                    ? actionRow('migrate', pendingMigrationSweeps(wallet.id) ? t('walletDetails.continueMigration') : t('walletDetails.upgradeRecovery'), Icon.MigrateIcon, onMigrateToBip39, { description: t('walletDetails.action.upgradeRecovery') })
+                                    : null}
+                                {isDemo
+                                    ? actionRow('exit-demo', t('walletDetails.exitDemo'), Icon.TrashIcon, () => { setExitError(null); setExitConfirmOpen(true); }, { danger: true, description: t('walletDetails.action.exitDemo') })
+                                    : actionRow('remove', 'Remove wallet', Icon.TrashIcon, () => (typeof onRemoveWallet === 'function' ? onRemoveWallet(wallet) : toSettings()), { danger: true, description: t('walletDetails.action.remove') })}
+                            </ActionList>
+                            {exitError && !exitConfirmOpen ? <StatusMessage variant="error">{exitError}</StatusMessage> : null}
+                            {exitConfirmOpen ? (
+                                <DemoExitConfirm
+                                    busy={exitBusy}
+                                    error={exitError}
+                                    onConfirm={handleExitDemo}
+                                    onCancel={() => { setExitConfirmOpen(false); setExitError(null); }}
+                                />
+                            ) : null}
+                        </>
+                    )}
+                    details={(
                     <dl className={pickerStyles.detailList}>
                         <Row label={t('walletDetails.name')} value={wallet.name || t('walletPicker.unnamed')} />
                         <Row label={t('walletDetails.type')} value={formatLabel} />
@@ -321,7 +330,8 @@ export function WalletDetails({ walletId, onBack, onRename, onMigrateToBip39, on
                         ) : null}
                         <Row label={t('walletDetails.id')} value={<code className={pickerStyles.code}>{wallet.id}</code>} />
                     </dl>
-                )}
+                    )}
+                />
             </ListPage>
         </Screen>
     );

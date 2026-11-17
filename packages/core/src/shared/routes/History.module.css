@@ -33,9 +33,28 @@
     .refreshing svg { animation: none; }
 }
 
-.exportButton {
-    flex: 0 0 auto;
-    white-space: nowrap;
+/* Refresh, Export and the filter on the title line: the app bar's gap, so
+   the two rows line up (as Notifications' header buttons). */
+.headerActions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+/* PanelSplit already places its panel 8px below the page header. With no
+   fixed list header, cancel the list scroller's second 8px top inset so the
+   first History block starts on that same 8px rhythm. */
+:global([data-list-detail='two-panel']) .historyListPage {
+    margin-block-start: calc(-1 * var(--xc-space-2));
+}
+
+/* The title line's outlined square icon buttons, the filter's size. The kit
+   Button draws their border and control radius. */
+.headerIconButton {
+    position: relative;
+    min-width: var(--xc-control-h-md);
+    width: var(--xc-control-h-md);
+    padding-inline: 0;
 }
 
 .searchRow {
@@ -47,37 +66,6 @@
 .searchRow > :first-child {
     flex: 1 1 auto;
     margin-bottom: 0;
-}
-
-.searchInput {
-    flex: 1 1 auto;
-    min-width: 0;
-    width: 100%;
-    box-sizing: border-box;
-    appearance: none;
-    min-height: 36px;
-    line-height: 1;
-    padding: 0 var(--xc-space-3);
-    border-radius: var(--xc-radius-sm);
-    border: 1px solid var(--xc-border);
-    background: var(--xc-bg);
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
-    font-family: inherit;
-    display: block;
-}
-
-.searchInput:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-/* The row's own Clear button clears the search; the engine's built-in
-   cancel mark would be a second control for the same thing. */
-.searchInput::-webkit-search-cancel-button {
-    -webkit-appearance: none;
-    appearance: none;
-    display: none;
 }
 
 /* Chain picker: full-width button + popover listbox so each option
@@ -306,16 +294,24 @@
     outline-offset: 2px;
 }
 
-/* The selected row keeps its marker inside the list card: a rail on the
-   leading edge in the selected tone, not a border of its own. */
-.rowSelected {
-    background: var(--xc-control-bg-hover);
-    box-shadow: inset 3px 0 0 var(--xc-control-selected);
+.row.row[data-xc-split-row] {
+    width: calc(100% - (2 * var(--xc-space-2)));
+    margin-inline: var(--xc-space-2);
+    border-radius: 10px;
+    box-shadow: none;
 }
 
-/* The inset is physical, so the rail moves to the right edge in RTL. */
-:global([dir='rtl']) .rowSelected {
-    box-shadow: inset -3px 0 0 var(--xc-control-selected);
+@media (hover: hover) and (pointer: fine) {
+    .row.row[data-xc-split-row]:hover {
+        background: color-mix(in srgb, var(--xc-text) 10%, transparent);
+        box-shadow: none;
+    }
+}
+
+.row.row[data-xc-split-row][aria-current='true'] {
+    background: color-mix(in srgb, var(--xc-accent-primary) 20%, transparent);
+    box-shadow: none;
+    font-weight: inherit;
 }
 
 .rowMeta {
@@ -394,11 +390,8 @@
 
 /* ───── ActionDetail page layout ───── */
 
-/* Outer wrap: stacks the action-details hero, the explorer-button
-   row, and the Status / Raw / Peer sections with consistent spacing.
-   `gap` matches the inter-button gap inside `.detailActions` so the
-   vertical rhythm between the hero card and the button row equals the
-   horizontal rhythm between adjacent buttons. */
+/* Outer wrap: stacks the action-details hero, the tab row and the
+   Actions / Status / Details / Raw panels with one 8px rhythm. */
 .detailContainer {
     display: flex;
     flex-direction: column;
@@ -415,6 +408,24 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
+}
+
+/* The Actions tab panel (G101, G102): the ActionList is its own card, so
+   the panel draws none; the RBF outcome and the save-contact form stack
+   under the list. */
+.detailActionsPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* An explorer favicon, or its letter fallback, takes the list's icon size
+   inside the row's tinted square. */
+.detailActionsPanel .detailActionFavicon,
+.detailActionsPanel .detailActionIcon {
+    width: var(--xc-icon-lg);
+    height: var(--xc-icon-lg);
 }
 
 /* Hero variant: zero card padding so the table inside runs flush
@@ -504,13 +515,12 @@
     min-width: 0;
 }
 
+/* Fact labels in plain case (no uppercase labels, 2026-11-13). */
 .detailsTable th {
     text-align: start;
-    font-weight: 500;
+    font-weight: 400;
     color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    font-size: var(--xc-text-sm);
     white-space: nowrap;
     /* Trailing padding inside the label cell creates the visual gap
        to the value column, replacing what column-gap used to provide. */
@@ -555,9 +565,8 @@
     text-transform: uppercase;
 }
 
-/* Inline value + copy icon used in the details table for fields the
-   user typically wants to paste (action_index / tx_hash / addresses). */
-/* The value first, its copy button right after it. */
+/* A pending send's decoded output line: the text first, its copy button
+   right after it. Details values carry no copy button (2026-11-13). */
 .copyableValue {
     display: flex;
     align-items: center;
@@ -573,41 +582,7 @@
     flex: 0 1 auto;
 }
 
-/* Explorer button row: equal-width columns that span the full row.
-   `auto-fit` + `minmax(0, 1fr)` divides the available width by the
-   number of buttons actually rendered: 3 buttons -> each 1/3, 2 -> 1/2,
-   1 -> full width. The row always reads as a balanced strip. */
-.detailActions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-    gap: var(--xc-space-2);
-}
-
-.detailAction {
-    appearance: none;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
-    padding: var(--xc-space-3) var(--xc-space-1);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--xc-space-1);
-    cursor: pointer;
-    color: var(--xc-text);
-    font-family: inherit;
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    min-height: 72px;
-    text-align: center;
-    text-decoration: none;
-}
-
-.detailAction:hover {
-    background: var(--xc-bg-muted);
-}
-
+/* The letter an explorer row shows when its favicon fails to load. */
 .detailActionIcon {
     width: 32px;
     height: 32px;
@@ -621,11 +596,7 @@
     overflow: hidden;
 }
 
-/* Branding logo image inside an explorer action button (XChain). */
-
-/* Naked favicon used by the explorer buttons: no circular icon-wrap
-   background; sits at the same vertical position as the wrapped icons
-   on the sibling buttons. */
+/* An explorer row's favicon: no circular icon-wrap background. */
 .detailActionFavicon {
     width: 32px;
     height: 32px;
@@ -633,176 +604,11 @@
     display: block;
 }
 
-/* The XChain button uses the bundled product favicon, which has more
-   padding around its glyph than the third-party favicons. Bump its
-   render size up so it visually matches Mempool / Blockstream
-   instead of looking smaller. */
-.detailAction[href*="explorer.xchain.io"] .detailActionFavicon {
-    width: 42px;
-    height: 42px;
-}
-
-/* "More" action: last button on the row, hosts a popover menu with
-   follow-up options (Save as contact, etc.) anchored to the button.
-   Wrapper is a flex container so the inner button stretches to the
-   grid row's height; without this the button shrinks to its content
-   and reads shorter than the explorer-link siblings beside it. */
-.detailActionMoreWrap {
-    position: relative;
-    display: flex;
-    align-self: stretch;
-}
-.detailActionMoreWrap > .detailAction {
-    flex: 1 1 auto;
-    width: 100%;
-    border: 1px solid var(--xc-accent-primary);
-    background: var(--xc-surface-raised);
-    font-family: inherit;
-}
-.moreMenuItem:disabled {
-    color: var(--xc-text-muted);
-    cursor: not-allowed;
-}
-.moreMenu {
-    position: absolute;
-    inset-inline-end: 0;
-    top: calc(100% + var(--xc-space-1));
-    min-width: 200px;
-    background: var(--xc-surface-raised);
-    border: 1px solid var(--xc-border);
-    border-radius: var(--xc-radius-md);
-    box-shadow: var(--xc-shadow-md);
-    z-index: 20;
-    display: flex;
-    flex-direction: column;
-    padding: var(--xc-space-1) 0;
-}
-.moreMenuItem {
-    appearance: none;
-    background: transparent;
-    border: none;
-    text-align: start;
-    padding: var(--xc-space-2) var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    font-family: inherit;
-    color: var(--xc-text);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-}
-.moreMenuItem:hover { background: var(--xc-bg-muted); }
-.moreMenuItem:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: -2px;
-}
-.moreMenuItemIcon {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    color: var(--xc-accent-text);
-}
-
-/* ───── Detail page tab strip ───── */
-
-.detailTabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-1);
-    border-bottom: 1px solid var(--xc-border);
-    padding-bottom: 1px;
-    margin-bottom: -1px;
-}
-
-.detailTab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    padding: var(--xc-space-3) var(--xc-space-3);
-    font-size: var(--xc-text-sm);
-    font-weight: 600;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    gap: var(--xc-space-2);
-    border-bottom: 2px solid transparent;
-    flex: 1 1 auto;
-    min-width: 0;
-    font-family: inherit;
-}
-
-.detailTab:hover {
-    color: var(--xc-text);
-}
-
-.detailTabActive {
-    color: var(--xc-accent-text);
-    border-bottom-color: var(--xc-accent-primary);
-}
-
-/* Peer block inside the Raw tab: small label + JSON pre below the
-   local raw data so the cross-chain partner is still visible. */
-.detailPeerBlock {
-    margin-top: var(--xc-space-3);
-    padding-top: var(--xc-space-3);
-    border-top: 1px solid var(--xc-border);
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-}
-
-.detailDecoded {
-    font-family: var(--xc-font-mono, monospace);
-    font-size: var(--xc-text-xs);
-    line-height: 1.4;
-    color: var(--xc-text);
-    white-space: pre-wrap;
-    word-break: break-all;
-    margin: 0;
-    overflow-x: auto;
-}
-
-/* JSON viewer wrap: the copy button sits on its own row above the
-   payload, right-aligned, so it never covers the first lines of JSON. */
-.rawJsonWrap {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--xc-space-1);
-}
-
-.rawJsonCopy {
-    align-self: flex-end;
-}
-
 .actions {
     display: flex;
     justify-content: flex-end;
     gap: var(--xc-space-2);
     margin-top: var(--xc-space-4);
-}
-
-.resultsHeader {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-2);
-}
-
-.resultsHeader > div {
-    min-width: 0;
-    flex-wrap: wrap;
-    justify-content: flex-end;
 }
 
 .rbfError {
@@ -934,13 +740,6 @@
 
 .groupCardWrap > .groupMembers > li + li > .row {
     border-top: 1px solid var(--xc-border);
-}
-
-/* PC-50: SPV verdict badge above the action detail card. */
-.detailVerify {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 0.5rem;
 }
 
 /* M2.3: pending state label on a row's meta line. Replaces the flat
@@ -1118,9 +917,64 @@
         padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
     }
 
-    .resultsHeader {
-        flex-direction: column;
-        align-items: stretch;
-    }
+}
 
+/* The header's ⋯ menu (Export history, Refresh), opening under the button
+   and aligned to its end edge. */
+.headerMoreWrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.headerMore {
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline-end: 0;
+    z-index: var(--xc-z-dropdown);
+    /* px, not rem: the popup holds its width in every shell. */
+    min-width: 200px;
+    width: max-content;
+    max-width: calc(100vw - 2 * var(--xc-page-gutter, 8px));
+    margin: 0;
+    padding: var(--xc-space-1);
+    list-style: none;
+    background: var(--xc-surface-raised, #1B2231);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-radius-md);
+    box-shadow: var(--xc-shadow-md);
+}
+
+.headerMoreItem {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    white-space: nowrap;
+    padding: var(--xc-space-2);
+    background: transparent;
+    border: none;
+    border-radius: var(--xc-radius-sm);
+    cursor: pointer;
+    text-align: start;
+    color: var(--xc-text);
+    font: inherit;
+    font-size: var(--xc-text-sm);
+}
+
+.headerMoreItem:hover:not(:disabled) {
+    background: var(--xc-bg-muted);
+}
+
+.headerMoreItem > span {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--xc-space-2);
+    width: 100%;
+}
+
+.headerMoreIcon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
 }

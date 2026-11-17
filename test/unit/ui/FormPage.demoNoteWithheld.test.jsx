@@ -12,10 +12,11 @@
 // the note. The form stays blocked, but it draws no notice wrapper of its own:
 // an empty wrapper still takes a gap in the page stack.
 
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, cleanup } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { render, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { FormPage } from '../../../packages/core/src/ui/FormPage.jsx';
+import { Button } from '../../../packages/core/src/ui/Button.jsx';
 
 afterEach(cleanup);
 
@@ -37,5 +38,25 @@ describe('FormPage demo guard', () => {
         );
         expect(container.querySelector('[class*="status"]')).toBeNull();
         expect(container.querySelector('form')).toBeTruthy();
+    });
+
+    it('keeps the submit enabled and swallows the press into the refusal', () => {
+        const onSubmit = vi.fn();
+        const refuse = vi.fn();
+        const { getByRole } = render(
+            <FormPage
+                label="Form"
+                onSubmit={onSubmit}
+                demoGuard={{ blocked: true, note: null, dialog: null, refuse }}
+                actions={<Button type="submit">Mint</Button>}
+            >
+                <input aria-label="Field" />
+            </FormPage>,
+        );
+        const submit = getByRole('button', { name: 'Mint' });
+        expect(submit).toBeEnabled();
+        fireEvent.click(submit);
+        expect(refuse).toHaveBeenCalledTimes(1);
+        expect(onSubmit).not.toHaveBeenCalled();
     });
 });

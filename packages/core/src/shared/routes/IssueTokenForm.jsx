@@ -12,7 +12,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
-    FormPage,
     ListPage,
     FormNotice,
     Button,
@@ -21,11 +20,10 @@ import {
     ChainBadge,
     // Network, the Optional tag and the fee selector come from the Wallet Form
     // Standard's FromSection, FormSection and FeeSection.
-    AddressText,
     Icon,
     StatusMessage,
     AddressField,
-    FormErrorSummary,
+    useFormErrors,
     Switch,
     IconSelect,
 } from '@xchain-wallet/core/ui';
@@ -39,7 +37,7 @@ import { MAX_ISSUE_TEXT_LENGTH } from '../utils/issueFieldValidation.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { SignCredentials } from '../components/SignCredentials.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -58,6 +56,7 @@ import {
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import styles from './IssueTokenForm.module.css';
 import { ISSUE_LOCKS } from './issueLocks.js';
+import { lockIconFor } from './lockIcons.js';
 // Laid out on the Wallet Form Standard: From (its Network picks the token's
 // network), Token, the optional sections, Network fee (FeesCard with the
 // native-fee switch), the status slot and Issue Token.
@@ -68,7 +67,8 @@ import {
     FormSection,
     FromSection,
     joinSummary,
-    summaryAddress,
+    joinSummaryParts,
+    summaryLineWithAddress,
     useFormSections,
 } from '../components/formStandard/index.js';
 import { NATIVE_FEE_WARNING } from '../../sdk/nativeFeePreflight.js';
@@ -86,6 +86,9 @@ import {
 import { blockDateEstimateText } from '../utils/blockDateEstimate.js';
 import { listLabel } from '../utils/listLabel.js';
 import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
+import { ListField } from '../components/ListField.jsx';
+import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
@@ -105,17 +108,20 @@ import {
     WATCH_ONLY_SIGNING_MESSAGE,
 } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
-import { DraftDiscardButton } from '../components/DraftDiscardButton.jsx';
+import { DraftNotice } from '../components/DraftNotice.jsx';
 import {
     compareDecimalStrings,
     formatDisplayAmount,
+    groupDecodedAmounts,
     subtractDecimalStrings,
 } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import { revealFormStatus } from '../../ui/FormErrorSummary.jsx';
 import '../../i18n/locales/en/issue.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/components.js';
 
+const NO_ACKNOWLEDGMENTS = new Set();
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 
 // Only the main section (Token) starts open; From, the optional sections and
@@ -133,15 +139,41 @@ const INITIAL_OPEN_SECTIONS = {
     fee: false,
 };
 
+// The field a validation message is about, by its copy, as the id of that field
+// (the key the form error map uses). Undefined for a message that names no field.
+function issueErrorFieldId(message) {
+    const text = String(message || '');
+    if (/^Callback token/i.test(text)) return 'issue-callback-tick';
+    if (/Callback payout/i.test(text)) return 'issue-callback-amount';
+    if (/callback/i.test(text)) return 'issue-callback-block';
+    if (/^Parent token|does not own|confirmed as a token|owned by another address/i.test(text)) return 'issue-parent-ticker';
+    if (/^Image URL/i.test(text)) return 'issue-image-url';
+    if (/ticker/i.test(text)) return 'issue-ticker';
+    if (/^Max supply /i.test(text)) return 'issue-supply';
+    if (/initial mint/i.test(text) && !/destination|Sending the initial mint/i.test(text)) return 'issue-initial-mint';
+    if (/Max mint per address/i.test(text)) return 'issue-mint-address-max';
+    if (/Max mint/i.test(text)) return 'issue-max-mint';
+    if (/Start block/i.test(text)) return 'issue-mint-start-block';
+    if (/Stop block/i.test(text)) return 'issue-mint-stop-block';
+    if (/Allow list/i.test(text)) return 'issue-allow-list';
+    if (/Block list/i.test(text)) return 'issue-block-list';
+    if (/Description/i.test(text)) return 'issue-description';
+    if (/Transfer ownership/i.test(text)) return 'issue-transfer-owner';
+    if (/Initial mint destination|Sending the initial mint/i.test(text)) return 'issue-transfer-supply';
+    return undefined;
+}
+
 // Which section holds the field a validation message is about, so
 // that section opens (and reopens on every attempt) when the error shows.
 function issueErrorSection(message) {
     const text = String(message || '');
     if (!text) return null;
+    // A press with no source address opens From, which holds the picker (G22).
+    if (/^Pick a source address/i.test(text)) return 'from';
     // Callback first: "Callback block" contains "lock", and its copy names
     // a payout token rather than the token being issued.
     if (/callback/i.test(text)) return 'callback';
-    if (/ticker|^Max supply |subtoken|does not own/i.test(text)) return 'token';
+    if (/ticker|parent token|^Max supply |subtoken|does not own/i.test(text)) return 'token';
     if (/image url/i.test(text)) return 'description';
     if (/initial mint/i.test(text)) return 'initialMint';
     if (/supply/i.test(text) && !/mint per|max mint/i.test(text)) return 'token';
@@ -186,8 +218,9 @@ const chainRegistry = registryLib.defaultRegistry();
  * The one Issue Token form (§40.1, §40.2), which the Create a token route
  * mounts. Every ISSUE v0 field sits on one screen, and the template picker
  * (Meme, Utility, Collectible, Limited edition, Subtoken) pre-fills the
- * settings a common kind of token uses. A subtoken adds a Parent ticker
- * (TICK = PARENT.CHILD) that is looked up before every compose; Collectible
+ * settings a common kind of token uses. A subtoken adds a Parent token,
+ * chosen from the tokens this wallet owns on the standard token picker
+ * (TICK = PARENT.CHILD), that is looked up before every compose; Collectible
  * and Limited edition carry their artwork as an Image URL in DESCRIPTION.
  *
  * Backed by `messaging.issueToken`; watcher mode runs the draft through
@@ -196,8 +229,15 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {object} props
  * @param {string} props.walletId
  * @param {() => void} props.onBack
+ * @param {string} [props.initialChainId]      with `initialParentTick`: the network of the token the form was opened from
+ * @param {string} [props.initialParentTick]   opened from a token (Issue subtoken): the form starts on the Subtoken template with this parent
  */
-export function IssueTokenForm({ walletId, onBack }) {
+export function IssueTokenForm({ walletId, onBack, initialChainId, initialParentTick }) {
+    // Opened from a token, the form starts as a subtoken of it; the prefill
+    // is not something the user typed, so it alone makes no draft.
+    const prefillParent = initialChainId && typeof initialParentTick === 'string' && initialParentTick.trim()
+        ? initialParentTick.trim()
+        : '';
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
@@ -214,7 +254,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
-    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
+    const [chainId, setChainId] = useState(/** @type {string | null} */ (prefillParent ? initialChainId : null));
     const [fromAddressId, setFromAddressId] = useState(
         /** @type {string | null} */ (null),
     );
@@ -249,7 +289,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     const [locks, setLocks] = useState(/** @type {Record<string, boolean>} */ ({}));
     const [allowList, setAllowList] = useState('');
     // The "Start from" preset that last filled the form ('' = none).
-    const [preset, setPreset] = useState('');
+    const [preset, setPreset] = useState(prefillParent ? 'subtoken' : '');
     const [blockList, setBlockList] = useState('');
     // A list picked from the address-list picker keeps its published name
     // beside its index; the name shows only while the field still holds it.
@@ -258,8 +298,26 @@ export function IssueTokenForm({ walletId, onBack }) {
     const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
     // Subtoken template: the existing parent the child is issued under, so the
     // ISSUE carries TICK = PARENT.CHILD. Only the Subtoken template reads it.
-    const [parentToken, setParentToken] = useState('');
+    const [parentToken, setParentToken] = useState(prefillParent);
     const isSubtoken = preset === 'subtoken';
+    // The tokens this wallet owns on every network, which the Parent token
+    // picker lists (the same getOwnedTokens read My tokens shows), each with
+    // the wallet address that owns it. `rows` is null while loading; `failed`
+    // says a read failed, so an empty list is not shown as "you own none".
+    const [ownedParents, setOwnedParents] = useState(
+        /** @type {{ rows: Array<{ chainId: string, tick: string, ownerAddressId: string }> | null, failed: boolean }} */
+        ({ rows: null, failed: false }),
+    );
+    const [parentPickerOpen, setParentPickerOpen] = useState(false);
+    // Bumped on every picker open, so the list is read again: a token issued
+    // or a read that failed since the last open shows the current answer.
+    const [parentReload, setParentReload] = useState(0);
+    const openParentPicker = useCallback(() => {
+        setParentReload((value) => value + 1);
+        setParentPickerOpen(true);
+    }, []);
+    // A prefilled parent moves From to its owner once, when ownership loads.
+    const prefillOwnerAppliedRef = useRef(false);
     // Collectible and Limited edition carry their artwork as an image URL in
     // DESCRIPTION; only those two templates read it.
     const [imageUrl, setImageUrl] = useState('');
@@ -301,20 +359,28 @@ export function IssueTokenForm({ walletId, onBack }) {
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
-    const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // The form error standard: Issue Token validates every field into one map keyed by
+    // field id, the notice at the top lists the problems, each failing field is outlined,
+    // and a field drops its own entry when it changes. 'form' holds a failure that names
+    // no field (the network refusing); 'form:...' keys are problems with no field.
+    const formErrors = useFormErrors();
     const [validationAttempt, setValidationAttempt] = useState(0);
+    // Set by an Issue Token press (G22): the button is always enabled, and
+    // an empty Ticker then shows red with its own message.
+    const [attempted, setAttempted] = useState(false);
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any | null} */ (null));
     const passwordRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
     // Reveal the field that needs attention when validation stops submission.
     useEffect(() => {
-        if (!formError) return;
         // The standard sections; see issueErrorSection.
-        const section = issueErrorSection(formError);
-        if (section) formSections.setOpen(section, true);
+        for (const [key, message] of Object.entries(formErrors.errors)) {
+            const section = key === 'form:fee' ? 'fee' : issueErrorSection(message);
+            if (section) formSections.setOpen(section, true);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [formError]);
+    }, [formErrors.attempt]);
 
     const formDraftTtlMs = Number.isFinite(settings?.privacy?.formDraftTtlMs)
         ? Number(settings.privacy.formDraftTtlMs)
@@ -370,7 +436,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (typeof v.payFeeInNativeCoin === 'boolean') setPayFeeInNativeCoin(v.payFeeInNativeCoin);
         setDraftPending(true);
     }, [draft]);
-    const dismissDraft = useCallback(() => {
+    const discardSavedDraft = useCallback(() => {
         draft.clear();
         setDraftPending(true);
     }, [draft]);
@@ -378,8 +444,10 @@ export function IssueTokenForm({ walletId, onBack }) {
         [
             ticker, supply, initialMint, maxMint, mintAddressMax, mintStartBlock,
             mintStopBlock, description, allowList, blockList, transferTo,
-            transferSupplyTo, password, parentToken, imageUrl, callbackTick,
-            callbackAmount, callbackBlock,
+            transferSupplyTo, password,
+            // The parent the form was opened with is not input.
+            parentToken.trim() === prefillParent ? '' : parentToken,
+            imageUrl, callbackTick, callbackAmount, callbackBlock,
         ]
             .some((value) => String(value || '').trim().length > 0)
         || divisible !== DIVISIBLE_DEFAULT
@@ -387,8 +455,8 @@ export function IssueTokenForm({ walletId, onBack }) {
     ), [
         ticker, supply, initialMint, maxMint, mintAddressMax, mintStartBlock,
         mintStopBlock, description, allowList, blockList, transferTo,
-        transferSupplyTo, password, divisible, locks, parentToken, imageUrl,
-        callbackTick, callbackAmount, callbackBlock,
+        transferSupplyTo, password, divisible, locks, parentToken, prefillParent,
+        imageUrl, callbackTick, callbackAmount, callbackBlock,
     ]);
     // The network, source and fee switch fill themselves in, so only what the
     // user typed or turned on makes a draft. A draft of defaults would come
@@ -481,6 +549,69 @@ export function IssueTokenForm({ walletId, onBack }) {
         ));
     }, [chainId, addressesByChain, activeByChain]);
 
+    // The Parent token picker's list: every token an issuing address of this
+    // wallet owns, on every network, read only while the Subtoken template is
+    // on. A demo wallet owns nothing and never sends its addresses to an
+    // explorer, as on My tokens.
+    useEffect(() => {
+        if (!isSubtoken || !addressesByChain) return undefined;
+        if (flowsLib.isDemoWallet(walletId)) {
+            setOwnedParents({ rows: [], failed: false });
+            return undefined;
+        }
+        if (typeof messaging?.getOwnedTokens !== 'function') {
+            setOwnedParents({ rows: [], failed: true });
+            return undefined;
+        }
+        const sources = [];
+        for (const [sourceChainId, addrs] of Object.entries(addressesByChain)) {
+            for (const source of Array.isArray(addrs) ? addrs : []) {
+                if (typeof source?.address === 'string' && source.address) {
+                    sources.push({ chainId: sourceChainId, source });
+                }
+            }
+        }
+        if (sources.length === 0) {
+            setOwnedParents({ rows: [], failed: false });
+            return undefined;
+        }
+        let cancelled = false;
+        // A re-read keeps a good list on screen until the answer replaces it;
+        // a failed one shows loading again rather than repeating the failure.
+        setOwnedParents((prev) => (prev.rows && !prev.failed ? prev : { rows: null, failed: false }));
+        Promise.all(sources.map(({ chainId: sourceChainId, source }) => Promise.resolve()
+            .then(() => messaging.getOwnedTokens({ chainId: sourceChainId, address: source.address }))
+            .then((rows) => ({ sourceChainId, source, rows: Array.isArray(rows) ? rows : [], failed: false }))
+            .catch(() => ({ sourceChainId, source, rows: [], failed: true }))))
+            .then((batches) => {
+                if (cancelled) return;
+                const seen = new Set();
+                const merged = [];
+                for (const { sourceChainId, source, rows } of batches) {
+                    for (const row of rows) {
+                        const tick = String(row?.tick || '').trim();
+                        const key = `${sourceChainId}:${tick}`;
+                        if (!tick || seen.has(key)) continue;
+                        seen.add(key);
+                        merged.push({ chainId: sourceChainId, tick, ownerAddressId: source.id });
+                    }
+                }
+                setOwnedParents({ rows: merged, failed: batches.some((batch) => batch.failed) });
+            });
+        return () => { cancelled = true; };
+    }, [isSubtoken, addressesByChain, messaging, walletId, parentReload]);
+
+    // Opened from a token: once ownership loads, From becomes the address
+    // that owns that parent, the only signer the chain accepts for a subtoken.
+    useEffect(() => {
+        if (!prefillParent || prefillOwnerAppliedRef.current || !ownedParents.rows) return;
+        prefillOwnerAppliedRef.current = true;
+        const owned = ownedParents.rows.find((row) => (
+            row.chainId === initialChainId && row.tick === prefillParent
+        ));
+        if (owned) setFromAddressId(owned.ownerAddressId);
+    }, [ownedParents, prefillParent, initialChainId]);
+
     useEffect(() => {
         if (stage === 'review') {
             setTimeout(() => passwordRef.current?.focus(), 0);
@@ -512,7 +643,7 @@ export function IssueTokenForm({ walletId, onBack }) {
     // The availability lookup checks that tick, and only once the name (and a
     // subtoken's parent) passes the grammar.
     const lookupTick = tickerGrammarError(ticker)
-        || (isSubtoken && tickerGrammarError(parentToken, { noun: 'Parent ticker', allowDot: true }))
+        || (isSubtoken && tickerGrammarError(parentToken, { noun: 'Parent token', allowDot: true }))
         ? ''
         : issueTick;
 
@@ -718,45 +849,59 @@ export function IssueTokenForm({ walletId, onBack }) {
     // when review may open. The live Fees card quote reads the same answer, so
     // it prices exactly the ISSUE review would accept.
     function issueInputsCheck() {
+        const found = issueInputsIssues();
+        // A lookup still settling at the very first check holds review, as before.
+        if (found.queueAt === 0) return { queue: true };
+        return found.issues.length > 0 ? { error: found.issues[0] } : null;
+    }
+
+    // Every input check, collecting each problem instead of stopping at the first, so
+    // one press can list everything to fix. `queueAt` is how many problems came before
+    // the ticker lookup was found still settling (null when it is not).
+    function issueInputsIssues() {
+        /** @type {string[]} */
+        const issues = [];
+        /** @type {number | null} */
+        let queueAt = null;
         if (!chainId || !fromAddress) {
-            return { error: 'Pick a source address first.' };
+            issues.push('Pick a source address first.');
         }
         // Same grammar module as the wizard, so the two authoring
         // surfaces cannot drift apart on what a ticker may be called. It covers
         // the empty case too, which is why the separate blank check went with it.
         const tickerError = tickerGrammarError(ticker);
         if (tickerError) {
-            return { error: tickerError };
+            issues.push(tickerError);
         }
         const descriptionError = actionTextSafetyError(description, 'Description')
             || issueDescriptionError(description);
         if (descriptionError) {
-            return { error: descriptionError };
+            issues.push(descriptionError);
         }
         if (isSubtoken) {
             if (!parentToken.trim()) {
-                return { error: 'Parent ticker is required for subtokens.' };
+                issues.push('Parent token is required for subtokens.');
             }
             // The parent is a REFERENCE to a token that already exists, so it
             // may itself be a subtoken: the indexer resolves a child's parent
             // as `parts.slice(0,-1).join('.')` (issue.js), so `A.B.C` is a
             // child of `A.B`. The dot-structure rules the chain enforces still
-            // apply (no leading, trailing or doubled dot).
+            // apply (no leading, trailing or doubled dot); a picked parent
+            // passes them, a restored draft may not.
             const parentError = tickerGrammarError(parentToken, {
-                noun: 'Parent ticker',
+                noun: 'Parent token',
                 allowDot: true,
             });
             if (parentError) {
-                return { error: parentError };
+                issues.push(parentError);
             }
         }
         if (usesImageUrl) {
-            if (!imageUrl.trim()) {
-                return { error: 'Image URL is required for this template.' };
-            }
-            const imageError = issueImageUrlError(imageUrl);
+            const imageError = !imageUrl.trim()
+                ? 'Image URL is required for this template.'
+                : issueImageUrlError(imageUrl);
             if (imageError) {
-                return { error: imageError };
+                issues.push(imageError);
             }
         }
         // The callback shares the create transaction, so a value the indexer
@@ -767,30 +912,29 @@ export function IssueTokenForm({ walletId, onBack }) {
             callbackTickDecimals,
         });
         if (callbackError) {
-            return { error: callbackError };
+            issues.push(callbackError);
         }
         const checkedTicker = lookupTick;
         if (tickerLookupSupported && checkedTicker
             && (tickerCheck.ticker !== checkedTicker || tickerCheck.status === 'checking')) {
-            return { queue: true };
-        }
-        if (tickerTaken) {
-            return { error: t('issue.tickerTaken', { ticker: checkedTicker }) };
+            queueAt = issues.length;
+        } else if (tickerTaken) {
+            issues.push(t('issue.tickerTaken', { ticker: checkedTicker }));
         }
         const supplyText = supply.trim();
         if (supplyText && !isNonNegativeDecimal(supplyText)) {
-            return { error: 'Max supply must be zero or a positive number.' };
+            issues.push('Max supply must be zero or a positive number.');
         }
         if (isPositiveDecimal(supplyText) && !hasAmountPrecision(supplyText, amountDecimals)) {
-            return { error: divisible
+            issues.push(divisible
                 ? 'Max supply can have at most 8 decimal places.'
-                : 'Max supply must be a whole number for an indivisible token.' };
+                : 'Max supply must be a whole number for an indivisible token.');
         }
         const supplyLimitError = isPositiveDecimal(supplyText)
             ? issueSupplyLimitError(supplyText, 'Max supply')
             : null;
         if (supplyLimitError) {
-            return { error: supplyLimitError };
+            issues.push(supplyLimitError);
         }
         // An initial mint above the cap is rejected outright by the
         // indexer (issue.js), which costs the user the fee and the token, so
@@ -798,55 +942,54 @@ export function IssueTokenForm({ walletId, onBack }) {
         const mintText = initialMint.trim();
         if (mintText) {
             if (!isNonNegativeDecimal(mintText)) {
-                return { error: 'Initial mint must be zero or a positive number.' };
+                issues.push('Initial mint must be zero or a positive number.');
             }
             if (isPositiveDecimal(mintText) && !hasAmountPrecision(mintText, amountDecimals)) {
-                return { error: divisible
+                issues.push(divisible
                     ? 'Initial mint can have at most 8 decimal places.'
-                    : 'Initial mint must be a whole number for an indivisible token.' };
+                    : 'Initial mint must be a whole number for an indivisible token.');
             }
             if (isPositiveDecimal(supplyText)
                 && compareDecimalStrings(mintText, supplyText) === 1) {
-                return { error: 'Initial mint cannot be more than the max supply.' };
+                issues.push('Initial mint cannot be more than the max supply.');
             }
         }
         const maxMintText = maxMint.trim();
         if (maxMintText) {
             if (!isPositiveDecimal(maxMintText)) {
-                return { error: 'Max mint per transaction must be a positive number, or left blank for no limit.' };
-            }
-            if (!hasAmountPrecision(maxMintText, amountDecimals)) {
-                return { error: divisible
+                issues.push('Max mint per transaction must be a positive number, or left blank for no limit.');
+            } else if (!hasAmountPrecision(maxMintText, amountDecimals)) {
+                issues.push(divisible
                     ? 'Max mint per transaction can have at most 8 decimal places.'
-                    : 'Max mint per transaction must be a whole number for an indivisible token.' };
-            }
-            const maxMintLimitError = issueSupplyLimitError(
-                maxMintText,
-                'Max mint per transaction',
-            );
-            if (maxMintLimitError) {
-                return { error: maxMintLimitError };
+                    : 'Max mint per transaction must be a whole number for an indivisible token.');
+            } else {
+                const maxMintLimitError = issueSupplyLimitError(
+                    maxMintText,
+                    'Max mint per transaction',
+                );
+                if (maxMintLimitError) {
+                    issues.push(maxMintLimitError);
+                }
             }
         }
         const mintAddressMaxText = mintAddressMax.trim();
         if (mintAddressMaxText) {
             if (!isPositiveDecimal(mintAddressMaxText)) {
-                return { error: 'Max mint per address must be a positive number, or left blank for no limit.' };
-            }
-            if (!hasAmountPrecision(mintAddressMaxText, amountDecimals)) {
-                return { error: divisible
+                issues.push('Max mint per address must be a positive number, or left blank for no limit.');
+            } else if (!hasAmountPrecision(mintAddressMaxText, amountDecimals)) {
+                issues.push(divisible
                     ? 'Max mint per address can have at most 8 decimal places.'
-                    : 'Max mint per address must be a whole number for an indivisible token.' };
-            }
-            const addressLimitError = issueSupplyLimitError(
-                mintAddressMaxText,
-                'Max mint per address',
-            );
-            if (addressLimitError) {
-                return { error: addressLimitError };
-            }
-            if (maxMintText && compareDecimalStrings(mintAddressMaxText, maxMintText) === -1) {
-                return { error: 'Max mint per address cannot be less than max mint per transaction.' };
+                    : 'Max mint per address must be a whole number for an indivisible token.');
+            } else {
+                const addressLimitError = issueSupplyLimitError(
+                    mintAddressMaxText,
+                    'Max mint per address',
+                );
+                if (addressLimitError) {
+                    issues.push(addressLimitError);
+                } else if (maxMintText && compareDecimalStrings(mintAddressMaxText, maxMintText) === -1) {
+                    issues.push('Max mint per address cannot be less than max mint per transaction.');
+                }
             }
         }
         for (const [value, label] of [
@@ -854,56 +997,101 @@ export function IssueTokenForm({ walletId, onBack }) {
             [mintStopBlock.trim(), 'Stop block'],
         ]) {
             if (value && !/^\d+$/.test(value)) {
-                return { error: `${label} must be a whole block height.` };
+                issues.push(`${label} must be a whole block height.`);
             }
         }
         if (mintStartBlock.trim() && mintStopBlock.trim()
+            && /^\d+$/.test(mintStartBlock.trim()) && /^\d+$/.test(mintStopBlock.trim())
             && compareDecimalStrings(mintStopBlock.trim(), mintStartBlock.trim()) === -1) {
-            return { error: 'Stop block cannot be before start block.' };
+            issues.push('Stop block cannot be before start block.');
         }
         for (const [value, label] of [
             [allowList.trim(), 'Allow list'],
             [blockList.trim(), 'Block list'],
         ]) {
             if (value && (!/^\d+$/.test(value) || compareDecimalStrings(value, '0') !== 1)) {
-                return { error: `${label} must be a positive list action index.` };
+                issues.push(`${label} must be a positive list action index.`);
             }
         }
         if (locks.maxSupply && !isPositiveDecimal(supplyText)) {
-            return { error: 'Max supply needs a positive cap before it can be locked.' };
+            issues.push('Max supply needs a positive cap before it can be locked.');
         }
         // A field still showing its own error holds the last valid value, not
         // the text the user sees refused; composing that value would issue
         // something other than what the field says.
-        const fieldRefusal = [
+        for (const [key, label, invalidText] of [
             ['supply', 'Max supply', 'must be zero or a positive number.'],
             ['initialMint', 'Initial mint', 'must be zero or a positive number.'],
             ['maxMint', 'Max mint per transaction', 'must be a positive number, or left blank for no limit.'],
             ['mintAddressMax', 'Max mint per address', 'must be a positive number, or left blank for no limit.'],
-        ].find(([key]) => amountInputErrors[key]);
-        if (fieldRefusal) {
-            const [key, label, invalidText] = fieldRefusal;
-            if (!/decimal places/.test(String(amountInputErrors[key]))) return { error: `${label} ${invalidText}` };
-            return {
-                error: divisible
+        ]) {
+            if (!amountInputErrors[key]) continue;
+            if (!/decimal places/.test(String(amountInputErrors[key]))) {
+                issues.push(`${label} ${invalidText}`);
+            } else {
+                issues.push(divisible
                     ? `${label} can have at most 8 decimal places.`
-                    : `${label} must be a whole number for an indivisible token.`,
-            };
+                    : `${label} must be a whole number for an indivisible token.`);
+            }
         }
         if (transferTo.trim() && !isValidIssueAddress(transferTo, descriptor)) {
-            return { error: 'Transfer ownership address is not valid for the active network.' };
+            issues.push('Transfer ownership address is not valid for the active network.');
         }
         if (transferSupplyTo.trim() && !isValidIssueAddress(transferSupplyTo, descriptor)) {
-            return { error: 'Initial mint destination is not valid for the active network.' };
+            issues.push('Initial mint destination is not valid for the active network.');
+        } else if (transferSupplyTo.trim() && !actionParams.MINT_SUPPLY) {
+            // A supply destination with no initial mint would be silently dropped
+            // by the chain; say so instead of composing a transaction that does
+            // less than the form showed.
+            issues.push('Sending the initial mint somewhere needs an initial mint above 0.');
         }
-        // A supply destination with no initial mint would be silently dropped
-        // by the chain; say so instead of composing a transaction that does
-        // less than the form showed.
-        if (transferSupplyTo.trim() && !actionParams.MINT_SUPPLY) {
-            return { error: 'Sending the initial mint somewhere needs an initial mint above 0.' };
-        }
-        return null;
+        return { issues, queueAt };
     }
+
+    // A value the code sets (a picker, a restored draft, a switch turning a field on or off)
+    // fires no field change handler, so each field's entry leaves the error map here when
+    // its value moves. Only the entries of the fields that changed go; the rest stay.
+    const watchedValues = {
+        'form:source': `${chainId}|${fromAddressId}`,
+        'issue-ticker': ticker,
+        'issue-parent-ticker': parentToken,
+        'issue-image-url': imageUrl,
+        'issue-supply': `${supply}|${locks.maxSupply}`,
+        'issue-initial-mint': initialMint,
+        'issue-max-mint': maxMint,
+        'issue-mint-address-max': mintAddressMax,
+        'issue-mint-start-block': mintStartBlock,
+        'issue-mint-stop-block': mintStopBlock,
+        'issue-allow-list': allowList,
+        'issue-block-list': blockList,
+        'issue-description': description,
+        'issue-transfer-owner': transferTo,
+        'issue-transfer-supply': transferSupplyTo,
+    };
+    const watchedRef = useRef(watchedValues);
+    const feePickRef = useRef(feePick);
+    const payFeeRef = useRef(payFeeInNativeCoin);
+    const callbackRef = useRef(callbackFields);
+    const clearFormError = formErrors.clear;
+    useEffect(() => {
+        let changed = false;
+        for (const [id, value] of Object.entries(watchedValues)) {
+            if (watchedRef.current[id] !== value) { clearFormError(id); changed = true; }
+        }
+        if (callbackRef.current !== callbackFields) {
+            for (const id of ['issue-callback-tick', 'issue-callback-amount', 'issue-callback-block']) clearFormError(id);
+            changed = true;
+        }
+        if (feePickRef.current !== feePick || payFeeRef.current !== payFeeInNativeCoin) {
+            clearFormError('form:fee');
+            changed = true;
+        }
+        watchedRef.current = watchedValues;
+        callbackRef.current = callbackFields;
+        feePickRef.current = feePick;
+        payFeeRef.current = payFeeInNativeCoin;
+        if (changed) clearFormError('form');
+    });
 
     const issueInputsReady = issueInputsCheck() === null;
     const quoteActionData = useMemo(
@@ -943,13 +1131,27 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action: 'ISSUE',
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
-        });
+        }));
     }, [stage, actionParams, chainId]);
+    const reviewDecoded = useMemo(() => (payFeeInNativeCoin && decoded
+        ? { ...decoded, warnings: [...(decoded.warnings || []), NATIVE_FEE_WARNING] }
+        : decoded), [decoded, payFeeInNativeCoin]);
+    const issueReviewComposed = useMemo(() => {
+        if (!reviewDecoded) return null;
+        const quote = normalizeProtocolFee(feesCardQuote);
+        return {
+            action: 'ISSUE',
+            chainId,
+            decoded: reviewDecoded,
+            quote: feesCardQuote,
+            protocolFeeKnownFree: quote.known && quote.free,
+        };
+    }, [chainId, feesCardQuote, reviewDecoded]);
 
     // What a submit validated, read again after the subtoken parent lookup
     // resolves: an answer about values no longer on screen is dropped.
@@ -1000,7 +1202,7 @@ export function IssueTokenForm({ walletId, onBack }) {
         if (submitInputsRef.current !== checked) return;
         if (parentError) {
             setValidationAttempt((attempt) => attempt + 1);
-            setFormError(parentError);
+            formErrors.validate({ 'issue-parent-ticker': parentError });
             return;
         }
         next();
@@ -1008,24 +1210,37 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     function handleReview(event) {
         event.preventDefault();
-        // Offline, the status slot already says why and the action is off.
-        if (networkOffline || parentCheckRef.current) return;
+        if (parentCheckRef.current) return;
+        // G130: the action is never off. Offline, the tap brings the form's
+        // offline notice into view and focuses it (one notice, never two).
+        if (networkOffline) {
+            if (!revealFormStatus(event.currentTarget)) formErrors.validate({ 'form:offline': t('issue.offline') });
+            return;
+        }
+        // G22: an empty Ticker also turns the field itself red; the error
+        // summary below names it and moves the cursor there.
+        setAttempted(true);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
         setValidationAttempt((attempt) => attempt + 1);
-        const inputsCheck = issueInputsCheck();
-        if (inputsCheck?.queue) {
+        // Every field is checked in one pass, one message per field (its first failing
+        // rule), so the notice at the top lists everything to fix at once.
+        const found = issueInputsIssues();
+        if (found.queueAt === 0 && !feeStop) {
             // A submit that lands inside the debounce or the lookup is held
             // and replayed when the check settles, rather than refused.
-            setFormError(null);
+            formErrors.reset();
             queueReview(true);
             return;
         }
-        if (inputsCheck) {
-            setFormError(inputsCheck.error);
-            return;
-        }
-        setFormError(null);
+        const problems = {};
+        found.issues.forEach((message, index) => {
+            const key = issueErrorFieldId(message)
+                || (/^Pick a source address/i.test(message) ? 'form:source' : `form:${index}`);
+            if (!problems[key]) problems[key] = message;
+        });
+        // A stop with no message is one the Fees field already shows itself; it still holds Review.
+        if (feeStop?.formError) problems['form:fee'] = feeStop.formError;
+        if (!formErrors.validate(problems) || feeStop) return;
         const next = singleEncode ? () => { openConfirmScreen(); } : () => setStage('review');
         if (isSubtoken) { afterParentCheck(next); return; }
         next();
@@ -1114,7 +1329,7 @@ export function IssueTokenForm({ walletId, onBack }) {
             if (isUserRejection(err)) return;
             // Same mapping the sign path already does: NativeFeeForfeitError's own message is
             // wire wording, and this confirm path is the one the flow actually takes.
-            setFormError(submitFailureMessage(err, {
+            formErrors.fail(submitFailureMessage(err, {
                 chainId,
                 coinTicker,
                 mandatory: nativeFeeMandatory,
@@ -1200,6 +1415,7 @@ export function IssueTokenForm({ walletId, onBack }) {
 
     function handleBuildAnother() {
         setResult(null);
+        setAttempted(false); // a fresh form opens with no G22 marks
         setSubmitError(null);
         setStage('form');
     }
@@ -1266,98 +1482,54 @@ export function IssueTokenForm({ walletId, onBack }) {
                     <p className={styles.hint}>{t('issue.broadcastComplete')}</p>
                 )}
                 <div className={styles.actions}>
-                    <Button variant="primary" onClick={leaveGuard.guardedOnBack}>{t('common.done')}</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={leaveGuard.guardedOnBack}>{t('common.done')}</Button>
                 </div>
             </ListPage>,
         );
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        // Cluster P FOLLOWUP 4: hardware and watcher failures offer Edit
-        // because changing form inputs is the recovery path.
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label={t('issue.reviewTokenIssue')}
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage
-                        variant="error"
-                        recovery={{ label: t('common.edit'), onAction: () => { setSubmitError(null); setStage('form'); } }}
-                    >
-                        {submitError}
-                    </StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? t('send.review.createUnsigned')
-                            : t('send.review.sign')}
-                    </Button>
-                )}
-            >
-                <p className={styles.summary}>{decoded?.summary}</p>
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
-                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>{t('send.fields.from')}</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {(decoded?.details || []).map((d) => (
-                        <DetailRow key={d.label} label={d.label} value={d.value} />
-                    ))}
-                    <DetailRow
-                        label={t('send.networkFee')}
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                                + (feeFiat ? ` (${feeFiat})` : '')
-                            : 'Fee estimate unavailable for this network.'}
-                    />
-                </dl>
-                {payFeeInNativeCoin ? (
-                    <FormNotice variant="warning" role="alert">{NATIVE_FEE_WARNING}</FormNotice>
-                ) : null}
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                )}
-            </FormPage>,
+        const quotedFee = normalizeProtocolFee(feesCardQuote);
+        const issuedSupply = actionParams.MINT_SUPPLY || '';
+        const confirmTick = issueTick.toUpperCase();
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={issueReviewComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setStage('form'); }}
+                decoded={reviewDecoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentials={<p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>}
+                credentialsReady
+                formatNativeFee={formatNativeFee}
+                formatProtocolFee={formatProtocolFee}
+                formatFeeTotal={feeFiatFormatters.formatFeeTotal}
+                summary={{
+                    verb: t('components.confirmSummary.verbIssue'),
+                    amount: issuedSupply,
+                    ticker: confirmTick,
+                    chainId,
+                    direction: 'in',
+                    address: fromAddress?.address,
+                    recipient: actionParams.TRANSFER_SUPPLY || undefined,
+                    protocolFee: !payFeeInNativeCoin && quotedFee.known
+                        ? { amount: quotedFee.free ? '0' : String(quotedFee.amount ?? ''), ticker: 'XCHAIN' }
+                        : undefined,
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, fiat: feeFiat, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -1411,6 +1583,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 summary={issueSummary}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? t('send.networkFeeValue', {
                         amount: feeEstimate.coinAmount,
@@ -1423,6 +1596,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 onPasswordChange={setPassword}
                 formatNativeFee={formatNativeFee}
                 formatProtocolFee={formatProtocolFee}
+                formatFeeTotal={feeFiatFormatters.formatFeeTotal}
                 hintClassName={styles.hint}
                 // Hardware swaps the password field for the device block
                 // and gates Approve on the device being available (§5.1).
@@ -1467,8 +1641,42 @@ export function IssueTokenForm({ walletId, onBack }) {
         );
     }
 
+    // The standard token picker, limited to the tokens this wallet owns, with
+    // its search and network filter. A subtoken lives on its parent's network
+    // and is signed by its owner, so a pick sets Network and From with it.
+    if (parentPickerOpen) {
+        const failedEmpty = ownedParents.failed && Array.isArray(ownedParents.rows) && ownedParents.rows.length === 0;
+        return (
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                kindFilter="tokens"
+                kindLocked
+                title={t('issue.parentPickerTitle')}
+                rows={ownedParents.rows === null
+                    ? null
+                    : ownedParents.rows.map((row) => ({ chainId: row.chainId, tick: row.tick }))}
+                emptyTitle={failedEmpty ? t('issue.parentPickerFailedTitle') : t('issue.parentPickerEmptyTitle')}
+                emptyBody={failedEmpty ? t('issue.parentPickerFailedBody') : t('issue.parentPickerEmptyBody')}
+                onSelect={(sel) => {
+                    const owned = ownedParents.rows?.find((row) => (
+                        row.chainId === sel.chainId && row.tick === sel.tick
+                    ));
+                    if (owned) {
+                        setChainId(owned.chainId);
+                        setFromAddressId(owned.ownerAddressId);
+                        setParentToken(owned.tick);
+                    }
+                    setParentPickerOpen(false);
+                }}
+                onBack={() => setParentPickerOpen(false)}
+            />
+        );
+    }
+
     // The same TYPE=2 address-list picker the admin access-lists mode uses,
-    // so create and edit bind lists identically.
+    // so create and edit bind lists identically. It is the only way to set
+    // a list here (G114), so union lists are offered as on Manage token.
     if (listPickerFor) {
         return (
             <ListPickerScreen
@@ -1477,6 +1685,8 @@ export function IssueTokenForm({ walletId, onBack }) {
                 chainId={chainId}
                 addresses={addressesByChain?.[chainId] || []}
                 filterType="2"
+                includeUnions
+                walletId={walletId}
                 title={listPickerFor === 'allow' ? t('issue.chooseAllowListTitle') : t('issue.chooseBlockListTitle')}
                 onSelect={(row) => {
                     const pick = {
@@ -1502,55 +1712,25 @@ export function IssueTokenForm({ walletId, onBack }) {
     const offlineNotice = networkOffline ? (
         <StatusMessage key="offline" variant="warning">{t('issue.offline')}</StatusMessage>
     ) : null;
-    const listRowLabel = (pick, value) => (
-        pick && value.trim() === pick.index ? listLabel(pick.index, pick.name) : undefined
-    );
+    // The Allow list or Block list field's text (G114): the list's name while
+    // the field still holds the picked list, "List #N" for an index from a
+    // draft or preset, or null so the field reads "None set".
+    const listFieldText = (pick, value) => {
+        const index = value.trim();
+        if (!index) return null;
+        return listLabel(index, pick && pick.index === index ? pick.name : null);
+    };
 
     const draftBanner = draft.hasDraft() && !draftPending ? (
-        <StatusMessage
-            variant="status"
-            recovery={{ label: t('send.draft.restore'), onAction: restoreDraft }}
+        <DraftNotice
+            onRestore={restoreDraft}
+            onDiscard={discardSavedDraft}
+            restoreLabel={t('send.draft.restore')}
         >
             {t('issue.draft.unfinished')}
-            <DraftDiscardButton onClick={dismissDraft} label={t('send.draft.discardLabel')}>
-                {t('send.draft.discard')}
-            </DraftDiscardButton>
-        </StatusMessage>
+        </DraftNotice>
     ) : null;
 
-    let issueErrorTarget;
-    if (/^Callback token/i.test(formError || '')) issueErrorTarget = { id: 'issue-callback-tick', label: 'Callback token' };
-    else if (/Callback payout/i.test(formError || '')) issueErrorTarget = { id: 'issue-callback-amount', label: 'Payout per unit' };
-    else if (/callback/i.test(formError || '')) issueErrorTarget = { id: 'issue-callback-block', label: 'Callback allowed from block' };
-    else if (/^Parent ticker|does not own|confirmed as a token|owned by another address/i.test(formError || '')) {
-        issueErrorTarget = { id: 'issue-parent-ticker', label: 'Parent ticker' };
-    } else if (/^Image URL/i.test(formError || '')) issueErrorTarget = { id: 'issue-image-url', label: 'Image URL' };
-    else if (/ticker/i.test(formError || '')) issueErrorTarget = { id: 'issue-ticker', label: tickerLabel };
-    else if (/^Max supply /i.test(formError || '')) issueErrorTarget = { id: 'issue-supply', label: 'Max supply' };
-    else if (/initial mint/i.test(formError || '') && !/destination|Sending the initial mint/i.test(formError || '')) {
-        issueErrorTarget = { id: 'issue-initial-mint', label: 'Initial mint' };
-    } else if (/Max mint per address/i.test(formError || '')) {
-        issueErrorTarget = { id: 'issue-mint-address-max', label: 'Max per address' };
-    } else if (/Max mint/i.test(formError || '')) {
-        issueErrorTarget = { id: 'issue-max-mint', label: 'Max mint per transaction' };
-    } else if (/Start block/i.test(formError || '')) {
-        issueErrorTarget = { id: 'issue-mint-start-block', label: 'Start block' };
-    } else if (/Stop block/i.test(formError || '')) {
-        issueErrorTarget = { id: 'issue-mint-stop-block', label: 'Stop block' };
-    } else if (/Allow list/i.test(formError || '')) {
-        issueErrorTarget = { id: 'issue-allow-list', label: 'Allow list' };
-    } else if (/Block list/i.test(formError || '')) {
-        issueErrorTarget = { id: 'issue-block-list', label: 'Block list' };
-    } else if (/Description/i.test(formError || '')) {
-        issueErrorTarget = { id: 'issue-description', label: 'Description' };
-    } else if (/Transfer ownership/i.test(formError || '')) {
-        issueErrorTarget = { id: 'issue-transfer-owner', label: 'Transfer ownership to' };
-    } else if (/Initial mint destination|Sending the initial mint/i.test(formError || '')) {
-        issueErrorTarget = { id: 'issue-transfer-supply', label: 'Send the initial mint to' };
-    }
-    const issueErrors = formError
-        ? [{ ...issueErrorTarget, message: formError }]
-        : [];
     // One-line summaries of the closed standard sections.
     const tokenSummary = joinSummary(
         issueTick.toUpperCase(),
@@ -1558,10 +1738,10 @@ export function IssueTokenForm({ walletId, onBack }) {
         divisible ? 'divisible' : 'not divisible',
     );
     const initialMintSummary = isPositiveDecimal(initialMint)
-        ? [
+        ? joinSummaryParts([
             `${formatDisplayAmount(initialMint.trim())} minted`,
-            transferSupplyTo.trim() ? `to ${summaryAddress(transferSupplyTo)}` : null,
-        ].filter(Boolean).join(' ')
+            transferSupplyTo.trim() ? summaryLineWithAddress(t, 'send.summary.toAddress', 'address', transferSupplyTo) : null,
+        ], ' ')
         : t('issue.summary.notSet');
     const mintingSetCount = [maxMint, mintAddressMax, mintStartBlock, mintStopBlock]
         .filter((value) => String(value).trim()).length;
@@ -1569,40 +1749,43 @@ export function IssueTokenForm({ walletId, onBack }) {
     // A section holding the current error reopens on every attempt,
     // even after the user closed it, so the error summary can focus its field.
     // A custom fee refusal (the review's fee stop) belongs to Network fee.
-    const feeStopNow = formError
-        ? customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate })
-        : null;
-    const errorSection = feeStopNow && feeStopNow.formError === formError
-        ? 'fee'
-        : issueErrorSection(formError);
-    const sectionErrorKey = (id) => (errorSection === id ? validationAttempt + 1 : 0);
+    const errorSections = new Set(Object.entries(formErrors.errors)
+        .map(([key, message]) => (key === 'form:fee' ? 'fee' : issueErrorSection(message))));
+    // G22 mark: shown once Issue Token was pressed, cleared as soon as filled.
+    const tickerMark = attempted && !ticker.trim() ? 'Ticker is required.' : undefined;
+    // The empty Parent token field says what it is waiting for: the list
+    // loading, a read that failed, or that a subtoken needs a token you own.
+    let parentFieldPlaceholder = t('issue.parentTokenSelect');
+    if (ownedParents.rows === null) parentFieldPlaceholder = t('issue.parentTokenLoading');
+    else if (ownedParents.rows.length === 0) {
+        parentFieldPlaceholder = ownedParents.failed ? t('issue.parentPickerFailedTitle') : t('issue.parentTokenNone');
+    }
+    const sectionErrorKey = (id) => (
+        errorSections.has(id) || (id === 'token' && tickerMark) ? validationAttempt + 1 : 0
+    );
     const sectionProps = (id) => ({ ...formSections.bind(id), revealKey: sectionErrorKey(id) });
     // No source to default to: no funding address on the network (the default
     // skips dispenser-delegated ones) and none picked by hand.
     const sourceMissing = Boolean(addressesByChain) && !fromAddress && (chainId
         ? (addressesByChain[chainId] || []).filter((a) => a.role !== 'dispenser').length === 0
         : chainsWithAddresses.length === 0);
-    const shownProtocolFee = normalizeProtocolFee(feesCardQuote);
-    // The XCHAIN protocol fee joins the Network fee row's summary.
-    const protocolSummary = !payFeeInNativeCoin && shownProtocolFee.known
-        && !shownProtocolFee.free && shownProtocolFee.amount != null
-        ? `${shownProtocolFee.amount} XCHAIN protocol fee`
-        : undefined;
     return wrap(
         <FormFrame
             demoGuard={demoGuard}
             label={t('issue.title')}
             // The one-page Issue token form is framed on wide screens like every other form.
             onSubmit={handleReview}
-            onChangeCapture={() => { if (formError) setFormError(null); }}
-            status={[offlineNotice, <FormErrorSummary key="errors" errors={issueErrors} focusKey={validationAttempt} />, draftBanner]}
+            errors={formErrors}
+            lead={draftBanner}
+            status={offlineNotice}
             action={(
                 // Always Issue Token, with the Issue action's icon
                 // (ActionsMenu's issue: PlusIcon), with or without a supply.
+                // Enabled with the Ticker or From empty (G22): pressing it
+                // marks the missing field and opens its section instead.
                 <FormAction
                     icon={<Icon.PlusIcon />}
                     loading={actionConfirm.composing}
-                    disabled={!fromAddress || !ticker.trim() || actionConfirm.composing || networkOffline}
                 >
                     {t('issue.title')}
                 </FormAction>
@@ -1637,6 +1820,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                             {t('send.source.noAddress')}
                         </FormNotice>
                     ) : null}
+                    formErrorKey="form:source"
                 />
             )}
             fee={(
@@ -1651,7 +1835,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                     onChange={setFeePick}
                     customEstimate={feeCustomEstimate}
                     disabled={composing}
-                    protocolSummary={protocolSummary}
+                    formErrorKey="form:fee"
                     fees={{
                         quote: feesCardQuote,
                         pending: feesCardPending,
@@ -1698,24 +1882,22 @@ export function IssueTokenForm({ walletId, onBack }) {
                     { value: 'utility', label: 'Utility token', sub: 'Mintable, adjustable supply, divisible. Every token can pay dividends.', icon: <Icon.GearIcon /> },
                     { value: 'collectible', label: 'Collectible', sub: 'One of a kind: supply 1, locked.', icon: <Icon.ImageIcon /> },
                     { value: 'edition', label: 'Limited edition', sub: 'A fixed set; one per address to mint.', icon: <Icon.CopyIcon /> },
-                    { value: 'subtoken', label: 'Subtoken', sub: 'Named subtoken under a ticker you own.', icon: <Icon.LinkIcon /> },
+                    { value: 'subtoken', label: 'Subtoken', sub: 'Named subtoken under a token you own.', icon: <Icon.LinkIcon /> },
                 ]}
             />
             {/* Network and From live in the From section above. */}
             {isSubtoken ? (
-                <Input
+                // The standard token selector: tapping it opens the picker of
+                // tokens this wallet owns; the field never takes typed text.
+                <TokenField
                     disabled={composing}
                     id="issue-parent-ticker"
-                    label={t('issue.parentTicker')}
-                    required
-                    help={t('issue.parentTickerHelp')}
-                    maxLength={MAX_TICKER_LENGTH}
-                    value={parentToken}
-                    onChange={(e) => setParentToken(e.target.value)}
-                    autoCapitalize="off"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
+                    label={t('issue.parentToken')}
+                    help={t('issue.parentTokenHelp')}
+                    value={parentToken.trim() && chainId ? { chainId, tick: parentToken.trim() } : null}
+                    placeholder={parentFieldPlaceholder}
+                    error={attempted && !parentToken.trim() ? t('issue.parentTokenMissing') : undefined}
+                    onOpenPicker={openParentPicker}
                 />
             ) : null}
             <Input
@@ -1736,7 +1918,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                 spellCheck={false}
                 error={tickerTaken
                     ? t('issue.tickerTaken', { ticker: lookupTick })
-                    : undefined}
+                    : tickerMark}
             />
                     {/* Amount fields at the precision Divisible sets: 8 places on, whole
                         numbers off. Switching it re-formats the stored value at once and
@@ -1755,6 +1937,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                         onValidationError={(message) => setAmountInputErrors((prev) => ({ ...prev, supply: message }))}
                     />
                     <Switch
+                        className={styles.divisibleSwitch}
                         disabled={composing}
                         label={t('issue.divisible')}
                         help={t('issue.divisibleHelp')}
@@ -1926,24 +2109,23 @@ export function IssueTokenForm({ walletId, onBack }) {
                     <div className={styles.lockRows}>
                         {ISSUE_LOCKS.map((lock) => {
                             const checked = !!locks[lock.key];
-                            const StateIcon = checked ? Icon.LockIcon : Icon.UnlockIcon;
+                            const ItemIcon = lockIconFor(lock.field);
                             return (
-                                <div className={styles.lockRow} key={lock.key}>
-                                    <span className={checked ? styles.lockIconOn : styles.lockIcon} aria-hidden="true">
-                                        <StateIcon />
-                                    </span>
-                                    <Switch
-                                        disabled={composing}
-                                        id={`issue-lock-${lock.key}`}
-                                        label={lock.label}
-                                        description={lock.description}
-                                        checked={checked}
-                                        onChange={(e) => setLocks((current) => ({
-                                            ...current,
-                                            [lock.key]: e.target.checked,
-                                        }))}
-                                    />
-                                </div>
+                                <Switch
+                                    key={lock.key}
+                                    className={checked ? `${styles.lockRow} ${styles.lockRowOn}` : styles.lockRow}
+                                    icon={<ItemIcon />}
+                                    disabled={composing}
+                                    id={`issue-lock-${lock.key}`}
+                                    label={lock.label}
+                                    description={lock.description}
+                                    help={lock.help}
+                                    checked={checked}
+                                    onChange={(e) => setLocks((current) => ({
+                                        ...current,
+                                        [lock.key]: e.target.checked,
+                                    }))}
+                                />
                             );
                         })}
                     </div>
@@ -1959,52 +2141,32 @@ export function IssueTokenForm({ walletId, onBack }) {
                     optional
                     {...sectionProps('lists')}
                 >
-                    <Input
+                    {/* G114: two picker fields that read the chosen list's
+                        name or "None set", with the list icon on the right.
+                        Tapping one opens the list picker; its clear action
+                        sets it back to none. */}
+                    <ListField
                         disabled={composing}
                         id="issue-allow-list"
                         label={t('issue.allowList')}
                         help={t('issue.allowListHelp')}
-                        inputMode="numeric"
-                        hint={listRowLabel(allowListPick, allowList)}
-                        value={allowList}
-                        onChange={(e) => setAllowList(e.target.value)}
-                        autoComplete="off"
-                        aria-required="false"
+                        placeholder={t('issue.listNoneSet')}
+                        valueText={listFieldText(allowListPick, allowList)}
+                        onOpenPicker={() => setListPickerFor('allow')}
+                        onClear={() => { setAllowList(''); setAllowListPick(null); }}
+                        clearLabel={t('issue.removeAllowList')}
                     />
-                    {/* The published address lists this wallet owns, by name,
-                        so a list need not be found by its number. */}
-                    <div className={styles.actions}>
-                        <Button type="button" variant="ghost" disabled={composing} onClick={() => setListPickerFor('allow')}>
-                            {allowList.trim() ? t('issue.changeAllowList') : t('issue.chooseAllowList')}
-                        </Button>
-                        {allowList.trim() ? (
-                            <Button type="button" variant="ghost" disabled={composing} aria-label={t('issue.removeAllowList')} onClick={() => { setAllowList(''); setAllowListPick(null); }}>
-                                {t('issue.removeList')}
-                            </Button>
-                        ) : null}
-                    </div>
-                    <Input
+                    <ListField
                         disabled={composing}
                         id="issue-block-list"
                         label={t('issue.blockList')}
                         help={t('issue.blockListHelp')}
-                        inputMode="numeric"
-                        hint={listRowLabel(blockListPick, blockList)}
-                        value={blockList}
-                        onChange={(e) => setBlockList(e.target.value)}
-                        autoComplete="off"
-                        aria-required="false"
+                        placeholder={t('issue.listNoneSet')}
+                        valueText={listFieldText(blockListPick, blockList)}
+                        onOpenPicker={() => setListPickerFor('block')}
+                        onClear={() => { setBlockList(''); setBlockListPick(null); }}
+                        clearLabel={t('issue.removeBlockList')}
                     />
-                    <div className={styles.actions}>
-                        <Button type="button" variant="ghost" disabled={composing} onClick={() => setListPickerFor('block')}>
-                            {blockList.trim() ? t('issue.changeBlockList') : t('issue.chooseBlockList')}
-                        </Button>
-                        {blockList.trim() ? (
-                            <Button type="button" variant="ghost" disabled={composing} aria-label={t('issue.removeBlockList')} onClick={() => { setBlockList(''); setBlockListPick(null); }}>
-                                {t('issue.removeList')}
-                            </Button>
-                        ) : null}
-                    </div>
                 </FormSection>
 
                 <FormSection
@@ -2063,7 +2225,7 @@ export function IssueTokenForm({ walletId, onBack }) {
                                 coin: descriptor?.coin, currentHeight, targetBlock: callbackBlock,
                             });
                             const tip = currentHeight != null
-                                ? t('issue.callbackCurrentBlock', { height: currentHeight.toLocaleString('en-US') })
+                                ? t('issue.callbackCurrentBlock', { height: String(currentHeight) })
                                 : null;
                             return [estimate ? t('issue.callbackBlockEstimate', { estimate }) : null, tip]
                                 .filter(Boolean).join(' ') || undefined;
@@ -2104,15 +2266,6 @@ export function IssueTokenForm({ walletId, onBack }) {
     );
 }
 
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
-    );
-}
-
 // What each "Start from" preset fills in. Fields a preset leaves
 // out keep whatever the form holds.
 // Every preset names its initial mint and per-address limit, so switching
@@ -2125,6 +2278,6 @@ const ISSUE_PRESETS = {
     // A fair mint: the cap locks at issuance with nothing minted (initial mint
     // 0 omits MINT_SUPPLY), so every print stays publicly mintable.
     edition: { divisible: false, initialMint: '0', mintAddressMax: '1', locks: { maxSupply: true } },
-    // A subtoken changes no field; it adds the Parent ticker.
+    // A subtoken changes no field; it adds the Parent token.
     subtoken: {},
 };

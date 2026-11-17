@@ -45,8 +45,12 @@ test('an unaffordable Litecoin token send offers Sign anyway behind the same war
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible();
     await expect(confirm.getByText('Sign anyway')).toBeVisible();
-    await expect(page.getByTestId('confirm-approve')).toBeDisabled();
+    // G130: Approve keeps its colour; a tap before Sign anyway is ticked says
+    // so at the top and sends nothing.
+    await page.getByTestId('confirm-approve').click();
+    await expect(page.getByTestId('confirm-blocked')).toContainText('Sign anyway');
     await confirm.getByTestId('ack-BALANCE_INSUFFICIENT').check();
+    await expect(page.getByTestId('confirm-blocked')).toHaveCount(0);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled();
     expect(consoleErrors).toEqual([]);
 });

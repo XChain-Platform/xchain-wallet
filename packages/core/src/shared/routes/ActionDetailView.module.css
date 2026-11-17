@@ -1,0 +1,232 @@
+/*
+ * Copyright © 2025–2026 Dankest, LLC
+ * Based on XChain Platform by Dankest, LLC – https://dankest.llc
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * This file is part of XChain Platform. Licensed under the GNU Affero
+ * General Public License v3.0 or later; see LICENSE.md. A commercial
+ * license (without AGPL source-disclosure terms) is available -
+ * contact legal@dankest.llc.
+ */
+
+/* The Action detail page (operator ruling 2026-11-13): hero, status bar,
+   the shared Actions | Details toggle (Actions first, G102), every block
+   8px apart. */
+
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* --- hero: the mark, the signed amount, the one address --- */
+
+.hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
+    padding-block: var(--xc-space-2) 0;
+    text-align: center;
+    min-width: 0;
+}
+
+/* The shared hero avatar is 88px; this hero draws it at 64px, as the
+   confirm screen the user signed does. */
+.heroMark {
+    --xc-avatar-size-hero: calc(var(--xc-space-8) * 2);
+    --xc-avatar-pip-hero: var(--xc-space-6);
+    position: relative;
+    display: inline-flex;
+    margin-block-end: var(--xc-space-1);
+}
+
+/* An action with no asset of its own: the History row's action icon on a
+   disc the size of the asset mark. */
+.subjectMark {
+    inline-size: var(--xc-avatar-size-hero);
+    block-size: var(--xc-avatar-size-hero);
+    border-radius: var(--xc-avatar-shape);
+    display: grid;
+    place-items: center;
+    background: var(--xc-surface-raised);
+    color: var(--xc-text);
+}
+
+.subjectMark svg {
+    inline-size: 50%;
+    block-size: 50%;
+}
+
+/* Which way value moved: a small round badge on the mark's top corner, clear
+   of the chain pip a token carries on its bottom corner. */
+.directionMark {
+    position: absolute;
+    inset-block-start: calc(var(--xc-space-1) * -1);
+    inset-inline-end: calc(var(--xc-space-1) * -1);
+    inline-size: var(--xc-icon-xl);
+    block-size: var(--xc-icon-xl);
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--xc-surface-raised);
+    color: var(--xc-text);
+    box-shadow: var(--xc-shadow-sm);
+}
+
+.directionMark svg {
+    inline-size: var(--xc-icon-sm);
+    block-size: var(--xc-icon-sm);
+}
+
+.heroAmount {
+    margin: 0;
+    font-size: calc(var(--xc-text-2xl) * 1.25);
+    font-weight: 800;
+    line-height: 1.15;
+    color: var(--xc-text);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.heroAmount bdi {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.heroTicker {
+    font-size: var(--xc-text-lg);
+    font-weight: 700;
+    color: var(--xc-text-muted);
+}
+
+.heroLine {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    min-width: 0;
+}
+
+/* --- the four-step status bar --- */
+
+.statusCard {
+    composes: card from '../../ui/Card.module.css';
+    min-width: 0;
+}
+
+.statusBar {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.step {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
+    min-width: 0;
+    text-align: center;
+}
+
+/* The line joining a step to the next one, drawn from this dot's centre. */
+.step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    inset-block-start: calc(var(--xc-icon-xl) / 2 - 1px);
+    inset-inline-start: 50%;
+    inline-size: 100%;
+    block-size: 2px;
+    background: var(--xc-border);
+}
+
+.step[data-state='done']:not(:last-child)::after {
+    background: var(--xc-success);
+}
+
+.stepDot {
+    position: relative;
+    z-index: var(--xc-z-base);
+    inline-size: var(--xc-icon-xl);
+    block-size: var(--xc-icon-xl);
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--xc-surface);
+    border: 2px solid var(--xc-border);
+    color: var(--xc-text-muted);
+    font-weight: 800;
+    font-size: var(--xc-text-sm);
+}
+
+.stepDot svg {
+    inline-size: var(--xc-icon-sm);
+    block-size: var(--xc-icon-sm);
+}
+
+.step[data-state='done'] .stepDot {
+    background: var(--xc-success);
+    border-color: var(--xc-success);
+    color: var(--xc-surface);
+}
+
+/* In progress: an amber ring with a filled centre. */
+.step[data-state='current'] .stepDot {
+    border-color: var(--xc-warning);
+    box-shadow: inset 0 0 0 var(--xc-space-1) var(--xc-surface), inset 0 0 0 var(--xc-space-3) var(--xc-warning);
+}
+
+.step[data-state='warn'] .stepDot {
+    background: var(--xc-warning);
+    border-color: var(--xc-warning);
+    color: var(--xc-surface);
+}
+
+.step[data-state='error'] .stepDot {
+    background: var(--xc-danger);
+    border-color: var(--xc-danger);
+    color: var(--xc-surface);
+}
+
+.stepLabel {
+    font-size: var(--xc-text-xs, var(--xc-text-sm));
+    font-weight: 600;
+    color: var(--xc-text);
+    overflow-wrap: anywhere;
+}
+
+.step[data-state='todo'] .stepLabel {
+    color: var(--xc-text-muted);
+}
+
+.step[data-state='current'] .stepLabel,
+.step[data-state='warn'] .stepLabel {
+    color: var(--xc-warning-text, var(--xc-text));
+}
+
+.step[data-state='error'] .stepLabel {
+    color: var(--xc-danger-text, var(--xc-danger));
+}
+
+/* --- Details values --- */
+
+.outputValue {
+    overflow-wrap: anywhere;
+}
+
+/* A failed proof under the status bar, centred like the hero above it. */
+.verdictLine {
+    display: flex;
+    justify-content: center;
+}
+
+.labelWithTip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}

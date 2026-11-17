@@ -101,7 +101,7 @@ afterEach(() => {
 describe('ProjectRosterForm roster controls', () => {
     it('opens with Network then From and keeps form-specific help on field labels', async () => {
         const { container } = mount();
-        await screen.findByText('No list published yet. This will be the first.');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
 
         // Network and From live in the standard From section, closed
         // on load; the address field is labelled "From address".
@@ -119,20 +119,23 @@ describe('ProjectRosterForm roster controls', () => {
         expectHelp('From address', 'Only the current owner of PROJ can publish its official-token list.');
         expectHelp(
             'Tokens',
-            'Tokens on PROJ\'s list show an "Official" badge in explorers and wallets. Add each one from the token picker.',
+            'Tokens on PROJ\'s list show an "Official" badge in explorers and wallets. Put one token per line, or add one from the token picker.',
         );
-        // Tokens come from the picker, never typed one per line.
-        expect(screen.queryByRole('textbox', { name: /Tokens/ })).toBeNull();
+        // Tokens are typed one per line, like the List create page.
+        expect(screen.getByRole('textbox', { name: /^Tokens/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Add Token' }).querySelector('svg[data-xc-icon]')).not.toBeNull();
         // Memo is its own optional section, closed on load.
+        // It holds only the memo, so the field has no label row or tip (ruling).
         fireEvent.click(screen.getByRole('button', { name: /^Memo/, expanded: false }));
-        expectHelp('Memo', 'An optional public note stored on the chain with this save: on the link when the list is published, or on the name and description change.');
+        expect(screen.queryByRole('button', { name: 'About Memo' })).toBeNull();
+        expect(screen.getByRole('textbox', { name: 'Memo' })).toBeInTheDocument();
 
-        // A network without list metadata hides the name and description.
+        // A network without list metadata leaves out the List Details section.
         expect(screen.queryByLabelText(/List name/)).toBeNull();
+        expect(screen.queryByRole('button', { name: /^List Details/ })).toBeNull();
         expect(screen.getByText(/doesn't take a list name or description yet/)).toBeTruthy();
-        // No list yet, so the main action creates it.
-        const save = screen.getByRole('button', { name: /^Create project tokens$/i });
+        // No list yet, so the main action creates it and links it.
+        const save = screen.getByRole('button', { name: 'Create and Link' });
         expect(save.className).toMatch(/success/);
         expect(save.querySelector('svg[data-xc-icon]')).not.toBeNull();
     });
@@ -156,13 +159,13 @@ describe('ProjectRosterForm roster controls', () => {
 
     it('renders reviewed tokens as icon rows in one card', async () => {
         mount();
-        await screen.findByText('No list published yet. This will be the first.');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
         for (const tick of ['FIRST', 'SECOND']) {
             fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
             fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: tick } });
             fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
         }
-        fireEvent.click(screen.getByRole('button', { name: /^Create project tokens$/i })); // The action names its object.
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' })); // A first list is created, then linked.
 
         const roster = await screen.findByRole('list', { name: 'Tokens' });
         const rows = screen.getAllByRole('listitem');

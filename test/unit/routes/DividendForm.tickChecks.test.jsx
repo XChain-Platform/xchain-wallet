@@ -147,18 +147,21 @@ describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
         await pickRow('GOODPAY');
     });
 
-    it('names the network\'s own coin at the holder-of field and disables submit', async () => {
+    it('answers a tap on the network coin with the field error and sends nothing', async () => {
         // The picker no longer offers the coin, so it arrives as a prefilled tick.
         const messaging = mountDividend({}, { initialTick: 'BTC' });
         await openPicker('Dividend token');
         await pickRow('GOODPAY');
         fireEvent.change(amountField(), { target: { value: '1' } });
         await expectText(/BTC is the active network itself, not an XChain token/);
-        expect(submitButton().disabled).toBe(true);
+        expect(submitButton()).toBeEnabled();
+        fireEvent.click(submitButton());
+        expect(screen.getByRole('alert', { name: /form errors/i }))
+            .toHaveTextContent(/BTC is the active network itself/);
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('names an unknown holder-of ticker and disables submit', async () => {
+    it('answers an unknown holder-of ticker tap instead of disabling submit', async () => {
         mountDividend({ GHOSTTOK: 'missing' });
         await openPicker('Holder-of token');
         await pickRow('GHOSTTOK');
@@ -166,10 +169,13 @@ describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
         await pickRow('GOODPAY');
         fireEvent.change(amountField(), { target: { value: '1' } });
         await expectText(/No token named GHOSTTOK exists on the active network\./);
-        expect(submitButton().disabled).toBe(true);
+        expect(submitButton()).toBeEnabled();
+        fireEvent.click(submitButton());
+        expect(screen.getByRole('alert', { name: /form errors/i }))
+            .toHaveTextContent(/No token named GHOSTTOK/);
     });
 
-    it('names an unknown dividend ticker and disables submit', async () => {
+    it('answers an unknown dividend ticker tap instead of disabling submit', async () => {
         mountDividend({ GHOSTPAY: 'missing' });
         await openPicker('Holder-of token');
         await pickRow('GOODTOK');
@@ -177,7 +183,10 @@ describe('DividendForm TICK / DIVIDEND_TICK existence checks', () => {
         await pickRow('GHOSTPAY');
         fireEvent.change(amountField(), { target: { value: '1' } });
         await expectText(/No token named GHOSTPAY exists on the active network\./);
-        expect(submitButton().disabled).toBe(true);
+        expect(submitButton()).toBeEnabled();
+        fireEvent.click(submitButton());
+        expect(screen.getByRole('alert', { name: /form errors/i }))
+            .toHaveTextContent(/No token named GHOSTPAY/);
     });
 
     it('enables submit once both tickers resolve to real tokens', async () => {

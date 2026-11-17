@@ -37,10 +37,11 @@ async function createThroughQuiz(mode) {
         </MessagingProvider>,
     );
     fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'correct-horse-battery' } });
-    fireEvent.change(screen.getByLabelText(/^Confirm/), { target: { value: 'correct-horse-battery' } });
+    fireEvent.change(screen.getByLabelText(/^Confirm(?! passphrase)/), { target: { value: 'correct-horse-battery' } });
     fireEvent.click(screen.getByRole('button', { name: /Next/ }));
 
-    fireEvent.click(await screen.findByRole('checkbox'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reveal Recovery Phrase' }));
+    fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: /Verify Recovery Phrase/ }));
 
     const words = PHRASE.split(' ');

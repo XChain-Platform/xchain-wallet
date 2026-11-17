@@ -45,16 +45,42 @@ describe('ObligationsView countdown', () => {
             </MessagingProvider>
         );
         const utils = render(view('wallet-1'));
-        await waitFor(() => expect(screen.getByText(/auto-pay is armed for 1 order/i)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/auto pay is armed for 1 order/i)).toBeTruthy());
 
         utils.rerender(view('wallet-2'));
-        expect(screen.queryByText(/auto-pay is armed/i)).toBeNull();
+        expect(screen.queryByText(/auto pay is armed/i)).toBeNull();
 
         await act(async () => { finishWalletTwo({ armed: 0, unsignableWalletIds: [] }); });
-        expect(screen.queryByText(/auto-pay is armed/i)).toBeNull();
+        expect(screen.queryByText(/auto pay is armed/i)).toBeNull();
     });
 
-    it('ticks to a plain expired state and stops its interval at zero', () => {
+    it('colours the ring green with plenty of time and red under 30 minutes, ring before chevron', () => {
+        const now = Math.floor(Date.now() / 1000);
+        const row = (index, left) => ({
+            chainId: 'litecoin-testnet',
+            address: 'ltc1payer',
+            payeeAddress: 'ltc1payee',
+            orderMatchActionIndex: index,
+            coinAmount: '0.5',
+            expiration: now + left,
+        });
+        hookState.obligations = [row('1', 3600), row('2', 29 * 60)];
+        const messaging = { getAutopayStatus: vi.fn().mockResolvedValue(null) };
+        const { container } = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ObligationsView walletId="wallet" onPay={() => {}} onBack={() => {}} />
+            </MessagingProvider>,
+        );
+        const rings = [...container.querySelectorAll('[data-fill-ring]')];
+        expect(rings.map((r) => r.getAttribute('data-tone'))).toEqual(['success', 'danger']);
+        // Order inside a row: ring slot, then the chevron.
+        const button = rings[0].closest('button');
+        const kids = [...button.children];
+        const ringAt = kids.findIndex((k) => k.contains(rings[0]));
+        expect(ringAt).toBe(kids.length - 2);
+    });
+
+    it('drops the row when its window closes and stops its interval at zero', () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-07-08T14:00:00Z'));
         hookState.obligations = [{
@@ -73,13 +99,15 @@ describe('ObligationsView countdown', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.getByText('2s left')).toBeInTheDocument();
+        expect(screen.getByText('2s')).toBeInTheDocument();
         expect(vi.getTimerCount()).toBeGreaterThan(0);
 
         act(() => vi.advanceTimersByTime(2_000));
 
-        expect(screen.getByText('Expired')).toBeInTheDocument();
-        expect(screen.queryByText(/0s|-\d+s/)).toBeNull();
+        // An expired payment is not listed at all; the page reads as empty.
+        expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+        expect(screen.getByText('No payments due')).toBeInTheDocument();
+        expect(screen.queryByText(/Expired|0s|-\d+s/)).toBeNull();
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
         expect(vi.getTimerCount()).toBe(0);
     });

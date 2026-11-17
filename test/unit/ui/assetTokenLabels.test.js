@@ -27,6 +27,9 @@ const ROOT = 'packages/core/src';
 const SITES = {
     'shared/components/PriceAlertForm.jsx#TokenPicker#0': 'asset',
     'shared/components/PriceAlertForm.jsx#TokenField#0': 'asset',
+    // Send's Multi add-recipient field: the coin pays its own output and has
+    // no multi-recipient form, so it offers tokens only.
+    'shared/components/MultiSendRecipients.jsx#TokenField#0': 'token',
     'shared/components/marketTradeParts.jsx#QuickSide#0': 'exempt: the market page fixes the pair; the chip picks nothing',
     'shared/components/marketTradeParts.jsx#QuickSide#1': 'exempt: the market page fixes the pair; the chip picks nothing',
     'shared/routes/AirdropForm.jsx#TokenPicker#0': 'token',
@@ -39,9 +42,10 @@ const SITES = {
     'shared/routes/CallbackForm.jsx#TokenField#0': 'token',
     'shared/routes/ContractFundsForm.jsx#TokenPicker#0': 'token',
     'shared/routes/ContractFundsForm.jsx#TokenField#0': 'token',
-    'shared/routes/ContractStakeForm.jsx#TokenPicker#0': 'token',
-    'shared/routes/ContractStakeForm.jsx#TokenField#0': 'token',
+    'shared/routes/StakingForm.jsx#TokenPicker#0': 'token',
+    'shared/routes/StakingForm.jsx#TokenField#0': 'token',
     'shared/routes/ControllerBindForm.jsx#TokenField#0': 'token',
+    'shared/routes/ControllerBindForm.jsx#TokenPicker#0': 'token',
     'shared/routes/CreateBetFeedForm.jsx#TokenPicker#0': 'token',
     'shared/routes/CreateBetFeedForm.jsx#TokenField#0': 'token',
     'shared/routes/CreateOrderForm.jsx#QuickSide#0': 'asset',
@@ -80,16 +84,29 @@ const SITES = {
     'shared/routes/ExecuteContractForm.jsx#TokenPicker#0': 'token',
     'shared/routes/ExecuteContractForm.jsx#TokenField#0': 'token',
     'shared/routes/GatedPublishForm.jsx#TokenField#0': 'token',
+    'shared/routes/GatedPublishForm.jsx#TokenPicker#0': 'token',
+    // A subtoken's Parent token: a token the wallet owns, never a coin.
+    'shared/routes/IssueTokenForm.jsx#TokenPicker#0': 'token',
+    'shared/routes/IssueTokenForm.jsx#TokenField#0': 'token',
     'shared/routes/ListCreateForm.jsx#TokenPicker#0': 'token',
     'shared/routes/MarketActivity.jsx#TokenPicker#0': 'exempt: picks a market, not a coin or token to move',
+    'shared/routes/MarketActivity.jsx#TokenPicker#1': 'exempt: wide market list, not a coin or token to move',
     'shared/routes/MintForm.jsx#TokenPicker#0': 'token',
     'shared/routes/MintForm.jsx#TokenField#0': 'token',
+    // G122: the priced token; a PRICE quote names a token, never a coin.
+    'shared/routes/OracleForm.jsx#TokenPicker#0': 'token',
+    'shared/routes/OracleForm.jsx#TokenField#0': 'token',
     'shared/routes/ProjectRosterForm.jsx#TokenPicker#0': 'token',
     'shared/routes/Receive.jsx#TokenPicker#0': 'asset',
     'shared/routes/Receive.jsx#TokenField#0': 'asset',
     'shared/routes/ReceivePicker.jsx#TokenPicker#0': 'asset',
-    'shared/routes/SellOwnershipForm.jsx#TokenPicker#0': 'asset',
-    'shared/routes/SellOwnershipForm.jsx#TokenField#0': 'asset',
+    // The token whose ownership is sold (operator 2026-11-15: the Name to
+    // Sell field became Token): one of this wallet's own tokens, never a coin.
+    'shared/routes/SellOwnershipForm.jsx#TokenPicker#0': 'token',
+    'shared/routes/SellOwnershipForm.jsx#TokenField#0': 'token',
+    // Get paid in: the network's coin or any token on it.
+    'shared/routes/SellOwnershipForm.jsx#TokenPicker#1': 'asset',
+    'shared/routes/SellOwnershipForm.jsx#TokenField#1': 'asset',
     'shared/routes/Send.jsx#TokenPicker#0': 'asset',
     'shared/routes/Send.jsx#TokenPicker#1': 'token',
     'shared/routes/Send.jsx#TokenField#0': 'asset',
@@ -108,6 +125,7 @@ const SITES = {
     'shared/routes/TokenAdminForm.jsx#TokenField#1': 'token',
     'shared/routes/TokenAdminForm.jsx#TokenField#2': 'token',
     'shared/routes/UnbindForm.jsx#TokenField#0': 'token',
+    'shared/routes/UnbindForm.jsx#TokenPicker#0': 'token',
 };
 
 // Known gaps in files another change owns right now; each is fixed there.

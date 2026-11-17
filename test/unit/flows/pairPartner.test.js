@@ -108,19 +108,19 @@ describe('flows/pairPartner role helpers', () => {
         const watcher = describePairingLane('watcher');
         expect(watcher.available).toBe(true);
         expect(watcher.partnerMode).toBe('signer');
-        expect(watcher.cta).toBe('Pair a Signer');
+        expect(watcher.cta).toBe('Pair the Signer Phone');
 
         const signer = describePairingLane('signer');
         expect(signer.available).toBe(true);
         expect(signer.partnerMode).toBe('watcher');
-        expect(signer.cta).toBe('Pair a Watcher');
+        expect(signer.cta).toBe('Pair the Other Phone');
     });
 
     it('reports the lane unavailable for a full wallet', () => {
         const lane = describePairingLane('full');
         expect(lane.available).toBe(false);
         expect(lane.cta).toBeNull();
-        expect(lane.help).toMatch(/Watcher and Signer/);
+        expect(lane.help).toMatch(/set up with another phone/);
     });
 });
 
@@ -325,7 +325,7 @@ describe('flows/pairPartner verifyPartnerPairing', () => {
         const v = verifyPartnerPairing({ local, partner });
         expect(v.ok).toBe(false);
         expect(v.reason).toBe('mode-mismatch');
-        expect(v.message).toMatch(/must be in signer mode/);
+        expect(v.message).toMatch(/Both phones were set up for the same job/);
     });
 
     it('pairs on the overlap when the offline half has fewer chains switched on', async () => {

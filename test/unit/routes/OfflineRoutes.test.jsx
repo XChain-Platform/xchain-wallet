@@ -30,6 +30,7 @@ import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetai
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { writeBalanceCache } from '../../../packages/core/src/shared/utils/balanceCache.js';
+import { historyMenuItem } from './historyMoreMenu.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const WALLET = { id: 'offline-wallet', name: 'Offline Wallet' };
@@ -88,7 +89,7 @@ afterEach(() => {
 });
 
 describe('offline route behavior from reachability', () => {
-    it('keeps cached Home balances and blocks Send with a reason', async () => {
+    it('keeps cached Home balances offline with no Send button', async () => {
         // Offline, Home starts from its saved balance copy and does not ask
         // the services for fresh balances.
         const balances = {
@@ -121,9 +122,8 @@ describe('offline route behavior from reachability', () => {
         expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         expect(messaging.getWalletBalances).not.toHaveBeenCalled();
         expectOneOfflineNotice();
-        const send = screen.getByRole('button', { name: 'Send' });
-        expect(send).toHaveAttribute('aria-disabled', 'true');
-        expect(send).toHaveAttribute('title', 'Send needs a network connection');
+        // Home has no Send button; Send is reached from the navigation.
+        expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
     });
 
     it('keeps cached Send inputs and disables submission with a reason', async () => {
@@ -167,7 +167,8 @@ describe('offline route behavior from reachability', () => {
         expect(await screen.findByDisplayValue(ADDRESS)).toBeInTheDocument();
         expectOneOfflineNotice();
         const send = screen.getByRole('button', { name: 'Send' });
-        expect(send).toBeDisabled();
+        // G130: enabled offline; the press brings the one offline notice into view.
+        expect(send).toBeEnabled();
         expect(send).toHaveAttribute('title', 'Sending needs a network connection');
         // The cached balance is read after the address list, so under load the
         // no-cache wording can still be on screen when the inputs first appear.
@@ -210,7 +211,8 @@ describe('offline route behavior from reachability', () => {
         expect(await screen.findByDisplayValue(ADDRESS)).toBeInTheDocument();
         expectOneOfflineNotice();
         const send = screen.getByRole('button', { name: 'Send' });
-        expect(send).toBeDisabled();
+        // G130: enabled offline; the press brings the one offline notice into view.
+        expect(send).toBeEnabled();
         expect(send).toHaveAttribute('title', 'Sending needs a network connection');
         expect(screen.getByText('Sending needs a network connection.')).toBeInTheDocument();
         expect(screen.queryByText(/cached balance remains available/i)).not.toBeInTheDocument();
@@ -245,7 +247,7 @@ describe('offline route behavior from reachability', () => {
 
         expect(await screen.findByDisplayValue(ADDRESS)).toBeInTheDocument();
         expectOneOfflineNotice();
-        expect(screen.getByRole('button', { name: 'Generate new address' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: /^Generate new address/ })).not.toHaveAttribute('aria-disabled');
     });
 
     it('shows one offline state for History and disables refresh with a reason', async () => {
@@ -278,7 +280,8 @@ describe('offline route behavior from reachability', () => {
         // offline state, and saved rows are held by the History offline cache spec.
         expect(await screen.findByText("You're offline")).toBeInTheDocument();
         expect(messaging.getAddressHistory).not.toHaveBeenCalled();
-        const refresh = screen.getByRole('button', { name: 'Refresh history' });
+        // Refresh sits in the title line's ⋯ menu.
+        const refresh = historyMenuItem('Refresh history');
         expect(refresh).toBeDisabled();
         expect(refresh).toHaveAttribute('title', 'Refreshing history needs a network connection');
     });
@@ -312,12 +315,14 @@ describe('offline route behavior from reachability', () => {
         const balance = await screen.findByRole('region', { name: /CACHE/ });
         expect(balance).toHaveTextContent('10');
         expectOneOfflineNotice();
-        const actions = within(screen.getByRole('group', { name: 'Actions for CACHE' }));
-        expect(actions.getByRole('button', { name: 'Send' })).toBeDisabled();
-        expect(actions.getByRole('button', { name: 'Exchange' })).toBeDisabled();
-        // The reason lines sit under the tile grid, not inside it.
-        expect(screen.getByText('Send needs a network connection.')).toBeInTheDocument();
-        expect(screen.getByText('Exchange needs a network connection.')).toBeInTheDocument();
+        const actions = within(screen.getByRole('list', { name: 'Actions for CACHE' }));
+        const send = actions.getByRole('button', { name: /^Send\b/ });
+        const exchange = actions.getByRole('button', { name: /^Exchange\b/ });
+        expect(send).toHaveAttribute('aria-disabled', 'true');
+        expect(exchange).toHaveAttribute('aria-disabled', 'true');
+        // Each locked row says why in place of its description.
+        expect(within(send).getByText('Send needs a network connection.')).toBeInTheDocument();
+        expect(within(exchange).getByText('Exchange needs a network connection.')).toBeInTheDocument();
     });
 
     it('keeps cached Markets rows and disables opening a market with a reason', async () => {

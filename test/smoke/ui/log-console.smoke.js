@@ -60,20 +60,31 @@ assert.ok(/logConsole\.subscribe/.test(compSrc),
 for (const level of ['log', 'info', 'warn', 'error']) {
     assert.ok(new RegExp(`'${level}'`).test(compSrc), `LogConsole filter chips include ${level}`);
 }
-assert.ok(/Clear log buffer/.test(compSrc),
+// The Clear label comes from the dictionary (components.logConsole.clearLogBuffer,
+// "Clear log buffer"), so the source carries the key, not the English text.
+assert.ok(/aria-label=(?:\{t\('components\.logConsole\.clearLogBuffer'\)\}|\{?["'`]Clear log buffer["'`]\}?)/.test(compSrc)
+    && /'components\.logConsole\.clearLogBuffer': 'Clear log buffer'/.test(read('packages/core/src/i18n/locales/en/components.js')),
     'LogConsole Clear button is aria-labelled');
-assert.ok(/Copy filtered log entries/.test(compSrc),
+// Copy takes every entry (the filters only change the view), labelled
+// "Copy all log entries" from the dictionary.
+assert.ok(/aria-label=(?:\{t\('components\.logConsole\.copyAllLogEntries'\)\}|\{?["'`]Copy all log entries["'`]\}?)/.test(compSrc),
     'LogConsole Copy button is aria-labelled');
 
-// 7. DeveloperModeSection mounts LogConsoleRow which renders LogConsole
-//    behind a Show / Hide toggle, gated on Developer Mode.
+// 7. DeveloperModeSection's LogConsoleRow is a drill-in row; the LogConsole
+//    mounts on its own page (DeveloperLogsPage), gated on Developer Mode,
+//    never behind a Show / Hide toggle (operator ruling 2026-11-13).
 assert.ok(/from '\.\.\/LogConsole\.jsx'/.test(sectionSrc),
     'DeveloperModeSection imports LogConsole');
-assert.ok(/<LogConsole \/>/.test(sectionSrc),
-    'DeveloperModeSection mounts the LogConsole panel');
-assert.ok(/LogConsoleRow/.test(sectionSrc),
-    'DeveloperModeSection wraps the panel in LogConsoleRow');
-assert.ok(/disabled=\{!developerMode\}/.test(sectionSrc),
-    'LogConsoleRow gates the Show/Hide button on Developer Mode');
+// The console (and its buffer attach) mounts only past the Developer Mode
+// check; its filters sit in the title-bar filter panel (operator walk
+// 2026-11-15), so the body holds only the note and the list.
+assert.ok(/export function DeveloperLogsPage\([\s\S]+?if \(!settings\?\.developerMode\)[\s\S]+?return <LiveLogsScreen/.test(sectionSrc),
+    'DeveloperLogsPage mounts the LogConsole panel only with Developer Mode on');
+assert.ok(/function LiveLogsScreen\([\s\S]+?useLogConsole\(\)[\s\S]+?<ListFilterMenu[\s\S]+?<LogConsoleControls state=\{state\} \/>[\s\S]+?<div id="settings-log-console"><LogConsole state=\{state\} \/><\/div>/.test(sectionSrc),
+    'the log filters live in the title-bar filter panel and the body holds the list');
+assert.ok(/function LogConsoleRow\(\{ onOpen \}\)[\s\S]+?<ListRow[\s\S]+?chevron/.test(sectionSrc),
+    'LogConsoleRow is a drill-in row');
+assert.ok(!/aria-controls="settings-log-console"/.test(sectionSrc),
+    'the console never expands in place');
 
 console.log('OK: logConsole singleton + LogConsole component + DeveloperModeSection wiring smoke');

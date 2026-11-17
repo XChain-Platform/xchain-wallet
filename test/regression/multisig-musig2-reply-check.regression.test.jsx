@@ -207,7 +207,7 @@ describe('MuSig2 step 1 replies are checked before they count', () => {
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         await screen.findByLabelText('Multisig signing progress');
-        fireEvent.click(screen.getByRole('button', { name: 'Import Cosigner Reply' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Import cosigner reply/ }));
         const reply = buildReplyEnvelope({
             kind: 'multisig-round-1-reply',
             fingerprint: fingerprintSessionRef(sessionRefOf(session)),
@@ -287,7 +287,7 @@ describe('MuSig2 step 2 partials are verified before they count', () => {
         const list = await screen.findByRole('list', { name: 'Multisig sessions' });
         fireEvent.click(within(list).getByRole('button'));
         await screen.findByLabelText('Multisig signing progress');
-        fireEvent.click(screen.getByRole('button', { name: 'Import Partial Signature' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Import partial signature/ }));
         const reply = buildReplyEnvelope({
             kind: 'multisig-round-2-reply',
             fingerprint: fingerprintSessionRef(sessionRefOf(session)),

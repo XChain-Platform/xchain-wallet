@@ -18,7 +18,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
+// The staking-unstake and staking-claim routes: the one Staking form on the network.
+import { NetworkPositionRoute as StakingActionForm } from '../../helpers/stakingFormRoutes.jsx';
 
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
 const ADDRESSES = {

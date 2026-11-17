@@ -8,14 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Regression suite: Home quick actions are the same four round buttons at
-// every width and for demo wallets.
+// Regression suite: Home has no Send / Receive / Exchange / More quick action
+// row at any width, for demo wallets either. The shared tile keeps its round
+// icon over label shape for the pages that still use it.
 //
-// The row contains Send, Receive, Exchange and More at every width,
-// including demo wallets. Each button stacks its round icon above its label.
-//
-// jsdom has no layout, so the button shape is pinned on the stylesheet and the
-// e2e layout sweep measures it in a browser.
+// jsdom has no layout, so the tile shape is pinned on the stylesheet.
 
 import React from 'react';
 import { readFileSync } from 'node:fs';
@@ -94,49 +91,36 @@ afterEach(() => {
     setWidth(1024);
 });
 
-async function quickActionNames() {
-    const row = await screen.findByRole('group', { name: 'Quick actions' });
-    return within(row).getAllByRole('button').map((button) => button.textContent.trim());
+async function expectNoHeroActionRow() {
+    await screen.findAllByRole('tablist');
+    expect(screen.queryByRole('group', { name: 'Quick actions' })).toBeNull();
+    for (const name of FOUR.concat(['More actions', 'Swap'])) {
+        expect(screen.queryByRole('button', { name })).toBeNull();
+    }
 }
 
-describe('Home quick action tiles', () => {
+describe('Home has no quick action tiles', () => {
     it.each([
         ['web', 360], ['web', 1280], ['web', 1440],
         ['desktop', 360], ['desktop', 1280], ['desktop', 1440],
         ['popup', 360],
-    ])('holds exactly Send, Receive, Exchange and More in the %s shell at %ipx', async (shell, width) => {
+    ])('holds no Send, Receive, Exchange or More button in the %s shell at %ipx', async (shell, width) => {
         setWidth(width);
         mountHome(handlers(), shell);
-        expect(await quickActionNames()).toEqual(FOUR);
-        expect(screen.queryByRole('button', { name: 'Swap' })).toBeNull();
+        await expectNoHeroActionRow();
     });
 
-    it.each([360, 1280, 1440])('holds the same four tiles for a demo wallet at %ipx', async (width) => {
+    it.each([360, 1280, 1440])('holds none for a demo wallet at %ipx', async (width) => {
         setWidth(width);
         markDemoWallet(WALLET.id);
         mountHome(handlers());
-        expect(await quickActionNames()).toEqual(FOUR);
+        await expectNoHeroActionRow();
     });
 
-    it('opens the actions menu from More', async () => {
-        setWidth(360);
-        const h = handlers();
-        mountHome(h, 'desktop');
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
-        within(row).getByRole('button', { name: 'More actions' }).click();
-        expect(h.onActions).toHaveBeenCalledTimes(1);
-        expect(screen.getAllByRole('button', { name: 'More actions' })).toHaveLength(1);
-    });
-
-    it('puts every tile icon before its label', async () => {
+    it('puts the balance tabs straight under the hero', async () => {
         mountHome(handlers());
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
-        for (const button of within(row).getAllByRole('button')) {
-            const [first, last] = [button.firstElementChild, button.lastElementChild];
-            expect(first).not.toBe(last);
-            expect(first.querySelector('svg')).not.toBeNull();
-            expect(last.textContent.trim()).not.toBe('');
-        }
+        const tabs = (await screen.findAllByRole('tablist'))[0];
+        expect(within(tabs.closest('main') || document.body).queryByRole('group', { name: 'Quick actions' })).toBeNull();
     });
 
     it('draws each button as a round 52px icon centred above its label with no outline or fill', () => {
@@ -154,6 +138,6 @@ describe('Home quick action tiles', () => {
         expect(ruleBody('.icon', tileCss)).toMatch(/border-radius:\s*50%/);
         expect(icon).toMatch(/width:\s*52px/);
         expect(icon).toMatch(/height:\s*52px/);
-        expect(ruleBody('.quickActions')).not.toMatch(/grid-auto-columns:\s*minmax\(0,\s*1fr\)/);
+        expect(ruleBody('.quickActions')).toBe('');
     });
 });

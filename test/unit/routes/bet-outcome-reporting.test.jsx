@@ -156,7 +156,12 @@ async function placeBet(utils) {
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(button(utils, /^Yes$/));
+        fireEvent.click(utils.getByRole('button', { name: /^Bet on Yes,/ }));
+        await drain();
+    });
+    // Bet opens the Place Bet step, where the stake is.
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: 'Bet' }));
         await drain();
     });
     await domAct(async () => {
@@ -187,8 +192,10 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
         await placeBet(utils);
 
         expect(calls.find((c) => c.method === 'placeBetAction')).toBeTruthy();
-        // The card the receipt used to live in is correctly gone.
-        expect(utils.container.textContent).not.toContain('Place a bet');
+        // The Place Bet step the receipt used to live in is correctly gone,
+        // and so is the Bet button of a market that no longer takes bets.
+        expect(utils.queryByRole('form', { name: 'Place Bet' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Bet' })).toBeNull();
         // The receipt is not.
         const receipt = utils.getByTestId('bet-result');
         expect(receipt.textContent).toContain('cafebabe');
@@ -273,7 +280,7 @@ describe('OracleConsole confirms the two actions that settle a market', () => {
         const { messaging } = harness();
         const utils = await openConsole(messaging);
 
-        await domAct(async () => { fireEvent.click(button(utils, /^Resolve$/)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /^Resolve/)); await drain(); });
         await domAct(async () => { fireEvent.click(button(utils, /^Yes$/)); await drain(); });
         await domAct(async () => { fireEvent.click(button(utils, /Publish Result/)); await drain(); });
         await domAct(async () => { fireEvent.click(utils.getByTestId('confirm-approve')); await drain(); });
@@ -292,7 +299,7 @@ describe('OracleConsole confirms the two actions that settle a market', () => {
         messaging.resolveMarketAction = () => Promise.resolve({ queued: true, broadcast: 'queued' });
         const utils = await openConsole(messaging);
 
-        await domAct(async () => { fireEvent.click(button(utils, /^Resolve$/)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /^Resolve/)); await drain(); });
         await domAct(async () => { fireEvent.click(button(utils, /^Yes$/)); await drain(); });
         await domAct(async () => { fireEvent.click(button(utils, /Publish Result/)); await drain(); });
         await domAct(async () => { fireEvent.click(utils.getByTestId('confirm-approve')); await drain(); });
@@ -308,7 +315,7 @@ describe('OracleConsole confirms the two actions that settle a market', () => {
         const { messaging } = harness();
         const utils = await openConsole(messaging);
 
-        await domAct(async () => { fireEvent.click(button(utils, /Cancel and Refund/)); await drain(); });
+        await domAct(async () => { fireEvent.click(button(utils, /^Cancel and refund/)); await drain(); });
         await domAct(async () => { fireEvent.click(button(utils, /Cancel Market/)); await drain(); });
         await domAct(async () => { fireEvent.click(utils.getByTestId('confirm-approve')); await drain(); });
 

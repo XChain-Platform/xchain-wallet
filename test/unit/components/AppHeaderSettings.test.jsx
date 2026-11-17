@@ -54,23 +54,21 @@ describe('AppHeader', () => {
         expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false');
     });
 
-    it('renders a disabled Lock control while locking', () => {
+    it('keeps Lock in the menu when a lock callback is supplied', () => {
         const onLock = vi.fn();
         render(<AppHeader onLock={onLock} locking />);
 
-        const lock = screen.getByRole('button', { name: 'Lock wallet' });
-        expect(lock).toBeDisabled();
-        fireEvent.click(lock);
+        expect(screen.queryByRole('button', { name: 'Lock wallet' })).toBeNull();
         expect(onLock).not.toHaveBeenCalled();
     });
 
-    it('shows the watch-only status without a wallet label', () => {
+    it('keeps watch-only status and the wallet label out of the app bar', () => {
         render(<AppHeader isWatcherMode activeWallet={{ id: 'watch-1', name: 'Cold watch' }} />);
-        expect(screen.getByRole('status', { name: 'Watch-only wallet' })).toBeTruthy();
+        expect(screen.queryByRole('status')).toBeNull();
         expect(screen.queryByText('Cold watch')).toBeNull();
     });
 
-    it('keeps Open in new window out of the header, which holds only the bell, Lock and the menu', () => {
+    it('keeps Open in new window out of the header, which holds only the bell and menu controls', () => {
         const onPopOut = vi.fn();
         render(<AppHeader onPopOut={onPopOut} />);
 
@@ -79,7 +77,7 @@ describe('AppHeader', () => {
         expect(screen.queryByRole('menu')).toBeNull();
     });
 
-    it('drops the header pop-out rules now that Open in new window is a wallet menu row', () => {
+    it('drops the legacy header pop-out rules', () => {
         expect(appHeaderCss).toMatch(/\.bar\s*\{[^}]*container:\s*app-header\s*\/\s*inline-size;/s);
         expect(appHeaderCss).not.toMatch(/\.popOut\b/);
     });

@@ -11,10 +11,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button, Icon, useReducedMotion } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
-// Ahead of this file's own sheet, so the shared button base loads first and
-// the control's rules follow it; a CSS-file composes would inline a second
-// copy of Button.module.css.
-import buttonStyles from '../../ui/Button.module.css';
 import styles from './OnboardingCarousel.module.css';
 
 /**
@@ -34,7 +30,7 @@ import styles from './OnboardingCarousel.module.css';
  * permanently the moment the user interacts (Next / a dot / an arrow key / Skip)
  * so it never fights a reader who has taken control.
  *
- * `onDone` fires for both "Get started" (finished) and "Skip": the caller
+ * `onDone` fires for both the last frame's "Next" (finished) and "Skip": the caller
  * only needs to know the explainer has been dismissed so it can persist
  * the seen-flag. The boolean argument (`completed`) lets a caller that
  * cares distinguish the two without forcing every caller to.
@@ -127,12 +123,6 @@ export function OnboardingCarousel({
         }
     }
 
-    const skipAction = (
-        <button type="button" className={`${buttonStyles.btn} ${buttonStyles.link} ${styles.skipBtn}`} onClick={handleSkip}>
-            {t('onboarding.carousel.skip')}
-        </button>
-    );
-
     const progressTabs = (
         <div
             className={styles.dots}
@@ -163,19 +153,34 @@ export function OnboardingCarousel({
         </div>
     );
 
-    // Only the forward action sits here: the screen has no header, so a
-    // reader steps back with the dots or ArrowLeft, never an in-page Back.
+    // Back and Next stay visually matched. The first Back keeps its grid cell,
+    // but is hidden from sight, assistive technology and keyboard focus.
     const navigation = (
         <>
-            {atLast ? (
-                <Button variant="success" onClick={handleFinish} icon={<Icon.CheckIcon />}>
-                    {t('onboarding.carousel.getStarted')}
-                </Button>
-            ) : (
-                <Button variant="success" onClick={() => goTo(index + 1)} icon={<Icon.ForwardIcon />}>
-                    {t('onboarding.carousel.next')}
-                </Button>
-            )}
+            <Button
+                variant="success"
+                block
+                className={index <= 0 ? styles.hiddenBack : undefined}
+                aria-hidden={index <= 0 ? 'true' : undefined}
+                tabIndex={index <= 0 ? -1 : undefined}
+                onClick={() => goTo(index - 1)}
+                icon={<Icon.BackIcon />}
+                iconPlacement="leading-edge"
+            >
+                {t('common.back')}
+            </Button>
+            <Button variant="primary" block onClick={handleSkip} icon={<Icon.XIcon />}>
+                {t('onboarding.carousel.skip')}
+            </Button>
+            <Button
+                variant="success"
+                block
+                onClick={atLast ? handleFinish : () => goTo(index + 1)}
+                icon={<Icon.ForwardIcon />}
+                iconPlacement="trailing-edge"
+            >
+                {t('onboarding.carousel.next')}
+            </Button>
         </>
     );
 
@@ -188,7 +193,6 @@ export function OnboardingCarousel({
                 data-reduced-motion="true"
             >
                 <div className={styles.column}>
-                    <div className={styles.skipRow}>{skipAction}</div>
                     <div className={styles.stack}>
                         {frames.map((frame, i) => {
                             const Heading = i === 0 ? 'h1' : 'h2';
@@ -201,7 +205,10 @@ export function OnboardingCarousel({
                             );
                         })}
                     </div>
-                    <div className={styles.actions}>
+                    <div className={styles.actionsRow}>
+                        <Button variant="primary" block onClick={handleSkip} icon={<Icon.XIcon />}>
+                            {t('onboarding.carousel.skip')}
+                        </Button>
                         <Button variant="success" block onClick={handleFinish} icon={<Icon.CheckIcon />}>
                             {t('onboarding.carousel.getStarted')}
                         </Button>
@@ -220,8 +227,6 @@ export function OnboardingCarousel({
             onKeyDown={handleCarouselKeyDown}
         >
             <div className={styles.column}>
-                <div className={styles.skipRow}>{skipAction}</div>
-
                 <div
                     className={styles.frameViewport}
                     aria-live="polite"

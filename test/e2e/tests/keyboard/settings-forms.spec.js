@@ -52,21 +52,23 @@ for (const size of SIZES) {
             await expect(row).toBeFocused();
         });
 
-        for (const [title, opener, field] of [
-            ['This wallet', 'Change…', 'Current wallet password'],
-            ['Backup', 'Show…', 'Wallet password'],
-            ['Backup', 'Test…', 'Recovery phrase to test'],
+        // These pages open straight on their form (no intro button, no
+        // Cancel); the row on the group page opens them and Back leaves.
+        for (const [title, rowName, field] of [
+            ['Security', 'Wallet password', 'Current wallet password'],
+            ['Backup and Recovery', 'Recovery phrase', 'Wallet password'],
+            ['Backup and Recovery', 'Test backup', 'Recovery phrase to test'],
         ]) {
-            test(`${title} ${opener} opens on its first field and Escape closes it back to the button`, async ({ page }) => {
+            test(`${title} ${rowName} opens on its first field and Escape returns to the group row`, async ({ page }) => {
                 await openSubpage(page, title);
-                const button = page.getByRole('main').getByRole('button', { name: opener }).first();
+                const button = page.getByRole('main').getByRole('button', { name: new RegExp(`^${rowName}\\b`) }).first();
                 await button.focus();
                 await page.keyboard.press('Enter');
                 // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
                 await expect(page.getByLabel(field, { exact: true }), 'focus is in the form').toBeFocused();
                 await page.keyboard.press('Escape');
-                await expect(page.getByRole('heading', { level: 1, name: title, exact: true }), 'the sub-page stays open').toBeVisible();
-                await expect(page.getByRole('main').getByRole('button', { name: opener }).first()).toBeFocused();
+                await expect(page.getByRole('heading', { level: 1, name: title, exact: true }), 'the group page is back').toBeVisible();
+                await expect(page.getByRole('main').getByRole('button', { name: new RegExp(`^${rowName}\\b`) }).first()).toBeFocused();
             });
         }
 

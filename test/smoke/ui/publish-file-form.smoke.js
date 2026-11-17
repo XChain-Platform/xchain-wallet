@@ -44,8 +44,8 @@ assert.match(form, /fileActionParams/,
 assert.match(form, /buildActionPsbtRequest/, 'watcher path builds an unsigned PSBT');
 assert.match(form, /ResultScreen/, 'watcher result surface rendered');
 assert.doesNotMatch(form, /ackForever/, 'no acknowledgement checkbox gates review');
-assert.match(form, /notice: t\('publishFile\.confirm\.notice'\)/,
-    'the confirm screen states the permanence');
+assert.match(form, /notice: `\$\{upload\.confirmLine\} \$\{t\('publishFile\.confirm\.notice'\)\}`/,
+    'the confirm screen names the upload method and states the permanence');
 assert.match(form, /t\('publishFile\.review\.permanent'\)/, 'watcher review keeps its permanence line');
 assert.match(form, /t\('publishFile\.metadataTooLarge'/,
     'review re-checks the ceiling after metadata edits');
@@ -59,20 +59,25 @@ const formCode = form.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).j
 assert.doesNotMatch(formCode, /GATE_MIN_AMOUNT|threshold/i,
     'PublishFileForm delegates the PC-29 threshold to GatedPublishForm');
 // The confirm lane carries the envelope's commit, reveal and recovery record, so
-// the public lane offers the envelope again. The cap and the compose must agree:
-// both keyed off the same envelopeAvailable, and AUTO sent with the signer's
-// tapscript capability asserted rather than assumed.
-assert.match(formCode, /maxPublicFileBytes\([\s\S]{0,120}envelopeAvailable \? \{ encoding: 'TAPROOT' \} : \{\}/,
-    'public publish cap is the envelope ceiling exactly when the envelope is offered');
-assert.match(formCode,
-    /envelopeAvailable\s*\?\s*\{ encoding: 'AUTO', options: flowsLib\.encoderSignerOptions\(fromAddress\) \}/,
-    'confirm-lane compose requests AUTO with the signer capability when the envelope is offered');
-assert.match(formCode, /!isWatcherMode\s*&&\s*flowsLib\.signerSupportsTapscript\(fromAddress\)\s*&&\s*descriptor\?\.addressTypes\?\.includes\('p2tr'\)/,
-    'envelope offered only to a tapscript-capable signer on a Taproot chain off the watch-only lane');
-assert.equal((formCode.match(/encoding: 'AUTO'/g) || []).length, 1,
-    'AUTO is requested on one lane only: the watch-only PSBT cannot carry a reveal');
-assert.doesNotMatch(formCode, /encoding:\s*'TAPROOT'\s*,/,
-    'the form never forces TAPROOT; AUTO chooses it from the payload and the signer');
+// the public lane offers the envelope as an Upload method the user picks. The
+// cap and the compose must agree: both follow the one picked method from the
+// shared hook, and AUTO is sent with the signer's tapscript capability asserted
+// rather than assumed (flows/uploadMethod.js).
+assert.match(formCode, /useUploadMethod\(\{[\s\S]{0,200}isWatcherMode,/,
+    'the upload method hears the wallet mode, so the watch-only lane never gets the envelope');
+assert.match(formCode, /maxPublicFileBytes\([\s\S]{0,120}upload\.ceilingOpts/,
+    'public publish cap is sized for the picked upload method');
+assert.match(formCode, /encoderOpts: \{[\s\S]{0,400}\.\.\.upload\.encoderOpts,/,
+    'confirm-lane compose sends the picked upload method request');
+assert.doesNotMatch(formCode, /encoding:\s*'(AUTO|TAPROOT)'/,
+    'the form never spells an encoding itself; the upload method helper owns the request');
+const uploadMethod = read('packages', 'core', 'src', 'flows', 'uploadMethod.js');
+assert.match(uploadMethod, /\{ encoding: 'AUTO', options: encoderSignerOptions\(fromAddress\) \}/,
+    'the Taproot method requests AUTO with the signer capability asserted');
+assert.match(uploadMethod, /if \(isWatcherMode\) return 'watcher';/,
+    'the envelope is refused on the watch-only lane, whose single PSBT cannot carry a reveal');
+assert.match(uploadMethod, /if \(!signerSupportsTapscript\(fromAddress\)\) return 'signer';/,
+    'the envelope is offered only to a tapscript-capable signer');
 
 // ---- Encoding-aware limits module --------------------------------------
 const limits = read('packages', 'core', 'src', 'flows', 'fileSizeLimits.js');

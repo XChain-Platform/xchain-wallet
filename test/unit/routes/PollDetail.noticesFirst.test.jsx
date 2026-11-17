@@ -9,12 +9,11 @@
 // contact legal@dankest.llc.
 
 // Every notice is the first item of the page content. The poll page drew the
-// ballot error, and in a demo wallet the demo note, above the voting form but
-// under the poll's terms and results, where a voter tapping Vote from the
-// bottom of the page never saw them.
+// ballot error above the voting form but under the poll's terms and results,
+// where a voter tapping Vote from the bottom of the page never saw it.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PollDetail } from '../../../packages/core/src/shared/routes/PollDetail.jsx';
@@ -63,35 +62,47 @@ afterEach(() => {
 
 describe('Poll page notices', () => {
     // The Form Standard puts a form's errors in one slot just above its
-    // action, so the ballot error sits right above the Vote button.
-    it('shows the ballot error in the status slot just above Vote', async () => {
+    // action. A choice row always opens Cast Vote with a choice made, so a
+    // ballot error can only come from Sign Vote, and it sits just above it.
+    it('shows the ballot error in the status slot just above Sign Vote', async () => {
         render(
             <MessagingProvider shell="web" messaging={messagingFor()}>
                 <PollDetail walletId="wallet-1" chainId={CHAIN} pollIndex={7} onBack={vi.fn()} />
             </MessagingProvider>,
         );
-        await screen.findByRole('checkbox', { name: '0: Stable' });
+        const stable = await screen.findByRole('button', { name: 'Vote for Stable' });
+        await waitFor(() => expect(stable).toBeEnabled());
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Vote' }));
+            fireEvent.click(stable);
+        });
+        const change = await screen.findByRole('button', { name: 'Change your choice' });
+        await act(async () => {
+            fireEvent.click(change);
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('checkbox', { name: '0: Stable' }));
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Sign Vote' }));
         });
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toContain('Choose at least one option');
         expect(alert.closest('[data-form-status]')).not.toBeNull();
-        expect(precedes(alert, screen.getByRole('button', { name: 'Vote' }))).toBe(true);
-        expect(precedes(screen.getByText('Choose a release channel'), alert)).toBe(true);
+        expect(precedes(alert, screen.getByRole('button', { name: 'Sign Vote' }))).toBe(true);
+        expect(precedes(alert, screen.getByText('Choose a release channel'))).toBe(true);
     });
 
-    it('shows the demo note once, before the poll terms, and keeps Vote disabled', async () => {
+    // A demo wallet gets no standing notice (ruling 2026-11-13); whether Vote
+    // refuses on press is PollDetail's own test.
+    it('shows no demo notice in a demo wallet', async () => {
         markDemoWallet('wallet-1');
         render(
             <MessagingProvider shell="web" messaging={messagingFor()}>
                 <PollDetail walletId="wallet-1" chainId={CHAIN} pollIndex={7} onBack={vi.fn()} />
             </MessagingProvider>,
         );
-        await screen.findByRole('checkbox', { name: '0: Stable' });
-        const notes = document.querySelectorAll('[data-variant]');
-        expect(notes.length).toBe(1);
-        expect(precedes(notes[0], screen.getByText('Choose a release channel'))).toBe(true);
-        expect(screen.getByRole('button', { name: 'Vote' })).toBeDisabled();
+        await screen.findByRole('button', { name: 'Vote for Stable' });
+        expect(document.querySelectorAll('[data-variant]')).toHaveLength(0);
+        expect(screen.queryByText(/Demo wallets can.t move funds/)).toBeNull();
     });
 });

@@ -30,13 +30,6 @@
     min-width: 0;
 }
 
-.heroTop {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
 .statusChip {
     display: inline-flex;
     align-items: center;
@@ -50,17 +43,6 @@
     font-weight: 700;
     line-height: 1.4;
 }
-
-.statusDot {
-    flex: 0 0 auto;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-}
-
-.statusDotOpen { background: var(--xc-brand-card-gain); }
-.statusDotClosed { background: #FFC94D; }
-.statusDotDone { background: rgba(255, 255, 255, 0.7); }
 
 .question {
     margin: 0;
@@ -102,11 +84,6 @@
     color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
     overflow-wrap: anywhere;
     min-width: 0;
-}
-
-.changePill.changePill {
-    align-self: center;
-    white-space: nowrap;
 }
 
 .legend {
@@ -153,29 +130,6 @@
     font-size: var(--xc-text-xs);
     color: rgba(255, 255, 255, 0.9);
     text-shadow: 0 1px 2px rgba(15, 23, 42, 0.45);
-}
-
-.heroChartSvg {
-    display: block;
-    width: 100%;
-    height: 100%;
-    overflow: visible;
-}
-
-/* The section tabs share the row evenly and never wrap a label; at the
-   narrowest widths the side padding gives way before the text does. */
-.sectionTabs.sectionTabs [role='tab'] {
-    flex: 1 1 0;
-    min-width: 0;
-    padding-inline: var(--xc-space-1);
-    white-space: nowrap;
-}
-
-@media not all and (min-width: 400px) {
-    .sectionTabs.sectionTabs [role='tab'] {
-        padding-inline: 2px;
-        font-size: var(--xc-text-xs);
-    }
 }
 
 .panel {
@@ -232,81 +186,7 @@
     overflow-wrap: anywhere;
 }
 
-/* Bet: the outcome segmented control, one segment per outcome. */
-.outcomeSegments {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0;
-    min-width: 0;
-    overflow: hidden;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-control-radius);
-}
-
-.outcomeSegment.outcomeSegment {
-    flex: 1 1 0;
-    min-width: 96px;
-    min-height: 52px;
-    height: auto;
-    padding: var(--xc-space-1) var(--xc-space-2);
-    border: 0;
-    border-inline-start: 1px solid var(--xc-border);
-    border-radius: 0;
-    --xc-button-hover-bg: var(--xc-bg-muted);
-    --xc-button-hover-border: transparent;
-    background: var(--xc-surface);
-    color: var(--xc-text);
-    white-space: normal;
-    text-align: center;
-}
-
-.outcomeSegment.outcomeSegment:first-child {
-    border-inline-start: 0;
-}
-
-.outcomeSegmentActive.outcomeSegmentActive,
-.outcomeSegmentActive.outcomeSegmentActive:hover {
-    --xc-button-hover-bg: var(--xc-accent-primary);
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
-}
-
-/* A selected Yes reads green and a selected No red. */
-.outcomeSegmentActive.outcomeYes,
-.outcomeSegmentActive.outcomeYes:hover {
-    --xc-button-hover-bg: var(--xc-success);
-    background: var(--xc-success);
-}
-
-.outcomeSegmentActive.outcomeNo,
-.outcomeSegmentActive.outcomeNo:hover {
-    --xc-button-hover-bg: var(--xc-danger);
-    background: var(--xc-danger);
-}
-
-.outcomeText {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    line-height: 1.2;
-    min-width: 0;
-}
-
-.outcomeName {
-    font-weight: 700;
-    overflow-wrap: anywhere;
-}
-
-.outcomeShare {
-    font-size: var(--xc-text-sm);
-    font-variant-numeric: tabular-nums;
-}
-
-.outcomeShare::after {
-    content: attr(data-share);
-}
-
+/* The outcome swatch drawn in the outcome dropdown's options. */
 .outcomeSwatch {
     display: inline-block;
     flex: 0 0 auto;
@@ -379,8 +259,14 @@
     color: var(--xc-success);
 }
 
-.placeButton.placeButton {
-    width: 100%;
+/* The held line under Bet and the "You bet" lines on Result. */
+/* The Bet tab: the outcome list, the line under it, the status slot and
+   what this wallet holds, 8px apart. */
+.betPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
 }
 
 .heldLine {
@@ -396,71 +282,4 @@
     --xc-icon-size: var(--xc-icon-sm);
     display: inline-flex;
     flex: 0 0 auto;
-}
-
-/* Activity and My Bets: one bet per row. */
-.betList {
-    composes: flush from '../../ui/Card.module.css';
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    list-style: none;
-}
-
-.betRow {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: var(--xc-space-2) var(--xc-card-pad);
-    border-top: 1px solid var(--xc-border-subtle, rgba(129, 139, 155, 0.35));
-    min-width: 0;
-}
-
-.betRow:first-child {
-    border-top: 0;
-}
-
-.betRowMain {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    font-weight: 600;
-    min-width: 0;
-}
-
-.betRowOutcome {
-    overflow-wrap: anywhere;
-    min-width: 0;
-}
-
-.betRowAmount {
-    flex: 0 0 auto;
-    font-variant-numeric: tabular-nums;
-}
-
-.betRowMeta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0 var(--xc-space-2);
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    min-width: 0;
-}
-
-.betRowSource {
-    min-width: 0;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.betRowRejected {
-    color: var(--xc-danger);
-}
-
-/* The split rows sit at the list's own gap, without the shared card's outer
-   margin opening wide bands between them. */
-.splitList > * {
-    margin: 0;
 }

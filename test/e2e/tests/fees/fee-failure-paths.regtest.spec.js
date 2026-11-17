@@ -120,8 +120,8 @@ async function submitIssue(page, tick, { nativeFee }) {
     await main.getByLabel('Ticker').fill(tick);
     await main.getByLabel('Max supply', { exact: true }).fill(SUPPLY);
 
-    // The fee switch sits in the Network fee section, closed until opened.
-    await openIssueSection(main, 'Network fee');
+    // The fee switch sits in the Fees section, closed until opened.
+    await openIssueSection(main, 'Speed and Fees');
     const toggle = feeToggle(main);
     await expect(toggle, 'Bitcoin does not offer the fee choice this spec is about')
         .toBeVisible({ timeout: 30_000 });
@@ -242,15 +242,14 @@ test.describe('§11.5 fee failure paths: the payer cannot afford the protocol fe
             await expect(page.getByTestId('confirm-modal'),
                 'the XCHAIN-lane compose never reached a confirm screen')
                 .toBeVisible({ timeout: 120_000 });
-            const panel = page.getByTestId('preflight-panel');
-            await expect(panel, 'the confirm screen ran no pre-flight at all')
+            const warning = page.getByTestId('confirm-status');
+            await expect(warning, 'the confirm screen ran no pre-flight at all')
                 .toBeVisible({ timeout: 120_000 });
-            await expect(panel,
+            await expect(warning,
                 'the dry run did not report a failure, so the confirm screen is asking about a '
                 + 'different transaction than the one that was built (the D-119 shape)')
-                .toHaveAttribute('data-verdict', 'fail', { timeout: 120_000 });
-            await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
-            await expect(panel,
+                .toHaveAttribute('data-state', 'fail', { timeout: 120_000 });
+            await expect(warning,
                 'the panel does not say WHY, so the user cannot tell a fee shortfall from any other refusal')
                 .toContainText(/insufficient funds \(FEE\)/);
 
@@ -261,9 +260,11 @@ test.describe('§11.5 fee failure paths: the payer cannot afford the protocol fe
             await expect(ack, 'there is no "Sign anyway" override next to the failing finding')
                 .toBeVisible();
             await expect(ack, 'the override is pre-acknowledged').not.toBeChecked();
-            await expect(page.getByTestId('confirm-approve'),
-                'Approve is live on an action the network says will fail')
-                .toBeDisabled();
+            // G130: Approve keeps its colour; a tap says why and sends nothing.
+            await page.getByTestId('confirm-approve').click();
+            await expect(page.getByTestId('confirm-blocked'),
+                'Approve went ahead on an action the network says will fail')
+                .toBeVisible();
 
             await page.getByTestId('confirm-reject').click();
             await expect(page.getByTestId('confirm-modal')).toBeHidden({ timeout: 30_000 });

@@ -19,10 +19,11 @@
 // place to the confirmed detail with SPV/LINK back".
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, act } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, act, fireEvent, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ActionDetail } from '../../../packages/core/src/shared/routes/ActionDetail.jsx';
+import { fact } from '../../helpers/detailFacts.js';
 
 const CHAIN = 'litecoin-regtest';
 const OURS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -103,14 +104,26 @@ async function advancePoll() {
     });
 }
 
+/**
+ * The step the page's status bar marks as current, read as its accessible
+ * text ("Confirmed, In Progress"); null once every step is complete. The bar
+ * alone says where a pending action is (operator ruling 2026-11-13).
+ */
+function currentStep() {
+    const bar = screen.getByRole('list', { name: 'Transaction Status' });
+    const step = within(bar).getAllByRole('listitem').find((li) => li.getAttribute('aria-current') === 'step');
+    return step ? step.textContent : null;
+}
+
+const PENDING_STEP = 'Confirmed, In Progress';
+
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('the standalone detail page upgrades in place when the action confirms', () => {
-    it('opens on the pending form and says the indexer has not validated it', async () => {
+    it('opens on the pending status with no pending notice text', async () => {
         mount(() => []);
-        await waitFor(() => expect(
-            screen.getByText(/not yet validated by the service/i),
-        ).toBeTruthy());
+        await waitFor(() => expect(currentStep()).toBe(PENDING_STEP));
+        expect(screen.queryByText(/not yet validated by the service/i)).toBeNull();
         // A pending action has no index, and the title must not invent one:
         // "#0" is a real action index on every chain.
         expect(screen.queryByText(/#0\b/)).toBeNull();
@@ -125,19 +138,18 @@ describe('the standalone detail page upgrades in place when the action confirms'
         let landed = false;
         const { messaging } = mount(() => (landed ? [confirmedRow()] : []));
         await waitFor(() => expect(messaging.getAddressHistory).toHaveBeenCalled());
-        expect(screen.getByText(/not yet validated by the service/i)).toBeTruthy();
+        expect(currentStep()).toBe(PENDING_STEP);
 
         landed = true;
         // The page re-looks on the same 20s beat as the list, so the clock has
         // to move for this to be a test of the product rather than of patience.
         await advancePoll();
-        await waitFor(() => {
-            expect(screen.queryByText(/not yet validated by the service/i)).toBeNull();
-        });
-        // The confirmed identity is now on screen: the block it landed in and
-        // the action index it was assigned.
-        expect(screen.getByText(/7,707/)).toBeTruthy();
-        expect(screen.getByText(/1,255/)).toBeTruthy();
+        await waitFor(() => expect(currentStep()).toBeNull());
+        // The confirmed identity is now on screen: the action index it was
+        // assigned in the title, and the block it landed in under Details.
+        expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Receive #1255$/);
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(fact('Block')).toHaveTextContent(/^7707$/);
     });
 
     it('matches the confirmed row case-insensitively', async () => {
@@ -146,39 +158,32 @@ describe('the standalone detail page upgrades in place when the action confirms'
         vi.useFakeTimers({ shouldAdvanceTime: true });
         let landed = false;
         mount(() => (landed ? [confirmedRow({ tx_hash: HASH.toUpperCase() })] : []));
-        await waitFor(() => expect(
-            screen.getByText(/not yet validated by the service/i),
-        ).toBeTruthy());
+        await waitFor(() => expect(currentStep()).toBe(PENDING_STEP));
         landed = true;
         await advancePoll();
-        await waitFor(() => {
-            expect(screen.queryByText(/not yet validated by the service/i)).toBeNull();
-        });
+        await waitFor(() => expect(currentStep()).toBeNull());
     });
 
     it('does NOT upgrade to a row the explorer carries without a block', async () => {
         // The explorer can list a transaction before it has a block. Swapping
         // to that would lose the pending detail and gain nothing.
         const { messaging } = mount(() => [confirmedRow({ block_index: 0, action_index: '1255' })]);
-        await waitFor(() => expect(
-            screen.getByText(/not yet validated by the service/i),
-        ).toBeTruthy());
+        await waitFor(() => expect(currentStep()).toBe(PENDING_STEP));
         await act(async () => { await messaging.getAddressHistory.mock.results[0].value; });
         // "Still pending" is not enough to prove no swap happened: a blockless
         // row renders as pending too. What only survives a NON-swap is the
         // pending METADATA, which a normalized explorer row does not carry, so
-        // the state-specific headline is the distinguishing evidence.
-        expect(screen.getByText(/Held by the network, waiting for a block/i)).toBeTruthy();
-        expect(screen.getByText(/not yet validated by the service/i)).toBeTruthy();
+        // the First seen fact under Details is the distinguishing evidence.
+        expect(currentStep()).toBe(PENDING_STEP);
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(fact('First seen')).toBeTruthy();
     });
 
     it('ignores an unrelated transaction on the same address', async () => {
         const { messaging } = mount(() => [confirmedRow({ tx_hash: 'ffffffffffffffffffffffffffffffff' })]);
-        await waitFor(() => expect(
-            screen.getByText(/not yet validated by the service/i),
-        ).toBeTruthy());
+        await waitFor(() => expect(currentStep()).toBe(PENDING_STEP));
         await act(async () => { await messaging.getAddressHistory.mock.results[0].value; });
-        expect(screen.getByText(/not yet validated by the service/i)).toBeTruthy();
+        expect(currentStep()).toBe(PENDING_STEP);
     });
 
     it('does not poll at all for an already-confirmed entry', async () => {
@@ -223,7 +228,7 @@ describe('the standalone detail page upgrades in place when the action confirms'
             ),
         );
         await waitFor(() => expect(messaging.getAddressHistory).toHaveBeenCalled());
-        expect(screen.getByText(/not yet validated by the service/i)).toBeTruthy();
+        expect(currentStep()).toBe(PENDING_STEP);
     });
 
     it('never polls the explorer for a demo wallet pending row (issue #82)', async () => {
@@ -233,9 +238,7 @@ describe('the standalone detail page upgrades in place when the action confirms'
         globalThis.localStorage.setItem('xc:demoWalletId', 'w1');
         try {
             const { messaging } = mount(() => []);
-            await waitFor(() => expect(
-                screen.getByText(/not yet validated by the service/i),
-            ).toBeTruthy());
+            await waitFor(() => expect(currentStep()).toBe(PENDING_STEP));
             await new Promise((r) => setTimeout(r, 150));
             expect(messaging.getAddressHistory).not.toHaveBeenCalled();
         } finally {

@@ -101,6 +101,7 @@ import {
     unlockButton, unlockedShell, unlockWallet,
 } from '../../fixtures/wallet.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
+import { restoreBackupFile } from '../../fixtures/backupRestore.js';
 // Imported for its CONSTANTS, not to rebuild the envelope: the checked-in file
 // is the fixture, and reading its secrets from the one place that wrote them
 // means the two can never drift.
@@ -207,9 +208,10 @@ async function reachHandshakeButton(page) {
  * passphrase and has never stored it. That is the legacy state, and restoring
  * this file is the only route a browser has to it.
  *
- * The three passwords are three different secrets. Two come from the envelope
- * (the file's own, and the one the exporting device used); the third is this
- * device's, chosen here, and it is the one every later unlock takes.
+ * The envelope carries two different secrets: the file's own, and the one the
+ * exporting device used. The tab asks for the file's first and the wallet's
+ * once the file has opened, and the restored wallet keeps the wallet's
+ * password on this device, so that is the one every later unlock takes.
  */
 async function restorePreSpecWallet(page) {
     const envelope = await readFile(ENVELOPE_PATH, 'utf8');
@@ -218,13 +220,12 @@ async function restorePreSpecWallet(page) {
     await page.getByRole('button', { name: 'Import wallet' }).click();
     await page.getByRole('tab', { name: 'Encrypted backup' }).click();
 
-    await page.getByPlaceholder('{"version":1').fill(envelope);
-    await page.getByLabel('Backup password', { exact: true })
-        .fill(PRE_SPEC_BACKUP_PASSWORD);
-    await page.getByLabel('Password of the wallet in this backup', { exact: true })
-        .fill(PRE_SPEC_WALLET_PASSWORD);
-    await page.getByLabel('Password for this device', { exact: true }).fill(PASSWORD);
-    await page.getByRole('button', { name: 'Restore', exact: true }).click();
+    await restoreBackupFile(page, {
+        content: envelope,
+        name: 'pre-spec.xchain-wallet',
+        backupPassword: PRE_SPEC_BACKUP_PASSWORD,
+        walletPassword: PRE_SPEC_WALLET_PASSWORD,
+    });
     // A restore ends on the donation notice; the shell waits behind Continue.
     await acknowledgeImportNotice(page);
 
@@ -273,7 +274,8 @@ test.describe('a failed message key-request says why', () => {
         await restorePreSpecWallet(page);
         // And the wallet's own offer to fix itself is declined, which is what
         // leaves it listed, unlocked and unpooled - the state under test.
-        await unlockDecliningCapture(page, PASSWORD);
+        // The restored wallet keeps its own password on this device.
+        await unlockDecliningCapture(page, PRE_SPEC_WALLET_PASSWORD);
 
         const main = await reachHandshakeButton(page);
 

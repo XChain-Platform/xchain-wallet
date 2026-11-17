@@ -17,6 +17,8 @@ import { TileLookFields, TILE_COLOURS } from '@xchain-wallet/core/shared/compone
 import { WalletIdentity } from '@xchain-wallet/core/shared/components/WalletIdentity.jsx';
 import { WalletModeField } from '@xchain-wallet/core/shared/components/WalletModeField.jsx';
 import { BodyParagraph, WarningCard, WarningLine } from '@xchain-wallet/core/shared/components/WarningCard.jsx';
+import { UploadMethodField, useUploadMethod } from '@xchain-wallet/core/shared/components/UploadMethodField.jsx';
+import { publicFileCompiledBytes } from '@xchain-wallet/core/flows/uploadMethod.js';
 import { Section, Guidance, Markup, LiveExample } from '../StyleGuidePage.jsx';
 import { SAMPLE_BALANCE_ROWS, SharedComponentExampleProvider } from './sharedComponentExamples.jsx';
 
@@ -59,6 +61,71 @@ export function FileFieldSection() {
                     <FileField label="Backup" optional fileName="wallet-backup.json" onClear={noop} />
                 </SharedComponentExampleProvider>
             </LiveExample>
+            <LiveExample label="Area: a screen whose first step is choosing one file (Restore Backup)">
+                <SharedComponentExampleProvider>
+                    <FileField
+                        variant="area"
+                        label="Choose your backup file"
+                        hint="or drop it here"
+                        inputLabel="Backup file"
+                        onFile={noop}
+                    />
+                </SharedComponentExampleProvider>
+            </LiveExample>
+        </Section>
+    );
+}
+
+// A 2 KB file on Bitcoin from a software key at the Normal rate, so both
+// options show a fee; the hardware example shows the disabled reason.
+const UPLOAD_EXAMPLE_FILE = { name: 'art.png', type: 'image/png', bytes: new Uint8Array(2048) };
+const UPLOAD_EXAMPLE_DESCRIPTOR = chainRegistry.get('bitcoin-mainnet');
+const UPLOAD_EXAMPLE_FEE = { unit: 'sat/vB', rateValue: 6 };
+const uploadExampleBytes = (file, meta) => publicFileCompiledBytes(
+    { name: file.name, type: file.type, ...meta }, file.bytes.length,
+);
+
+function UploadMethodExample({ source }) {
+    const upload = useUploadMethod({
+        descriptor: UPLOAD_EXAMPLE_DESCRIPTOR,
+        fromAddress: { id: `sg-${source}`, address: 'bc1qexample', source },
+        feeEstimate: UPLOAD_EXAMPLE_FEE,
+        coinTicker: 'BTC',
+        file: UPLOAD_EXAMPLE_FILE,
+        metadata: { title: '', memo: '' },
+        compiledBytesFor: uploadExampleBytes,
+        standardCap: 7792,
+    });
+    return <UploadMethodField upload={upload} />;
+}
+
+export function UploadMethodFieldSection() {
+    return (
+        <Section
+            id="upload-method-field"
+            title="Upload method field"
+            tag="CANONICAL · UploadMethodField"
+            kicker="How a file's bytes reach the chain: Taproot envelope (Cheapest, the default when it can be used) or Standard, each with its estimated network fee."
+        >
+            <Guidance
+                what={<>The themed dropdown (<code>IconSelect</code>, G119) with an icon per option. Each option's second line is its description, or its one-line reason when it cannot be used, then its fee for the current file and rate. <code>useUploadMethod</code> owns the pick, the ceiling options and the compose request, so a form cannot size its file for one method and compose with another.</>}
+                when={<>Every form that publishes a file: Publish file, Gated publish, Attach artwork.</>}
+                whenNot={<>Actions without a file payload: their encoding is not the user's choice.</>}
+                doRule={<>✓ Put it before the file field, whose ceiling follows the pick · name the method and its fee on the review</>}
+                dontRule={<>✗ Hide an option that cannot be used (disable it with its reason) · re-estimate on every keystroke</>}
+                supersedes={<>Source: <code>UploadMethodField.jsx</code> in <code>shared/components</code>.</>}
+            />
+            <Markup>
+{`const upload = useUploadMethod({ descriptor, fromAddress, isWatcherMode, feeEstimate, coinTicker,
+    file, metadata: { title, memo }, compiledBytesFor, standardCap });
+<UploadMethodField upload={upload} />`}
+            </Markup>
+            <LiveExample label="A software key on Bitcoin: Taproot envelope picked">
+                <UploadMethodExample source="hd" />
+            </LiveExample>
+            <LiveExample label="A hardware wallet: the envelope disabled with its reason">
+                <UploadMethodExample source="trezor" />
+            </LiveExample>
         </Section>
     );
 }
@@ -69,12 +136,12 @@ export function WarningCardSection() {
             id="warning-card"
             title="Warning card"
             tag="CANONICAL · WarningCard / WarningLine / BodyParagraph"
-            kicker="The wallet's one look for a security warning: a padded card of plain lines, with the lines that protect the user's money as red-edged callouts."
+            kicker="The wallet's one look for a security warning: a padded card of plain lines, with the lines that protect the user's money as red Notices (a light red tint, a thin red border, no edge bar)."
         >
             <Guidance
-                what={<><code>WarningCard</code> holds <code>WarningLine</code> rows; <code>critical</code> draws a line as a red-edged callout. <code>BodyParagraph</code> is the same start-aligned line at body size for an explanation page outside a card.</>}
+                what={<><code>WarningCard</code> holds <code>WarningLine</code> rows; <code>critical</code> draws a line as a danger <code>Notice</code> (a thin wrapper); on a screen of its own, render <code>{'<Notice tone="danger" role="note">'}</code> outside the card instead, never a notice inside a card. <code>BodyParagraph</code> is the same start-aligned line at body size for an explanation page outside a card.</>}
                 when={<>Recovery phrase, private key and license screens, and any page whose text protects the user's money.</>}
-                whenNot={<>A status after an action (StatusMessage) or a field error (FormNotice).</>}
+                whenNot={<>A status after an action (Notice) or a field error (the form's error map).</>}
                 doRule={<>✓ Keep each line one idea · mark only the money-protecting lines critical</>}
                 dontRule={<>✗ Centre the text · colour a whole card red</>}
                 supersedes={<>Source: <code>WarningCard.jsx</code> in <code>shared/components</code>.</>}
@@ -104,10 +171,10 @@ export function WalletModeFieldSection() {
             id="wallet-mode-field"
             title="Wallet mode field"
             tag="CANONICAL · WalletModeField"
-            kicker="The wallet-mode choice on the create and import forms: Normal, Watch-only or Air-gapped signer."
+            kicker="The wallet-mode names: Normal, Signs on another phone, or Signer for another phone. Create and import no longer offer the choice; only the two-phone pairing sets the other two."
         >
             <Guidance
-                what={<>A <code>RadioGroup</code> with an icon and a hint on each option, and a note that the choice is final. Wallet Details shows the mode read-only afterwards.</>}
+                what={<>The standard themed dropdown (<code>Select</code>, never radios: G119) with an icon and a one-line hint on each option, and a note that the choice is final. Wallet Details shows the mode read-only afterwards.</>}
                 when={<>Creating or importing a wallet.</>}
                 whenNot={<>Any screen after the wallet exists: the mode cannot change, so show it as text.</>}
                 doRule={<>✓ Pass <code>disabled</code> while the form is busy</>}

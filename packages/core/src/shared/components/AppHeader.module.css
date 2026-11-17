@@ -4,6 +4,10 @@
     /* The app bar keeps the touch size (44px buttons) at every width and pointer,
        so every shell, popup and desktop alike, has one bar height. */
     --xc-control-h-md: 44px;
+    /* G112 insets resolve on :root; a field in the bar re-derives them. */
+    --xc-field-icon-inset-md: calc((var(--xc-control-h-md) - var(--xc-control-icon-md)) / 2);
+    --xc-field-glyph-inset-md: calc((var(--xc-control-h-md) - var(--xc-icon-md)) / 2);
+    --xc-field-action-inset-md: calc((var(--xc-control-h-md) - var(--xc-tap-min)) / 2);
     container: app-header / inline-size;
     display: flex;
     align-items: center;
@@ -37,7 +41,7 @@
 .right {
     display: flex;
     align-items: center;
-    gap: var(--xc-space-1);
+    gap: var(--xc-space-2);
     flex: 0 0 auto;
     flex-wrap: nowrap;
 }
@@ -47,16 +51,6 @@
     height: var(--xc-control-h-md);
     border-radius: var(--xc-control-radius);
     --xc-icon-size: var(--xc-control-icon-md, var(--xc-icon-md));
-}
-
-.walletName {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--xc-text);
-    font-size: var(--xc-text-sm);
-    font-weight: 700;
 }
 
 /* Logo is 750×464 (≈1.617:1). Width-only sizing preserves aspect
@@ -83,16 +77,12 @@
 
 /* Phones keep the full 58px logo, the same size as the tablet and desktop bars. */
 
-/* The Notifications bell. Unread shows as a red count on the button's corner
-   and an accent edge, so something new is plain at a glance from any screen. */
+/* The Notifications bell. The button stays the normal header button; unread
+   shows only as a count bubble on its corner: blue when the unread items are
+   ordinary, red when one needs the user to act (operator ruling 2026-11-13). */
 .bellWrap {
     position: relative;
     display: inline-flex;
-}
-
-.bellUnread.bellUnread {
-    border-color: var(--xc-accent-primary);
-    color: var(--xc-accent-text);
 }
 
 .bellBadge {
@@ -105,11 +95,16 @@
     box-sizing: border-box;
     border: 2px solid var(--xc-surface);
     border-radius: var(--xc-radius-pill, 999px);
-    background: var(--xc-danger);
-    color: var(--xc-on-danger);
+    background: var(--xc-accent-primary);
+    color: var(--xc-on-accent);
     font-size: var(--xc-text-xs);
     font-weight: 700;
     line-height: var(--xc-icon-xs);
     text-align: center;
     pointer-events: none;
+}
+
+.bellBadge.bellBadgeAction {
+    background: var(--xc-danger);
+    color: var(--xc-on-danger);
 }

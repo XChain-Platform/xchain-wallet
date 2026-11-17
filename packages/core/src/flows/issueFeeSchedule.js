@@ -25,8 +25,7 @@
 // review composes and quotes for real, and an existing ticker (an update, which
 // is free) is answered by that live quote, not by this.
 
-const SCALE = 18n;
-const ONE = 10n ** SCALE;
+import { feeForGas, scheduleGas } from './scheduleFee.js';
 
 /**
  * @param {*} schedule  the feeschedule answer; anything else yields null
@@ -34,49 +33,8 @@ const ONE = 10n ** SCALE;
  * @returns {null | { xchainFee: string, requiredFeeSats?: number, scheduleEstimate: true }}
  */
 export function issueFeeFromSchedule(schedule, ticker) {
-    if (!schedule || typeof schedule !== 'object' || Array.isArray(schedule)) return null;
-    const gasTable = schedule.gasSchedule;
-    if (!gasTable || typeof gasTable !== 'object') return null;
     const key = String(ticker || '').includes('.') ? 'ISSUE_SUBTOKEN' : 'ISSUE';
-    const gas = toScaled(gasTable[key]);
-    const gasPrice = toScaled(schedule.gasPrice);
     // A schedule that cannot price ISSUE fails closed, as the indexer's own
     // static pricing does: no figure beats a figure from a half-read table.
-    if (gas === null || gasPrice === null) return null;
-
-    const fee = truncate((gas * gasPrice) / ONE, 8n);
-    const quote = { xchainFee: formatScaled(fee, 8), scheduleEstimate: true };
-
-    const prices = schedule.prices;
-    if (prices && prices.available === true) {
-        const xchainUsd = toScaled(prices.xchainUsd);
-        const coinUsd = toScaled(prices.coinUsd);
-        if (xchainUsd !== null && coinUsd !== null && coinUsd > 0n) {
-            const native = (fee * xchainUsd) / coinUsd; // 18 dp
-            const sats = (native * 100000000n + ONE / 2n) / ONE;
-            quote.requiredFeeSats = Number(sats);
-        }
-    }
-    return quote;
-}
-
-// A non-negative decimal (string or number) as an integer at 18 dp, or null.
-function toScaled(value) {
-    if (value === null || value === undefined) return null;
-    const text = String(value).trim();
-    const match = /^(\d+)(?:\.(\d+))?$/.exec(text);
-    if (!match) return null;
-    const frac = (match[2] || '').slice(0, Number(SCALE)).padEnd(Number(SCALE), '0');
-    return BigInt(match[1]) * ONE + BigInt(frac || '0');
-}
-
-function truncate(scaled, places) {
-    const step = 10n ** (SCALE - places);
-    return (scaled / step) * step;
-}
-
-function formatScaled(scaled, places) {
-    const whole = scaled / ONE;
-    const frac = (scaled % ONE).toString().padStart(Number(SCALE), '0').slice(0, places);
-    return `${whole}.${frac}`;
+    return feeForGas(schedule, scheduleGas(schedule, key));
 }

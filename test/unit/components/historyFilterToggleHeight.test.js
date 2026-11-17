@@ -14,6 +14,9 @@ describe('History toolbar', () => {
         expect(source).not.toContain('phoneFilterToggle}');
         expect(source).not.toContain('history.filters.toggle');
         expect(source).toContain('<ListFilterMenu');
-        expect(source).toContain('trailing={filterMenu}');
+        // The filter is the last of the title line's buttons (Refresh,
+        // Export, then the filter; G02, G95).
+        expect(source).toContain('{withFilter ? filterMenu : null}');
+        expect(source).toContain('trailing={headerTools(true)}');
     });
 });

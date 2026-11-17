@@ -1,0 +1,10 @@
+/* Two token icons as one pair badge: the second tucks under the first. */
+.pairIcons {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+}
+
+.pairIcons > :nth-child(2) {
+    margin-inline-start: calc(-1 * var(--xc-space-2));
+}

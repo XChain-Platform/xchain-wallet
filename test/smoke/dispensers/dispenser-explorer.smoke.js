@@ -51,6 +51,10 @@ assert.ok(existsSync(explorerPath), 'DispenserExplorer.jsx exists');
 
 const explorerSrc = readFileSync(explorerPath, 'utf8');
 const detailSrc = readFileSync(detailPath, 'utf8');
+const actionConfirmSrc = readFileSync(
+    join(core, 'src', 'shared', 'components', 'ActionConfirmScreen.jsx'),
+    'utf8',
+);
 
 // --- 1. Single-component export ---------------------------------------
 
@@ -80,7 +84,9 @@ assert.ok(
 );
 // Operator ruling: the chain filter stays, but its options name the chain
 // without the network kind.
-assert.ok(/<Select\b[\s\S]*?label="Network"/.test(explorerSrc) && /chainFilter/.test(explorerSrc),
+// The filter is the standard Network field and its full-screen list
+// (operator ruling 2026-11-13), never a Select of chains.
+assert.ok(/<NetworkField\b[\s\S]*?label="Network"/.test(explorerSrc) && /chainFilter/.test(explorerSrc),
     'explorer keeps a network filter');
 assert.ok(!/networkKind\}/.test(explorerSrc),
     'explorer renders no network-kind label');
@@ -167,8 +173,12 @@ assert.ok(
     // Copy reworded for plain language ("inherent risk of UTXO-chain buys" ->
     // "a normal risk when buying on these chains"). The WARNING is what matters:
     // pin the substance (payment reaches the creator, nothing is released).
-    /the payment reaches the creator but[\s\S]{0,40}?no \{giveTick\} is released/.test(detailSrc),
-    'token-paid review stage warns about UTXO-chain buy race',
+    /extraWarnings=\{\[[\s\S]{0,240}?the payment reaches the creator but no \$\{giveTick\} is released/.test(detailSrc),
+    'token-paid review sends the UTXO-chain buy race warning to Confirm Standard',
+);
+assert.ok(
+    /extraWarnings=\{extraWarnings\}/.test(actionConfirmSrc),
+    'ActionConfirmScreen forwards form safety warnings to its shared warning slot',
 );
 assert.ok(
     /ownerAddress/.test(detailSrc),

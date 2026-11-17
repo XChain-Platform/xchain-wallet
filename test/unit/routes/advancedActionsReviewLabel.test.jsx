@@ -18,6 +18,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { AdvancedActionsForm } from '../../../packages/core/src/shared/routes/AdvancedActionsForm.jsx';
+import { selectOption, selectOptionValues } from '../../helpers/selectOption.js';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 const BTC = 'bitcoin-mainnet';
@@ -56,9 +57,9 @@ async function openReview(actionCode) {
             <AdvancedActionsForm walletId="w" onBack={() => {}} />
         </MessagingProvider>,
     );
-    await waitFor(() => expect(document.querySelector(`option[value="${actionCode}"]`)).toBeTruthy());
-    const picker = document.querySelector(`option[value="${actionCode}"]`).closest('select');
-    fireEvent.change(picker, { target: { value: actionCode } });
+    const picker = await screen.findByRole('combobox', { name: 'Action' });
+    await waitFor(() => expect(selectOptionValues(picker)).toContain(actionCode));
+    selectOption(picker, actionCode);
     const submit = await screen.findByRole('button', { name: 'Sign Action' });
     fireEvent.click(submit);
 }
@@ -67,18 +68,22 @@ describe('AdvancedActionsForm review stage wording', () => {
     it('titles a watcher-mode EXECUTE review as a contract call', async () => {
         await openReview('EXECUTE');
 
-        expect(await screen.findByRole('heading', { name: 'Review Contract Call' })).toBeInTheDocument();
-        const submit = screen.getByRole('button', { name: 'Create Unsigned Transaction: Contract Call' });
+        expect(await screen.findByRole('heading', { name: 'Confirm' })).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Call');
+        const submit = screen.getByRole('button', { name: 'Approve' });
         expect(submit).toHaveClass(buttonStyles.success);
         expect(submit.querySelector('svg')).toBeTruthy();
-        expect(screen.getByText('Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+        expect(screen.queryByText(/Estimate unavailable/)).not.toBeInTheDocument();
+        expect(screen.getByText('Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.')).toBeInTheDocument();
         expect(screen.queryByText(/Review EXECUTE|: EXECUTE/)).not.toBeInTheDocument();
     });
 
     it('titles a watcher-mode XBRIDGE review as a bridge transfer', async () => {
         await openReview('XBRIDGE');
 
-        expect(await screen.findByRole('heading', { name: 'Review Bridge Transfer' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Create Unsigned Transaction: Bridge Transfer' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Confirm' })).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Bridge transfer');
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
     });
 });

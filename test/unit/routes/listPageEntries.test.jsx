@@ -33,7 +33,7 @@ function renderDetail(props) {
             <ListDetail chainId="bitcoin-mainnet" actionIndex="7" onBack={() => {}} onFork={() => {}} {...props} />
         </MessagingProvider>,
     );
-    return screen.findByText('Fork & Edit');
+    return screen.findByRole('button', { name: /^Fork\b/ });
 }
 
 function renderMyLists(props) {
@@ -45,50 +45,46 @@ function renderMyLists(props) {
 }
 
 describe('ListDetail entries', () => {
-    it('renders neither extra entry when no handler is passed', async () => {
+    it('renders neither extra action row when no handler is passed', async () => {
         await renderDetail({});
-        expect(screen.queryByText('Share List')).toBeNull();
-        expect(screen.queryByText('Transfer List')).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Share\b/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Transfer\b/ })).toBeNull();
     });
 
-    it('shows Share list only when onShare is passed and calls it with the list ref', async () => {
+    it('shows Share only when onShare is passed and calls it with the list ref', async () => {
         const onShare = vi.fn();
         await renderDetail({ onShare });
-        expect(screen.queryByText('Transfer List')).toBeNull();
-        fireEvent.click(screen.getByText('Share List'));
+        expect(screen.queryByRole('button', { name: /^Transfer\b/ })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^Share\b/ }));
         expect(onShare).toHaveBeenCalledWith({ chainId: 'bitcoin-mainnet', actionIndex: '7' });
     });
 
-    it('shows Transfer list only when onTransfer is passed and calls it with the list ref', async () => {
+    it('shows Transfer only when onTransfer is passed and calls it with the list ref', async () => {
         const onTransfer = vi.fn();
         await renderDetail({ onTransfer });
-        expect(screen.queryByText('Share List')).toBeNull();
-        fireEvent.click(screen.getByText('Transfer List'));
+        expect(screen.queryByRole('button', { name: /^Share\b/ })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^Transfer\b/ }));
         expect(onTransfer).toHaveBeenCalledWith({ chainId: 'bitcoin-mainnet', actionIndex: '7' });
     });
 });
 
 describe('MyLists entries', () => {
-    it('renders neither extra entry when no handler is passed', async () => {
-        renderMyLists({ onCreateList: () => {} });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Create List' })).toBeTruthy());
-        expect(screen.queryByText('Create Union List')).toBeNull();
-        expect(screen.queryByText('Shared Lists')).toBeNull();
+    // Operator 2026-11-13: the title bar plus is Create list, and there is no
+    // Create union list or Shared lists entry on the page (Shared with me is
+    // the filter's Show choice).
+    it('makes the title bar plus Create list and calls it on click', async () => {
+        const onCreateList = vi.fn();
+        renderMyLists({ onCreateList });
+        const plus = await screen.findByRole('button', { name: 'Create list' });
+        fireEvent.click(plus);
+        expect(onCreateList).toHaveBeenCalledTimes(1);
     });
 
-    it('shows Create union list only when passed and calls it on click', async () => {
-        const onCreateUnionList = vi.fn();
-        renderMyLists({ onCreateUnionList });
-        expect(screen.queryByText('Shared Lists')).toBeNull();
-        fireEvent.click(screen.getByText('Create Union List'));
-        expect(onCreateUnionList).toHaveBeenCalledTimes(1);
-    });
-
-    it('shows Shared lists only when passed and calls it on click', async () => {
-        const onOpenSharedLists = vi.fn();
-        renderMyLists({ onOpenSharedLists });
+    it('renders no Create union list or Shared lists entry even when the shell passes them', async () => {
+        renderMyLists({ onCreateList: () => {}, onCreateUnionList: vi.fn(), onOpenSharedLists: vi.fn() });
+        await screen.findByRole('button', { name: 'Create list' });
         expect(screen.queryByText('Create Union List')).toBeNull();
-        fireEvent.click(screen.getByText('Shared Lists'));
-        expect(onOpenSharedLists).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText('Shared Lists')).toBeNull();
+        expect(screen.queryByRole('menu')).toBeNull();
     });
 });

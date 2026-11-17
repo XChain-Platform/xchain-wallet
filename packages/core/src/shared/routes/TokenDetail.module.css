@@ -7,6 +7,46 @@
     line-height: 1.2;
 }
 
+/* Manage Token is an administrative surface, so it identifies the token in
+   the standard outline card without carrying the browse page's balance hero. */
+.manageIdentityCard {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    min-width: 0;
+}
+
+.manageIdentityIcon {
+    --xc-avatar-size-list: 48px;
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.manageIdentityText {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.manageIdentityTicker,
+.manageIdentityName {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.manageIdentityTicker {
+    color: var(--xc-text);
+    font-size: var(--xc-text-lg);
+    font-weight: 800;
+}
+
+.manageIdentityName {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
 /* ───── Asset balance card - Home's balance card (TotalBalanceHero in
    HomeTabs' heroStack, PortfolioChart behind it) ───── */
 
@@ -108,44 +148,52 @@
     visibility: hidden;
 }
 
-/* ───── Quick actions ───── */
-
-.quickActionReason {
-    margin: 0;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-    font-weight: 500;
-    line-height: 1.2;
-    text-align: center;
-}
-
 .tabPanel {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
     min-height: 0;
+    /* The panel adds no inset of its own, so its first block (the Details
+       card) sits exactly the page column's 8px gap under the tab row. */
+    margin: 0;
+    padding: 0;
+}
+
+/* The Details tab's facts sit in the standard card (operator ruling
+   2026-11-15, G14): one rounded card, one fact per row, 8px under the tab
+   row. The card's own inset is the row edge (.detailRow padding-inline: 0). */
+.detailsCard {
+    composes: card from '../../ui/Card.module.css';
+    margin: 0;
+}
+
+/* The issuer's lock states in the Details card: an icon and the state word. */
+.ownerLocked,
+.ownerEditable {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--xc-space-1);
+    font-weight: 600;
+}
+
+.ownerLocked {
+    color: var(--xc-warning-text);
+}
+
+.ownerEditable {
+    color: var(--xc-success);
+}
+
+.ownerLocked svg,
+.ownerEditable svg {
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
 }
 
 /* Native-coin layout - no tabs, just stacked sections. Each section
    has its own muted title heading so the user can visually parse the
    structure as they scroll. */
-
-.infoCard {
-    composes: card from '../../ui/Card.module.css';
-}
-
-.priceAlertCard {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: var(--xc-space-2);
-    min-height: 54px;
-    box-sizing: border-box;
-}
-
-.priceAlertCard > button {
-    align-self: flex-start;
-}
 
 .descriptionValue {
     max-width: 100%;
@@ -344,54 +392,6 @@
     gap: var(--xc-space-3);
 }
 
-/* Pill-style strip that sits inside the Media tab to switch between
-   Image / Video / Audio. Distinct from the page-level `.tabs` so
-   nested tabs read as a secondary level. Bordered + the active pill
-   gets a solid accent fill so it's unmistakable which media type
-   the user is currently viewing. */
-.subtabs {
-    display: flex;
-    width: 100%;
-    gap: 2px;
-    background: var(--xc-bg-muted);
-    border: 1px solid var(--xc-border-strong);
-    border-radius: 999px;
-    padding: 2px;
-}
-
-.subtab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    padding: var(--xc-space-1) var(--xc-space-3);
-    border-radius: 999px;
-    cursor: pointer;
-    transition: background-color var(--xc-transition), color var(--xc-transition);
-    font-family: inherit;
-    flex: 1 1 0;
-    text-align: center;
-    /* State the WCAG 2.2 AA 2.5.8 pointer-target floor instead of
-       inheriting it from whichever line box the platform font produces. */
-    min-height: var(--xc-tap-min);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.subtab:hover { color: var(--xc-text); }
-.subtab:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-.subtabActive,
-.subtabActive:hover {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
-}
 
 .heroImageLink {
     display: flex;
@@ -589,9 +589,12 @@
     unicode-bidi: isolate;
 }
 
+/* A row of its cell's full width, not shrink-to-content, so the address
+   beside its copy icon fits the real room and shows whole when it can (G99). */
 .copyableValue,
 .holdersAddrWrap {
-    display: inline-flex;
+    display: flex;
+    width: 100%;
     align-items: center;
     flex-wrap: wrap;
     gap: var(--xc-space-2);
@@ -660,12 +663,6 @@
     font-size: var(--xc-text-sm);
 }
 
-.error {
-    margin: 0;
-    color: var(--xc-danger-fg);
-    font-size: var(--xc-text-sm);
-}
-
 .supplyChart {
     display: block;
     width: 100%;
@@ -701,47 +698,18 @@
     white-space: nowrap;
 }
 
-/* The Actions tab. Square rounded tiles in a grid that fills the
-   width: three or four across on a phone, more on a desktop. */
+/* The Actions tab: the action list (G101), then the issuer's heading and
+   list, 8px apart. */
 .assetActions {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
 }
 
-/* Tiles sit 8px apart and are 80px tall in every window. A phone row of four
-   spans the full width, so each tile is a quarter of the row. 600px and
-   wider keep 80px squares, as many per row as fit, from the left. */
-.assetActionGrid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--xc-space-2);
-}
-
-/* The square tile draws itself 1:1 (QuickActionTile .square); here the
-   height is fixed and only the width follows the column. Five classes to
-   outrank that tripled rule whichever sheet loads last. */
-.assetActionGrid.assetActionGrid.assetActionGrid.assetActionGrid.assetActionGrid > * {
-    aspect-ratio: auto;
-    block-size: 80px;
-}
-
-@media (min-width: 600px) {
-    .assetActionGrid {
-        grid-template-columns: repeat(auto-fill, 80px);
-    }
-}
-
 .assetActionOwner {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
-}
-
-.assetActionReasons {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
 }
 
 /* 8px from the tab line to the panel, and 8px between the panel's

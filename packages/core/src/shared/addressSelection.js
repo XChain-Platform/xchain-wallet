@@ -17,7 +17,7 @@
 // address. Owner-gated actions (mint, dividend, transfer-ownership, etc.) do
 // NOT use these: they must source from the token's owner address instead.
 
-export const WATCH_ONLY_SIGNING_MESSAGE = 'This watch-only account cannot sign.';
+export const WATCH_ONLY_SIGNING_MESSAGE = 'This address has no key in this wallet, so it cannot sign.';
 
 /**
  * Remove addresses that cannot authorize a transaction or message.

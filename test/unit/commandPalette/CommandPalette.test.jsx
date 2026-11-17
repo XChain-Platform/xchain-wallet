@@ -16,6 +16,7 @@ import {
     act, render, screen, fireEvent, cleanup,
 } from '@testing-library/react';
 import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
+import styles from '../../../packages/core/src/shared/commandPalette/CommandPalette.module.css';
 import { buildCommands } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
 import { useCommandPalette } from '../../../packages/core/src/shared/commandPalette/useCommandPalette.js';
 
@@ -96,11 +97,12 @@ describe('CommandPalette', () => {
 
     it('renders a modal dialog with all commands when open', () => {
         render(<CommandPalette open onClose={() => {}} commands={makeCommands()} />);
-        expect(screen.getByRole('dialog', { name: 'Wallet menu' })).toHaveAttribute('aria-modal', 'true');
+        expect(screen.getByRole('dialog', { name: 'Command Palette' })).toHaveAttribute('aria-modal', 'true');
         expect(getInput()).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByRole('option', { name: /Home/ })).toBeTruthy();
         expect(screen.getByRole('option', { name: /Send/ })).toBeTruthy();
         expect(screen.getByRole('option', { name: /Settings/ })).toBeTruthy();
+        expect(screen.getAllByRole('option').every((row) => row.querySelector(`.${styles.rowChevron}`))).toBe(true);
     });
 
     it('pre-selects the first result (§33.2)', () => {

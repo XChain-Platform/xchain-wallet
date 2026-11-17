@@ -58,7 +58,7 @@ describe('co-signer account screens', () => {
         );
 
         await screen.findByText('Build agent');
-        fireEvent.click(screen.getByRole('button', { name: 'Turn Off' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Turn off/ }));
 
         const dialog = screen.getByRole('dialog', { name: 'Turn off this agent account?' });
         expect(within(dialog).getByText(/revokes the agent's signing access/i)).toBeTruthy();
@@ -112,7 +112,7 @@ describe('co-signer account screens', () => {
         });
 
         // Create stays pressable; the refusal shows on the press and nothing is provisioned.
-        fireEvent.click(screen.getByRole('button', { name: 'Create agent account' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Agent Account' }));
         expect((await screen.findAllByText(/starting with 02 or 03/i)).length).toBeGreaterThan(0);
         expect(screen.getByLabelText('Agent public key')).toHaveAttribute('aria-invalid', 'true');
         expect(screen.queryByRole('heading', { name: 'Review Agent Account' })).toBeNull();

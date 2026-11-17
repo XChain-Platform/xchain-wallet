@@ -40,4 +40,5 @@ export {
     toLedgerCreatePayment,
     addressTypeFromPath,
     composeBitcoinCompactSignature,
+    LEDGER_NETWORK_SUPPORT,
 } from './ledgerFormat.js';

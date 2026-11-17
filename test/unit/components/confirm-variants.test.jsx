@@ -165,8 +165,8 @@ describe('request provenance across the shared confirmation adapters', () => {
     });
 });
 
-describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', () => {
-    it('enumerates every input and output, marking own vs external and which key signs', () => {
+describe('§5.5 PsbtIntentPanel: shared confirmation intent', () => {
+    it('foregrounds the decoded action without rebuilding a second raw transaction review', () => {
         const utils = render(React.createElement(PsbtIntentPanel, {
             decomposed: DECOMPOSED,
             ownAddresses: new Set([OWN]),
@@ -175,18 +175,13 @@ describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', ()
         }));
         const text = utils.container.textContent;
 
-        // Every input and output is accounted for, not just totals.
-        expect(text).toContain('Inputs (2)');
-        expect(text).toContain('Outputs (3)');
-        expect(text).toContain('Signs with your key');
-        expect(text).toContain('Other signer');
-        expect(text).toContain('Recipient');
-        expect(text).toContain('Change (back to you)');
-        // A non-address output is named, never silently dropped.
-        expect(text).toContain('(data / non-address output)');
+        expect(text).toBe('Carries an XChain Send action');
+        expect(utils.getByTestId('psbt-action-intent')).toBeTruthy();
+        expect(text).not.toContain('Inputs');
+        expect(text).not.toContain('Outputs');
     });
 
-    it('computes the fee from inputs minus outputs and states what leaves the wallet', () => {
+    it('does not duplicate fee and outgoing totals already owned by shared confirmation', () => {
         const utils = render(React.createElement(PsbtIntentPanel, {
             decomposed: DECOMPOSED,
             ownAddresses: new Set([OWN]),
@@ -194,13 +189,12 @@ describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', ()
             decodedAction: { summary: 'x' },
         }));
         const text = utils.container.textContent;
-        // 150,000 in - 145,000 out = 5,000 fee. Only the external output (and
-        // the valueless data output) count as leaving; change does not.
-        expect(text).toContain('5,000 sats');
-        expect(text).toContain('120,000 sats');
+        expect(text).toBe('x');
+        expect(text).not.toContain('5,000 sats');
+        expect(text).not.toContain('120,000 sats');
     });
 
-    it('reports an unavailable fee instead of guessing when an input value is missing', () => {
+    it('does not infer an unavailable fee from incomplete raw inputs', () => {
         const utils = render(React.createElement(PsbtIntentPanel, {
             decomposed: {
                 inputs: [{ address: OWN }],
@@ -210,8 +204,9 @@ describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', ()
             decodedAction: { summary: 'x' },
         }));
         const text = utils.container.textContent;
-        expect(text).toContain('amount unknown');
-        expect(text).toContain('unavailable');
+        expect(text).toBe('x');
+        expect(text).not.toContain('amount unknown');
+        expect(text).not.toContain('unavailable');
     });
 
     it('fails LOUD when the action data is present but cannot be read', () => {
@@ -227,13 +222,10 @@ describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', ()
         // collapsed technical details beside the alert, not inside it.
         expect(alert.textContent).not.toContain('P2SH_P2WSH_UNSUPPORTED');
         expect(alert.textContent).toContain('cannot read yet');
-        expect(alert.textContent).toContain('Verify the amounts and destinations');
         const details = utils.getByTestId('psbt-action-undecoded-details');
         expect(details.textContent).toContain('P2SH_P2WSH_UNSUPPORTED');
         expect(alert.contains(details)).toBe(false);
-        // The output set is still enumerated: an unreadable action is exactly
-        // when the user most needs to see where the coins go.
-        expect(utils.container.textContent).toContain('Outputs (3)');
+        expect(utils.container.textContent).not.toContain('Outputs (3)');
     });
 
     it('keeps exception text and unmapped codes out of the alert sentence', () => {
@@ -250,7 +242,7 @@ describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', ()
             const alert = utils.getByTestId('psbt-action-undecoded');
             expect(alert.getAttribute('role')).toBe('alert');
             expect(messageText(alert)).toMatch(
-                /^The XChain action inside this transaction could not be read\. Verify/,
+                /^The XChain action inside this transaction could not be read\.$/,
             );
             expect(alert.textContent).not.toContain(decodeError);
             expect(utils.getByTestId('psbt-action-undecoded-details').textContent).toContain(decodeError);
@@ -273,7 +265,7 @@ describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', ()
         expect(describeUnreadableReason(null)).toBe(null);
     });
 
-    it('states an ordinary payment plainly instead of crying wolf', () => {
+    it('leaves an ordinary payment to the shared native-send presentation', () => {
         // NO_OP_RETURN means there is no XChain action at all. Alerting here
         // would train the user to click through the warnings that DO matter.
         const utils = render(React.createElement(PsbtIntentPanel, {
@@ -283,7 +275,8 @@ describe('§5.5 PsbtIntentPanel: the output set is the foregrounded content', ()
             decodeError: 'NO_OP_RETURN',
         }));
         expect(utils.queryByTestId('psbt-action-undecoded')).toBe(null);
-        expect(utils.getByTestId('psbt-action-none').textContent).toMatch(/ordinary payment/i);
+        expect(utils.queryByTestId('psbt-action-none')).toBe(null);
+        expect(utils.container.textContent).toBe('');
         expect(utils.container.querySelectorAll('[role="alert"]').length).toBe(0);
     });
 
@@ -393,9 +386,10 @@ describe('§5.2.5 exact fee beats the caller estimate', () => {
     it('renders the PSBT fee, converted from sats, with the chain ticker', () => {
         const utils = render(React.createElement(ActionConfirmScreen, {
             ...screenProps({ networkFeeSats: 5900, chainId: 'bitcoin-mainnet' }),
-            feeText: 'Network fee: 0.00042 BTC (estimate)',
+            feeEstimate: { coinAmount: '0.00042' },
         }));
-        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.000059 BTC');
+        expect(utils.getByTestId('confirm-fee-network').textContent).toBe('0.000059 BTC');
+        expect(utils.getByTestId('confirm-fee-network').closest('[data-testid="confirm-facts"]')).not.toBeNull();
         // The estimate must not also appear; two fee numbers is worse than one.
         expect(utils.container.textContent).not.toContain('0.00042');
     });
@@ -403,17 +397,18 @@ describe('§5.2.5 exact fee beats the caller estimate', () => {
     it('falls back to the caller estimate when the exact fee is unknowable', () => {
         const utils = render(React.createElement(ActionConfirmScreen, {
             ...screenProps({ networkFeeSats: null, chainId: 'bitcoin-mainnet' }),
-            feeText: 'Network fee: 0.00042 BTC',
+            feeEstimate: { coinAmount: '0.00042' },
         }));
-        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.00042 BTC (estimate)');
+        expect(utils.getByTestId('confirm-fee-network').textContent).toBe('0.00042 BTC');
+        expect(utils.getByTestId('confirm-facts').querySelector('[data-testid="confirm-fee-network"]')).not.toBeNull();
     });
 
-    it('does not label the caller fee as an estimate twice', () => {
+    it('shows the caller fee once, as the network fee row', () => {
         const utils = render(React.createElement(ActionConfirmScreen, {
             ...screenProps({ networkFeeSats: null, chainId: 'bitcoin-mainnet' }),
-            feeText: 'Network fee: 0.00042 BTC (estimate)',
+            feeEstimate: { coinAmount: '0.00042' },
         }));
-        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 0.00042 BTC (estimate)');
+        expect(utils.container.textContent.match(/0\.00042 BTC/g)).toHaveLength(1);
     });
 
     // §1.1 / §5.2.2: the intent states what was COMPOSED. The caller's
@@ -449,7 +444,7 @@ describe('§5.2.5 exact fee beats the caller estimate', () => {
         const utils = render(React.createElement(ActionConfirmScreen, {
             ...screenProps({ networkFeeSats: 100000000, chainId: 'dogecoin-mainnet' }),
         }));
-        expect(utils.getByTestId('confirm-fee').textContent).toBe('Network fee: 1 DOGE');
+        expect(utils.getByTestId('confirm-fee-network').textContent).toBe('1 DOGE');
     });
 
     it('discloses when sub-dust change is included in the exact fee', () => {
@@ -460,10 +455,9 @@ describe('§5.2.5 exact fee beats the caller estimate', () => {
                 chainId: 'bitcoin-mainnet',
             }),
         }));
-        expect(utils.getByTestId('confirm-fee').textContent).toContain('Network fee: 0.00001 BTC');
+        expect(utils.getByTestId('confirm-fee-network').textContent).toBe('0.00001 BTC');
         expect(utils.getByTestId('confirm-dust-change').textContent).toBe(
-            'No change output was created. Any remainder below 0.00000546 BTC '
-            + 'is included in the network fee shown above.',
+            'None, under 0.00000546 BTC goes to the fee',
         );
     });
 });
@@ -552,9 +546,9 @@ describe('§5.5 ConfirmActionModal: PSBT variant', () => {
             password=""
             onPasswordChange={() => {}}
         />);
-        // The header carries the headline; the footer verb stays the bare Approve.
+        // The sentence says it in plain words; the footer verb stays the bare Approve.
         expect(utils.getByTestId('confirm-modal')).toHaveAttribute('aria-label', 'Confirm Sign transaction');
-        expect(utils.getByTestId('confirm-action-label')).toHaveTextContent(/^Sign transaction$/);
+        expect(utils.getByTestId('confirm-sentence')).toHaveTextContent(/^Sign this transaction$/);
         expect(utils.getByTestId('confirm-approve')).toHaveTextContent(/^Approve$/);
         expect(utils.getByRole('button', { name: 'Approve' })).toBeTruthy();
         expect(utils.queryByRole('button', { name: 'Sign transaction' })).toBeNull();
@@ -572,7 +566,7 @@ describe('§5.5 ConfirmActionModal: PSBT variant', () => {
         expect(utils.getByTestId('confirm-approve').disabled).toBe(false);
     });
 
-    it('a refusal blocks Approve, hides the credentials, and cannot be clicked through', () => {
+    it('a refusal holds Approve, hides the credentials, and cannot be clicked through', () => {
         const onApprove = vi.fn();
         const utils = render(React.createElement(ConfirmActionModal, modalProps({
             variant: 'psbt',
@@ -584,10 +578,13 @@ describe('§5.5 ConfirmActionModal: PSBT variant', () => {
         expect(refusal.getAttribute('role')).toBe('alert');
         // No credentials block at all: there is nothing to sign with.
         expect(utils.queryByTestId('creds')).toBe(null);
+        // G130: Approve keeps its colour; the tap repeats the refusal at the
+        // top of the page and signs nothing.
         const approve = utils.getByTestId('confirm-approve');
-        expect(approve.disabled).toBe(true);
+        expect(approve.disabled).toBe(false);
         fireEvent.click(approve);
         expect(onApprove).not.toHaveBeenCalled();
+        expect(utils.getByTestId('confirm-blocked').textContent).toBe('The wallet will not sign what it cannot show you.');
         // Reject stays reachable: a refusal must never trap the user.
         expect(utils.getByTestId('confirm-reject').disabled).toBe(false);
     });
@@ -604,6 +601,7 @@ describe('§5.5 ConfirmActionModal: message variant', () => {
         })));
         // Verbatim: newlines and leading whitespace survive (pre-wrap), because
         // the signature covers these exact bytes.
+        expect(utils.getByTestId('confirm-message-text').tagName).toBe('P');
         expect(utils.getByTestId('confirm-message-text').textContent).toBe(MESSAGE);
         expect(utils.getByLabelText('Message to sign')).toBeTruthy();
         // No pre-flight panel (no chain state to check, nothing to broadcast)
@@ -620,9 +618,12 @@ describe('§5.5 ConfirmActionModal: message variant', () => {
             messageText: 'hi',
             sourceAddress: OWN,
         })));
-        const row = utils.getByTestId('confirm-source');
-        expect(row.textContent).toContain('Signing address');
-        expect(row.textContent).toContain(OWN);
+        const row = utils.getByTestId('confirm-address');
+        expect(row.previousElementSibling.textContent).toBe('Address');
+        expect(row.closest('[data-testid="confirm-facts"]')).not.toBeNull();
+        // Whole where it fits, cut in the middle where it does not; the
+        // title always carries all of it (jsdom measures nothing).
+        expect(row.querySelector('[title]')?.getAttribute('title')).toBe(OWN);
     });
 
     it('keeps the headline when there is no decoded action to draw one from', () => {

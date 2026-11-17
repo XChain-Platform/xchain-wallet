@@ -20,25 +20,16 @@
     position: absolute;
 }
 
+/* The rows, mark, chevron and dividers come from the token list's sheet
+   (BalanceList.module.css); this only resets the list element. */
 .list {
-    composes: flush from './Card.module.css';
     width: 100%;
     margin: 0;
     list-style: none;
 }
 
-.icon {
-    width: var(--xc-icon-lg);
-    height: var(--xc-icon-lg);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    border-radius: 50%;
-}
-
-.icon img {
-    display: block;
-    width: 100%;
-    height: 100%;
+/* The All networks mark: the token list's 40px muted tile holding the filter
+   glyph at the row icon size. */
+.allMark {
+    --xc-icon-size: var(--xc-icon-lg);
 }

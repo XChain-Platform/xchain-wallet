@@ -54,10 +54,23 @@ assert.match(sendSrc, /markTested\b/, 'markTested setter');
 // --- gate computation --------------------------------------------------
 
 assert.match(sendSrc, /testSendGate = useMemo/, 'gate is memoized');
+// The threshold is an amount in the display currency (operator ruling
+// 2026-11-14), converted with the coin's price at check time; no price, no gate.
 assert.match(
     sendSrc,
+    /resolveTestSendFiat\(settings\)/,
+    'gate reads the grace.testSendThresholdFiat threshold',
+);
+assert.match(
+    sendSrc,
+    /fiatToCoin\(testSendThresholdFiat, amountFiatRate, nativeDecimalsFor\(desc\)\)/,
+    'threshold converted to the chain units with the amount price',
+);
+assert.match(sendSrc, /if \(!amountFiatRate\) return null;/, 'no price skips the suggestion');
+assert.doesNotMatch(
+    sendSrc,
     /settings\?\.grace\?\.testSendThresholdSats/,
-    'gate reads the grace.testSendThresholdSats threshold',
+    'the legacy sats threshold is no longer read',
 );
 assert.match(
     sendSrc,
@@ -108,8 +121,11 @@ assert.match(
     /const testSendGateBanner = testSendGate \? \(/,
     'banner is a shared const, not inlined in one render branch',
 );
-const formRender = sendSrc.slice(sendSrc.indexOf('id="send-form"'));
-assert.ok(formRender.length > 0, 'compose form found');
+// The compose form is the standard FormFrame, keyed by SEND_FORM_ID.
+assert.match(sendSrc, /const SEND_FORM_ID = 'send-form';/, 'compose form id constant');
+const formIdx = sendSrc.search(/<FormFrame\s+id=\{SEND_FORM_ID\}/);
+assert.ok(formIdx !== -1, 'compose form found');
+const formRender = sendSrc.slice(formIdx);
 // The banner is one of the compose form's status notices, so it leads the page
 // content above the form card.
 assert.match(
@@ -122,9 +138,12 @@ assert.match(
     /<FormAction\b[\s\S]{0,200}disabled=\{(?:isDemo \|\| )?networkOffline \|\| !!testSendGate \|\| maxUnavailable \|\| !!amountBalanceError\}/,
     'compose-form Send button disabled while offline, gated, Max is unavailable, or the amount exceeds the known balance',
 );
+// Under the form error standard (2026-11-15) the gate is one more entry of
+// the press's error map, added when the payment is otherwise valid, and the
+// failed validate returns before the confirm path.
 assert.match(
     sendSrc,
-    /if \(testSendGate\) \{[\s\S]{0,400}return;/,
+    /if \(testSendGate\b[^{]{0,80}\{\s*problems\['form:testSend'\][\s\S]{0,300}if \(!form\.validate\(problems\)[^;]{0,40}\) return;/,
     'handleReview refuses to open the confirm path while the gate is up',
 );
 assert.match(sendSrc, /t\('send\.testGate\.sendSmall'\)/, 'small-test button copy');

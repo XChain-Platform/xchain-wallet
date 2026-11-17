@@ -23,9 +23,12 @@
 // host-side via the SDK, previews it, and signs the BATCH through the
 // generic advancedAction path (action='BATCH', params={ COMMAND }), so
 // software, hardware, and watcher signers all work exactly as they do for
-// any other action. The page groups actions by transaction: each card is
-// one BATCH on its own network from its own From address, and several cards
-// are signed one after another as separate transactions.
+// any other action. The Actions section lists the transactions as flat,
+// collapsible rows (operator layout 1, "Nested sections"): each one is a
+// BATCH on its own network from its own From address, its actions fold open
+// in place to their editors, and several are signed one after another as
+// separate transactions. There is no page-level From section; each
+// transaction carries its own.
 //
 // FILE is excluded from the picker: a FILE sub-action needs the tx's single
 // rawData payload, which the dedicated file / gated publishers own (the two
@@ -38,8 +41,11 @@
 // targets power users comfortable typing action params by hand.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-// Network and From come from the standard FromSection.
-import { AddressText, Button, ChainBadge, FeeSelector, FieldNote, FormPage, Icon, ListPage, ListRow, PageHeader, Screen, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+// Each transaction's Network and From is one row that opens the own-address picker.
+import { AddressText, Button, ChainBadge, FieldNote, FormPage, Icon, ListPage, ListRow, PageHeader, Screen, Select, StatusMessage, Textarea, useFormErrors } from '@xchain-wallet/core/ui';
+import { useSettings } from '../hooks/useSettings.js';
+import { useFeeFiat } from '../hooks/useFeeFiat.js';
+import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import { FeesCard } from '../components/FeesCard.jsx';
 import { registry as registryLib, flows as flowsLib, decoder as decoderLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -49,6 +55,7 @@ import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { actionOptionIcon, actionSelectOptions } from '../utils/actionOptionIcon.jsx';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import {
     estimateNativeSendFee,
@@ -72,31 +79,23 @@ import { TokenListIcon } from '../../ui/icons/index.jsx';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/batch.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/send.js';
 // The compose stage sits on the Wallet Form Standard frame.
 import {
     FeeSection,
     FormAction,
     FormFrame,
     FormSection as StandardSection,
-    FromSection,
     joinSummary,
-    summaryAddress,
+    summaryLineWithAddress,
     useFormSections,
 } from '../components/formStandard/index.js';
 import batchStyles from './BatchComposerForm.module.css';
-import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
+// Review facts as label-left value-right rows, never stacked uppercase labels.
+import facts from './FactRows.module.css';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
 
 const chainRegistry = registryLib.defaultRegistry();
-
-// The protocol fee joins the Network fee row's summary, as the
-// standard asks of forms with a protocol fee. Nothing while it is unknown.
-// BATCH never pays it in the native coin (no pay-in-native switch).
-function protocolFeeSummary(quote, pending) {
-    if (pending) return undefined;
-    const fee = normalizeProtocolFee(quote);
-    if (!fee.known || fee.free) return undefined;
-    return fee.amount ? `${fee.amount} XCHAIN protocol fee` : undefined;
-}
 
 // Actions this generic composer cannot queue: nested BATCH (the protocol
 // forbids it outright) and FILE (needs the tx's one rawData payload; the
@@ -127,14 +126,52 @@ function blankRow() {
     return { id: newRowId(), action: '', paramsJson: '{\n  "VERSION": "0"\n}' };
 }
 
-// The page holds one card per transaction. The first card always signs on
-// the page's Network and From (the defaults); every later card carries its
-// own network and From address, picked when it is added.
+// One entry per transaction, each with its own network and From address.
+// The first transaction's network and From are the page's: the Speed and
+// Fees section and the Advanced section follow them.
 let nextTxId = 0;
 const newTxId = () => `btx-${++nextTxId}`;
 
 function blankTx(extra = {}) {
     return { id: newTxId(), chainId: null, fromAddressId: null, rows: [blankRow()], ...extra };
+}
+
+/**
+ * A transaction's estimated network fee at the picked speed, over the word
+ * "fee": fiat when the coin has a price ("~$1.12"), the coin amount when not
+ * (testnets, no price data).
+ */
+function TxFeeFigure({ chainId, estimate, ticker, settings }) {
+    // The form reads settings once and hands them to every row, so the reads
+    // never grow with the transaction count; prices come from the shared
+    // price cache.
+    const descriptor = chainId ? chainRegistry.get(chainId) : null;
+    const coinAmount = estimate?.coinAmount;
+    const fiat = useFeeFiat({
+        chainId,
+        chainCoin: descriptor?.coin,
+        nativeTicker: protocolCoinTickerFor(descriptor),
+        settings,
+        active: Boolean(coinAmount),
+    });
+    if (!coinAmount) return null;
+    const text = fiat.formatNativeFee(coinAmount) || `~${coinAmount} ${ticker}`.trim();
+    return (
+        <span className={batchStyles.txFee} data-batch-tx-fee="">
+            <span className={batchStyles.txFeeAmount}>{text}</span>
+            <span className={batchStyles.txFeeLabel}>{t('batch.feeWord')}</span>
+        </span>
+    );
+}
+
+/**
+ * Draws nothing. The form has no page-level From section, so this stands in
+ * FormFrame's `from` slot only to hand the first transaction's network and
+ * From address to the Advanced section (coin control, change address), which
+ * reads them from that slot's props.
+ */
+function BatchSourceFrame() {
+    return null;
 }
 
 /**
@@ -152,7 +189,7 @@ function rowSentence(row, params) {
         .join(' ');
     const destination = p.DESTINATION ?? p.ADDRESS;
     const subtitle = typeof destination === 'string' && destination.trim()
-        ? t('batch.rowTo', { address: summaryAddress(destination.trim()) })
+        ? summaryLineWithAddress(t, 'send.summary.toAddress', 'address', destination.trim())
         : (p.SUPPLY !== undefined && p.SUPPLY !== null && String(p.SUPPLY).trim()
             ? t('batch.rowSupply', { supply: String(p.SUPPLY) })
             : '');
@@ -240,43 +277,46 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const signerReady = useSignerReady(walletId);
     const { isWatcherMode } = useWalletMode();
     const variant = screenVariantFor(shell);
+    // Read once for every transaction row's fee figure.
+    const { settings } = useSettings();
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
     );
-    // getActiveAddresses()[chainId]; `{}` when the host has none.
-    const [activeByChain, setActiveByChain] = useState(
-        /** @type {Record<string, any>} */ ({}),
-    );
     const [actionsList, setActionsList] = useState(/** @type {string[]} */ ([]));
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
 
-    const [chainId, setChainId] = useState(/** @type {string | null} */ (null));
-    const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
-    const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
-    // One entry per transaction card; the first one's network and From are
-    // the page's own (chainId / fromAddressId above).
+    // One entry per transaction, each holding its own network and From. The
+    // first one's are the page's (chainId / fromAddressId below), so removing
+    // transaction 1 hands the page to the one that moves up.
     const [txs, setTxs] = useState(() => [blankTx()]);
-    // The own-address picker for a later card ({ txId }) or for the card
-    // "Add another network" is about to create ({ txId: null }), with the
+    const chainId = txs[0]?.chainId ?? null;
+    const fromAddressId = txs[0]?.fromAddressId ?? null;
+    // The own-address picker for a transaction ({ txId }) or for the one
+    // "Add transaction" is about to create ({ txId: null }), with the
     // network the picker currently shows.
     const [cardPicker, setCardPicker] = useState(/** @type {{ txId: string | null, chainId: string | null } | null} */ (null));
     // The picker's network as of the latest switch: a pick can follow a
     // network switch in the same event, before the state update lands.
     const cardPickerChainRef = useRef(/** @type {string | null} */ (null));
-    // Rows whose editor the user folded back into its sentence.
+    // Actions and transactions the user folded closed. Everything opens by
+    // default, so a new transaction or action opens expanded.
     const [closedRows, setClosedRows] = useState(/** @type {Record<string, boolean>} */ ({}));
+    const [closedTxs, setClosedTxs] = useState(/** @type {Record<string, boolean>} */ ({}));
     // Which transaction the confirm page is signing, and the per-transaction
     // results once signing ends.
     const [signingIndex, setSigningIndex] = useState(0);
     const signingRef = useRef(false);
     // The standard sections' open state, held above the early returns so it
-    // survives the From picker and the review stage. Each Create Batch attempt
-    // bumps the counter so a section holding an error reopens.
-    const formSections = useFormSections({ from: false, actions: true, fee: false });
+    // survives the From picker and the review stage. Each Review attempt
+    // bumps the counter so a section, transaction or action holding an error
+    // reopens.
+    const formSections = useFormSections({ actions: true, fee: false });
     const [reviewAttempt, setReviewAttempt] = useState(0);
 
     const [stage, setStage] = useState(/** @type {'compose'|'review'|'submitting'|'done'} */ ('compose'));
+    const composeFormErrors = useFormErrors();
+    const signFormErrors = useFormErrors();
     // One composed BATCH per transaction card, in card order.
     const [composed, setComposed] = useState(/** @type {Array<{txId:string,chainId:string,from:any,command:string,subStrings:string[],sendTotals:any[]}>|null} */ (null));
     const [draftCommand, setDraftCommand] = useState(/** @type {{key:string,command:string}|null} */ (null));
@@ -287,6 +327,8 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     // with no action picked yet only says so after one of those.
     const [touchedRows, setTouchedRows] = useState(/** @type {Record<string, boolean>} */ ({}));
     const [preReviewError, setPreReviewError] = useState(/** @type {string | null} */ (null));
+    // The transaction a pre-review refusal (a balance check) names, so it opens.
+    const [preReviewTxId, setPreReviewTxId] = useState(/** @type {string | null} */ (null));
     const [validatingRows, setValidatingRows] = useState(false);
     const [password, setPassword] = useState('');
     const [hwStatus, setHwStatus] = useState('idle');
@@ -313,7 +355,6 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         ]).then(([byChain, actions, active]) => {
             if (cancelled) return;
             setAddressesByChain(byChain || {});
-            setActiveByChain(active || {});
             const raw = (Array.isArray(actions) && actions.length > 0) ? actions : FALLBACK_ACTIONS;
             setActionsList(raw.filter((a) => !EXCLUDED_ACTIONS.has(String(a).toUpperCase())
                 && isActionOfferedInBuild(a, { hasDexSurface })));
@@ -324,8 +365,12 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 setLoadError('No addresses on any network yet. Use Receive to generate one before composing a batch.');
                 return;
             }
-            setChainId(chains[0]);
-            setFromAddressId(pickDefaultAddressId(byChain[chains[0]] || [], active?.[chains[0]]));
+            // Transaction 1 opens on the first network with an address, from
+            // that network's default From.
+            const defaultFrom = pickDefaultAddressId(byChain[chains[0]] || [], active?.[chains[0]]);
+            setTxs((list) => list.map((tx, i) => (i === 0
+                ? { ...tx, chainId: chains[0], fromAddressId: defaultFrom }
+                : tx)));
         }).catch((err) => {
             if (!cancelled) setLoadError(userFacingMessage(err, 'Failed to load wallet.'));
         });
@@ -372,22 +417,18 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    // Each card with its resolved network, From record and parsed rows. The
-    // first card signs on the page's Network and From.
-    const txList = useMemo(() => txs.map((tx, i) => {
-        const txChainId = i === 0 ? chainId : tx.chainId;
-        const txFromId = i === 0 ? fromAddressId : tx.fromAddressId;
-        const from = txChainId && txFromId && addressesByChain
-            ? (addressesByChain[txChainId] || []).find((a) => a.id === txFromId) || null
+    // Each transaction with its resolved From record and parsed rows, signed
+    // on its own network and From.
+    const txList = useMemo(() => txs.map((tx) => {
+        const from = tx.chainId && tx.fromAddressId && addressesByChain
+            ? (addressesByChain[tx.chainId] || []).find((a) => a.id === tx.fromAddressId) || null
             : null;
         return {
             ...tx,
-            chainId: txChainId,
-            fromAddressId: txFromId,
             from,
             parsed: tx.rows.map((r) => ({ row: r, ...parseRowParams(r.paramsJson) })),
         };
-    }), [txs, chainId, fromAddressId, addressesByChain]);
+    }), [txs, addressesByChain]);
     const multiTx = txList.length > 1;
     const allRows = useMemo(() => txList.flatMap((tx) => tx.rows), [txList]);
 
@@ -417,25 +458,31 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     // With several cards, a page-level message names its transaction.
     const inTx = (index, message) => (multiTx && message ? `${t('batch.transactionNumber', { number: index + 1 })}: ${message}` : message);
 
-    const constraintError = useMemo(() => {
+    // The first batch-wide refusal and the transaction it belongs to, so that
+    // transaction can open itself.
+    const constraintFault = useMemo(() => {
         if (Object.values(rowErrors).some(Boolean)) return null;
         for (let i = 0; i < txList.length; i += 1) {
             // Params stay attached because ISSUE constraints distinguish a
             // parent ticker from its child tickers.
             const subActions = txList[i].parsed.map((pr) => ({ action: pr.row.action, params: pr.params }));
             const constraintErrors = flowsLib.validateBatchConstraints(subActions);
-            if (constraintErrors.length > 0) return inTx(i, constraintErrors[0]);
+            if (constraintErrors.length > 0) return { message: inTx(i, constraintErrors[0]), txId: txList[i].id };
         }
-        // Two cards on one network and From would be one transaction.
+        // Two transactions may share a network from different From
+        // addresses; one network and one From would be one transaction.
         const seen = new Map();
         for (let i = 0; i < txList.length; i += 1) {
-            if (!txList[i].from) return t('batch.pickFrom', { number: i + 1 });
+            if (!txList[i].from) return { message: t('batch.pickFrom', { number: i + 1 }), txId: txList[i].id };
             const key = `${txList[i].chainId}|${txList[i].fromAddressId}`;
-            if (seen.has(key)) return t('batch.duplicate', { number: i + 1, first: seen.get(key) + 1 });
+            if (seen.has(key)) {
+                return { message: t('batch.duplicate', { number: i + 1, first: seen.get(key) + 1 }), txId: txList[i].id };
+            }
             seen.set(key, i);
         }
         return null;
     }, [txList, rowErrors, multiTx]);
+    const constraintError = constraintFault?.message ?? null;
 
     const composeError = useMemo(() => {
         for (let i = 0; i < txList.length; i += 1) {
@@ -452,6 +499,27 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         rowErrors[row.id] && (row.action || touchedRows[row.id]) ? rowErrors[row.id] : null
     );
     const anyShownRowError = allRows.some((row) => Boolean(shownRowError(row)));
+
+    // A transaction or action holding an error opens itself: when the error
+    // first shows (a Review press, a refusal from the async checks) and again
+    // on every Review press, so a folded one never hides why Review is off.
+    const errorRowIds = allRows.filter((row) => shownRowError(row)).map((row) => row.id);
+    const errorTxIds = txList
+        .filter((tx) => tx.rows.some((row) => shownRowError(row))
+            || tx.id === constraintFault?.txId
+            || (preReviewError && tx.id === preReviewTxId))
+        .map((tx) => tx.id);
+    const revealKey = `${reviewAttempt}|${errorRowIds.join(',')}|${errorTxIds.join(',')}`;
+    useEffect(() => {
+        const reopen = (ids) => (closed) => (ids.some((id) => closed[id])
+            ? Object.fromEntries(Object.entries(closed).filter(([id]) => !ids.includes(id)))
+            : closed);
+        if (errorRowIds.length > 0) setClosedRows(reopen(errorRowIds));
+        if (errorTxIds.length > 0) setClosedTxs(reopen(errorTxIds));
+        // Only a new error set or a new Review press reopens; the id arrays
+        // are rebuilt every render and are read through the key.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [revealKey]);
 
     const draftKey = JSON.stringify({ chainId, fromAddressId, txs });
     const draftKeyRef = useRef(draftKey);
@@ -485,6 +553,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
 
     const clearPreReviewErrors = (rowId = null) => {
         setPreReviewError(null);
+        setPreReviewTxId(null);
         if (rowId) {
             setRowValidationErrors((errors) => {
                 if (!errors[rowId]) return errors;
@@ -493,12 +562,6 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 return next;
             });
         }
-    };
-    const handleChainChange = (cid) => {
-        clearPreReviewErrors();
-        setRowValidationErrors({});
-        setChainId(cid);
-        setFromAddressId(pickDefaultAddressId(addressesByChain[cid] || [], activeByChain[cid]));
     };
     const updateTx = (txId, update) => setTxs((list) => list.map((tx) => (tx.id === txId ? update(tx) : tx)));
     const updateRow = (txId, rowId, patch) => {
@@ -512,19 +575,33 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             ? tx
             : { ...tx, rows: [...tx.rows, blankRow()] }));
     };
-    // Removing the last action of a later card removes that card; the first
-    // card always keeps one action.
+    // Removing a transaction's last action removes the transaction while
+    // another one remains; the page always keeps one transaction with one
+    // action (Remove action is not offered there).
     const removeRow = (txId, rowId) => {
         clearPreReviewErrors(rowId);
-        setTxs((list) => list.flatMap((tx, i) => {
+        setTxs((list) => list.flatMap((tx) => {
             if (tx.id !== txId) return [tx];
             const rest = tx.rows.filter((r) => r.id !== rowId);
             if (rest.length > 0) return [{ ...tx, rows: rest }];
-            return i === 0 ? [tx] : [];
+            return list.length > 1 ? [] : [tx];
         }));
     };
+    // Removing the only transaction leaves a blank one on the same network
+    // and From; removing transaction 1 hands the page's network and From to
+    // the one that moves up.
+    const removeTx = (txId) => {
+        clearPreReviewErrors();
+        setRowValidationErrors({});
+        setTxs((list) => (list.length > 1
+            ? list.filter((tx) => tx.id !== txId)
+            : list.map((tx) => blankTx({ chainId: tx.chainId, fromAddressId: tx.fromAddressId }))));
+    };
     const toggleRow = (rowId) => setClosedRows((closed) => ({ ...closed, [rowId]: !closed[rowId] }));
-    // "Add another network" proposes the first network no card uses yet.
+    const toggleTx = (txId) => setClosedTxs((closed) => ({ ...closed, [txId]: !closed[txId] }));
+    // Add transaction proposes the first network no transaction uses yet, and
+    // the picker can stay on any network: a second From on one network is a
+    // second transaction.
     const openNewCardPicker = () => {
         const used = new Set(txList.map((tx) => tx.chainId));
         openCardPicker(null, chainsWithAddresses.find((cid) => !used.has(cid)) || chainId);
@@ -552,10 +629,24 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
 
     const txSendTotals = useMemo(() => txList.map((tx) => sendTotalsFor(tx.parsed)), [txList]);
 
+    const composeProblems = () => {
+        const problems = {};
+        for (const tx of txList) {
+            for (const pr of tx.parsed) {
+                const message = rowErrors[pr.row.id];
+                if (!message) continue;
+                const field = !pr.row.action || /not available/.test(message) ? 'action' : 'params';
+                problems[`batch-${field}-${pr.row.id}`] = message;
+            }
+        }
+        if (constraintFault) problems[`batch-from-${constraintFault.txId}`] = constraintFault.message;
+        return problems;
+    };
+
     async function goReview() {
         setReviewAttempt((n) => n + 1);
         setTouchedRows(Object.fromEntries(allRows.map((row) => [row.id, true])));
-        if (composeError) return;
+        if (!composeFormErrors.validate(composeProblems())) return;
         const validatedDraftKey = draftKey;
         setValidatingRows(true);
         setPreReviewError(null);
@@ -579,10 +670,17 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         setRowValidationErrors(validationErrors);
         if (validations.some(([, , unavailable]) => unavailable)) {
             setPreReviewError('Couldn\'t validate every action. Check your connection and try again.');
+            composeFormErrors.fail('Couldn\'t validate every action. Check your connection and try again.', 'form:validation');
             setValidatingRows(false);
             return;
         }
         if (Object.keys(validationErrors).length > 0) {
+            const problems = {};
+            txList.forEach((tx, txIndex) => tx.parsed.forEach((pr, rowIndex) => {
+                const message = validationErrors[pr.row.id];
+                if (message) problems[`batch-params-${pr.row.id}`] = inTx(txIndex, `Step ${rowIndex + 1}: ${message}`);
+            }));
+            composeFormErrors.validate(problems);
             setValidatingRows(false);
             return;
         }
@@ -607,16 +705,23 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                         (entry) => String(entry.tick || '').trim().toUpperCase() === total.tick,
                     );
                     if (compareDecimalStrings(total.amount, String(balance?.amount ?? '0')) === 1) {
+                        setPreReviewTxId(txList[i].id);
                         setPreReviewError(inTx(
                             i,
                             `These steps send ${total.amount} ${total.tick} in total, more than the ${balance?.amount ?? '0'} ${total.tick} this address holds.`,
                         ));
+                        composeFormErrors.fail(inTx(
+                            i,
+                            `These steps send ${total.amount} ${total.tick} in total, more than the ${balance?.amount ?? '0'} ${total.tick} this address holds.`,
+                        ), 'form:balance');
                         setValidatingRows(false);
                         return;
                     }
                 }
             } catch {
+                setPreReviewTxId(txList[i].id);
                 setPreReviewError(inTx(i, 'Couldn\'t refresh this address\'s balances. Check your connection and try again.'));
+                composeFormErrors.fail(inTx(i, 'Couldn\'t refresh this address\'s balances. Check your connection and try again.'), 'form:balance');
                 setValidatingRows(false);
                 return;
             }
@@ -779,8 +884,11 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
         // A second submit while a run is in flight is ignored, not composed twice.
         if (signingRef.current || stage === 'submitting' || !composed) return;
         const hw = hwSource;
-        if (!isWatcherMode && !hw && (!signerReady && password.length === 0)) return;
         if (!isWatcherMode && hw && hwStatus !== 'available') return;
+        if (!signFormErrors.validate({
+            'batch-sign-password': !isWatcherMode && !hw && !signerReady && password.length === 0
+                ? 'Enter your password to sign this batch.' : null,
+        })) return;
         setSubmitError(null);
         setSubmitErrorDetails('');
         signingRef.current = true;
@@ -824,6 +932,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     };
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review' || stage === 'submitting' ? returnToCompose : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'compose' ? 'Compose Batch' : 'Review Batch'}
@@ -832,20 +941,36 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     const wrap = (children) => (
         <Screen variant={variant} header={header} restoreScroll={!(stage === 'review' || stage === 'submitting')}>{children}</Screen>
     );
-    const feeCard = (
-        // No pay-in-native switch: xchain-indexer refuses native-fee quotes for BATCH (its fee is
-        // the sum of state-dependent sub-action fees), so the wallet cannot size that output.
-        <FeesCard chainId={chainId} quote={protocolFeeQuote} pending={protocolFeePending} nativeSwitch={false} feeSelector={feeTiers ? (
-            <FeeSelector
-                chainId={chainId}
-                label="Network fee"
-                coinTicker={coinTicker}
-                tiers={feeTiers}
-                value={feePick}
-                onChange={setFeePick}
-                customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-            />
-        ) : null} />
+    // No pay-in-native switch: xchain-indexer refuses native-fee quotes for
+    // BATCH (its fee is the sum of state-dependent sub-action fees), so the
+    // wallet cannot size that output.
+    const feeSection = (
+        <FeeSection
+            {...formSections.bind('fee')}
+            chainId={chainId}
+            coinTicker={coinTicker}
+            tiers={feeTiers}
+            value={feePick}
+            onChange={setFeePick}
+            customEstimate={feeCustomEstimate}
+            fees={{ quote: protocolFeeQuote, pending: protocolFeePending, nativeSwitch: false }}
+        />
+    );
+    // The review stage reads the fees back with their Total, like every
+    // confirm screen; the speed and any custom fee are picked only in the
+    // compose form's Speed and Fees section (G113: no stage draws its own
+    // fee picker), which Back returns to.
+    const feeSummary = (
+        <FeesCard
+            chainId={chainId}
+            coinTicker={coinTicker}
+            tiers={feeTiers}
+            value={feePick}
+            customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
+            quote={protocolFeeQuote}
+            pending={protocolFeePending}
+            nativeSwitch={false}
+        />
     );
 
     // The load error, the loading line and every done-stage panel lay out
@@ -860,26 +985,8 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
     }
     if (!addressesByChain || !chainId) return wrap(<ListPage><p className={styles.hint}>Loading wallet…</p></ListPage>);
 
-    if (sourcePickerOpen) {
-        return (
-            <OwnAddressPickerScreen
-                variant={variant}
-                title="From Address"
-                walletId={walletId}
-                chainId={chainId}
-                onChainChange={handleChainChange}
-                onPick={(address) => {
-                    clearPreReviewErrors();
-                    setFromAddressId(address.id);
-                    setSourcePickerOpen(false);
-                }}
-                onBack={() => setSourcePickerOpen(false)}
-            />
-        );
-    }
-
-    // A later card's network and From: picked together on one screen, as the
-    // page's own From picker does.
+    // A transaction's network and From, picked together on one screen; Back
+    // leaves the transaction as it was.
     if (cardPicker) {
         return (
             <OwnAddressPickerScreen
@@ -918,6 +1025,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 confirmAction={actionConfirm.confirmAction}
                 summary={batchSummary}
                 screenVariant={variant}
+                feeEstimate={signingFee}
                 feeText={signingFee?.coinAmount
                     ? `Network fee: ${signingFee.coinAmount} ${signingTicker}`.trim()
                     : undefined}
@@ -1009,7 +1117,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     </h2>
                 )}
                 {results.map(resultBlock)}
-                <div className={styles.actions}><Button variant="primary" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button></div>
+                <div className={styles.actions}><Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button></div>
             </ListPage>,
         );
     }
@@ -1021,6 +1129,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                 demoGuard={demoGuard}
                 label="Review batch"
                 onSubmit={handleSign}
+                errors={signFormErrors}
                 status={buildError || (submitError && (hw || isWatcherMode)) ? (
                     <>
                         {buildError ? (
@@ -1053,19 +1162,21 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                             variant="success"
                             icon={<Icon.SignIcon />}
                             loading={stage === 'submitting'}
-                            disabled={!composed || (!isWatcherMode && (hw ? hwStatus !== 'available' : (!signerReady && password.length === 0)))}
+                            disabled={!composed || (!isWatcherMode && hw && hwStatus !== 'available')}
                         >
                             {isWatcherMode ? 'Create Batch' : 'Sign Batch'}
                         </Button>
                     </>
                 )}
             >
-                <p className={styles.summary} style={{ textAlign: 'left' }}>
-                    Each transaction bundles its actions and sends them
-                    together, but each action still confirms on its own: if one runs out of what it needs (for example fee
-                    coverage), it fails alone and the others still land. This is different from the parallel
-                    composer, where each action is its own transaction from the start.
-                </p>
+                <WarningCard data-batch-review-note="">
+                    <WarningLine>
+                        Each transaction bundles its actions and sends them
+                        together, but each action still confirms on its own: if one runs out of what it needs (for example fee
+                        coverage), it fails alone and the others still land. This is different from the parallel
+                        composer, where each action is its own transaction from the start.
+                    </WarningLine>
+                </WarningCard>
                 {multiTx ? (
                     <StatusMessage variant="warning">{t('batch.notAtomic', { count: txList.length })}</StatusMessage>
                 ) : null}
@@ -1082,9 +1193,9 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                                     {txDescriptor ? <ChainBadge descriptor={txDescriptor} size="sm" showName={false} /> : null}
                                 </h3>
                             ) : null}
-                            <dl className={styles.detailsList}>
-                                <dt className={styles.detailsLabel}>From</dt>
-                                <dd className={styles.detailsValue}><AddressText address={c.from?.address} /></dd>
+                            <dl className={facts.list}>
+                                <dt className={facts.label}>From</dt>
+                                <dd className={facts.value}><AddressText address={c.from?.address} fit /></dd>
                             </dl>
                             <p className={styles.successLabel}>Batch steps ({c.subStrings.length})</p>
                             <ol style={{ paddingLeft: '1rem', margin: 'var(--xc-space-2) 0' }}>
@@ -1118,7 +1229,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                     <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
                 ) : null}
 
-                {feeCard}
+                {feeSummary}
 
                 {!isWatcherMode ? (
                     <SignCredentials
@@ -1126,7 +1237,12 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                         fromAddress={fromAddress}
                         chainId={chainId}
                         password={password}
-                        onPasswordChange={(v) => { setPassword(v); if (submitError) setSubmitError(null); }}
+                        passwordFieldId="batch-sign-password"
+                        onPasswordChange={(v) => {
+                            setPassword(v);
+                            signFormErrors.clear('batch-sign-password');
+                            if (submitError) setSubmitError(null);
+                        }}
                         onStatusChange={onHwStatusChange}
                         passwordRef={passwordRef}
                         submitError={submitError}
@@ -1148,173 +1264,233 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
             demoGuard={demoGuard}
             label="Batch composer"
             onSubmit={(event) => { event.preventDefault(); goReview(); }}
-            status={preReviewError || constraintError ? (
+            errors={composeFormErrors}
+            status={!composeFormErrors.hasErrors && (preReviewError || constraintError) ? (
                 <StatusMessage variant="error">{preReviewError || constraintError}</StatusMessage>
             ) : null}
             action={(
                 // Names how many transactions the review will hold; it leads
                 // to the review stage, then one confirm screen per transaction.
-                <FormAction icon={<TokenListIcon />} loading={validatingRows} disabled={anyShownRowError || Boolean(constraintError) || validatingRows}>
+                <FormAction icon={<TokenListIcon />} loading={validatingRows}>
                     {t('batch.review', { count: txList.length })}
                 </FormAction>
             )}
-            /* The standard order: From (the default Network and address),
-               Actions (one card per transaction), then the Network fee row
-               with the Fees card. */
-            from={(
-                <FromSection
-                    {...formSections.bind('from')}
-                    chainId={chainId}
-                    chainIds={chainsWithAddresses}
-                    chainRegistry={chainRegistry}
-                    onNetworkChange={handleChainChange}
-                    networkHelp="The chain the whole batch is sent on. Every action in it is signed by the From address and recorded on this network."
-                    address={fromAddress?.address || null}
-                    onOpenPicker={() => setSourcePickerOpen(true)}
-                    pickerLabel="Choose from address"
-                    addressHelp="The address that signs and pays for the whole batch."
-                />
-            )}
-            fee={(
-                // No pay-in-native switch: xchain-indexer refuses native-fee quotes for BATCH (its fee is
-                // the sum of state-dependent sub-action fees), so the wallet cannot size that output.
-                <FeeSection
-                    {...formSections.bind('fee')}
-                    chainId={chainId}
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feeCustomEstimate}
-                    protocolSummary={protocolFeeSummary(protocolFeeQuote, protocolFeePending)}
-                    fees={{ quote: protocolFeeQuote, pending: protocolFeePending, nativeSwitch: false }}
-                />
-            )}
+            /* Layout 1: Actions (the transactions, each with its own Network
+               and From row), then Advanced and Speed and Fees. No From
+               section: BatchSourceFrame only hands transaction 1's network
+               and From to the Advanced section. */
+            from={<BatchSourceFrame chainId={chainId} address={fromAddress?.address || null} />}
+            fee={feeSection}
         >
             <StandardSection
                 id="actions"
                 title="Actions"
                 icon={TokenListIcon}
+                className={batchStyles.actionsSection}
                 {...formSections.bind('actions')}
                 revealKey={actionsHaveError ? reviewAttempt + 1 : 0}
                 summary={actionsSummary}
             >
-            {/* One card per transaction: its header names the network, the
-                From address and the transaction number; each action reads as a
-                sentence with a remove button and opens its editor below it.
-                No Batch limits text; the cap shows only once a card reaches it. */}
-            <ol className={batchStyles.cards} aria-label={t('batch.transactionsLabel')} data-xc-preserve-nested-cards>
+            {/* Layout 1, "Nested sections": the transactions are flat rows
+                with dividers (no card inside a card). A transaction folds open
+                to its Network and From row, its actions, Add action and
+                Remove transaction; an action folds open in place to its
+                editor and Remove action. Add and Remove are plain rows with
+                bare icons, never red and never buttons inside a row. No Batch
+                limits text; the cap shows only once a transaction reaches it. */}
+            <ol className={batchStyles.txList} aria-label={t('batch.transactionsLabel')}>
                 {txList.map((tx, txIndex) => {
                     const number = txIndex + 1;
                     const descriptor = tx.chainId ? chainRegistry.get(tx.chainId) : null;
+                    // The coin network's own name for this transaction's From
+                    // summary (G20, G61), with no mainnet, testnet or regtest
+                    // text; a reviewed exception in networkKindRendering.audit.
+                    const networkName = descriptor?.displayName || '';
                     const full = tx.rows.length >= flowsLib.BATCH_MAX_COMMANDS;
+                    // A transaction holding a shown row error stays open: Review
+                    // is off until it is fixed, so folding it must not hide why.
+                    const txOpen = !closedTxs[tx.id] || tx.rows.some((row) => Boolean(shownRowError(row)));
+                    // One transaction with one action has nothing to remove.
+                    const canRemove = txList.length > 1 || tx.rows.length > 1;
+                    // The summary line's icons: each picked action once, the
+                    // list icon while none is picked.
+                    const pickedActions = [...new Set(tx.rows.map((row) => row.action).filter(Boolean))].slice(0, 5);
                     return (
-                        <li key={tx.id} className={batchStyles.card}>
+                        <li key={tx.id} className={batchStyles.tx} data-batch-tx={number}>
                             <ListRow
-                                className={batchStyles.cardHeader}
-                                aria-label={t('batch.changeSource', { number })}
-                                onClick={() => (txIndex === 0
-                                    ? setSourcePickerOpen(true)
-                                    : openCardPicker(tx.id, tx.chainId))}
-                                leading={descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null}
-                                title={<span className={batchStyles.cardFrom}>{summaryAddress(tx.from?.address || '')}</span>}
-                                trailing={<span className={batchStyles.cardNumber}>{t('batch.transactionNumber', { number })}</span>}
+                                className={[batchStyles.txHeader, txOpen ? batchStyles.txHeaderOpen : null].filter(Boolean).join(' ')}
+                                aria-expanded={txOpen}
+                                onClick={() => toggleTx(tx.id)}
+                                leading={descriptor ? <ChainBadge descriptor={descriptor} size="md" showName={false} /> : null}
+                                title={t('batch.transactionNumber', { number })}
+                                subtitle={(
+                                    <>
+                                        <span className={batchStyles.txLine}>
+                                            {networkName ? <span>{networkName}</span> : null}
+                                            {networkName ? <span aria-hidden="true">·</span> : null}
+                                            <span className={batchStyles.txIcons} aria-hidden="true">
+                                                {pickedActions.length > 0
+                                                    ? pickedActions.map((action) => <span key={action}>{actionOptionIcon(action)}</span>)
+                                                    : <Icon.ListIcon />}
+                                            </span>
+                                            <span>{t('batch.actionCount', { count: tx.rows.length })}</span>
+                                        </span>
+                                        {/* Closed, the summary names its From address, in
+                                            full when it fits (G99); open, the From row does. */}
+                                        {txOpen ? null : (
+                                            <span className={batchStyles.address}>
+                                                <AddressText address={tx.from?.address || ''} fit />
+                                            </span>
+                                        )}
+                                    </>
+                                )}
+                                trailing={(
+                                    <TxFeeFigure
+                                        chainId={tx.chainId}
+                                        estimate={feeEstimateFor(tx.chainId)}
+                                        ticker={tickerFor(tx.chainId)}
+                                        settings={settings}
+                                    />
+                                )}
+                                chevron={txOpen ? <Icon.ChevronDownIcon /> : true}
                             />
-                            <ul className={batchStyles.rows} aria-label={t('batch.actionsOf', { number })}>
-                                {tx.parsed.map((pr, i) => {
-                                    const row = pr.row;
-                                    const sentence = rowSentence(row, pr.params);
-                                    const open = !closedRows[row.id];
-                                    const rowError = shownRowError(row);
-                                    return (
-                                        <li key={row.id}>
-                                            <section className={batchStyles.row} aria-label={`Action ${i + 1}`}>
-                                                <div className={batchStyles.rowLine}>
-                                                    <ListRow
-                                                        className={batchStyles.rowSentence}
-                                                        aria-expanded={open}
-                                                        tooltip={t('batch.editRow', { number: i + 1 })}
-                                                        onClick={() => toggleRow(row.id)}
-                                                        title={sentence.title}
-                                                        subtitle={sentence.subtitle || null}
-                                                    />
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        icon={<Icon.XIcon />}
-                                                        aria-label={t('batch.removeRow')}
-                                                        title={t('batch.removeRow')}
-                                                        onClick={() => removeRow(tx.id, row.id)}
-                                                        disabled={txIndex === 0 && tx.rows.length <= 1}
-                                                    />
-                                                </div>
-                                                {open ? (
-                                                    <div className={batchStyles.rowEditor}>
-                                                        <Select
-                                                            label="Action"
-                                                            help="One sub-action included in this single BATCH transaction."
-                                                            value={row.action || ''}
-                                                            onChange={(e) => updateRow(tx.id, row.id, { action: e.target.value })}
-                                                        >
-                                                            <option value="">Select action</option>
-                                                            {/* One SDK list serves every chain; drop what this card's chain refuses at every version. */}
-                                                            {actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, tx.chainId, a)).map((a) => (
-                                                                <option key={a} value={a}>{actionDisplayLabel(a)} ({a})</option>
-                                                            ))}
-                                                        </Select>
-                                                        <Textarea
-                                                            label="Params (JSON object)"
-                                                            help="This action's fields, entered as a JSON object."
-                                                            rows={4}
-                                                            value={row.paramsJson}
-                                                            onChange={(e) => updateRow(tx.id, row.id, { paramsJson: e.target.value })}
-                                                            placeholder='{"VERSION":"0", ...}'
-                                                            spellCheck={false}
+                            {txOpen ? (
+                                <div className={batchStyles.txBody}>
+                                    {/* The transaction's Network and From, picked together
+                                        on the own-address picker. */}
+                                    <ListRow
+                                        id={`batch-from-${tx.id}`}
+                                        className={batchStyles.fromRow}
+                                        aria-label={t('batch.changeSource', { number })}
+                                        onClick={() => openCardPicker(tx.id, tx.chainId)}
+                                        leading={descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : null}
+                                        title={t('batch.fromOn', { network: networkName })}
+                                        subtitle={(
+                                            <span className={batchStyles.address}>
+                                                <AddressText address={tx.from?.address || ''} fit />
+                                            </span>
+                                        )}
+                                        chevron
+                                    />
+                                    {composeFormErrors.errorFor(`batch-from-${tx.id}`) ? (
+                                        <FieldNote variant="error">{composeFormErrors.errorFor(`batch-from-${tx.id}`)}</FieldNote>
+                                    ) : null}
+                                    <ul className={batchStyles.actionList} aria-label={t('batch.actionsOf', { number })}>
+                                        {tx.parsed.map((pr, i) => {
+                                            const row = pr.row;
+                                            const sentence = rowSentence(row, pr.params);
+                                            const open = !closedRows[row.id];
+                                            const rowError = shownRowError(row);
+                                            return (
+                                                <li key={row.id}>
+                                                    <section
+                                                        className={[batchStyles.action, open ? batchStyles.actionOpen : null].filter(Boolean).join(' ')}
+                                                        aria-label={`Action ${i + 1}`}
+                                                    >
+                                                        <ListRow
+                                                            className={batchStyles.actionRow}
+                                                            aria-expanded={open}
+                                                            tooltip={t('batch.editRow', { number: i + 1 })}
+                                                            onClick={() => toggleRow(row.id)}
+                                                            leading={(
+                                                                <span className={batchStyles.bareIcon} aria-hidden="true">
+                                                                    {row.action ? actionOptionIcon(row.action) : <Icon.ListIcon />}
+                                                                </span>
+                                                            )}
+                                                            title={sentence.title}
+                                                            subtitle={sentence.subtitle || null}
+                                                            chevron={open ? <Icon.ChevronDownIcon /> : true}
                                                         />
-                                                    </div>
-                                                ) : null}
-                                                {rowError ? (
-                                                    <FieldNote variant="error">
-                                                        {rowError}
-                                                    </FieldNote>
-                                                ) : null}
-                                            </section>
-                                        </li>
-                                    );
-                                })}
-                            </ul>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                icon={<Icon.PlusIcon />}
-                                className={batchStyles.addToTx}
-                                onClick={() => addRow(tx.id)}
-                                disabled={full}
-                            >
-                                {t('batch.addToTransaction')}
-                            </Button>
-                            {full ? (
-                                <p className={styles.hint}>
-                                    {flowsLib.BATCH_MAX_COMMANDS} actions is the most one batch carries.
-                                </p>
+                                                        {open ? (
+                                                            <div className={batchStyles.editor}>
+                                                                <Select
+                                                                    id={`batch-action-${row.id}`}
+                                                                    label="Action"
+                                                                    help="One sub-action included in this single BATCH transaction."
+                                                                    value={row.action || ''}
+                                                                    onChange={(e) => updateRow(tx.id, row.id, { action: e.target.value })}
+                                                                >
+                                                                    {/* One SDK list serves every chain; drop what this transaction's chain refuses at every version. */}
+                                                                    {actionSelectOptions(actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, tx.chainId, a)), 'Select action')}
+                                                                </Select>
+                                                                <Textarea
+                                                                    id={`batch-params-${row.id}`}
+                                                                    label="Params (JSON object)"
+                                                                    help="This action's fields, entered as a JSON object."
+                                                                    rows={4}
+                                                                    value={row.paramsJson}
+                                                                    onChange={(e) => updateRow(tx.id, row.id, { paramsJson: e.target.value })}
+                                                                    placeholder='{"VERSION":"0", ...}'
+                                                                    spellCheck={false}
+                                                                />
+                                                                {rowError
+                                                                    && !composeFormErrors.errorFor(`batch-action-${row.id}`)
+                                                                    && !composeFormErrors.errorFor(`batch-params-${row.id}`)
+                                                                    ? <FieldNote variant="error">{rowError}</FieldNote> : null}
+                                                            </div>
+                                                        ) : null}
+                                                        {!open && rowError ? (
+                                                            <div className={batchStyles.editor}>
+                                                                <FieldNote variant="error">{rowError}</FieldNote>
+                                                            </div>
+                                                        ) : null}
+                                                        {open && canRemove ? (
+                                                            <ListRow
+                                                                className={batchStyles.controlRow}
+                                                                onClick={() => removeRow(tx.id, row.id)}
+                                                                leading={<span className={batchStyles.bareIcon} aria-hidden="true"><Icon.TrashIcon /></span>}
+                                                                title={t('batch.removeAction')}
+                                                                subtitle={t('batch.removeActionDesc')}
+                                                            />
+                                                        ) : null}
+                                                    </section>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                    <ListRow
+                                        className={[batchStyles.controlRow, batchStyles.addRow].join(' ')}
+                                        onClick={() => addRow(tx.id)}
+                                        disabled={full}
+                                        leading={<span className={batchStyles.bareIcon} aria-hidden="true"><Icon.PlusIcon /></span>}
+                                        title={<span className={batchStyles.addTitle}>{t('batch.addAction')}</span>}
+                                        subtitle={t('batch.addActionDesc')}
+                                    />
+                                    {full ? (
+                                        <div className={batchStyles.editor}>
+                                            <WarningCard data-batch-cap-note="">
+                                                <WarningLine>
+                                                    {flowsLib.BATCH_MAX_COMMANDS} actions is the most one batch carries.
+                                                </WarningLine>
+                                            </WarningCard>
+                                        </div>
+                                    ) : null}
+                                    {canRemove ? (
+                                        <ListRow
+                                            className={batchStyles.controlRow}
+                                            onClick={() => removeTx(tx.id)}
+                                            leading={<span className={batchStyles.bareIcon} aria-hidden="true"><Icon.TrashIcon /></span>}
+                                            title={t('batch.removeTransaction')}
+                                            subtitle={t('batch.removeTransactionDesc', {
+                                                number,
+                                                actions: t('batch.actionCount', { count: tx.rows.length }),
+                                            })}
+                                        />
+                                    ) : null}
+                                </div>
                             ) : null}
                         </li>
                     );
                 })}
             </ol>
-            {chainsWithAddresses.length > 1 ? (
-                <Button
-                    type="button"
-                    variant="secondary"
-                    icon={<Icon.PlusIcon />}
-                    className={batchStyles.addNetwork}
-                    onClick={openNewCardPicker}
-                >
-                    {t('batch.addNetwork')}
-                </Button>
-            ) : null}
+            {/* A new transaction opens expanded with one action. */}
+            <ListRow
+                className={[batchStyles.controlRow, batchStyles.addRow, batchStyles.addTxRow].join(' ')}
+                onClick={openNewCardPicker}
+                leading={<span className={batchStyles.bareIcon} aria-hidden="true"><Icon.PlusIcon /></span>}
+                title={<span className={batchStyles.addTitle}>{t('batch.addTransaction')}</span>}
+                subtitle={t('batch.addTransactionDesc')}
+            />
             </StandardSection>
         </FormFrame>,
     );

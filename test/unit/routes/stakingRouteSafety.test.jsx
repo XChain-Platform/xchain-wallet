@@ -9,8 +9,11 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { openSection } from '../../helpers/openFormSections.js';
-import { StakeForm } from '../../../packages/core/src/shared/routes/StakeForm.jsx';
-import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
+// The staking routes render the one Staking form on their target and action.
+import {
+    NetworkPositionRoute as StakingActionForm,
+    NetworkStakeRoute as StakeForm,
+} from '../../helpers/stakingFormRoutes.jsx';
 import { StakingList } from '../../../packages/core/src/shared/routes/StakingList.jsx';
 
 const MAINNET = 'bitcoin-mainnet';
@@ -124,6 +127,28 @@ describe('staking route request safety', () => {
         expect(messaging.buildActionPsbtRequest.mock.calls[0][0].actionData.params).toEqual({
             VERSION: '1',
             AMOUNT: '1',
+            SIGNING_PUBKEY: PUBKEY,
+        });
+    });
+
+    it('sends VERSION 2 and shows Top up in the review when Top up is chosen in the Mode dropdown', async () => {
+        const messaging = methods({ getStakesForAddress: vi.fn().mockResolvedValue([]) });
+        render(app(<StakeForm walletId="w" chainId={MAINNET} onBack={() => {}} />, messaging));
+
+        fireEvent.change(await screen.findByLabelText(/^Amount/), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Signing public key'), { target: { value: PUBKEY } });
+        await screen.findByText(/No existing stake for this public key/);
+        fireEvent.click(screen.getByRole('button', { name: 'Mode: New stake' }));
+        fireEvent.click(screen.getByRole('option', { name: 'Top up an existing stake' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review Stake' }));
+        expect(await screen.findByText('Top up an existing stake')).toBeInTheDocument();
+        expect(screen.getByText(/Top up 2 XCHAIN for signing public key/)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
+        await waitFor(() => expect(messaging.buildActionPsbtRequest).toHaveBeenCalledTimes(1));
+        expect(messaging.buildActionPsbtRequest.mock.calls[0][0].actionData.params).toEqual({
+            VERSION: '2',
+            AMOUNT: '2',
             SIGNING_PUBKEY: PUBKEY,
         });
     });

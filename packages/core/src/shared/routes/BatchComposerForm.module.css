@@ -1,94 +1,137 @@
-/* Batch page grouped by transaction: one card per transaction, its header
-   naming the network, the From address and the transaction number, its
-   actions as sentence rows, and Add to this transaction under them. */
+/* Batch compose, layout 1 ("Nested sections", operator pick 2026-11-14):
+   the Actions section holds the transactions as flat rows with dividers, no
+   card inside a card. A transaction folds open to its Network and From row,
+   its action rows, Add action and Remove transaction, set off by an accent
+   rule on its leading edge; an open action and its editor sit on the muted
+   fill. */
 
-.cards {
+/* The section body runs its rows edge to edge; each row keeps its own
+   padding and the dividers stand in for the body's gap. */
+.actionsSection > div {
+    padding: 0;
+    gap: 0;
+}
+
+.txList,
+.actionList {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
     min-width: 0;
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
-.card {
-    composes: card from '../../ui/Card.module.css';
+.tx {
+    min-width: 0;
+}
+
+.tx + .tx,
+.actionList > li + li,
+.txBody > * + *,
+.addTxRow {
+    border-block-start: 1px solid var(--xc-border);
+}
+
+/* Flat rows: the section's own corners frame them. */
+.txHeader,
+.fromRow,
+.actionRow,
+.controlRow {
+    border-radius: 0;
+}
+
+.txHeaderOpen {
+    background: var(--xc-bg-muted);
+}
+
+/* "Bitcoin · [action icons] 2 actions" under the transaction's title. */
+.txLine {
     display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
+    align-items: center;
+    gap: var(--xc-space-1);
     min-width: 0;
+    white-space: nowrap;
 }
 
-/* The header row opens the network and From picker for its card. */
-.cardHeader {
-    min-width: 0;
-    border-block-end: 1px solid var(--xc-border);
+.txIcons {
+    --xc-icon-size: var(--xc-icon-sm);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    color: var(--xc-text);
 }
 
-.cardFrom {
+/* A block of the subtitle's width, so AddressText fit measures the room it
+   has and shows the whole address when it fits (G99). */
+.address {
+    display: block;
     min-width: 0;
     overflow: hidden;
-    color: var(--xc-text-muted);
     font-family: var(--xc-font-mono);
     font-size: var(--xc-text-xs);
-    font-weight: 400;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.cardNumber {
-    margin-inline-start: auto;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-    font-weight: 400;
+/* The transaction's estimated network fee over the word "fee". */
+.txFee {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
     white-space: nowrap;
 }
 
-.rows {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    list-style: none;
+.txFeeAmount {
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
 }
 
-.row {
+.txFeeLabel {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.txBody {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-2);
+    min-width: 0;
+    border-block-start: 1px solid var(--xc-border);
+    border-inline-start: var(--xc-space-1) solid var(--xc-accent-primary);
+}
+
+.action {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
 }
 
-.rowLine {
-    display: flex;
+.actionOpen {
+    background: var(--xc-bg-muted);
+}
+
+/* Bare row icons: no tile, never red. */
+.bareIcon {
+    display: inline-flex;
     align-items: center;
-    gap: var(--xc-space-2);
-    min-width: 0;
+    color: var(--xc-text);
 }
 
-/* The sentence row opens and folds the action's editor. */
-.rowSentence {
-    flex: 1 1 auto;
-    min-width: 0;
-}
-
-.rowEditor {
+/* The editor lines up under the action's sentence, past its icon. */
+.editor {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
+    gap: var(--xc-space-2);
     min-width: 0;
+    /* Logical sides so the editor indents under the row icon in RTL too. */
+    padding-block: 0 var(--xc-space-2);
+    padding-inline: calc(var(--xc-space-3) * 2 + var(--xc-icon-lg)) var(--xc-space-3);
 }
 
-.addToTx {
-    align-self: flex-start;
-}
-
-.addNetwork {
-    width: 100%;
-    margin-block-start: var(--xc-space-3);
+.addTitle,
+.addRow .bareIcon {
+    color: var(--xc-accent-text);
 }
 
 .reviewTx {

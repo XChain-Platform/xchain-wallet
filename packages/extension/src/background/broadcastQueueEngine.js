@@ -55,6 +55,31 @@ function queuedRevealFields(source) {
 }
 
 /**
+ * The donation verdict a queued entry carries, reduced to its known fields, or
+ * null when it is malformed. The fiat amount and currency are what the booking
+ * takes off the donation queue; an entry from an older build has neither and
+ * only accrues. `mainnet` says whether the send accrues at all (false for a
+ * testnet or regtest send), and `reservationId` names the claim on the queue
+ * these bytes hold, which their broadcast settles and their discard releases.
+ *
+ * @param {unknown} verdict
+ * @returns {{ chainId: string, donationIncluded: boolean, donatedFiat?: string, currency?: string, mainnet?: boolean, reservationId?: string } | null}
+ */
+export function cleanAdsCommit(verdict) {
+    if (!verdict || typeof verdict !== 'object') return null;
+    const v = /** @type {any} */ (verdict);
+    if (typeof v.chainId !== 'string' || typeof v.donationIncluded !== 'boolean') return null;
+    return {
+        chainId: v.chainId,
+        donationIncluded: v.donationIncluded,
+        ...(typeof v.donatedFiat === 'string' && /^\d+(\.\d+)?$/.test(v.donatedFiat) ? { donatedFiat: v.donatedFiat } : {}),
+        ...(typeof v.currency === 'string' && v.currency ? { currency: v.currency } : {}),
+        ...(typeof v.mainnet === 'boolean' ? { mainnet: v.mainnet } : {}),
+        ...(typeof v.reservationId === 'string' && v.reservationId ? { reservationId: v.reservationId } : {}),
+    };
+}
+
+/**
  * @param {{
  *   store: import('./broadcastQueueStore.js').BroadcastQueueStore,
  *   importedAddressIdsFor: (vault: any, walletId: string) => Promise<Set<string>>,
@@ -145,11 +170,9 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         mergePendingTxIds(live, persisted);
         const link = persisted.rbfReplacesPendingTxId;
         if (!live.rbfReplacesPendingTxId && typeof link === 'string' && link) live.rbfReplacesPendingTxId = link;
-        const verdict = persisted.adsCommit;
         if (live.adsCommit) return;
-        if (!verdict || typeof verdict !== 'object') return;
-        if (typeof verdict.chainId !== 'string' || typeof verdict.donationIncluded !== 'boolean') return;
-        live.adsCommit = { chainId: verdict.chainId, donationIncluded: verdict.donationIncluded };
+        const verdict = cleanAdsCommit(persisted.adsCommit);
+        if (verdict) live.adsCommit = verdict;
     }
     async function ensureQueueLoaded() {
         // A sealed store serves nothing: a host built on it during a wipe must
@@ -939,7 +962,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             return sameTx;
         }
         const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const adsCommit = entry.adsCommit;
+        const adsCommit = cleanAdsCommit(entry.adsCommit);
         const stored = {
             id,
             chainId: entry.chainId,
@@ -958,12 +981,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 : {}),
             ...commitLandedFields(entry),
             ...queuedRevealFields(entry),
-            ...(adsCommit
-                && typeof adsCommit === 'object'
-                && typeof adsCommit.chainId === 'string'
-                && typeof adsCommit.donationIncluded === 'boolean'
-                ? { adsCommit: { chainId: adsCommit.chainId, donationIncluded: adsCommit.donationIncluded } }
-                : {}),
+            ...(adsCommit ? { adsCommit } : {}),
         };
         getQueue(walletId).push(stored);
         // Start a background save for the vault rebuild, which pushes in a loop.

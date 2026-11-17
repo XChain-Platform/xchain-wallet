@@ -219,11 +219,31 @@ assert.ok(
 for (const [shell, appPath] of [
     ['popup', join(wsRoot, 'packages', 'extension', 'src', 'popup', 'App.jsx')],
     ['web', join(wsRoot, 'packages', 'web', 'src', 'App.jsx')],
+    ['desktop', join(wsRoot, 'packages', 'desktop', 'renderer', 'App.jsx')],
 ]) {
     const app = readFileSync(appPath, 'utf8');
     assert.ok(app.includes("'wizard'"), `${shell} App.jsx tracks the wizard sub-route`);
     assert.ok(/<TokenWizard\b/.test(app), `${shell} App.jsx renders TokenWizard`);
     assert.ok(!/onCreateToken=\{/.test(app), `${shell} App.jsx passes no onCreateToken to Home`);
+    // Issue subtoken on a token's page opens the wizard with that token as the
+    // parent, and only that entry does: every Create token entry clears the
+    // form source first, so a stale token never prefills a new token.
+    const wizardBlock = app.match(/<TokenWizard\b[\s\S]*?\/>/)?.[0] || '';
+    assert.ok(
+        /initialChainId=\{subtokenParentFromToken \? tokenDetailRef\?\.chainId : undefined\}/.test(wizardBlock)
+            && /initialParentTick=\{subtokenParentFromToken \? tokenDetailRef\?\.tick : undefined\}/.test(wizardBlock),
+        `${shell} App.jsx prefills the wizard's parent from the token it was opened on`,
+    );
+    assert.ok(
+        /const subtokenParentFromToken = formSource === 'manage-token' \|\| formSource === 'token-detail';/.test(app),
+        `${shell} App.jsx takes the parent only from a token page source`,
+    );
+    assert.ok(/onIssueSubtoken[=:][^\n]*'wizard'/.test(app), `${shell} App.jsx opens Issue subtoken on the wizard`);
+    const createEntries = app.split('\n').filter((line) => line.includes("setUnlockedView('wizard')"));
+    assert.ok(
+        createEntries.length >= 2 && createEntries.every((line) => line.includes('setFormSource(null); setUnlockedView(\'wizard\')')),
+        `${shell} App.jsx clears the form source on every Create token entry`,
+    );
 }
 
 console.log(

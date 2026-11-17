@@ -67,7 +67,9 @@ describe('create wallet', () => {
 
     it('refuses the duress passphrase as the wallet password', () => {
         submit(DURESS);
-        expect(screen.getByRole('alert')).toHaveTextContent(DURESS_PASSWORD_COLLISION_MESSAGE);
+        // The form's error notice; the Password field also shows its own line.
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(DURESS_PASSWORD_COLLISION_MESSAGE);
+        expect(screen.getByLabelText('Password')).toHaveAttribute('aria-invalid', 'true');
         expect(screen.queryByRole('button', { name: 'Reveal Recovery Phrase' })).toBeNull();
     });
 
@@ -93,7 +95,7 @@ describe('import wallet', () => {
         setPasswords('Password', 'Confirm password', DURESS);
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(DURESS_PASSWORD_COLLISION_MESSAGE);
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(DURESS_PASSWORD_COLLISION_MESSAGE);
         expect(importMnemonic).not.toHaveBeenCalled();
     });
 
@@ -105,24 +107,29 @@ describe('import wallet', () => {
         setPasswords('Password', 'Confirm password', DURESS);
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(DURESS_PASSWORD_COLLISION_MESSAGE);
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(DURESS_PASSWORD_COLLISION_MESSAGE);
         expect(importMnemonic).not.toHaveBeenCalled();
     });
 });
 
 describe('pair a partner wallet', () => {
-    it('refuses the duress passphrase as the password for this device', async () => {
-        const importMnemonic = vi.fn(async () => ({ wallet: { id: 'w-1' } }));
-        mount(<PairPartnerWallet />, { importMnemonic });
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+    // The pairing moved to Settings, Advanced (2026-11-15): it adds the shared
+    // phrase to the OPEN vault under the password the vault already has, so it
+    // never chooses a password that could collide with the duress passphrase.
+    it('asks only for the open wallet password, never a new one', async () => {
+        const addImportedWallet = vi.fn(async () => ({ wallet: { id: 'w-1' } }));
+        mount(<PairPartnerWallet />, { addImportedWallet });
+        fireEvent.click(screen.getByRole('button', { name: /^Sign on another phone/ }));
         fireEvent.change(screen.getByLabelText(/Shared recovery phrase/i, { selector: 'textarea' }), { target: { value: PHRASE } });
-        setPasswords(/^Password for this device$/i, /Confirm password/i, DURESS);
+        expect(screen.getByLabelText(/^Wallet password$/i)).toBeInTheDocument();
+        expect(screen.queryByLabelText(/^Confirm password$/i)).toBeNull();
+        fireEvent.change(screen.getByLabelText(/^Wallet password$/i), { target: { value: OTHER } });
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
         });
 
-        expect(screen.getByText(DURESS_PASSWORD_COLLISION_MESSAGE)).toBeInTheDocument();
-        expect(importMnemonic).not.toHaveBeenCalled();
+        expect(screen.queryByText(DURESS_PASSWORD_COLLISION_MESSAGE)).toBeNull();
+        expect(addImportedWallet).toHaveBeenCalledWith(expect.objectContaining({ password: OTHER }));
     });
 });
 
@@ -133,7 +140,6 @@ describe('migrate to a BIP39 wallet', () => {
             <MigrateToBip39 legacyWalletId="wallet-old" onBack={() => {}} onMigrated={() => {}} onSweepChain={() => {}} />,
             { getAddressesByChain: vi.fn(async () => ({})), addImportedWallet },
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         setPasswords('Password', 'Confirm password', DURESS);
         fireEvent.click(screen.getByRole('button', { name: 'Generate Recovery Phrase' }));
 

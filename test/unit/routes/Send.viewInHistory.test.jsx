@@ -22,6 +22,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
@@ -155,6 +157,30 @@ describe('Send success card: "View in History" (M2.4)', () => {
         const hint = screen.getByText(/already appears in History/i);
         expect(hint.textContent).toMatch(/up to a minute/i);
         expect(hint.textContent).not.toMatch(/confirmed|accepted/i);
+        // A note is a WarningCard line, never a loose paragraph, and never
+        // inside the success card (no card in a card).
+        expect(hint).toHaveAttribute('data-warning-line', 'plain');
+        expect(hint.closest('[data-send-history-note]')).not.toBeNull();
+        expect(hint.closest('[data-transaction-status]')).toBeNull();
+    });
+
+    it('lists the sent facts as label-left rows with no uppercase labels', async () => {
+        const { messaging } = mount({ onViewHistory: vi.fn() });
+        await driveToBroadcastDone(messaging);
+
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/Send.module.css'),
+            'utf8',
+        ).replace(/\/\*[\s\S]*?\*\//g, '');
+        for (const selector of ['.successRow dt', '.successLabel', '.detailsLabel', '.detailsToggle']) {
+            const body = new RegExp(`${selector.replace('.', '\\.')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] || '';
+            expect(body, selector).not.toMatch(/text-transform:\s*uppercase/);
+        }
+        const row = /\.successRow\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+        expect(row).toMatch(/justify-content:\s*space-between/);
+        expect(row).not.toMatch(/flex-direction:\s*column/);
+        expect(/\.successSummary\s*\{([^}]*)\}/.exec(css)?.[1] || '').not.toMatch(/composes:\s*card/);
+        expect(screen.getByText('Transaction ID')).toBeInTheDocument();
     });
 
     it('navigates with the transaction identity, matching History\'s initialFocus shape', async () => {

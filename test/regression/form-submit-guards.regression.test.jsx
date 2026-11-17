@@ -15,8 +15,11 @@
 //
 //   [P1] 2026-10-13: Repeated sign-throttle submits can persist the same
 //        settings patch more than once while the first update is pending.
+//        The throttle now applies per choice, so the guard is that a second
+//        choice never writes the older value of the first one back.
 
 import React from 'react';
+import { selectOption } from '../helpers/selectOption.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../packages/core/src/schemas/settings.js';
@@ -74,6 +77,8 @@ describe('regression/form-submit-guards', () => {
         mocks.messaging.blockOrigin.mockReturnValue(pending.promise);
         render(<ConnectedSitesSection />);
 
+        // The Block Site form opens from the header plus.
+        fireEvent.click(await screen.findByRole('button', { name: 'Block a site' }));
         const input = await screen.findByPlaceholderText('https://example.com or *.example.com');
         fireEvent.change(input, { target: { value: 'https://blocked.example' } });
         const form = input.closest('form');
@@ -84,27 +89,26 @@ describe('regression/form-submit-guards', () => {
         fireEvent.submit(form);
 
         expect(mocks.messaging.blockOrigin).toHaveBeenCalledTimes(1);
-        expect(screen.getByRole('button', { name: 'Block Origin' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Block Site' })).toBeDisabled();
 
         pending.resolve();
         await waitFor(() => expect(mocks.messaging.listBlockedOrigins).toHaveBeenCalledTimes(2));
     });
 
-    it('[REGRESSION P1] admits one throttle update while its save is pending', async () => {
+    it('[REGRESSION P1] a second throttle choice made while the first save is pending keeps the first', async () => {
         const pending = deferred();
         mocks.update.mockReturnValue(pending.promise);
         render(<ConnectedSitesSection />);
 
-        const burst = await screen.findByLabelText('Sign-throttle burst (max requests per window)');
-        const form = burst.closest('form');
+        // The throttle lives on the Options view and applies at once.
+        fireEvent.click(await screen.findByRole('radio', { name: 'Options' }));
+        selectOption(await screen.findByTestId('throttle-select-burst'), '10');
+        selectOption(screen.getByTestId('throttle-select-windowMs'), '300000');
 
-        fireEvent.submit(form);
-        fireEvent.submit(form);
-
-        expect(mocks.update).toHaveBeenCalledTimes(1);
-        expect(screen.getByRole('button', { name: 'Applying…' })).toBeDisabled();
+        expect(mocks.update).toHaveBeenNthCalledWith(1, { signThrottle: { burst: 10, windowMs: 60000 } });
+        expect(mocks.update).toHaveBeenNthCalledWith(2, { signThrottle: { burst: 10, windowMs: 300000 } });
 
         pending.resolve(mocks.settings);
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Apply Throttle' })).toBeEnabled());
+        await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(2));
     });
 });

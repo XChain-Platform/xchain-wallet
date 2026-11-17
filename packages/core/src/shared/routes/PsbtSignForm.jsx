@@ -58,6 +58,7 @@ import {
     PageHeader,
     ListPage,
     Icon,
+    useFormErrors,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 // The Wallet Form Standard frame.
@@ -82,7 +83,9 @@ import {
     formatNativeBaseUnits,
     tickerForDescriptor,
 } from '../../registry/coinTicker.js';
+import { formatWithThousands } from '../utils/amountFormat.js';
 import { isUserRejection } from '../hooks/useActionConfirmFlow.js';
+import { isHwSignBack } from '../../signers/hardwareSession.js';
 import { PsbtConfirmScreen } from '../components/PsbtConfirmScreen.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { HwSignBlock } from '../components/HwSignBlock.jsx';
@@ -106,6 +109,7 @@ import {
 import { pickDefaultChainId } from '../chainSelection.js';
 import { psbtActionSummary } from '../utils/actionDisplayLabel.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
+import { formatBytes } from '../utils/formatBytes.js';
 import { detectBrowserFamilyForWebHidHint } from '../utils/webhidSupport.js';
 import { SIGNED_NOT_BROADCAST_UNSAVED_WARNING } from '../utils/submitFailureMessage.js';
 
@@ -422,7 +426,7 @@ function nativeAmountLabel(value, descriptor) {
     if (amount === null || !descriptor) return null;
     const display = formatNativeBaseUnits(amount, descriptor);
     const ticker = tickerForDescriptor(descriptor);
-    return display === null || !ticker ? null : `${display} ${ticker}`;
+    return display === null || !ticker ? null : `${formatWithThousands(display) || display} ${ticker}`;
 }
 
 /**
@@ -513,6 +517,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
 
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    const formErrors = useFormErrors();
+    // G22: Sign Transaction stays enabled while the code is empty; pressing
+    // it then marks the code field red, reopens its section and focuses it.
+    const [codeMissingAttempt, setCodeMissingAttempt] = useState(0);
+    const codeFieldRef = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
     const [parseError, setParseError] = useState(/** @type {string | null} */ (null));
     const [parsing, setParsing] = useState(false);
     // The XChain action decoded from the pasted PSBT (best-effort;
@@ -1023,15 +1032,29 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         event.preventDefault();
         if (busy) return;
         setError(null);
-        if (!chainId) { setError('Pick a network.'); return; }
-        if (!addressId) { setError('Pick a signing address.'); return; }
-        if (!psbtHex) { setError('Paste a valid transaction code.'); return; }
-        if (!decomposed) { setError('Transaction could not be parsed for this network.'); return; }
-        if (importEligibilityError) return;
-        if (ownedInputCount === 0) {
-            setError(
-                `The chosen address signs none of this transaction's inputs. Pick a different address or transaction.`,
-            );
+        const codeProblem = !pasted.trim()
+            ? 'Paste the transaction code or choose a .psbt file.'
+            : inputError || (!psbtHex ? 'Paste a valid transaction code.' : null)
+                || (parsing ? 'Wait for the transaction code to finish parsing.' : null)
+                || (!decomposed ? (parseError || 'Transaction could not be parsed for this network.') : null)
+                || importEligibilityError;
+        const problems = {
+            'form:network': !chainId ? 'Pick a network.' : null,
+            'psbt-sign-address': !addressId
+                ? 'Pick a signing address.'
+                : (!codeProblem && ownedInputCount === 0
+                    ? `The chosen address signs none of this transaction's inputs. Pick a different address or transaction.`
+                    : null),
+            'psbt-sign-paste': codeProblem,
+            'form:device': isHwSource && hwStatus !== 'available'
+                ? 'Hardware wallet is not ready yet. Connect and unlock your device.'
+                : null,
+            'psbt-sign-password': !useConfirmPage && !isHwSource && !signerReady && password.length === 0
+                ? 'Enter your wallet password.'
+                : null,
+        };
+        if (!formErrors.validate(problems)) {
+            if (!pasted.trim()) setCodeMissingAttempt((n) => n + 1);
             return;
         }
         if (useConfirmPage) {
@@ -1045,16 +1068,11 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             return;
         }
         if (isHwSource) {
-            if (hwStatus !== 'available') {
-                setError('Hardware wallet is not ready yet. Connect + unlock your device.');
-                return;
-            }
             if (typeof messaging.signPsbtUserInitiatedHw !== 'function') {
                 setError(SIGN_UNAVAILABLE_MESSAGE);
                 return;
             }
         } else {
-            if ((!signerReady && password.length === 0)) { setError('Enter your wallet password.'); return; }
             if (typeof messaging.signPsbtUserInitiated !== 'function') {
                 setError(SIGN_UNAVAILABLE_MESSAGE);
                 return;
@@ -1083,6 +1101,8 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             setBroadcastError(null);
             if (!isHwSource) setPassword('');
         } catch (err) {
+            // Back on the hardware sign page returns here with nothing signed.
+            if (isHwSignBack(err)) return;
             setError(
                 err?.name === 'InvalidPasswordError'
                     ? 'Incorrect password.'
@@ -1440,6 +1460,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
         <FormFrame
             label="Sign transaction"
             onSubmit={handleSubmit}
+            errors={formErrors}
             from={(
                 <FromSection
                     {...formSections.bind('from')}
@@ -1451,6 +1472,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     networkHelp="The network whose rules are used to read the unsigned transaction. The signing address must belong to this network."
                     address={selectedAddress?.address || null}
                     addressId="psbt-sign-address"
+                    formErrorKey="psbt-sign-address"
                     addressLabel="Signing address"
                     addressHelp="Choose the wallet address whose keys will sign this transaction. It must hold the inputs being signed because only the keys controlling an input can authorize spending it."
                     onOpenPicker={() => setSigningAddressPickerOpen(true)}
@@ -1466,19 +1488,6 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 <FormAction
                     icon={<Icon.SignIcon />}
                     loading={busy}
-                    disabled={
-                        busy
-                        || !psbtHex
-                        || !decomposed
-                        || Boolean(importEligibilityError)
-                        || ownedInputCount === 0
-                        || !addressId
-                        // On the confirm-page path the password is typed there, so
-                        // it must not gate the button that opens it.
-                        || (useConfirmPage
-                            ? false
-                            : (isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)))
-                    }
                 >
                     Sign Transaction
                 </FormAction>
@@ -1490,10 +1499,10 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 icon={Icon.DocumentIcon}
                 {...formSections.bind('transaction')}
                 // A code or file error reopens the section on its next change.
-                revealKey={visibleError || 0}
+                revealKey={visibleError || codeMissingAttempt || 0}
                 summary={transactionSummary}
             >
-            <div style={{ marginBottom: 'var(--xc-space-3)' }}>
+            <div style={{ marginBottom: 'var(--xc-space-2)' }}>
                 <div
                     {...drop.rootProps}
                     style={{
@@ -1507,35 +1516,30 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     }}
                 >
                     <Textarea
+                        ref={codeFieldRef}
                         id="psbt-sign-paste"
                         label="Unsigned transaction code"
                         help="A PSBT is a partially signed Bitcoin transaction. Paste PSBT hex starting with 70736274ff, base64 starting with cHNid, scan the code, or drop a .psbt file."
                         value={pasted}
+                        error={codeMissingAttempt > 0 && !pasted.trim()
+                            ? 'Paste the transaction code or choose a .psbt file.'
+                            : undefined}
                         onChange={(e) => { setPasted(e.target.value); if (error) setError(null); }}
                         placeholder="Paste the transaction code (it starts with 70736274ff or cHNid), or drop a .psbt file"
                         rows={6}
                         aria-label="Unsigned transaction code"
                         fieldAction={(
                             <FieldIconButton
-                                icon={<Icon.ScanIcon />}
+                                icon={<Icon.QrCodeIcon />}
                                 label={scannerOpen ? 'Close scanner' : 'Scan transaction'}
                                 aria-pressed={scannerOpen}
                                 onClick={() => { setScannerOpen((open) => !open); if (error) setError(null); }}
                                 disabled={busy}
                             />
                         )}
-                        style={{
-                            width: '100%',
-                            background: 'var(--xc-bg)',
-                            color: 'var(--xc-text)',
-                            border: '1px solid var(--xc-border)',
-                            borderRadius: 'var(--xc-radius-sm)',
-                            padding: 'var(--xc-space-2)',
-                            fontSize: 'var(--xc-text-xs)',
-                            fontFamily: 'var(--xc-font-mono)',
-                            resize: 'vertical',
-                            wordBreak: 'break-all',
-                        }}
+                        // The shared field draws the box and keeps the text
+                        // clear of the scan icon; only the code font is local.
+                        className={artifactStyles.codeInput}
                     />
                 </div>
                 {visibleError ? (
@@ -1557,7 +1561,8 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                     itself takes any file. */}
                 <div style={{ marginTop: 'var(--xc-space-2)' }}>
                     <FileField
-                        label="Transaction file"
+                        // G25: the file field's label names its size limit.
+                        label={`Transaction file (up to ${formatBytes(PSBT_FILE_MAX_BYTES, { limit: true })})`}
                         optional
                         help={t('routes.psbtSign.fileHelp')}
                         fileName={psbtFileName}
@@ -1590,12 +1595,12 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
                 ) : null}
             </div>
             {previewBlock ? (
-                <div style={{ marginBottom: 'var(--xc-space-3)' }}>
+                <div style={{ marginBottom: 'var(--xc-space-2)' }}>
                     {previewBlock}
                 </div>
             ) : null}
             {isHwSource && selectedAddress ? (
-                <div style={{ marginBottom: 'var(--xc-space-3)' }}>
+                <div style={{ marginBottom: 'var(--xc-space-2)' }}>
                     <HwSignBlock
                         signerKind={selectedAddress.source}
                         signerName={selectedAddress.signerLabel
@@ -1617,6 +1622,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
             ) : (
                 <PanicPasswordGate>
                     <Input
+                        id="psbt-sign-password"
                         type="password"
                         label="Wallet password"
                         help={t('routes.psbtSign.passwordHelp')}

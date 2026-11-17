@@ -96,9 +96,9 @@ describe('TokenAdminForm token record read faults', () => {
             });
             const preview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
             await act(async () => { await Promise.resolve(); });
-            expect(preview).toBeDisabled();
+            expect(preview).toBeEnabled();
             fireEvent.click(preview);
-            expect(screen.queryByRole('form', { name: /Review/ })).toBeNull();
+            expect(screen.queryByTestId('confirm-modal')).toBeNull();
             expect(target.buildActionPsbtRequest).not.toHaveBeenCalled();
         });
 
@@ -107,9 +107,9 @@ describe('TokenAdminForm token record read faults', () => {
                 getTokenInfo: vi.fn(() => new Promise(() => {})),
             });
             const preview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
-            expect(preview).toBeDisabled();
+            expect(preview).toBeEnabled();
             fireEvent.submit(preview.closest('form'));
-            expect(screen.queryByRole('form', { name: /Review/ })).toBeNull();
+            expect(screen.queryByTestId('confirm-modal')).toBeNull();
             expect(target.buildActionPsbtRequest).not.toHaveBeenCalled();
         });
     }
@@ -149,8 +149,11 @@ describe('TokenAdminForm access lists across a token switch', () => {
         const preview = adminAction();
         if (!preview.disabled) {
             fireEvent.click(preview);
-            const review = await screen.findByRole('form', { name: /Review/ }).catch(() => null);
-            if (review) fireEvent.submit(review);
+            const approve = await screen.findByTestId('confirm-approve').catch(() => null);
+            if (approve) {
+                await waitFor(() => expect(approve).toBeEnabled());
+                fireEvent.click(approve);
+            }
             await act(async () => { await Promise.resolve(); });
         }
         const composedLists = target.buildActionPsbtRequest.mock.calls
@@ -186,7 +189,7 @@ describe('TokenAdminForm access lists across a token switch', () => {
 
         // The owner picks a block-list for the first token, which marks the
         // block-list field as edited.
-        fireEvent.click(screen.getByRole('button', { name: /(Choose|Change) Block-List/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Block list:/ }));
         fireEvent.click(await screen.findByText(/Address list #55/));
         expect(await screen.findByText(/List #55/)).toBeInTheDocument();
 
@@ -201,23 +204,29 @@ describe('TokenAdminForm access lists across a token switch', () => {
 
         // The second token's own bindings show, and nothing from the first.
         expect(await screen.findByText(/Policy 9 \(List #9\)/)).toBeInTheDocument();
-        expect(screen.getByText('None (anyone may interact)')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Allow list: None set' })).toBeInTheDocument();
         expect(screen.queryByText(/List #5\b/)).toBeNull();
         expect(screen.queryByText(/List #7\b/)).toBeNull();
         expect(screen.queryByText(/List #55/)).toBeNull();
 
-        // Unchanged against the second token's record, so the action stays closed.
+        // Unchanged against the second token's record: the action stays
+        // enabled (G22) and a press says nothing changed instead of composing.
         const preview = adminAction();
-        expect(preview).toBeDisabled();
+        expect(preview).not.toBeDisabled();
+        fireEvent.click(preview);
+        expect((await screen.findAllByText(/Leaving both unchanged does nothing/)).length).toBeGreaterThan(0);
+        expect(target.buildActionPsbtRequest).not.toHaveBeenCalled();
 
         // A new allow-list composes only that change; the block-list matches
         // the second token's record and is left out.
-        fireEvent.click(screen.getByRole('button', { name: /Choose Allow-List/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Allow list: None set/ }));
         fireEvent.click(await screen.findByText(/Address list #55/));
         const openPreview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
         await waitFor(() => expect(openPreview).toBeEnabled());
         fireEvent.click(openPreview);
-        fireEvent.submit(await screen.findByRole('form', { name: /Review/ }));
+        const approve = await screen.findByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
         await waitFor(() => expect(target.buildActionPsbtRequest).toHaveBeenCalledTimes(1));
         const params = target.buildActionPsbtRequest.mock.calls[0][0].actionData.params;
         expect(params.TICK).toBe('BETA');
@@ -260,12 +269,14 @@ describe('TokenAdminForm list detail read faults', () => {
             await act(async () => { await Promise.resolve(); await Promise.resolve(); });
             expect(screen.queryByText(/0 members/)).toBeNull();
 
-            fireEvent.click(screen.getByRole('button', { name: /Choose Block-List/ }));
+            fireEvent.click(screen.getByRole('button', { name: /^Block list: None set/ }));
             fireEvent.click(await screen.findByText(/Address list #55/));
             const preview = await screen.findByRole('button', { name: ADMIN_ACTION_PATTERN });
             await waitFor(() => expect(preview).toBeEnabled());
             fireEvent.click(preview);
-            fireEvent.submit(await screen.findByRole('form', { name: /Review/ }));
+            const approve = await screen.findByTestId('confirm-approve');
+            await waitFor(() => expect(approve).toBeEnabled());
+            fireEvent.click(approve);
             await waitFor(() => expect(target.buildActionPsbtRequest).toHaveBeenCalledTimes(1));
             const params = target.buildActionPsbtRequest.mock.calls[0][0].actionData.params;
             expect(params.BLOCK_LIST).toBe('55');
@@ -299,9 +310,10 @@ describe('TokenAdminForm double press', () => {
         const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
-        const review = await screen.findByRole('form', { name: /Review/ });
-        fireEvent.submit(review);
-        fireEvent.submit(review);
+        const approve = await screen.findByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
+        fireEvent.click(approve);
         await act(async () => {
             compose.resolve({ psbtHex: '70736274ff00', chainId: CHAIN });
             await compose.promise;
@@ -327,6 +339,6 @@ describe('TokenAdminForm double press', () => {
             await fresh.promise;
         });
         expect(getTokenInfo.mock.calls.filter(([req]) => req?.fresh)).toHaveLength(1);
-        expect(await screen.findByRole('form', { name: /Review/ })).toBeInTheDocument();
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
     });
 });

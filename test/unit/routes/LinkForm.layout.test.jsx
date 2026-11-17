@@ -83,9 +83,11 @@ describe('LinkForm action layout', () => {
 
         fireEvent.change(actionInputs[0], { target: { value: '10' } });
         fireEvent.change(actionInputs[1], { target: { value: '20' } });
-        expect(await screen.findByText('Found: SEND 10 PEPE, block 902,311'))
-            .toBeInTheDocument();
-        expect(screen.getByText('Found: ISSUE PEPE, block 5,401,220')).toBeInTheDocument();
+        // Each card summarises what its number holds.
+        expect(await within(cards[0]).findByText('Token send')).toBeInTheDocument();
+        expect(within(cards[0]).getByText('902311')).toBeInTheDocument();
+        expect(await within(cards[1]).findByText('Token issuance')).toBeInTheDocument();
+        expect(within(cards[1]).getByText('5401220')).toBeInTheDocument();
 
         fireEvent.click(await screen.findByRole('button', { name: 'Link Actions' }));
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));

@@ -8,18 +8,26 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, SegmentedControl, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { DexHeaderSlot } from '../components/dexHeaderSlot.js';
+import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Select, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { InPageScreen } from '@xchain-wallet/core/ui/navHistory.js';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/market.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/settings.js';
+import '../../i18n/locales/en/firstPaint.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { OrderbookPanel } from '../components/OrderbookPanel.jsx';
 import { RecentTradesPanel } from '../components/RecentTradesPanel.jsx';
+// My Orders is one list: the user's open orders and filled trades, newest first.
 import { OpenOrdersPanel } from '../components/OpenOrdersPanel.jsx';
-import { TradeHistoryPanel } from '../components/TradeHistoryPanel.jsx';
+// The header's standard list filter (G95): search, plus the order status on My Orders.
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
+import { useSettings } from '../hooks/useSettings.js';
+import { explorerChainUrl } from '../utils/explorerLinks.js';
 import { BuyGlyph, SellGlyph } from '../components/marketTradeParts.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
@@ -40,12 +48,12 @@ import { percentChangeDisplay } from '../utils/percentFormat.js';
 import {
     compareDecimalStrings,
     divideDecimalStrings,
+    formatWithThousands,
     multiplyDecimalStrings,
     roundDecimalString,
     subtractDecimalStrings,
     sumDecimalStrings,
 } from '../utils/amountFormat.js';
-import receivePickerStyles from './TokenPicker.module.css';
 import styles from './MarketView.module.css';
 
 /**
@@ -61,13 +69,18 @@ import styles from './MarketView.module.css';
  * @param {string} props.chainId
  * @param {string} props.tick1
  * @param {string} props.tick2
- * @param {() => void} props.onBack
+ * @param {() => void} [props.onBack] the page header's Back; an embedded panel has no header
  * @param {() => void} [props.onSwap] renders the reverse-pair control; reopens the market with tick1/tick2 flipped
  * @param {(trade: { side: 'buy' | 'sell', mode: 'swap' | 'market', price?: string, pick?: number }) => void} [props.onTrade]
  *   Opens the Trade page route (web, desktop and the extension popup route it).
  *   A host that leaves it out (an embedded Market view) opens the page in place here.
+ * @param {boolean} [props.embedded] drawn as the DEX's right panel beside the market list:
+ *   no Screen or page header of its own (the card names the market), and always one column
+ * @param {() => void} [props.onWatchlistChange] called after the star changes the watchlist,
+ *   so a market list shown beside this panel reads it again
  */
-export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, onTrade }) {
+export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, onTrade, embedded = false, onWatchlistChange }) {
+    const dexHeaderSlot = useContext(DexHeaderSlot);
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const tabsId = useId();
@@ -85,7 +98,11 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, on
     // after editing it fills the field again on the Trade page.
     const pickRef = useRef(0);
     const [tab, setTab] = useState(/** @type {'book' | 'trades' | 'orders'} */ ('book'));
-    const [ordersView, setOrdersView] = useState(/** @type {'open' | 'filled'} */ ('open'));
+    // The header filter: the search narrows the open tab's rows; the status
+    // narrows My Orders (operator 2026-11-13, replacing the Open | Filled switch).
+    const [query, setQuery] = useState('');
+    const [orderStatus, setOrderStatus] = useState(/** @type {'all' | 'open' | 'filled'} */ ('all'));
+    const { settings } = useSettings();
     // The Trade page shown in place, for a shell with no route for it.
     const [localTrade, setLocalTrade] = useState(/** @type {any} */ (null));
     // The market, price and order-book loads share one page error and one reload.
@@ -115,6 +132,8 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, on
 
     useEffect(() => {
         setLocalTrade(null);
+        setQuery('');
+        setOrderStatus('all');
     }, [chainId, tick1, tick2]);
 
     const openTrade = (trade) => {
@@ -195,34 +214,113 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, on
                 await messaging.saveWatchlistEntry({ walletId, chainId, tick1, tick2 });
             }
             await loadStars();
+            onWatchlistChange?.();
         } catch { /* the star shows the stored state on the next read */ }
         finally { setStarBusy(false); }
     };
 
     if (localTrade) {
+        // Trade opens over the market in place: its Back returns to the
+        // market, so it shows even when the market is a root page.
         return (
-            <MarketTrade
-                walletId={walletId}
-                chainId={chainId}
-                tick1={tick1}
-                tick2={tick2}
-                side={localTrade.side}
-                mode={localTrade.mode}
-                price={localTrade.price ?? null}
-                pick={localTrade.pick}
-                onBack={() => setLocalTrade(null)}
-            />
+            <InPageScreen>
+                <MarketTrade
+                    walletId={walletId}
+                    chainId={chainId}
+                    tick1={tick1}
+                    tick2={tick2}
+                    side={localTrade.side}
+                    mode={localTrade.mode}
+                    price={localTrade.price ?? null}
+                    pick={localTrade.pick}
+                    onBack={() => setLocalTrade(null)}
+                />
+            </InPageScreen>
         );
     }
 
+    // Filter, then open-on-explorer: the page header's trailing controls; in
+    // the DEX's right panel they go up onto the DEX header line when it offers
+    // a spot, else into a row above the market's card.
+    // The DEX offers two spots: the header line (open-on-explorer) and the
+    // inside of its one filter menu (this market's order status), so the page
+    // shows one filter button, not two (operator 2026-11-13).
+    const headerSlot = embedded ? dexHeaderSlot?.tools ?? null : null;
+    const filterSlot = embedded ? dexHeaderSlot?.filter ?? null : null;
+    const chainUrl = explorerChainUrl({ chainId, settings });
+    const explorerUrl = chainUrl
+        ? `${chainUrl}/market/${encodeURIComponent(tick1)}/${encodeURIComponent(tick2)}`
+        : null;
+    const explorerTitle = t('market.openOnExplorer');
+    const searchLabel = tab === 'book' ? t('market.filter.searchBook')
+        : tab === 'trades' ? t('market.filter.searchTrades')
+        : t('market.filter.searchOrders');
+    const statusSelect = tab === 'orders' ? (
+        <Select
+            aria-label={t('market.filter.orderStatus')}
+            size="md"
+            value={orderStatus}
+            onChange={(event) => setOrderStatus(/** @type {any} */ (event.target.value))}
+        >
+            <Select.Option value="all" icon={<Icon.ListIcon />}>{t('market.filter.allOrders')}</Select.Option>
+            <Select.Option value="open" icon={<Icon.PlayIcon />}>{t('settings.developer.open')}</Select.Option>
+            <Select.Option value="filled" icon={<Icon.CheckIcon />}>{t('components.openOrdersPanel.filled')}</Select.Option>
+        </Select>
+    ) : null;
+    const explorerButton = () => (explorerUrl ? (
+        <Button
+            type="button"
+            size="md"
+            variant="secondary"
+            className={styles.explorerButton}
+            icon={<Icon.ExternalLinkIcon />}
+            onClick={() => window.open(explorerUrl, '_blank', 'noopener,noreferrer')}
+            aria-label={explorerTitle}
+            title={explorerTitle}
+            data-explorer-link=""
+        >
+            {null}
+        </Button>
+    ) : null);
+    const headerTools = () => (
+        <div className={styles.headerControls}>
+            <ListFilterMenu
+                query={query}
+                onQueryChange={setQuery}
+                active={tab === 'orders' && orderStatus !== 'all'}
+                label={t('market.filter.label')}
+                searchPlaceholder={t('routes.addressList.search')}
+                searchLabel={searchLabel}
+                resultsId={`${tabsId}-panel`}
+            >
+                {statusSelect}
+            </ListFilterMenu>
+            {explorerUrl ? (
+                <Button
+                    type="button"
+                    size="md"
+                    variant="secondary"
+                    className={styles.explorerButton}
+                    icon={<Icon.ExternalLinkIcon />}
+                    onClick={() => window.open(explorerUrl, '_blank', 'noopener,noreferrer')}
+                    aria-label={explorerTitle}
+                    title={explorerTitle}
+                    data-explorer-link=""
+                >
+                    {null}
+                </Button>
+            ) : null}
+        </div>
+    );
     const header = (
         <PageHeader
             onBack={onBack}
             title={`${tick1}/${tick2}`}
+            trailing={headerTools()}
         />
     );
-    const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+    const wrap = (children) => {
+        const page = (
             <ListPage className={styles.page}>
                 {failedLoads.length > 0 ? (
                     <StatusMessage
@@ -232,10 +330,28 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, on
                         {t('market.loadFailed', { list: andList(failedLoads) })}
                     </StatusMessage>
                 ) : null}
+                {embedded && !headerSlot ? <div className={styles.panelToolbar}>{headerTools()}</div> : null}
                 <PageLoadFailureScope report={reportFailure}>{children}</PageLoadFailureScope>
             </ListPage>
-        </Screen>
-    );
+        );
+        // The DEX's right panel sits inside the market list's Screen, which
+        // owns the page header, the scroller and the shell notices.
+        if (embedded) {
+            if (!headerSlot) return page;
+            return (
+                <>
+                    {createPortal(explorerButton(), headerSlot)}
+                    {filterSlot && statusSelect ? createPortal(statusSelect, filterSlot) : null}
+                    {page}
+                </>
+            );
+        }
+        return (
+            <Screen variant={variant} header={header}>
+                {page}
+            </Screen>
+        );
+    };
 
     const pillClass = rangeMove?.direction === 'positive'
         ? heroStyles.changePositive
@@ -348,10 +464,11 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, on
     }
 
     return wrap(
-        <div className={styles.layout}>
-            {/* Two columns on a wide screen (card and Buy / Sell on the left, the tabs and
-                their panel on the right), one column otherwise. A stale or failed-price
-                notice under the card takes the column's gap. */}
+        <div className={embedded ? styles.layout : `${styles.layout} ${styles.layoutResponsive}`} data-market-layout={embedded ? 'single' : 'responsive'}>
+            {/* Two columns when the page is wide enough (card and Buy / Sell on the left,
+                the tabs and their panel on the right), one column otherwise and always
+                in the DEX's right panel. A stale or failed-price notice under the card
+                takes the column's gap. */}
             <div className={styles.column}>
             <div
                 role="region"
@@ -408,37 +525,19 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, on
             </div>
 
             <div className={styles.column}>
-            <div
-                className={`${receivePickerStyles.kindSegments} ${styles.panelTabs}`}
-                role="tablist"
+            <Tabs
+                id={tabsId}
+                className={styles.panelTabs}
                 aria-label={t('market.panels')}
-                style={{ width: '100%' }}
-            >
-                {[
+                value={tab}
+                onChange={(id) => setTab(/** @type {any} */ (id))}
+                panelId={`${tabsId}-panel`}
+                items={[
                     { id: 'book',   label: 'Book',      icon: <Icon.BookIcon /> },
                     { id: 'trades', label: 'Trades',    icon: <Icon.SwapIcon /> },
                     { id: 'orders', label: 'My Orders', icon: <Icon.TokenListIcon /> },
-                ].map((opt) => {
-                    const active = tab === opt.id;
-                    return (
-                        <Button
-                            key={opt.id}
-                            id={`${tabsId}-tab-${opt.id}`}
-                            type="button"
-                            role="tab"
-                            aria-selected={active}
-                            aria-controls={`${tabsId}-panel`}
-                            tabIndex={active ? 0 : -1}
-                            className={`${receivePickerStyles.kindSegment} ${active ? receivePickerStyles.kindSegmentActive : ''}`}
-                            style={{ flex: 1 }}
-                            onClick={() => setTab(/** @type {any} */ (opt.id))}
-                            icon={opt.icon}
-                        >
-                            {opt.label}
-                        </Button>
-                    );
-                })}
-            </div>
+                ]}
+            />
 
             <div
                 id={`${tabsId}-panel`}
@@ -455,6 +554,8 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, on
                             tick2={tick2}
                             demo={demo}
                             layout="split"
+                            bare
+                            query={query}
                             lastPrice={lastPrice}
                             lastDirection={changeDisplay?.direction ?? 'neutral'}
                             onPickPrice={(price, side) => {
@@ -466,39 +567,18 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, on
                         />
                     ) : null}
                     {tab === 'trades' ? (
-                        <RecentTradesPanel key={panelKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} />
+                        <RecentTradesPanel key={panelKey} chainId={chainId} tick1={tick1} tick2={tick2} demo={demo} bare query={query} />
                     ) : null}
                     {tab === 'orders' ? (
-                        <>
-                            {/* Open | Filled sits right above the list it switches. */}
-                            <SegmentedControl
-                                className={styles.ordersSwitch}
-                                aria-label={t('market.myOrders')}
-                                value={ordersView}
-                                onChange={setOrdersView}
-                                items={[
-                                    { id: 'open', label: <span className={styles.segLabel}><Icon.ClockIcon />{t('settings.developer.open')}</span> },
-                                    { id: 'filled', label: <span className={styles.segLabel}><Icon.CheckIcon />{t('components.openOrdersPanel.filled')}</span> },
-                                ]}
-                            />
-                            {ordersView === 'open' ? (
-                                <OpenOrdersPanel
-                                    key={marketKey}
-                                    walletId={walletId}
-                                    chainId={chainId}
-                                    tick1={tick1}
-                                    tick2={tick2}
-                                />
-                            ) : (
-                                <TradeHistoryPanel
-                                    key={marketKey}
-                                    walletId={walletId}
-                                    chainId={chainId}
-                                    tick1={tick1}
-                                    tick2={tick2}
-                                />
-                            )}
-                        </>
+                        <OpenOrdersPanel
+                            key={panelKey}
+                            walletId={walletId}
+                            chainId={chainId}
+                            tick1={tick1}
+                            tick2={tick2}
+                            status={orderStatus}
+                            query={query}
+                        />
                     ) : null}
                 </RouteErrorBoundary>
             </div>
@@ -508,7 +588,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, on
 }
 
 // The order the page error names what could not load.
-const LOAD_ORDER = ['market details', 'prices', 'order book', 'recent trades'];
+const LOAD_ORDER = ['market details', 'prices', 'order book', 'recent trades', 'your orders'];
 
 // The card's range buttons, each with the window it plots and the
 // bucket its closes are taken at. YTD is left out.
@@ -624,18 +704,20 @@ function derive24hStats(rows, tick1, tick2) {
     };
 }
 
+// The places stay as the market page has always shown them; the whole part
+// groups ("12,500.0000") so a large price reads at a glance.
 function formatPrice(n) {
     if (compareDecimalStrings(n, '0') === null) return '-';
     if (compareDecimalStrings(n, '0') === 0) return '0';
-    if (compareDecimalStrings(n, '1') >= 0) return roundDecimalString(n, 4);
-    if (compareDecimalStrings(n, '0.01') >= 0) return roundDecimalString(n, 6);
-    return roundDecimalString(n, 8);
+    if (compareDecimalStrings(n, '1') >= 0) return formatWithThousands(roundDecimalString(n, 4));
+    if (compareDecimalStrings(n, '0.01') >= 0) return formatWithThousands(roundDecimalString(n, 6));
+    return formatWithThousands(roundDecimalString(n, 8));
 }
 
 function formatVolume(n) {
     if (compareDecimalStrings(n, '0') !== 1) return '0';
     if (compareDecimalStrings(n, '1000000') >= 0) {
-        return `${divideDecimalStrings(n, '1000000', 2)}M`;
+        return `${formatWithThousands(divideDecimalStrings(n, '1000000', 2))}M`;
     }
     if (compareDecimalStrings(n, '1000') >= 0) {
         return `${divideDecimalStrings(n, '1000', 2)}K`;

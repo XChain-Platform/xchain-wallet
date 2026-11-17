@@ -44,7 +44,8 @@ describe('a ticked passphrase box with an empty field refuses to import', () => 
 
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
-        await screen.findByText(/Enter the extra passphrase, or uncheck the box/);
+        expect(await screen.findByRole('alert', { name: 'Form errors' }))
+            .toHaveTextContent(/Enter the extra passphrase, or uncheck the box/);
         expect(importMnemonic).not.toHaveBeenCalled();
     });
 
@@ -91,7 +92,7 @@ describe('background label restore feedback', () => {
         fireEvent.change(screen.getByLabelText(/^Confirm/), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
-        expect(await screen.findByText('Automatic Donation System')).toBeTruthy();
+        expect(await screen.findByText('Automatic Donations')).toBeTruthy();
         expect(onImported).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         expect(onImported).toHaveBeenCalledTimes(1);

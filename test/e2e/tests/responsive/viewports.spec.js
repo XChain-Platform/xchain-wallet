@@ -152,7 +152,7 @@ test.describe('responsive: one interface at every width', () => {
                 const walletName = page.getByRole('heading', { level: 1 });
                 const password = page.getByLabel('Password', { exact: true });
                 const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
-                const forgot = page.getByRole('button', { name: 'Forgot password?' });
+                const forgot = page.getByRole('button', { name: 'Forgot Password?' });
 
                 await expect(walletName).toBeVisible();
                 await expectAboveFold(walletName, `${viewport.name} wallet name`);
@@ -161,20 +161,19 @@ test.describe('responsive: one interface at every width', () => {
 
                 await forgot.scrollIntoViewIfNeeded();
                 await expect(forgot).toBeVisible();
-                await expectAboveFold(forgot, `${viewport.name} Forgot password link`);
+                await expectAboveFold(forgot, `${viewport.name} Forgot Password button`);
             });
         }
 
-        // The link hides itself with the hidden attribute while its panel is
-        // open, which works only while no author display rule outranks the
-        // attribute. jsdom applies no stylesheet, so only a browser shows it.
-        await test.step('Forgot password leaves the screen while its panel is open', async () => {
-            const forgot = page.getByRole('button', { name: 'Forgot password?' });
+        // The Forgot Password button opens its own page in place of the lock
+        // screen; that page's Back is the only way out and returns here.
+        await test.step('Forgot Password opens its own page and Back returns', async () => {
+            const forgot = page.getByRole('button', { name: 'Forgot Password?' });
             await forgot.click();
-            await expect(page.getByRole('alertdialog', { name: 'Restore wallet access' })).toBeVisible();
+            await expect(page.getByRole('list', { name: 'Restore wallet access' })).toBeVisible();
             await expect(forgot).toBeHidden();
-            await page.getByRole('alertdialog', { name: 'Restore wallet access' })
-                .getByRole('button', { name: 'Cancel', exact: true }).click();
+            await expect(page.getByRole('button', { name: 'Unlock Wallet' })).toBeHidden();
+            await page.getByRole('button', { name: 'Back to previous screen' }).click();
             await expect(forgot).toBeVisible();
         });
     });
@@ -232,7 +231,7 @@ test.describe('responsive: one interface at every width', () => {
         // of them was under the floor before this slice.
         await test.step('Home tabs', async () => {
             await gotoSection(page, 'Home');
-            for (const tab of ['Coins', 'Tokens', 'NFTs', 'DeFi', 'Activity']) {
+            for (const tab of ['Balances', 'NFTs', 'DeFi']) {
                 const t = page.getByRole('tab', { name: new RegExp(`^${tab}`) });
                 if (await t.count() === 0) continue;
                 await t.first().click();

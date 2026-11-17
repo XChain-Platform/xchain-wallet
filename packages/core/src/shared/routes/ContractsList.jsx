@@ -9,9 +9,11 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, ChainBadge, EmptyState, Icon, ListPage, PageHeader, Screen, Select, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import { AddressText, Button, EmptyState, Icon, ListPage, ListRow, NetworkField, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
+import * as branding from '../../branding/branding.js';
 // The standard title-line filter, as Bet Markets uses it.
 import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
+import { LIST_DETAIL_MIN_WIDTH, ListDetailSplit, listDetailStyles, useWideContent } from '../components/PanelSplit.jsx';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletSource } from '../hooks/useDemoGuard.jsx';
@@ -73,12 +75,33 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {(chainId: string, actionIndex: string) => void} props.onOpenContract
  * @param {() => void} [props.onDeploy]   navigate to the §42.6 deploy form (Phase 4 Step 4+); when omitted the button is hidden
  * @param {() => void} props.onBack
+ * @param {'all' | 'mine' | 'interactions'} [props.initialView]
+ * @param {{ chainId: string, contractActionIndex: string } | null} [props.selectedContract]
+ * @param {(ref: { chainId: string, contractActionIndex: string }) => void} [props.onSelectContract]
+ * @param {(ref: { chainId: string, contractActionIndex: string }, panel: { toolsSlot: HTMLElement | null }) => import('react').ReactNode} [props.renderContract]
+ * @param {(ref: { chainId: string, contractActionIndex: string }, page: { measureRef: (el: HTMLElement | null) => void }) => import('react').ReactNode} [props.renderContractPage]
  */
-export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
+export function ContractsList({
+    walletId,
+    onOpenContract,
+    onDeploy,
+    onBack,
+    initialView = 'all',
+    selectedContract = null,
+    onSelectContract,
+    renderContract,
+    renderContractPage,
+}) {
     const { shell } = useMessaging();
     const source = useWalletSource(walletId);
     const { messaging } = source;
     const variant = screenVariantFor(shell);
+    const canSplit = typeof renderContract === 'function';
+    const [layoutRef, wideContent, measured] = useWideContent(LIST_DETAIL_MIN_WIDTH, canSplit);
+    const twoPanel = canSplit && wideContent;
+    const detailRoute = typeof renderContractPage === 'function' && Boolean(selectedContract);
+    const listShown = !detailRoute || (measured && twoPanel);
+    const [localPick, setLocalPick] = useState(/** @type {{ chainId: string, contractActionIndex: string } | null} */ (null));
 
     const vmChains = useChainIdsWithAction('DEPLOY');
 
@@ -92,8 +115,8 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
         /** @type {string} */ ('all'),
     );
     const [searchQuery, setSearchQuery] = useState('');
-    // The All | Mine | Interactions tabs above the list.
-    const [view, setView] = useState('all');
+    // The All | My Contracts | Interactions tabs above the list.
+    const [view, setView] = useState(initialView);
 
     /** @typedef {{ loading: boolean, rows: any[], error: string | null }} LoadState */
     const [myByChain, setMyByChain] = useState(
@@ -115,6 +138,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     };
 
     useEffect(() => {
+        if (!listShown) return undefined;
         let cancelled = false;
         setAddressesByChain(null);
         setAddressesError(null);
@@ -130,7 +154,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 }
             });
         return () => { cancelled = true; };
-    }, [walletId, messaging, addressesReload]);
+    }, [walletId, messaging, addressesReload, listShown]);
 
     const vmChainsWithAddresses = useMemo(() => {
         if (!addressesByChain) return [];
@@ -154,6 +178,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     // chain). Fan out one sdk.getContracts(addr, 'source') per address
     // per chain, merge, de-dupe.
     useEffect(() => {
+        if (!listShown) return undefined;
         if (!addressesByChain) return;
         if (activeChains.length === 0) {
             setMyByChain(settledEmpty([]));
@@ -201,7 +226,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, activeChains, messaging, contractsReload, offline]);
+    }, [addressesByChain, activeChains, messaging, contractsReload, offline, listShown]);
 
     // Phase 3: "My interactions": union of deposits + withdrawals
     // scoped to the user's addresses. Returns the set of distinct
@@ -209,6 +234,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
     // Each entry is a synthesized row carrying { contract_action_index,
     // latestBlock, kinds: Set<'deposit'|'withdraw'> } for rendering.
     useEffect(() => {
+        if (!listShown) return undefined;
         if (!addressesByChain) return;
         if (activeChains.length === 0) {
             setInteractionsByChain(settledEmpty([]));
@@ -297,9 +323,10 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             });
         }
         return () => { cancelled = true; };
-    }, [addressesByChain, activeChains, messaging, contractsReload, offline]);
+    }, [addressesByChain, activeChains, messaging, contractsReload, offline, listShown]);
 
     useEffect(() => {
+        if (!listShown) return undefined;
         if (activeChains.length === 0) {
             setBrowseByChain(settledEmpty([]));
             return;
@@ -331,7 +358,54 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 });
         }
         return () => { cancelled = true; };
-    }, [activeChains, messaging, contractsReload, offline]);
+    }, [activeChains, messaging, contractsReload, offline, listShown]);
+
+    const statesForView = view === 'mine'
+        ? myByChain
+        : view === 'interactions' ? interactionsByChain : browseByChain;
+    const viewRows = useMemo(() => activeChains.flatMap((chainId) => (
+        statesForView[chainId]?.rows || []
+    ).map((row) => ({
+        chainId,
+        contractActionIndex: String(rowKey(row)),
+        row,
+    }))), [activeChains, statesForView]);
+    const viewLoading = activeChains.some((chainId) => !statesForView[chainId] || statesForView[chainId].loading);
+    const shownContract = useMemo(() => {
+        if (!twoPanel || !addressesByChain) return null;
+        const pick = selectedContract ?? localPick;
+        if (pick?.chainId && pick?.contractActionIndex != null) {
+            return {
+                chainId: String(pick.chainId),
+                contractActionIndex: String(pick.contractActionIndex),
+            };
+        }
+        if (viewLoading) return null;
+        const first = viewRows[0];
+        return first ? {
+            chainId: first.chainId,
+            contractActionIndex: first.contractActionIndex,
+        } : null;
+    }, [twoPanel, addressesByChain, selectedContract, localPick, viewLoading, viewRows]);
+    // Once this is a supported wide Contracts page, the split and its docked
+    // tabs stay mounted. An empty, loading or failed tab is left-panel state;
+    // it must not collapse the layout or replace the selected detail.
+    const showPanel = twoPanel && listShown && !addressesError
+        && Boolean(addressesByChain) && vmChainsWithAddresses.length > 0;
+    useEffect(() => {
+        if (showPanel && shownContract && !sameContract(shownContract, selectedContract)) {
+            onSelectContract?.(shownContract);
+        }
+    }, [showPanel, shownContract, selectedContract, onSelectContract]);
+    const pickContract = (chainId, contractActionIndex) => {
+        const ref = { chainId: String(chainId), contractActionIndex: String(contractActionIndex) };
+        if (!twoPanel) {
+            onOpenContract(ref.chainId, ref.contractActionIndex);
+            return;
+        }
+        setLocalPick(ref);
+        onSelectContract?.(ref);
+    };
 
     // The title bar holds the filter (search, Network) and a plus for
     // Publish contract at the far right; the body is just the list.
@@ -350,17 +424,19 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                         searchPlaceholder="Search"
                         searchLabel="Search contracts"
                     >
-                        <Select
+                        {/* The standard Network field opens the full-screen
+                            network list (operator ruling 2026-11-13). */}
+                        <NetworkField
                             label="Network"
+                            help="Shows only the contracts on the network you pick, or on every network."
                             size="md"
                             value={chainFilter}
-                            onChange={(event) => setChainFilter(event.target.value)}
-                        >
-                            <option value="all">All networks</option>
-                            {vmChainsWithAddresses.map((cid) => (
-                                <option key={cid} value={cid}>{chainRegistry.get(cid)?.displayName || cid}</option>
-                            ))}
-                        </Select>
+                            onChange={setChainFilter}
+                            chainIds={vmChainsWithAddresses}
+                            chainRegistry={chainRegistry}
+                            allOption
+                            notSource
+                        />
                     </ListFilterMenu>
                     {onDeploy ? (
                         <Button variant="secondary" icon={<Icon.PlusIcon />} aria-label="Publish contract" title="Publish contract" onClick={onDeploy}>
@@ -371,11 +447,55 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
             ) : null}
         />
     );
-    const wrap = (children, toolbar, notices) => (
-        <Screen variant={variant} header={header}>
-            <ListPage toolbar={toolbar} notices={notices}>{children}</ListPage>
-        </Screen>
-    );
+    const selectedRow = shownContract ? viewRows.find((item) => sameContract(item, shownContract)) : null;
+    const detailSkeleton = <div aria-hidden="true"><Skeleton height={190} /></div>;
+    const wrap = (children, toolbar, notices) => {
+        const listPage = (
+            <ListPage toolbar={showPanel ? undefined : toolbar} notices={notices}>{children}</ListPage>
+        );
+        if (!showPanel) {
+            return (
+                <Screen variant={variant} header={header}>
+                    <div ref={layoutRef} className={listDetailStyles.layoutRoot} data-list-detail="list">
+                        {listPage}
+                    </div>
+                </Screen>
+            );
+        }
+        return (
+            <Screen variant={variant} header={header} bodyClassName={listDetailStyles.twoPanelBody}>
+                <ListDetailSplit
+                    measureRef={layoutRef}
+                    storageKey="contracts"
+                    resizeLabel="Resize the contracts list"
+                    resizeHint="Drag to resize the contracts list, or press Enter to reset."
+                    layoutName="two-panel"
+                    listHeader={toolbar}
+                    list={listPage}
+                    listLabel="Contracts list"
+                    detailLabel={selectedRow
+                        ? contractDisplayLabel(selectedRow.row, selectedRow)
+                        : 'Contract detail'}
+                    detailBusy={!shownContract}
+                    detailFallback={detailSkeleton}
+                    detail={shownContract
+                        ? renderContract(shownContract, { toolsSlot: null })
+                        : detailSkeleton}
+                />
+            </Screen>
+        );
+    };
+
+    if (detailRoute && !(measured && twoPanel)) {
+        if (!measured) {
+            return (
+                <Screen variant={variant} header={header}>
+                    <div ref={layoutRef} className={listDetailStyles.layoutRoot} data-list-detail="measuring" />
+                </Screen>
+            );
+        }
+        return renderContractPage(selectedContract, { measureRef: layoutRef });
+    }
 
     if (addressesError) {
         return wrap(
@@ -418,7 +538,7 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 aria-label="Contract views"
                 items={[
                     { id: 'all', label: <span className={contractStyles.tabLabel}><Icon.GridIcon />All</span> },
-                    { id: 'mine', label: <span className={contractStyles.tabLabel}><Icon.UserIcon />Mine</span> },
+                    { id: 'mine', label: <span className={contractStyles.tabLabel}><Icon.UserIcon />My Contracts</span> },
                     { id: 'interactions', label: <span className={contractStyles.tabLabel}><Icon.DollarIcon />Interactions</span> },
                 ]}
                 value={view}
@@ -463,8 +583,9 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 searchQuery={searchQuery}
                 emptyTitle="No published contracts"
                 emptyText="Published contracts appear here after you publish one."
-                onOpenContract={onOpenContract}
-                renderRow={(row, cid) => <ContractRow row={row} chainId={cid} />}
+                onOpenContract={pickContract}
+                selectedContract={showPanel ? shownContract : null}
+                renderRow={contractRowParts}
             />
         );
     } else if (view === 'interactions') {
@@ -475,18 +596,10 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 searchQuery={searchQuery}
                 emptyTitle="No contract interactions"
                 emptyText={`${actionDisplayLabel('DEPOSIT')} and ${actionDisplayLabel('WITHDRAW').toLowerCase()} actions appear here after one of your addresses interacts with a contract.`}
-                onOpenContract={onOpenContract}
-                renderRow={(row, cid) => <InteractionRow row={row} chainId={cid} />}
-            >
-                {/* Keep the copy plain-language: this renders to end users, so no
-                    SDK method names or internal shorthand (#2255). The technical
-                    reason (SDK getExecutions is contract-scoped today) lives in
-                    the header comment at the top of this file. */}
-                <p className={styles.entryDescription}>
-                    Contract calls that don&apos;t move funds aren&apos;t listed
-                    here yet. Open a contract to see its call history.
-                </p>
-            </ChainSection>
+                onOpenContract={pickContract}
+                selectedContract={showPanel ? shownContract : null}
+                renderRow={interactionRowParts}
+            />
         );
     } else {
         tabBody = (
@@ -496,8 +609,9 @@ export function ContractsList({ walletId, onOpenContract, onDeploy, onBack }) {
                 searchQuery={searchQuery}
                 emptyTitle="No contracts yet"
                 emptyText="Published and indexed contracts appear here after one is created."
-                onOpenContract={onOpenContract}
-                renderRow={(row, cid) => <ContractRow row={row} chainId={cid} />}
+                onOpenContract={pickContract}
+                selectedContract={showPanel ? shownContract : null}
+                renderRow={contractRowParts}
             />
         );
     }
@@ -540,8 +654,8 @@ function ChainSection({
     emptyTitle,
     emptyText,
     onOpenContract,
+    selectedContract,
     renderRow,
-    children,
 }) {
     const searchActive = searchQuery.trim().length > 0;
     const groups = chains.map((cid) => {
@@ -564,9 +678,9 @@ function ChainSection({
             )) : shown.map(({ cid, state, rows }) => (
                 <ChainGroup key={cid} descriptor={chainRegistry.get(cid)} chainId={cid} state={{ ...state, rows }}
                             onOpenContract={onOpenContract}
+                            selectedContract={selectedContract}
                             renderRow={(row) => renderRow(row, cid)} />
             ))}
-            {children}
         </Section>
     );
 }
@@ -577,73 +691,97 @@ function ChainGroup({
     chainId,
     state,
     onOpenContract,
+    selectedContract,
     renderRow,
 }) {
+    // No network heading above the rows: the chain badge on each row's icon
+    // names the network (U12, G61). The rows sit in one list card with
+    // dividers, each ending in the standard chevron (G07, G97).
+    const chainIconUrl = branding.chainIconSmallUrl(chainId);
     return (
-        <section>
-            {descriptor ? (
-                <SectionHeader
-                    as="h3"
-                    title={<ChainBadge descriptor={descriptor} size="sm" />}
-                />
-            ) : null}
+        <section aria-label={`Contracts on ${descriptor?.displayName || chainId}`}>
             {state.loading ? (
                 <div role="status" aria-label={`Loading contracts on ${descriptor?.displayName || chainId}`}>
                     <Skeleton.List rows={3} />
                 </div>
             ) : (
-                <>
-                    {state.rows.map((row, i) => (
-                        <Button
-                            key={String(rowKey(row)) + ':' + i}
-                            type="button"
-                            className={`${styles.entry} ${contractStyles.contractRow}`}
-                            icon={<Icon.ArrowRightIcon />}
-                            aria-label={`Open ${contractDisplayLabel(row, { chainId, actionIndex: rowKey(row) })}`}
-                            onClick={() => onOpenContract(chainId, String(rowKey(row)))}
-                        >
-                            {renderRow(row)}
-                        </Button>
-                    ))}
-                </>
+                <ul className={contractStyles.list} data-xc-split-list={selectedContract ? '' : undefined}>
+                    {state.rows.map((row, i) => {
+                        const parts = renderRow(row);
+                        const selected = sameContract(selectedContract, {
+                            chainId,
+                            contractActionIndex: String(rowKey(row)),
+                        });
+                        return (
+                            <li
+                                key={String(rowKey(row)) + ':' + i}
+                                className={contractStyles.listItem}
+                                data-selected={selected ? 'true' : undefined}
+                            >
+                                <ListRow
+                                    className={contractStyles.contractRow}
+                                    data-xc-split-row={selectedContract ? '' : undefined}
+                                    aria-label={`Open ${contractDisplayLabel(row, { chainId, actionIndex: rowKey(row) })}`}
+                                    aria-current={selected ? 'true' : undefined}
+                                    onClick={() => onOpenContract(chainId, String(rowKey(row)))}
+                                    chevron
+                                    leading={(
+                                        <span className={contractStyles.rowIcon} aria-hidden="true">
+                                            <Icon.ContractIcon />
+                                            {chainIconUrl ? (
+                                                <img src={chainIconUrl} alt="" className={contractStyles.chainOverlay} />
+                                            ) : null}
+                                        </span>
+                                    )}
+                                    title={parts.title}
+                                    subtitle={parts.subtitle}
+                                    trailing={parts.trailing}
+                                />
+                            </li>
+                        );
+                    })}
+                </ul>
             )}
         </section>
     );
 }
 
-function ContractRow({ row, chainId }) {
+/** A status word in sentence case for the row's pill ("ACTIVE" -> "Active"). */
+function statusText(value) {
+    const text = String(value || '').trim().toLowerCase();
+    return text ? text.charAt(0).toUpperCase() + text.slice(1) : 'Unknown';
+}
+
+/** A live contract's status takes the success tint; every other status stays neutral. */
+function statusIsLive(value) {
+    return ['active', 'valid'].includes(String(value || '').trim().toLowerCase());
+}
+
+function contractRowParts(row, chainId) {
     // Name and version off the chain's own record, printed with the derived
     // address: "Escrow v1.0.0 (C:BTC:12)". Never the name alone - names are not
     // unique, so two contracts would look like one.
     const publisher = row.source || row.SOURCE;
-    const status = String(row.status || row.STATUS || '(unknown)');
-    return (
-        <span className={styles.entryText}>
-            <span className={styles.entryLabel}>
-                {contractDisplayLabel(row, { chainId, actionIndex: row.action_index })}
+    return {
+        title: contractDisplayLabel(row, { chainId, actionIndex: row.action_index }),
+        subtitle: publisher ? (
+            <span className={contractStyles.publisher}>
+                {/* An element, so AddressText's fit takes its width off the row. */}
+                <span>Published by</span>
+                <AddressText address={String(publisher)} fit focusable={false} />
             </span>
-            <span className={styles.entryDescription}>
-                {publisher ? (
-                    <>published by <AddressText address={String(publisher)} /> · </>
-                ) : null}
-                status {status}
-            </span>
-        </span>
-    );
+        ) : null,
+        trailing: <span className={`${contractStyles.statusPill} ${statusIsLive(row.status || row.STATUS) ? contractStyles.statusLive : ''}`}>{statusText(row.status || row.STATUS)}</span>,
+    };
 }
 
-function InteractionRow({ row, chainId }) {
+function interactionRowParts(row, chainId) {
     const kinds = Array.from(row.kinds || []).sort().join(' + ');
-    return (
-        <span className={styles.entryText}>
-            <span className={styles.entryLabel}>
-                {contractDisplayLabel(row, { chainId, actionIndex: row.contract_action_index })}
-            </span>
-            <span className={styles.entryDescription}>
-                {kinds || '(none)'} · last block {row.latestBlock || '?'}
-            </span>
-        </span>
-    );
+    return {
+        title: contractDisplayLabel(row, { chainId, actionIndex: row.contract_action_index }),
+        subtitle: `${kinds || '(none)'} · last block ${row.latestBlock || '?'}`,
+        trailing: null,
+    };
 }
 
 function extractRows(resp) {
@@ -670,6 +808,12 @@ function newestFirst(a, b) {
 
 function rowKey(row) {
     return row.action_index ?? row.contract_action_index ?? row.tx_hash ?? '0';
+}
+
+function sameContract(a, b) {
+    return Boolean(a && b)
+        && String(a.chainId) === String(b.chainId)
+        && String(a.contractActionIndex) === String(b.contractActionIndex);
 }
 
 function applySearch(rows, query) {

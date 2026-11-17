@@ -52,8 +52,9 @@ function mount(target, { walletsAfterRemoval = [ACTIVE], removeWallet, walletNam
     return { messaging, reload, onBack, onRemoved };
 }
 
+// The page lands directly on its confirm step (RemoveWallet passes `direct`),
+// so there is no "Remove…" step to open first: type the name, then Remove Wallet.
 function confirmRemoval(name) {
-    fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Confirm wallet name' }), { target: { value: name } });
     const confirm = screen.getByRole('button', { name: 'Remove Wallet' });
     expect(confirm).toBeEnabled();
@@ -88,14 +89,16 @@ describe('Remove Wallet page', () => {
 
     it('asks for the chosen wallet\'s name, not the active wallet\'s', () => {
         mount(OTHER);
-        fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
         fireEvent.change(screen.getByRole('textbox', { name: 'Confirm wallet name' }), { target: { value: ACTIVE.name } });
-        expect(screen.getByRole('button', { name: 'Remove Wallet' })).toBeDisabled();
+        // G130: the button stays enabled; the active wallet's name is refused.
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Wallet' }));
+        expect(screen.getByRole('alert', { name: /form errors/i })).toHaveTextContent(OTHER.name);
+        fireEvent.change(screen.getByRole('textbox', { name: 'Confirm wallet name' }), { target: { value: OTHER.name } });
+        expect(screen.getByRole('button', { name: 'Remove Wallet' })).toBeEnabled();
     });
 
     it('changes nothing when the user backs out', () => {
         const { messaging, reload, onBack, onRemoved } = mount(OTHER);
-        fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
         fireEvent.change(screen.getByRole('textbox', { name: 'Confirm wallet name' }), { target: { value: OTHER.name } });
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
@@ -137,10 +140,65 @@ describe('Remove Wallet page', () => {
         expect(readActiveWallet()).toBeNull();
     });
 
+    it('leads with one danger notice, then the confirm field and the red danger button', () => {
+        mount(OTHER);
+        const field = screen.getByRole('textbox', { name: 'Confirm wallet name' });
+        const button = screen.getByRole('button', { name: 'Remove Wallet' });
+        const form = field.closest('form');
+        expect(form).toBe(button.closest('form'));
+        // The shared danger (error tone) notice is the first block in the form.
+        const notice = screen.getByTestId('remove-wallet-danger-notice');
+        expect(notice.getAttribute('data-variant')).toBe('error');
+        expect(form.contains(notice)).toBe(true);
+        expect(notice.textContent).toContain('You are about to remove this wallet');
+        expect(notice.textContent).toContain(OTHER.name);
+        expect(notice.textContent).toMatch(/can't be recovered without its backup or recovery phrase/i);
+        expect(notice.textContent).toMatch(/back up/i);
+        expect(notice.contains(field)).toBe(false);
+        expect(notice.contains(button)).toBe(false);
+        // Exactly three blocks: the title, the wallet name, then ONE paragraph
+        // holding both sentences as flowing text.
+        const paras = notice.querySelectorAll('p');
+        expect(paras.length).toBe(2);
+        expect(paras[0].textContent).toBe(OTHER.name);
+        const body = screen.getByTestId('remove-wallet-danger-body');
+        expect(body).toBe(paras[1]);
+        expect(body.querySelector('br')).toBeNull();
+        expect(body.textContent).toBe(
+            'Its accounts, addresses, hardware wallet links, and pending transactions will be deleted. It can\'t be recovered without its backup or recovery phrase. Back up this wallet first.',
+        );
+        // Notice, then field, then button, with no card or Settings surface wrapping the field.
+        const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+        expect(follows(notice, field)).toBe(true);
+        expect(follows(field, button)).toBe(true);
+        expect(document.body.querySelector('[class*="settingsSurface"]')).toBeNull();
+        // The one red exception to the green main action: danger variant with its icon.
+        // G125: red, never the success green of other main actions.
+        expect(button.className).toMatch(/danger/);
+        expect(button.className).not.toMatch(/success/);
+        expect(button.className).toMatch(/block/i);
+        expect(button.querySelector('svg')).toBeTruthy();
+        // G130: the button is enabled; the typed name is checked on the press.
+        expect(button.disabled).toBe(false);
+    });
+
+    it('keeps the final button red and enabled with no local override (G125, G130)', () => {
+        mount(OTHER);
+        const button = screen.getByRole('button', { name: 'Remove Wallet' });
+        expect(button.disabled).toBe(false);
+        expect(button.className).toMatch(/danger/);
+        // G130: Button draws no disabled look at all, so the page needs no
+        // exception of its own to stay red.
+        const css = readFileSync(join(process.cwd(), 'packages/core/src/shared/components/settings/ThisWalletSection.module.css'), 'utf8');
+        expect(css).not.toMatch(/:disabled\s*\{/);
+    });
+
     it('offers no removal for a wallet whose name is unknown', () => {
         mount(OTHER, { walletName: '' });
         expect(screen.getByText('This wallet is no longer listed.')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Remove…' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Remove Wallet' })).toBeNull();
+        expect(screen.queryByRole('textbox', { name: 'Confirm wallet name' })).toBeNull();
     });
 });
 

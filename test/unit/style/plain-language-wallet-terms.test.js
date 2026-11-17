@@ -21,8 +21,10 @@ const TERM_PATTERN = new RegExp(
     'i',
 );
 
-// Keys shown only in Developer mode.
-const DEVELOPER_KEY = /^settings\.developer\./;
+// Keys shown only in Developer mode. The Test Networks pages (custom networks
+// and the regtest faucet) are Developer mode tools split out of
+// settings.developer.* on 2026-11-14; a network descriptor is what they take.
+const DEVELOPER_KEY = /^settings\.(?:developer|testNetworks)\./;
 
 // The wallet list names a recovery-phrase wallet's type BIP39 beside its account count, matching the Wallet details card.
 const ALLOWED = new Set(['walletPicker.js walletPicker.bip39']);
@@ -65,11 +67,13 @@ describe('wallet picker format badge', () => {
 });
 
 describe('derivation path cross-check copy', () => {
-    it('labels the help tip and the comparison text with account path, never derivation path', async () => {
+    // G121 (2026-11-15): the read-only account path carries no help tip, so
+    // only the comparison text is left to name it.
+    it('labels the comparison text with account path, never derivation path', async () => {
         const mod = await import(pathToFileURL(resolve(EN_DIR, 'components.js')).href);
         const messages = mod.default ?? mod;
         const prefix = 'components.derivationPathCrossCheck.';
-        expect(messages[`${prefix}derivationPathHelpLabel`]).toBe('Account path help');
+        expect(messages[`${prefix}derivationPathHelpLabel`]).toBeUndefined();
         expect(messages[`${prefix}theDerivationPathAndAddress`]).toContain('account path');
         expect(messages[`${prefix}trezorDisplaysTheAddressAnd`]).toContain('account path');
         const jargon = Object.entries(messages)

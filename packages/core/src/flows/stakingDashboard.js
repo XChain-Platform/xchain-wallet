@@ -260,6 +260,28 @@ export function latestEffectiveStakingRow(rows, height) {
     })[0] || null;
 }
 
+/**
+ * This address's own row in the chain's validator roster, matched on the
+ * delegated signing key (case-insensitive) and the address. A roster row is
+ * the operator's only when it names both: a row pairing the key with another
+ * address is someone else's record.
+ *
+ * @param {object} args
+ * @param {any[]} [args.validators]        rows from getValidatorsForChain
+ * @param {string | null | undefined} args.signingPubkey  the active delegation's key
+ * @param {string} args.address
+ * @returns {any | null}
+ */
+export function ownValidatorRow({ validators, signingPubkey, address } = {}) {
+    if (!signingPubkey) return null;
+    const pk = String(signingPubkey).toLowerCase();
+    return (Array.isArray(validators) ? validators : []).find((v) => {
+        const vk = String(v?.signing_pubkey || v?.SIGNING_PUBKEY || '').toLowerCase();
+        const source = v?.source ?? v?.SOURCE ?? v?.address ?? v?.ADDRESS;
+        return vk === pk && source === address;
+    }) || null;
+}
+
 /** Sum current staking row amounts exactly at the protocol token scale. */
 export function sumStakingAmounts(rows) {
     let total = 0n;

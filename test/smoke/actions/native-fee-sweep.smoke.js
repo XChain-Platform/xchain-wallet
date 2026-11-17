@@ -26,7 +26,8 @@ const flows = (f) => read('packages', 'core', 'src', 'flows', f);
 // payload they build ----
 const SWEEP_FORMS = [
     'CreateOrderForm.jsx', 'DividendForm.jsx', 'AirdropForm.jsx',
-    'ListCreateForm.jsx', 'ListForkForm.jsx',
+    // The one List form; its Edit and Fork body was ListForkForm.jsx.
+    'ListCreateForm.jsx',
     'CallbackForm.jsx', 'SweepForm.jsx',
     // Added 2026-08-01. It was on NEITHER list, so this smoke passed
     // while the one authoring surface for an ownership sale composed ORDER and
@@ -171,7 +172,8 @@ for (const f of BET_FORMS) {
     // BOTH lanes: the flag has to be in the composed PSBT the user approves AND
     // in the submit that signs it. A form that threaded only one would preview
     // a fee output it never pays for, or pay for one nobody previewed.
-    const composeIdx = src.indexOf('messaging.composeBetForConfirm({');
+    // G98: the Advanced section's choices wrap the compose request.
+    const composeIdx = src.indexOf('messaging.composeBetForConfirm(withAdvancedOptions({');
     assert.ok(composeIdx !== -1, `${f} composes through the BET route`);
     // The window spans the compose call and the submit beside it; BetFeedDetail
     // re-reads the market between them, so the submit sits about 950 characters on.
@@ -302,7 +304,18 @@ const EXEMPT = new Map([
     // BATCH lane, fee-quote denied.
     ['BatchComposerForm.jsx', 'BATCH is fee-quote denied'],
     ['GatedPublishForm.jsx', 'BATCH lane, fee-quote denied'],
+    // Each declares a kind (SWAP_KIND, ORDER_KIND) and renders
+    // TradeOwnerActionForm with it; that shared form mounts useNativeFee and
+    // threads the flag, and the scan holds it to that below.
+    ['MySwapsView.jsx', 'Edit and Cancel Swap compose in TradeOwnerActionForm, which threads payFeeInNativeCoin'],
+    ['OrderActionPanel.jsx', 'Edit and Cancel Order compose in TradeOwnerActionForm, which threads payFeeInNativeCoin'],
 ]);
+{
+    const owner = routes('TradeOwnerActionForm.jsx');
+    assert.match(owner, /import \{ useNativeFee \}/, 'TradeOwnerActionForm uses the useNativeFee hook');
+    assert.match(owner, /payFeeInNativeCoin: true/, 'TradeOwnerActionForm threads the native-fee flag into its payloads');
+    assert.match(owner, /nativeFeeProps: \{ \.\.\.nativeFee\.toggleProps\b/, 'TradeOwnerActionForm passes the whole toggleProps');
+}
 
 for (const file of readdirSync(routesDir).filter((f) => f.endsWith('.jsx'))) {
     const src = routes(file);

@@ -44,6 +44,7 @@ export const RUNTIME_REQUEST_TIMEOUT_MS = 60_000;
 const TIMED_SHELL_REQUESTS = new Set([
     'account.list',
     'addresses.byChain',
+    'addresses.byWallet',
     'balances.wallet',
     'broadcast.queue.list',
     'contacts.list',
@@ -167,6 +168,7 @@ function sendMessageOnce(type, request, timeoutMs) {
 const REPEATABLE_READS = new Set([
     'account.list',
     'addresses.byChain',
+    'addresses.byWallet',
     'balances.wallet',
     'broadcast.queue.list',
     'contacts.list',

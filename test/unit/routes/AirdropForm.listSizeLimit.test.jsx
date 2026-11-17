@@ -111,7 +111,7 @@ describe('AirdropForm refuses a recipient list too large to verify, before compo
             'This airdrop lists 200 addresses, more than this wallet can verify in one airdrop: '
             + 'up to 190 of these fit. Split it into 2 airdrops of up to 190 addresses each.',
         );
-        expect(submitButton()).toBeDisabled();
+        expect(submitButton()).toBeEnabled();
         fireEvent.submit(submitButton().closest('form'));
         await flushTimers();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -142,7 +142,7 @@ describe('AirdropForm refuses a recipient list too large to verify, before compo
 
         fireEvent.click(submitButton());
         await flushTimers();
-        // The review title is Title Case.
-        expect(document.body.textContent).toMatch(/Review Address List/);
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Create address list of 190 items');
     });
 });

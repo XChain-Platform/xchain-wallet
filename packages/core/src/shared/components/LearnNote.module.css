@@ -1,53 +1,6 @@
-/* LearnNote. A quiet explanatory callout, shown only when Learn
- * Mode is on, so it reads as help rather than as a warning. Deliberately
- * not danger/warning coloured: nothing is wrong when this appears. */
-
-.note {
-    composes: card from '../../ui/Card.module.css';
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    line-height: 1.5;
-}
-
-.header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-1);
-}
-
-.title {
-    color: var(--xc-text);
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-/* Inline link-style button; the flex box lets it meet the minimum pointer
-   target floor without padding that would push the text out of line. */
-.dismiss {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--xc-tap-min);
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    font: inherit;
-    text-decoration: underline;
-    /* Two pixels separate the underline without changing the line box. */
-    text-underline-offset: 2px;
-}
-
-.dismiss:focus-visible {
-    border-radius: var(--xc-radius-sm);
-    outline: 2px solid var(--xc-focus-ring);
-    /* Two pixels separate the focus ring without enlarging the control. */
-    outline-offset: 2px;
-}
+/* LearnNote. The notice box, tone, title and close X come from the kit
+ * Notice (the Notice Standard); this file only styles the help sentence and
+ * its docs link. */
 
 .body {
     margin: 0;
@@ -55,7 +8,8 @@
 }
 
 .body a {
-    color: var(--xc-accent-primary);
+    color: inherit;
+    text-decoration: underline;
 }
 
 .body a span[aria-hidden='true'] {

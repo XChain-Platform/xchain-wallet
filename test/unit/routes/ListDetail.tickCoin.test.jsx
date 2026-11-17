@@ -9,12 +9,13 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { ListDetail } from '../../../packages/core/src/shared/routes/ListDetail.jsx';
 
-function renderList(messaging, chainId = 'bitcoin-testnet') {
+// The members live on the List tab; the page opens on Actions.
+async function renderList(messaging, chainId = 'bitcoin-testnet') {
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ListDetail
@@ -25,6 +26,7 @@ function renderList(messaging, chainId = 'bitcoin-testnet') {
             />
         </MessagingProvider>,
     );
+    fireEvent.click(await screen.findByRole('tab', { name: 'List' }));
 }
 
 afterEach(() => {
@@ -42,7 +44,7 @@ describe('ListDetail coin-qualified ticker members', () => {
             getTokenInfo: vi.fn().mockResolvedValue({ canonicalTick: 'DOGECOIN' }),
         };
 
-        renderList(messaging);
+        await renderList(messaging);
 
         expect(await screen.findByText('DOGECOIN')).toBeTruthy();
         expect(screen.getByText('DOGE')).toBeTruthy();
@@ -62,7 +64,7 @@ describe('ListDetail coin-qualified ticker members', () => {
             getTokenInfo: vi.fn(() => new Promise((_resolve, reject) => { rejectLookup = reject; })),
         };
 
-        renderList(messaging, 'bitcoin-mainnet');
+        await renderList(messaging, 'bitcoin-mainnet');
 
         expect(await screen.findByText('id 19')).toBeTruthy();
         expect(screen.getByText('LTC')).toBeTruthy();
@@ -86,7 +88,7 @@ describe('ListDetail coin-qualified ticker members', () => {
             getTokenInfo: vi.fn(),
         };
 
-        renderList(messaging);
+        await renderList(messaging);
 
         const pepe = await screen.findByText('PEPE');
         const future = screen.getByText('FUTURE:^8');

@@ -110,7 +110,7 @@ async function openAdvanced() {
     fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
     fireEvent.change(await screen.findByLabelText(/^Amount \(/), { target: { value: '1' } });
-    fireEvent.click(screen.getByText('Advanced'));
+    fireEvent.click(screen.getByText('Advanced', { selector: '[data-form-section-title]' }));
 }
 
 afterEach(() => {

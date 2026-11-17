@@ -97,7 +97,7 @@ describe('long content layout', () => {
         expect(quantityText.closest(`.${balanceStyles.rowContent}`).querySelector(`.${balanceStyles.rowBody}`)).not.toBeNull();
     });
 
-    it('keeps a full history address and pending amount available without digit ellipsis', () => {
+    it('keeps a long history address off the row and the pending amount without digit ellipsis', () => {
         const address = `bc1q${'addresssegment'.repeat(12)}`;
         const amount = '1234567890123456789012345678901234567890';
         render(
@@ -125,8 +125,11 @@ describe('long content layout', () => {
             </MessagingProvider>,
         );
 
-        // The whole address stays in the title; the row shows both ends.
-        expect(screen.getByTitle(address)).toHaveTextContent(`${address.slice(0, 6)}…${address.slice(-6)}`);
+        // A history row shows no counterparty address (the history-rows change,
+        // 2026-11-14): it lives on the action's detail page, so the row cannot
+        // overflow on a long one.
+        expect(screen.queryByTitle(address)).toBeNull();
+        expect(document.body.textContent).not.toContain(address.slice(0, 12));
         // The amount is shown digit-grouped; every digit must still be there.
         const pendingAmount = document.querySelector('[data-pending-amount]');
         expect(pendingAmount.getAttribute('title').replace(/,/g, '')).toContain(amount);
@@ -203,7 +206,9 @@ describe('long content layout', () => {
         render(<PageHeader title={title} onBack={() => {}} trailing={<button type="button">Action</button>} />);
 
         expect(screen.getByRole('heading', { name: title })).toHaveAttribute('title', title);
-        expect(rule(pageHeaderCss, '.title')).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(rule(pageHeaderCss, '.title')).not.toMatch(/text-overflow:\s*ellipsis/);
+        // The approved header shows one line that ends in an ellipsis; the whole title stays in the
+        // heading's title attribute (asserted above) so nothing is lost.
+        expect(rule(pageHeaderCss, '.title')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(pageHeaderCss, '.title')).toMatch(/white-space:\s*nowrap/);
     });
 });

@@ -113,7 +113,7 @@ describe('private-key reveal security', () => {
         expect(screen.getByText(/Never share this private key/)).toHaveTextContent(
             'Never share this private key. Anyone with it can spend funds from this address.',
         );
-        expect(screen.getByText(/screen-sharing or recording/i)).toBeTruthy();
+        expect(screen.queryByText(/screen-sharing or recording/i)).toBeNull();
         // The password field sits under the warning, masked, with no key shown.
         expect(screen.getByLabelText('Wallet password')).toHaveAttribute('type', 'password');
         expect(shownKey()).toBeNull();
@@ -128,7 +128,8 @@ describe('private-key reveal security', () => {
 
         expect(messaging.exportPrivateKey).not.toHaveBeenCalled();
         expect(shownKey()).toBeNull();
-        expect(screen.getByText('Enter your wallet password.')).toBeTruthy();
+        expect(screen.getByRole('alert', { name: 'Form errors' }))
+            .toHaveTextContent('Enter your wallet password.');
     });
 
     it('requires password confirmation before the exported key shows', async () => {
@@ -152,7 +153,8 @@ describe('private-key reveal security', () => {
 
         await confirmPassword();
 
-        expect(screen.getByText('The wallet password is not right.')).toBeTruthy();
+        expect(screen.getByRole('alert', { name: 'Form errors' }))
+            .toHaveTextContent('The wallet password is not right.');
         expect(screen.queryByText(/internal decrypt detail/i)).toBeNull();
         expect(screen.getByLabelText('Wallet password')).toBeTruthy();
         expect(shownKey()).toBeNull();

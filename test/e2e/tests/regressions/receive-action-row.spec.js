@@ -18,7 +18,10 @@ const VIEWPORTS = [
     { width: 1280, height: 800 },
 ];
 
-test('Receive action labels stay on one standard-height line inside the viewport', async ({ page }) => {
+// The QR's actions are one ActionList under the code (ruling G101): Copy,
+// Share, the explorer and New address, a full-width row each with a title
+// and a one-line description, never a row of short buttons.
+test('Receive actions are one full-width action list inside the viewport', async ({ page }) => {
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
 
     for (const viewport of VIEWPORTS) {
@@ -26,30 +29,29 @@ test('Receive action labels stay on one standard-height line inside the viewport
             await page.setViewportSize(viewport);
             await gotoSection(page, 'Receive');
 
-            const newAddress = page.getByRole('main')
-                .getByRole('button', { name: 'Generate new address' });
-            await expect(newAddress).toBeVisible();
+            const list = page.getByRole('main')
+                .getByRole('list', { name: 'Payment request actions' });
+            await expect(list).toBeVisible();
+            await expect(list.getByRole('button', { name: /^Generate new address/ })).toBeVisible();
 
-            const actionRow = newAddress.locator('..');
-            const actions = actionRow.locator(':scope > button, :scope > a');
-            await expect(actions).toHaveCount(4);
+            const rows = list.locator(':scope > li > button, :scope > li > a');
+            const count = await rows.count();
+            expect(count, `${viewport.width}px: Receive has too few action rows`).toBeGreaterThanOrEqual(3);
 
-            const metrics = await actions.evaluateAll((controls) => {
-                const standardHeight = Number.parseFloat(
-                    getComputedStyle(document.documentElement)
-                        .getPropertyValue('--xc-control-h-md'),
-                );
+            const metrics = await rows.evaluateAll((controls) => {
                 const viewportWidth = document.documentElement.clientWidth;
+                const listBox = controls[0]?.closest('ul')?.getBoundingClientRect();
                 return {
-                    standardHeight,
                     viewportWidth,
+                    listWidth: listBox?.width ?? 0,
                     controls: controls.map((control) => {
                         const box = control.getBoundingClientRect();
                         return {
-                            label: control.innerText.trim().replace(/\s+/g, ' '),
-                            clientHeight: control.clientHeight,
-                            scrollHeight: control.scrollHeight,
-                            height: box.height,
+                            label: control.innerText.trim().split('\n')[0],
+                            lines: control.innerText.trim().split('\n').filter(Boolean).length,
+                            scrollWidth: control.scrollWidth,
+                            clientWidth: control.clientWidth,
+                            width: box.width,
                             left: box.left,
                             right: box.right,
                         };
@@ -57,23 +59,13 @@ test('Receive action labels stay on one standard-height line inside the viewport
                 };
             });
 
-            expect(metrics.standardHeight, 'the medium control height token must resolve')
-                .toBeGreaterThan(0);
-            expect(
-                new Set(metrics.controls.map(({ height }) => height)).size,
-                `${viewport.width}px: Receive actions have different heights`,
-            ).toBe(1);
-
             for (const control of metrics.controls) {
                 const label = `${viewport.width}px: ${control.label}`;
-                expect(
-                    control.scrollHeight,
-                    `${label} wraps or clips vertically`,
-                ).toBe(control.clientHeight);
-                expect(
-                    control.height,
-                    `${label} does not use the standard medium control height`,
-                ).toBe(metrics.standardHeight);
+                expect(control.lines, `${label} has no description line`).toBeGreaterThanOrEqual(2);
+                expect(control.width, `${label} does not fill the list's width`)
+                    .toBe(metrics.listWidth);
+                expect(control.scrollWidth, `${label} clips sideways`)
+                    .toBeLessThanOrEqual(control.clientWidth);
                 expect(control.left, `${label} overflows the viewport start`).toBeGreaterThanOrEqual(0);
                 expect(control.right, `${label} overflows the viewport end`)
                     .toBeLessThanOrEqual(metrics.viewportWidth);

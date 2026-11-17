@@ -162,12 +162,11 @@ describe('Litecoin send flow', () => {
 
         expect(await screen.findByLabelText('From address')).toHaveValue(SOURCE.address);
         await waitFor(() => expect(messaging.estimateFee).toHaveBeenCalledWith({ chainId: CHAIN }));
-        // The Network fee section starts closed: open it to see the rate and the amount.
-        fireEvent.click(screen.getByRole('button', { name: /^Network fee/, expanded: false }));
-        expect(screen.getByRole('button', { name: 'Edit fee rate (sat/vB)' }))
-            .toHaveTextContent('4 sat/vB');
-        expect(screen.getByRole('button', { name: 'Edit exact fee amount' }).closest('[role="status"]'))
-            .toHaveTextContent('0.00001 LTC');
+        // The Fees section starts closed: open it to see the Network fee line.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/, expanded: false }));
+        const feeFigure = screen.getByRole('button', { name: 'Edit exact fee amount' });
+        expect(feeFigure.closest('[role="status"]')).toHaveTextContent('0.00001 LTC');
+        expect(feeFigure.closest('[data-fees-row="network"]')).toHaveTextContent(/^Network fee/);
 
         fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: DESTINATION } });
         const amount = screen.getByLabelText('Amount (LTC)');

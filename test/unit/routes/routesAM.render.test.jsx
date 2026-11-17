@@ -39,7 +39,7 @@ describe('A through M route render coverage', () => {
             { listCoSignerAccounts: vi.fn().mockResolvedValue([]) },
         );
 
-        expect(screen.getByRole('heading', { level: 1, name: 'Agent Accounts' })).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 1, name: 'My Agents' })).toBeTruthy();
         expect(await screen.findByRole('heading', { name: 'No agent accounts yet' })).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'New agent account' }));
@@ -65,7 +65,7 @@ describe('A through M route render coverage', () => {
             }],
         });
 
-        expect(await screen.findByRole('button', { name: 'Create agent account' })).toBeEnabled();
+        expect(await screen.findByRole('button', { name: 'Create Agent Account' })).toBeEnabled();
     });
 
 });

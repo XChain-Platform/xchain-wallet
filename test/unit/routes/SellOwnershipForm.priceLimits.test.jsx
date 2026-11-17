@@ -57,7 +57,7 @@ function mount(messaging) {
 
 async function listAt(price) {
     fireEvent.change(screen.getByRole('textbox', { name: /^Price/ }), { target: { value: price } });
-    const list = screen.getByRole('button', { name: /^List name for sale$/i });
+    const list = screen.getByRole('button', { name: /^List ownership for sale$/i });
     await waitFor(() => expect(list).not.toBeDisabled());
     fireEvent.click(list);
 }

@@ -77,6 +77,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/airdrop.regtest.spec.js
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     encoderRpc,
     expectConfirmModal as sharedConfirmModal,
@@ -143,20 +144,18 @@ async function coinBalanceSats(address) {
 
 /** The composed transaction's miner fee, in satoshis, off the confirm screen. */
 async function screenNetworkFeeSats(page) {
-    const text = await page.getByTestId('confirm-fee').innerText();
+    const text = await page.getByTestId('confirm-fee-network').innerText();
     const coin = Number(text.match(/([\d.]+)\s*[A-Z]{3,5}/)?.[1]);
     expect(Number.isFinite(coin), `unparseable network fee line: ${text}`).toBe(true);
     return Math.round(coin * 1e8);
 }
 
-/** The protocol-fee row of the confirm screen's balance projection, in sats. */
+/** The protocol-fee fact in the Confirm Standard card, in satoshis. */
 async function projectedProtocolFeeSats(page) {
-    const deltas = page.getByTestId('action-intent-deltas');
-    if (await deltas.count() === 0) return null;
-    const text = await deltas.innerText();
-    // The projection prints the amount before its ticker ("Protocol fee" then
-    // "0.00001 BTC").
-    const coin = text.match(/Protocol fee\s*([\d.,]+)\s*[A-Z]{3,5}\b/)?.[1];
+    const fee = page.getByTestId('confirm-fee-protocol');
+    if (await fee.count() === 0) return null;
+    const text = await fee.innerText();
+    const coin = text.match(/^([\d.,]+)\s*[A-Z]{3,5}\b/)?.[1];
     return coin === undefined ? null : Math.round(Number(coin.replace(/,/g, '')) * 1e8);
 }
 
@@ -550,14 +549,16 @@ async function publishAddressList(page, source, members) {
     await reloadToHome(page);
     await openPaletteCommand(page, 'Create a list');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('List type')).toBeVisible({ timeout: 30_000 });
+    await expect(main.getByRole('button', { name: /^List type:/ })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
     await readChainAddresses(page, source);
     expect(await (await openFromAddress(main)).inputValue(),
         'the list would be published from an address holding no coin')
         .toBe(source);
 
-    await main.getByLabel('List type').selectOption('2');
+    // List type is the themed dropdown: open it, then pick Addresses.
+    await main.getByRole('button', { name: /^List type:/ }).click();
+    await main.getByRole('option', { name: 'Addresses', exact: true }).click();
     await main.getByLabel('Addresses', { exact: true }).fill(members.join('\n'));
     const plural = members.length === 1 ? 'address' : 'addresses';
     await expect(main, `the list form did not accept all ${members.length} addresses for this chain`)
@@ -915,7 +916,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(issuer);
 
             await page.getByRole('textbox', { name: /^Per-recipient amount/ }).fill(String(AMOUNT));
-            await main.getByLabel('Airdrop to').selectOption('holders');
+            await pickOption(main.getByLabel('Airdrop to'), 'holders');
             await page.getByLabel('Tokens (one per line)', { exact: true }).fill(MEMB_TICK);
 
             // TWO holders right now: the issuer, which kept most of the supply,
@@ -971,12 +972,14 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await sendToken(page, MEMB_TICK, late, MEMB_MOVE);
             await reloadToHome(page);
 
-            const resume = page.getByRole('button', { name: /^Resume airdrop:/ });
+            // Home carries no airdrop card: the header bell lists the resume action.
+            await expect(page.getByRole('main').getByRole('button', { name: /^Resume airdrop:/ })).toHaveCount(0);
+            await page.getByRole('button', { name: /^Notifications/ }).first().click();
+            const resume = page.getByRole('button', { name: /Resume airdrop/ }).first();
             await expect(resume,
-                'the signed-but-unfinished airdrop is not offered on Home, so a LIST that has '
+                'the signed-but-unfinished airdrop is not offered in the bell, so a LIST that has '
                 + 'already been paid for would be stranded')
                 .toBeVisible({ timeout: 60_000 });
-            await expect(resume).toContainText('Ready to sign the airdrop');
             await resume.click();
 
             await expect(page.getByText('Review airdrop', { exact: true }).first(),
@@ -1088,8 +1091,8 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(others.length).toBe(2);
             [member, heldOut] = others;
 
-            await main.getByLabel('Airdrop to').selectOption('existing');
-            await main.getByRole('button', { name: 'Choose list' }).click();
+            await pickOption(main.getByLabel('Airdrop to'), 'existing');
+            await main.getByRole('button', { name: /^List:/ }).click();
             await expect(page.getByText('No published lists yet', { exact: true }))
                 .toBeVisible({ timeout: 30_000 });
         });
@@ -1111,8 +1114,8 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await readChainAddresses(page, issuer);
 
             await page.getByRole('textbox', { name: /^Per-recipient amount/ }).fill(String(AMOUNT));
-            await main.getByLabel('Airdrop to').selectOption('existing');
-            await main.getByRole('button', { name: 'Choose list' }).click();
+            await pickOption(main.getByLabel('Airdrop to'), 'existing');
+            await main.getByRole('button', { name: /^List:/ }).click();
             const row = page.getByRole('button', { name: `Address list #${listIndex}` });
             await expect(row, `the list picker does not offer list #${listIndex}, which this wallet `
                 + 'published from this chain minutes ago')

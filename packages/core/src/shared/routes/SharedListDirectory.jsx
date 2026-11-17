@@ -8,13 +8,13 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import {
+    AddressText,
     Button,
     ChainBadge,
     EmptyState,
     Icon,
-    Input,
     ListPage,
     PageHeader,
     Screen,
@@ -24,69 +24,22 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
+import { homeDescriptor, listType, useSharedListDirectory } from '../hooks/useSharedListDirectory.js';
 import {
     bindLabel,
     orderSharedLists,
     pickableSharedLists,
     platformBadgeText,
-    shortOwner,
     directoryText,
     DIRECTORY_NAME_MAX_CHARS,
 } from '../utils/sharedListRows.js';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
 import styles from './IssueTokenForm.module.css';
 import local from './SharedListDirectory.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const PAGE_SIZE = 20;
-
-function listType(type) {
-    const value = String(type ?? '').toLowerCase();
-    if (value === '1' || value === 'token') return 'token';
-    if (value === '2' || value === 'address') return 'address';
-    return value;
-}
-
-function normalizeEntry(entry) {
-    return {
-        ...entry,
-        name: typeof entry.name === 'string' && entry.name.length > 0 ? entry.name : null,
-        homeChain: entry.homeChain ?? entry.home_chain,
-        homeListIndex: entry.homeListIndex ?? entry.home_list_index,
-        type: listType(entry.type),
-        memberCount: entry.memberCount ?? entry.member_count,
-        shareBlock: entry.shareBlock ?? entry.share_block,
-        bindTarget: entry.bindTarget ?? entry.bind_target ?? null,
-        maintainedByPlatform: entry.maintainedByPlatform ?? entry.maintained_by_platform ?? false,
-    };
-}
-
-function isEntryRecord(entry) {
-    return entry !== null && typeof entry === 'object' && !Array.isArray(entry);
-}
-
-// A row the directory can show names a list type, a home chain and a list
-// index; anything less renders as a phantom row nobody can open. The index
-// text itself is shown neutralized, so its content is not checked here.
-function isDirectoryRow(entry) {
-    return (entry.type === 'token' || entry.type === 'address')
-        && entry.homeChain != null && String(entry.homeChain).length > 0
-        && entry.homeListIndex != null && String(entry.homeListIndex).length > 0;
-}
-
-function homeDescriptor(homeChain, viewingChainId) {
-    const direct = chainRegistry.get(String(homeChain));
-    if (direct) return direct;
-
-    const networkKind = chainRegistry.get(viewingChainId)?.networkKind;
-    const descriptors = networkKind
-        ? chainRegistry.byNetworkKind(networkKind)
-        : chainRegistry.supportedChains();
-    const value = String(homeChain ?? '').toUpperCase();
-    return descriptors.find((descriptor) => (
-        tickerForCoin(descriptor.coin).toUpperCase() === value
-        || descriptor.coin.toUpperCase() === value
-    )) ?? null;
-}
 
 function valueOrUnknown(value) {
     return value == null || value === '' ? '?' : directoryText(value);
@@ -105,32 +58,13 @@ function valueOrUnknown(value) {
 export function SharedListDirectory({ walletId, chainId, mode, filterType, onSelect, onOpenList, onBack }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
-    const [directory, setDirectory] = useState(/** @type {{ lists: any[], unavailable: string[] } | null} */ (null));
-    const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
+    const { directory, loadError, reload: reloadDirectory } = useSharedListDirectory({
+        messaging,
+        chainId,
+        scopeKey: walletId,
+    });
     const [query, setQuery] = useState('');
     const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
-    const [directoryReload, setDirectoryReload] = useState(0);
-
-    useEffect(() => {
-        let cancelled = false;
-        setDirectory(null);
-        setLoadError(null);
-        Promise.resolve().then(() => messaging.getSharedLists({ chainId }))
-            .then((response) => {
-                if (cancelled) return;
-                setDirectory({
-                    // A malformed row does not discard the valid rows returned beside it.
-                    lists: Array.isArray(response?.lists)
-                        ? response.lists.filter(isEntryRecord).map(normalizeEntry).filter(isDirectoryRow)
-                        : [],
-                    unavailable: Array.isArray(response?.unavailable) ? response.unavailable : [],
-                });
-            })
-            .catch((error) => {
-                if (!cancelled) setLoadError(error?.message || 'Failed to load shared lists.');
-            });
-        return () => { cancelled = true; };
-    }, [chainId, messaging, walletId, directoryReload]);
 
     const visibleLists = useMemo(() => {
         if (!directory) return [];
@@ -175,15 +109,20 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
         .map((id) => chainRegistry.get(id))
         .filter(Boolean);
 
-    const header = (
-        <PageHeader
-            onBack={onBack}
-            title={mode === 'pick' ? 'Choose a Shared List' : 'Shared Lists'}
-        />
-    );
-    const wrap = (children, toolbar, notices) => (
-        <Screen variant={variant} header={header}>
-            <ListPage notices={notices} toolbar={toolbar}>{children}</ListPage>
+    // The search lives behind the title bar filter, as on every list page;
+    // the page body is only the directory.
+    const wrap = (children, filterMenu = null, notices = null) => (
+        <Screen
+            variant={variant}
+            header={(
+                <PageHeader
+                    onBack={onBack}
+                    title={mode === 'pick' ? 'Choose a Shared List' : 'Shared Lists'}
+                    trailing={filterMenu}
+                />
+            )}
+        >
+            <ListPage notices={notices}>{children}</ListPage>
         </Screen>
     );
 
@@ -191,7 +130,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
         return wrap(
             <StatusMessage
                 variant="error"
-                recovery={{ label: 'Try Again', onAction: () => setDirectoryReload((value) => value + 1) }}
+                recovery={{ label: 'Try Again', onAction: reloadDirectory }}
             >
                 {loadError}
             </StatusMessage>,
@@ -199,25 +138,17 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
     }
     if (!directory) return wrap(<p className={styles.hint}>Loading shared lists…</p>);
 
-    const toolbar = (
-        <div className={local.filterRow}>
-            <div className={local.searchControl}>
-                <Input
-                    type="search"
-                    size="md"
-                    placeholder="Search"
-                    value={query}
-                    onChange={(event) => {
-                        setQuery(event.target.value);
-                        setVisibleLimit(PAGE_SIZE);
-                    }}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    aria-label="Search shared lists"
-                />
-            </div>
-        </div>
+    const filterMenu = (
+        <ListFilterMenu
+            query={query}
+            onQueryChange={(value) => {
+                setQuery(value);
+                setVisibleLimit(PAGE_SIZE);
+            }}
+            label="Filter shared lists"
+            searchPlaceholder="Search"
+            searchLabel="Search shared lists"
+        />
     );
 
     // One notice for every chain that did not answer, not one per chain.
@@ -281,7 +212,7 @@ export function SharedListDirectory({ walletId, chainId, mode, filterType, onSel
                 </>
             )}
         </>,
-        unavailableOnly ? null : toolbar,
+        unavailableOnly ? null : filterMenu,
         unavailableNotice,
     );
 }
@@ -305,62 +236,73 @@ function SharedListRow({ entry, chainId, pickable, onSelect, onOpenList }) {
     const canOpen = !pickable && typeof onOpenList === 'function'
         && descriptor?.id && entry.homeListIndex != null;
 
+    const actions = [];
+    if (pickable) {
+        actions.push({
+            id: 'choose',
+            icon: <Icon.CheckIcon />,
+            title: 'Choose list',
+            description: 'Use this list for the form you came from',
+            onClick: choose,
+        });
+    }
+    if (canOpen) {
+        actions.push({
+            id: 'open',
+            icon: <Icon.ListIcon />,
+            title: 'Open list',
+            description: 'See its members and details',
+            onClick: () => onOpenList(descriptor.id, String(entry.homeListIndex)),
+        });
+    }
+    const entryLabel = `${typeLabel} ${valueOrUnknown(entry.homeListIndex)}`;
+
     return (
-        <dl
-            role="listitem"
-            className={styles.detailsList}
-            aria-label={`${typeLabel} ${valueOrUnknown(entry.homeListIndex)}`}
-        >
-            {entry.name ? (
-                <>
-                    <dt className={styles.detailsLabel}>Name</dt>
-                    <dd className={styles.detailsValue}>{neutralizeControlText(entry.name, { maxLength: DIRECTORY_NAME_MAX_CHARS })}</dd>
-                </>
+        <div role="listitem" className={local.entry} aria-label={entryLabel}>
+            <dl className={styles.detailsList}>
+                {entry.name ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Name</dt>
+                        <dd className={styles.detailsValue}>{neutralizeControlText(entry.name, { maxLength: DIRECTORY_NAME_MAX_CHARS })}</dd>
+                    </>
+                ) : null}
+                <dt className={styles.detailsLabel}>Home network</dt>
+                <dd className={styles.detailsValue}>
+                    {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : '?'}
+                </dd>
+                <dt className={styles.detailsLabel}>Home list index</dt>
+                <dd className={styles.detailsValue}>{valueOrUnknown(entry.homeListIndex)}</dd>
+                <dt className={styles.detailsLabel}>Type</dt>
+                <dd className={styles.detailsValue}>{typeLabel}</dd>
+                <dt className={styles.detailsLabel}>Members</dt>
+                <dd className={styles.detailsValue}>{members}</dd>
+                <dt className={styles.detailsLabel}>Owner</dt>
+                <dd className={styles.detailsValue}>
+                    {/* G99: the owner in full when the cell has room. */}
+                    {typeof entry.owner === 'string' && entry.owner
+                        ? <AddressText address={neutralizeControlText(entry.owner)} />
+                        : '?'}
+                </dd>
+                <dt className={styles.detailsLabel}>Share block</dt>
+                <dd className={styles.detailsValue}>{valueOrUnknown(entry.shareBlock)}</dd>
+                <dt className={styles.detailsLabel}>On this network</dt>
+                <dd className={styles.detailsValue}>{bindLabel(entry)}</dd>
+                {badge ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Maintainer</dt>
+                        <dd className={styles.detailsValue}>{badge}</dd>
+                    </>
+                ) : null}
+            </dl>
+            {actions.length ? (
+                // The entry's actions as the shared action list (G101), at
+                // the end of the pane under its facts.
+                <ActionList label={`${entryLabel} actions`}>
+                    {actions.map(({ id, ...action }) => (
+                        <ActionListItem key={id} data-action-id={id} {...action} />
+                    ))}
+                </ActionList>
             ) : null}
-            <dt className={styles.detailsLabel}>Home network</dt>
-            <dd className={styles.detailsValue}>
-                {descriptor ? <ChainBadge descriptor={descriptor} size="sm" showName={false} /> : '?'}
-            </dd>
-            <dt className={styles.detailsLabel}>Home list index</dt>
-            <dd className={styles.detailsValue}>{valueOrUnknown(entry.homeListIndex)}</dd>
-            <dt className={styles.detailsLabel}>Type</dt>
-            <dd className={styles.detailsValue}>{typeLabel}</dd>
-            <dt className={styles.detailsLabel}>Members</dt>
-            <dd className={styles.detailsValue}>{members}</dd>
-            <dt className={styles.detailsLabel}>Owner</dt>
-            <dd className={styles.detailsValue}>{shortOwner(entry.owner) || '?'}</dd>
-            <dt className={styles.detailsLabel}>Share block</dt>
-            <dd className={styles.detailsValue}>{valueOrUnknown(entry.shareBlock)}</dd>
-            <dt className={styles.detailsLabel}>On this network</dt>
-            <dd className={styles.detailsValue}>{bindLabel(entry)}</dd>
-            {badge ? (
-                <>
-                    <dt className={styles.detailsLabel}>Maintainer</dt>
-                    <dd className={styles.detailsValue}>{badge}</dd>
-                </>
-            ) : null}
-            {pickable ? (
-                <>
-                    <dt className={styles.detailsLabel}>Select</dt>
-                    <dd className={styles.detailsValue}>
-                        <Button type="button" variant="secondary" icon={<Icon.CheckIcon />} onClick={choose}>Choose List</Button>
-                    </dd>
-                </>
-            ) : null}
-            {canOpen ? (
-                <>
-                    <dt className={styles.detailsLabel}>Details</dt>
-                    <dd className={styles.detailsValue}>
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => onOpenList(descriptor.id, String(entry.homeListIndex))}
-                        >
-                            Open List
-                        </Button>
-                    </dd>
-                </>
-            ) : null}
-        </dl>
+        </div>
     );
 }

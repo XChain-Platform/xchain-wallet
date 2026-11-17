@@ -20,18 +20,24 @@ export { FormPage } from './FormPage.jsx';
 export { FormNotice } from './FormNotice.jsx';
 export { FieldNote } from './FieldNote.jsx';
 export { FormErrorSummary } from './FormErrorSummary.jsx';
+// The form error standard: one error map per form, read by the kit fields.
+export { useFormErrors, useFormFieldError, usePickedFieldError, FormErrorsContext } from './formErrors.js';
 export { FormSection } from './FormSection.jsx';
 export { ListPage } from './ListPage.jsx';
 export { ListRow } from './ListRow.jsx';
 export { EmptyState } from './EmptyState.jsx';
 export { SectionHeader } from './SectionHeader.jsx';
+// The Notice Standard's one notice; StatusMessage is its older name.
+export { Notice } from './StatusMessage.jsx';
 export { StatusMessage } from './StatusMessage.jsx';
+export { StatusMessageGroup } from './StatusMessage.jsx';
 export { PageNotice, PageNoticeHostContext } from './PageNotice.jsx';
 export { Button } from './Button.jsx';
 export { Spinner } from './Button.jsx';
 export { Checkbox } from './Checkbox.jsx';
 export { ChoiceControl } from './ChoiceControl.jsx';
 export { Switch } from './Switch.jsx';
+export { OptionSwitchList, OptionSwitch } from './OptionSwitchList.jsx';
 export { Chip } from './Chip.jsx';
 export { Tabs } from './Tabs.jsx';
 export { SegmentedControl } from './SegmentedControl.jsx';

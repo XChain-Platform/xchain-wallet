@@ -35,7 +35,6 @@ for (const [name, text] of [
     ['create password', createWallet],
     ['import password', importWallet],
     ['migration password', migrateWallet],
-    ['paired-wallet password', pairWallet],
 ]) {
     assert.match(
         text,
@@ -48,6 +47,15 @@ for (const [name, text] of [
         `${name} confirmation uses new-password`,
     );
 }
+
+// The two-phone pairing opens from Settings with the vault already open, so
+// its field is the vault's existing password, with no confirmation.
+assert.match(
+    pairWallet,
+    /value=\{password\}[\s\S]{0,300}?autoComplete="current-password"/,
+    'paired-wallet password uses current-password',
+);
+assert.doesNotMatch(pairWallet, /value=\{confirm\}/, 'paired-wallet password has no confirmation field');
 
 assert.match(
     locked,

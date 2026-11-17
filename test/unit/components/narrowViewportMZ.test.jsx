@@ -52,7 +52,7 @@ describe('shared M to Z components at a 320px viewport', () => {
     // The app loads the toast cards on idle after first paint; load them up front here.
     beforeAll(() => preloadToastStack());
 
-    it('keeps the searchable NetworkFilter toolbar inside its container', () => {
+    it('keeps the NetworkFilter trigger inside its container and opens the full-screen list', () => {
         const families = ['bitcoin', 'litecoin', 'dogecoin', 'ethereum', 'solana', 'dash', 'cosmos'];
         const chainRegistry = {
             byCoin: (coin) => [{ id: `${coin}-mainnet`, displayName: `${coin} network` }],
@@ -66,15 +66,15 @@ describe('shared M to Z components at a 320px viewport', () => {
             />,
         );
 
+        // The list is the full-screen network picker, so it cannot overflow
+        // the toolbar the way the old dropdown could.
         fireEvent.click(screen.getByRole('button', { name: /All networks/ }));
-        expect(screen.getByRole('listbox')).toBeVisible();
-        expect(screen.getByRole('searchbox', { name: 'Search networks' })).toBeVisible();
+        expect(screen.getByRole('dialog', { name: 'Network' })).toBeVisible();
+        expect(screen.getAllByRole('button', { name: /^Select / })).toHaveLength(families.length + 1);
 
         const source = css('NetworkFilter');
         expect(source).toMatch(/\.wrap\s*\{[^}]*min-width:\s*(?:0|min\(10rem, 100%\))/s);
         expect(source).toMatch(/\.trigger\s*\{[^}]*box-sizing:\s*border-box/s);
-        expect(source).toMatch(/\.search\s*\{[^}]*min-width:\s*0/s);
-        expect(source).toMatch(/\.item\s*\{[^}]*box-sizing:\s*border-box[^}]*min-width:\s*0/s);
     });
 
     it('contains a NoticeModal card with long content and a reachable action', () => {

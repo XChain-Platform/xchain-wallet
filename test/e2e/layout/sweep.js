@@ -993,7 +993,7 @@ export function createSweep(page, {
         await measure('onboarding: intro carousel');
         await dismissIntroCarousel(page);
         await measure('onboarding: welcome');
-        for (const name of ['Import wallet', 'From FreeWallet', 'Pair an offline signer']) {
+        for (const name of ['Import wallet', 'Import FreeWallet', 'Connect Hardware Wallet']) {
             const btn = page.getByRole('button', { name });
             if (await btn.count() === 0) continue;
             await btn.click();
@@ -1007,11 +1007,11 @@ export function createSweep(page, {
         await page.getByLabel('Password', { exact: true }).fill('layoutsweep1234');
         await page.getByLabel(/^Confirm( password)?$/).fill('layoutsweep1234');
         await page.getByRole('button', { name: 'Next' }).click();
-        await page.getByLabel(/written down|saved my recovery phrase/i).waitFor({ timeout: 60_000 });
+        await page.getByRole('checkbox', { name: /written down|saved my recovery phrase/i }).waitFor({ timeout: 60_000 });
         // readRecoveryPhrase asserts the stage opens concealed, then reveals it.
         const words = await readRecoveryPhrase(page);
         await measure('create: recovery phrase');
-        await page.getByLabel(/written down|saved my recovery phrase/i).check();
+        await page.getByRole('checkbox', { name: /written down|saved my recovery phrase/i }).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
         await measure('create: verify phrase');
         await completeRecoveryPhraseChallenge(page, words);
@@ -1024,7 +1024,7 @@ export function createSweep(page, {
             return;
         }
         await page.getByRole('button', { name: 'Create wallet' }).click();
-        const notice = page.getByRole('heading', { name: 'Automatic Donation System', exact: true });
+        const notice = page.getByRole('heading', { name: 'Automatic Donations', exact: true });
         await notice.or(unlockedShell(page)).first().waitFor({ state: 'visible', timeout: 240_000 });
         if (await notice.isVisible()) {
             await measure('create: donation notice');
@@ -1035,8 +1035,10 @@ export function createSweep(page, {
     }
 
     async function unlocked() {
+        // Home opens on Balances (coins and tokens, operator 2026-11-15); the
+        // label keeps its old name so the measures stay comparable.
         await measure('home: coins');
-        for (const tab of ['Tokens', 'NFTs', 'DeFi', 'Activity']) {
+        for (const tab of ['NFTs', 'DeFi']) {
             const t = page.getByRole('tab', { name: tab }).or(page.getByRole('button', { name: tab, exact: true })).first();
             if (await t.count() === 0) continue;
             await t.click().catch(() => {});
@@ -1113,7 +1115,7 @@ export function createSweep(page, {
                 await page.waitForTimeout(250);
                 return;
             }
-            if (await page.getByRole('searchbox', { name: 'Search settings' }).isVisible().catch(() => false)) return;
+            if (await page.getByRole('button', { name: 'Filter settings' }).isVisible().catch(() => false)) return;
             await home();
             await openSettings(page);
         });
@@ -1205,7 +1207,8 @@ export function measureRulings() {
         if (!visible(btn)) continue;
         const name = text(btn);
         if (/^paste\b/i.test(name)) { cap(out.fieldButtonsOutside, { button: name, paste: true }); continue; }
-        if (!/^max\b/i.test(name)) continue;
+        // Max is an icon named by its aria-label ("Use max available amount").
+        if (!/^(max|use max)\b/i.test(name)) continue;
         let field = null;
         for (let a = btn.parentElement, i = 0; a && i < 4 && !field; a = a.parentElement, i += 1) {
             field = [...a.querySelectorAll('input, textarea')].find(visible) || null;

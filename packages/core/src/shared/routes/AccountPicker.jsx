@@ -8,7 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 // The My Wallets list card and wallet-style tiles.
 import listStyles from './CoSignerAccountList.module.css';
@@ -73,14 +74,61 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
         return () => { cancelled = true; };
     }, [walletId, messaging, reload]);
 
-    // My Accounts, laid out like My Wallets.
+    // Every address of the wallet in one read, grouped here by account so the
+    // search can match an account by any of its addresses. A failed read only
+    // leaves the address match out; the list itself never waits on it.
+    const [addressesByAccount, setAddressesByAccount] = useState(/** @type {Map<string, string>} */ (new Map()));
+    useEffect(() => {
+        let cancelled = false;
+        setAddressesByAccount(new Map());
+        if (!walletId || typeof messaging.getAddressesByChain !== 'function') return undefined;
+        Promise.resolve()
+            .then(() => messaging.getAddressesByChain(walletId))
+            .then((byChain) => {
+                if (cancelled || !byChain || typeof byChain !== 'object') return;
+                const next = new Map();
+                for (const records of Object.values(byChain)) {
+                    if (!Array.isArray(records)) continue;
+                    for (const record of records) {
+                        if (!record?.accountId || !record.address) continue;
+                        next.set(record.accountId, `${next.get(record.accountId) || ''}\n${String(record.address).toLowerCase()}`);
+                    }
+                }
+                setAddressesByAccount(next);
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [walletId, messaging]);
+
+    const [query, setQuery] = useState('');
+    const needle = query.trim().toLowerCase();
+    const visibleAccounts = useMemo(() => {
+        if (!accounts || needle === '') return accounts;
+        return accounts.filter((a) => {
+            const customName = typeof a.name === 'string' ? a.name.trim() : '';
+            const numbered = t('accountPicker.defaultName', { number: (a.index ?? 0) + 1 });
+            const hay = `${customName}\n${numbered}${addressesByAccount.get(a.id) || ''}`.toLowerCase();
+            return hay.includes(needle);
+        });
+    }, [accounts, needle, addressesByAccount]);
+
+    // My Accounts, laid out like My Wallets: filter and plus at the right.
     const header = (
         <PageHeader
             onBack={onBack}
             backLabel={backLabel}
             title={t('accountPicker.pageTitle')}
             trailing={(
-                <Button variant="ghost" size="sm" icon={<Icon.PlusIcon />} onClick={() => onAddAccount?.()} aria-label={t('accountPicker.add')} title={t('accountPicker.add')} />
+                <>
+                    <ListFilterMenu
+                        query={query}
+                        onQueryChange={setQuery}
+                        searchPlaceholder={t('routes.addressList.search')}
+                        searchLabel={t('accountPicker.searchLabel')}
+                        label={t('accountPicker.filter')}
+                    />
+                    <Button variant="ghost" size="sm" icon={<Icon.PlusIcon />} onClick={() => onAddAccount?.()} aria-label={t('accountPicker.add')} title={t('accountPicker.add')} />
+                </>
             )}
         />
     );
@@ -107,10 +155,13 @@ export function AccountPicker({ walletId, activeAccountId, onSwitch, onAddAccoun
                     </div>
                 ) : null}
                 {accounts && accounts.length === 0 ? <EmptyState title={t('accountPicker.empty.title')} body={t('accountPicker.empty.addBody')} /> : null}
-                {accounts && accounts.length ? (
+                {accounts && accounts.length > 0 && visibleAccounts.length === 0 ? (
+                    <EmptyState title={t('accountPicker.noMatchTitle')} body={t('accountPicker.noMatchBody')} />
+                ) : null}
+                {visibleAccounts && visibleAccounts.length ? (
                     /* Safari needs an explicit list role because this class removes list styling. */
                     <ul className={listStyles.list} role="list" aria-label={t('accountPicker.pageTitle')}>
-                        {accounts.map((a) => {
+                        {visibleAccounts.map((a) => {
                             const active = a.id === activeAccountId;
                             const numbered = t('accountPicker.defaultName', { number: (a.index ?? 0) + 1 });
                             const customName = typeof a.name === 'string' ? a.name.trim() : '';

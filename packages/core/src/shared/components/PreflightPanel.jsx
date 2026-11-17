@@ -30,6 +30,7 @@ import {
     preflightFindingKey,
 } from '../utils/preflightFindingKey.js';
 import { unverifiedText, warningText } from '../utils/preflightFindingCopy.js';
+import { isNetworkApprovalFinding, networkApprovalIsPartial } from '../utils/preflightCheckState.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
@@ -75,7 +76,10 @@ export const TIER1_NOTICE_CODES = Object.freeze({
 // in the SDK's src/preflight/constants.js, which names this pin as the
 // enforcement point): this panel reads `verdict`, `findings[].severity`,
 // `findings[].code`, `findings[].message`, `findings[].overridable`,
-// `findings[]._downgradedBy`, `findings[].data.commandIndex` (the override
+// `findings[].source` and the presence of `findings[].data` (a DRYRUN_VALID
+// counts as the indexer's verdict only with source 'dryrun' and a data
+// object - utils/preflightCheckState.js), `findings[]._downgradedBy`,
+// `findings[].data.commandIndex` (the override
 // identity is (code, commandIndex), and that pair is what stops one
 // "Sign anyway" clearing several network-rejected batch commands at once - see
 // utils/preflightFindingKey.js), `findings[].data.subCommandCount` and
@@ -260,13 +264,26 @@ function noticeText(f) {
  */
 
 /**
+ * Whether an error finding carries the Sign anyway box: a producer-marked
+ * overridable error that is not a proven refusal.
+ *
+ * @param {PreflightFinding} f
+ * @returns {boolean}
+ */
+export function preflightFindingHasOverride(f) {
+    return f?.severity === 'error' && Boolean(f.overridable) && !isHardPreflightFinding(f);
+}
+
+/**
  * @param {object} props
  * @param {PreflightReport | null} props.report
  * @param {boolean} [props.loading]                       true while the report streams in
  * @param {Set<string>} props.acknowledged                codes the user has explicitly acknowledged
  * @param {(code: string) => void} props.onAcknowledge
+ * @param {boolean} [props.blockingErrorsShownAbove]      the confirm screen's invalid notice already
+ *   states every error that has no Sign anyway box, so the panel lists only the ones that do
  */
-export function PreflightPanel({ report, loading, acknowledged, onAcknowledge }) {
+export function PreflightPanel({ report, loading, acknowledged, onAcknowledge, blockingErrorsShownAbove = false }) {
     if (loading && !report) {
         return (
             <div className={styles.panel} data-testid="preflight-panel" aria-live="polite" aria-busy="true">
@@ -282,7 +299,8 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
         );
     }
 
-    const errors = report.findings.filter((f) => f.severity === 'error');
+    const errors = report.findings.filter((f) => f.severity === 'error'
+        && !(blockingErrorsShownAbove && !preflightFindingHasOverride(f)));
     const warnings = report.findings.filter((f) => f.severity === 'warning');
 
     //`info` findings used to render NOWHERE, and DRYRUN_UNAVAILABLE is
@@ -305,10 +323,12 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
     // the verdict is 'fail' and the chip says so. The UNJUDGED half is all
     // `info`, which is what let a batch the network explicitly declined to
     // judge arrive here as a clean pass wearing the approval chip.
-    const partlyJudged = report.findings.some((f) => f.code === DRYRUN_VALID
-        && Number.isInteger(f?.data?.subCommandCount)
-        && Number.isInteger(f?.data?.accepted)
-        && f.data.accepted < f.data.subCommandCount);
+    const approvals = report.findings.filter(isNetworkApprovalFinding);
+    const partlyJudged = approvals.some(networkApprovalIsPartial);
+    // "Looks good" needs the indexer's own valid verdict. A pass with no
+    // Tier-1 finding at all, or a DRYRUN_VALID stamped by a producer that
+    // never asked the indexer (the dev mock), is not one.
+    const approved = approvals.length > 0;
 
     // The chip is the one thing a hurried user reads. A clean local pass with
     // no network answer is not "Looks good"; it is "nobody checked but us".
@@ -317,6 +337,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
         : report.verdict === 'warn' ? 'Review warnings'
         : unreached ? 'Local checks only'
         : partlyJudged ? 'Partly checked'
+        : !approved ? t('components.preflightPanel.notChecked')
         : 'Looks good';
 
     return (
@@ -346,7 +367,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
             // to look the same either way.
             data-dryrun={unreached ? 'unreached'
                 : partlyJudged ? 'partial'
-                : notices.some((f) => f.code === DRYRUN_VALID) ? 'approved' : 'none'}
+                : approved ? 'approved' : 'none'}
             aria-live={isFail ? 'assertive' : 'polite'}
         >
             <div
@@ -355,7 +376,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
                 // does not make a client-proven failure less urgent, and this
                 // rule is declared after the verdict rules in the stylesheet,
                 // so it would otherwise win the cascade and mute them.
-                className={`${styles.chip} ${styles[`chip_${report.verdict}`] || ''} ${(unreached || partlyJudged) && report.verdict === 'pass' ? styles.chip_unreached : ''}`.trim()}
+                className={`${styles.chip} ${styles[`chip_${report.verdict}`] || ''} ${(unreached || partlyJudged || !approved) && report.verdict === 'pass' ? styles.chip_unreached : ''}`.trim()}
                 data-testid="preflight-chip"
             >
                 {chipText}
@@ -375,10 +396,11 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
                     {errors.map((f, i) => (
                         <li key={`${preflightFindingKey(f)}-${i}`} className={`${styles.finding} ${styles.findingError}`}>
                             <span className={styles.findingMsg}>{consensusRefusalMessage(f) || f.message}</span>
-                            {f.overridable && !isHardPreflightFinding(f) ? (
+                            {preflightFindingHasOverride(f) ? (
                                 <Checkbox
                                     className={styles.ack}
                                     label={t('components.preflightPanel.signAnyway')}
+                                    help={t('components.preflightPanel.signAnywayHelp')}
                                     checked={acknowledged.has(preflightFindingKey(f))}
                                     onChange={() => onAcknowledge(preflightFindingKey(f))}
                                     data-testid={`ack-${preflightFindingKey(f)}`}
@@ -453,7 +475,7 @@ export function PreflightPanel({ report, loading, acknowledged, onAcknowledge })
             ) : null}
 
             {typeof report.stateHeight === 'number' ? (
-                <div className={styles.stamp}>{t('components.preflightPanel.checkedAtBlock')} {formatDecimalAmount(report.stateHeight)}</div>
+                <div className={styles.stamp}>{t('components.preflightPanel.checkedAtBlock')} {String(report.stateHeight)}</div>
             ) : null}
         </div>
     );

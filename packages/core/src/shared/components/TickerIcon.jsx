@@ -36,8 +36,10 @@ const PIP_PIXELS = Object.freeze({ header: 14, list: 20, hero: 32 });
  * @param {string} props.tick
  * @param {number} [props.size] legacy size mapped to the nearest context
  * @param {'header'|'list'|'hero'} [props.context='list']
+ * @param {boolean} [props.pip=true] false leaves the chain pip off, for a list
+ *   whose rows all sit on one chain the page already names
  */
-export function TickerIcon({ chainId, tick, size, context }) {
+export function TickerIcon({ chainId, tick, size, context, pip = true }) {
     const [failedImageUrl, setFailedImageUrl] = useState(null);
     const descriptor = chainRegistry.get(chainId);
     const tickUpper = String(tick || '').toUpperCase();
@@ -88,7 +90,7 @@ export function TickerIcon({ chainId, tick, size, context }) {
                 srcSet={showNativeIcon ? nativeIconSrcSet : undefined}
                 imagePixels={AVATAR_PIXELS[avatarContext]}
             />
-            {!isNative && chainPipUrl && failedImageUrl !== chainPipUrl ? (
+            {pip && !isNative && chainPipUrl && failedImageUrl !== chainPipUrl ? (
                 <img
                     src={chainPipUrl}
                     width={PIP_PIXELS[avatarContext]}

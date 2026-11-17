@@ -169,15 +169,8 @@ td.splitPriceAsk {
     font-size: var(--xc-text-xs);
 }
 
-/* The Trade page's order form (PlaceOrderPanel layout="trade"). */
-.tradeCard {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-3);
-    min-width: 0;
-}
-
-.tradeSide,
+/* The Trade page's order form (PlaceOrderPanel layout="trade"): the
+   Swap | Limit | Market toggle heads its Trade Details section. */
 .tradeType {
     width: 100%;
 }
@@ -201,6 +194,7 @@ td.splitPriceAsk {
     white-space: nowrap;
 }
 
+/* 25 / 50 / 75 / 100 (100 is the same path as the Max icon inside the Amount field). */
 .pctRow {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -309,9 +303,9 @@ td.splitPriceAsk {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    border: 1px solid var(--xc-border-strong);
+    border: 1px solid var(--xc-control-border);
     border-radius: var(--xc-radius-pill);
-    background: var(--xc-surface);
+    background: var(--xc-control-bg);
     color: var(--xc-text);
     font-size: var(--xc-text-xs);
     font-weight: 600;
@@ -335,11 +329,16 @@ td.splitPriceAsk {
     --xc-icon-size: var(--xc-icon-xs);
 }
 
+/* The chosen chip takes the brand fill the wallet's other choice chips and
+   segments use (ui/Chip .pressed), never the button's pressed ring. */
 .priceChip.priceChip[aria-pressed='true'],
 .priceChip.priceChip[aria-pressed='true']:hover:not(:disabled) {
-    background: var(--xc-text);
-    border-color: var(--xc-text);
-    color: var(--xc-surface);
+    --xc-button-hover-bg: var(--xc-control-selected);
+    --xc-button-hover-border: var(--xc-control-selected);
+    background: var(--xc-control-selected);
+    border-color: var(--xc-control-selected);
+    color: var(--xc-control-selected-text);
+    box-shadow: none;
 }
 
 @media (max-width: 420px) {

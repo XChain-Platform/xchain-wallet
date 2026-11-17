@@ -124,7 +124,8 @@ assert.ok(
     'a HW source hands the confirm page its device block (§5.1)',
 );
 assert.ok(
-    /messaging\.composeForConfirm\(\{/.test(src) && /action: 'MINT', params: actionParams/.test(src),
+    // G98: the Advanced section's choices wrap the compose request.
+    /messaging\.composeForConfirm\(withAdvancedOptions\(\{/.test(src) && /action: 'MINT', params: actionParams/.test(src),
     'compose runs host-side via composeForConfirm with the MINT actionData',
 );
 assert.ok(
@@ -150,7 +151,13 @@ assert.ok(
 
 // --- 5. Validation ----------------------------------------------------
 
-assert.ok(/Ticker is required/.test(src), 'MintForm rejects empty ticker');
+// G22: Mint stays enabled; an empty ticker is marked red on its field and
+// the press stops before any compose.
+assert.ok(
+    /const firstMissing = !ticker\.trim\(\) \? 'mint-token'/.test(src)
+        && /attempted && !ticker\.trim\(\) \? 'Pick the token to mint\.'/.test(src),
+    'MintForm rejects empty ticker',
+);
 // The ticker goes through the shared reference grammar (the chain's full
 // TICK_CHARACTERS, dots as subtoken levels), not a local A-Z regex.
 assert.ok(

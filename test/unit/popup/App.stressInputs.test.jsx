@@ -299,7 +299,7 @@ describe('session status replies without a string state (NW)', () => {
             sessionReply.override = () => Promise.resolve(value);
             render(<App />);
             const retry = await screen.findByRole('button', { name: 'Try Again' }, { timeout: 15_000 });
-            expect(screen.getByRole('heading', { name: "The wallet couldn't start.", level: 1 })).toBeInTheDocument();
+            expect(screen.getByRole('heading', { name: 'Wallet Unavailable', level: 1 })).toBeInTheDocument();
             expect(screen.queryByRole('heading', { name: 'Home', level: 1 })).not.toBeInTheDocument();
 
             const before = vi.mocked(getSessionStatus).mock.calls.length;

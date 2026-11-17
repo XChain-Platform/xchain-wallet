@@ -88,10 +88,10 @@ async function settle() {
     }
 }
 
-// The page opens on Details and shows only the chosen tab's content, so the
-// buy form appears once the Buy tab is chosen.
+// Every viewer opens on Actions; the buy form is the Buy page a buyer's
+// first action row opens.
 async function openBuy() {
-    fireEvent.click(screen.getByRole('tab', { name: 'Buy' }));
+    fireEvent.click(screen.getByTestId('dispenser-buy-row'));
     await settle();
 }
 

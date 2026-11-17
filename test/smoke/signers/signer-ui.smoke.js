@@ -53,11 +53,11 @@ assert.equal(
     'PairSignerForm.jsx only exports the component',
 );
 
-// Four-stage state machine.
-for (const stage of ['vendor', 'pairing', 'confirm', 'saving', 'done', 'error']) {
+// Three steps: Choose, Connect, Accounts.
+for (const stage of ['choose', 'connect', 'accounts']) {
     assert.ok(
         pairSrc.includes(`'${stage}'`),
-        `PairSignerForm tracks stage "${stage}"`,
+        `PairSignerForm tracks step "${stage}"`,
     );
 }
 
@@ -75,20 +75,25 @@ assert.ok(
     'PairSignerForm does NOT import ledgerFactory directly',
 );
 
-// Persists through messaging.registerSigner.
+// Saves a hardware wallet through messaging.addHardwareWallet in add mode,
+// and hands the wallet to the shell for Set Password in first mode.
 assert.ok(
-    /messaging\.registerSigner\s*\(/.test(pairSrc),
-    'PairSignerForm persists via messaging.registerSigner',
+    /messaging\.addHardwareWallet\s*\(/.test(pairSrc),
+    'PairSignerForm saves via messaging.addHardwareWallet',
+);
+assert.ok(
+    /onDeviceReady/.test(pairSrc),
+    'PairSignerForm hands a first-install wallet to onDeviceReady',
 );
 
-// Firmware verdict gates the save button on 'unsupported'.
+// Firmware verdict fails Allow XChain on 'unsupported', so Continue never shows.
 assert.ok(
     /checkFirmware/.test(pairSrc),
     'PairSignerForm runs pairingInfo through checkFirmware',
 );
 assert.ok(
-    /verdict\?\.status === 'unsupported'/.test(pairSrc),
-    'PairSignerForm disables save when firmware is unsupported',
+    /found\?\.status === 'unsupported'/.test(pairSrc),
+    'PairSignerForm blocks Continue when firmware is unsupported',
 );
 
 // --- 2. ViewPrivateKey file + public surface --------------------------

@@ -27,6 +27,7 @@ import {
     COMMON_ACTIONS,
     PROTOCOL_ONLY_ACTIONS,
 } from '../../../packages/core/src/registry/actions.js';
+import { openSelectListbox, selectOption, selectOptionDetails, selectOptionValues } from '../../helpers/selectOption.js';
 
 const LABEL = '(dedicated form available)';
 const BTC = 'bitcoin-mainnet';
@@ -70,7 +71,7 @@ describe('dedicatedFormActions', () => {
 });
 
 describe('AdvancedActionsForm action picker label', () => {
-    it('labels a registry action with a form and leaves an SDK-only action bare', async () => {
+    it('gives every action option an icon and prints no dedicated-form text', async () => {
         const target = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [FROM] }),
             getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: FROM }),
@@ -87,12 +88,19 @@ describe('AdvancedActionsForm action picker label', () => {
                 <AdvancedActionsForm walletId="w" onBack={() => {}} />
             </MessagingProvider>,
         );
-        const option = (value) => document.querySelector(`option[value="${value}"]`);
-        await waitFor(() => expect(option('SDKONLY')).toBeTruthy());
-        expect(option('CALLBACK').textContent).toContain(LABEL);
-        expect(option('SLEEP').textContent).toContain(LABEL);
-        expect(option('SDKONLY').textContent).not.toContain(LABEL);
-        expect(screen.getAllByRole('option').length).toBeGreaterThan(3);
+        const picker = await screen.findByRole('combobox', { name: 'Action' });
+        await waitFor(() => expect(selectOptionValues(picker)).toContain('SDKONLY'));
+        const details = selectOptionDetails(picker);
+        const option = (value) => details.find((o) => o.value === value);
+        for (const o of details) expect(o.label).not.toContain(LABEL);
+        expect(option('SDKONLY')).toBeTruthy();
+        expect(details.length).toBeGreaterThan(3);
+        // Every option, the placeholder included, carries an icon.
+        const listbox = openSelectListbox(picker);
+        const rows = Array.from(listbox.querySelectorAll('[role="option"]'));
+        expect(rows.length).toBe(details.length);
+        for (const row of rows) expect(row.querySelector('svg')).not.toBeNull();
+        expect(listbox.textContent).not.toMatch(/dedicated form/i);
     });
 
     it('clears a chain-specific action before loading the next network', async () => {
@@ -124,10 +132,9 @@ describe('AdvancedActionsForm action picker label', () => {
             </MessagingProvider>,
         );
 
-        await waitFor(() => expect(document.querySelector('option[value="COLLECT"]')).toBeTruthy());
-        const collect = document.querySelector('option[value="COLLECT"]');
-        const actionPicker = collect.closest('select');
-        fireEvent.change(actionPicker, { target: { value: 'COLLECT' } });
+        const actionPicker = await screen.findByRole('combobox', { name: 'Action' });
+        await waitFor(() => expect(selectOptionValues(actionPicker)).toContain('COLLECT'));
+        selectOption(actionPicker, 'COLLECT');
         await waitFor(() => expect(target.getActionFormats).toHaveBeenCalledWith({
             chainId: BTC,
             action: 'COLLECT',
@@ -139,8 +146,9 @@ describe('AdvancedActionsForm action picker label', () => {
         fireEvent.click(await screen.findByRole('button', { name: /Select Litecoin/i }));
 
         await waitFor(() => expect(target.listActions).toHaveBeenCalledWith({ chainId: LTC }));
-        expect(actionPicker.value).toBe('');
-        expect(document.querySelector('option[value="COLLECT"]')).toBeNull();
+        const nextPicker = screen.getByRole('combobox', { name: 'Action' });
+        expect(nextPicker.value).toBe('');
+        expect(selectOptionValues(nextPicker)).not.toContain('COLLECT');
         expect(target.getActionFormats).not.toHaveBeenCalledWith({
             chainId: LTC,
             action: 'COLLECT',
@@ -196,8 +204,8 @@ describe('AdvancedActionsForm action picker label', () => {
         );
 
         const actionPicker = await screen.findByRole('combobox', { name: 'Action' });
-        await screen.findByRole('option', { name: /SDKONLY/ });
-        fireEvent.change(actionPicker, { target: { value: 'SDKONLY' } });
+        await waitFor(() => expect(selectOptionValues(actionPicker)).toContain('SDKONLY'));
+        selectOption(actionPicker, 'SDKONLY');
 
         expect(screen.getByRole('button', { name: 'Sign Action' })).toBeDisabled();
         expect(screen.queryByText('This action takes no user-provided fields.')).toBeNull();
@@ -231,8 +239,8 @@ describe('AdvancedActionsForm action picker label', () => {
         );
 
         const actionPicker = await screen.findByRole('combobox', { name: 'Action' });
-        await screen.findByRole('option', { name: /SDKONLY/ });
-        fireEvent.change(actionPicker, { target: { value: 'SDKONLY' } });
+        await waitFor(() => expect(selectOptionValues(actionPicker)).toContain('SDKONLY'));
+        selectOption(actionPicker, 'SDKONLY');
 
         expect(await screen.findByText('schema unavailable')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Sign Action' })).toBeDisabled();
@@ -263,10 +271,10 @@ describe('AdvancedActionsForm action picker label', () => {
         );
 
         const actionPicker = await screen.findByRole('combobox', { name: 'Action' });
-        await screen.findByRole('option', { name: /GOODONE/ });
-        fireEvent.change(actionPicker, { target: { value: 'BADONE' } });
+        await waitFor(() => expect(selectOptionValues(actionPicker)).toContain('GOODONE'));
+        selectOption(actionPicker, 'BADONE');
         expect(await screen.findByText('schema unavailable')).toBeInTheDocument();
-        fireEvent.change(actionPicker, { target: { value: 'GOODONE' } });
+        selectOption(actionPicker, 'GOODONE');
         expect(await screen.findByLabelText('VALUE')).toBeInTheDocument();
         expect(screen.queryByText('schema unavailable')).toBeNull();
     });

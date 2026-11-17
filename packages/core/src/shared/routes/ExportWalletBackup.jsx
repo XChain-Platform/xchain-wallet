@@ -44,7 +44,9 @@ export function ExportWalletBackup({ walletId, walletName = '', walletFormat, on
                 notices={<div ref={setNoticeHost} style={{ display: 'contents' }} data-page-notice-host="" />}
             >
                 <PageNoticeHostContext.Provider value={noticeHost}>
-                    <div className={settingsStyles.settingsSurface} data-settings-section="wallet-backup">
+                    {/* No card wrapper: the form (FormPage) is bare on a phone and
+                        draws its own centred, width-limited card on wide screens. */}
+                    <div data-settings-section="wallet-backup" style={{ display: 'contents' }}>
                         <BackupSection
                             // Keyed by wallet so a page reused for another wallet
                             // never carries a half-finished export across.
@@ -52,6 +54,7 @@ export function ExportWalletBackup({ walletId, walletName = '', walletFormat, on
                             activeWallet={wallet}
                             onExportInTab={onExportInTab}
                             only="export"
+                            direct
                         />
                     </div>
                 </PageNoticeHostContext.Provider>

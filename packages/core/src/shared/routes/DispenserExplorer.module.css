@@ -1,119 +1,25 @@
-.searchForm,
 .resultGroup {
     width: 100%;
     min-width: 0;
+    margin-top: var(--xc-space-3);
+    margin-bottom: var(--xc-space-2);
 }
 
-/* On a wide screen the field, tabs and cards keep one readable column in the middle. */
-.searchForm,
+/* On a wide screen the tabs and the list card keep one readable column in the middle. */
 .browse,
 .resultGroup {
     max-width: 760px;
     margin-inline: auto;
 }
 
-/* One large search field with the magnifier as its submit
-   button and an X that clears back to the browse list. */
-.searchField {
-    position: relative;
-    display: flex;
-    align-items: center;
-    width: 100%;
-    min-width: 0;
-}
-
-.searchField > div {
-    flex: 1 1 0;
-    width: 100%;
-    min-width: 0;
-    margin-bottom: 0;
-}
-
-/* The kit Input rule outranks a bare class, so the size and the padding that
-   clears both buttons are set through the wrapper. */
-.searchField input.searchInput {
-    width: 100%;
-    min-height: 48px;
-    box-sizing: border-box;
-    padding-inline: 44px 44px;
-    border: 1.5px solid var(--xc-accent-primary);
-    border-radius: var(--xc-radius-md);
-    background: var(--xc-bg);
-    font-size: var(--xc-text-md);
-    text-overflow: ellipsis;
-}
-
-.searchField input.searchInput::-webkit-search-cancel-button {
-    appearance: none;
-    display: none;
-}
-
-.searchSubmit,
-.searchClear {
-    position: absolute;
-    z-index: calc(var(--xc-z-base) + 1);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--xc-radius-sm);
-    background: transparent;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-}
-
-.searchSubmit {
-    inset-inline-start: 4px;
-    color: var(--xc-accent-primary);
-}
-
-.searchSubmit:disabled {
-    color: var(--xc-text-muted);
-    cursor: default;
-}
-
-.searchClear {
-    inset-inline-end: 4px;
-}
-
-.searchSubmit:focus-visible,
-.searchClear:focus-visible {
-    outline: none;
-    box-shadow: var(--xc-shadow-focus-ring);
-}
-
-/* Forced-colors mode drops the box-shadow ring, so focus gets an outline. */
-@media (forced-colors: active) {
-    .searchSubmit:focus-visible,
-    .searchClear:focus-visible {
-        outline: 2px solid Highlight;
-        outline-offset: 2px;
-    }
-}
-
-.searchSubmit svg,
-.searchClear svg {
-    width: 1.25rem;
-    height: 1.25rem;
-}
-
-.chainSelect {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    box-sizing: border-box;
-}
-
+/* The toggle is the first thing under the header, so the page's own 8px gap
+   (ListPage) is the only space above it. */
 .browse {
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
     width: 100%;
     min-width: 0;
-    margin-top: var(--xc-space-3);
 }
 
 .tabLabel {
@@ -137,35 +43,35 @@
     min-width: 0;
 }
 
-.rankNote {
-    margin: 0;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
+/* One list card: rounded only at the top and bottom of the whole list, with a
+   divider line between rows. Each row carries its own padding. */
+.cardList {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
 }
 
-.cardList,
+/* A group's rows sit under their token or seller row, set in a step. */
 .groupCards {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-2);
     min-width: 0;
+    padding-inline-start: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+    border-inline-start: 2px solid var(--xc-border);
+}
+
+.cardList > * + *,
+.groupCards > * + * {
+    border-top: 1px solid var(--xc-border);
 }
 
 .group {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-2);
     min-width: 0;
-}
-
-.groupCards {
-    padding-inline-start: var(--xc-space-3);
-    border-inline-start: 2px solid var(--xc-border);
-}
-
-.resultGroup {
-    margin-top: var(--xc-space-3);
-    margin-bottom: var(--xc-space-2);
 }
 
 .sectionTitle {

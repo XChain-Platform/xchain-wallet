@@ -120,8 +120,8 @@ describe('coinpayAction pending-tx summary', () => {
     });
 
     it('still lets an explicit caller summary (the auto-pay wording) win', async () => {
-        await coinpayAction(opts({ actionSummary: 'Auto-paid match #14 for order #7' }));
-        expect(summary()).toBe('Auto-paid match #14 for order #7');
+        await coinpayAction(opts({ actionSummary: 'Auto paid match #14 for order #7' }));
+        expect(summary()).toBe('Auto paid match #14 for order #7');
     });
 
     // The point of the whole exercise: new copy, guard still bites.

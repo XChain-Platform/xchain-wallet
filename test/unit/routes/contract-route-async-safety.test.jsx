@@ -5,6 +5,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { ContractDetail } from '../../../packages/core/src/shared/routes/ContractDetail.jsx';
@@ -71,10 +72,12 @@ describe('contract route request isolation', () => {
         };
         const utils = render(provider(messaging, <ContractDetail {...props} />));
 
+        // The owner fact is on the Details tab.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
+        expect(await screen.findByText('Owner (you)')).toBeInTheDocument();
+        // Calls are the Activity tab's list; its pager is the one with Next.
+        fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
         await screen.findByText('ping #41-1');
-        expect(screen.getByText(/Owner:/).parentElement).toHaveTextContent('(you)');
-        // Calls are the History tab's list; its pager is the one with Next.
-        fireEvent.click(screen.getByRole('tab', { name: 'History' }));
         fireEvent.click(screen.getByRole('button', { name: /Next/ }));
         await waitFor(() => expect(executions).toHaveBeenCalledWith(expect.objectContaining({
             contractActionIndex: '41',
@@ -88,10 +91,12 @@ describe('contract route request isolation', () => {
             contractActionIndex: '42',
             opts: { page: 1 },
         }));
-        expect(screen.getByText(/Owner:/).parentElement).not.toHaveTextContent('(you)');
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(await screen.findByText('Owner')).toBeInTheDocument();
+        expect(screen.queryByText('Owner (you)')).toBeNull();
     });
 
-    it('drops the previous contract ABI and its arguments when the next contract has none', async () => {
+    it('drops the previous contract ABI and its arguments when the next contract has none, and offers Try Again', async () => {
         const secondContract = deferred();
         const getContractByActionIndex = vi.fn(({ contractActionIndex }) => (
             contractActionIndex === '41'
@@ -123,8 +128,10 @@ describe('contract route request isolation', () => {
         await flush();
 
         expect(screen.queryByLabelText('limit (number)')).toBeNull();
-        expect(screen.getByLabelText('Method')).toHaveValue('');
-        expect(screen.getByLabelText('Arguments')).toHaveValue('');
+        expect(screen.queryByLabelText('Method')).toBeNull();
+        expect(screen.queryByLabelText('Arguments')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Call Contract' })).toBeDisabled();
     });
 
     it('clears positional values whenever a different declared method is selected', async () => {
@@ -151,10 +158,10 @@ describe('contract route request isolation', () => {
         )));
 
         fireEvent.change(await screen.findByLabelText('firstValue (string)'), { target: { value: 'secret-one' } });
-        fireEvent.change(screen.getByLabelText('Method'), { target: { value: 'second' } });
+        selectOption(screen.getByLabelText('Method'), 'second');
         expect(screen.getByLabelText('secondValue (string)')).toHaveValue('');
         fireEvent.change(screen.getByLabelText('secondValue (string)'), { target: { value: 'secret-two' } });
-        fireEvent.change(screen.getByLabelText('Method'), { target: { value: 'first' } });
+        selectOption(screen.getByLabelText('Method'), 'first');
         expect(screen.getByLabelText('firstValue (string)')).toHaveValue('');
     });
 });
@@ -218,9 +225,11 @@ describe('contract form submit locks', () => {
 
         fireEvent.change(await screen.findByLabelText('Method'), { target: { value: 'ping' } });
         fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
-        const form = await screen.findByRole('form', { name: 'Review Contract Call' });
-        fireEvent.submit(form);
-        fireEvent.submit(form);
+        await screen.findByTestId('confirm-modal');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Call');
+        await waitFor(() => expect(screen.getByTestId('confirm-approve')).not.toBeDisabled());
+        fireEvent.click(screen.getByTestId('confirm-approve'));
+        fireEvent.click(screen.getByTestId('confirm-approve'));
 
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
     });
@@ -236,9 +245,11 @@ describe('contract form submit locks', () => {
         });
         fireEvent.change(screen.getByLabelText('Gas limit'), { target: { value: '50000' } });
         fireEvent.click(screen.getByRole('button', { name: 'Publish Contract' }));
-        const form = await screen.findByRole('form', { name: 'Review contract publication' });
-        fireEvent.submit(form);
-        fireEvent.submit(form);
+        await screen.findByTestId('confirm-modal');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Deploy Contract');
+        await waitFor(() => expect(screen.getByTestId('confirm-approve')).not.toBeDisabled());
+        fireEvent.click(screen.getByTestId('confirm-approve'));
+        fireEvent.click(screen.getByTestId('confirm-approve'));
 
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
     });
@@ -258,7 +269,9 @@ function executeMessaging(overrides = {}) {
         getSettings: () => Promise.resolve({}),
         listWallets: watchOnlyWallet(),
         signerReady: () => Promise.resolve({ ready: false }),
-        getContractByActionIndex: () => Promise.resolve({ data: {} }),
+        getContractByActionIndex: () => Promise.resolve({
+            data: { abi: { version: 1, methods: { ping: { params: [] } } } },
+        }),
         ...overrides,
     };
 }

@@ -139,8 +139,8 @@ describe('Home recent-activity reads', () => {
                 <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} onHistory={vi.fn()} />
             </MessagingProvider>,
         );
-        // Home settles on its Coins tab; there is no Activity tab to open.
-        await screen.findByRole('tab', { name: /Coins/ });
+        // Home settles on its Balances tab; there is no Activity tab to open.
+        await screen.findByRole('tab', { name: /Balances/ });
         expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
         const historyReadsBeforeTab = messaging.getAddressHistory.mock.calls.length;
         expect(document.querySelectorAll('[data-activity-row]')).toHaveLength(0);

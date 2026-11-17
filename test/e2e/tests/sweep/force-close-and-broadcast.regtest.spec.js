@@ -440,7 +440,7 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // fee is a hub setting, and on a coin-fee lane there is no line.
             await expect(approve, 'Approve never went live after the confirmation word was typed')
                 .toBeEnabled({ timeout: 120_000 });
-            const feeLine = page.getByTestId('confirm-protocol-fee');
+            const feeLine = page.getByTestId('confirm-fee-protocol');
             if (await feeLine.count() > 0) {
                 const said = await feeLine.innerText();
                 sweepFeeXchain = Number(said.match(new RegExp(`([\\d.]+)\\s*${TICK}\\b`))?.[1]);

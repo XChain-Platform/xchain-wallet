@@ -42,6 +42,7 @@
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import { createWallet, expect, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
+import { pickFiatCurrency } from '../../fixtures/pickerFields.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
@@ -333,7 +334,7 @@ test.describe(`user-oracle dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // fiat amount left EMPTY: that combination is what selects the
             // user-oracle path over the validator one (DispenserForm.jsx:493).
             await main.getByRole('button', { name: /Advanced options/ }).click();
-            await main.getByLabel('Priced in fiat', { exact: true }).selectOption(FIAT_CODE);
+            await pickFiatCurrency(main, FIAT_CODE);
             await main.getByLabel(/^Oracle address/).fill(ORACLE_ADDRESS);
             await expect(main.getByLabel(/^Fiat amount/),
                 'the fiat amount must stay empty, or this composes the Mode A validator path')

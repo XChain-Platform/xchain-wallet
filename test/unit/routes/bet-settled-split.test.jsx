@@ -203,31 +203,39 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         expect(settlement.textContent).toContain('Winning outcome: "Yes" (outcome 0)');
         expect(settlement.textContent).toContain('Winning bets settled as won');
         expect(settlement.textContent).toContain('nothing to claim');
-        // The timeline on the Activity tab names the winner too.
+        // Activity is the bet rows alone; the winner is named in the
+        // settlement above, not in a status-history footer.
         await domAct(async () => { fireEvent.click(utils.getByRole('tab', { name: 'Activity' })); await drain(); });
-        expect(utils.container.textContent).toContain('winner "Yes" (outcome 0)');
+        expect(utils.container.querySelectorAll('[data-outcome-activity] li')).toHaveLength(2);
+        expect(utils.container.textContent).not.toContain('winner "Yes" (outcome 0)');
     });
 
-    it('offers the existing oracle settlement controls only to this market owner', async () => {
-        const onSettleMarket = vi.fn();
+    it('offers the oracle settlement controls only to this market owner, on its own Actions tab', async () => {
         const { messaging } = harness({
             betFeed: () => Promise.resolve({
                 data: [feed('closed', { source: OWN, expire_at: Math.floor(Date.now() / 1000) + 3600 })],
             }),
         });
-        const utils = await openMarket(messaging, { onSettleMarket });
+        const utils = await openMarket(messaging);
 
+        // The owner opens on Actions, the first tab (G102); Result is next.
+        expect(utils.getByRole('tab', { name: 'Actions', selected: true })).toBeTruthy();
+        await domAct(async () => { fireEvent.click(utils.getByRole('tab', { name: 'Result' })); await drain(); });
         expect(utils.getByTestId('bet-settlement').textContent).toContain('Pending resolution');
         expect(utils.getByTestId('bet-settlement').textContent).toContain('do not submit a claim');
-        fireEvent.click(utils.getByRole('button', { name: 'Settle This Market' }));
-        expect(onSettleMarket).toHaveBeenCalledOnce();
+        // Settle This Market opens this page's owner Actions tab, where
+        // Post result now lives (My markets no longer carries it).
+        await domAct(async () => { fireEvent.click(utils.getByRole('button', { name: 'Settle This Market' })); await drain(); });
+        expect(utils.getByRole('tab', { name: 'Actions', selected: true })).toBeTruthy();
+        expect(utils.getByRole('button', { name: /^Post result/ })).toBeTruthy();
         utils.unmount();
 
         const other = harness({
             betFeed: () => Promise.resolve({ data: [feed('closed', { source: ORACLE })] }),
         });
-        const otherUtils = await openMarket(other.messaging, { onSettleMarket });
+        const otherUtils = await openMarket(other.messaging);
         expect(otherUtils.queryByRole('button', { name: 'Settle This Market' })).toBeNull();
+        expect(otherUtils.queryByRole('tab', { name: 'Actions' })).toBeNull();
     });
 
     it('rebuilds the split from the bets when the market is terminal', async () => {
@@ -241,7 +249,9 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         expect(text).not.toContain('no bets yet');
         expect(text).toContain('300');
         expect(text).toContain('100');
-        expect(text).toContain('1 bet)');
+        // Result's final split: each row names its pool and its bets.
+        const rows = [...utils.container.querySelectorAll('[data-outcome-results] li')].map((li) => li.textContent);
+        expect(rows.some((row) => /\b1 bet(?!s)/.test(row))).toBe(true);
 
         const betsCall = calls.find((c) => c.method === 'bets');
         expect(betsCall?.args).toMatchObject({ chainId: CHAIN, query: '1268', type: 'feed' });
@@ -264,8 +274,13 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         const utils = await openMarket(messaging);
         const text = utils.container.textContent;
 
-        expect(text).toContain('900 (90.0%, 9 bets)');
-        expect(text).toContain('100 (10.0%, 1 bet)');
+        // Result's final split, one row per outcome: label, winner pill,
+        // share, then "pool, bets".
+        const rows = [...utils.container.querySelectorAll('[data-outcome-results] li')].map((li) => li.textContent);
+        expect(rows).toEqual([
+            '0: YesWinner90.0%900 XCHAIN, 9 bets',
+            '1: No10.0%100 XCHAIN, 1 bet',
+        ]);
         // The market's bet rows are now read for every market (the card's chart, Activity
         // and My Bets draw from them); the harness bets total 400, so the explorer's
         // 900 / 100 aggregate staying on screen is what proves it was not replaced.
@@ -282,9 +297,10 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         const utils = await openMarket(messaging);
         const text = utils.container.textContent;
 
-        expect(text).toContain('Current split');
+        // A live market opens on its outcome list, each row with its staked pool.
         expect(text).not.toContain('Final split');
-        expect(text).toContain('300');
+        const yes = utils.getByRole('button', { name: 'Bet on Yes, 100 percent, 300 XCHAIN staked' });
+        expect(yes.textContent).toBe('Yes300 XCHAIN staked100%');
         // The feed read now serves the card's chart on a live market too, but it
         // never replaces the split: the explorer's 300 pool is the one on screen.
         expect(text).not.toContain('(75.0%');

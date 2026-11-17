@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// TokenDetail gates its direct Manage action on the same all-addresses
-// ownership check ManageToken itself uses, never on the active address alone.
+// TokenDetail lets any wallet open Manage. The selected form owns the
+// authoritative submit-time ownership refusal.
 
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
@@ -100,35 +100,40 @@ describe('TokenDetail "Manage token" action', () => {
     it('renders and navigates for the issuing wallet', async () => {
         const { onManageToken } = renderDetail({ creator: MINE, withPrimaryActions: true });
 
-        // The Actions tab opens first: the basics lead the main group, and the
-        // issuer's Manage token tile sits in its own group below.
-        const manage = await screen.findByRole('button', { name: 'Manage token' });
-        const actions = within(screen.getByRole('group', { name: 'Actions for S18PROBE' }))
+        // The Actions tab opens first: the basics lead the main list, and the
+        // issuer's Manage token row sits in its own list below.
+        const manage = await screen.findByRole('button', { name: /^Manage token\b/ });
+        const actions = within(screen.getByRole('list', { name: 'Actions for S18PROBE' }))
             .getAllByRole('button');
-        expect(actions.slice(0, 3).map((button) => button.textContent)).toEqual([
-            'Send',
-            'Receive',
-            'Exchange',
+        expect(actions.slice(0, 3).map((button) => button.getAttribute('data-action-id'))).toEqual([
+            'send',
+            'receive',
+            'exchange',
         ]);
-        expect(actions.some((button) => button.textContent === 'Manage token')).toBe(false);
+        expect(actions.some((button) => button.getAttribute('data-action-id') === 'manage')).toBe(false);
+        expect(within(screen.getByRole('list', { name: 'You issued this token' })).getByRole('button', { name: /^Manage token\b/ }))
+            .toBe(manage);
         fireEvent.click(manage);
 
         expect(onManageToken).toHaveBeenCalledTimes(1);
     });
 
-    it('does not render for a wallet that only holds (never issued) the tick', async () => {
-        const { messaging } = renderDetail({ creator: OTHER });
+    it('renders and navigates for a wallet that only holds the tick', async () => {
+        const { messaging, onManageToken } = renderDetail({ creator: OTHER });
 
-        await waitFor(() => expect(messaging.getAddressesByChain).toHaveBeenCalled());
-        expect(screen.getByRole('group', { name: 'Actions for S18PROBE' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Manage token' })).toBeNull();
+        expect(screen.getByRole('list', { name: 'Actions for S18PROBE' })).toBeInTheDocument();
+        const manage = screen.getByRole('button', { name: /^Manage token\b/ });
+        expect(manage).not.toHaveAttribute('aria-disabled');
+        fireEvent.click(manage);
+        expect(onManageToken).toHaveBeenCalledTimes(1);
+        expect(messaging.getAddressesByChain).not.toHaveBeenCalled();
     });
 
     it('does not render Manage for a native coin', () => {
         renderDetail({ creator: MINE, kind: 'native' });
 
-        expect(screen.getByRole('group', { name: 'Actions for S18PROBE' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Manage token' })).toBeNull();
+        expect(screen.getByRole('list', { name: 'Actions for S18PROBE' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Manage token\b/ })).toBeNull();
     });
 
     it('refetches a balance when restored route state omits quantity', async () => {

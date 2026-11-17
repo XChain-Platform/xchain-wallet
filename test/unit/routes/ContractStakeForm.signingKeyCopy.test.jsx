@@ -16,7 +16,8 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
-import { ContractStakeForm } from '../../../packages/core/src/shared/routes/ContractStakeForm.jsx';
+// The contract-stake route: the one Staking form on a contract target.
+import { ContractStakeRoute as ContractStakeForm } from '../../helpers/stakingFormRoutes.jsx';
 
 const CHAIN = 'bitcoin-regtest';
 const ADDRESS = 'bcrt1qactiveactiveactiveactiveactiveactive0';
@@ -59,7 +60,7 @@ function mountForm(props, walletMode = 'full') {
 async function submitUntil(check) {
     // The standard From section labels the field "From address".
     await screen.findByLabelText('From address');
-    const form = screen.getByLabelText(/signing public key/i, { selector: 'input' }).closest('form');
+    const form = screen.getByLabelText(/signing key$/i, { selector: 'input' }).closest('form');
     await waitFor(() => {
         if (form.isConnected) fireEvent.submit(form);
         check();
@@ -74,7 +75,7 @@ describe('ContractStakeForm signing-key copy', () => {
     it('words the stake-mode key error with the input label', async () => {
         mountForm({ initialMode: 'stake', initialSigningPubkey: 'abc' });
         await submitUntil(() => expect(document.body.textContent)
-            .toContain('The signing public key must be exactly 64 characters'));
+            .toContain('The signing key must be exactly 64 characters'));
         expect(document.body.textContent).not.toContain('Signing pubkey');
         expect(document.body.textContent).not.toContain('(Ed25519).');
     });
@@ -82,12 +83,12 @@ describe('ContractStakeForm signing-key copy', () => {
     it('words the delegate-mode key error with the new-key label', async () => {
         mountForm({ initialMode: 'delegate', initialSigningPubkey: 'abc' });
         await submitUntil(() => expect(document.body.textContent)
-            .toContain('The new signing public key must be exactly 64 characters'));
+            .toContain('The new signing key must be exactly 64 characters'));
     });
 
     it('labels the review row like the input in delegate mode', async () => {
         mountForm({ initialMode: 'delegate', initialTick: 'XCHAIN', initialSigningPubkey: 'a'.repeat(64) }, 'watcher');
-        await submitUntil(() => expect(reviewLabels()).toContain('New signing public key'));
+        await submitUntil(() => expect(reviewLabels()).toContain('New signing key'));
         expect(reviewLabels()).not.toContain('Signing pubkey');
     });
 });

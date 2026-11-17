@@ -18,7 +18,7 @@ describe('Settings CSS compatibility', () => {
         expect(css).not.toContain(':has(');
         expect(css).not.toContain('@supports selector');
         expect(css).toMatch(
-            /\.page div:not\(\[class\*=['"]labelRow['"]\]\)\s*\{[\s\S]*?flex-wrap:\s*wrap !important;/,
+            /\.page div:not\(\[class\*=['"]labelRow['"]\]\):not\(\[class\*=['"]popover['"]\]\)\s*\{[\s\S]*?flex-wrap:\s*wrap !important;/,
         );
     });
 
@@ -27,7 +27,7 @@ describe('Settings CSS compatibility', () => {
         expect(css).toContain('flex: 1 1 100% !important;');
         expect(css).toContain('width: 100% !important;');
         expect(css).toMatch(
-            /\.page div:not\(\[class\*=['"]labelRow['"]\]\)\s*\{[\s\S]*?min-width:\s*0;[\s\S]*?max-width:\s*100%;/,
+            /\.page div:not\(\[class\*=['"]labelRow['"]\]\):not\(\[class\*=['"]popover['"]\]\)\s*\{[\s\S]*?min-width:\s*0;[\s\S]*?max-width:\s*100%;/,
         );
     });
 });

@@ -19,15 +19,15 @@
 // keeping this component pure and trivially testable.
 
 import { AddressText, StatusMessage } from '@xchain-wallet/core/ui';
-import { formatDisplayAmount } from '../utils/amountFormat.js';
+import { formatDisplayAmount, groupDecodedAmounts } from '../utils/amountFormat.js';
 import styles from './ActionIntentSummary.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/execute.js';
 import '../../i18n/locales/en/send.js';
 
-function reviewDetailValue(detail) {
-    if (!/^(Amount|Quantity)$/.test(String(detail?.label || ''))) return detail?.value;
+function reviewDetailValue(detail, groupedDetail = detail) {
+    if (!/^(Amount|Quantity)$/.test(String(detail?.label || ''))) return groupedDetail?.value;
     return formatDisplayAmount(detail?.value);
 }
 
@@ -57,9 +57,12 @@ function reviewSummary(decoded) {
  * @param {{ deltas: Array<{ tick: string, before: string, after: string, isCoin?: boolean, isFee?: boolean }>, notes?: string[] } | null} [props.simulation]
  */
 export function ActionIntentSummary({ decoded, simulation }) {
+    // Quantities read grouped ("250,000 PEPE") in the summary and the rows;
+    // Amount and Quantity rows keep their own display rule below.
+    const shown = groupDecodedAmounts(decoded) || decoded;
     return (
         <div className={styles.intent} data-testid="action-intent">
-            <p className={styles.summary}>{reviewSummary(decoded)}</p>
+            <p className={styles.summary}>{reviewSummary(shown)}</p>
 
             {decoded.warnings.length > 0 ? (
                 <StatusMessage variant="warning" role={null}>
@@ -74,7 +77,7 @@ export function ActionIntentSummary({ decoded, simulation }) {
                     {decoded.details.map((d, i) => (
                         <div key={`${d.label}-${i}`} className={styles.row}>
                             <dt>{d.label}</dt>
-                            <dd>{reviewDetailValue(d)}</dd>
+                            <dd>{reviewDetailValue(d, shown.details[i])}</dd>
                         </div>
                     ))}
                 </dl>

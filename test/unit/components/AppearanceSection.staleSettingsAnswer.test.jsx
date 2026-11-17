@@ -12,6 +12,7 @@ import {
     waitFor,
 } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+import { selectOption } from '../../helpers/selectOption.js';
 
 const { messagingState } = vi.hoisted(() => ({
     messagingState: { current: null },
@@ -109,7 +110,7 @@ describe('stale settings answers', () => {
         fireEvent.click(privacy);
         await waitFor(() => expect(harness.messaging.updateSettings).toHaveBeenCalledTimes(1));
 
-        fireEvent.change(theme, { target: { value: 'dark' } });
+        selectOption(theme, 'dark');
         await waitFor(() => expect(harness.messaging.updateSettings).toHaveBeenCalledTimes(2));
         expect(harness.writes[0].answer.theme).toBe('system');
         expect(harness.writes[1].answer.theme).toBe('dark');
@@ -130,9 +131,9 @@ describe('stale settings answers', () => {
         render(<AppearanceSection />);
 
         const theme = await screen.findByRole('combobox', { name: 'Theme' });
-        fireEvent.change(theme, { target: { value: 'dark' } });
+        selectOption(theme, 'dark');
         await waitFor(() => expect(harness.messaging.updateSettings).toHaveBeenCalledTimes(1));
-        fireEvent.change(theme, { target: { value: 'light' } });
+        selectOption(theme, 'light');
         await waitFor(() => expect(harness.messaging.updateSettings).toHaveBeenCalledTimes(2));
 
         await resolveWrite(harness.writes[1]);
@@ -154,9 +155,9 @@ describe('stale settings answers', () => {
         render(<AppearanceSection />);
 
         const theme = await screen.findByRole('combobox', { name: 'Theme' });
-        fireEvent.change(theme, { target: { value: 'dark' } });
+        selectOption(theme, 'dark');
         await waitFor(() => expect(harness.messaging.updateSettings).toHaveBeenCalledTimes(1));
-        fireEvent.change(theme, { target: { value: 'light' } });
+        selectOption(theme, 'light');
         expect(await screen.findByRole('alert')).toHaveTextContent('offline');
 
         await resolveWrite(harness.writes[0]);
@@ -181,9 +182,7 @@ describe('stale settings answers', () => {
         const privacy = await screen.findByRole('switch', { name: 'Hide small balances' });
         fireEvent.click(privacy);
         await waitFor(() => expect(harness.messaging.updateSettings).toHaveBeenCalledTimes(1));
-        fireEvent.change(await screen.findByRole('combobox', { name: 'Theme' }), {
-            target: { value: 'dark' },
-        });
+        selectOption(await screen.findByRole('combobox', { name: 'Theme' }), 'dark');
         expect(await screen.findByRole('alert')).toHaveTextContent('offline');
 
         await resolveWrite(harness.writes[0]);

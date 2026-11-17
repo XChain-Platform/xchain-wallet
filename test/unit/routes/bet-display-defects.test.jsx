@@ -185,8 +185,8 @@ async function openMarket(messaging, feedIndex = '1169') {
     return utils;
 }
 
-// The market page opens on Details and shows only the chosen tab's content,
-// so the bet form appears once the Bet tab is chosen.
+// The market page opens on its Bet tab and shows only the chosen tab's
+// content; choosing Bet again keeps it there.
 async function chooseBetTab(utils) {
     await domAct(async () => {
         fireEvent.click(utils.getByRole('tab', { name: 'Bet' }));
@@ -200,7 +200,10 @@ describe('(a) BetFeedDetail: the pool respects the token, not the sum column', (
         const utils = await openMarket(messaging);
         const shown = utils.container.textContent;
         expect(shown).not.toContain('300.000000000000000000');
-        expect(shown).toContain('300 (100.0%');
+        // The hero's pool line, and the Yes outcome row with its stake and chance.
+        expect(shown).toContain('Pool 300 XCHAIN');
+        const yes = utils.getByRole('button', { name: 'Bet on Yes, 100 percent, 300 XCHAIN staked' });
+        expect(yes.textContent).toBe('Yes300 XCHAIN staked100%');
     });
 
     it('does not trim a figure that has significant decimals', async () => {
@@ -210,7 +213,9 @@ describe('(a) BetFeedDetail: the pool respects the token, not the sum column', (
             }),
         });
         const utils = await openMarket(messaging);
-        expect(utils.container.textContent).toContain('0.175 (100.0%');
+        expect(utils.container.textContent).toContain('Pool 0.175 XCHAIN');
+        const yes = utils.getByRole('button', { name: 'Bet on Yes, 100 percent, 0.175 XCHAIN staked' });
+        expect(yes.textContent).toBe('Yes0.175 XCHAIN staked100%');
     });
 });
 
@@ -218,7 +223,9 @@ describe('(b) counts are pluralized', () => {
     it('one bet is "1 bet", two are "2 bets"', async () => {
         const { messaging } = harness();
         const utils = await openMarket(messaging);
-        expect(utils.container.textContent).toContain('1 bet)');
+        // The hero's standing line: "Pool 300 XCHAIN · 1 bet".
+        const stats = () => utils.container.querySelector('[data-bet-hero-stats]').textContent;
+        expect(stats()).toContain('· 1 bet');
         expect(utils.container.textContent).not.toContain('1 bets');
 
         const two = harness({
@@ -227,7 +234,7 @@ describe('(b) counts are pluralized', () => {
             }),
         });
         const utils2 = await openMarket(two.messaging);
-        expect(utils2.container.textContent).toContain('2 bets)');
+        expect(utils2.container.querySelector('[data-bet-hero-stats]').textContent).toContain('· 2 bets');
     });
 
     it('a one-day market costs "about 1 day", never "about 1 days"', async () => {
@@ -256,8 +263,9 @@ describe('(c) the confirm screens name the outcome the market names', () => {
         const { messaging } = harness();
         const utils = await openMarket(messaging);
         await chooseBetTab(utils);
+        // Tapping Yes opens the Place Bet step, where the stake is.
         await domAct(async () => {
-            fireEvent.click(button(utils, /^Yes$/));
+            fireEvent.click(utils.getByRole('button', { name: /^Bet on Yes,/ }));
             await drain();
         });
         await domAct(async () => {
@@ -269,7 +277,8 @@ describe('(c) the confirm screens name the outcome the market names', () => {
             await drain();
         });
 
-        const intent = utils.getByTestId('action-intent').textContent;
+        // The confirm page's sentence and facts (G127) carry the decoded intent.
+        const intent = utils.getByTestId('confirm-modal').textContent;
         expect(intent).toContain('"Yes" (outcome 0)');
         // The index is what the bytes carry: it must still be on the screen.
         expect(intent).toContain('outcome 0');
@@ -284,7 +293,7 @@ describe('(c) the confirm screens name the outcome the market names', () => {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /^Resolve$/));
+            fireEvent.click(button(utils, /^Resolve/));
             await drain();
         });
         await domAct(async () => {
@@ -296,7 +305,7 @@ describe('(c) the confirm screens name the outcome the market names', () => {
             await drain();
         });
 
-        const intent = utils.getByTestId('action-intent').textContent;
+        const intent = utils.getByTestId('confirm-modal').textContent;
         expect(intent).toContain('"Yes" (outcome 0)');
         expect(intent).toContain('market 2343');
     });
@@ -308,20 +317,19 @@ describe('(c) the confirm screens name the outcome the market names', () => {
             betFeed: () => Promise.resolve({ data: [{ ...ZERO_DECIMAL_FEED, outcomes: '' }] }),
         });
         const utils = await openMarket(messaging);
-        // Details says so; the Bet tab then offers nothing to back.
-        expect(utils.container.textContent).toContain('No outcomes recorded');
+        // The Bet tab offers nothing to back.
         await chooseBetTab(utils);
-        // Keep Review active when the feed has no outcomes so the form can explain
-        // why it cannot continue.
-        const review = button(utils, /Place bet/i);
-        expect(review.disabled).toBe(false);
-        fireEvent.click(review);
-        expect(utils.container.textContent).toContain('Choose an outcome.');
+        expect(utils.queryByRole('list', { name: 'Outcome to back' })).toBeNull();
+        expect(utils.getByRole('heading', { level: 2, name: 'Will it ship?' })).toBeTruthy();
+        // No outcome rows and no Bet button: the tab says why instead.
+        expect(utils.queryByRole('button', { name: 'Bet' })).toBeNull();
+        expect(utils.getByText('This market lists no outcomes, so there is nothing to bet on.')).toBeTruthy();
+        expect(utils.queryByRole('form', { name: 'Place Bet' })).toBeNull();
     });
 });
 
 // My bets is a tab of Bet Markets (view 'bets').
-describe('(c) the My bets tab names each row\'s outcome', () => {
+describe('(c) the My bets tab names each bet\'s outcome on its market card', () => {
     const BET_ROW = Object.freeze({
         action_index: '5001',
         feed_action_index: '1169',
@@ -342,51 +350,48 @@ describe('(c) the My bets tab names each row\'s outcome', () => {
         return utils;
     }
 
-    it('reads the market for its labels and names the backed side', async () => {
-        const { messaging, calls } = harness({ bets: () => Promise.resolve({ data: [BET_ROW] }) });
+    // My bets is the All list narrowed to the markets the wallet bet in
+    // (operator ruling 2026-11-13): the market names its outcomes, so the
+    // card's chip names the backed side with no read per bet.
+    const listed = (utils) => Array.from(utils.container.querySelectorAll('[data-market-index]'))
+        .map((el) => el.getAttribute('data-market-index'));
+    const marketsRead = () => Promise.resolve({ data: [ZERO_DECIMAL_FEED, OWN_CLOSED_FEED] });
+
+    it('lists the market the bet sits in as its card, naming the backed side', async () => {
+        const { messaging, calls } = harness({ bets: () => Promise.resolve({ data: [BET_ROW] }), betFeeds: marketsRead });
         const onOpenMarket = vi.fn();
         const utils = await openMyBets(messaging, { onOpenMarket });
-        expect(utils.container.textContent).toContain('Backed "No" (outcome 1)');
-        expect(utils.container.textContent).toContain('staked 100 XCHAIN');
-        fireEvent.click(utils.getByRole('button', { name: /Market #1169.*Backed "No"/ }));
+        expect(listed(utils)).toEqual(['1169']);
+        // One short summary on the right of the row: amount and asset only.
+        const chips = utils.container.querySelectorAll('[data-testid="bet-market-your-bet"]');
+        expect(chips.length).toBe(1);
+        expect(chips[0].textContent).toBe('You bet 100 XCHAIN');
+        expect(chips[0].closest('span[class*="right"]')).not.toBeNull();
+        expect(utils.container.textContent).not.toContain(' on No');
+        fireEvent.click(utils.container.querySelector('[data-market-index="1169"]'));
         expect(onOpenMarket).toHaveBeenCalledWith(CHAIN, '1169');
-        // One read per DISTINCT market, not per row.
-        expect(calls.filter((c) => c.method === 'betFeed').length).toBe(1);
+        // No market read per bet: the list's own read carries the labels.
+        expect(calls.filter((c) => c.method === 'betFeed').length).toBe(0);
     });
 
-    it('separates pending bets from plain win and loss history', async () => {
-        const rows = [
-            BET_ROW,
-            { ...BET_ROW, action_index: '5002', bet_status: 'won', settled_block: 7001 },
-            { ...BET_ROW, action_index: '5003', bet_status: 'lost', settled_block: 7002 },
-            { ...BET_ROW, action_index: '5004', bet_status: 'refunded', settled_block: 7003 },
-        ];
-        const { messaging } = harness({ bets: () => Promise.resolve({ data: rows }) });
+    it('sums several bets and assets into the one right-side summary', async () => {
+        const second = { ...BET_ROW, action_index: '6001', outcome: 0, amount: '50' };
+        const other = { ...BET_ROW, action_index: '6002', tick: 'PEPE', amount: '5' };
+        const { messaging } = harness({ bets: () => Promise.resolve({ data: [BET_ROW, second, other] }), betFeeds: marketsRead });
         const utils = await openMyBets(messaging);
-        const text = utils.container.textContent;
-
-        expect(text).toContain('Pending resolution');
-        expect(text).toContain('Past bets');
-        expect(text).toContain('Won');
-        expect(text).toContain('Lost');
-        expect(text).toContain('Refunded');
-        expect(text).toContain('Settled in block 7001');
-        expect(text).toContain('There is no claim transaction');
-        expect(text).toContain('credits winnings or refunds automatically');
+        const chips = utils.container.querySelectorAll('[data-testid="bet-market-your-bet"]');
+        expect(chips.length).toBe(1);
+        expect(chips[0].textContent).toBe('You bet 150 XCHAIN +1 more');
     });
 
-    it('stops reading markets at the ceiling instead of re-batching forever', async () => {
-        // The label read re-runs on its own result, so a per-pass cap would
-        // just fetch the next batch each time. 40 distinct markets, ceiling 25.
+    it('reads no market per bet however many bets the wallet holds', async () => {
         const many = Array.from({ length: 40 }, (_, i) => ({
             ...BET_ROW, action_index: String(6000 + i), feed_action_index: String(2000 + i),
         }));
-        const { messaging, calls } = harness({ bets: () => Promise.resolve({ data: many }) });
-        const utils = await openMyBets(messaging);
+        const { messaging, calls } = harness({ bets: () => Promise.resolve({ data: many }), betFeeds: marketsRead });
+        await openMyBets(messaging);
         await domAct(async () => { await drain(40); });
-        expect(calls.filter((c) => c.method === 'betFeed').length).toBe(25);
-        // The rows past the ceiling still render, on their index.
-        expect(utils.container.textContent).toContain('Backed outcome 1');
+        expect(calls.filter((c) => c.method === 'betFeed').length).toBe(0);
     });
 
     // Session 25,. The deadline race put a REJECTED bet in this list and
@@ -395,28 +400,14 @@ describe('(c) the My bets tab names each row\'s outcome', () => {
     // was staked: the chain refused the action. What it did cost is the fees.
     it('does not tell a bettor they staked money on a bet the chain refused', async () => {
         const rejected = { ...BET_ROW, bet_status: 'invalid', status: 'invalid: FEED_ACTION_INDEX (feed not open)' };
-        const { messaging } = harness({ bets: () => Promise.resolve({ data: [rejected] }) });
+        const { messaging } = harness({ bets: () => Promise.resolve({ data: [rejected] }), betFeeds: marketsRead });
         const utils = await openMyBets(messaging);
         const text = utils.container.textContent;
 
-        expect(text).not.toContain('staked 100 XCHAIN');
-        expect(text).toContain('nothing was staked, but the fees were spent');
-        expect(text).toContain('Rejected by the network');
-        // The row still names what was attempted, and is still a row: the user
-        // paid for it and may need to find it.
-        expect(text).toContain('Would have backed "No" (outcome 1)');
-    });
-
-    it('keeps the index alone when the market read fails, and asks only once', async () => {
-        const { messaging, calls } = harness({
-            bets: () => Promise.resolve({ data: [BET_ROW] }),
-            betFeed: (args) => {
-                calls.push({ method: 'betFeed', args });
-                return Promise.reject(new Error('explorer down'));
-            },
-        });
-        const utils = await openMyBets(messaging);
-        expect(utils.container.textContent).toContain('Backed outcome 1');
-        expect(calls.filter((c) => c.method === 'betFeed').length).toBe(1);
+        expect(text).not.toContain('You bet 100 XCHAIN');
+        expect(text).toContain('Your bet was rejected by the network');
+        // The market is still listed: the user paid fees for the bet and may
+        // need to find it.
+        expect(listed(utils)).toEqual(['1169']);
     });
 });

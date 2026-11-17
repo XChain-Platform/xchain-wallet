@@ -85,6 +85,11 @@
     color: var(--xc-text);
 }
 
+/* A recent destination's badge leads its line: no name before it. */
+.badgeOnly {
+    margin-inline-start: 0;
+}
+
 .empty {
     padding: 10px 12px;
     font-size: 0.85em;

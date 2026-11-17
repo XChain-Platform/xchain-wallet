@@ -130,8 +130,14 @@ assert.ok(
 
 // --- 4. Pre-flight before compose --------------------------------------
 
-const checkBlock = src.match(/function issueInputsCheck\(\) \{[\s\S]*?\n    \}\n/);
-assert.ok(checkBlock, 'issueInputsCheck found');
+// issueInputsCheck answers from issueInputsIssues, which collects every
+// problem so one press can list them all (G120); the checks live there.
+assert.ok(
+    /function issueInputsCheck\(\) \{\s*\n\s*const found = issueInputsIssues\(\);/.test(src),
+    'issueInputsCheck answers from the collected input issues',
+);
+const checkBlock = src.match(/function issueInputsIssues\(\) \{[\s\S]*?\n    \}\n/);
+assert.ok(checkBlock, 'issueInputsIssues found');
 const check = checkBlock[0];
 assert.ok(
     /validateAdvancedIssueFields\(callbackFields, \{/.test(check),
@@ -143,10 +149,10 @@ for (const key of ['supply', 'currentHeight', 'callbackTickDecimals']) {
         `pre-flight passes ${key} into the validator`,
     );
 }
-const reviewBlock = src.match(/const inputsCheck = issueInputsCheck\(\);[\s\S]{0,1200}?setStage\('review'\)/);
+const reviewBlock = src.match(/const found = issueInputsIssues\(\);[\s\S]{0,1600}?setStage\('review'\)/);
 assert.ok(reviewBlock, 'review step is gated by the input check');
 assert.ok(
-    /setStage\('review'\)/.test(reviewBlock[0]),
+    /if \(!formErrors\.validate\(problems\) \|\| feeStop\) return;[\s\S]*setStage\('review'\)/.test(reviewBlock[0]),
     'validation runs before the form opens its review step',
 );
 

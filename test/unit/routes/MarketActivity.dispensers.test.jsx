@@ -25,7 +25,9 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-const ORACLE = 'bcrt1qoracleoracleoracleoracleoracleoracle';
+// Each offer row's right side: its unit price over the quote coin.
+const offerPrices = () => [...document.querySelectorAll('[data-offer-price]')].map((el) => el.textContent);
+const ORACLE ='bcrt1qoracleoracleoracleoracleoracleoracle';
 const offer = (idx, extra) => ({
     action_index: idx, status: 'valid', current_status: 'open', give_tick: 'XCHAIN', get_tick: null,
     get_coin: 'BTC', escrow_remaining: '100', ...extra,
@@ -71,7 +73,10 @@ function renderMarket(extra = {}, props = {}) {
 describe('Marketplace on explorer-shaped rows', () => {
     it('lists open offers with their terms and stock', async () => {
         renderMarket();
-        expect(await screen.findByText('5 XCHAIN per 0.01 BTC')).toBeInTheDocument();
+        // The priced dispenser shows its unit price (0.01 BTC for 5 XCHAIN); its lot
+        // terms ride in the row's accessible name, not on the compact row.
+        await screen.findAllByText('BTC each');
+        expect(offerPrices()).toContain('0.002BTC each');
         expect(screen.getAllByText('100 XCHAIN remaining').length).toBe(2);
         expect(screen.queryByText(/7 XCHAIN per/)).toBeNull();
         expect(screen.queryByRole('button', { name: /5 XCHAIN per 0.01 BTC/ })).toBeNull();
@@ -84,6 +89,53 @@ describe('Marketplace on explorer-shaped rows', () => {
         const button = await screen.findByRole('button', { name: /5 XCHAIN per 0.01 BTC/ });
         fireEvent.click(button);
         expect(onOpenDispenser).toHaveBeenCalledWith(expect.any(String), '20');
+    });
+
+    it('draws each offer as one tappable chevron row with no Buy or Sell button inside', async () => {
+        const onOpenDispenser = vi.fn();
+        renderMarket({}, { onOpenDispenser });
+        const row = await screen.findByRole('button', { name: /5 XCHAIN per 0.01 BTC/ });
+        // The row is the control: nothing nested inside it is a button, and no
+        // Buy or Sell label sits in it (the side shows as colour and arrow).
+        expect(row.querySelector('button, [role="button"], a')).toBeNull();
+        expect(within(row).queryByText(/^(Buy|Sell)$/)).toBeNull();
+        expect(row.querySelector('[aria-hidden="true"] svg')).not.toBeNull();
+        expect(within(row).getByText('Dispenser')).toBeInTheDocument();
+        expect(within(row).getByText('100 XCHAIN remaining')).toBeInTheDocument();
+        const chevron = [...row.querySelectorAll('span[aria-hidden="true"]')].find((el) => el.querySelector('svg') && !el.closest('[data-offer-price]'));
+        expect(chevron).toBeTruthy();
+        // A dispenser is always Buy: green side, unit price over its quote coin.
+        const price = row.querySelector('[data-offer-price]');
+        expect(price.getAttribute('data-side')).toBe('buy');
+        expect(price.textContent).toContain('0.002');
+        expect(price.textContent).toContain('BTC each');
+        // No Buy or Sell button anywhere in the Offers list.
+        const list = screen.getByRole('region', { name: 'Marketplace activity' });
+        expect(within(list).queryByRole('button', { name: /^(Buy|Sell)$/ })).toBeNull();
+    });
+
+    it('colours the price red on a Sell offer and opens the trade flow when the row is tapped', async () => {
+        const wanted = {
+            action_index: '60', status: 'valid',
+            give_tick: null, give_coin: 'BTC', give_amount: '0.08',
+            get_tick: 'XCHAIN', get_coin: 'BTC', get_amount: '3200',
+            state: { status: 'open', give_remaining: '0.08', get_remaining: '3200' },
+        };
+        renderMarket({
+            getOrdersForToken: vi.fn()
+                .mockResolvedValueOnce({ data: [wanted] })
+                .mockResolvedValue({ data: [] }),
+            getOrderbook: vi.fn().mockResolvedValue({ data: [] }),
+            getMarketHistory: vi.fn().mockResolvedValue({ data: [] }),
+        });
+        const row = await screen.findByRole('button', { name: /^Sell: .*Order/ });
+        const price = row.querySelector('[data-offer-price]');
+        expect(price.getAttribute('data-side')).toBe('sell');
+        expect(within(row).getByText('Order')).toBeInTheDocument();
+        expect(row.querySelector('button')).toBeNull();
+        fireEvent.click(row);
+        // The Trade page replaces the Offers list in place.
+        expect(screen.queryByRole('tab', { name: 'Offers' })).toBeNull();
     });
 
     it('prices a Mode B offer from its oracle, never as zero coin', async () => {
@@ -146,7 +198,8 @@ describe('Marketplace on explorer-shaped rows', () => {
         });
         // The open order is an Offers row priced per token (0.004 BTC for 10 XCHAIN), with
         // its remaining stock (10, not the original 25); the cancelled one never lists.
-        expect(await screen.findByText('0.0004 BTC per XCHAIN')).toBeInTheDocument();
+        await screen.findAllByText('BTC each');
+        expect(offerPrices()).toContain('0.0004BTC each');
         expect(screen.getByText('10 XCHAIN for sale')).toBeInTheDocument();
         expect(messaging.getOrderDetail).not.toHaveBeenCalled();
         expect(screen.queryByText(/99 XCHAIN/)).toBeNull();
@@ -229,7 +282,8 @@ describe('Marketplace network scope', () => {
         const messaging = renderMarket({
             getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'regtest' }),
         });
-        expect(await screen.findByText('5 XCHAIN per 0.01 BTC')).toBeInTheDocument();
+        await screen.findAllByText('BTC each');
+        expect(offerPrices()).toContain('0.002BTC each');
         const asked = messaging.getDispensersForToken.mock.calls.map(([args]) => args.chainId);
         expect(asked.length).toBeGreaterThan(0);
         expect(asked.every((chainId) => chainId.endsWith('-regtest'))).toBe(true);
@@ -257,9 +311,10 @@ describe('Marketplace on unreadable rows', () => {
             getSwapsForToken: once([swap, null]),
         });
         // The readable order is an Offers row; the readable swap is on the Swaps tab.
-        expect(await screen.findByText(/^1\.3333\d* BTC per XCHAIN$/)).toBeInTheDocument();
+        await screen.findAllByText('BTC each');
+        expect(offerPrices().some((text) => /^1\.3333\d*BTC each$/.test(text))).toBe(true);
         fireEvent.click(screen.getByRole('tab', { name: 'Swaps' }));
         expect(await screen.findByText('Sold 3 XCHAIN for 4 BTC')).toBeInTheDocument();
-        expect(screen.getByRole('heading', { name: 'XCHAIN Marketplace' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Marketplace' })).toBeInTheDocument();
     });
 });

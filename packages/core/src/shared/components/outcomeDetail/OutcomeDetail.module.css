@@ -1,0 +1,716 @@
+/* The shared bet market and poll page (Layout 1, "Leading Line Hero"): the
+   blue hero, the tab strip and its panels. Both routes draw from this one
+   sheet so the two pages cannot drift. */
+
+/* No reserved band under the figures: the card is as tall as its text and
+   range chips, and the chart fills it from behind. */
+.heroStack {
+    min-height: 0;
+}
+
+.hero {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    padding: var(--xc-card-pad);
+    color: var(--xc-on-accent);
+    min-width: 0;
+}
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+/* A frosted pill on the blue card, like the card's other chips. */
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    max-width: 100%;
+    padding: var(--xc-space-1) var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: rgba(15, 23, 42, 0.32);
+    color: var(--xc-on-accent);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    line-height: 1.2;
+    overflow-wrap: break-word;
+}
+
+.chipOk {
+    color: #BBF7D0;
+}
+
+.chipBad {
+    color: #FECACA;
+}
+
+.chipDot {
+    flex: 0 0 auto;
+    width: var(--xc-space-2);
+    height: var(--xc-space-2);
+    border-radius: 50%;
+}
+
+.dotOpen { background: var(--xc-brand-card-gain); }
+.dotClosed { background: #FFC94D; }
+.dotDone { background: rgba(255, 255, 255, 0.7); }
+
+.chipIcon {
+    --xc-icon-size: var(--xc-icon-sm);
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.question {
+    margin: 0;
+    font-size: var(--xc-text-lg);
+    font-weight: 800;
+    line-height: 1.25;
+    color: var(--xc-on-accent);
+    overflow-wrap: break-word;
+}
+
+.bigRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--xc-space-1) var(--xc-space-2);
+    min-width: 0;
+}
+
+.bigPct {
+    font-family: var(--xc-font-sans);
+    font-variant-numeric: tabular-nums;
+    /* Home's 32px headline. */
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    color: var(--xc-on-accent);
+}
+
+.bigMessage {
+    font-size: var(--xc-text-lg);
+    font-weight: 600;
+}
+
+.bigLabel {
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    color: color-mix(in srgb, var(--xc-on-accent) 92%, transparent);
+    overflow-wrap: break-word;
+    min-width: 0;
+}
+
+.changePill.changePill {
+    align-self: center;
+    white-space: nowrap;
+}
+
+.finalPill {
+    display: inline-block;
+    padding-inline: var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: rgba(0, 0, 0, 0.55);
+    color: var(--xc-on-accent);
+    font-size: var(--xc-text-md);
+    font-weight: 800;
+    line-height: 1.6;
+}
+
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1) var(--xc-space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+}
+
+.legendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    min-width: 0;
+    text-shadow: 0 1px 2px rgba(15, 23, 42, 0.45);
+}
+
+.legendSwatch {
+    flex: 0 0 auto;
+    width: 12px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+.legendText {
+    overflow-wrap: break-word;
+}
+
+.legendValue {
+    font-variant-numeric: tabular-nums;
+}
+
+/* The standing line sits at the card's foot, just above the range chips. */
+.foot {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    margin-top: auto;
+    padding-top: var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 1px 2px rgba(15, 23, 42, 0.45);
+    min-width: 0;
+}
+
+.footLine {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--xc-space-1) var(--xc-space-3);
+    margin: 0;
+    min-width: 0;
+}
+
+.footLine strong {
+    color: var(--xc-on-accent);
+}
+
+.footMet {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    color: #BBF7D0;
+    font-weight: 700;
+}
+
+.footMissed {
+    color: #FECACA;
+    font-weight: 700;
+}
+
+.footIcon {
+    --xc-icon-size: var(--xc-icon-sm);
+    display: inline-flex;
+}
+
+/* The end of the foot line (the bet's oracle, the poll's quorum): it takes
+   the line's free room and sits flush right. */
+.footEnd {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: end;
+    justify-content: flex-end;
+    white-space: nowrap;
+}
+
+/* The split as one stacked bar, a segment per outcome in its own colour. */
+.bar {
+    display: flex;
+    width: 100%;
+    height: var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    overflow: hidden;
+    background: rgba(15, 23, 42, 0.32);
+}
+
+.barSegment {
+    flex: 0 0 auto;
+    height: 100%;
+}
+
+.chartSvg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+/* An item with no history to chart (every poll, a market with no bet rows)
+   opens with the identity card (G16): the one outlined card surface with no
+   blue fill, the status pills, the question in bold and a muted line. */
+.identity {
+    composes: card from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    color: var(--xc-text);
+    min-width: 0;
+}
+
+.identityTitle {
+    margin: 0;
+    color: var(--xc-text);
+    font-size: var(--xc-text-lg);
+    font-weight: 800;
+    line-height: 1.25;
+    overflow-wrap: break-word;
+}
+
+.identityLine {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    min-width: 0;
+}
+
+/* On the white card the pills and the foot's verdict colours take the page's
+   own tones instead of the light tints drawn for the blue hero. */
+.identity .chip {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+}
+
+.identity .chipOk,
+.identity .footMet {
+    color: var(--xc-success);
+}
+
+.identity .chipBad,
+.identity .footMissed {
+    color: var(--xc-danger);
+}
+
+.identity .dotOpen { background: var(--xc-success); }
+.identity .dotDone { background: var(--xc-text-muted); }
+
+.identity .footLine {
+    justify-content: flex-start;
+}
+
+.identity .footLine strong {
+    color: var(--xc-text);
+}
+
+/* The lead, legend and bar on the white card: the page's own text tones and
+   a muted track, with no shadow drawn for the blue. */
+.identity .bigPct {
+    color: var(--xc-text);
+}
+
+.identity .bigMessage,
+.identity .bigLabel {
+    color: var(--xc-text-muted);
+}
+
+.identity .finalPill {
+    background: var(--xc-bg-muted);
+    color: var(--xc-text);
+}
+
+.identity .legendItem {
+    text-shadow: none;
+}
+
+.identity .bar {
+    background: var(--xc-bg-muted);
+}
+
+/* The hero or identity card, the tab row and the panel stack 8px apart
+   (G13), in place of the page's wider section gap. */
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* The tab strip shares the row evenly and never wraps a label; at the
+   narrowest widths the side padding gives way before the text does. */
+.tabs.tabs [role='tab'] {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: var(--xc-space-1);
+    white-space: nowrap;
+}
+
+@media not all and (min-width: 400px) {
+    .tabs.tabs [role='tab'] {
+        font-size: var(--xc-text-xs);
+    }
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* Bet or Vote: the pick, its status slot, the green button. */
+.action {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.pick,
+.results {
+    composes: card from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.pickHead {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    min-width: 0;
+    font-weight: 700;
+}
+
+.pickHeadIcon {
+    --xc-icon-size: var(--xc-icon-md);
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--xc-accent-text);
+}
+
+.pickTitle {
+    min-width: 0;
+    overflow-wrap: break-word;
+}
+
+.pickNote {
+    margin-inline-start: auto;
+    font-size: var(--xc-text-xs);
+    font-weight: 500;
+    color: var(--xc-text-muted);
+    text-align: end;
+}
+
+.pickList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* One outcome per row: a mark, its name and amount, its share at the end. */
+.pickRow.pickRow {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--xc-space-3);
+    width: 100%;
+    min-height: 52px;
+    height: auto;
+    padding-block: var(--xc-space-2);
+    padding-inline: var(--xc-space-3);
+    color: var(--xc-text);
+    text-align: start;
+    white-space: normal;
+}
+
+/* The kit Button wraps its children in a centred label span; across a pick
+   row that span runs the full width: the mark, the name and amount, then
+   the share at the end. */
+.pickRow.pickRow > span {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--xc-space-3);
+    min-width: 0;
+}
+
+.pickRow.pickOn[aria-pressed='true'] {
+    border-color: var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-accent-primary) 8%, transparent);
+    box-shadow: inset 0 0 0 1px var(--xc-accent-primary);
+}
+
+.pickMark {
+    position: relative;
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--xc-border-strong);
+    border-radius: 50%;
+}
+
+.pickOn .pickMark {
+    border-color: var(--xc-accent-primary);
+}
+
+.pickOn .pickMark::after {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border-radius: 50%;
+    background: var(--xc-accent-primary);
+}
+
+.pickText {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.pickName {
+    font-weight: 700;
+    overflow-wrap: break-word;
+}
+
+.pickSub {
+    font-size: var(--xc-text-xs);
+    font-weight: 500;
+    color: var(--xc-text-muted);
+}
+
+.pickShare {
+    flex: 0 0 auto;
+    font-size: var(--xc-text-md);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The amount and share are drawn from data attributes, so the row's own
+   text (and so its name) stays the outcome's label. */
+.pickSub::after {
+    content: attr(data-sub);
+}
+
+.pickShare::after {
+    content: attr(data-share);
+}
+
+/* An approval ballot's option: a checkbox row drawn like the bet's pick
+   row (the same edge, height and chosen tint), its own box as the mark. */
+.pickCheck {
+    min-width: 0;
+    min-height: 52px;
+    padding-block: var(--xc-space-2);
+    padding-inline: var(--xc-space-3);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-control-radius);
+    overflow-wrap: break-word;
+}
+
+.pickCheck.pickOn {
+    border-color: var(--xc-accent-primary);
+    background: color-mix(in srgb, var(--xc-accent-primary) 8%, transparent);
+    box-shadow: inset 0 0 0 1px var(--xc-accent-primary);
+}
+
+.go.go {
+    width: 100%;
+}
+
+/* Result: the final results list, the winner marked, then the wallet's own line. */
+.resultList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    min-width: 0;
+}
+
+.resultRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.resultTop {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--xc-space-1) var(--xc-space-2);
+    min-width: 0;
+    font-weight: 700;
+}
+
+.resultName {
+    min-width: 0;
+    overflow-wrap: break-word;
+}
+
+.winnerPill {
+    padding-inline: var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+}
+
+.resultValue {
+    margin-inline-start: auto;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.resultSub {
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    overflow-wrap: break-word;
+}
+
+.track {
+    display: block;
+    height: 6px;
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-bg-muted);
+    overflow: hidden;
+}
+
+.trackFill {
+    display: block;
+    height: 100%;
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-accent-primary);
+}
+
+.trackFillLow {
+    background: color-mix(in srgb, var(--xc-accent-primary) 45%, var(--xc-bg-muted));
+}
+
+.resultFooter {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-width: 0;
+    padding-top: var(--xc-space-2);
+    border-top: 1px solid var(--xc-border);
+    font-size: var(--xc-text-sm);
+}
+
+/* Details: one fact per row, the label at the start and the value at the end. */
+.facts {
+    composes: flush from '../../../ui/Card.module.css';
+    margin: 0;
+}
+
+.factRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-1) var(--xc-space-3);
+    min-height: 40px;
+    padding-block: var(--xc-space-2);
+    padding-inline: var(--xc-card-pad);
+    border-top: 1px solid var(--xc-border-subtle, rgba(129, 139, 155, 0.35));
+}
+
+.factRow:first-child {
+    border-top: 0;
+}
+
+.factLabel {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.factValue {
+    margin: 0;
+    min-width: 0;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    text-align: end;
+    overflow-wrap: break-word;
+}
+
+/* Activity: one bet or vote per row. */
+.activityList {
+    composes: flush from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    list-style: none;
+}
+
+.activityRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-2) var(--xc-card-pad);
+    border-top: 1px solid var(--xc-border-subtle, rgba(129, 139, 155, 0.35));
+    min-width: 0;
+}
+
+.activityRow:first-child {
+    border-top: 0;
+}
+
+/* A row led by an icon (the bet's outcome mark): the icon at the start,
+   centred on the row, and the title and meta lines stacked beside it. */
+.activityRowLed {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-3);
+}
+
+.activityLead {
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.activityBody {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.activityMain {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    font-weight: 600;
+    min-width: 0;
+}
+
+.activityTitle {
+    overflow-wrap: break-word;
+    min-width: 0;
+}
+
+.activityAmount {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+}
+
+.activityMeta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--xc-space-2);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+    min-width: 0;
+}
+
+.activityMetaItem {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.activityDanger {
+    color: var(--xc-danger);
+}
+
+.activityMine {
+    color: var(--xc-success);
+    font-weight: 700;
+}

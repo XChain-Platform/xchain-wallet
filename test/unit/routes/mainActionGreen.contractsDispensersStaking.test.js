@@ -40,10 +40,12 @@ const FORM_ACTIONS = [
     ['DeployContractForm', 'Publish Contract'],
     ['ExecuteContractForm', "\\{t\\('execute\\.callContract'\\)\\}"],
     ['ContractFundsForm', '\\{verb\\}'],
-    ['ContractStakeForm', "\\{mode === 'stake' \\? 'Stake' : mode === 'unstake' \\? 'Unstake' : 'Delegate Key'\\}"],
+    // The one Staking form names its action from the action table
+    // ('Stake', 'Unstake', 'Delegate Key', 'Claim Rewards', ...).
+    ['StakingForm', '\\{cfg\\.submitLabel\\(singleEncode\\)\\}'],
 ];
 
-// Pages with no form: the contract page's Call button is the one green button;
+// Pages with no form: the contract page's actions are action-list rows;
 // the lists keep their forward action as a plus icon in the title bar.
 const TITLE_BAR_ACTIONS = [
     ['ContractsList', 'aria-label="Publish contract"'],
@@ -62,11 +64,17 @@ describe('main actions on the dispenser, contract and staking screens (U63)', ()
         expect(source).toMatch(/<Button\b[^>]*variant="success"[^>]*icon=\{icon\}/);
     });
 
-    it('ContractDetail draws its Call method action green with an icon', () => {
-        const attrs = buttonWith(read('ContractDetail'), 'aria-label="Call method"');
-        expect(attrs, 'ContractDetail: main action not found').not.toBeNull();
-        expect(attrs).toMatch(/variant="success"/);
-        expect(attrs).toMatch(/icon=\{/);
+    // G101 (2026-11-13): the contract page's actions are one action list,
+    // never a green button. Layout 3 (2026-11-14): Deposit leads it, and the
+    // contract's functions and Call by name are rows of a second list.
+    it('ContractDetail draws Deposit as the first action-list row with an icon', () => {
+        const source = read('ContractDetail');
+        const row = source.match(/<ActionListItem\b([\s\S]*?)\n\s*\/>/);
+        expect(row, 'ContractDetail: first action row not found').not.toBeNull();
+        expect(row[1]).toMatch(/title="Deposit"/);
+        expect(row[1]).toMatch(/icon=\{/);
+        expect(source).toMatch(/title="Call by name"/);
+        expect(source).not.toMatch(/variant="success"/);
     });
 
     it.each(TITLE_BAR_ACTIONS)('%s keeps its forward action as an icon button in the title bar', (name, marker) => {
@@ -76,23 +84,35 @@ describe('main actions on the dispenser, contract and staking screens (U63)', ()
         expect(attrs).not.toMatch(/variant="success"/);
     });
 
-    it('DispenserExplorer submits its search through an icon button', () => {
-        const attrs = buttonWith(read('DispenserExplorer'), "aria-label=\\{searching \\? 'Searching' : 'Search'\\}");
-        expect(attrs, 'DispenserExplorer: search action not found').not.toBeNull();
-        expect(attrs).toMatch(/icon=\{<Icon\.SearchIcon \//);
+    it('DispenserExplorer searches from the filter panel, with no search button', () => {
+        const source = read('DispenserExplorer');
+        expect(source).toMatch(/<ListFilterMenu[\s\S]*onSearchKeyDown=/);
+        expect(source).not.toMatch(/<ListFilterPopover|<ListSearchField/);
+        expect(source).not.toMatch(/variant="ghost"/);
     });
 
-    it.each([...FORM_ACTIONS.map(([name]) => name), 'ContractDetail'])('%s greens only one button', (name) => {
-        const source = read(name);
+    it('ContractDetail greens no button: its actions are list rows', () => {
+        const source = read('ContractDetail');
         const greens = (source.match(/variant="success"/g) || []).length + (source.match(/<FormAction\b/g) || []).length;
-        expect(greens).toBe(1);
+        expect(greens).toBe(0);
+    });
+
+    // Each form page greens its one FormAction; its result page, a separate
+    // page, greens its one Done with the check icon (U63, resultDoneGreen).
+    it.each(FORM_ACTIONS.map(([name]) => name))('%s greens one button per page', (name) => {
+        const source = read(name);
+        expect(source.match(/<FormAction\b/g)).toHaveLength(1);
+        expect(source.match(/variant="success"/g)).toHaveLength(1);
+        expect(source).toMatch(
+            /<Button variant="success" icon=\{<Icon\.CheckIcon \/>\} onClick=\{[^}]+\}>(?:Done|\{t\('common\.done'\)\})<\/Button>/,
+        );
     });
 
     it.each(TITLE_BAR_ACTIONS.map(([name]) => name))('%s greens no button', (name) => {
         expect(read(name).match(/variant="success"/g)).toBeNull();
     });
 
-    it.each(['DispenserForm', 'DeployContractForm', 'ExecuteContractForm', 'ContractFundsForm', 'ContractStakeForm'])(
+    it.each(['DispenserForm', 'DeployContractForm', 'ExecuteContractForm', 'ContractFundsForm', 'StakingForm'])(
         '%s never labels its submit Preview',
         (name) => {
             expect(read(name)).not.toMatch(/'Preview'|common\.preview/);
@@ -116,9 +136,14 @@ describe('action forms open on Network, then From (U60)', () => {
     // The From section comes first in the frame, ahead of the form's own sections.
     it.each([
         ['DispenserForm', '<FromSection', '<FormSection id="dispenser"'],
-        ['ExecuteContractForm', '<FromSection', "title={t('execute.method')}"],
-        ['ContractStakeForm', '<FromSection', '<FormSection', '>Target</dt>'],
-        ['ContractFundsForm', '<FromSection', '<FormSection', 'label="Token"'],
+        // The target (the contract, or the network on Stake On) is the main
+        // section's first field.
+        ['ExecuteContractForm', '<FromSection', "title={t('execute.method')}", '<TargetField', "label={t('execute.method')}"],
+        ['ContractFundsForm', '<FromSection', '<FormSection', '<TargetField', 'label="Token"'],
+        // The one Staking form: the action control first (ruling 2026-11-13),
+        // then Stake On, then each action's own fields (Mode, Token, Amount,
+        // the signing key).
+        ['StakingForm', '<FromSection', '<FormSection', '{toggle}', '<TargetField', 'label="Mode"', 'label="Token"', '<AmountField', 'label={cfg.key.label}'],
     ])('%s orders its first fields', (name, ...markers) => {
         const body = read(name);
         const form = body.slice(body.lastIndexOf('<FormFrame')).replace(/\s+/g, ' ');

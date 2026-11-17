@@ -140,15 +140,19 @@ describe('dropdown chrome', () => {
         expect(restores).toBe(true);
     });
 
-    it('renders the shared Select as a plain dropdown the arrow rule matches', () => {
+    it('renders the shared Select as the themed dropdown with the shared chevron', () => {
+        const { d } = renderedChevron();
         render(
             <Select label="Sort" value="a" onChange={() => {}}>
                 <option value="a">A to Z</option>
             </Select>,
         );
+        // Ruling G96: never a native select, so no browser arrow to restyle.
         const select = screen.getByRole('combobox', { name: 'Sort' });
-        expect(select.tagName).toBe('SELECT');
-        expect(select.matches(ARROW_RULE)).toBe(true);
+        expect(select.tagName).toBe('BUTTON');
+        expect(select.matches(ARROW_RULE)).toBe(false);
+        expect(select.textContent).not.toMatch(/[▾▴]/);
+        expect([...select.querySelectorAll('path')].map((p) => p.getAttribute('d'))).toContain(d);
     });
 
     it('leaves no native select on the browser arrow', () => {
@@ -178,7 +182,10 @@ describe('dropdown chrome', () => {
         expect(offenders).toEqual([]);
     });
 
-    it('draws the same chevron on the network filter', () => {
+    // The network filter opens the full-screen network list, not a dropdown
+    // (operator ruling 2026-11-13), so it draws the Network field's list
+    // mark instead of the dropdown chevron.
+    it('draws the list mark, not the dropdown chevron, on the network filter', () => {
         const { d } = renderedChevron();
         const registry = { byCoin: (coin) => [{ id: `${coin}-mainnet`, displayName: coin }] };
         render(
@@ -192,6 +199,8 @@ describe('dropdown chrome', () => {
         );
         const trigger = screen.getByRole('button', { name: /^Filter by network/ });
         expect(trigger.textContent).not.toMatch(/[▾▴]/);
-        expect([...trigger.querySelectorAll('path')].map((p) => p.getAttribute('d'))).toContain(d);
+        expect([...trigger.querySelectorAll('path')].map((p) => p.getAttribute('d'))).not.toContain(d);
+        expect(trigger.querySelector('.lucide-layout-list')).not.toBeNull();
+        expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
     });
 });

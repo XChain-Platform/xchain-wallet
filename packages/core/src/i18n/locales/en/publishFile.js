@@ -23,8 +23,8 @@ const messages = {
     'publishFile.loadNoAddress': 'No address on any network yet. Use Receive to generate one first.',
     'publishFile.fileEmpty': 'That file is empty.',
     'publishFile.fileUnreadable': "Couldn't read that file.",
-    'publishFile.fileTooLarge': 'That file is {size} bytes; with this metadata the on-chain ceiling is {cap} bytes.',
-    'publishFile.metadataTooLarge': 'With this title/memo the on-chain ceiling is {cap} bytes and the file is {size}. Shorten the title or memo.',
+    'publishFile.fileTooLarge': 'That file is {size}; with this metadata the on-chain ceiling is {cap}.',
+    'publishFile.metadataTooLarge': 'With this title/memo the on-chain ceiling is {cap} and the file is {size}. Shorten the title or memo.',
     'publishFile.pickFile': 'Pick a file first.',
     'publishFile.noSigner': 'No signing address available on this network.',
     'publishFile.badCharacters': "File name, title, and memo can't contain | or ; characters.",
@@ -48,14 +48,13 @@ const messages = {
     'publishFile.from.networkHelp': "The chain the file is published on. Your From address and the fee are on this network, and the file's bytes are stored in transactions on it.",
     'publishFile.from.addressHelp': "The wallet address that pays the network fee and is recorded as the file's publisher.",
     'publishFile.titleField.help': 'A short label stored on-chain with the published file.',
-    'publishFile.fileField.label': 'File (up to {cap} bytes)',
-    'publishFile.fileField.help': 'Up to about {cap} bytes with the current title and memo. The ceiling is exact per upload: shorter names and titles leave a little more room for the file itself.',
+    'publishFile.fileField.label': 'File (up to {cap})',
+    'publishFile.fileField.help': 'Up to about {cap} with the current title and memo. The ceiling is exact per upload: shorter names and titles leave a little more room for the file itself.',
     'publishFile.fileField.helpEnvelope': 'This network and account support the compact Taproot encoding, which is what makes the larger ceiling possible. Files are compressed automatically when that makes them smaller, so what lands on-chain is often well under the size shown here.',
     'publishFile.fileField.helpLegacy': 'Files are compressed automatically when that makes them smaller, so what lands on-chain is often less than the file size.',
     'publishFile.details.type': 'Type',
     'publishFile.details.size': 'Size',
-    'publishFile.details.bytes': '{bytes} bytes',
-    'publishFile.memoField.help': 'An optional note stored on-chain with the published file.',
+    'publishFile.details.bytes': '{bytes}',
 };
 
 addEnglish(messages);

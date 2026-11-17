@@ -8,11 +8,15 @@
 // that, a rate above the chain ceiling reaches compose and prices the carrier at
 // that rate, and a rate the form cannot price composes at the encoder's own
 // default while the field shows the typed one. Sweep refuses both at Review, as
-// Send and Create order do.
+// Send and Create order do. The custom fee is typed into the one editor, the
+// Network fee line (G113), as the fee the named rate prices to; a rate of more
+// than 8 decimals cannot be typed there any more (customFeeReviewStop's own
+// test pins that refusal).
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { feeForRate, networkFeeEditor } from '../../helpers/customNetworkFee.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SweepForm } from '../../../packages/core/src/shared/routes/SweepForm.jsx';
 
@@ -67,8 +71,9 @@ async function mountSweep() {
         expect(submit().disabled).toBe(false);
     });
     fireEvent.change(screen.getByLabelText(/^Destination address/), { target: { value: DESTINATION } });
-    // The fee selector sits in the standard Network fee section, closed on load.
-    fireEvent.click(screen.getByRole('button', { name: /^Network fee/ }));
+    // The fee selector sits in the standard Fees section, closed on load.
+    fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/ }));
+    // Custom opens the Network fee line's one editor.
     fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
     return { container, submit, composeForConfirm };
 }
@@ -79,40 +84,31 @@ function formAlerts(container) {
 }
 
 describe('SweepForm custom network fee at Review', () => {
-    it('refuses a custom rate above the chain ceiling before compose', async () => {
+    it('reports a custom rate above the chain ceiling at Review', async () => {
         const q = await mountSweep();
-        fireEvent.change(screen.getByLabelText(/^Custom fee rate/), { target: { value: '50000' } });
+        fireEvent.change(networkFeeEditor(), { target: { value: feeForRate(50000, CHAIN) } });
         fireEvent.click(q.submit());
 
         await waitFor(() => expect(formAlerts(q.container)).toMatch(/no higher than 1,000/i));
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        expect(q.composeForConfirm).not.toHaveBeenCalled();
+        expect(q.composeForConfirm).toHaveBeenCalledTimes(1);
+        expect(q.composeForConfirm.mock.calls[0][0].encoderOpts.feePerKb).toBe(50_000_000);
         // The fee field names the bound; the form status does not repeat it.
         expect(formAlerts(q.container).match(/no higher than 1,000/gi)).toHaveLength(1);
     });
 
-    it('refuses an empty custom rate before compose', async () => {
+    it('reports an empty custom fee at Review', async () => {
         const q = await mountSweep();
-        fireEvent.change(screen.getByLabelText(/^Custom fee rate/), { target: { value: '' } });
+        fireEvent.change(networkFeeEditor(), { target: { value: '' } });
         fireEvent.click(q.submit());
 
-        await waitFor(() => expect(formAlerts(q.container)).toMatch(/custom fee rate/i));
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        expect(q.composeForConfirm).not.toHaveBeenCalled();
-    });
-
-    it('refuses a custom rate with more decimals than the form can price', async () => {
-        const q = await mountSweep();
-        fireEvent.change(screen.getByLabelText(/^Custom fee rate/), { target: { value: '5.123456789' } });
-        fireEvent.click(q.submit());
-
-        await waitFor(() => expect(formAlerts(q.container)).toMatch(/at most 8 decimal places/i));
-        expect(q.composeForConfirm).not.toHaveBeenCalled();
+        await waitFor(() => expect(formAlerts(q.container)).toMatch(/enter a custom network fee/i));
+        expect(q.composeForConfirm).toHaveBeenCalledTimes(1);
+        expect(q.composeForConfirm.mock.calls[0][0].encoderOpts.feePerKb).toBeUndefined();
     });
 
     it('composes with an in-range custom rate', async () => {
         const q = await mountSweep();
-        fireEvent.change(screen.getByLabelText(/^Custom fee rate/), { target: { value: '25' } });
+        fireEvent.change(networkFeeEditor(), { target: { value: feeForRate(25, CHAIN) } });
         fireEvent.click(q.submit());
 
         await waitFor(() => expect(q.composeForConfirm).toHaveBeenCalledTimes(1));

@@ -1,0 +1,140 @@
+/* Quiet Hours and Notification Sounds (Settings > Notifications).
+   Both pages are forms in the shared Settings form frame (G126): the notice,
+   then the fields, spaced by the form gap with no divider lines between them. */
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
+    min-width: 0;
+}
+
+/* The gap spaces the parts; the notice's own block margin would add a
+   second gap under the header (FormPage's status slot zeroes it the same way). */
+.form > * {
+    margin-block: 0;
+}
+
+/* One form field: its control with any hint under it. No row surface and no
+   divider (operator 2026-11-15). */
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+/* ─── Quiet hours range slider ───────────────────────────────────────
+   Drawn like the Network fee slider (FeeSelector's native range input with
+   accent-color, measured in Chromium 2026-11-15): an 8px rounded line, the
+   chosen span in the accent colour, and a 16px accent dot for each thumb.
+   Two thumbs on one line, so it is drawn rather than native: a native range
+   has one thumb and cannot fill a span that wraps past midnight. */
+
+.track {
+    position: relative;
+    /* The line sits centred in a tap-height strip so each dot's hit box
+       (--xc-tap-min) stays inside the track. */
+    height: var(--xc-tap-min);
+    /* Half a dot of room at each end, so a dot at 12 AM or 12 PM stays whole. */
+    margin: 0 var(--xc-space-2);
+    touch-action: none;
+}
+
+.line {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 50%;
+    height: 8px;
+    margin-block-start: calc(var(--xc-space-2) / -2);
+    border-radius: 999px;
+    background: var(--xc-bg-muted);
+    box-shadow: inset 0 0 0 1px var(--xc-border);
+    overflow: hidden;
+}
+
+.fill {
+    position: absolute;
+    inset-block: 0;
+}
+
+.fillOn {
+    background: var(--xc-accent-primary);
+}
+
+/* Off: the window still shows where it would be, in the muted line colour. */
+.fillOff {
+    background: var(--xc-border);
+    opacity: 0.45;
+}
+
+/* The thumb's hit box is the tap minimum; the dot inside it is what shows. */
+.handle {
+    position: absolute;
+    inset-block-start: 0;
+    width: var(--xc-tap-min);
+    height: var(--xc-tap-min);
+    margin-inline-start: calc(var(--xc-tap-min) / -2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    touch-action: none;
+    outline: none;
+}
+
+.handle:active {
+    cursor: grabbing;
+}
+
+.dot {
+    display: block;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--xc-accent-primary);
+}
+
+/* The fee slider's focus ring, on the dot. */
+.handle:focus-visible .dot {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.axis {
+    display: flex;
+    justify-content: space-between;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+/* ─── Notification sounds ───────────────────────────────────────────── */
+
+/* The groups sit a section gap apart (the 16px --xc-section-gap tokens.css
+   sets for titled form sections; Settings narrows the variable itself to
+   8px, so the value is named here), so each group title reads as the start
+   of a new group rather than one more field (operator 2026-11-15). */
+.soundGroups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-4);
+    /* The first group title sits the same section gap under the master
+       switch: the form gap above it plus this top padding. */
+    padding-block-start: max(0rem, calc(var(--xc-space-4) - var(--xc-form-gap)));
+    min-width: 0;
+}
+
+.soundGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-form-gap);
+    min-width: 0;
+}
+
+.groupLabel {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}

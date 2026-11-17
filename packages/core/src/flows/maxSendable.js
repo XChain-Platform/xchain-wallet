@@ -224,7 +224,9 @@ export async function quoteMaxSendable({
     try {
         built = await composeForConfirm({
             sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts,
-            source: source.trim(), signal,
+            // A probe is never shown or signed, so it plans the donation the
+            // send would carry without claiming the queue from a real review.
+            source: source.trim(), signal, claimAds: false,
         });
     } catch (err) {
         quote = insufficientFundsQuote(err);

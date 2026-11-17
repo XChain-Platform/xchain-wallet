@@ -119,11 +119,12 @@ for (const stage of ['role', 'seed', 'exchange']) {
     assert.ok(route.includes(`stage === '${stage}'`), `the lane renders its ${stage} stage`);
 }
 
+// The two-phone pairing left Welcome for Settings, Advanced ("Use another
+// phone as a signer"), so Onboarding no longer offers it.
 const onboarding = read('packages', 'core', 'src', 'shared', 'routes', 'Onboarding.jsx');
 assert.ok(
-    // The smoke runner swaps t('key') for its English text; a direct run reads the key.
-    /onPairPartner/.test(onboarding) && /Pair an Offline Signer|t\('onboarding\.pairAnOfflineSigner'\)/.test(onboarding),
-    'Onboarding exposes the pairing lane behind an onPairPartner prop',
+    !/onPairPartner/.test(onboarding) && !/pairAnOfflineSigner|Pair an Offline Signer/.test(onboarding),
+    'Onboarding no longer offers the two-phone pairing lane',
 );
 
 const appShells = [
@@ -138,12 +139,12 @@ for (const [name, rel] of appShells) {
         `${name} shell imports and renders PairPartnerWallet`,
     );
     assert.ok(
-        src.includes("onboardingStep === 'pair-partner'"),
-        `${name} shell routes the pair-partner onboarding step`,
+        src.includes("unlockedView === 'pair-partner'"),
+        `${name} shell routes the pair-partner page inside an open vault`,
     );
     assert.ok(
-        src.includes("onPairPartner={() => setOnboardingStep('pair-partner')}"),
-        `${name} shell wires the Onboarding entry point`,
+        src.includes("onPairAnotherPhone={() => setUnlockedView('pair-partner')}"),
+        `${name} shell wires the Settings, Advanced entry point`,
     );
 }
 

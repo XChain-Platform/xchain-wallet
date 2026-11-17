@@ -27,15 +27,16 @@ import {
     FormPage,
     FormSection,
     Icon,
+    IconSelect,
     InfoTip,
     OptionalPill,
     Input,
-    RadioGroup,
     Select,
     Switch,
 } from '@xchain-wallet/core/ui';
 import { AmountField } from '../components/AmountField.jsx';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { actionOptionIcon } from '../utils/actionOptionIcon.jsx';
 import { BITCOIN_ACTIONS } from '../../registry/actions.js';
 import { allowedTicksMode, nativeTickForChain, normalizeAllowedTicks } from '../../cosigner/allowedTicks.js';
 import { applyTickLookup, policyTickNames } from '../../cosigner/tickIdResolver.js';
@@ -452,9 +453,18 @@ const pickerStyle = {
  * @param {PolicyDraft} props.value
  * @param {(next: PolicyDraft) => void} props.onChange
  */
+// A row's Remove: red with the trash icon, as every Remove is.
+function RemoveButton({ onClick, ...rest }) {
+    return (
+        <Button type="button" variant="danger" size="sm" icon={<Icon.TrashIcon />} onClick={onClick} {...rest}>
+            Remove
+        </Button>
+    );
+}
+
 // One collapsible line drawn with the shared section styles: icon, title,
 // Optional pill, the ? help, a closed summary and a chevron.
-function PolicySection({ id, title, icon: SectionIcon, help, optional = false, defaultOpen = false, summary, children }) {
+function PolicySection({ id, title, icon: SectionIcon, optional = false, defaultOpen = false, summary, children }) {
     const [open, setOpen] = useState(defaultOpen);
     const panelId = `policy-section-${id}`;
     return (
@@ -481,8 +491,9 @@ function PolicySection({ id, title, icon: SectionIcon, help, optional = false, d
                 </span>
             </Button>
             <div id={panelId} className={sectionStyles.sectionBody} hidden={!open}>
-                {/* The group's explanation as a muted first line, not a lone ? button. */}
-                {help?.props?.label ? <p style={{ margin: 0, color: 'var(--xc-text-muted)', fontSize: 'var(--xc-text-xs)' }}>{help.props.label}</p> : null}
+                {/* The group's explanation rides on its first control's '?' tip
+                    (the Actions group, the token choice, the rolling switch, the
+                    Add button's row), never a loose muted paragraph (U57). */}
                 {children}
             </div>
         </section>
@@ -527,7 +538,11 @@ export function CoSignerPolicyEditor({ value, onChange, tokenIds = null, tokenEr
     return (
         // No "Policy rules" heading; the sections join the parent form's flow.
         <div style={{ display: 'contents' }} aria-label="Agent spending policy">
-            <PolicySection title="Allowed actions" icon={Icon.CheckIcon} help={<InfoTip label="Choose which actions the agent may sign. The agent can never sign an action that is not selected." aria="About allowed actions" />} {...{ id: 'actions', defaultOpen: true, summary: actionPreview.length ? actionPreview.map((a) => a.label).join(', ') : 'None picked' }}>
+            <PolicySection title="Allowed actions" icon={Icon.CheckIcon} {...{ id: 'actions', defaultOpen: true, summary: actionPreview.length ? actionPreview.map((a) => a.label).join(', ') : 'None picked' }}>
+                <span className={styles.groupLabel}>
+                    Actions
+                    <InfoTip label="Choose which actions the agent may sign. The agent can never sign an action that is not selected." aria="About allowed actions" />
+                </span>
                 <div style={pickerStyle} role="group" aria-label="Actions">
                     {ACTION_CHOICES.map(({ key, label }) => (
                         <Checkbox
@@ -550,15 +565,10 @@ export function CoSignerPolicyEditor({ value, onChange, tokenIds = null, tokenEr
                                 {a.known ? null : (
                                     <>
                                         {' '}
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
+                                        <RemoveButton
                                             aria-label={`Remove ${a.key}`}
                                             onClick={() => writeKeys(pickedKeys.filter((k) => k !== a.key))}
-                                        >
-                                            Remove
-                                        </Button>
+                                        />
                                     </>
                                 )}
                             </span>
@@ -568,15 +578,22 @@ export function CoSignerPolicyEditor({ value, onChange, tokenIds = null, tokenEr
             </PolicySection>
 
             {/* Which tokens the agent may move, beside the actions it may sign. */}
-            <PolicySection title={t('coSigner.policy.tokens.title')} icon={Icon.CoinsIcon} help={<InfoTip label={t('coSigner.policy.tokens.help')} aria={t('coSigner.policy.tokens.helpAria')} />} {...{ id: 'tokens', defaultOpen: true, summary: tokenSummary(draft) }}>
-                <RadioGroup
-                    legend={t('coSigner.policy.tokens.legend')}
+            <PolicySection title={t('coSigner.policy.tokens.title')} icon={Icon.CoinsIcon} {...{ id: 'tokens', defaultOpen: true, summary: tokenSummary(draft) }}>
+                {/* The themed dropdown with an icon per option, never radios
+                    (G119); each option's description is its secondary line. */}
+                <IconSelect
+                    label={t('coSigner.policy.tokens.legend')}
+                    help={t('coSigner.policy.tokens.help')}
                     value={draft.tokenMode || 'any'}
-                    onChange={(mode) => set({ tokenMode: mode })}
+                    onChange={(mode) => {
+                        // Picking the current choice again changes nothing, as a radio did.
+                        if (mode === (draft.tokenMode || 'any')) return;
+                        set({ tokenMode: mode });
+                    }}
                     options={[
-                        { value: 'any', label: t('coSigner.policy.tokens.any'), description: t('coSigner.policy.tokens.anyHelp'), icon: Icon.CoinsIcon },
-                        { value: 'none', label: t('send.advanced.none'), description: t('coSigner.policy.tokens.noneHelp'), icon: Icon.XIcon },
-                        { value: 'list', label: t('coSigner.policy.tokens.list'), description: t('coSigner.policy.tokens.listHelp'), icon: Icon.TokenListIcon },
+                        { value: 'any', label: t('coSigner.policy.tokens.any'), sub: t('coSigner.policy.tokens.anyHelp'), icon: <Icon.CoinsIcon /> },
+                        { value: 'none', label: t('send.advanced.none'), sub: t('coSigner.policy.tokens.noneHelp'), icon: <Icon.XIcon /> },
+                        { value: 'list', label: t('coSigner.policy.tokens.list'), sub: t('coSigner.policy.tokens.listHelp'), icon: <Icon.TokenListIcon /> },
                     ]}
                 />
                 {draft.tokenMode === 'list' ? (
@@ -599,7 +616,7 @@ export function CoSignerPolicyEditor({ value, onChange, tokenIds = null, tokenEr
                 ) : null}
             </PolicySection>
 
-            <PolicySection title="Per-action amount limits" icon={Icon.MaxIcon} help={<InfoTip label="Optionally cap how much the agent may move in one action for a specific token or for every token." aria="About per-action amount limits" />} {...{ id: 'per-action', optional: true, summary: draft.maxPerAction.length ? `${draft.maxPerAction.length} limit${draft.maxPerAction.length === 1 ? '' : 's'}` : 'Not set' }}>
+            <PolicySection title="Per-action amount limits" icon={Icon.MaxIcon} {...{ id: 'per-action', optional: true, summary: draft.maxPerAction.length ? `${draft.maxPerAction.length} limit${draft.maxPerAction.length === 1 ? '' : 's'}` : 'Not set' }}>
                 {draft.maxPerAction.map((row, i) => {
                     const rowAction = String(row.action || '').trim().toUpperCase();
                     const stray = rowAction !== '' && !actionPreview.some((a) => a.key === rowAction);
@@ -614,16 +631,16 @@ export function CoSignerPolicyEditor({ value, onChange, tokenIds = null, tokenEr
                                 onChange={(e) => patchRow('maxPerAction', i, { action: e.target.value })}
                                 error={stray ? "This limit won't apply until you pick one of the allowed actions." : undefined}
                             >
-                                <option value="">
+                                <Select.Option value="" icon={<Icon.ListIcon />}>
                                     {actionPreview.length > 0 ? 'Choose an action' : 'Add allowed actions above first'}
-                                </option>
+                                </Select.Option>
                                 {actionPreview.map((a) => (
-                                    <option key={a.key} value={a.key}>
+                                    <Select.Option key={a.key} value={a.key} icon={actionOptionIcon(a.key)}>
                                         {a.known ? a.label : `${a.key} (not a known action)`}
-                                    </option>
+                                    </Select.Option>
                                 ))}
                                 {stray ? (
-                                    <option value={rowAction}>{`${rowAction} (not in the allowed actions above)`}</option>
+                                    <Select.Option value={rowAction} icon={<Icon.BanIcon />}>{`${rowAction} (not in the allowed actions above)`}</Select.Option>
                                 ) : null}
                             </Select>
                             <Input
@@ -647,17 +664,21 @@ export function CoSignerPolicyEditor({ value, onChange, tokenIds = null, tokenEr
                                     patchRow('maxPerAction', i, { cap: stripped });
                                 }}
                             />
-                            <Button type="button" variant="ghost" onClick={() => removeRow('maxPerAction', i)}>Remove</Button>
+                            <RemoveButton onClick={() => removeRow('maxPerAction', i)} />
                         </div>
                     );
                 })}
-                <Button type="button" variant="secondary" onClick={() => addRow('maxPerAction', { action: '', tick: '*', cap: '' })}>
-                    Add limit
-                </Button>
+                <div className={styles.addRow}>
+                    <Button type="button" variant="secondary" icon={<Icon.PlusIcon />} onClick={() => addRow('maxPerAction', { action: '', tick: '*', cap: '' })}>
+                        Add Limit
+                    </Button>
+                    <InfoTip label="Optionally cap how much the agent may move in one action for a specific token or for every token." aria="About per-action amount limits" />
+                </div>
             </PolicySection>
 
-            <PolicySection title="Rolling limit" icon={Icon.ClockIcon} help={<InfoTip label="Turn this on to cap the agent's total activity over a moving time window, such as 10 actions per 24 hours." aria="About the rolling limit" />} {...{ id: 'rolling', optional: true, summary: draft.windowEnabled ? `${draft.windowMaxActions || 'Any'} actions per ${draft.windowHours || '?'} h` : 'Off' }}>
+            <PolicySection title="Rolling limit" icon={Icon.ClockIcon} {...{ id: 'rolling', optional: true, summary: draft.windowEnabled ? `${draft.windowMaxActions || 'Any'} actions per ${draft.windowHours || '?'} h` : 'Off' }}>
                 <Switch
+                    help="Turn this on to cap the agent's total activity over a moving time window, such as 10 actions per 24 hours."
                     label="Enforce a rolling limit"
                     checked={draft.windowEnabled}
                     onChange={(e) => set({ windowEnabled: e.target.checked })}
@@ -701,17 +722,17 @@ export function CoSignerPolicyEditor({ value, onChange, tokenIds = null, tokenEr
                                     inputMode="decimal"
                                     placeholder="1000"
                                 />
-                                <Button type="button" variant="ghost" onClick={() => removeRow('windowPerTick', i)}>Remove</Button>
+                                <RemoveButton onClick={() => removeRow('windowPerTick', i)} />
                             </div>
                         ))}
-                        <Button type="button" variant="secondary" onClick={() => addRow('windowPerTick', { tick: '', cap: '' })}>
-                            Add per-token rolling limit
+                        <Button type="button" variant="secondary" icon={<Icon.PlusIcon />} onClick={() => addRow('windowPerTick', { tick: '', cap: '' })}>
+                            Add Per-Token Rolling Limit
                         </Button>
                     </>
                 ) : null}
             </PolicySection>
 
-            <PolicySection title="Extra-confirmation threshold" icon={Icon.InfoIcon} help={<InfoTip label="Optionally highlight requests above a token amount on the approval screen. Every request still asks for your approval." aria="About extra-confirmation thresholds" />} {...{ id: 'confirm', optional: true, summary: draft.confirmAbove.length ? `${draft.confirmAbove.length} threshold${draft.confirmAbove.length === 1 ? '' : 's'}` : 'Not set' }}>
+            <PolicySection title="Extra-confirmation threshold" icon={Icon.InfoIcon} {...{ id: 'confirm', optional: true, summary: draft.confirmAbove.length ? `${draft.confirmAbove.length} threshold${draft.confirmAbove.length === 1 ? '' : 's'}` : 'Not set' }}>
                 {draft.confirmAbove.map((row, i) => (
                     <div key={i} className={styles.policyRow}>
                         <Input
@@ -730,15 +751,18 @@ export function CoSignerPolicyEditor({ value, onChange, tokenIds = null, tokenEr
                             inputMode="decimal"
                             placeholder="500"
                         />
-                        <Button type="button" variant="ghost" onClick={() => removeRow('confirmAbove', i)}>Remove</Button>
+                        <RemoveButton onClick={() => removeRow('confirmAbove', i)} />
                     </div>
                 ))}
-                <Button type="button" variant="secondary" onClick={() => addRow('confirmAbove', { tick: '', amount: '' })}>
-                    Add threshold
-                </Button>
+                <div className={styles.addRow}>
+                    <Button type="button" variant="secondary" icon={<Icon.PlusIcon />} onClick={() => addRow('confirmAbove', { tick: '', amount: '' })}>
+                        Add Threshold
+                    </Button>
+                    <InfoTip label="Optionally highlight requests above a token amount on the approval screen. Every request still asks for your approval." aria="About extra-confirmation thresholds" />
+                </div>
             </PolicySection>
 
-            <PolicySection title="Allowed recipients" icon={Icon.UsersIcon} help={<InfoTip label="Optionally restrict the agent to paying only the listed recipient addresses. With no addresses listed, any recipient is allowed." aria="About allowed recipients" />} {...{ id: 'recipients', optional: true, summary: draft.allowedDestinations.filter((d) => String(d?.address ?? d ?? '').trim()).length ? `${draft.allowedDestinations.length} address${draft.allowedDestinations.length === 1 ? '' : 'es'}` : 'Anyone' }}>
+            <PolicySection title="Allowed recipients" icon={Icon.UsersIcon} {...{ id: 'recipients', optional: true, summary: draft.allowedDestinations.filter((d) => String(d?.address ?? d ?? '').trim()).length ? `${draft.allowedDestinations.length} address${draft.allowedDestinations.length === 1 ? '' : 'es'}` : 'Anyone' }}>
                 {draft.allowedDestinations.map((row, i) => (
                     <div key={i} className={styles.policyRow}>
                         <Input
@@ -749,15 +773,18 @@ export function CoSignerPolicyEditor({ value, onChange, tokenIds = null, tokenEr
                             placeholder="bc1q…"
                             autoComplete="off"
                         />
-                        <Button type="button" variant="ghost" onClick={() => removeRow('allowedDestinations', i)}>Remove</Button>
+                        <RemoveButton onClick={() => removeRow('allowedDestinations', i)} />
                     </div>
                 ))}
-                <Button type="button" variant="secondary" onClick={() => addRow('allowedDestinations', { address: '' })}>
-                    Add recipient
-                </Button>
+                <div className={styles.addRow}>
+                    <Button type="button" variant="secondary" icon={<Icon.PlusIcon />} onClick={() => addRow('allowedDestinations', { address: '' })}>
+                        Add Recipient
+                    </Button>
+                    <InfoTip label="Optionally restrict the agent to paying only the listed recipient addresses. With no addresses listed, any recipient is allowed." aria="About allowed recipients" />
+                </div>
             </PolicySection>
 
-            <PolicySection title="Allowed transaction outputs" icon={Icon.LockIcon} help={<InfoTip label="Optionally add an anti-drain guard so every signed transaction output must use a listed address and stay within its maximum value in the chain's base units." aria="About allowed transaction outputs" />} {...{ id: 'outputs', optional: true, summary: draft.allowedOutputs.length ? `${draft.allowedOutputs.length} output${draft.allowedOutputs.length === 1 ? '' : 's'}` : 'Not set' }}>
+            <PolicySection title="Allowed transaction outputs" icon={Icon.LockIcon} {...{ id: 'outputs', optional: true, summary: draft.allowedOutputs.length ? `${draft.allowedOutputs.length} output${draft.allowedOutputs.length === 1 ? '' : 's'}` : 'Not set' }}>
                 {draft.allowedOutputs.map((row, i) => (
                     <div key={i} className={styles.policyRow}>
                         <Input
@@ -777,12 +804,15 @@ export function CoSignerPolicyEditor({ value, onChange, tokenIds = null, tokenEr
                             inputMode="numeric"
                             placeholder="(no cap)"
                         />
-                        <Button type="button" variant="ghost" onClick={() => removeRow('allowedOutputs', i)}>Remove</Button>
+                        <RemoveButton onClick={() => removeRow('allowedOutputs', i)} />
                     </div>
                 ))}
-                <Button type="button" variant="secondary" onClick={() => addRow('allowedOutputs', { address: '', maxValue: '' })}>
-                    Add output
-                </Button>
+                <div className={styles.addRow}>
+                    <Button type="button" variant="secondary" icon={<Icon.PlusIcon />} onClick={() => addRow('allowedOutputs', { address: '', maxValue: '' })}>
+                        Add Output
+                    </Button>
+                    <InfoTip label="Optionally add an anti-drain guard so every signed transaction output must use a listed address and stay within its maximum value in the chain's base units." aria="About allowed transaction outputs" />
+                </div>
             </PolicySection>
         </div>
     );

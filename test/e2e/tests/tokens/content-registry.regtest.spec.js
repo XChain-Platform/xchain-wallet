@@ -34,6 +34,7 @@ import {
     createWallet,
     expect,
     expectMyTokensRow,
+    openFormSection,
     openPaletteCommand,
     test,
 } from '../../fixtures/wallet.js';
@@ -305,15 +306,15 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 30_000 });
             await expect(page.getByRole('main')).toContainText(source);
 
-            await page.getByRole('button', { name: 'Fork & Edit', exact: true }).click();
+            await page.getByRole('list', { name: 'List actions' }).getByRole('button', { name: /^Fork\b/ }).click();
             const forkMain = page.getByRole('main');
-            await expect(forkMain.getByRole('button', { name: 'Publish Edit', exact: true }))
+            await expect(forkMain.getByRole('button', { name: 'Publish Fork', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
-            // The fork adds a member the parent does not already hold: ListForkForm
+            // The fork adds a member the parent does not already hold: the List form's Fork
             // drops additions that are already on the list, so re-adding `source`
-            // would leave nothing to publish and Publish edit disabled.
-            await forkMain.getByLabel(/^Add addresses/).fill(REGTEST_DESTINATION);
-            await forkMain.getByRole('button', { name: 'Publish Edit', exact: true }).click();
+            // would leave nothing to publish and Publish Fork disabled.
+            await forkMain.getByLabel('Addresses', { exact: true }).fill(REGTEST_DESTINATION);
+            await forkMain.getByRole('button', { name: 'Publish Fork', exact: true }).click();
 
             const publishAdd = forkMain.getByRole('button', { name: 'Publish Add', exact: true });
             await expect(publishAdd).toBeVisible({ timeout: 30_000 });
@@ -357,10 +358,13 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await openManagedList();
             // List details read through the shared host gate, which holds every
             // read while the venue's per-IP limit is paused after a 429.
-            await page.getByRole('button', { name: 'Rename List', exact: true }).click({ timeout: 90_000 });
+            // Renaming is the Edit action: its name and description sit in the
+            // Details section, closed until used, and it publishes with Publish Edit.
+            await page.getByRole('button', { name: 'Edit', exact: true }).click({ timeout: 90_000 });
             const renameMain = page.getByRole('main');
+            await openFormSection(renameMain, 'Details');
             await renameMain.getByLabel('Name', { exact: true }).fill(NAME);
-            await renameMain.getByRole('button', { name: 'Rename List', exact: true }).click();
+            await renameMain.getByRole('button', { name: 'Publish Edit', exact: true }).click();
             const renamePassword = renameMain.getByLabel('Password', { exact: true });
             if (await renamePassword.count() > 0 && await renamePassword.isVisible()) await renamePassword.fill(PASSWORD);
             await expectConfirmModal(page, 'this action', 60_000);
@@ -402,9 +406,9 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const rosterMain = page.getByRole('main');
             const addToken = rosterMain.getByRole('button', { name: 'Add Token', exact: true });
             await expect(addToken).toBeVisible({ timeout: 30_000 });
-            await expect(rosterMain.getByText('No list published yet. This will be the first.', { exact: true }),
+            await expect(rosterMain.getByText('Loading the current project token list…', { exact: true }),
                 'the wallet never finished checking the current official-token list')
-                .toBeVisible({ timeout: 60_000 });
+                .toBeHidden({ timeout: 60_000 });
             // Each project token is a row added through the token picker.
             await addToken.click();
             await expect(page.locator('[data-balance-key]').first(),
@@ -414,7 +418,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.getByRole('button', { name: new RegExp(`^Select ${MEMBER}( on |$)`) }).first().click();
             await expect(rosterMain.getByRole('listitem').filter({ hasText: MEMBER })).toBeVisible({ timeout: 30_000 });
             await expect(rosterMain.getByRole('button', { name: `Remove ${MEMBER}`, exact: true })).toBeVisible();
-            await rosterMain.getByRole('button', { name: 'Create Project Tokens', exact: true }).click();
+            await rosterMain.getByRole('button', { name: 'Create and Link', exact: true }).click();
 
             await expect(rosterMain.getByRole('button', { name: 'Publish List', exact: true }))
                 .toBeVisible({ timeout: 30_000 });

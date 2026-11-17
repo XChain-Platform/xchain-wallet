@@ -34,6 +34,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useCollectibleKeys.js', () => (
 }));
 
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
+import { showHomeBalances } from '../../helpers/homeBalances.js';
 
 const chainRegistry = {
     byCoin: () => [],
@@ -54,13 +55,14 @@ function mount(overrides = {}) {
         ...overrides,
     };
     const view = render(<HomeTabs {...props} />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+    showHomeBalances('tokens');
     return { ...view, props };
 }
 
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    globalThis.localStorage?.clear();
 });
 
 describe('HomeTabs token filter empty state', () => {

@@ -56,6 +56,12 @@ afterEach(async () => {
         const store = await import('../../packages/core/src/shared/hooks/useWalletMode.js');
         store.resetWalletModes?.();
     } catch { /* mocked module without a reset */ }
+    // A form's Advanced choices (fee bumping, chosen coins, change address)
+    // live in a module store too, keyed by form and source address.
+    try {
+        const advanced = await import('../../packages/core/src/shared/components/formStandard/advancedOptions.js');
+        advanced.resetAdvancedStore?.();
+    } catch { /* mocked module without a reset */ }
 });
 
 afterEach(() => {

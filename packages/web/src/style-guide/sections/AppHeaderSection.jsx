@@ -20,7 +20,7 @@ export function AppHeaderSection() {
             kicker="The wallet's global top strip. The logo and active wallet name anchor the left; lock, pop-out, and the wallet menu sit on the right."
         >
             <Guidance
-                what={<>A single flex row with the logo, plain wallet name, and optional watch-only badge on the left. Lock appears where the sidebar does not provide it, Open in new window appears only on supported surfaces, and the pancake toggles the wallet menu.</>}
+                what={<>A single flex row with the logo, plain wallet name, and optional "Signs on another phone" badge on the left. Lock appears where the sidebar does not provide it, and the pancake toggles the wallet menu. There is no Open in new window control in the bar or the menu.</>}
                 when={<>Mounted by the layout wrapper, never by individual routes. It stays visible on every unlocked screen while route screens render <code>PageHeader</code> below it.</>}
                 whenNot={<>Locked, onboarding, and wizard flows that need full-screen focus. Modal overlays do not include it.</>}
                 sizing={<>Bar padding is <code>var(--xc-space-2) var(--xc-space-3)</code>. The logo is 58px wide and action buttons use the medium control tokens.</>}
@@ -59,7 +59,7 @@ export function AppHeaderSection() {
                 </div>
             </LiveExample>
 
-            <LiveExample label="Watch-only wallet without lock">
+            <LiveExample label="Wallet another phone signs for, without lock">
                 <div style={{ border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', overflow: 'hidden' }}>
                     <AppHeader
                         activeWallet={{ id: 'watch-wallet', name: 'Watch wallet' }}

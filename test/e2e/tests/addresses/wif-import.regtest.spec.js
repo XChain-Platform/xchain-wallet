@@ -77,6 +77,7 @@ import wifCodec from 'wif';
 import * as ecc from 'tiny-secp256k1';
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
@@ -197,7 +198,7 @@ async function submitImport(page, { wif, label }) {
     await selectImportChain(page);
     // Pinned, not defaulted: the assertion downstream is an EXACT address, and
     // the chain default is free to move.
-    await page.getByLabel('Address type').selectOption('p2wpkh');
+    await pickOption(page.getByLabel('Address type'), 'p2wpkh');
     await page.getByLabel('WIF private key').fill(wif);
     if (label) await page.getByLabel('Label', { exact: true }).fill(label);
     // The password field renders only while the signer is NOT ready: unlocked,
@@ -268,15 +269,12 @@ test.describe('Addresses: importing a private key', () => {
             await test.step('D-65: pressing Use really makes it the active address', async () => {
                 await page.getByRole('button', { name: `View address ${imported}` }).click();
 
-                const use = page.getByRole('button', { name: 'Use', exact: true });
-                await expect(use, 'the address detail offers no Use action').toBeVisible({ timeout: 30_000 });
-                // A negative control, and it is not decoration: if the address
+                // Set active is offered only on an address that is not active
+                // yet, so its presence is the negative control: if the address
                 // were already active the flip below would pass without the
                 // button ever having worked.
-                await expect(use,
-                    'Use already reports this address as active before it was pressed, so the '
-                    + 'assertion below would pass without the button working')
-                    .toHaveAttribute('title', 'Make this the active address');
+                const use = page.getByRole('button', { name: /^Set active/ });
+                await expect(use, 'the address detail offers no Set active action, or the address was already active before it was pressed').toBeVisible({ timeout: 30_000 });
 
                 await use.click();
 
@@ -303,8 +301,8 @@ test.describe('Addresses: importing a private key', () => {
                     + 'spends the ACTIVE address, so an imported key that cannot be activated cannot be spent';
                 await expect(page.getByRole('main').getByText('Active', { exact: true }), notActivated)
                     .toBeVisible({ timeout: 30_000 });
-                await expect(page.getByRole('group', { name: 'Address actions' })
-                    .getByRole('button', { name: 'Use', exact: true }), notActivated)
+                await expect(page.getByRole('list', { name: 'Actions', exact: true })
+                    .getByRole('button', { name: /^Set active/ }), notActivated)
                     .toHaveCount(0);
             });
 

@@ -14,7 +14,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { CommandPalette } from '../../../packages/core/src/shared/commandPalette/CommandPalette.jsx';
-import { visibleWalletMenu, walletMenuFooter } from '../../../packages/core/src/shared/walletMenu.js';
+import { visibleWalletMenu } from '../../../packages/core/src/shared/walletMenu.js';
 
 // The xchain.io site links the wallet menu once carried; none belong in it.
 const SITE_LINK_LABELS = [
@@ -25,7 +25,7 @@ const SITE_LINK_LABELS = [
 afterEach(() => cleanup());
 
 describe('the unified wallet menu holds only wallet items', () => {
-    it('renders exactly the visible catalogue rows and footer rows with no site links', () => {
+    it('renders exactly the visible catalogue rows, no footer rows and no lock row, with no site links', () => {
         const gates = {
             hasDexSurface: true,
             hasVmAddress: true,
@@ -47,8 +47,6 @@ describe('the unified wallet menu holds only wallet items', () => {
         );
         const expectedIds = [
             ...visibleWalletMenu(gates).flatMap((group) => group.rows.map((row) => row.id)),
-            // jsdom serves the wallet over http, a shell that can open a new window, so the footer leads with the pop-out row.
-            ...walletMenuFooter({ canPopOut: true }).map((row) => row.id),
         ];
         const rows = Array.from(container.querySelectorAll('[data-wallet-menu-row]'));
 

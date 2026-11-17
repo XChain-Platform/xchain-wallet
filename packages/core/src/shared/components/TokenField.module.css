@@ -3,6 +3,9 @@
 
 .field {
     --token-field-control-height: var(--xc-control-h-md);
+    /* G112: the token icon and the caret sit in square slots (tokens.css). */
+    --token-field-icon-inset: var(--xc-field-icon-inset-md);
+    --token-field-glyph-inset: var(--xc-field-glyph-inset-md);
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -13,6 +16,8 @@
 
 .lg {
     --token-field-control-height: var(--xc-control-h-lg);
+    --token-field-icon-inset: var(--xc-field-icon-inset-lg);
+    --token-field-glyph-inset: var(--xc-field-glyph-inset-lg);
 }
 
 .label {
@@ -30,11 +35,12 @@
     display: flex;
     box-sizing: border-box;
     align-items: center;
-    gap: var(--xc-space-3);
+    gap: var(--xc-field-icon-gap);
     width: 100%;
     min-width: 0;
     height: var(--token-field-control-height);
     padding: 0 var(--xc-control-pad-x);
+    padding-inline-end: calc(var(--token-field-glyph-inset) - var(--xc-field-border));
     font-family: var(--xc-font-sans);
     font-size: var(--xc-control-font);
     color: var(--xc-text);
@@ -47,6 +53,12 @@
     font-weight: 400;
     white-space: nowrap;
     transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
+}
+
+/* G112: with a token chosen, its icon sits as far from the start edge as
+   from the top and bottom; the ticker follows one icon gap after it. */
+.control.leadIcon {
+    padding-inline-start: calc(var(--token-field-icon-inset) - var(--xc-field-border));
 }
 
 .control:hover:not(:disabled) {

@@ -64,7 +64,7 @@ describe('SignApproval in watcher mode', () => {
             />,
         );
 
-        await screen.findByText(/Watcher mode never signs or asks for a password/i);
+        await screen.findByText(/Another phone signs for this wallet, so it never signs or asks for a password/i);
         expect(screen.queryByLabelText('Password')).toBeNull();
         expect(screen.queryByRole('button', { name: /^(Approve|Sign in)$/i })).toBeNull();
         expect(messaging.resolveApproval).not.toHaveBeenCalled();
@@ -107,7 +107,7 @@ describe('SignApproval in watcher mode', () => {
             />,
         );
 
-        expect(await screen.findByText('This watch-only account cannot sign.')).toBeTruthy();
+        expect(await screen.findByText('This address has no key in this wallet, so it cannot sign.')).toBeTruthy();
         expect(screen.queryByLabelText('Password')).toBeNull();
         expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
         expect(messaging.resolveApproval).not.toHaveBeenCalled();

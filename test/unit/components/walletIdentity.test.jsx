@@ -120,10 +120,13 @@ describe('wallet identity surfaces', () => {
         );
 
         await waitFor(() => {
-            const identity = screen.getByTestId('wallet-identity');
-            expect(identity).toHaveTextContent('Signing with');
+            // Confirm Standard: a facts card row, "Signing with" its label,
+            // the name as plain text (the hero is the page's one icon, G127
+            // revised 2026-11-16).
+            const identity = screen.getByTestId('confirm-signing-wallet');
+            expect(identity.previousElementSibling).toHaveTextContent('Signing with');
             expect(identity).toHaveTextContent('Cold Reserve');
-            expect(identity).toHaveAttribute('data-wallet-tone', String(walletIdentityTone('wallet-cold')));
+            expect(identity.querySelector('[data-xc-avatar], img, svg')).toBeNull();
         });
     });
 
@@ -145,7 +148,15 @@ describe('wallet identity surfaces', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByTestId('wallet-identity')).toHaveTextContent('Main Wallet');
+            const facts = screen.getByTestId('confirm-facts');
+            expect([...facts.querySelectorAll('dt')].map((node) => node.textContent)).toEqual([
+                'Signing with',
+                'Network',
+                'Address',
+            ]);
+            expect(screen.getByTestId('confirm-signing-wallet')).toHaveTextContent('Main Wallet');
+            expect(screen.getByTestId('confirm-address').querySelector('[title="bc1qsigningaddress"]'))
+                .not.toBeNull();
         });
     });
 
@@ -165,7 +176,7 @@ describe('wallet identity surfaces', () => {
         );
         const { rerender } = render(screenFor(readyConfirm()));
         await waitFor(() => {
-            expect(screen.getByTestId('wallet-identity')).toHaveTextContent('Main Wallet');
+            expect(screen.getByTestId('confirm-signing-wallet')).toHaveTextContent('Main Wallet');
         });
 
         // The side panel picks another wallet while this review signs.
@@ -173,7 +184,7 @@ describe('wallet identity surfaces', () => {
         rerender(screenFor({ ...readyConfirm(), phase: 'signing', canApprove: false }));
         await new Promise((resolve) => { setTimeout(resolve, 20); });
 
-        const identity = screen.getByTestId('wallet-identity');
+        const identity = screen.getByTestId('confirm-signing-wallet');
         expect(identity).toHaveTextContent('Main Wallet');
         expect(identity).not.toHaveTextContent('Cold Reserve');
     });
@@ -196,14 +207,14 @@ describe('wallet identity surfaces', () => {
         );
         const { rerender } = render(screenFor(readyConfirm()));
         await waitFor(() => {
-            expect(screen.getByTestId('wallet-identity')).toHaveTextContent('Main Wallet');
+            expect(screen.getByTestId('confirm-signing-wallet')).toHaveTextContent('Main Wallet');
         });
 
         writeActiveWallet('wallet-cold');
         rerender(screenFor({ ...readyConfirm(), phase: 'signing', canApprove: false }));
         await new Promise((resolve) => { setTimeout(resolve, 20); });
 
-        expect(screen.getByTestId('wallet-identity')).toHaveTextContent('Main Wallet');
+        expect(screen.getByTestId('confirm-signing-wallet')).toHaveTextContent('Main Wallet');
     });
 
     it('renders wallet names containing markup as text in the wallet list', async () => {

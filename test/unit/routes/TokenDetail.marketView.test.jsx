@@ -63,7 +63,7 @@ function renderDetail({ onBuy = vi.fn() } = {}) {
 describe('TokenDetail Exchange action', () => {
     it('opens the selected asset market even when the balance is zero', () => {
         const onBuy = renderDetail();
-        const button = screen.getByRole('button', { name: 'Exchange' });
+        const button = screen.getByRole('button', { name: /^Exchange\b/ });
 
         expect(button).toBeTruthy();
         fireEvent.click(button);
@@ -74,7 +74,7 @@ describe('TokenDetail Exchange action', () => {
     it('is left out of the Actions tab when the shell has no exchange route', () => {
         renderDetail({ onBuy: null });
 
-        expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Exchange' })).toBeNull();
+        expect(screen.getByRole('button', { name: /^Send\b/ })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /^Exchange\b/ })).toBeNull();
     });
 });

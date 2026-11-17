@@ -8,27 +8,27 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { Chip, Icon } from '@xchain-wallet/core/ui';
-import { useBackHandler } from '../../ui/backStack.js';
-import { ChevronIcon } from '../../ui/ChainPicker.icons.jsx';
+import { NetworkPicker } from '../../ui/NetworkPicker.jsx';
 import { TokenListIcon } from '../../ui/icons/index.jsx';
 import buttonStyles from '../../ui/Button.module.css';
 import fieldStyles from '../../ui/ChainPicker.module.css';
 import styles from './NetworkFilter.module.css';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
-import '../../i18n/locales/en/extension.js';
+import '../../i18n/locales/en/firstPaint.js';
 
 /**
  * Single-select network filter that scales to N chains. Replaces the
  * fixed `[All] [BTC] [LTC] [DOGE]` chip row with one trigger button
- * that surfaces the currently selected filter; clicking opens a
- * dropdown with every coin family in the dataset.
- *
- * The dropdown is searchable when there are more than 6 entries;
- * cheap to add and pays off the moment a wallet hosts more chains.
+ * that surfaces the currently selected filter; pressing it opens the
+ * standard full-screen network list (NetworkPicker) with All networks
+ * first and every coin family in the dataset after it, each row drawn
+ * like a token row (operator ruling 2026-11-13: a network is always
+ * chosen from that list, never a dropdown).
  *
  * `value` is the active filter: `'all'` or a coin family
  * (`'bitcoin'` / `'litecoin'` / `'dogecoin'` / …). `onChange`
@@ -46,6 +46,9 @@ import '../../i18n/locales/en/extension.js';
  * @param {boolean} [props.fieldTrigger]  draw the trigger like the standard
  *   network field (button base, network icon and name, list icon, no accent
  *   fill) instead of the chip; callers that leave it off keep the chip
+ * @param {boolean} [props.fieldLook]  keep the chip trigger on the white
+ *   field surface while a network is chosen, as every dropdown in a filter
+ *   panel is (G96); the filter button's dot already says a filter is on
  */
 export function NetworkFilter({
     chainRegistry,
@@ -56,32 +59,21 @@ export function NetworkFilter({
     size = 'md',
     iconOnly = false,
     fieldTrigger = false,
+    fieldLook = false,
 }) {
     const [open, setOpen] = useState(false);
-    const [query, setQuery] = useState('');
-    const listboxId = useId();
     const triggerRef = useRef(null);
-    const popoverRef = useRef(null);
-    const searchRef = useRef(null);
-    const focusOnOpenRef = useRef('selected');
 
-    const closeFilter = useCallback((restoreFocus = false) => {
+    // The picker owns Back and Escape; closing returns focus to the trigger.
+    const closeFilter = useCallback(() => {
         setOpen(false);
-        setQuery('');
-        if (restoreFocus) triggerRef.current?.querySelector('button')?.focus();
+        triggerRef.current?.querySelector('button')?.focus();
     }, []);
-    useBackHandler(open ? () => closeFilter(true) : undefined);
 
-    useEffect(() => {
-        if (!open) return undefined;
-        const onClick = (e) => {
-            if (triggerRef.current?.contains(e.target)) return;
-            if (popoverRef.current?.contains(e.target)) return;
-            closeFilter(true);
-        };
-        window.addEventListener('mousedown', onClick);
-        return () => window.removeEventListener('mousedown', onClick);
-    }, [closeFilter, open]);
+    const chooseNetwork = useCallback((next) => {
+        onChange(next);
+        closeFilter();
+    }, [closeFilter, onChange]);
 
     const entries = useMemo(() => {
         return coinFamilies.map((coin) => {
@@ -96,13 +88,16 @@ export function NetworkFilter({
         });
     }, [coinFamilies, chainRegistry]);
 
-    const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase();
-        if (!q) return entries;
-        return entries.filter((e) =>
-            e.label.toLowerCase().includes(q) || e.ticker.toLowerCase().includes(q)
-        );
-    }, [entries, query]);
+    // A filter row is a coin family, not one chain, so its line under the
+    // name is the ticker alone: the family's first descriptor need not be on
+    // the network the wallet is using.
+    const pickerOptions = useMemo(() => entries.map((e) => ({
+        value: e.coin,
+        chainId: e.chainId || '',
+        title: e.label,
+        ticker: e.ticker,
+        description: e.ticker,
+    })), [entries]);
 
     const triggerLabel = value === 'all'
         ? t('common.allNetworks')
@@ -117,68 +112,24 @@ export function NetworkFilter({
         : branding.chainIconSmallUrl(entries.find((e) => e.coin === value)?.chainId || '');
 
     const triggerProps = {
-        onClick: () => {
-            if (open) closeFilter();
-            else openFilter(entries.length > 6 ? 'search' : 'selected');
-        },
+        onClick: () => setOpen(true),
+        // The arrows open the list as they opened the old dropdown.
         onKeyDown: (e) => {
             if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
             e.preventDefault();
-            openFilter(e.key === 'ArrowUp' ? 'last' : 'selected');
+            setOpen(true);
         },
-        'aria-haspopup': 'listbox',
+        'aria-haspopup': 'dialog',
         'aria-expanded': open ? 'true' : 'false',
-        'aria-controls': open ? listboxId : undefined,
         'aria-label': triggerAriaLabel,
         title: triggerLabel,
     };
     const asField = fieldTrigger && !iconOnly;
 
-    useEffect(() => {
-        if (!open) return;
-        if (focusOnOpenRef.current === 'search') {
-            searchRef.current?.focus();
-            return;
-        }
-        const options = listboxOptions(popoverRef.current);
-        const selectedOption = options.find(
-            (option) => option.getAttribute('aria-selected') === 'true',
-        );
-        const fallback = focusOnOpenRef.current === 'last' ? options.at(-1) : options[0];
-        (selectedOption || fallback)?.focus();
-    }, [open]);
-
-    const openFilter = (focus = 'selected') => {
-        focusOnOpenRef.current = focus;
-        setOpen(true);
-    };
-
-    const onPopoverKeyDown = (e) => {
-        const options = listboxOptions(popoverRef.current);
-        if (e.target === searchRef.current) {
-            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-            e.preventDefault();
-            (e.key === 'ArrowDown' ? options[0] : options.at(-1))?.focus();
-            return;
-        }
-
-        const index = options.indexOf(document.activeElement);
-        let nextIndex = null;
-        if (e.key === 'ArrowDown') nextIndex = (index + 1) % options.length;
-        if (e.key === 'ArrowUp') nextIndex = (index - 1 + options.length) % options.length;
-        if (e.key === 'Home') nextIndex = 0;
-        if (e.key === 'End') nextIndex = options.length - 1;
-        if (nextIndex !== null && options.length > 0) {
-            e.preventDefault();
-            options[nextIndex]?.focus();
-            return;
-        }
-        if ((e.key === 'Enter' || e.key === ' ') && index >= 0) {
-            e.preventDefault();
-            options[index].click();
-        }
-        if (e.key === 'Tab') closeFilter();
-    };
+    // The list fills the app frame as NetworkField's does.
+    const portalTarget = typeof document === 'undefined'
+        ? null
+        : triggerRef.current?.closest('#xc-main')?.parentElement || document.body;
 
     return (
         <div
@@ -190,7 +141,8 @@ export function NetworkFilter({
             {asField ? (
                 <button
                     type="button"
-                    className={`${buttonStyles.btn} ${fieldStyles.trigger}`}
+                    // The icon always shows, so it always takes its G112 slot.
+                    className={`${buttonStyles.btn} ${fieldStyles.trigger} ${fieldStyles.leadIcon}`}
                     {...triggerProps}
                 >
                     <span className={fieldStyles.triggerIcon} aria-hidden="true">
@@ -206,7 +158,8 @@ export function NetworkFilter({
             ) : (
                 <Chip
                     pressed={value !== 'all'}
-                    className={`${styles.trigger} ${value === 'all' ? styles.idle : ''}`.trim()}
+                    className={[styles.trigger, value === 'all' || fieldLook ? styles.idle : '',
+                        fieldLook ? styles.fieldLook : ''].filter(Boolean).join(' ')}
                     {...triggerProps}
                 >
                     <span className={styles.triggerIcon} aria-hidden="true">
@@ -221,91 +174,24 @@ export function NetworkFilter({
                             <span className={styles.triggerLabel}>{triggerLabel}</span>
                         </span>
                     )}
+                    {/* The list mark, as on the Network field: this opens a
+                        full-screen list, not a dropdown. */}
                     <span className={styles.triggerCaret} aria-hidden="true">
-                        <ChevronIcon open={open} />
+                        <TokenListIcon />
                     </span>
                 </Chip>
             )}
-            {open ? (
-                <div
-                    ref={popoverRef}
-                    className={styles.popover}
-                    // Lets a filter panel lay this popover into its own flow
-                    // (HomeListFilterMenu.module.css) without :has().
-                    data-listbox-popover=""
-                    onKeyDown={onPopoverKeyDown}
-                >
-                    {entries.length > 6 ? (
-                        <div className={styles.searchWrap}>
-                            <Icon.SearchIcon />
-                            <input
-                                ref={searchRef}
-                                type="search"
-                                enterKeyHint="search"
-                                autoCapitalize="off"
-                                autoCorrect="off"
-                                spellCheck={false}
-                                className={styles.search}
-                                placeholder={t('components.networkFilter.searchNetworks')}
-                                aria-label={t('components.networkFilter.searchNetworks2')}
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                            />
-                        </div>
-                    ) : null}
-                    <ul id={listboxId} className={styles.list} role="listbox" aria-label={t('extension.connect.chains')}>
-                        <li role="presentation">
-                            <button
-                                type="button"
-                                role="option"
-                                tabIndex={-1}
-                                aria-label={t('common.allNetworks')}
-                                aria-selected={value === 'all' ? 'true' : 'false'}
-                                className={`${styles.item} ${value === 'all' ? styles.itemActive : ''}`}
-                                onClick={() => { onChange('all'); closeFilter(true); }}
-                                title={t('common.allNetworks')}
-                            >
-                                <span className={styles.itemIcon} aria-hidden="true">
-                                    <Icon.FilterIcon />
-                                </span>
-                                <span className={styles.itemLabel}>{t('common.allNetworks')}</span>
-                                <span className={styles.itemTicker}>{entries.length}</span>
-                            </button>
-                        </li>
-                        {filtered.map((e, index) => {
-                            const iconUrl = branding.chainIconSmallUrl(e.chainId || '');
-                            return (
-                                <li key={`${e.coin}-${index}`} role="presentation">
-                                    <button
-                                        type="button"
-                                        role="option"
-                                        tabIndex={-1}
-                                        aria-label={e.label}
-                                        aria-selected={value === e.coin ? 'true' : 'false'}
-                                        className={`${styles.item} ${value === e.coin ? styles.itemActive : ''}`}
-                                        onClick={() => { onChange(e.coin); closeFilter(true); }}
-                                        title={e.label}
-                                    >
-                                        <span className={styles.itemIcon} aria-hidden="true">
-                                            {iconUrl ? <img src={iconUrl} alt="" /> : null}
-                                        </span>
-                                        <span className={styles.itemLabel}>{e.label}</span>
-                                        <span className={styles.itemTicker}>{e.ticker}</span>
-                                    </button>
-                                </li>
-                            );
-                        })}
-                        {filtered.length === 0 ? (
-                            <li
-                                className={styles.empty}
-                                role="option"
-                                aria-disabled="true"
-                            >
-                                {t('components.networkFilter.noMatchingNetworks')}
-                            </li>
-                        ) : null}
-                    </ul>
-                </div>
+            {open && portalTarget ? createPortal(
+                <NetworkPicker
+                    label={t('settings.network.label')}
+                    value={value}
+                    options={pickerOptions}
+                    onSelect={chooseNetwork}
+                    onBack={closeFilter}
+                    contained={portalTarget !== document.body}
+                    allOption
+                />,
+                portalTarget,
             ) : null}
         </div>
     );
@@ -314,8 +200,4 @@ export function NetworkFilter({
 function shortLabelForCoin(coin) {
     const map = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
     return map[coin] || coin.toUpperCase();
-}
-
-function listboxOptions(popover) {
-    return Array.from(popover?.querySelectorAll('[role="option"]:not([aria-disabled="true"])') || []);
 }

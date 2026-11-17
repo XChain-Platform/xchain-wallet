@@ -5,7 +5,7 @@
 
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import {
     ANDROID_UPDATE_FEED_URL,
     ARWEAVE_GATEWAY_BASE,
@@ -48,7 +48,7 @@ const files = execFileSync('git', [
     'ls-files',
     ':(glob)packages/core/src/shared/**',
     ':(glob)packages/*/src/**',
-], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+], { encoding: 'utf8' }).trim().split('\n').filter((file) => file && existsSync(file)); // a tracked file deleted in the working tree has nothing to scan
 const urlHostPattern = /https?:\/\/([a-z0-9.-]+)/gi;
 const violations = [];
 

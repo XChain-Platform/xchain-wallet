@@ -168,13 +168,14 @@ describe('WalletDetails passphrase row reads passphraseStored', () => {
         });
 
         // The exit now asks first; confirming inside the dialog starts the removal.
-        fireEvent.click(utils.getByRole('button', { name: 'Exit demo & wipe' }));
+        fireEvent.click(utils.getByRole('button', { name: /^Exit demo & wipe/ }));
         const dialog = utils.getByRole('dialog');
         fireEvent.click(within(dialog).getByRole('button', { name: 'Exit Demo & Wipe' }));
 
         const hidden = { hidden: true };
         expect(utils.getByRole('button', { name: 'Back to previous screen', ...hidden }).disabled).toBe(true);
-        expect(utils.getByRole('button', { name: /Edit wallet/, ...hidden }).disabled).toBe(true);
+        // An ActionList row stays focusable while off (G101): aria-disabled, not native disabled.
+        expect(utils.getByRole('button', { name: /Edit wallet/, ...hidden })).toHaveAttribute('aria-disabled', 'true');
         expect(within(dialog).getByRole('button', { name: 'Exit Demo & Wipe' }).disabled).toBe(true);
 
         finishRemoval();

@@ -138,8 +138,8 @@ function feeToggle(scope) {
 }
 
 async function enableNativeFee(scope) {
-    // The switch sits in the Network fee section, closed until opened.
-    await openIssueSection(scope, 'Network fee');
+    // The switch sits in the Fees section, closed until opened.
+    await openIssueSection(scope, 'Speed and Fees');
     const toggle = feeToggle(scope);
     if (REGTEST_COIN === 'RBTC') {
         await expect(toggle, 'Bitcoin did not offer its native-fee choice')

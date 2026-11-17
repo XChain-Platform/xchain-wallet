@@ -122,7 +122,7 @@ const MEMPOOL_STAGE_COPY = {
  *        "dropped or replaced?" grace window. Defaults to `DROPPED_GRACE_MS`.
  */
 export function TxStatusTimeline({
-    entry, chainTip, indexerWatermark, seenWindowMs, droppedGraceMs,
+    entry, chainTip, indexerWatermark, seenWindowMs, droppedGraceMs, announce = true,
 }) {
     const [, setTick] = useState(0);
     const nowMs = Date.now();
@@ -132,6 +132,69 @@ export function TxStatusTimeline({
         return () => clearInterval(id);
     }, []);
 
+    const { stages, currentStageIndex, pendingState, confirmed } = txStatusStages(entry, {
+        chainTip, indexerWatermark, seenWindowMs, droppedGraceMs, nowMs,
+    });
+
+    return (
+        <>
+            {/* A page that already announces the confirmation elsewhere
+                passes announce={false}, so it is said once. */}
+            {announce ? (
+                <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                    {confirmed ? t('txTimeline.transactionConfirmed') : ''}
+                </span>
+            ) : null}
+            <ol className={styles.timeline} aria-label={t('txTimeline.transactionStatus')}>
+                {stages.map((s, i) => {
+                    const current = i === currentStageIndex;
+                    const stateLabel = s.done
+                        ? 'Complete'
+                        : current
+                            ? (pendingState === 'failed' ? 'Current stage: Failed' : 'Current stage')
+                            : 'Not started';
+                    return (
+                        <li
+                            key={s.key}
+                            className={`${styles.row} ${s.done ? styles.rowDone : styles.rowPending}`
+                                + (s.warn ? ` ${styles.rowWarn}` : '')
+                                + (s.error ? ` ${styles.rowError}` : '')}
+                            aria-current={current ? 'step' : undefined}
+                        >
+                            <span className={styles.dot} aria-hidden="true">
+                                {s.error ? '✕' : (s.warn ? '!' : (s.done ? '●' : '○'))}
+                            </span>
+                            {i < stages.length - 1 ? (
+                                <span className={`${styles.spine} ${s.done ? styles.spineDone : ''}`} aria-hidden="true" />
+                            ) : null}
+                            <div className={styles.body}>
+                                <div className={styles.heading}>
+                                    <div className={styles.label}>{s.label}</div>
+                                    <span className={styles.state}>{stateLabel}</span>
+                                </div>
+                                <div className={styles.sub}>{s.sub}</div>
+                            </div>
+                        </li>
+                    );
+                })}
+            </ol>
+        </>
+    );
+}
+
+/**
+ * The stage list behind the timeline, as data, so the Action detail page's
+ * four-step bar reads the same verdicts the timeline draws instead of
+ * working them out a second time.
+ *
+ * @param {any} entry
+ * @param {{ chainTip?: number, indexerWatermark?: number, seenWindowMs?: number, droppedGraceMs?: number, nowMs?: number }} [options]
+ * @returns {{ stages: Array<{ key: string, label: string, done: boolean, sub: string, warn?: boolean, error?: boolean }>,
+ *             currentStageIndex: number, pendingState: string | null, confirmed: boolean, failed: boolean }}
+ */
+export function txStatusStages(entry, {
+    chainTip, indexerWatermark, seenWindowMs, droppedGraceMs, nowMs = Date.now(),
+} = {}) {
     const txHash = typeof entry?.txHash === 'string' ? entry.txHash : '';
     // A record the wallet proved into a block itself stays blockless in
     // shape (so the pending detail branch renders it) and carries the proof
@@ -241,44 +304,5 @@ export function TxStatusTimeline({
         ? stages.findIndex((stage) => stage.key === 'mempool')
         : stages.findIndex((stage) => !stage.done);
 
-    return (
-        <>
-            <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-                {confirmed ? t('txTimeline.transactionConfirmed') : ''}
-            </span>
-            <ol className={styles.timeline} aria-label={t('txTimeline.transactionStatus')}>
-                {stages.map((s, i) => {
-                    const current = i === currentStageIndex;
-                    const stateLabel = s.done
-                        ? 'Complete'
-                        : current
-                            ? (pendingState === 'failed' ? 'Current stage: Failed' : 'Current stage')
-                            : 'Not started';
-                    return (
-                        <li
-                            key={s.key}
-                            className={`${styles.row} ${s.done ? styles.rowDone : styles.rowPending}`
-                                + (s.warn ? ` ${styles.rowWarn}` : '')
-                                + (s.error ? ` ${styles.rowError}` : '')}
-                            aria-current={current ? 'step' : undefined}
-                        >
-                            <span className={styles.dot} aria-hidden="true">
-                                {s.error ? '✕' : (s.warn ? '!' : (s.done ? '●' : '○'))}
-                            </span>
-                            {i < stages.length - 1 ? (
-                                <span className={`${styles.spine} ${s.done ? styles.spineDone : ''}`} aria-hidden="true" />
-                            ) : null}
-                            <div className={styles.body}>
-                                <div className={styles.heading}>
-                                    <div className={styles.label}>{s.label}</div>
-                                    <span className={styles.state}>{stateLabel}</span>
-                                </div>
-                                <div className={styles.sub}>{s.sub}</div>
-                            </div>
-                        </li>
-                    );
-                })}
-            </ol>
-        </>
-    );
+    return { stages, currentStageIndex, pendingState, confirmed, failed };
 }

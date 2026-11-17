@@ -50,8 +50,26 @@ assert.ok(ROUTE_NAV_GROUPS.messaging.includes('compose-message'),
 assert.ok(ROUTE_NAV_GROUPS['contracts-list'].includes('staking-dashboard'),
     'staking remains under the Contracts section');
 
-assert.ok(/\.sidebar\s*\{[\s\S]*?flex:\s*0 0 220px/.test(cssSrc),
-    'the full sidebar reserves 220px');
+// G100: the full side menu is as wide as its widest row (max-content), plus
+// a dragged extra of at most 300px; no fixed 220px.
+assert.ok(/\n\.sidebar\s*\{[^}]*flex:\s*0 0 auto/.test(cssSrc),
+    'the side menu takes its own width, not a fixed basis');
+assert.ok(!/flex:\s*0 0 220px|width:\s*220px/.test(cssSrc),
+    'no fixed 220px side menu width remains');
+assert.ok(/\.layout\[data-xc-side-menu='full'\]\s*>\s*\.sidebar\s*\{[^}]*width:\s*max-content/.test(cssSrc),
+    'the full side menu defaults to the width its widest row needs');
+assert.ok(/\.layout\[data-xc-side-menu='full'\]\s+\.nav\s+\.item\s*\{[^}]*var\(--xc-side-menu-extra\)/.test(cssSrc),
+    'a dragged extra widens the full side menu');
+assert.ok(/\.layout\[data-xc-rail='shown'\]\[data-xc-side-menu='collapsed'\]\s*>\s*\.sidebar\s*\{[^}]*width:\s*0;[^}]*border:\s*0;/.test(cssSrc),
+    'the collapsed side menu has zero width and no border');
+assert.ok(/\.layout\[data-xc-side-menu='icons'\]\s+\.sidebar,\s*\n\.layout\[data-xc-tier='rail'\]\s+\.sidebar\s*\{/.test(cssSrc),
+    'the Icons state draws the same 64px rail as the rail tier');
+// The collapsed state ties the rail tier's 64px width on specificity, so it
+// must come later in the sheet or the rail tier shows a blank 64px column.
+const railWidthAt = cssSrc.indexOf("[data-xc-tier='rail'] > .sidebar {\n    width: 64px;");
+const collapsedWidthAt = cssSrc.indexOf("[data-xc-side-menu='collapsed'] > .sidebar {\n    width: 0;");
+assert.ok(railWidthAt > 0 && collapsedWidthAt > railWidthAt,
+    'the collapsed side menu rule follows the 64px rail width rule');
 assert.ok(/\.layout\[data-xc-tier='compact'\]\s+\.sidebar\s*\{[\s\S]*?display:\s*none/.test(cssSrc),
     'the sidebar hides in compact mode');
 assert.ok(/\.layout\[data-xc-tier='rail'\]\s+\.sidebar\s*\{[\s\S]*?flex:\s*0 0 64px/.test(cssSrc),

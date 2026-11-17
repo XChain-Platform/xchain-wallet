@@ -131,8 +131,10 @@ describe('BridgeMoveForm lays out every page state through FormPage', () => {
             ['From address', 'Your address on the source network that holds the tokens to move.'],
             ['Receive at', 'The address on the destination network that receives the tokens. It starts as one of your own addresses; you can type or paste any valid address on that network.'],
             ['Amount (XCHAIN)', "How much of the token to move. It must fit the token's decimal places."],
-            ['Memo', 'A public note saved on the blockchain with this action. It cannot contain | or ;.'],
         ];
+        // A memo alone in its Memo section has no label row and no tip (ruling).
+        expect(screen.queryByRole('button', { name: 'About Memo' })).toBeNull();
+        expect(screen.getByRole('textbox', { name: 'Memo' })).toBeInTheDocument();
         for (const [label, copy] of help) {
             const trigger = screen.getByRole('button', { name: `About ${label}` });
             fireEvent.click(trigger);
@@ -151,7 +153,7 @@ describe('BridgeMoveForm lays out every page state through FormPage', () => {
 
         expect(byText(container, 'button[type="submit"]', 'Move')).not.toBeNull();
         expect(container.textContent).toContain(
-            'Watcher mode: this prepares the transaction for your offline signer.',
+            'Another phone signs for this wallet: this prepares the transaction for it.',
         );
     });
 

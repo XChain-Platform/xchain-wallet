@@ -125,17 +125,17 @@ export function AmountFieldSection() {
             id="amount-field"
             title="Amount field"
             tag="CANONICAL amount entry"
-            kicker="The standard amount-entry block: an input sized like every other field (md, 36px), with an inline Max button, a coin/fiat swap toggle showing the converted figure underneath, and an 'X available' balance line on the right. Used anywhere the user types a quantity of coin or tokens. size='lg' exists only for hero screens (Send/Receive)."
+            kicker="The standard amount-entry block: an input sized like every other field (md, 36px), with an in-field Max icon, a coin/fiat swap toggle showing the converted figure underneath, and an 'X available' balance line on the right. Used anywhere the user types a quantity of coin or tokens. size='lg' exists only for hero screens (Send/Receive)."
         >
             <Guidance
-                what={<>A composed block around the shared <code>Input</code> primitive: an amount input at the given <code>size</code> (see Field sizes), an optional inline <b>Max</b> button on the right edge, and a footer row with the coin/fiat swap toggle + derived conversion (left) and caller-supplied balance text (right). The canonical <code>amount</code> is always coin-scale; in fiat mode the parent derives it via the price rate. Fiat affordances render only when a <code>fiatRate</code> is passed (native coins with an oracle price); token fields pass <code>null</code> and get a plain amount input.</>}
+                what={<>A composed block around the shared <code>Input</code> primitive: an amount input at the given <code>size</code> (see Field sizes), an in-field <b>Max</b> icon at the trailing edge (the shared <code>FieldIconButton</code> in the Input's <code>fieldAction</code> slot: no box, no text, named "Use max available amount"), and a footer row with the coin/fiat swap toggle + derived conversion (left) and caller-supplied balance text (right). The canonical <code>amount</code> is always coin-scale; in fiat mode the parent derives it via the price rate. Fiat affordances render only when a <code>fiatRate</code> is passed (native coins with an oracle price); token fields pass <code>null</code> and get a plain amount input.</>}
                 when={<>Any field where the user enters an amount of coin or tokens they hold or expect: Send, Receive request amounts, dispenser escrow (Create dispenser), dispenser refill, and future amount-bearing forms. Always use this instead of a bare <code>Input</code> so Max, balance context, and fiat conversion behave identically everywhere.</>}
                 whenNot={<>Rates and prices (fee rate, trigger price, fiat price) → default <code>Input</code>: they aren't balances, so Max and "available" are meaningless. Counts (number of fills) → default <code>Input</code>.</>}
                 variants={<>
-                    <code>size="md" | "lg"</code> (default md; Send/Receive pass lg). <code>label</code> (default "Amount"; the active unit is appended, e.g. "Escrow amount (PEPECREATURE)"). Omit <code>onMax</code> to hide the Max button. Omit <code>balanceText</code> when the balance is meaningless (Receive). <code>fiatRate={'{null}'}</code> hides the fiat toggle + conversion line. <code>maxDisabled</code> greys Max while the balance loads.
+                    <code>size="md" | "lg"</code> (default md; Send/Receive pass lg). <code>label</code> (default "Amount"; the active unit is appended, e.g. "Escrow amount (PEPECREATURE)"). Omit <code>onMax</code> to show the Max icon disabled. Omit <code>balanceText</code> when the balance is meaningless (Receive). <code>fiatRate={'{null}'}</code> hides the fiat toggle + conversion line. <code>maxDisabled</code> greys Max while the balance loads.
                 </>}
                 doRule={<>✓ Keep <code>amount</code> coin-scale and canonical · strip commas + validate partial decimals in the change handler (copy the Send handler) · pass balance text as "X.XX TICK available" · wire <code>onMax</code> to the real spendable balance</>}
-                dontRule={<>✗ Build a bespoke amount input with its own Max button · show fiat for tokens with no oracle price · put units inside the typed value (the label + footer carry the units)</>}
+                dontRule={<>✗ Build a bespoke amount input with its own Max button, or a boxed or text Max inside a field · show fiat for tokens with no oracle price · put units inside the typed value (the label + footer carry the units)</>}
                 supersedes={<>Bare amount <code>Input</code>s in dispenser create/refill (replaced). Previously hard-locked to the big size; it now forwards the shared <code>size</code> prop and defaults to md. The component lives at <code>packages/core/src/shared/components/AmountField.jsx</code>.</>}
             />
 
@@ -151,13 +151,13 @@ export function AmountFieldSection() {
     amountInputMode={mode}      // 'coin' | 'fiat'
     onAmountFieldChange={onAmountFieldChange}
     toggleAmountInputMode={toggleMode}
-    onMax={() => setAmount(spendable)}   // omit to hide Max
+    onMax={() => setAmount(spendable)}   // omit to show Max disabled
     maxDisabled={!spendable}
     balanceText={\`\${spendable} BTC available\`}
 />`}
             </Markup>
 
-            <LiveExample label="Standard (md): the default size, matching the To / From / Token fields. Max button, USD equivalent + swap toggle underneath, balance on the right. Select the ⇄ toggle to flip to USD entry; select Max to fill the balance.">
+            <LiveExample label="Standard (md): the default size, matching the To / From / Token fields. Max icon in the field, USD equivalent + swap toggle underneath, balance on the right. Select the ⇄ toggle to flip to USD entry; select Max to fill the balance.">
                 <AmountField
                     amount={amount}
                     fiatAmount={fiatAmount}

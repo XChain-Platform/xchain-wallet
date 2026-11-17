@@ -38,7 +38,9 @@ import { useEffect, useState } from 'react';
 // Under the Wallet Form Standard this is a field group placed inside
 // its host's own section (Add Account's Account section, the developer-mode
 // network row), so it draws no page or section frame of its own.
-import { Icon, RadioGroup, StatusMessage } from '@xchain-wallet/core/ui';
+import { Icon, IconSelect, StatusMessage } from '@xchain-wallet/core/ui';
+import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
+import { hardwareModelName, hardwareVendorName } from '../components/hardware/index.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/signerSelect.js';
 import { useMessaging } from '../useMessaging.js';
@@ -46,6 +48,15 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 
 const NOOP = () => {};
+
+// The product name a paired signer is shown by when it has no label
+// ("Trezor Model T"), never the raw stored codes ("trezor T2T1").
+function signerDeviceName(s) {
+    const code = String(s.vendor || s.kind || '').toLowerCase();
+    const model = hardwareModelName(code, s.model);
+    const vendor = hardwareVendorName(code);
+    return model.toLowerCase().startsWith(vendor.toLowerCase()) ? model : `${vendor} ${model}`;
+}
 
 // A signer list read that never reached the wallet service: a failed fetch, a
 // timeout, or a background whose message port closed or does not answer. Such
@@ -143,35 +154,38 @@ export function SignerSelectForm({ walletId, value, onChange, disabled = false }
         },
         ...signers.map((s) => ({
             id: s.id,
-            label: s.label || `${s.vendor} ${s.model}`,
-            sub: `Hardware device: connect ${s.vendor} ${s.model} and approve there; the wallet password is not sent to it${s.firmwareVersion ? ` (firmware ${s.firmwareVersion})` : ''}.`,
+            label: s.label || signerDeviceName(s),
+            sub: `Hardware wallet: connect ${signerDeviceName(s)} and approve there; the wallet password is not sent to it${s.firmwareVersion ? ` (firmware ${s.firmwareVersion})` : ''}.`,
             kind: s.kind,
         })),
     ];
 
     // No FormPage or titled section around the choice; the intro is the
-    // group's help tip, and every option carries an icon (RadioGroup's icon),
-    // as every standard toggle does.
+    // field's help tip. A choice among a few named options is the standard
+    // themed icon dropdown, an icon per option and its line under the name
+    // (G44, G96), never a radio list. The watch-only note is a warning card
+    // line, never a loose notice.
     return (
         <>
             {isWatcherMode ? (
-                <StatusMessage variant="warning" role="note">
-                    {t('signerSelect.watcherNote')}
-                </StatusMessage>
+                <WarningCard role="note">
+                    <WarningLine>{t('signerSelect.watcherNote')}</WarningLine>
+                </WarningCard>
             ) : null}
-            <RadioGroup
-                legend={t('signerSelect.title')}
-                aria-label={t('signerSelect.choose')}
+            <IconSelect
+                label={t('signerSelect.title')}
                 help={t('signerSelect.intro')}
-                name={`signer-${walletId}`}
                 value={value ?? 'software'}
                 onChange={(nextValue) => emitChange(nextValue === 'software' ? null : nextValue)}
-                options={options.map((opt) => ({
-                    value: opt.id ?? 'software',
-                    label: opt.label,
-                    icon: opt.kind === 'software' ? Icon.KeyIcon : Icon.UsbIcon,
-                    description: opt.sub,
-                }))}
+                options={options.map((opt) => {
+                    const OptionIcon = opt.kind === 'software' ? Icon.KeyIcon : Icon.UsbIcon;
+                    return {
+                        value: opt.id ?? 'software',
+                        label: opt.label,
+                        icon: <OptionIcon />,
+                        sub: opt.sub,
+                    };
+                })}
                 disabled={disabled}
             />
         </>

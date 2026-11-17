@@ -94,9 +94,9 @@ function mountWizard() {
     );
 }
 
-// The Network fee section, opened (it starts closed).
+// The Fees section, opened (it starts closed).
 function openFeeSection() {
-    const header = screen.getByRole('button', { name: /^Network fee/ });
+    const header = screen.getByRole('button', { name: /^Speed and Fees/ });
     if (header.getAttribute('aria-expanded') !== 'true') fireEvent.click(header);
     return header.closest('[data-form-section]');
 }
@@ -149,8 +149,13 @@ describe('Issue Token native-coin fee toggle', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         await screen.findByTestId('confirm-modal');
         await waitFor(() => {
-            expect(screen.getByTestId('confirm-fee')).toHaveTextContent(/0\.00001 BTC.*~€0\.50/);
-            expect(screen.getByTestId('confirm-protocol-fee')).toHaveTextContent(/0\.5 XCHAIN.*~€0\.20/);
+            expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent('0.00001 BTC');
+            expect(screen.getByTestId('confirm-fee-protocol')).toHaveTextContent('0.5 XCHAIN');
+            // No Total block (G127 revised 2026-11-16): each fee row carries
+            // its own value in the chosen fiat currency.
+            expect(screen.queryByTestId('confirm-total-fiat')).toBeNull();
+            const rows = [screen.getByTestId('confirm-fee-network'), screen.getByTestId('confirm-fee-protocol')];
+            expect(rows.some((row) => /€/.test(row.textContent))).toBe(true);
         });
     });
 

@@ -107,7 +107,17 @@ const GROUPED_ROUTES = {
         ['swap', 'SwapForm'],
         ['create-order', 'CreateOrderForm'],
         ['my-orders', 'MyOrdersView'],
+        // One order, opened from its My Orders row.
+        ['order-detail', 'OrderDetail', { chainId: 'bitcoin-mainnet', actionIndex: '1' }],
+        // Order detail's Edit and Cancel: one standard form route each.
+        ['edit-order', 'EditOrderForm', { chainId: 'bitcoin-mainnet', actionIndex: '1' }],
+        ['cancel-order', 'CancelOrderForm', { chainId: 'bitcoin-mainnet', actionIndex: '1' }],
         ['my-swaps', 'MySwapsView'],
+        // One swap, opened from its My Swaps row.
+        ['swap-detail', 'SwapDetail', { chainId: 'bitcoin-mainnet', actionIndex: '1' }],
+        // Swap Details' Edit and Cancel: one standard form route each.
+        ['edit-swap', 'EditSwapForm', { chainId: 'bitcoin-mainnet', actionIndex: '1' }],
+        ['cancel-swap', 'CancelSwapForm', { chainId: 'bitcoin-mainnet', actionIndex: '1' }],
         ['cross-chain-swap', 'CrossChainSwapForm'],
         ['cross-chain-order', 'CrossChainOrderForm'],
         ['bet-markets', 'BetFeedsList'],
@@ -133,16 +143,19 @@ const GROUPED_ROUTES = {
         ['contract-execute', 'ExecuteContractForm'],
         ['contract-deposit', 'ContractFundsForm', { mode: 'deposit' }],
         ['contract-withdraw', 'ContractFundsForm', { mode: 'withdraw' }],
-        ['contract-stake', 'ContractStakeForm'],
+        // Every staking write route renders the one Staking form on its target and action.
+        ['contract-stake', 'StakingForm', {
+            target: { kind: 'contract', chainId: 'bitcoin-mainnet', contractActionIndex: '1' },
+            action: 'stake',
+        }],
         ['staking-dashboard', 'StakingList'],
         ['stake-detail', 'StakeDetail', { kind: 'validator' }],
         ['stake-new', 'StakeNew'],
-        ['stake-form', 'StakeForm'],
-        ['staking-unstake', 'StakingActionForm', { mode: 'unstake' }],
-        ['staking-claim', 'StakingActionForm', { mode: 'claim-rewards' }],
-        ['staking-delegate', 'DelegationActionForm', { mode: 'delegate' }],
-        ['staking-revoke', 'DelegationActionForm', { mode: 'revoke' }],
-        ['operator-dashboard', 'OperatorDashboard'],
+        ['stake-form', 'StakingForm', { target: { kind: 'network', chainId: 'bitcoin-mainnet' }, action: 'stake' }],
+        ['staking-unstake', 'StakingForm', { target: { kind: 'network', chainId: 'bitcoin-mainnet' }, action: 'unstake' }],
+        ['staking-claim', 'StakingForm', { target: { kind: 'network', chainId: 'bitcoin-mainnet' }, action: 'claim-rewards' }],
+        ['staking-delegate', 'StakingForm', { target: { kind: 'network', chainId: 'bitcoin-mainnet' }, action: 'delegate' }],
+        ['staking-revoke', 'StakingForm', { target: { kind: 'network', chainId: 'bitcoin-mainnet' }, action: 'revoke' }],
     ],
     messaging: [
         ['messaging', 'MessagingInbox'],
@@ -154,21 +167,26 @@ const GROUPED_ROUTES = {
     lists: [
         ['lists', 'MyLists'],
         ['list-detail', 'ListDetail'],
+        ['list-look', 'ListLookForm', { chainId: 'bitcoin-mainnet', actionIndex: '1' }],
         ['list-create', 'ListCreateForm'],
-        ['list-fork', 'ListForkForm', {
+        // Every list action route renders the one List form with its action
+        // picked; list-rename opens Edit, which holds the name and description.
+        ['list-fork', 'ListCreateForm', {
+            action: 'fork',
             listRef: { chainId: 'bitcoin-mainnet', actionIndex: '1', type: '1', items: [] },
         }],
-        ['list-share', 'ListShareForm', {
+        ['list-share', 'ListCreateForm', {
+            action: 'share',
             listRef: { chainId: 'bitcoin-mainnet', actionIndex: '1' },
         }],
-        ['list-transfer', 'ListTransferForm', {
+        ['list-transfer', 'ListCreateForm', {
+            action: 'transfer',
             listRef: { chainId: 'bitcoin-mainnet', actionIndex: '1' },
         }],
-        ['list-rename', 'ListRenameForm', {
+        ['list-rename', 'ListCreateForm', {
+            action: 'edit',
             listRef: { chainId: 'bitcoin-mainnet', actionIndex: '1' },
         }],
-        ['list-union', 'UnionListForm'],
-        ['shared-lists', 'SharedListDirectory'],
         ['access-lists', 'TokenAdminForm', { mode: 'access-lists' }],
     ],
     obligations: [
@@ -178,17 +196,29 @@ const GROUPED_ROUTES = {
     settings: [
         ['settings', 'Settings'],
         ['connected-sites', 'ConnectedSites'],
+        // Settings, Advanced: the two-phone pairing, moved off Welcome.
+        ['pair-partner', 'PairPartnerWallet'],
     ],
 };
 
 const TITLE_OVERRIDES = {
     advanced: 'Advanced action',
+    // Connect Hardware Wallet (Welcome, Add Wallet and the actions list).
+    'pair-signer': 'Hardware wallet',
+    'pair-partner': 'Use another phone as a signer',
     // The Trade page's registry title.
     'market-trade': 'Trade',
     'sign-psbt': 'Sign transaction',
     'verify-signature': 'Verify signature',
     'governance-delegations': 'My delegations',
     'governance-clear-delegation': 'Clear vote delegation',
+    // Both open the one asset page (operator ruling 2026-11-15), whose header
+    // and window title name the asset; with no asset in hand it is "Token".
+    'token-detail': 'Token',
+    'manage-token': 'Token',
+    // The Issue Token form's own page heading (issue.title), so the registry
+    // title never reads "Wizard".
+    wizard: 'Issue Token',
 };
 
 function titleFor(id) {
@@ -205,6 +235,21 @@ export const ROUTE_NAV_GROUPS = Object.freeze(Object.fromEntries(
 ));
 
 const ROUTE_NAV_SECTION_OVERRIDES = {
+    'my-tokens': 'my-tokens',
+    'manage-token': 'my-tokens',
+    'governance-polls': 'governance-polls',
+    'governance-create-poll': 'governance-polls',
+    'governance-poll-detail': 'governance-polls',
+    'governance-delegate': 'governance-polls',
+    'governance-delegations': 'governance-polls',
+    'governance-clear-delegation': 'governance-polls',
+    'bet-markets': 'bet-markets',
+    'bet-market-detail': 'bet-markets',
+    'bet-oracle-record': 'bet-markets',
+    'bet-create': 'bet-markets',
+    'cosigner-accounts': 'cosigner-accounts',
+    'cosigner-provision': 'cosigner-accounts',
+    'cosigner-detail': 'cosigner-accounts',
     addresses: 'addresses',
     'view-private-key': 'addresses',
     'address-preferences': 'addresses',
@@ -219,6 +264,18 @@ const ROUTE_NAV_SECTION_OVERRIDES = {
     'wallet-rename': 'wallets',
     'add-wallet': 'wallets',
     'migrate-bip39': 'wallets',
+    // Connecting a hardware wallet adds a wallet.
+    'pair-signer': 'wallets',
+    // Network staking has its own sidebar row. Contract staking keeps the
+    // Contracts section because its subject is a contract.
+    'staking-dashboard': 'staking-dashboard',
+    'stake-detail': 'staking-dashboard',
+    'stake-new': 'staking-dashboard',
+    'stake-form': 'staking-dashboard',
+    'staking-unstake': 'staking-dashboard',
+    'staking-claim': 'staking-dashboard',
+    'staking-delegate': 'staking-dashboard',
+    'staking-revoke': 'staking-dashboard',
 };
 
 export const ROUTE_NAV_SECTIONS = Object.freeze(Object.fromEntries(
@@ -249,24 +306,41 @@ export const ROUTE_REGISTRY = Object.freeze(Object.fromEntries(
 // not listed, including every drilldown a new screen adds, keeps Back.
 // Rows a wallet cannot use (Send in signer mode, Contracts without a VM
 // address) stay listed: those routes are unreachable while the row is gone.
-export const SIDEBAR_PRIMARY_DESTINATIONS = [
-    'home',
-    'history',
-    'send',
-    'receive',
-    'scan',
-    'markets',
-    'market-activity',
-    'dispensers-list',
-    'contracts-list',
-    'messaging',
-];
+export const SIDEBAR_NAV_GROUPS = Object.freeze([
+    Object.freeze({
+        id: 'wallet',
+        labelKey: 'components.leftNav.groupWallet',
+        // Scan stays a main-menu route only; it is off the side menu (operator 2026-11-16).
+        destinations: Object.freeze(['home', 'history', 'send', 'receive', 'my-tokens']),
+    }),
+    Object.freeze({
+        id: 'trade',
+        labelKey: 'components.leftNav.groupTrade',
+        destinations: Object.freeze(['markets', 'market-activity', 'dispensers-list', 'bet-markets']),
+    }),
+    Object.freeze({
+        id: 'network',
+        labelKey: 'components.leftNav.groupNetwork',
+        destinations: Object.freeze(['governance-polls', 'staking-dashboard']),
+    }),
+    Object.freeze({
+        id: 'build',
+        labelKey: 'components.leftNav.groupBuild',
+        destinations: Object.freeze(['contracts-list', 'cosigner-accounts']),
+    }),
+    Object.freeze({
+        id: 'social',
+        labelKey: 'components.leftNav.groupSocial',
+        destinations: Object.freeze(['messaging', 'contacts']),
+    }),
+]);
 
-export const SIDEBAR_SECONDARY_DESTINATIONS = [
-    'contacts',
-    'lists',
-    'obligations',
-];
+export const SIDEBAR_PRIMARY_DESTINATIONS = Object.freeze(
+    SIDEBAR_NAV_GROUPS.flatMap((group) => group.destinations),
+);
+
+// Kept as an empty compatibility export for callers that consume both lists.
+export const SIDEBAR_SECONDARY_DESTINATIONS = Object.freeze([]);
 
 export const SIDEBAR_FOOTER_DESTINATIONS = ['settings'];
 

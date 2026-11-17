@@ -93,11 +93,12 @@ function mount(dispenser, {
 }
 
 const buyButton = () => screen.findByRole('button', { name: /^Buy \d+ Dispenses?$/ });
-// The buy panel shows only on the Buy tab (Details is the default), and its
+// The buy panel is the Buy page a buyer's first action row opens, and its
 // count field is the stepper's "How Many Dispenses".
 const fillsInput = async () => {
-    const buyTab = await screen.findByRole('tab', { name: /^Buy$/ });
-    if (buyTab.getAttribute('aria-selected') !== 'true') fireEvent.click(buyTab);
+    const buyRow = screen.queryByTestId('dispenser-buy-row')
+        || (screen.queryByLabelText(/^How Many Dispenses/i) ? null : await screen.findByTestId('dispenser-buy-row'));
+    if (buyRow) fireEvent.click(buyRow);
     return screen.findByLabelText(/^How Many Dispenses/i);
 };
 
@@ -126,7 +127,7 @@ describe('coin-paid dispenser priced below the dust floor', () => {
             'Buying fewer than 51 fills builds a payment under 0.001 DOGE, which every '
             + 'node refuses. Enter at least 51 fills to buy from this dispenser.',
         );
-        expect(await buyButton()).toBeDisabled();
+        expect(await buyButton()).toBeEnabled();
 
         fireEvent.change(await fillsInput(), { target: { value: '51' } });
         await waitFor(() => expect(screen.queryByTestId('buy-dust-block')).toBeNull());
@@ -143,9 +144,9 @@ describe('coin-paid dispenser priced below the dust floor', () => {
         );
         // No fill count fixes it: the floor is unreachable however Fills is set.
         expect(screen.queryByTestId('min-fills-notice')).toBeNull();
-        expect(await buyButton()).toBeDisabled();
+        expect(await buyButton()).toBeEnabled();
         fireEvent.change(await fillsInput(), { target: { value: '20' } });
-        expect(await buyButton()).toBeDisabled();
+        expect(await buyButton()).toBeEnabled();
     });
 
     it('stays silent when the per-fill price already clears the floor', async () => {
@@ -163,7 +164,7 @@ describe('coin-paid dispenser priced below the dust floor', () => {
         fireEvent.change(await fillsInput(), { target: { value: '10' } });
         await screen.findByTestId('buy-dust-block');
         const build = await screen.findByRole('button', { name: 'Create Unsigned Transaction' });
-        expect(build).toBeDisabled();
+        expect(build).toBeEnabled();
         fireEvent.click(build);
         expect(messaging.buildSendPsbtRequest).not.toHaveBeenCalled();
 

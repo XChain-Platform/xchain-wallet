@@ -143,7 +143,7 @@ describe('ControllerBindForm source selection', () => {
         const messaging = mount({ [LITECOIN]: [watchAddress] });
 
         const guard = await screen.findByLabelText('Guard contract');
-        expect(screen.getByText('This watch-only account cannot sign.')).toBeTruthy();
+        expect(screen.getByText('This address has no key in this wallet, so it cannot sign.')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Bind Address' })).toBeDisabled();
         expect(screen.queryByText(NO_SOURCE)).toBeNull();
         fireEvent.submit(guard.closest('form'));
@@ -206,8 +206,8 @@ describe('ControllerBindForm page template', () => {
         const bind = screen.getByRole('button', { name: 'Bind Address' });
         await waitFor(() => expect(bind).toBeEnabled());
         fireEvent.click(bind);
-        expect(screen.getByText(/Watcher mode: this prepares the transaction for your offline signer/)).toBeInTheDocument();
-        const sign = await screen.findByRole('button', { name: 'Bind controller' });
+        expect(screen.getByText(/Another phone signs for this wallet: this prepares the transaction for it/)).toBeInTheDocument();
+        const sign = await screen.findByRole('button', { name: 'Approve' });
         fireEvent.click(sign);
         const txidCell = await screen.findByText(txid);
         expect(messaging.buildControllerBindParams).toHaveBeenCalled();

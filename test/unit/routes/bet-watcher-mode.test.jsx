@@ -12,6 +12,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
+import { selectOption } from '../../helpers/selectOption.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
@@ -119,13 +120,16 @@ describe('BetFeedDetail in watcher mode', () => {
         const messaging = harness({ walletMode: 'watcher' });
         const utils = await renderRoute(messaging, detailRoute);
         await openBetTab(utils);
-        const text = utils.container.textContent;
-
-        expect(text).toContain('Place a bet');
-        expect(text).toContain('Create Unsigned Transaction');
+        fireEvent.click(utils.getByRole('list', { name: 'Outcome to back' }).querySelector('button'));
+        // Bet opens the Place Bet step, whose action builds the unsigned stake.
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Bet' }));
+            await drain();
+        });
+        expect(utils.getByRole('form', { name: 'Place Bet' })).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Create Unsigned Transaction' })).toBeTruthy();
         expect(utils.queryByLabelText('Password')).toBeNull();
 
-        fireEvent.click(utils.getByRole('group', { name: 'Outcome to back' }).querySelector('button'));
         fireEvent.change(utils.getByLabelText('Stake (XCHAIN)'), { target: { value: '1' } });
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Create Unsigned Transaction' }));
@@ -142,10 +146,18 @@ describe('BetFeedDetail in watcher mode', () => {
     it('still offers the signing form in full mode', async () => {
         const utils = await renderRoute(harness({ walletMode: 'full' }), detailRoute);
         await openBetTab(utils);
-        const text = utils.container.textContent;
+        fireEvent.click(utils.getByRole('list', { name: 'Outcome to back' }).querySelector('button'));
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Bet' }));
+            await drain();
+        });
 
-        expect(text).toContain('Place a bet');
-        expect(utils.getByLabelText('Password')).toBeTruthy();
+        // The Place Bet step signs; the shared confirm screen asks for the
+        // password, so the form itself carries none.
+        expect(utils.getByRole('form', { name: 'Place Bet' })).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Place Bet' })).toBeTruthy();
+        expect(utils.queryByRole('button', { name: 'Create Unsigned Transaction' })).toBeNull();
+        expect(utils.queryByLabelText('Password')).toBeNull();
     });
 
     it('does not offer a password on a closed market', async () => {
@@ -158,15 +170,15 @@ describe('BetFeedDetail in watcher mode', () => {
 });
 
 describe('OracleConsole in watcher mode', () => {
+    // One market: its card, then its action list (G101) and any open form.
     function cardFor(utils, index) {
-        return Array.from(utils.container.querySelectorAll('div'))
-            .filter((d) => /card/i.test(String(d.className)) && /^Market number: #\d+/.test(d.textContent || ''))
-            .find((d) => new RegExp(`#${index}`).test(d.textContent));
+        return Array.from(utils.container.querySelectorAll('[data-oracle-market]'))
+            .find((d) => d.getAttribute('data-oracle-market').endsWith(`:${index}`));
     }
 
     it.each([
         ['Resolve', 'resolveMarketParams', true],
-        ['Cancel and Refund', 'cancelMarketParams', false],
+        ['Cancel and refund', 'cancelMarketParams', false],
     ])('builds an unsigned %s action without a password field', async (action, builder, needsOutcome) => {
         const messaging = harness({ walletMode: 'watcher', feeds: [feed('closed')] });
         const utils = await renderRoute(
@@ -176,11 +188,11 @@ describe('OracleConsole in watcher mode', () => {
         const card = cardFor(utils, '1193');
 
         expect(card.textContent).toContain('Resolve');
-        expect(card.textContent).toContain('Cancel and Refund');
+        expect(card.textContent).toContain('Cancel and refund');
         const labels = Array.from(card.querySelectorAll('button')).map((b) => b.textContent.trim());
-        expect(labels).toContain('Resolve');
+        expect(labels.some((label) => label.startsWith('Resolve'))).toBe(true);
 
-        fireEvent.click(Array.from(card.querySelectorAll('button')).find((b) => b.textContent.trim() === action));
+        fireEvent.click(Array.from(card.querySelectorAll('button')).find((b) => b.textContent.trim().startsWith(action)));
         if (needsOutcome) fireEvent.click(utils.getByRole('button', { name: 'Yes' }));
         expect(utils.queryByLabelText('Password')).toBeNull();
         await domAct(async () => {
@@ -206,7 +218,7 @@ describe('OracleConsole in watcher mode', () => {
         const card = cardFor(utils, '1193');
 
         expect(card.textContent).toContain('Resolve');
-        expect(card.textContent).toContain('Cancel and Refund');
+        expect(card.textContent).toContain('Cancel and refund');
         expect(card.textContent).not.toContain('Create Unsigned Transaction');
     });
 
@@ -231,8 +243,17 @@ describe('betting outcome pickers announce the selected outcome', () => {
     it('marks the backed outcome pressed on the place-bet picker', async () => {
         const utils = await renderRoute(harness({ walletMode: 'full' }), detailRoute);
         await openBetTab(utils);
-        const picker = utils.container.querySelector('[aria-label="Outcome to back"]');
-        await assertGroup(picker, ['Yes', 'No']);
+        // The Bet tab's outcome rows are actions, not a selection: tapping
+        // No opens Place Bet, whose outcome dropdown shows No.
+        const outcomeButtons = Array.from(utils.container.querySelectorAll('[data-outcome-list] button'));
+        expect(outcomeButtons.map((b) => b.getAttribute('aria-label').split(',')[0])).toEqual(['Bet on Yes', 'Bet on No']);
+        for (const b of outcomeButtons) expect(b.hasAttribute('aria-pressed')).toBe(false);
+        await domAct(async () => { outcomeButtons[1].click(); await drain(); });
+        const picker = () => utils.container.querySelector('form button[aria-label^="Outcome: "]');
+        expect(picker()).not.toBeNull();
+        expect(picker().getAttribute('aria-label')).toBe('Outcome: No');
+        await domAct(async () => { selectOption(picker(), { value: '0' }); await drain(); });
+        expect(picker().getAttribute('aria-label')).toBe('Outcome: Yes');
     });
 
     it('marks the winning outcome pressed on the resolve picker', async () => {
@@ -241,7 +262,7 @@ describe('betting outcome pickers announce the selected outcome', () => {
             consoleRoute,
         );
         const resolve = Array.from(utils.container.querySelectorAll('button'))
-            .find((b) => b.textContent.trim() === 'Resolve');
+            .find((b) => b.textContent.trim().startsWith('Resolve'));
         await domAct(async () => { resolve.click(); await drain(); });
         await assertGroup(utils.container.querySelector('[aria-label="Winning outcome"]'), ['Yes', 'No']);
     });

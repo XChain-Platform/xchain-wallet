@@ -54,8 +54,8 @@ describe('popup App handoff routing', () => {
     it('opens the FreeWallet importer from a fresh-install handoff', async () => {
         render(<App />);
 
-        expect(await screen.findByRole('heading', { name: 'Import From FreeWallet' }))
+        expect(await screen.findByRole('heading', { name: 'Import Wallet' }))
             .toBeInTheDocument();
-        expect(screen.getByLabelText('Wallet name')).toHaveValue('FreeWallet');
+        expect(screen.getByLabelText('Wallet name')).toHaveValue('Imported Wallet');
     });
 });

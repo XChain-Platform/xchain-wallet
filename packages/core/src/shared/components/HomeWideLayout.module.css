@@ -1,0 +1,205 @@
+/* Wide Home (G115): the collapsible top section, a divider, then the list
+   and detail split. 8px between every Home block, as in the one column: the
+   divider sits 8px under the top section's cards (the row's own end padding,
+   gone with the section when it collapses) and the panels pad 8px under the
+   divider themselves, so the line between them meets the divider. The split
+   fills the room under the overview and each panel scrolls on its own
+   (G128): Home puts the shared split's `splitBody` on its Screen body and
+   `splitFill` on its page column and HomeTabs' wrapper, and this box is the
+   last of that chain. */
+.wide {
+    composes: splitFill from './PanelSplit.module.css';
+    /* The Screen body's inline padding the divider runs through: the page
+       gutter at the start, and at the end the gutter less the 2px step and
+       any classic scrollbar lane (Screen.module.css .body). */
+    --xc-home-bleed-start: var(--xc-page-gutter);
+    --xc-home-bleed-end: max(0px, calc(var(--xc-page-gutter) - 2px - var(--xc-frame-scrollbar, 0px)));
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    margin-block-start: 0;
+}
+
+/* With no overview, cancel the Screen body's top inset so the handle starts
+   on the app toolbar's existing bottom line. */
+.wide[data-top-collapsed='true'] {
+    margin-block-start: calc(-1 * var(--xc-page-top));
+}
+
+.wide[data-motion='on'] {
+    transition: margin-block-start 120ms ease-out;
+}
+
+/* ───── Top section ───── */
+
+/* The overview and the divider keep their own height; only the split
+   takes or gives room. */
+.top {
+    display: flex;
+    flex-direction: column;
+    flex: none;
+    min-width: 0;
+}
+
+/* Collapsing animates the body's row to nothing; the chart keeps its
+   range because the body stays mounted (inert while collapsed). */
+.topBody {
+    display: grid;
+    grid-template-rows: 1fr;
+}
+
+.top[data-collapsed='true'] .topBody {
+    grid-template-rows: 0fr;
+}
+
+.topClip {
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Only once the first frame has painted, so a reload paints the saved
+   state in place (the side menu's motion rule). */
+.top[data-motion='on'] .topBody {
+    transition: grid-template-rows 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wide[data-motion='on'],
+    .top[data-motion='on'] .topBody {
+        transition: none;
+    }
+}
+
+:global(html[data-xc-reduced-motion='reduce']) .wide[data-motion='on'],
+:global(html[data-xc-reduced-motion='reduce']) .top[data-motion='on'] .topBody {
+    transition: none;
+}
+
+/* The wallet value card and the allocation card side by side, equally tall.
+   The 8px down to the divider is the row's own end padding, inside the clip,
+   so collapsing takes it with the cards and leaves nothing of the section
+   above the line (operator 2026-11-15: no sliver). */
+.topRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1.9fr) minmax(300px, 1fr);
+    align-items: stretch;
+    gap: var(--xc-space-2);
+    padding-block-end: var(--xc-space-2);
+}
+
+.heroCell,
+.allocationCell {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.heroCell > * {
+    flex: 1 1 auto;
+}
+
+/* ───── Divider, then the split ───── */
+
+/* Edge to edge across the content area (operator 2026-11-15): it runs
+   through the Screen body's inline padding (the two bleeds on .wide), so it
+   meets the side menu's edge and the scrollbar lane. Only the line bleeds;
+   Home's measured blocks keep their widths. No top margin: the 8px above it
+   is the top row's padding, which collapses with the section. */
+.sectionDivider {
+    position: relative;
+    flex: none;
+    height: 1px;
+    margin-inline-start: calc(-1 * var(--xc-home-bleed-start));
+    margin-inline-end: calc(-1 * var(--xc-home-bleed-end));
+    background: var(--xc-border);
+}
+
+/* Fully collapsed means no second line or empty divider bar. The zero-height
+   box remains only as the positioned anchor for the reachable handle. */
+.wide[data-top-collapsed='true'] .sectionDivider {
+    height: 0;
+    background: transparent;
+    border: 0;
+}
+
+/* The collapse handle (CollapseHandle, horizontal) hangs under the line as
+   the side menu's tab hangs off the menu's edge (LeftNav .sideMenuHandle,
+   rotated): the drawn tab starts at the line's bottom edge, touching it and
+   never over it, centred along it; the 24px hit area stays centred on the
+   tab, as on the side. By offset, so the Button's press nudge cannot move
+   it, and above the panels under it. */
+.topHandle.topHandle {
+    position: absolute;
+    z-index: var(--xc-z-base);
+    inset-block-start: calc(100% + (var(--xc-collapse-handle-tab) - var(--xc-tap-min)) / 2);
+    inset-inline-start: calc(50% - (var(--xc-collapse-handle-length) / 2));
+}
+
+/* The shared list-and-detail split (PanelSplit.module.css, G128): it fills
+   the room from the divider to the bottom of the content area (the Screen
+   body pays no bottom inset under it), so the line between the panels runs
+   that whole height, and each panel scrolls on its own. The panels pad 8px
+   under the divider instead of a gap above the split, and pad their ends by
+   the page's top inset, so the last row keeps its gutter. */
+.split {
+    composes: twoPanel from './PanelSplit.module.css';
+    min-width: 0;
+}
+
+/* Detail blocks keep their own height while that panel scrolls. */
+.detailPanel > * {
+    flex-shrink: 0;
+}
+
+/* A drag paints no text selection and keeps the resize cursor everywhere. */
+.split[data-dragging],
+.split[data-dragging] * {
+    user-select: none;
+    cursor: col-resize;
+}
+
+.listPanel {
+    composes: listPanel from './PanelSplit.module.css';
+    display: flex;
+    flex-direction: column;
+    /* No gap: the list body carries the 8px under the header line inside its
+       scroll (PanelSplit.module.css, operator 2026-11-16). */
+    gap: 0;
+    flex: 0 0 auto;
+    min-width: 0;
+    padding-block-start: var(--xc-space-2);
+    padding-block-end: 0;
+}
+
+.listHeader {
+    composes: listHeader from './PanelSplit.module.css';
+}
+
+.listBody {
+    composes: listBody from './PanelSplit.module.css';
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.detailPanel {
+    composes: detailPanel from './PanelSplit.module.css';
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-width: 0;
+    padding-block-start: var(--xc-space-2);
+    padding-block-end: var(--xc-page-top);
+}
+
+@media (forced-colors: active) {
+    .sectionDivider {
+        background: CanvasText;
+    }
+}
+
+/* Composes from PanelSplit.module.css: a change there needs this file rebuilt too. */
+/* Rebuilt with PanelSplit.module.css 2026-11-16 (scrollbar lane). */
+/* Rebuilt with PanelSplit.module.css 2026-11-16 (header separator). */
+/* Rebuilt with PanelSplit.module.css 2026-11-16 (list to the bottom edge). */

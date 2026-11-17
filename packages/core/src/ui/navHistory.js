@@ -15,30 +15,74 @@
 // a pop reopens the same item even after a later page reused the shell's slot.
 // Opening another item on the page already showing (token A, then token B)
 // is a step of its own, so Back returns to the first item.
+//
+// A page opened from a navigation surface (the sidebar, the bottom bar, the
+// menu, the command palette) is a root: the history starts over on it and its
+// entry is marked root. A page opened from a click on another page is a push.
+// The Back chevron shows only while the page on screen is not a root, so a
+// page reached from another page always offers the way back to it, and the
+// same page opened from the menu has nothing to go back to. The system Back
+// gesture still pops a root page to Home.
 
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, createElement, useCallback, useLayoutEffect, useRef, useState } from 'react';
 
 /** The page every history starts from and falls back to when nothing is left to pop. */
 export const NAV_HOME = 'home';
 /** Most entries kept; the oldest above Home drop first. */
 export const NAV_HISTORY_LIMIT = 64;
 
-/** @typedef {{ view: string, ctx: object | null }} NavEntry */
+/** @typedef {{ view: string, ctx: object | null, root?: true }} NavEntry */
 
-/** @param {string} view @param {object | null} [ctx] @returns {NavEntry} */
-const entry = (view, ctx = null) => ({ view, ctx });
+/**
+ * @param {string} view @param {object | null} [ctx] @param {boolean} [root]
+ * @returns {NavEntry}
+ */
+const entry = (view, ctx = null, root = false) => (root ? { view, ctx, root: true } : { view, ctx });
 
 const top = (stack) => stack[stack.length - 1];
 
 /**
- * A fresh history showing `view`. Home is always the bottom entry, so Back
- * from any root page lands on Home.
+ * A fresh history showing `view` as a root page. Home is always the bottom
+ * entry, so the system Back from any root page lands on Home.
  *
  * @param {string} [view]
  * @returns {NavEntry[]}
  */
 export function createNavStack(view = NAV_HOME) {
-    return view === NAV_HOME ? [entry(NAV_HOME)] : [entry(NAV_HOME), entry(view)];
+    return view === NAV_HOME ? [entry(NAV_HOME, null, true)] : [entry(NAV_HOME, null, true), entry(view, null, true)];
+}
+
+/**
+ * True when the page on screen was opened from another page, so the header
+ * offers Back to it. A root page (Home, or any page opened from a navigation
+ * surface) has nothing to go back to.
+ *
+ * @param {NavEntry[]} stack
+ * @returns {boolean}
+ */
+export function canGoBackIn(stack) {
+    return stack.length > 1 && !top(stack).root;
+}
+
+/**
+ * What the shell tells PageHeader about its history: `canGoBack` is false on
+ * a root page. Null outside a shell (onboarding, a bare render), where Back
+ * shows whenever the screen gives it a handler.
+ */
+export const NavHistoryContext = createContext(/** @type {{ canGoBack: boolean } | null} */ (null));
+
+const IN_PAGE = Object.freeze({ canGoBack: true });
+
+/**
+ * Wraps a whole screen component that a page shows in its own place (a
+ * contract picker, a market's Trade form, an address picker): every header
+ * inside it shows Back, since its Back closes it and returns to the page,
+ * even when that page is a root.
+ *
+ * @param {{ children: import('react').ReactNode }} props
+ */
+export function InPageScreen({ children }) {
+    return createElement(NavHistoryContext.Provider, { value: IN_PAGE }, children);
 }
 
 /**
@@ -55,10 +99,11 @@ export function pushView(stack, view, leavingCtx = null) {
     // Opening the page already on screen adds nothing to go back through.
     if (top(stack).view === view) return stack;
     if (view === NAV_HOME) return createNavStack(NAV_HOME);
-    const leaving = top(stack).view;
+    const { view: leaving, root } = top(stack);
     const next = stack.slice(0, -1);
-    // Home shows no single item, so it keeps no context to restore.
-    next.push(entry(leaving, leaving === NAV_HOME ? null : leavingCtx), entry(view));
+    // Home shows no single item, so it keeps no context to restore. The page
+    // left stays a root, so Back to it shows no chevron of its own.
+    next.push(entry(leaving, leaving === NAV_HOME ? null : leavingCtx, root), entry(view));
     return withinLimit(next);
 }
 
@@ -77,9 +122,9 @@ function withinLimit(next) {
  * @returns {NavEntry[]}
  */
 export function pushItem(stack, leavingCtx) {
-    const { view } = top(stack);
+    const { view, root } = top(stack);
     if (view === NAV_HOME) return stack;
-    return withinLimit([...stack.slice(0, -1), entry(view, leavingCtx), entry(view)]);
+    return withinLimit([...stack.slice(0, -1), entry(view, leavingCtx, root), entry(view)]);
 }
 
 /**
@@ -96,7 +141,8 @@ export function popView(stack) {
 /**
  * Swap the current page for `view` without adding a step: redirects, and a
  * page that turns into another. Replacing with the page just below collapses
- * onto it, so the history never shows one page twice in a row.
+ * onto it, so the history never shows one page twice in a row. The new page
+ * takes the old one's place, root or not.
  *
  * @param {NavEntry[]} stack
  * @param {string} view
@@ -106,7 +152,7 @@ export function replaceView(stack, view) {
     if (top(stack).view === view) return stack;
     if (view === NAV_HOME) return createNavStack(NAV_HOME);
     if (stack.length > 1 && stack[stack.length - 2].view === view) return stack.slice(0, -1);
-    return [...stack.slice(0, -1), entry(view)];
+    return [...stack.slice(0, -1), entry(view, null, top(stack).root)];
 }
 
 /**
@@ -177,6 +223,13 @@ const ITEM_FIELDS = Object.freeze({
     'token-detail': ['tokenDetailRef', ['chainId', 'tick']],
     'list-detail': ['listRef', ['chainId', 'actionIndex']],
     'dispenser-detail': ['dispenserRef', ['chainId', 'actionIndex']],
+    'order-detail': ['orderRef', ['chainId', 'actionIndex']],
+    // Edit and Cancel act on the order or swap their detail page shows.
+    'edit-order': ['orderRef', ['chainId', 'actionIndex']],
+    'cancel-order': ['orderRef', ['chainId', 'actionIndex']],
+    'swap-detail': ['swapRef', ['chainId', 'actionIndex']],
+    'edit-swap': ['swapRef', ['chainId', 'actionIndex']],
+    'cancel-swap': ['swapRef', ['chainId', 'actionIndex']],
     market: ['activeMarket', ['chainId', 'tick1', 'tick2']],
     'contract-detail': ['contractRef', ['chainId', 'contractActionIndex']],
     'stake-detail': ['stakingRef', ['kind', 'chainId', 'address']],
@@ -196,6 +249,16 @@ const ITEM_FIELDS = Object.freeze({
  * @returns {string | null}
  */
 export function navItemKey(view, ctx) {
+    // The Addresses list and one selected address share a route. Naming the
+    // list too makes the first address selection a history step, so header and
+    // hardware Back return to the list after any child action returns here.
+    if (view === 'addresses') {
+        const target = ctx?.addressDetailTarget;
+        if (!target) return 'addresses:list';
+        const id = target.record?.id || target.id;
+        if (id != null && id !== '') return `addresses:id:${String(id)}`;
+        return `addresses:value:${String(target.chainId || '')}:${String(target.address || '')}`;
+    }
     const spec = ITEM_FIELDS[view];
     if (!spec || !ctx || typeof ctx !== 'object') return null;
     const [field, parts] = spec;
@@ -276,7 +339,11 @@ export function useNavHistory({ initialView = NAV_HOME, capture, restore, itemKe
         : viewOrUpdate);
     const valid = (view) => typeof view === 'string' && view.length > 0;
 
-    /** Open a page; accepts a view or an updater of the current view, like a state setter. */
+    /**
+     * Open a page from a click on the page on screen: a push, so Back returns
+     * to that page. Accepts a view or an updater of the current view, like a
+     * state setter.
+     */
     const navigate = useCallback((viewOrUpdate) => {
         const view = resolve(viewOrUpdate);
         if (!valid(view)) return;
@@ -309,8 +376,20 @@ export function useNavHistory({ initialView = NAV_HOME, capture, restore, itemKe
         if (next.length < current.length && top(next) === current[next.length - 1]) setBacks((count) => count + 1);
     }, [commit]);
 
-    /** Start over on `view`: lock, unlock, a wallet switch, a tab-bar root. */
+    /** Start over on `view` as a root page: lock, unlock, a resume. */
     const reset = useCallback((view = NAV_HOME) => {
+        if (!valid(view)) return;
+        commit(createNavStack(view));
+    }, [commit]);
+
+    /**
+     * Open a page from a navigation surface (sidebar, bottom bar, menu,
+     * command palette): the history starts over on it, so it shows no Back.
+     * It starts over even when the page is already showing, since a page
+     * reached from another page and then picked from the menu is a root.
+     */
+    const navigateRoot = useCallback((viewOrUpdate) => {
+        const view = resolve(viewOrUpdate);
         if (!valid(view)) return;
         commit(createNavStack(view));
     }, [commit]);
@@ -339,8 +418,10 @@ export function useNavHistory({ initialView = NAV_HOME, capture, restore, itemKe
         view: top(stack).view,
         previousView: stack.length > 1 ? stack[stack.length - 2].view : null,
         depth: stack.length,
+        canGoBack: canGoBackIn(stack),
         backs,
         navigate,
+        navigateRoot,
         back,
         replace,
         land,

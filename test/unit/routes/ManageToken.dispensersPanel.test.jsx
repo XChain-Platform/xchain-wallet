@@ -5,12 +5,14 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+// The issuer's actions and facts (once the Manage token page) now live in
+// TokenOwnerActions.jsx, shown on the one asset page.
 const source = readFileSync(
-    join(process.cwd(), 'packages/core/src/shared/routes/ManageToken.jsx'),
+    join(process.cwd(), 'packages/core/src/shared/components/TokenOwnerActions.jsx'),
     'utf8',
 );
 
-describe('ManageToken removed market panels', () => {
+describe('issuer actions: removed market panels', () => {
     it('does not request dispenser, order, or swap panel data', () => {
         expect(source).not.toContain('getDispensersForToken');
         expect(source).not.toContain('getOrdersForToken');

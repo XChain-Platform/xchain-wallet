@@ -17,10 +17,10 @@ const componentsRoot = join(sharedRoot, 'components');
 const uiRoot = join(sharedRoot, '../ui');
 const tokensPath = join(sharedRoot, '../ui/tokens.css');
 const viewPrivateKeyStylesPath = join(sharedRoot, 'routes/ViewPrivateKey.module.css');
+// BackupReminderCard and QueuedBroadcastBanner left this list when their
+// boxes became the kit Notice (the Notice Standard).
 const cardModules = [
-    'BackupReminderCard.module.css',
     'CollectiblesView.module.css',
-    'QueuedBroadcastBanner.module.css',
     'TotalBalanceHero.module.css',
 ];
 const routeModules = [
@@ -254,9 +254,9 @@ it('uses shared tokens for route control, icon, and loader geometry', () => {
     expect(quickTileCss).toMatch(/--xc-icon-size:\s*(?:22px|var\(--xc-icon-md\))/);
     expect(imported).not.toMatch(/(?:margin|padding|outline-offset):[^;]*-?2px/);
     expect(issue).not.toMatch(/outline-offset:\s*-?2px/);
-    expect(loading).toMatch(
-        /\.dots > span\s*\{[^}]*width:\s*var\(--xc-space-2\)[^}]*height:\s*var\(--xc-space-2\)/s,
-    );
+    // The loading screen is the fading logo plus one progress bar.
+    expect(loading).toMatch(/\.bootLogo\s*\{[^}]*composes:\s*standardSize from '\.\/BootLogo\.module\.css';[^}]*animation:\s*bootFade/s);
+    expect(loading).toMatch(/\.bootBar\s*\{/);
 });
 
 // The unused inline-code and revealed-key rules that carried the hairlines
@@ -370,17 +370,18 @@ it('tokenizes shared component dimensions except documented pixel exceptions', (
     const expectedPixelDeclarations = {
         'ActionIntentSummary.module.css': [],
         'AmountField.module.css': [],
-        'BackupReminderCard.module.css': [
-            'flex: 1 1 240px',
-            'outline: 2px solid var(--xc-focus-ring)',
-            'outline-offset: 2px',
-        ],
+        // A kit Notice now (the Notice Standard): no pixel exceptions left.
+        'BackupReminderCard.module.css': [],
         'BalanceChanges.module.css': [
             'border-bottom: 1px solid var(--xc-border-soft, var(--xc-border))',
             'border-top: 1px solid var(--xc-border-soft, var(--xc-border))',
         ],
         'CollectiblesView.module.css': [
             'outline: 2px solid var(--xc-focus-ring)',
+            'outline-offset: -2px',
+            // Wide Home's selected card (G115): the focus ring's own inset
+            // geometry in the accent colour; no outline-width token exists.
+            'outline: 2px solid var(--xc-accent-primary)',
             'outline-offset: -2px',
             'outline: 2px solid var(--xc-on-accent)',
             'outline-offset: 2px',

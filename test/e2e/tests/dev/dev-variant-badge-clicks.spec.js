@@ -47,7 +47,8 @@ function popoverSwitch(page) {
 async function showBadge(page) {
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
     await gotoSection(page, 'Settings');
-    await page.getByRole('main').getByRole('button', { name: /^Developer mode/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Advanced\b/ }).click();
+    await page.getByRole('main').getByRole('button', { name: /^Developer mode\b/ }).click();
     const developerMode = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
     if (!(await developerMode.isChecked())) await developerMode.click();
     const popover = popoverSwitch(page);

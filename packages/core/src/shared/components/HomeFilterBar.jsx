@@ -69,6 +69,7 @@ export function HomeFilterBar({
                     value={networkFilter || 'all'}
                     onChange={onNetworkFilterChange}
                     ariaLabel={t('home.filter.filterByNetwork')}
+                    fieldLook={variant === 'menu'}
                 />
             </div>
         </div>

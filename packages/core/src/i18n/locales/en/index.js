@@ -55,6 +55,7 @@
 import accountPicker from './accountPicker.js';
 import actionDetail from './actionDetail.js';
 import actionsMenu from './actionsMenu.js';
+import actionWarnings from './actionWarnings.js';
 import addressDiscovery from './addressDiscovery.js';
 import addressList from './addressList.js';
 import addressPreferences from './addressPreferences.js';
@@ -71,6 +72,7 @@ import commandPalette from './commandPalette.js';
 import common from './common.js';
 import components from './components.js';
 import composeMessage from './composeMessage.js';
+import confirmStandard from './confirmStandard.js';
 import coSigner from './coSigner.js';
 import createOrder from './createOrder.js';
 import createWallet from './createWallet.js';
@@ -87,6 +89,9 @@ import firstPaint from './firstPaint.js';
 import flows from './flows.js';
 import gatedPublish from './gatedPublish.js';
 import governance from './governance.js';
+import hardwareConnect from './hardwareConnect.js';
+import hardwareManage from './hardwareManage.js';
+import hardwareSign from './hardwareSign.js';
 import history from './history.js';
 import home from './home.js';
 import importWallet from './importWallet.js';
@@ -96,6 +101,7 @@ import locked from './locked.js';
 import manageToken from './manageToken.js';
 import market from './market.js';
 import multisig from './multisig.js';
+import mySwaps from './mySwaps.js';
 import onboarding from './onboarding.js';
 import palette from './palette.js';
 import panic from './panic.js';
@@ -120,6 +126,7 @@ import txTimeline from './txTimeline.js';
 import ui from './ui.js';
 import unbindForm from './unbindForm.js';
 import undoSend from './undoSend.js';
+import uploadMethod from './uploadMethod.js';
 import verifySignature from './verifySignature.js';
 import walletDetails from './walletDetails.js';
 import walletMenu from './walletMenu.js';
@@ -129,6 +136,7 @@ export const en = {
     ...accountPicker,
     ...actionDetail,
     ...actionsMenu,
+    ...actionWarnings,
     ...addressDiscovery,
     ...addressList,
     ...addressPreferences,
@@ -145,6 +153,7 @@ export const en = {
     ...common,
     ...components,
     ...composeMessage,
+    ...confirmStandard,
     ...coSigner,
     ...createOrder,
     ...createWallet,
@@ -161,6 +170,9 @@ export const en = {
     ...flows,
     ...gatedPublish,
     ...governance,
+    ...hardwareConnect,
+    ...hardwareManage,
+    ...hardwareSign,
     ...history,
     ...home,
     ...importWallet,
@@ -170,6 +182,7 @@ export const en = {
     ...manageToken,
     ...market,
     ...multisig,
+    ...mySwaps,
     ...onboarding,
     ...palette,
     ...panic,
@@ -194,6 +207,7 @@ export const en = {
     ...ui,
     ...unbindForm,
     ...undoSend,
+    ...uploadMethod,
     ...verifySignature,
     ...walletDetails,
     ...walletMenu,

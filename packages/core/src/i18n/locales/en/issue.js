@@ -21,7 +21,6 @@ const messages = {
     'issue.issuance': 'issuance',
     'issue.success': 'Token issued',
     'issue.broadcastComplete': 'Broadcast complete.',
-    'issue.reviewTokenIssue': 'Review token issue',
     'issue.draft.unfinished':
         'Your unfinished issue draft was saved. Restore it to continue. Nothing was submitted.',
     'issue.networkHelp': 'The chain the token is issued on. Your From address and the network fee are on this network.',
@@ -40,7 +39,6 @@ const messages = {
     'issue.summary.locksOn': '{count} locks on',
     'issue.summary.set': 'Set',
     'issue.summary.newOwner': 'New owner set',
-    'issue.supply': 'Supply',
     'issue.fromHelp':
         'This address issues and owns the new token and pays the issuance and network fees.',
     'issue.maxSupply': 'Max supply',
@@ -64,10 +62,10 @@ const messages = {
     'issue.descriptionAria': 'Token description',
     'issue.allowList': 'Allow list',
     'issue.allowListHelp':
-        'The number of the address list whose members may hold or transfer this new token. Everyone else is denied.',
+        'The address list whose members may hold or transfer this new token. Everyone else is denied. Tap the field to pick, change or clear the list.',
     'issue.blockList': 'Block list',
     'issue.blockListHelp':
-        'The number of the address list whose members may not hold or transfer this new token.',
+        'The address list whose members may not hold or transfer this new token. Tap the field to pick, change or clear the list.',
     'issue.divisible': 'Divisible (8 decimal places)',
     'issue.transferOwnership': 'New owner address',
     'issue.transferOwnershipHint':
@@ -76,9 +74,19 @@ const messages = {
     'issue.sendInitialMintHint': 'Leave blank to keep the minted tokens at the issuing address.',
     'issue.selectTemplate': 'Select template',
     'issue.offline': 'Creating a token needs a network connection.',
-    'issue.parentTicker': 'Parent ticker',
-    'issue.parentTickerHelp':
-        'The token you own that this subtoken is created under. It may itself be a subtoken.',
+    'issue.parentToken': 'Parent token',
+    'issue.parentTokenHelp':
+        'The token you own that this subtoken is created under. It may itself be a subtoken. Choosing it also sets the network and the address that issues.',
+    'issue.parentTokenSelect': 'Select a token you own',
+    'issue.parentTokenLoading': 'Loading your tokens',
+    'issue.parentTokenNone': 'A subtoken needs a token you own',
+    'issue.parentTokenMissing': 'Pick the token this subtoken is created under.',
+    'issue.parentPickerTitle': 'Select Parent Token',
+    'issue.parentPickerEmptyTitle': 'You own no tokens yet',
+    'issue.parentPickerEmptyBody': 'A subtoken is created under a token you own.',
+    // Also the Parent token field's placeholder when the list fails to load.
+    'issue.parentPickerFailedTitle': "Couldn't load your tokens",
+    'issue.parentPickerFailedBody': 'Check your connection, then go back and open this list again.',
     'issue.subtokenName': 'Subtoken name',
     'issue.subtokenNetworkHelp':
         'The chain the subtoken is created on. It must be the chain where its parent token lives.',
@@ -86,15 +94,12 @@ const messages = {
     'issue.imageUrl': 'Image URL',
     'issue.imageUrlHelp':
         "Where the artwork lives (https, http, ipfs or ar). It's stored as the token's description.",
-    'issue.chooseAllowListTitle': 'Choose Allow-List',
-    'issue.chooseBlockListTitle': 'Choose Block-List',
-    'issue.chooseAllowList': 'Choose allow-list',
-    'issue.changeAllowList': 'Change allow-list',
+    'issue.chooseAllowListTitle': 'Select Allow List',
+    'issue.chooseBlockListTitle': 'Select Block List',
+    // An Allow list or Block list field with no list chosen (G114).
+    'issue.listNoneSet': 'None set',
     'issue.removeAllowList': 'Remove allow-list',
-    'issue.chooseBlockList': 'Choose block-list',
-    'issue.changeBlockList': 'Change block-list',
     'issue.removeBlockList': 'Remove block-list',
-    'issue.removeList': 'Remove',
     'issue.section.callback': 'Callback',
     'issue.summary.callback': '{amount} {ticker} per unit',
     'issue.callbackTick': 'Callback token',

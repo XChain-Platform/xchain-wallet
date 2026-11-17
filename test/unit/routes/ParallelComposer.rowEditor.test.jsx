@@ -10,11 +10,12 @@
 // list keeps its Chain row.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ParallelComposer } from '../../../packages/core/src/shared/routes/ParallelComposer.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 import badgeStyles from '../../../packages/core/src/ui/ChainBadge.module.css';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
@@ -36,6 +37,7 @@ function mount(initialRows = [{ chainId: CHAIN_ID, action: 'SEND', params: { VER
         listActions: vi.fn(async () => ['SEND']),
         getSettings: vi.fn(async () => ({ walletMode: 'full' })),
         signerReady: vi.fn(async () => ({ ready: true })),
+        validateAction: vi.fn(async () => ({ valid: true, errors: [] })),
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -46,6 +48,7 @@ function mount(initialRows = [{ chainId: CHAIN_ID, action: 'SEND', params: { VER
             />
         </MessagingProvider>,
     );
+    return messaging;
 }
 
 describe('ParallelComposer row editor', () => {
@@ -80,17 +83,19 @@ describe('ParallelComposer row editor', () => {
     });
 
     it('waits to ask for an action until the user touches the row or submits the queue', async () => {
-        mount(null);
+        const messaging = mount(null);
         const review = await screen.findByRole('button', { name: 'Sign and Send Queue' });
         expect(screen.queryByText(/pick an action/)).toBeNull();
         expect(review).not.toBeDisabled();
 
         fireEvent.click(review);
-        expect(await screen.findByText('Row 1: pick an action.')).toBeTruthy();
-        expect(review).toBeDisabled();
+        expect(await within(screen.getByLabelText('Form errors')).findByText('Row 1: pick an action.')).toBeTruthy();
+        expect(review).not.toBeDisabled();
+        expect(screen.getByRole('combobox', { name: 'Action' })).toHaveAttribute('aria-invalid', 'true');
+        expect(messaging.validateAction).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Add Action' }));
-        fireEvent.change(screen.getAllByRole('combobox', { name: 'Action' })[0], { target: { value: 'SEND' } });
+        selectOption(screen.getAllByRole('combobox', { name: 'Action' })[0], 'SEND');
         expect(screen.queryByText(/pick an action/)).toBeNull();
 
         fireEvent.change(screen.getAllByRole('textbox', { name: 'Params (JSON object)' })[1], {

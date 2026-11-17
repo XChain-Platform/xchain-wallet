@@ -62,8 +62,11 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
         const main = page.getByRole('main');
         await test.step('fill Publish file with a file the legacy cap refuses', async () => {
             await openPaletteCommand(page, 'Publish file');
-            await expect(main.getByRole('radiogroup', { name: 'Publish mode' })).toBeVisible({ timeout: 30_000 });
-            await main.getByRole('radio', { name: /Public/ }).check();
+            // Publish as is the themed dropdown (G119): open it, pick Public.
+            const publishAs = main.getByRole('button', { name: /^Publish as: / });
+            await expect(publishAs).toBeVisible({ timeout: 30_000 });
+            await publishAs.click();
+            await main.getByRole('option', { name: /^Public/ }).click();
             await selectVenueChain(main, 'Network');
             // The form offers the envelope ceiling on this chain and says why.
             await expect(main).toContainText('compact Taproot encoding', { timeout: 30_000 });
@@ -85,7 +88,8 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 180_000 });
             await expect(modal.getByTestId('confirm-envelope-commit')).toContainText(/Commit transaction: .*fee [\d.]+ BTC/);
             await expect(modal.getByTestId('confirm-envelope-reveal')).toContainText(/Reveal transaction: .*fee [\d.]+ BTC/);
-            await expect(modal.getByTestId('confirm-fee')).toContainText('both transactions');
+            await expect(modal.getByTestId('confirm-fee-network')).toContainText(/BTC/);
+            await expect(modal.getByText('Network fee, both transactions', { exact: true })).toBeVisible();
             await page.getByTestId('confirm-approve').click();
 
             await expect(main.getByRole('heading', { name: 'File published' }),

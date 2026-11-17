@@ -286,15 +286,18 @@ describe('regression/test-networks-no-fiat', () => {
             await primeFiatRates();
             render(<FeeRows chainId={chainId} />);
 
-            const networkFee = screen.getByTestId('confirm-fee');
-            const protocolFee = screen.getByTestId('confirm-protocol-fee');
+            // The facts card's fee rows (G127); re-read inside the wait, since
+            // a row's text is replaced when the rates arrive.
             await waitFor(() => {
+                const networkFee = screen.getByTestId('confirm-fee-network');
+                const protocolFee = screen.getByTestId('confirm-fee-protocol');
                 if (showsFiat) {
                     expect(networkFee).toHaveTextContent('$0.50');
                     expect(protocolFee).toHaveTextContent('$2.00');
                 } else {
                     expect(networkFee).not.toHaveTextContent('$');
                     expect(protocolFee).not.toHaveTextContent('$');
+                    expect(screen.getByTestId('confirm-modal')).not.toHaveTextContent('$');
                 }
             });
         },

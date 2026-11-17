@@ -102,7 +102,8 @@ describe('Quick Dispenser', () => {
         const fromSection = () => utils.container.querySelector('[data-form-section="from"]');
         const cards = () => [...utils.container.querySelectorAll('section[aria-label^="You "]')];
         const fromNetwork = () => networkControls(fromSection())[0];
-        await waitFor(() => expect(fromSection().textContent).toContain('bc1q...rce0'));
+        // G99: the From summary's address is the fitting AddressText.
+        await waitFor(() => expect(fromSection().querySelector(`[data-section-summary] [aria-label="${BTC_SOURCE.address}"]`)).not.toBeNull());
         // The From section's Network field is the token's, locked to it.
         expect(fromNetwork().getAttribute('aria-label')).toBe('Network: Bitcoin');
         expect(fromNetwork()).toBeDisabled();
@@ -121,7 +122,7 @@ describe('Quick Dispenser', () => {
 
         // The give chip now holds the Litecoin token, and From moved with it.
         expect(screen.getByRole('button', { name: 'Token: LTOK on Litecoin' })).toBeTruthy();
-        await waitFor(() => expect(fromSection().textContent).toContain('ltc1...urc0'));
+        await waitFor(() => expect(fromSection().querySelector(`[data-section-summary] [aria-label="${LTC_SOURCE.address}"]`)).not.toBeNull());
         expect(fromNetwork().getAttribute('aria-label')).toBe('Network: Litecoin');
         // The cards still show the network only as the icon badge.
         for (const card of cards()) {

@@ -5,6 +5,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { networkFeeEditor } from '../../helpers/customNetworkFee.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { SellOwnershipForm } from '../../../packages/core/src/shared/routes/SellOwnershipForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
@@ -87,7 +88,7 @@ describe('SellOwnershipForm rendering', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: /^List name for sale$/i })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /^List ownership for sale$/i })).toBeDisabled();
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -96,7 +97,7 @@ describe('SellOwnershipForm rendering', () => {
         // the one "Get paid in" picker (the network coin or any token on it).
         mount(messagingWith());
 
-        expect(await screen.findByRole('heading', { name: 'Sell alpha Name' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Sell Ownership' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Sell via: Exchange' }));
         fireEvent.click(screen.getByRole('option', { name: /^Dispenser/ }));
 
@@ -106,7 +107,7 @@ describe('SellOwnershipForm rendering', () => {
 
         expect(screen.getByRole('button', { name: 'Get paid in: BTC on Bitcoin' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /^Get paid in/ }));
-        expect(await screen.findByRole('heading', { name: 'Get Paid in' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Get Paid In' })).toBeInTheDocument();
     });
 
     it('validates the price token, expiration, and memo before review', async () => {
@@ -148,21 +149,22 @@ describe('SellOwnershipForm rendering', () => {
         fireEvent.click(screen.getByRole('button', { name: /^Network:/ }));
         fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
         expect(await screen.findByRole('button', { name: 'Get paid in: Select an asset' })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: /^List name for sale$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^List ownership for sale$/i }));
         expect(await screen.findByRole('alert')).toHaveTextContent('Select a price token.');
     });
 
     it('does not review a custom network fee that the builder would drop', async () => {
         mount(messagingWith());
         fireEvent.change(await screen.findByLabelText(/^Price/), { target: { value: '5' } });
-        // The fee selector sits in the Network fee section, closed on load.
-        fireEvent.click(screen.getByRole('button', { name: /^Network fee/ }));
+        // The fee selector sits in the Fees section, closed on load.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/ }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/^Custom fee rate/), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: /^List name for sale$/i }));
+        // Custom opened the Network fee line's one editor (G113).
+        fireEvent.change(networkFeeEditor(), { target: { value: '' } });
+        fireEvent.click(screen.getByRole('button', { name: /^List ownership for sale$/i }));
 
-        expect(screen.getAllByText('Enter a custom fee rate.')).toHaveLength(1);
-        expect(screen.getByRole('heading', { name: 'Sell alpha Name' })).toBeInTheDocument();
+        expect(screen.getAllByText('Enter a custom network fee.')).toHaveLength(1);
+        expect(screen.getByRole('heading', { name: 'Sell Ownership' })).toBeInTheDocument();
     });
 
     it('rejects an invalid price-token ticker returned by wallet data', async () => {
@@ -184,7 +186,7 @@ describe('SellOwnershipForm rendering', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Price token can only use letters, numbers, dots and',
         );
-        expect(screen.getByRole('heading', { name: 'Sell alpha Name' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Sell Ownership' })).toBeInTheDocument();
     });
 
     it('shows price tokens only from the sale network', async () => {
@@ -288,21 +290,24 @@ describe('SellOwnershipForm rendering', () => {
         fireEvent.change(await screen.findByLabelText(/^Price/), { target: { value: ' 5.00 ' } });
         fireEvent.change(screen.getByLabelText(/^Expires after/), { target: { value: ' 12 ' } });
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: ' note ' } });
-        fireEvent.click(await screen.findByRole('button', { name: /^List name for sale$/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /^List ownership for sale$/i }));
 
-        const review = await screen.findByRole('form', { name: 'Review ownership sale' });
+        const review = await screen.findByTestId('confirm-modal');
         expect(within(review).getByText('5.00 BTC')).toBeInTheDocument();
         expect(within(review).getByText('12 blocks')).toBeInTheDocument();
         expect(within(review).getByText('note')).toBeInTheDocument();
-        expect(within(review).getByText(/paid in XCHAIN/)).toBeInTheDocument();
+        expect(within(review).getByTestId('confirm-fee-network')).toBeInTheDocument();
+        expect(screen.queryByText('Estimate unavailable')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByLabelText(/^Price/)).toHaveValue('5.00000000');
         expect(screen.getByLabelText(/^Expires after/)).toHaveValue(' 12 ');
         expect(screen.getByLabelText('Memo')).toHaveValue(' note ');
 
-        fireEvent.click(screen.getByRole('button', { name: /^List name for sale$/i }));
-        fireEvent.click(await screen.findByRole('button', { name: /Create Unsigned Transaction/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^List ownership for sale$/i }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1));
         expect(buildActionPsbtRequest.mock.calls[0][0].actionData).toEqual({
             action: 'ORDER',
@@ -328,8 +333,8 @@ describe('SellOwnershipForm rendering', () => {
             buildActionPsbtRequest,
         }));
         fireEvent.change(await screen.findByLabelText(/^Price/), { target: { value: '5' } });
-        fireEvent.click(await screen.findByRole('button', { name: /^List name for sale$/i }));
-        fireEvent.click(await screen.findByRole('button', { name: /Create Unsigned Transaction/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /^List ownership for sale$/i }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
 
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent(/couldn't complete|review|try again/i);

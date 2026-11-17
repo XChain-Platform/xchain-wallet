@@ -216,7 +216,8 @@ describe('DispenserDetail close-window banner', () => {
         });
         expect(lifecycleCalls).toContainEqual({ chainId: CHAIN, kind: 'cancels', query: DISPENSER_ADDRESS, type: 'address' });
         expect(banner(utils)).toMatch(/^Closing in about 23 minutes/);
-        expect(banner(utils)).toContain('returns to rltc1q…disp with the first block');
+        // G99: the banner wraps, so the dispenser address is named in full.
+        expect(banner(utils)).toContain(`returns to ${DISPENSER_ADDRESS} with the first block`);
         expect(banner(utils)).not.toContain('this wallet');
         expect(banner(utils)).not.toContain('owner');
     });

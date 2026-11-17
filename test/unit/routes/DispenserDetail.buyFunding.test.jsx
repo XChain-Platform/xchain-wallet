@@ -101,12 +101,11 @@ async function settle() {
             await vi.advanceTimersByTimeAsync(400);
         });
     }
-    // The page opens on Details and shows only the chosen tab; the buy
-    // panel needs the Buy tab picked.
-    const buyTab = screen.queryByRole('tab', { name: /^Buy$/ });
-    if (buyTab && buyTab.getAttribute('aria-selected') !== 'true') {
+    // Every viewer opens on Actions; a buyer's first row opens the Buy page.
+    const buyRow = screen.queryByTestId('dispenser-buy-row');
+    if (buyRow) {
         await act(async () => {
-            fireEvent.click(buyTab);
+            fireEvent.click(buyRow);
             await vi.advanceTimersByTimeAsync(400);
         });
     }
@@ -139,10 +138,9 @@ describe('dispenser Buy panel funding check (D-37)', () => {
         await settle();
         expect(screen.getByText(/0 MEMEVALID available/)).toBeInTheDocument();
         const buy = buyButton();
-        expect(buy).toBeDisabled();
-        // The pre-flight verdict is on screen, and no signing path was entered.
-        const panel = screen.getByTestId('preflight-chip');
-        expect(panel).toHaveTextContent(/Will likely fail/);
+        expect(buy).toBeEnabled();
+        expect(screen.getByRole('alert')).toHaveTextContent(/This buy pays 5 MEMEVALID/);
+        expect(screen.queryByTestId('preflight-chip')).toBeNull();
         fireEvent.click(buy);
         expect(screen.queryByRole('button', { name: /Sign buy/ })).not.toBeInTheDocument();
         expect(messaging.sendToken).not.toHaveBeenCalled();
@@ -154,7 +152,7 @@ describe('dispenser Buy panel funding check (D-37)', () => {
         expect(screen.getByText(/12 MEMEVALID available/)).toBeInTheDocument();
         // 3 fills = 15 MEMEVALID against a 12 balance.
         fireEvent.change(dispensesField(), { target: { value: '3' } });
-        expect(buyButton()).toBeDisabled();
+        expect(buyButton()).toBeEnabled();
         // 2 fills = 10 MEMEVALID, affordable.
         fireEvent.change(dispensesField(), { target: { value: '2' } });
         expect(buyButton()).toBeEnabled();

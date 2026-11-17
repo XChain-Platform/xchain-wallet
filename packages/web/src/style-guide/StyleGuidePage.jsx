@@ -13,7 +13,7 @@
 // component as it's documented. Sections render in the order declared
 // in `SECTIONS` below; the TOC is generated from that list.
 import { useState } from 'react';
-import { Checkbox, ChoiceControl, RadioGroup, SegmentedControl } from '@xchain-wallet/core/ui';
+import { Checkbox, ChoiceControl, Icon, IconSelect, SegmentedControl } from '@xchain-wallet/core/ui';
 import { VIEWS, ViewContext, ViewFrame, ViewportFrame, useViewState } from './frames.jsx';
 import { ComponentStateMatrix } from './ComponentStateMatrix.jsx';
 import {
@@ -43,6 +43,7 @@ import { FieldSizesSection } from './sections/FieldSizesSection.jsx';
 import { AmountFieldSection } from './sections/AmountFieldSection.jsx';
 import { AddressFieldSection } from './sections/AddressFieldSection.jsx';
 import { TokenFieldSection } from './sections/TokenFieldSection.jsx';
+import { TargetFieldSection } from './sections/TargetFieldSection.jsx';
 import { ChainPickerSection } from './sections/ChainPickerSection.jsx';
 import { NetworkFieldSection } from './sections/NetworkFieldSection.jsx';
 import { FeeSelectorSection } from './sections/FeeSelectorSection.jsx';
@@ -55,6 +56,7 @@ import { FormErrorSummarySection } from './sections/FormErrorSummarySection.jsx'
 import { FormSectionSection } from './sections/FormSectionSection.jsx';
 import { ListPageSection } from './sections/ListPageSection.jsx';
 import { ListRowSection } from './sections/ListRowSection.jsx';
+import { ActionListSection } from './sections/ActionListSection.jsx';
 import { EmptyStateSection } from './sections/EmptyStateSection.jsx';
 import { ResultScreenSection } from './sections/ResultScreenSection.jsx';
 import { SectionHeaderSection } from './sections/SectionHeaderSection.jsx';
@@ -76,6 +78,7 @@ import {
 } from './sections/DisplayPrimitivesSection.jsx';
 import {
     AnimatedQrFramesSection,
+    KeyQrSection,
     QrScannerSection,
 } from './sections/QrPrimitivesSection.jsx';
 import {
@@ -103,10 +106,17 @@ import {
     PortfolioChartSection,
     RouteErrorBoundarySection,
     SparklineSection,
+    UploadMethodFieldSection,
     WalletIdentitySection,
     WalletModeFieldSection,
     WarningCardSection,
 } from './sections/WalletPartsSections.jsx';
+import {
+    ExpirationChoiceSection,
+    ListFieldSection,
+    ListFilterPopoverSection,
+    ListSearchFieldSection,
+} from './sections/ListPartsSections.jsx';
 // Curated catalog: patterns we've established across the recent work
 // (Home, Receive, Send, TokenDetail). Add a section here when a new
 // pattern lands in two routes or you want to codify a one-off as
@@ -124,9 +134,14 @@ export const SECTIONS = [
     { id: 'form-standard',         label: 'Form Standard',          Component: FormStandardSection },
     { id: 'give-get',              label: 'Give / Get',             Component: GiveGetStandardSection },
     { id: 'file-field',            label: 'File field',             Component: FileFieldSection, components: ['FileField'] },
+    { id: 'upload-method-field',   label: 'Upload method field',    Component: UploadMethodFieldSection, components: ['UploadMethodField'] },
     { id: 'warning-card',          label: 'Warning card',           Component: WarningCardSection, components: ['WarningCard'] },
     { id: 'wallet-mode-field',     label: 'Wallet mode field',      Component: WalletModeFieldSection, components: ['WalletModeField'] },
     { id: 'list-filter-menu',      label: 'List filter menu',       Component: ListFilterMenuSection, components: ['ListFilterMenu'] },
+    { id: 'list-filter-popover',   label: 'List filter popover',    Component: ListFilterPopoverSection, components: ['ListFilterPopover'] },
+    { id: 'list-search-field',     label: 'List search field',      Component: ListSearchFieldSection, components: ['ListSearchField'] },
+    { id: 'list-field',            label: 'List field',             Component: ListFieldSection, components: ['ListField'] },
+    { id: 'expiration-choice',     label: 'Expiration choice',      Component: ExpirationChoiceSection, components: ['expirationChoice'] },
     { id: 'portfolio-chart',       label: 'Portfolio chart',        Component: PortfolioChartSection, components: ['PortfolioChart'] },
     { id: 'sparkline',             label: 'Sparkline',              Component: SparklineSection, components: ['Sparkline'] },
     { id: 'mnemonic-grid',         label: 'Mnemonic grid',          Component: MnemonicGridSection, components: ['MnemonicGrid'] },
@@ -135,6 +150,7 @@ export const SECTIONS = [
     { id: 'route-error-boundary',  label: 'Route error boundary',   Component: RouteErrorBoundarySection, components: ['RouteErrorBoundary'] },
     { id: 'list-page',             label: 'List page',              Component: ListPageSection, primitives: ['ListPage'] },
     { id: 'list-row',              label: 'List row',               Component: ListRowSection, primitives: ['ListRow'] },
+    { id: 'action-list',           label: 'Action list',            Component: ActionListSection, components: ['ActionList', 'ActionsDetailsToggle', 'ExplorerFavicon'] },
     { id: 'empty-state',           label: 'Empty state',            Component: EmptyStateSection, primitives: ['EmptyState'] },
     { id: 'result-screen',         label: 'Result screen',          Component: ResultScreenSection, components: ['ResultScreen'] },
     { id: 'section-header',        label: 'Section header',         Component: SectionHeaderSection, primitives: ['SectionHeader'] },
@@ -157,7 +173,9 @@ export const SECTIONS = [
     { id: 'balance-list',          label: 'Balance / search list',  Component: BalanceListSection, components: ['BalanceList'] },
     { id: 'token-selector',        label: 'Token selector page',    Component: TokenSelectorSection },
     { id: 'address-list',          label: 'Address list (contacts)',Component: AddressListSection, components: ['ContactsPickerScreen', 'NetworkFilterDropdown'] },
-    { id: 'radio-group',           label: 'Radio group',            Component: RadioGroupSection, primitives: ['RadioGroup'] },
+    // RadioGroup stays a barrel export, so its section stays listed; G119
+    // retires it from every screen and the section shows the dropdown instead.
+    { id: 'single-choice',         label: 'Single choice',          Component: SingleChoiceSection, primitives: ['RadioGroup'] },
     { id: 'segmented-control',     label: 'Segmented control',      Component: SegmentedControlSection, primitives: ['SegmentedControl'] },
     { id: 'pill-segmented',        label: 'Pill segmented',         Component: PillSegmentedSection },
     { id: 'toggle-bar',            label: 'Toggle bar (filter)',    Component: ToggleBarSection },
@@ -167,6 +185,7 @@ export const SECTIONS = [
     { id: 'amount-field',          label: 'Amount field',           Component: AmountFieldSection, components: ['AmountField'] },
     { id: 'address-field',         label: 'Address field',          Component: AddressFieldSection, primitives: ['AddressField'] },
     { id: 'token-field',           label: 'Token field',            Component: TokenFieldSection, components: ['TokenField'] },
+    { id: 'target-field',          label: 'Target field',           Component: TargetFieldSection, components: ['TargetField'] },
     { id: 'chain-picker',          label: 'Network picker',           Component: ChainPickerSection, primitives: ['ChainPicker'] },
     { id: 'network-field',         label: 'Network field',          Component: NetworkFieldSection, primitives: ['NetworkField', 'NetworkPicker'] },
     { id: 'fee-selector',          label: 'Fee selector',           Component: FeeSelectorSection, primitives: ['FeeSelector'] },
@@ -176,15 +195,16 @@ export const SECTIONS = [
     { id: 'multisig-badge',        label: 'Multisig badge',         Component: MultisigBadgeSection, primitives: ['MultisigBadge'] },
     { id: 'verified-badge',        label: 'Verified badge',         Component: VerifiedBadgeSection, primitives: ['VerifiedBadge'] },
     { id: 'info-tip',              label: 'Info tip',               Component: InfoTipSection, primitives: ['InfoTip'] },
+    { id: 'key-qr',                label: 'Static QR code',         Component: KeyQrSection, components: ['KeyQR'] },
     { id: 'animated-qr-frames',    label: 'Animated QR frames',     Component: AnimatedQrFramesSection, primitives: ['AnimatedQrFrames'] },
     { id: 'qr-scanner',            label: 'QR scanner',             Component: QrScannerSection, primitives: ['QrScanner'] },
     { id: 'voice',                 label: 'Voice & microcopy',      Component: VoiceSection },
-    { id: 'states',                label: 'Loading / empty / error',Component: StatesSection, primitives: ['Skeleton', 'StatusMessage'], components: ['ToastHost'] },
+    { id: 'states',                label: 'Loading / empty / error',Component: StatesSection, primitives: ['Skeleton', 'Notice', 'StatusMessage', 'StatusMessageGroup'], components: ['ToastHost'] },
     { id: 'privacy-mode',          label: 'Privacy mode',           Component: PrivacyModeSection },
-    { id: 'action-confirm',        label: 'Action confirm',         Component: ActionConfirmSection, components: ['ActionConfirmScreen'] },
+    { id: 'action-confirm',        label: 'Action confirm',         Component: ActionConfirmSection, components: ['ActionConfirmScreen', 'ConfirmActionModal'] },
     { id: 'sign-credentials',      label: 'Sign credentials',       Component: SignCredentialsSection, components: ['SignCredentials'] },
     { id: 'contract-notices',      label: 'Contract notices',       Component: ContractNoticesSection, components: ['ContractConsentPanel', 'OwnerWithdrawWarning'] },
-    { id: 'draft-exit',            label: 'Draft discard, demo exit', Component: DraftAndExitSection, components: ['DraftDiscardButton', 'DemoExitConfirm'] },
+    { id: 'draft-exit',            label: 'Draft restore, demo exit', Component: DraftAndExitSection, components: ['DraftNotice', 'DraftDiscardButton', 'DemoExitConfirm'] },
     { id: 'native-fee-toggle',     label: 'Protocol fee toggle',    Component: NativeFeeToggleSection, components: ['NativeFeeToggle'] },
     { id: 'fees-card',             label: 'Fees card',              Component: FeesCardSection, components: ['FeesCard'] },
     { id: 'picker-screens',        label: 'Picker screens',         Component: PickerScreensSection, components: ['OwnAddressPickerScreen', 'ListPickerScreen'] },
@@ -252,27 +272,26 @@ function ChoiceControlSection() {
             id="choice-control"
             title="Choice control"
             tag="CANONICAL · ChoiceControl"
-            kicker="A compact checkbox or radio whose whole label is the pointer target, for dense approval and permission lists."
+            kicker="A compact checkbox whose whole label is the pointer target, for dense approval and permission lists."
         >
             <Guidance
-                what={<>A native <code>input</code> of type <code>checkbox</code> or <code>radio</code> wrapped in its label. Extra props pass through to the input.</>}
-                when={<>Use it inside extension approval screens where each row is one permission or account choice with a short inline label.</>}
-                whenNot={<>Use <code>Checkbox</code> when a form field needs a description or error, and <code>RadioGroup</code> for a labelled set of exclusive options.</>}
+                what={<>A native checkbox <code>input</code> wrapped in its label. Extra props pass through to the input.</>}
+                when={<>Use it inside extension approval screens where each row is one permission the user turns on or off, with a short inline label.</>}
+                whenNot={<>Use <code>Checkbox</code> when a form field needs a description or error. A single choice among a few options is never radios (G119): use the themed dropdown, <a href="#single-choice">Single choice</a>.</>}
                 sizing={<>The painted box uses the control icon token and the label keeps the shared touch target on coarse pointers.</>}
-                variants={<>Checkbox or radio, checked, unchecked and disabled, in both themes.</>}
+                variants={<>Checked, unchecked and disabled, in both themes.</>}
                 doRule={<>Keep the label short and specific to the permission it grants.</>}
-                dontRule={<>Do not hand-roll a label around a raw input when this control fits.</>}
+                dontRule={<>Do not hand-roll a label around a raw input when this control fits, and do not pass <code>type="radio"</code>.</>}
             />
             <Markup>
 {`<ChoiceControl checked={remember} onChange={(event) => setRemember(event.target.checked)}>
     Remember this site
-</ChoiceControl>
-<ChoiceControl type="radio" name="account" value="main">Main account</ChoiceControl>`}
+</ChoiceControl>`}
             </Markup>
-            <LiveExample label="Checkbox, radio, and disabled states">
+            <LiveExample label="Checked, unchecked, and disabled states">
                 <div style={{ display: 'grid', gap: 'var(--xc-space-2)' }}>
                     <ChoiceControl defaultChecked>Remember this site</ChoiceControl>
-                    <ChoiceControl type="radio" name="sg-choice-account" value="main" defaultChecked>Main account</ChoiceControl>
+                    <ChoiceControl>Share my balance</ChoiceControl>
                     <ChoiceControl disabled>Managed by your organization</ChoiceControl>
                 </div>
             </LiveExample>
@@ -434,59 +453,62 @@ export function LiveExample({ label, minHeight, padded = true, children }) {
     );
 }
 
-export function RadioGroupSection() {
-    const [delivery, setDelivery] = useState('private');
+export function SingleChoiceSection() {
+    const [delivery, setDelivery] = useState('public');
 
     return (
         <Section
-            id="radio-group"
-            title="Radio group"
-            tag="CANONICAL expanded exclusive choice"
-            kicker="A labelled set of mutually exclusive choices that preserves native radio keyboard behavior."
+            id="single-choice"
+            title="Single choice"
+            tag="CANONICAL · IconSelect, no radio buttons (G119)"
+            kicker="A single choice among a few options is a labelled field that shows the current choice and opens the wallet's themed dropdown, with an icon per option."
         >
             <Guidance
-                what={<>A native <code>fieldset</code> and <code>legend</code> containing same-name radio inputs, label-wide touch targets, and optional descriptions.</>}
-                when={<>Use when every choice should remain visible and supporting copy helps users compare the options.</>}
-                whenNot={<>Use <a href="#segmented-control">SegmentedControl</a> for two or three compact choices with short labels, or checkboxes when more than one value may be selected.</>}
-                sizing={<>The circle uses <code>--xc-control-icon-md</code>. Every label provides a 44px minimum touch target without enlarging the circle.</>}
-                variants={<>Option descriptions, disabled options or groups, required state, hint text, and error text.</>}
-                doRule={<>Give the group a concise legend, pass one stable value, and let the native inputs provide arrow-key movement.</>}
-                dontRule={<>Do not add route-local keyboard handlers, omit the legend, or use radio buttons for independent on/off settings.</>}
-                supersedes={<>Route-local radio markup for expanded exclusive choices. Use <code>&lt;RadioGroup&gt;</code> from <code>@xchain-wallet/core/ui</code>.</>}
+                what={<>An <code>IconSelect</code>: the field label above, a trigger that shows the picked option's icon and label, and a themed listbox with an icon, a label and an optional secondary line on every option.</>}
+                when={<>Any one-of-a-few choice on a form: Publish as, Pause setting, an export file format, a QR format, which address to sign in with.</>}
+                whenNot={<>Use <a href="#segmented-control">SegmentedControl</a> for a tab-like view toggle above content, and checkboxes when more than one value may be selected.</>}
+                sizing={<>The trigger fills its form column at the standard field height; the open list is as wide as its longest option and is never cut off.</>}
+                variants={<>Option secondary text (the old radio description), disabled options, a disabled field, and a help tip on the label.</>}
+                doRule={<>Give every option an icon and a short label, put each option's description in <code>sub</code>, and keep the stored values unchanged.</>}
+                dontRule={<>Do not render radio buttons, a <code>RadioGroup</code>, or a native <code>select</code> for a single choice.</>}
+                supersedes={<><code>RadioGroup</code> and <code>ChoiceControl type="radio"</code> on every screen. <code>RadioGroup</code> stays in the kit only until it is removed; its matrix below shows the dropdown that replaces it.</>}
             />
             <Markup>
-{`<RadioGroup
-    legend="Delivery visibility"
-    name="delivery"
-    value={delivery}
-    onChange={setDelivery}
+{`<IconSelect
+    label="Publish as"
+    help="Choose whether this file is readable by everyone or encrypted."
+    value={mode}
+    onChange={setMode}
     options={[
-        { value: 'private', label: 'Private', description: 'Only the recipient can read it' },
-        { value: 'public', label: 'Public', description: 'Readable by anyone' },
+        { value: 'public', label: 'Public', sub: 'Anyone can read the file', icon: <Icon.EyeIcon /> },
+        { value: 'gated', label: 'Encrypted', sub: 'Only token holders can unlock it', icon: <Icon.LockIcon /> },
     ]}
 />`}
             </Markup>
-            <LiveExample label="Delivery visibility">
-                <RadioGroup
-                    legend="Delivery visibility"
-                    name="style-guide-delivery"
+            <LiveExample label="Publish as, open the field to compare the options" minHeight={220}>
+                <IconSelect
+                    label="Publish as"
+                    help="Choose whether this file is readable by everyone or encrypted for holders of a token you own."
                     value={delivery}
                     onChange={setDelivery}
                     options={[
                         {
-                            value: 'private',
-                            label: 'Private',
-                            description: 'Only the recipient can read it.',
-                        },
-                        {
                             value: 'public',
                             label: 'Public',
-                            description: 'Stored as readable network data.',
+                            sub: 'Anyone can read the file straight from the chain.',
+                            icon: <Icon.EyeIcon />,
+                        },
+                        {
+                            value: 'gated',
+                            label: 'Encrypted',
+                            sub: 'Only holders of a token you own can unlock it.',
+                            icon: <Icon.LockIcon />,
                         },
                         {
                             value: 'scheduled',
                             label: 'Scheduled release',
-                            description: 'Unavailable for this message type.',
+                            sub: 'Unavailable for this file type.',
+                            icon: <Icon.ClockIcon />,
                             disabled: true,
                         },
                     ]}

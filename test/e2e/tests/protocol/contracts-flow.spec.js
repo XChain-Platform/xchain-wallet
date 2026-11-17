@@ -206,7 +206,10 @@ async function openContract(page) {
 
 async function walkExecute(page, viewport) {
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: 'Call method', exact: true }).click();
+    // Each function is its own row under Contract Functions on the Actions
+    // tab; its name carries the description and the Writes tag too. The row
+    // opens the call form with that function chosen.
+    await main.getByRole('button', { name: /^release\b/ }).click();
     await expectScreen(page, viewport, `Call contract #${CONTRACT_INDEX}`);
 
     await main.getByLabel('amount (amount)', { exact: true }).fill(CALL_AMOUNT);

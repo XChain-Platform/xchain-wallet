@@ -35,11 +35,13 @@ describe('device pass layout guards', () => {
     it('keeps quick-action tiles secondary and outranking the Button variant', () => {
         const jsx = read('packages/core/src/ui/QuickActionTile.jsx');
         const css = read('packages/core/src/ui/QuickActionTile.module.css');
-        const home = read('packages/core/src/shared/routes/Home.jsx');
+        const tokenDetail = read('packages/core/src/shared/routes/TokenDetail.jsx');
         const tiles = buttonsWith(jsx, 'className={[styles.tile, square ? styles.square : null, className]');
         expect(tiles).toHaveLength(1);
         expect(tiles[0]).toContain('variant="secondary"');
-        expect(home.match(/<QuickActionTile\b/g)?.length).toBeGreaterThanOrEqual(5);
+        // Token detail's actions moved from tiles to the shared action list (G101).
+        expect(tokenDetail).toMatch(/<ActionList\b/);
+        expect(tokenDetail).not.toMatch(/<QuickActionTile\b/);
         expect(css).not.toMatch(/(^|\n)\.tile\s*\{[^}]*background/);
         expect(rule(css, '.tile.tile')).toMatch(/background:\s*var\(--xc-surface-raised\)/);
     });
@@ -56,7 +58,7 @@ describe('device pass layout guards', () => {
     });
 
     it('has no bottom action row on Home at any size', () => {
-        // Home's actions are the four quick actions; the rest live in More.
+        // Home has no action row; every action lives in the navigation and the wallet menu.
         const css = read('packages/core/src/shared/routes/Home.module.css');
         const jsx = read('packages/core/src/shared/routes/Home.jsx');
         expect(css).not.toMatch(/\.actionsFull/);
@@ -65,7 +67,8 @@ describe('device pass layout guards', () => {
 
     it('hides a search-only header menu when the rail shows Search', () => {
         const css = read('packages/core/src/shared/components/LeftNav.module.css');
-        expect(css).toMatch(/\.layout\[data-xc-rail='shown'\] :global\(\[data-header-menu='search-only'\]\)\s*\{\s*display:\s*none;/);
+        // G100: a collapsed side menu shows no Search, so the trigger stays there.
+        expect(css).toMatch(/\.layout\[data-xc-rail='shown'\]:not\(\[data-xc-side-menu='collapsed'\]\) :global\(\[data-header-menu='search-only'\]\)\s*\{\s*display:\s*none;/);
     });
 
     it('shows no reachability notice for a demo wallet in any shell', () => {

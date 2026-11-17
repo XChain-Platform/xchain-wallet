@@ -65,7 +65,7 @@ describe('Safety field tips (U57)', () => {
     it('explains Auto-lock, the test-send warning and Hold duration', () => {
         render(<SafetySection />);
         expect(within(tipText('About auto-lock timeout')).getByText(/idle before it locks/)).toBeTruthy();
-        expect(within(tipText('About the new-recipient test-send warning')).getByText(/Enter 0 to turn this warning off/)).toBeTruthy();
+        expect(within(tipText('About the new-recipient test-send warning')).getByText(/in your display currency/)).toBeTruthy();
         expect(within(tipText('About hold duration')).getByText(/send at once without holding/)).toBeTruthy();
     });
 

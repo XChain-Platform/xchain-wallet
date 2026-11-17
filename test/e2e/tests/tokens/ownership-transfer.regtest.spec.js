@@ -168,7 +168,7 @@ test.describe(`token ownership transfer on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('button', { name: 'Transfer Ownership', exact: true }).click();
 
             await expectConfirmModal(page, 'the ownership transfer');
-            await expect(page.getByTestId('action-intent'))
+            await expect(page.getByTestId('confirm-sentence'))
                 .toContainText(`Transfer ownership of ${TICK}`);
             const txid = await approveAndGetTxid(page);
             const action = await waitForValidAction(txid);

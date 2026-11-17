@@ -86,6 +86,7 @@ describe('SignerPool edge branches', () => {
             passphraseMismatchNames: [],
             passphraseCaptureNeeded: [],
             passphraseCaptureNames: [],
+            hardware: [],
         });
         expect(unlockWalletRecord).not.toHaveBeenCalled();
     });

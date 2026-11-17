@@ -88,8 +88,9 @@ describe('Pause token reads the owner again at Approve', () => {
     it('refuses when ownership moved after the confirm page opened', async () => {
         const { messaging, target, getTokenInfo } = confirmMessaging(record);
         mountPause(messaging);
-        await screen.findByText('Active, not paused');
-        fireEvent.click(screen.getByRole('radio', { name: 'Pause indefinitely' }));
+        await screen.findByRole('button', { name: 'Pause Token' });
+        fireEvent.click(screen.getByRole('button', { name: /^Pause setting/ }));
+        fireEvent.click(screen.getByRole('option', { name: 'Pause indefinitely' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pause Token' }));
         await screen.findByRole('button', { name: 'Approve' });
         getTokenInfo.mockResolvedValue({ ...record, creator: NEW_OWNER });
@@ -101,8 +102,9 @@ describe('Pause token reads the owner again at Approve', () => {
     it('signs when the record did not move', async () => {
         const { messaging, target } = confirmMessaging(record);
         mountPause(messaging);
-        await screen.findByText('Active, not paused');
-        fireEvent.click(screen.getByRole('radio', { name: 'Pause indefinitely' }));
+        await screen.findByRole('button', { name: 'Pause Token' });
+        fireEvent.click(screen.getByRole('button', { name: /^Pause setting/ }));
+        fireEvent.click(screen.getByRole('option', { name: 'Pause indefinitely' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pause Token' }));
         await approve();
         await waitFor(() => expect(target.sleepAction).toHaveBeenCalledTimes(1));
@@ -128,7 +130,7 @@ describe('Access lists reads the owner again at Approve', () => {
     }
 
     async function bindBlockList() {
-        fireEvent.click(await screen.findByRole('button', { name: 'Choose Block-List' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Block list: None set' }));
         fireEvent.click(await screen.findByText(/Address list #42/));
         const update = await screen.findByRole('button', { name: 'Update Access Lists' });
         await waitFor(() => expect(update).toBeEnabled());

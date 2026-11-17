@@ -79,17 +79,11 @@
     gap: var(--xc-space-2);
 }
 
-.matchCount {
-    margin: 0;
-    min-height: 1em;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-}
-
 .groups {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-4);
+    /* 8px between blocks, as on every list page (G80, G93). */
+    gap: var(--xc-space-2);
 }
 
 .day {
@@ -104,11 +98,16 @@
     text-transform: uppercase;
 }
 
+/* Each day's rows sit in one rounded list card with divider lines (G07),
+   like My Tokens and Home's lists. */
 .list {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     list-style: none;
     margin: 0;
     padding: 0;
-    border-block: 1px solid var(--xc-border);
 }
 
 .row {
@@ -124,7 +123,8 @@
 .rowButton {
     width: 100%;
     display: flex;
-    padding: var(--xc-space-3) 0;
+    /* The 8px list row padding on every side (G80). */
+    padding: var(--xc-list-row-padding);
     color: inherit;
     text-align: start;
     /* Button sets 600 for its labels; a row reads at body weight so only an
@@ -140,9 +140,48 @@
 .rowGrid {
     width: 100%;
     display: grid;
-    grid-template-columns: var(--xc-control-h-md) minmax(0, 1fr) auto;
-    gap: var(--xc-space-3);
+    /* Icon, copy, time and dot, then the chevron slot. Every row has all four
+       columns (an empty slot when the row opens nothing), so the time and dot
+       end at the same right edge on every row in every day group. */
+    grid-template-columns: var(--xc-control-h-md) minmax(0, 1fr) auto calc(var(--xc-space-8) / 3);
+    /* Three one-line rows: the label and time, the detail, the description.
+       The detail and the description span under the time, which is what the
+       character budgets in shared/alertCopy.js are measured against. */
+    grid-template-rows: auto auto auto;
+    column-gap: var(--xc-space-2);
+    row-gap: var(--xc-space-1);
     align-items: center;
+}
+
+.rowGrid > .iconTile,
+.rowGrid > .chevron {
+    grid-row: 1 / 4;
+}
+
+.rowGrid > .iconTile {
+    grid-column: 1;
+}
+
+.rowGrid > .chevron {
+    grid-column: 4;
+}
+
+/* The standard list chevron (ui/ListRow.module.css .chevron): the page
+   header Back's icon box, clipped to its middle third, muted. */
+.chevron {
+    --xc-icon-size: var(--xc-space-8);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--xc-icon-size) / 3);
+    overflow: hidden;
+    color: var(--xc-text-muted);
+}
+
+.chevron svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
 }
 
 .iconTile {
@@ -176,14 +215,26 @@
     color: var(--xc-warning-text);
 }
 
+/* The copy wrapper adds no box: its three lines are grid items of the row. */
 .copy {
+    display: contents;
+}
+
+/* Every line is one line tall: it never wraps and ends in an ellipsis when the
+   text is longer than the row (a narrow phone, a larger text scale). */
+.typeLabel,
+.title,
+.message {
+    display: block;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .typeLabel {
+    grid-column: 2;
+    grid-row: 1;
     color: var(--xc-info-text);
     font-size: 10px;
     font-weight: 700;
@@ -204,10 +255,11 @@
 }
 
 .title {
+    grid-column: 2 / 4;
+    grid-row: 2;
     color: var(--xc-text);
     font-size: var(--xc-text-sm);
     font-weight: 500;
-    overflow-wrap: anywhere;
 }
 
 .unread .title {
@@ -215,16 +267,19 @@
 }
 
 .message {
+    grid-column: 2 / 4;
+    grid-row: 3;
     color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
+    font-size: var(--xc-text-xs);
     line-height: 1.35;
-    overflow-wrap: anywhere;
 }
 
 /* The time sits top right with the unread dot just after it on the same
    line, not alone in the row's bottom corner. */
 .meta {
-    align-self: start;
+    grid-column: 3;
+    grid-row: 1;
+    align-self: center;
     min-width: 3rem;
     display: flex;
     flex-direction: row;
@@ -255,6 +310,6 @@
 
 @media (max-width: 480px) {
     .rowGrid {
-        gap: var(--xc-space-2);
+        column-gap: var(--xc-space-2);
     }
 }

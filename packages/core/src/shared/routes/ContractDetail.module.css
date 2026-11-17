@@ -1,56 +1,22 @@
-/* Preview (contract detail, 2026-11-12): the blue card's own lines, the What
-   It Does card, the action row, the icon tabs and the Functions list. The
-   card itself reuses Home's heroStack and the bet market card's figures. */
+/* Contract detail (screen walk 2026-11-14, layout 3): the identity card's own
+   lines (its frame, mark and badge are the oracle record's G16 card), the
+   panels under the Actions | Details | Activity toggle, and the function
+   rows' name and Read only or Writes tag. */
 
-.heroTitleRow {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
-.heroIcon {
-    --xc-icon-size: 18px;
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border-radius: var(--xc-radius-md, 8px);
-    background: rgba(255, 255, 255, 0.16);
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    color: var(--xc-on-accent);
-}
-
-.heroName {
-    margin: 0;
-    min-width: 0;
-    font-size: var(--xc-text-lg);
-    font-weight: 700;
-    line-height: 1.25;
-    color: var(--xc-on-accent);
-}
-
-.heroLine {
+/* The address under the name, with its copy button beside it. */
+.identityAddressRow {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 2px var(--xc-space-2);
-    margin: 0;
-    min-width: 0;
-    font-size: var(--xc-text-xs);
-    color: rgba(255, 255, 255, 0.88);
+    justify-content: center;
+    gap: var(--xc-space-1);
 }
 
-.heroAddress {
+.identityMono {
     font-family: var(--xc-font-mono);
-    font-weight: 600;
-    color: var(--xc-on-accent);
 }
 
-/* The copy control stays a real button (the card's text layer only takes
-   clicks on buttons), drawn small and white on the blue. */
+/* The copy control stays a real button, drawn small and muted. */
 .heroCopy {
     display: inline-flex;
 }
@@ -61,112 +27,43 @@
     min-inline-size: 24px;
     min-block-size: 24px;
     margin-block: calc(-1 * var(--xc-space-1));
-    color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
+    color: var(--xc-text-muted);
 }
 
 .heroCopy button:hover:not(:disabled) {
-    color: var(--xc-on-accent);
+    color: var(--xc-text);
 }
 
-.youChip {
-    white-space: normal;
-}
-
-.youIcon {
-    --xc-icon-size: 12px;
-    display: inline-flex;
-}
-
-.heroStats.heroStats {
-    align-self: stretch;
-    width: 100%;
-    max-width: none;
-    justify-content: space-between;
-    margin-top: 0;
-    padding-top: 0;
-}
-
-.heroOthers {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-.heroTotal {
-    margin-inline-start: auto;
-    white-space: nowrap;
-}
-
-/* What It Does: a plain card, the title with its icon, then the text. */
-.about {
-    composes: card from '../../ui/Card.module.css';
+/* Under a divider: what the contract holds, then publisher, block and calls. */
+.identityFoot {
     display: flex;
     flex-direction: column;
+    align-self: stretch;
     gap: var(--xc-space-1);
-    min-width: 0;
+    margin-top: var(--xc-space-1);
+    padding-top: var(--xc-space-2);
+    border-top: 1px solid var(--xc-border-subtle, rgba(129, 139, 155, 0.35));
 }
 
-.aboutTitle {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
+.identityHoldings {
     margin: 0;
+    color: var(--xc-text);
     font-size: var(--xc-text-sm);
     font-weight: 700;
-    color: var(--xc-text);
-}
-
-.aboutIcon {
-    --xc-icon-size: var(--xc-icon-sm);
-    display: inline-flex;
-    color: var(--xc-text-muted);
-}
-
-.aboutText {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    line-height: 1.45;
-    color: var(--xc-text);
     overflow-wrap: anywhere;
 }
 
-/* The actions share the row by their labels, which never wrap; Stake here
-   takes its own row under them. */
-.actions {
+.identityPublished {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
-.action.action {
-    flex: 1 1 0;
-    min-width: max-content;
-    padding-inline: var(--xc-space-2);
-    white-space: nowrap;
-}
-
-.actionWide.actionWide {
-    flex-basis: 100%;
-}
-
-.actionNote {
-    margin: 0;
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-}
-
-/* The icon tabs: the icon over its word, four equal slots. */
-.tabLabel {
-    display: inline-flex;
-    flex-direction: column;
     align-items: center;
-    gap: 2px;
-    line-height: 1.15;
+    justify-content: center;
+    gap: 0 var(--xc-space-1);
 }
 
-.tabIcon {
-    --xc-icon-size: var(--xc-icon-sm);
-    display: inline-flex;
+/* The publisher's AddressText in the muted line: the line's own colour. */
+.identityOwner[aria-label] {
+    color: inherit;
 }
 
 .panel {
@@ -176,115 +73,21 @@
     min-width: 0;
 }
 
-/* Functions: one card, a header line, then one tappable row per function. */
-.listCard {
-    composes: flush from '../../ui/Card.module.css';
-    min-width: 0;
-    overflow: hidden;
-}
-
-.listHead {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    padding: var(--xc-space-2) var(--xc-card-pad);
-}
-
-.listTitle {
+.actionNote {
     margin: 0;
     font-size: var(--xc-text-sm);
-    font-weight: 700;
-    white-space: nowrap;
-}
-
-.listHint {
-    font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
-    white-space: nowrap;
 }
 
-.fnList {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-/* A function row is the shared Button (or a plain row when the page cannot
-   call methods). The doubled class outranks Button's single-class rules in
-   any sheet order; its hover colours point at the muted row fill and keep
-   the divider's colour, which Button's hover and press rules repaint. */
-.fnRow.fnRow,
-.fnRow {
-    --xc-button-hover-bg: var(--xc-bg-muted);
-    --xc-button-hover-border: var(--xc-border-subtle, rgba(129, 139, 155, 0.35));
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: var(--xc-space-2);
-    width: 100%;
-    max-width: none;
-    min-height: 52px;
-    box-sizing: border-box;
-    padding-block: var(--xc-space-2);
-    padding-inline: var(--xc-card-pad) var(--xc-space-2);
-    border: 0;
-    border-top: 1px solid var(--xc-border-subtle, rgba(129, 139, 155, 0.35));
-    border-radius: 0;
-    background: transparent;
-    color: var(--xc-text);
-    font: inherit;
-    text-align: start;
-}
-
-/* Button wraps its children in one label span; it fills the row so the
-   name column stretches and the tag sits at the end. */
-button.fnRow.fnRow > span {
-    flex: 1 1 auto;
-    justify-content: flex-start;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
-button.fnRow.fnRow:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-}
-
-/* Button's press rule dims and nudges; a list row does neither. */
-.fnRow.fnRow:active:not(:disabled) {
-    filter: none;
-    transform: none;
-}
-
-.fnRow.fnRow:focus-visible {
-    outline: medium solid var(--xc-focus-ring);
-    outline-offset: -3px;
-}
-
-.fnText {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    flex: 1 1 auto;
-    min-width: 0;
-}
-
+/* A function row's title: the function's own name, in code type. */
 .fnName {
     font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-sm);
-    font-weight: 700;
-    overflow-wrap: anywhere;
-}
-
-.fnExplain {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
     overflow-wrap: anywhere;
 }
 
 .fnTag {
     flex: 0 0 auto;
-    padding: 1px var(--xc-space-2);
+    padding: 0 var(--xc-space-2);
     border: 1px solid var(--xc-border-strong);
     border-radius: 999px;
     background: var(--xc-bg-muted);
@@ -299,17 +102,15 @@ button.fnRow.fnRow:hover:not(:disabled) {
     border-color: color-mix(in srgb, var(--xc-success, #14b86c) 45%, transparent);
 }
 
-.fnChevron {
-    --xc-icon-size: var(--xc-icon-sm);
-    display: inline-flex;
-    flex: 0 0 auto;
-    color: var(--xc-accent-primary);
+/* A long value (a hash, a constructor argument) wraps anywhere. */
+.mono {
+    font-family: var(--xc-font-mono);
+    overflow-wrap: anywhere;
 }
 
-.listNote {
-    margin: 0;
-    padding: var(--xc-space-2) var(--xc-card-pad);
-    border-top: 1px solid var(--xc-border-subtle, rgba(129, 139, 155, 0.35));
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
+/* One holding per line in the Holdings fact. */
+.factLines {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
 }

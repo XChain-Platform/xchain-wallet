@@ -265,9 +265,29 @@ async function placeOrder(page) {
     return action;
 }
 
-/** The open-order row in My orders, located by the index the chain gave it. */
+/**
+ * The order's row in My orders, located by the index the chain gave it. The
+ * ring layout's row names the trade, not the order number, so it is found by
+ * its order key.
+ */
 function orderRow(page, orderIndex) {
-    return page.getByRole('main').getByRole('listitem').filter({ hasText: `#${orderIndex}` });
+    return page.getByRole('main').locator(`[data-order-row$=":${orderIndex}"]`);
+}
+
+/**
+ * Opens the order's detail page from its row (the row is one button) and
+ * presses one of its actions there: Cancel and Edit left the row on
+ * 2026-11-13, and are rows of the detail page's Actions list (G101).
+ */
+async function openOrderAction(page, orderIndex, action) {
+    await orderRow(page, orderIndex).getByRole('button').click();
+    const main = page.getByRole('main');
+    // The order number sits in the facts under Details (G102).
+    await main.getByRole('tab', { name: 'Details' }).click({ timeout: 30_000 });
+    await expect(main.getByLabel('Order details'), `the detail page for #${orderIndex} never opened`)
+        .toContainText(`#${orderIndex}`, { timeout: 30_000 });
+    await main.getByRole('tab', { name: 'Actions' }).click();
+    await main.getByRole('button', { name: new RegExp(`^${action} order`) }).click();
 }
 
 test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
@@ -315,20 +335,24 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('cancel it, and the escrow comes back', async () => {
             const before = await tokenBalance(source, 'XCHAIN');
             const main = page.getByRole('main');
-            await orderRow(page, orderIndex).getByRole('button', { name: 'Cancel', exact: true }).click();
+            await openOrderAction(page, orderIndex, 'Cancel');
 
-            // The panel's own promise, which is the claim the chain settles
-            // below. (Its title lives in the page header, not in a heading
-            // element, so asserting a heading here would fail on a correct
-            // screen.)
-            await expect(main.getByText(/Cancelling closes the order and returns the escrowed/),
-                'the cancel panel never opened for this order')
+            // The standard Cancel Order form on its own route. (Its title
+            // lives in the page header, not in a heading element, so
+            // asserting a heading here would fail on a correct screen.)
+            await expect(main.locator('[data-form-standard="cancel-order"]'),
+                'the cancel form never opened for this order')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main, 'the cancel panel is pointed at a different order')
+            await expect(main, 'the cancel form is pointed at a different order')
                 .toContainText(`#${orderIndex}`);
-            // Signed on the shared confirm page, after its network dry run.
+            // Signed on the shared confirm page, after its network dry run;
+            // the cancel's promise is the review screen's warning (G105),
+            // the claim the chain settles below.
             await page.getByRole('button', { name: 'Cancel Order' }).click();
             await expectConfirmModal(page, 'this action', 60_000);
+            await expect(page.getByTestId('confirm-action-warnings'),
+                'the review never said what the cancel does')
+                .toContainText(/Cancelling closes the order and returns any escrowed side/);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             await page.getByTestId('confirm-approve').click();
             await expect(page.getByText('Cancel broadcast'),
@@ -396,7 +420,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             const row = orderRow(page, orderIndex);
             await expect(row, `#${orderIndex} is not in My orders to edit`)
                 .toBeVisible({ timeout: 60_000 });
-            await row.getByRole('button', { name: 'Edit', exact: true }).click();
+            await openOrderAction(page, orderIndex, 'Edit');
 
             const main = page.getByRole('main');
             const expiration = main.getByLabel('New expiration', { exact: true });

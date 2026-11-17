@@ -76,7 +76,27 @@ describe('DurationSlider', () => {
 
         expect(screen.getByText('100 blocks is ~16.7 hours (1 block is ~10 min).')).toBeInTheDocument();
         expect(screen.getAllByText(/100 blocks is ~/)).toHaveLength(1);
-        expect(screen.getByText('~16.7 hours')).toBeInTheDocument();
+        expect(screen.getByText('~17 hours')).toBeInTheDocument();
         expect(screen.getByRole('slider', { name: 'Duration' })).toHaveAttribute('aria-valuetext', 'Custom');
+    });
+
+    it('makes the header label follow a custom block count in the short style', () => {
+        function ControlledSlider() {
+            const [value, setValue] = useState('4320');
+            return <DurationSlider coin="bitcoin" value={value} onChange={setValue} />;
+        }
+
+        render(<ControlledSlider />);
+        expect(screen.getByText('~1 month')).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Custom'));
+        const blocks = screen.getByLabelText('Blocks');
+        // Bitcoin: 144 blocks a day.
+        for (const [count, label] of [
+            ['864', '~6 days'], ['2016', '~2 weeks'], ['25920', '~6 months'],
+            ['51840', '~1 year'], ['78840', '~1.5 years'],
+        ]) {
+            fireEvent.change(blocks, { target: { value: count } });
+            expect(screen.getByText(label)).toBeInTheDocument();
+        }
     });
 });

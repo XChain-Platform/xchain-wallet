@@ -145,7 +145,7 @@ describe('Issue Token draft', () => {
         await waitFor(() => expect(localStorage.getItem(KEY)).toBeNull());
     });
 
-    it('drops the draft on Discard and saves what is typed next', async () => {
+    it('drops the draft from the X and saves what is typed next', async () => {
         localStorage.setItem(KEY, JSON.stringify({
             savedAt: Date.now(),
             network: 'regtest',
@@ -153,7 +153,7 @@ describe('Issue Token draft', () => {
         }));
         mount(makeMessaging());
         expect(await screen.findByText(/Nothing was submitted\./)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Discard saved draft' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Discard draft' }));
         expect(localStorage.getItem(KEY)).toBeNull();
         expect(screen.queryByText(/Nothing was submitted\./)).toBeNull();
 
@@ -199,7 +199,8 @@ describe('Issue Token draft', () => {
         }));
         mount(makeMessaging());
         fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
-        expect(await screen.findByLabelText('Parent ticker')).toHaveValue('PARENT');
+        // The Parent token selector shows the restored parent on its network.
+        expect(await screen.findByRole('button', { name: /^Parent token: PARENT on / })).toBeTruthy();
         expect(screen.getByLabelText('Subtoken name')).toHaveValue('CHILD');
         // The signer sits in the From section; the restored one stands.
         await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(ADDR_2.address));

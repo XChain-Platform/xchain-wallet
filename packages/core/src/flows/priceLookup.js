@@ -332,10 +332,37 @@ async function fetchJson(fetchImpl, url, signal) {
  * hub's derived price source) beside the coin ones.
  */
 async function fetchOracleSnapshotRate(fetchImpl, chainCoin, pair, nowMs, signal) {
+    const rows = await fetchOracleSnapshotRows(fetchImpl, chainCoin, signal);
+    return rows ? oracleRateFromRows(rows, pair, nowMs) : null;
+}
+
+// The snapshot feed is one URL per coin whatever pair is wanted, so callers
+// that ask at once (the coin refresh and a token batch on the same Home
+// render) share one in-flight read of it.
+/** @type {Map<string, SharedRefresh>} */
+const snapshotReads = new Map();
+
+/**
+ * The coin explorer's latest finalized snapshot rows, or null when the coin
+ * has no explorer. Throws on transport errors.
+ */
+async function fetchOracleSnapshotRows(fetchImpl, chainCoin, signal) {
     const base = explorerUrlForCoin(chainCoin);
     if (!base) return null;
-    const json = await fetchJson(fetchImpl, `${base}/api/price_snapshots/FINALIZED/status?limit=25`, signal);
-    const rows = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+    const url = `${base}/api/price_snapshots/FINALIZED/status?limit=25`;
+    let entry = snapshotReads.get(url);
+    if (!entry) {
+        entry = startSharedRefresh((sharedSignal) => fetchJson(fetchImpl, url, sharedSignal).finally(() => {
+            if (snapshotReads.get(url) === entry) snapshotReads.delete(url);
+        }));
+        snapshotReads.set(url, entry);
+    }
+    const json = await joinSharedRefresh(entry, signal);
+    return Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+}
+
+/** The fresh positive rate for `pair` in snapshot rows, else null. */
+function oracleRateFromRows(rows, pair, nowMs) {
     const row = rows.find((r) => r && r.coin_pair === pair);
     if (!row) return null;
     const rate = Number(row.price);
@@ -416,8 +443,69 @@ export function isFiatRateSourceUrl(url) {
         const rest = u.pathname.slice(b.pathname.length);
         if (rest === '/api/price_snapshots/FINALIZED/status') return true;
         if (/^\/api\/market\/[^/]+\/[^/]+$/.test(rest)) return true;
+        // Every market against one tick, the token batch's one read.
+        if (/^\/api\/markets\/[^/]+$/.test(rest)) return true;
+        // Home's value chart: every token's price series, one read per chain.
+        if (rest === '/api/price_history') return true;
     }
     return false;
+}
+
+/** Assets one price-history read carries (the explorer refuses more). */
+export const PRICE_HISTORY_ASSETS_MAX = 50;
+/** Buckets one price-history read may span (the explorer refuses more). */
+export const PRICE_HISTORY_BUCKETS_MAX = 1000;
+const PRICE_HISTORY_INTERVAL_S = { hour: 3600, day: 86400 };
+
+/**
+ * Price series for up to 50 assets from a launch coin's mainnet explorer
+ * (GET /{COIN}/api/price_history): oracle series in USD and DEX series in the
+ * coin, each naming its source. The oracle feed publishes USD pairs only, so
+ * the series are always asked for in USD; a caller showing another currency
+ * scales them to its own rate now. `from` is clamped so the span stays within
+ * the explorer's bucket ceiling. Null when the coin has no explorer. Throws on
+ * transport errors and on a body that is not the route's shape.
+ *
+ * @param {object} args
+ * @param {string} args.chainCoin             coin family, e.g. 'bitcoin'
+ * @param {string[]} args.assets              tickers, at most 50
+ * @param {'hour' | 'day'} args.interval
+ * @param {number} args.from                  unix seconds
+ * @param {number} [args.to]                  unix seconds, default now
+ * @param {AbortSignal} [args.signal]
+ * @returns {Promise<{ series: Array<{ asset: string, source: 'oracle' | 'dex', quote: string, points: Array<{ t: number, price: string }> }>, missing: string[], quote: string } | null>}
+ */
+export async function fetchPriceHistory({ chainCoin, assets, interval, from, to, signal } = {}) {
+    const base = explorerUrlForCoin(chainCoin);
+    if (!base) return null;
+    const list = [...new Set((assets || []).map((a) => String(a || '').trim()).filter(Boolean))];
+    if (list.length === 0) return { series: [], missing: [], quote: tickerForCoin(chainCoin) };
+    if (list.length > PRICE_HISTORY_ASSETS_MAX) throw new Error(`fetchPriceHistory: at most ${PRICE_HISTORY_ASSETS_MAX} assets per read`);
+    const step = PRICE_HISTORY_INTERVAL_S[interval];
+    if (!step) throw new Error('fetchPriceHistory: interval must be hour or day');
+    const toS = Math.floor(Number.isFinite(to) ? to : deps.now() / 1000);
+    const floor = toS - (PRICE_HISTORY_BUCKETS_MAX - 2) * step;
+    const fromS = Math.max(0, floor, Math.floor(Number.isFinite(from) ? from : floor));
+    // A ticker with a comma is sent as its own repeated parameter, which the
+    // route does not split.
+    const params = new URLSearchParams();
+    if (list.some((a) => a.includes(','))) for (const a of list) params.append('assets', a);
+    else params.set('assets', list.join(','));
+    params.set('interval', interval);
+    params.set('from', String(fromS));
+    params.set('to', String(toS));
+    params.set('fiat', 'USD');
+    const fetchImpl = resolveFetch();
+    if (!fetchImpl) throw new Error('fetchPriceHistory: fetch unavailable');
+    const json = await fetchJson(fetchImpl, `${base}/api/price_history?${params.toString()}`, signal);
+    if (!json || typeof json !== 'object' || !Array.isArray(json.series)) {
+        throw new Error('fetchPriceHistory: the answer is not a price history');
+    }
+    return {
+        series: json.series.filter((s) => s && typeof s.asset === 'string' && Array.isArray(s.points)),
+        missing: Array.isArray(json.missing) ? json.missing : [],
+        quote: typeof json.quote === 'string' ? json.quote : tickerForCoin(chainCoin),
+    };
 }
 
 /**
@@ -701,19 +789,255 @@ async function fetchMarketPriceInCoin(fetchImpl, chainCoin, tick, nativeTicker, 
         : Array.isArray(json) ? json
             : json?.data ? [json.data] : [];
     for (const row of rows) {
-        const price = marketPriceOf(row, tick, nativeTicker);
-        if (!Number.isFinite(price) || price <= 0) continue;
-        // `last_updated` is the indexer's last recompute of the row (unix
-        // seconds, block time), not the age of the fill it prices, so it
-        // bounds how stale the DATA can be rather than the trade. That is
-        // still the only freshness signal this endpoint gives us.
-        const tsMs = Number(row.last_updated) * 1000;
-        if (!Number.isFinite(tsMs) || tsMs <= 0) continue;
-        const ageMs = nowMs - tsMs;
-        if (ageMs > MARKET_STALE_MS || ageMs < -PRICE_TIMESTAMP_FUTURE_SKEW_MS) continue;
-        return { price, change24hPct: marketChange24hOf(row, tick, nativeTicker) };
+        const priced = marketRowPrice(row, tick, nativeTicker, nowMs);
+        if (priced) return priced;
     }
     return null;
+}
+
+/** A market row's usable price of `tick` in `quote`, or null. */
+function marketRowPrice(row, tick, quote, nowMs) {
+    const price = marketPriceOf(row, tick, quote);
+    if (!Number.isFinite(price) || price <= 0) return null;
+    // `last_updated` is the indexer's last recompute of the row (unix
+    // seconds, block time), not the age of the fill it prices, so it
+    // bounds how stale the DATA can be rather than the trade. That is
+    // still the only freshness signal this endpoint gives us.
+    const tsMs = Number(row.last_updated) * 1000;
+    if (!Number.isFinite(tsMs) || tsMs <= 0) return null;
+    const ageMs = nowMs - tsMs;
+    if (ageMs > MARKET_STALE_MS || ageMs < -PRICE_TIMESTAMP_FUTURE_SKEW_MS) return null;
+    return { price, change24hPct: marketChange24hOf(row, tick, quote) };
+}
+
+// The explorer serves at most 100 markets per list read. Its getMarkets
+// reader ignores ?page= (it runs its own query without the page OFFSET), so
+// a second page would only repeat the first: the batch reads one, the 100
+// newest markets against the coin. A token whose market is older stays
+// unpriced in the batch, as a token with no market does.
+const MARKETS_LIMIT = 100;
+
+/**
+ * The batch's secondary source: every market against the native coin in one
+ * read (`/api/markets/{coin}`), kept for the wanted ticks only. Returns a Map
+ * of tick to `{ price, change24hPct }`. Throws on transport errors (caller
+ * gives up).
+ */
+async function fetchMarketPricesInCoin(fetchImpl, chainCoin, nativeTicker, ticks, nowMs, signal) {
+    const out = new Map();
+    const base = explorerUrlForCoin(chainCoin);
+    if (!base) return out;
+    const url = `${base}/api/markets/${encodeURIComponent(nativeTicker)}?limit=${MARKETS_LIMIT}`;
+    const json = await fetchJson(fetchImpl, url, signal);
+    const rows = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+    for (const row of rows) {
+        const t1 = normalizeTick(row?.tick1);
+        const t2 = normalizeTick(row?.tick2);
+        const tick = t1 === nativeTicker ? t2 : t2 === nativeTicker ? t1 : '';
+        if (!ticks.has(tick) || out.has(tick)) continue;
+        const priced = marketRowPrice(row, tick, nativeTicker, nowMs);
+        if (priced) out.set(tick, priced);
+    }
+    return out;
+}
+
+/** True when a token's cached rate (or its remembered miss) is due a refresh. */
+function tokenRateDue(hit, nowMs) {
+    if (!hit) return true;
+    if (hit.rate && !hit.rate.stale && isFreshRate(hit.fetchedAtMs, nowMs)) return false;
+    const missAtMs = hit.missAtMs ?? (hit.rate ? null : hit.fetchedAtMs);
+    return !(missAtMs != null && nowMs - missAtMs >= 0 && nowMs - missAtMs <= MISS_TTL_MS);
+}
+
+/**
+ * A token whose refresh resolved nothing keeps whatever the cache holds,
+ * exactly as the coin path does: its observation timestamp stays unchanged so
+ * freshness remains honest, while missAtMs throttles retries. Returns whether
+ * a held rate just turned stale (listeners should hear of it).
+ */
+function recordTokenMiss(key, hit, nowMs) {
+    if (hit?.rate) {
+        markCachedRateStale(tokenRateCache, key, nowMs, TOKEN_RATE_CACHE_MAX);
+        const retained = readCacheEntry(tokenRateCache, key);
+        writeCacheEntry(tokenRateCache, key, { ...retained, missAtMs: nowMs }, TOKEN_RATE_CACHE_MAX);
+        return Boolean(retained?.rate?.stale && !hit.rate.stale);
+    }
+    writeCacheEntry(tokenRateCache, key, { rate: null, fetchedAtMs: nowMs, missAtMs: nowMs }, TOKEN_RATE_CACHE_MAX);
+    return false;
+}
+
+function writeTokenRate(key, { chainCoin, tick, fiatCurrency, nowMs }, rate, source, change24hPct = null) {
+    writeCacheEntry(tokenRateCache, key, {
+        rate: Object.freeze({
+            rate,
+            chainCoin,
+            tick,
+            fiatCurrency,
+            source,
+            fetchedAt: new Date(nowMs).toISOString(),
+            stale: false,
+            change24hPct,
+        }),
+        fetchedAtMs: nowMs,
+    }, TOKEN_RATE_CACHE_MAX);
+}
+
+/**
+ * Refresh the cached fiat rates of many tokens at once (Home's Balances
+ * list). The reads follow the chains, never the tokens: per coin family one
+ * oracle snapshot read (shared with the coin's own refresh when both run at
+ * once), the coin's rate (TTL-cached), and one read of the 100 newest markets
+ * against the coin. Each token then takes its oracle pair, else its market
+ * price converted through the coin rate, else stays unpriced (§45.4). The
+ * same TTL, miss throttle and in-flight sharing as `refreshTokenFiatRate`
+ * apply per token, and only the asked-for ticks are written.
+ *
+ * @param {object} opts
+ * @param {Array<{ chainCoin: string, tick: string, nativeTicker: string }>} opts.tokens
+ * @param {string} [opts.fiatCurrency]             default 'USD'
+ * @param {boolean} [opts.allowCoingeckoFallback]  default true
+ * @param {boolean} [opts.force]                   default false
+ * @param {AbortSignal} [opts.signal]               cancels in-flight requests and backoff
+ * @returns {Promise<{ updated: string[] }>}       `${chainCoin}|${tick}` of each rate that changed
+ */
+export async function refreshTokenFiatRates({
+    tokens,
+    fiatCurrency = 'USD',
+    allowCoingeckoFallback = true,
+    force = false,
+    signal,
+} = {}) {
+    if (!Array.isArray(tokens) || tokens.length === 0) return { updated: [] };
+    hydratePersistedRates();
+    const fetchImpl = resolveFetch();
+    if (!fetchImpl) return { updated: [] };
+    const nowMs = deps.now();
+
+    // Group the due ticks by chain; a tick another refresh is already
+    // reading joins that refresh instead.
+    const groups = new Map();
+    const joined = new Set();
+    for (const token of tokens) {
+        const chainCoin = token?.chainCoin;
+        const t = normalizeTick(token?.tick);
+        const n = normalizeTick(token?.nativeTicker);
+        if (typeof chainCoin !== 'string' || chainCoin.length === 0) continue;
+        if (t.length === 0 || n.length === 0 || t === n || /[/?#\\]/.test(t)) continue;
+        const key = tokenCacheKey(chainCoin, t, fiatCurrency);
+        const hit = readCacheEntry(tokenRateCache, key);
+        if (!force && !tokenRateDue(hit, nowMs)) continue;
+        const active = tokenRefreshes.get(`${key}|fallback:${allowCoingeckoFallback}`);
+        if (active) {
+            joined.add(active);
+            continue;
+        }
+        const groupKey = `${chainCoin}|${n}`;
+        if (!groups.has(groupKey)) groups.set(groupKey, { chainCoin, nativeTicker: n, hits: new Map() });
+        groups.get(groupKey).hits.set(t, hit);
+    }
+    if (signal?.aborted) throw abortError();
+
+    for (const group of groups.values()) {
+        const refreshKeys = [...group.hits.keys()].map((t) => (
+            `${tokenCacheKey(group.chainCoin, t, fiatCurrency)}|fallback:${allowCoingeckoFallback}`
+        ));
+        /** @type {SharedRefresh} */
+        const refresh = startSharedRefresh((sharedSignal) => refreshChainTokenRates({
+            ...group,
+            fiatCurrency,
+            allowCoingeckoFallback,
+            fetchImpl,
+            nowMs,
+            signal: sharedSignal,
+        }).finally(() => {
+            for (const refreshKey of refreshKeys) {
+                if (tokenRefreshes.get(refreshKey) === refresh) tokenRefreshes.delete(refreshKey);
+            }
+        }));
+        for (const refreshKey of refreshKeys) tokenRefreshes.set(refreshKey, refresh);
+        joined.add(refresh);
+    }
+    if (joined.size === 0) return { updated: [] };
+
+    const results = await Promise.all([...joined].map((entry) => joinSharedRefresh(entry, signal)));
+    // A joined single-token refresh answers `{ updated: boolean }`; only the
+    // batches name what they priced.
+    return { updated: [...new Set(results.flatMap((result) => (Array.isArray(result?.updated) ? result.updated : [])))] };
+}
+
+async function refreshChainTokenRates({
+    chainCoin,
+    nativeTicker,
+    hits,
+    fiatCurrency,
+    allowCoingeckoFallback,
+    fetchImpl,
+    nowMs,
+    signal,
+}) {
+    const updated = [];
+    const keyOf = (t) => tokenCacheKey(chainCoin, t, fiatCurrency);
+    const put = (t, rate, source, change24hPct) => {
+        writeTokenRate(keyOf(t), { chainCoin, tick: t, fiatCurrency, nowMs }, rate, source, change24hPct);
+        updated.push(`${chainCoin}|${t}`);
+    };
+    let remaining = [...hits.keys()];
+
+    // The coin's rate converts market prices. Its refresh starts first so
+    // its snapshot read is in flight before the token pairs ask for the same
+    // URL, and the two share one read. It always settles (an error comes back
+    // as the value), so an unawaited refresh never rejects unhandled.
+    const coinRefresh = refreshFiatRates({ chainCoins: [chainCoin], fiatCurrency, allowCoingeckoFallback, signal })
+        .then(() => null, (err) => err);
+
+    // 1. Each token's own oracle pair, from the coin's one snapshot read.
+    //    The feed publishes USD pairs only.
+    if (fiatCurrency === 'USD') {
+        try {
+            const rows = (await fetchOracleSnapshotRows(fetchImpl, chainCoin, signal)) || [];
+            remaining = remaining.filter((t) => {
+                const rate = oracleRateFromRows(rows, `${t}/USD`, nowMs);
+                if (rate == null) return true;
+                put(t, rate, 'oracle', null);
+                return false;
+            });
+        } catch (err) {
+            if (signal?.aborted) throw err;
+            // Fall through to the markets.
+        }
+    }
+
+    // 2. The DEX markets, converted through the coin's own rate. Without it
+    //    a market price is only a coin-denominated number.
+    if (remaining.length > 0) {
+        const coinError = await coinRefresh;
+        if (coinError && signal?.aborted) throw coinError;
+        // Otherwise the cache read below decides.
+        const coinRate = getFiatRate({ chainCoin, fiatCurrency });
+        if (coinRate) {
+            try {
+                const prices = await fetchMarketPricesInCoin(
+                    fetchImpl, chainCoin, nativeTicker, new Set(remaining), nowMs, signal,
+                );
+                remaining = remaining.filter((t) => {
+                    const market = prices.get(t);
+                    const fiat = market ? market.price * coinRate.rate : null;
+                    if (fiat == null || !Number.isFinite(fiat) || fiat <= 0) return true;
+                    put(t, fiat, 'market', market.change24hPct);
+                    return false;
+                });
+            } catch (err) {
+                if (signal?.aborted) throw err;
+                // Keep whatever the cache already holds.
+            }
+        }
+    }
+
+    let staleChanged = false;
+    for (const t of remaining) staleChanged = recordTokenMiss(keyOf(t), hits.get(t), nowMs) || staleChanged;
+    if (updated.length > 0) persistRates();
+    if (updated.length > 0 || staleChanged) notifyListeners();
+    return { updated };
 }
 
 /**
@@ -758,17 +1082,17 @@ export async function refreshTokenFiatRate({
 
     const key = tokenCacheKey(chainCoin, t, fiatCurrency);
     const hit = readCacheEntry(tokenRateCache, key);
-    if (!force && hit) {
-        if (hit.rate && !hit.rate.stale && isFreshRate(hit.fetchedAtMs, nowMs)) return { updated: false };
-        const missAtMs = hit.missAtMs ?? (hit.rate ? null : hit.fetchedAtMs);
-        if (missAtMs != null && nowMs - missAtMs >= 0 && nowMs - missAtMs <= MISS_TTL_MS) {
-            return { updated: false };
-        }
-    }
+    if (!force && !tokenRateDue(hit, nowMs)) return { updated: false };
     const refreshKey = `${key}|fallback:${allowCoingeckoFallback}`;
     if (signal?.aborted) throw abortError();
     const active = tokenRefreshes.get(refreshKey);
-    if (active) return joinSharedRefresh(active, signal);
+    if (active) {
+        // A batch in flight answers with the list it priced; this caller
+        // asked about one tick, so it gets that tick's yes or no.
+        return joinSharedRefresh(active, signal).then((result) => (Array.isArray(result?.updated)
+            ? { updated: result.updated.includes(`${chainCoin}|${t}`) }
+            : result));
+    }
 
     /** @type {SharedRefresh} */
     const refresh = startSharedRefresh((sharedSignal) => refreshTokenFiatRateUncached({
@@ -801,34 +1125,12 @@ async function refreshTokenFiatRateUncached({
     hit,
     signal,
 }) {
-    // A refresh that resolved nothing keeps whatever the cache already
-    // holds, exactly as the coin path does. Its observation timestamp stays
-    // unchanged so freshness remains honest, while missAtMs throttles retries.
     const miss = () => {
-        if (hit?.rate) {
-            markCachedRateStale(tokenRateCache, key, nowMs, TOKEN_RATE_CACHE_MAX);
-            const retained = readCacheEntry(tokenRateCache, key);
-            writeCacheEntry(tokenRateCache, key, { ...retained, missAtMs: nowMs }, TOKEN_RATE_CACHE_MAX);
-            if (retained?.rate?.stale && !hit.rate.stale) notifyListeners();
-        } else {
-            writeCacheEntry(tokenRateCache, key, { rate: null, fetchedAtMs: nowMs, missAtMs: nowMs }, TOKEN_RATE_CACHE_MAX);
-        }
+        if (recordTokenMiss(key, hit, nowMs)) notifyListeners();
         return { updated: false };
     };
     const put = (rate, source, change24hPct = null) => {
-        writeCacheEntry(tokenRateCache, key, {
-            rate: Object.freeze({
-                rate,
-                chainCoin,
-                tick: t,
-                fiatCurrency,
-                source,
-                fetchedAt: new Date(nowMs).toISOString(),
-                stale: false,
-                change24hPct,
-            }),
-            fetchedAtMs: nowMs,
-        }, TOKEN_RATE_CACHE_MAX);
+        writeTokenRate(key, { chainCoin, tick: t, fiatCurrency, nowMs }, rate, source, change24hPct);
         persistRates();
         notifyListeners();
         return { updated: true };
@@ -899,6 +1201,7 @@ export function _resetPriceLookupForTests({ preservePersistent = false } = {}) {
     coinRefreshes.clear();
     tokenRateCache.clear();
     tokenRefreshes.clear();
+    snapshotReads.clear();
     listeners.clear();
     persistedRatesHydrated = false;
     if (!preservePersistent) {

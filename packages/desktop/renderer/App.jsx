@@ -44,7 +44,7 @@ import { useDocumentTitle } from '@xchain-wallet/core/shared/hooks/useDocumentTi
 import { useScannedPsbt } from '@xchain-wallet/core/shared/hooks/useScannedPsbt.js';
 import { useSettings } from '@xchain-wallet/core/shared/hooks/useSettings.js';
 import { useActiveWalletModeSource, useWalletMode } from '@xchain-wallet/core/shared/hooks/useWalletMode.js';
-import { AppHeader } from '@xchain-wallet/core/shared/components/AppHeader.jsx';
+import { ShellAppHeader } from '@xchain-wallet/core/shared/components/ShellAppHeader.jsx';
 import { MessagingProvider } from '@xchain-wallet/core/shared/MessagingProvider.jsx';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
@@ -72,7 +72,10 @@ import { isConfirmActive } from '@xchain-wallet/core/shared/hooks/useConfirmActi
 import { useHeldWalletSwitch } from '@xchain-wallet/core/shared/hooks/useHeldWalletSwitch.js';
 import { takePostDemoIntent } from '@xchain-wallet/core/shared/utils/demoGraduation.js';
 import { historyScopeForAsset } from '@xchain-wallet/core/shared/utils/historyEntryScope.js';
-import { defaultDexAssetForNetwork, sharedListDirectoryChainId, syncDexAssetToNetwork } from '@xchain-wallet/core/shared/chainSelection.js';
+import {
+    defaultDexAssetForNetwork, defaultDispenserAssetForNetwork,
+    syncDexAssetToNetwork, syncDispenserAssetToNetwork,
+} from '@xchain-wallet/core/shared/chainSelection.js';
 import { lockImmediately } from '@xchain-wallet/core/shared/utils/lockAction.js';
 import { clearSensitiveCopy } from '@xchain-wallet/core/shared/clipboard.js';
 import { CoinpayObligationsProvider } from '@xchain-wallet/core/shared/hooks/useCoinpayObligations.js';
@@ -87,7 +90,6 @@ import { ScanRoute } from '@xchain-wallet/core/shared/routes/ScanRoute.jsx';
 import { ActionsMenu } from '@xchain-wallet/core/shared/routes/ActionsMenu.jsx';
 import { buildActionEntries } from '@xchain-wallet/core/shared/actionEntries.js';
 import { MyTokens } from '@xchain-wallet/core/shared/routes/MyTokens.jsx';
-import { ManageToken } from '@xchain-wallet/core/shared/routes/ManageToken.jsx';
 import { TokenDetail } from '@xchain-wallet/core/shared/routes/TokenDetail.jsx';
 import { IssueTokenForm } from '@xchain-wallet/core/shared/routes/IssueTokenForm.jsx';
 import { MintForm } from '@xchain-wallet/core/shared/routes/MintForm.jsx';
@@ -101,13 +103,8 @@ import { DispenserForm } from '@xchain-wallet/core/shared/routes/DispenserForm.j
 import { DispensersList } from '@xchain-wallet/core/shared/routes/DispensersList.jsx';
 import { MyLists } from '@xchain-wallet/core/shared/routes/MyLists.jsx';
 import { ListDetail } from '@xchain-wallet/core/shared/routes/ListDetail.jsx';
+import { ListLookForm } from '@xchain-wallet/core/shared/routes/ListLookForm.jsx';
 import { ListCreateForm } from '@xchain-wallet/core/shared/routes/ListCreateForm.jsx';
-import { ListForkForm } from '@xchain-wallet/core/shared/routes/ListForkForm.jsx';
-import { ListShareForm } from '@xchain-wallet/core/shared/routes/ListShareForm.jsx';
-import { ListTransferForm } from '@xchain-wallet/core/shared/routes/ListTransferForm.jsx';
-import { ListRenameForm } from '@xchain-wallet/core/shared/routes/ListRenameForm.jsx';
-import { UnionListForm } from '@xchain-wallet/core/shared/routes/UnionListForm.jsx';
-import { SharedListDirectory } from '@xchain-wallet/core/shared/routes/SharedListDirectory.jsx';
 import { DispenserDetail } from '@xchain-wallet/core/shared/routes/DispenserDetail.jsx';
 import { DispenserExplorer } from '@xchain-wallet/core/shared/routes/DispenserExplorer.jsx';
 import { DividendForm } from '@xchain-wallet/core/shared/routes/DividendForm.jsx';
@@ -125,10 +122,6 @@ import { ContactsList } from '@xchain-wallet/core/shared/routes/ContactsList.jsx
 import { StakingList } from '@xchain-wallet/core/shared/routes/StakingList.jsx';
 import { StakeDetail } from '@xchain-wallet/core/shared/routes/StakeDetail.jsx';
 import { StakeNew } from '@xchain-wallet/core/shared/routes/StakeNew.jsx';
-import { StakeForm } from '@xchain-wallet/core/shared/routes/StakeForm.jsx';
-import { StakingActionForm } from '@xchain-wallet/core/shared/routes/StakingActionForm.jsx';
-import { DelegationActionForm } from '@xchain-wallet/core/shared/routes/DelegationActionForm.jsx';
-import { OperatorDashboard } from '@xchain-wallet/core/shared/routes/OperatorDashboard.jsx';
 import { History } from '@xchain-wallet/core/shared/routes/History.jsx';
 import { ActionDetail } from '@xchain-wallet/core/shared/routes/ActionDetail.jsx';
 import { LinkForm } from '@xchain-wallet/core/shared/routes/LinkForm.jsx';
@@ -151,7 +144,6 @@ import { useAccountList } from '@xchain-wallet/core/shared/hooks/useAccountList.
 import { useGovernanceAddressesPresent } from '@xchain-wallet/core/shared/hooks/useGovernanceAddressesPresent.js';
 import { useMessagingUnread } from '@xchain-wallet/core/shared/hooks/useMessagingUnread.js';
 import { buildWalletAlerts } from '@xchain-wallet/core/shared/walletAlerts.js';
-import { TAB_BAR_DESTINATIONS } from '@xchain-wallet/core/shared/routeRegistry.js';
 import { navItemKey, useNavHistory, WALLET_SWITCH_KEEPS } from '@xchain-wallet/core/ui/navHistory.js';
 import * as messaging from './messaging.js';
 import { getSessionStatus, listWallets, lockWallet, listAccounts } from './messaging.js';
@@ -167,11 +159,18 @@ import { BottomTabBar } from '@xchain-wallet/core/shared/components/BottomTabBar
 import { useWaitingLinkDropped } from '@xchain-wallet/core/shared/components/WaitingLinkDroppedNotice.jsx';
 import { QueuedBroadcastBanner } from '@xchain-wallet/core/shared/components/QueuedBroadcastBanner.jsx';
 import { LockedSendOutcomeNotice } from '@xchain-wallet/core/shared/components/LockedSendOutcomeNotice.jsx';
+import { EraseScheduledNotice } from '@xchain-wallet/core/shared/components/EraseScheduledNotice.jsx';
 import { ReachabilityBanner } from '@xchain-wallet/core/shared/components/ReachabilityBanner.jsx';
 import { ToastHost, useClearToastsOnLock, useToast } from '@xchain-wallet/core/shared/components/ToastHost.jsx';
 import { useDemoAutoWipe } from '@xchain-wallet/core/shared/hooks/useDemoAutoWipe.js';
-import { registerSigner as registerLocalSigner, unregisterSigner as unregisterLocalSigner } from './signerBridge.js';
-import { trackHardwareFactories, useHardwareSessionReset } from '@xchain-wallet/core/shared/hooks/useHardwareSessionReset.js';
+import {
+    registerHardwareRecord,
+    registerSigner as registerLocalSigner,
+} from './signerBridge.js';
+import {
+    trackHardwareFactories, useHardwareReconnect, useHardwareSessionReset,
+} from '@xchain-wallet/core/shared/hooks/useHardwareSessionReset.js';
+import { openHardwareSigner } from '@xchain-wallet/core/signers/hardwareReconnect.js';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
 import { useDeepLinks } from './deepLinkRoute.js';
@@ -188,13 +187,20 @@ const MarketView = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Mar
 const MarketTrade = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MarketTrade.jsx'), 'MarketTrade');
 const CreateOrderForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CreateOrderForm.jsx'), 'CreateOrderForm');
 const MyOrdersView = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MyOrdersView.jsx'), 'MyOrdersView');
+const OrderDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/OrderDetail.jsx'), 'OrderDetail');
+const EditOrderForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/EditOrderForm.jsx'), 'EditOrderForm');
+const CancelOrderForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CancelOrderForm.jsx'), 'CancelOrderForm');
 const MySwapsView = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MySwapsView.jsx'), 'MySwapsView');
+const SwapDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/SwapDetail.jsx'), 'SwapDetail');
+const EditSwapForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/EditSwapForm.jsx'), 'EditSwapForm');
+const CancelSwapForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CancelSwapForm.jsx'), 'CancelSwapForm');
 const SwapForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/SwapForm.jsx'), 'SwapForm');
 const CrossChainSwapForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CrossChainSwapForm.jsx'), 'CrossChainSwapForm');
 const CrossChainOrderForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CrossChainOrderForm.jsx'), 'CrossChainOrderForm');
 const ContractsList = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ContractsList.jsx'), 'ContractsList');
 const ContractDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ContractDetail.jsx'), 'ContractDetail');
-const ContractStakeForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ContractStakeForm.jsx'), 'ContractStakeForm');
+// Every staking write route (contract and validator) renders the one Staking form.
+const StakingForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/StakingForm.jsx'), 'StakingForm');
 const DeployContractForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/DeployContractForm.jsx'), 'DeployContractForm');
 const ExecuteContractForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ExecuteContractForm.jsx'), 'ExecuteContractForm');
 const ContractFundsForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ContractFundsForm.jsx'), 'ContractFundsForm');
@@ -213,11 +219,14 @@ const PollDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Pol
 const DelegateVoteForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/DelegateVoteForm.jsx'), 'DelegateVoteForm');
 const MyDelegations = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MyDelegations.jsx'), 'MyDelegations');
 const MultisigCreate = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MultisigCreate.jsx'), 'MultisigCreate');
+const MultisigCosignerShare = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MultisigCosignerShare.jsx'), 'MultisigCosignerShare');
 const MultisigSigningSession = lazyRoute(() => import('@xchain-wallet/core/shared/routes/MultisigSigningSession.jsx'), 'MultisigSigningSession');
 const CoSignerAccountList = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CoSignerAccountList.jsx'), 'CoSignerAccountList');
 const CoSignerProvision = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CoSignerProvision.jsx'), 'CoSignerProvision');
 const CoSignerAccountDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CoSignerAccountDetail.jsx'), 'CoSignerAccountDetail');
 const PairSignerForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/PairSignerForm.jsx'), 'PairSignerForm');
+const HardwareFirstRun = lazyRoute(() => import('@xchain-wallet/core/shared/components/HardwareFirstRun.jsx'), 'HardwareFirstRun');
+const HardwareSignPage = lazyRoute(() => import('@xchain-wallet/core/shared/components/HardwareSignPage.jsx'), 'HardwareSignPage');
 const AlertsRoute = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AlertsRoute.jsx'), 'AlertsRoute');
 
 // Loaded on first pairing; a lock or wallet switch resets the loaded ones.
@@ -230,6 +239,9 @@ const pairTrezorSigner = (...args) => hardwareFactories.load('trezor')
 const pairLedgerSigner = (...args) => hardwareFactories.load('ledger')
     .then((module) => module.pairLedgerSigner(...args));
 const resetHardwareSessions = () => hardwareFactories.reset();
+// The same factories reopen a paired device after a lock or reload, and decide
+// whether Welcome offers Connect Hardware Wallet at all.
+const HARDWARE_PAIR_FACTORIES = Object.freeze({ trezor: pairTrezorSigner, ledger: pairLedgerSigner });
 
 // Same default chain registry the web shell uses: buildBalanceRows needs it
 // to resolve divisibility / display names for the palette's token rows.
@@ -291,13 +303,16 @@ function AppInner() {
     // reopens the same token, account or list the user left.
     const navContext = useRef({ capture: () => null, restore: () => {} });
     const nav = useNavHistory({
-        initialView: /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'market-trade' | 'create-order' | 'my-orders' | 'my-swaps' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'alerts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' | 'list-union' | 'shared-lists' | 'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'operator-dashboard' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'multisig-create' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'account-details' | 'wallet-phrase' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
+        initialView: /** @type {'home' | 'send' | 'receive' | 'wizard' | 'actions' | 'my-tokens' | 'manage-token' | 'market-activity' | 'issue' | 'mint' | 'destroy' | 'sweep' | 'lock' | 'mint-settings' | 'callback-settings' | 'execute-callback' | 'access-lists' | 'bridge-settings' | 'bridge-move' | 'pause-token' | 'lock-address' | 'description' | 'transfer' | 'broadcast' | 'oracle' | 'dispenser' | 'dispensers-list' | 'dispensers-picker' | 'dispenser-detail' | 'dispenser-explorer' | 'dividend' | 'airdrop' | 'advanced' | 'migrate-bip39' | 'pair-signer' | 'markets' | 'markets-picker' | 'market' | 'market-trade' | 'create-order' | 'my-orders' | 'order-detail' | 'edit-order' | 'cancel-order' | 'my-swaps' | 'swap-detail' | 'edit-swap' | 'cancel-swap' | 'coinpay' | 'obligations' | 'swap' | 'sell-name' | 'messaging' | 'compose-message' | 'contacts' | 'alerts' | 'lists' | 'list-detail' | 'list-create' | 'list-fork' | 'list-share' | 'list-transfer' | 'list-rename' |'contracts-list' | 'contract-detail' | 'contract-deploy' | 'contract-execute' | 'contract-deposit' | 'contract-withdraw' | 'controller-bind' | 'staking-dashboard' | 'stake-detail' | 'stake-new' | 'stake-form' | 'staking-unstake' | 'staking-claim' | 'staking-delegate' | 'staking-revoke' | 'history' | 'action-detail' | 'token-detail' | 'link-form' | 'attach-content' | 'gated-publish' | 'publish-file' | 'project-roster' | 'parallel-compose' | 'batch-compose' | 'cross-chain-swap' | 'cross-chain-order' | 'multisig-create' | 'multisig-share' | 'multisig-sign' | 'cosigner-accounts' | 'cosigner-provision' | 'cosigner-detail' | 'addresses' | 'address-preferences' | 'view-private-key' | 'add-wallet' | 'add-account' | 'wallet-picker' | 'account-picker' | 'wallet-details' | 'account-details' | 'wallet-phrase' | 'wallet-rename' | 'account-rename' | 'sign-message' | 'verify-signature' | 'sign-psbt' | 'scan'} */ ('home'),
         capture: () => navContext.current.capture(),
         restore: (ctx) => navContext.current.restore(ctx),
         itemKey: navItemKey,
     });
     const unlockedView = nav.view;
     const setUnlockedView = nav.navigate;
+    // A page opened from the sidebar, bottom bar, menu or palette is a root:
+    // the history starts over on it and it shows no Back.
+    const openRootView = nav.navigateRoot;
     const goBack = nav.back;
     const resetNav = nav.reset;
     useDocumentTitle({
@@ -318,6 +333,11 @@ function AppInner() {
     // §17.7: the address staged for the key-reveal ceremony; cleared on Back
     // so a stale address cannot leak into a later visit.
     const [privateKeyAddress, setPrivateKeyAddress] = useState(
+        /** @type {any | null} */ (null),
+    );
+    // The address item shown inside the Addresses route. It belongs to the
+    // history entry so child actions pop back to this detail, then the list.
+    const [addressDetailTarget, setAddressDetailTarget] = useState(
         /** @type {any | null} */ (null),
     );
     // PC-32: the address whose on-chain preferences are being edited.
@@ -348,6 +368,10 @@ function AppInner() {
     );
     const [composePrefill, setComposePrefill] = useState(
         /** @type {{ chainId?: string, fromAddressId?: string, toAddress?: string } | null} */ (null),
+    );
+    // Address a conversation's menu sends to Contacts (add or edit form).
+    const [contactsOpenTarget, setContactsOpenTarget] = useState(
+        /** @type {{ address: string, chainId?: string, edit?: boolean } | null} */ (null),
     );
     // Conversation to reopen when the messaging inbox next mounts (set when
     // backing out of a compose form launched from that thread's composer).
@@ -388,6 +412,19 @@ function AppInner() {
     // A lock clears the active wallet and a switch replaces it; either ends
     // the device session the previous wallet opened.
     useHardwareSessionReset(activeWalletId, resetHardwareSessions);
+    // Once unlocked, the active wallet's paired devices are registered again,
+    // so a lock or a reload never leaves a hardware wallet unable to sign.
+    // Adding an account bumps signerListKey: the list is read again so a
+    // Ledger's record carries the identity of a network the account added.
+    const [signerListKey, setSignerListKey] = useState(0);
+    useHardwareReconnect({
+        unlocked: status.state === 'unlocked',
+        walletId: activeWalletId,
+        listSigners: messaging.listSigners,
+        registerRecord: registerHardwareRecord,
+        factories: HARDWARE_PAIR_FACTORIES,
+        refreshKey: signerListKey,
+    });
     // §24 Cluster Y FOLLOWUP 3: track the resolved active-wallet record
     // for LeftNav / BottomTabBar wallet-switcher labelling and so the
     // 'settings' top-level view can pass `activeWallet` into Settings.
@@ -418,7 +455,8 @@ function AppInner() {
     const palette = useCommandPalette({
         enabled: status.state === 'unlocked' && !shortcutHelpOpen,
         binding: settings?.keyboard?.bindings?.['command-palette'],
-        navigate: setUnlockedView,
+        // Every palette and menu pick opens its page as a root.
+        navigate: openRootView,
         currentView: unlockedView,
     });
     const [paletteContacts, setPaletteContacts] = useState(/** @type {any[]} */ ([]));
@@ -479,7 +517,8 @@ function AppInner() {
         enabled: status.state === 'unlocked' && !palette.open && !shortcutHelpOpen,
         overrides: settings?.keyboard?.bindings,
         handlers: {
-            navigate: setUnlockedView,
+            // A go-to shortcut is a nav pick like the palette's: a root page.
+            navigate: openRootView,
             lock: handleLock,
             openHelp: () => setShortcutHelpOpen(true),
         },
@@ -487,9 +526,23 @@ function AppInner() {
     const [dispenserRef, setDispenserRef] = useState(
         /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
     );
+    const [dispenserMarketAsset, setDispenserMarketAsset] = useState(
+        () => defaultDispenserAssetForNetwork(settings?.activeNetwork),
+    );
+    useEffect(() => {
+        setDispenserMarketAsset((current) => syncDispenserAssetToNetwork(current, settings?.activeNetwork));
+    }, [settings?.activeNetwork]);
+    // Which order the Order detail page shows, picked from a My Orders row.
+    const [orderRef, setOrderRef] = useState(
+        /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
+    );
+    // Which swap the Swap Details page shows, picked from a My Swaps row.
+    const [swapRef, setSwapRef] = useState(
+        /** @type {{ chainId: string, actionIndex: string } | null} */ (null),
+    );
     // PC-10 "My Lists": which list ListDetail is showing, and the
-    // {chainId, actionIndex, type, items} handed from ListDetail's
-    // "Fork & edit" button into ListForkForm.
+    // {chainId, actionIndex, type, items} handed from ListDetail's Edit and
+    // Fork tiles into the List form.
     const [listRef, setListRef] = useState(
         /** @type {{ chainId: string, actionIndex: string, origin?: 'shared', directoryChainId?: string } | null} */ (null),
     );
@@ -509,6 +562,12 @@ function AppInner() {
     // subset for the owner-gated 'manage-token' view.
     const [tokenDetailRef, setTokenDetailRef] = useState(
         /** @type {{ chainId: string, tick: string, kind: string, displayName?: string, divisibility?: number | null, fiatRate?: number | null, quantity?: string, imageUrl?: string | null, issuer?: string | null } | null} */ (null),
+    );
+    // Wide Home's selected item (G115), held here so a visit to Send or a
+    // form opened from the detail panel comes back to the same item. Scoped
+    // to the wallet it was picked in.
+    const [homeDetail, setHomeDetail] = useState(
+        /** @type {{ walletId: string, item: any } | null} */ (null),
     );
     // The page that opened the current action form, when that page hands the
     // form an asset to prefill ('manage-token', 'token-detail', 'settings') or
@@ -531,6 +590,9 @@ function AppInner() {
     // 'token-detail' covers the coin and token page's Actions tab, which
     // opens each per-asset form pre-filled with the asset on screen.
     const fromManage = formSource === 'manage-token' || formSource === 'settings' || formSource === 'token-detail';
+    // The wizard opened from a token (Issue subtoken) takes that token as the
+    // subtoken's parent; the faucet's 'settings' source never opens it.
+    const subtokenParentFromToken = formSource === 'manage-token' || formSource === 'token-detail';
     const prefillChainId = fromManage ? tokenDetailRef?.chainId : undefined;
     const prefillTick = fromManage ? tokenDetailRef?.tick : undefined;
     const prefillFromAddress = fromManage ? tokenDetailRef?.issuer : undefined;
@@ -951,6 +1013,42 @@ function AppInner() {
         refresh();
     };
 
+    // The connect flow reports only the new wallet's id; its name comes from the list.
+    const handleHardwareWalletAdded = (walletId) => {
+        const fallback = walletId ? { id: walletId } : null;
+        listWallets()
+            .then((list) => {
+                const found = Array.isArray(list) ? list.find((w) => w.id === walletId) : null;
+                handleWalletAdded(found || fallback);
+            })
+            .catch(() => handleWalletAdded(fallback));
+    };
+
+    // Unlink removed the wallet; re-read the session, which lands on Home, or
+    // on Welcome when that was the last wallet.
+    const handleWalletUnlinked = () => {
+        setWalletDetailsId(null);
+        refresh();
+    };
+
+    // Manage, Reconnect: open the device inside the click and hand it to the bridge.
+    const handleHardwareReconnect = (wallet, signer) => {
+        if (!signer?.id) return;
+        openHardwareSigner(signer)
+            .then((live) => {
+                registerLocalSigner(signer.id, live);
+                showToast({ message: `${wallet?.name || 'Hardware wallet'} is connected.`, variant: 'success' });
+            })
+            .catch((err) => showToast({ message: err?.message || 'Could not connect the hardware wallet.', variant: 'error' }));
+    };
+
+    // A hardware wallet's Accounts row opens the shared My Accounts page (G131),
+    // which lists the active wallet's accounts, so that wallet becomes active first.
+    const handleHardwareOpenAccounts = (wallet) => {
+        if (wallet?.id && wallet.id !== activeWalletId) handleSwitchWallet(wallet.id, wallet.name);
+        setUnlockedView('account-picker');
+    };
+
     // Two gates, because the lanes stopped agreeing. Staking,
     // multisig and co-signer accounts are still Bitcoin-exclusive; the §42.2
     // Contracts nav follows the registry, which now advertises DEPLOY on
@@ -985,11 +1083,14 @@ function AppInner() {
             walletRenameTarget,
             accountRenameTarget,
             migrateLegacyWalletId,
+            addressDetailTarget,
             privateKeyAddress,
             addressPrefsTarget,
             coSignerAccountId,
             multisigSessionId,
             dispenserRef,
+            orderRef,
+            swapRef,
             listRef,
             listForkRef,
             sellNameRef,
@@ -1014,11 +1115,14 @@ function AppInner() {
             setWalletRenameTarget(ctx.walletRenameTarget);
             setAccountRenameTarget(ctx.accountRenameTarget);
             setMigrateLegacyWalletId(ctx.migrateLegacyWalletId);
+            setAddressDetailTarget(ctx.addressDetailTarget);
             setPrivateKeyAddress(ctx.privateKeyAddress);
             setAddressPrefsTarget(ctx.addressPrefsTarget);
             setCoSignerAccountId(ctx.coSignerAccountId);
             setMultisigSessionId(ctx.multisigSessionId);
             setDispenserRef(ctx.dispenserRef);
+            setOrderRef(ctx.orderRef);
+            setSwapRef(ctx.swapRef);
             setListRef(ctx.listRef);
             setListForkRef(ctx.listForkRef);
             setSellNameRef(ctx.sellNameRef);
@@ -1142,26 +1246,19 @@ function AppInner() {
                     />
                 );
             }
+            // Connect Hardware Wallet on a fresh install: the three connect
+            // steps, then Set Password, then the vault is created.
             if (onboardingStep === 'pair-signer') {
                 return (
                     <Suspense fallback={<Loading />}>
-                        <PairSignerForm
+                        <HardwareFirstRun
                             pairTrezor={pairTrezorSigner}
                             pairLedger={pairLedgerSigner}
                             onBack={() => setOnboardingStep('welcome')}
+                            onCreated={refresh}
+                            onSignerPaired={registerLocalSigner}
                         />
                     </Suspense>
-                );
-            }
-            // §20.5: watcher/signer pairing lane. Fresh-install
-            // only: it imports the shared recovery phrase itself, so the
-            // add-wallet-to-an-open-vault path below does not offer it.
-            if (onboardingStep === 'pair-partner') {
-                return (
-                    <PairPartnerWallet
-                        onBack={() => setOnboardingStep('welcome')}
-                        onPaired={refresh}
-                    />
                 );
             }
             return (
@@ -1170,7 +1267,7 @@ function AppInner() {
                     onImport={() => setOnboardingStep('import')}
                     onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}
                     onConnectHardware={() => setOnboardingStep('pair-signer')}
-                    onPairPartner={() => setOnboardingStep('pair-partner')}
+                    hardwareFactories={HARDWARE_PAIR_FACTORIES}
                     onDemoEntered={refresh}
                     onWalletFound={refresh}
                 />
@@ -1302,8 +1399,13 @@ function AppInner() {
                 return (
                     <TokenWizard
                         walletId={activeWalletId}
-                        onBack={goBack}
+                        onBack={formBack}
                         onCustom={() => setUnlockedView('issue')}
+                        // Issue subtoken on a token's page opens it as a
+                        // subtoken of that token; the Create token entries
+                        // clear the form source, so they start blank.
+                        initialChainId={subtokenParentFromToken ? tokenDetailRef?.chainId : undefined}
+                        initialParentTick={subtokenParentFromToken ? tokenDetailRef?.tick : undefined}
                     />
                 );
             }
@@ -1491,13 +1593,11 @@ function AppInner() {
                     <MyLists
                         walletId={activeWalletId}
                         activeAccountId={activeAccountId || undefined}
-                        onOpenList={(cid, actionIndex) => {
-                            setListRef({ chainId: cid, actionIndex });
+                        onOpenList={(cid, actionIndex, shared) => {
+                            setListRef({ chainId: cid, actionIndex, ...(shared || {}) });
                             setUnlockedView('list-detail');
                         }}
                         onCreateList={() => setUnlockedView('list-create')}
-                        onCreateUnionList={() => setUnlockedView('list-union')}
-                        onOpenSharedLists={() => setUnlockedView('shared-lists')}
                         onBack={formBack}
                     />
                 );
@@ -1509,10 +1609,22 @@ function AppInner() {
                         chainId={listRef.chainId}
                         actionIndex={listRef.actionIndex}
                         onBack={goBack}
+                        onEdit={(ref) => { setListForkRef(ref); setUnlockedView('list-rename'); }}
+                        onEditLook={() => setUnlockedView('list-look')}
                         onFork={(ref) => { setListForkRef(ref); setUnlockedView('list-fork'); }}
                         onShare={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-share'); }}
                         onTransfer={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-transfer'); }}
-                        onRename={listRef.origin === 'shared' ? undefined : (ref) => { setListRef(ref); setUnlockedView('list-rename'); }}
+                    />
+                );
+            }
+            // Edit look is its own page; Save and Back both return to the list.
+            if (unlockedView === 'list-look' && activeWalletId && listRef) {
+                return (
+                    <ListLookForm
+                        chainId={listRef.chainId}
+                        actionIndex={listRef.actionIndex}
+                        onBack={goBack}
+                        onDone={goBack}
                     />
                 );
             }
@@ -1520,113 +1632,130 @@ function AppInner() {
                 return (
                     <ListCreateForm
                         walletId={activeWalletId}
+                        activeAccountId={activeAccountId || undefined}
                         onBack={goBack}
+                        onDone={() => nav.land('lists')}
+                    />
+                );
+            }
+            // Every list action opens the one List form with its action
+            // picked; a form that is done unwinds to My Lists, past the form.
+            // Edit and Fork take the members ListDetail handed over.
+            const listRepointHandlers = {
+                // Each consumer's own edit screen opens on top of My Lists,
+                // so Back from it lands there and not in the finished fork.
+                'issue-lists': () => { nav.land('lists'); setUnlockedView('access-lists'); },
+                'dispenser-lists': () => { nav.land('lists'); setUnlockedView('dispensers-list'); },
+                'order-lists': () => { nav.land('lists'); setUnlockedView('my-orders'); },
+            };
+            if (unlockedView === 'list-rename' && activeWalletId && (listForkRef || listRef)) {
+                return (
+                    <ListCreateForm
+                        action="edit"
+                        walletId={activeWalletId}
+                        activeAccountId={activeAccountId || undefined}
+                        listRef={listForkRef || listRef}
+                        onBack={goBack}
+                        onDone={() => { setListForkRef(null); nav.land('lists'); }}
+                        repointHandlers={listRepointHandlers}
                     />
                 );
             }
             if (unlockedView === 'list-fork' && activeWalletId && listForkRef) {
                 return (
-                    <ListForkForm
+                    <ListCreateForm
+                        action="fork"
                         walletId={activeWalletId}
+                        activeAccountId={activeAccountId || undefined}
                         listRef={listForkRef}
                         onBack={goBack}
                         onDone={() => { setListForkRef(null); nav.land('lists'); }}
-                        // Each consumer's own edit screen opens on top of My Lists,
-                        // so Back from it lands there and not in the finished fork.
-                        repointHandlers={{
-                            'issue-lists': () => { nav.land('lists'); setUnlockedView('access-lists'); },
-                            'dispenser-lists': () => { nav.land('lists'); setUnlockedView('dispensers-list'); },
-                            'order-lists': () => { nav.land('lists'); setUnlockedView('my-orders'); },
-                        }}
+                        repointHandlers={listRepointHandlers}
                     />
                 );
             }
             if (unlockedView === 'list-share' && activeWalletId && listRef) {
                 return (
-                    <ListShareForm
+                    <ListCreateForm
+                        action="share"
                         walletId={activeWalletId}
+                        activeAccountId={activeAccountId || undefined}
                         listRef={listRef}
                         onBack={goBack}
                         onDone={() => nav.land('lists')}
+                        repointHandlers={listRepointHandlers}
                     />
                 );
             }
             if (unlockedView === 'list-transfer' && activeWalletId && listRef) {
                 return (
-                    <ListTransferForm
-                        walletId={activeWalletId}
-                        listRef={listRef}
-                        onBack={goBack}
-                        onDone={() => nav.land('lists')}
-                    />
-                );
-            }
-            if (unlockedView === 'list-rename' && activeWalletId && listRef) {
-                return (
-                    <ListRenameForm
-                        walletId={activeWalletId}
-                        listRef={listRef}
-                        onBack={goBack}
-                        onDone={() => nav.land('lists')}
-                    />
-                );
-            }
-            if (unlockedView === 'list-union' && activeWalletId) {
-                return (
-                    <UnionListForm
+                    <ListCreateForm
+                        action="transfer"
                         walletId={activeWalletId}
                         activeAccountId={activeAccountId || undefined}
+                        listRef={listRef}
                         onBack={goBack}
                         onDone={() => nav.land('lists')}
-                    />
-                );
-            }
-            if (unlockedView === 'shared-lists' && activeWalletId) {
-                return (
-                    <SharedListDirectory
-                        walletId={activeWalletId}
-                        chainId={sharedListDirectoryChainId(listRef, settings?.activeNetwork)}
-                        mode="browse"
-                        onOpenList={(chainId, actionIndex) => {
-                            setListRef({
-                                chainId,
-                                actionIndex,
-                                origin: 'shared',
-                                directoryChainId: sharedListDirectoryChainId(listRef, settings?.activeNetwork),
-                            });
-                            setUnlockedView('list-detail');
-                        }}
-                        onBack={goBack}
+                        repointHandlers={listRepointHandlers}
                     />
                 );
             }
 
-            if (unlockedView === 'dispensers-list' && activeWalletId) {
-                return (
-                    <DispensersList
-                        walletId={activeWalletId}
-                        activeAccountId={activeAccountId || undefined}
-                        onOpenDispenser={(chainId, actionIndex) => {
-                            setDispenserRef({ chainId, actionIndex });
-                            setUnlockedView('dispenser-detail');
-                        }}
-                        onCreateDispenser={() => setUnlockedView('dispenser')}
-                        onBack={goBack}
-                    />
-                );
+            if (unlockedView === 'dispensers-list' || unlockedView === 'dispenser-detail') {
+                if ((unlockedView === 'dispensers-list' && activeWalletId)
+                    || (unlockedView === 'dispenser-detail' && activeWalletId && dispenserRef)) {
+                    const renderDispenserDetail = (ref, extra = {}) => (
+                        <DispenserDetail
+                            walletId={activeWalletId}
+                            chainId={ref.chainId}
+                            actionIndex={ref.actionIndex}
+                            onBack={goBack}
+                            onOpenAgain={(terms) => {
+                                setDispenserRef({ ...ref, reopen: terms });
+                                setFormSource('dispenser-detail');
+                                setUnlockedView('dispenser');
+                            }}
+                            {...extra}
+                        />
+                    );
+                    return (
+                        <DispensersList
+                            walletId={activeWalletId}
+                            activeAccountId={activeAccountId || undefined}
+                            onOpenDispenser={(chainId, actionIndex) => {
+                                setDispenserRef({ chainId, actionIndex });
+                                setUnlockedView('dispenser-detail');
+                            }}
+                            onCreateDispenser={() => setUnlockedView('dispenser')}
+                            onBack={goBack}
+                            marketAsset={dispenserMarketAsset}
+                            onChangeMarket={() => setUnlockedView('dispensers-picker')}
+                            selectedDispenser={dispenserRef}
+                            onSelectDispenser={setDispenserRef}
+                            renderDispenser={(ref) => renderDispenserDetail(ref, { embedded: true })}
+                            renderDispenserPage={unlockedView === 'dispenser-detail'
+                                ? (ref, page) => renderDispenserDetail(ref, { measureRef: page.measureRef })
+                                : undefined}
+                        />
+                    );
+                }
             }
-            if (unlockedView === 'dispenser-detail' && activeWalletId && dispenserRef) {
+            if (unlockedView === 'dispensers-picker' && activeWalletId) {
                 return (
-                    <DispenserDetail
+                    <ReceivePicker
                         walletId={activeWalletId}
-                        chainId={dispenserRef.chainId}
-                        actionIndex={dispenserRef.actionIndex}
+                        accountId={activeAccountId || undefined}
+                        title={t('common.dispensers.selectMarket')}
+                        backLabel={t('common.dispensers.backToDispensers')}
                         onBack={goBack}
-                        // The form opens with this dispenser's terms to reopen it.
-                        onOpenAgain={(terms) => {
-                            setDispenserRef({ ...dispenserRef, reopen: terms });
-                            setFormSource('dispenser-detail');
-                            setUnlockedView('dispenser');
+                        onSelect={(selection) => {
+                            setDispenserMarketAsset({
+                                chainId: selection.chainId,
+                                tick: selection.tick,
+                                displayName: selection.displayName,
+                                kind: selection.kind,
+                            });
+                            nav.land('dispensers-list');
                         }}
                     />
                 );
@@ -1722,16 +1851,26 @@ function AppInner() {
                     />
                 );
             }
-            if (unlockedView === 'pair-signer' && activeWalletId) {
+            // Connect Hardware Wallet inside an open vault: the device is
+            // saved as its own wallet, which then becomes active.
+            if (unlockedView === 'pair-signer') {
                 return (
                     <PairSignerForm
-                        walletId={activeWalletId}
+                        mode="add"
                         pairTrezor={pairTrezorSigner}
                         pairLedger={pairLedgerSigner}
                         onSignerPaired={registerLocalSigner}
-                        onSignerUnpaired={unregisterLocalSigner}
                         onBack={formBack}
-                        onPaired={formBack}
+                        onCreated={handleHardwareWalletAdded}
+                    />
+                );
+            }
+            // Settings, Advanced, Use another phone as a signer.
+            if (unlockedView === 'pair-partner') {
+                return (
+                    <PairPartnerWallet
+                        onBack={goBack}
+                        onPaired={handleWalletAdded}
                     />
                 );
             }
@@ -1770,6 +1909,29 @@ function AppInner() {
                             setUnlockedView('market');
                         }}
                         onBack={goBack}
+                        // Wide content: the list and the picked market side by side. The
+                        // pick lives in activeMarket, so Back from the Trade page keeps it.
+                        selectedMarket={activeMarket}
+                        onSelectMarket={(chainId, tick1, tick2) => setActiveMarket({ chainId, tick1, tick2 })}
+                        renderMarket={(market, panel) => (
+                            <MarketView
+                                embedded
+                                walletId={activeWalletId}
+                                chainId={market.chainId}
+                                tick1={market.tick1}
+                                tick2={market.tick2}
+                                onWatchlistChange={panel.onWatchlistChange}
+                                onSwap={() => setActiveMarket({
+                                    chainId: market.chainId,
+                                    tick1: market.tick2,
+                                    tick2: market.tick1,
+                                })}
+                                onTrade={(trade) => {
+                                    setActiveMarket({ ...market, trade });
+                                    setUnlockedView('market-trade');
+                                }}
+                            />
+                        )}
                     />
                 );
             }
@@ -1898,6 +2060,57 @@ function AppInner() {
                         accountId={activeAccountId}
                         onBack={formBack}
                         onCreateOrder={() => setUnlockedView('create-order')}
+                        onOpenOrder={(ref) => {
+                            setOrderRef(ref);
+                            setUnlockedView('order-detail');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'order-detail' && activeWalletId && orderRef) {
+                return (
+                    <OrderDetail
+                        walletId={activeWalletId}
+                        accountId={activeAccountId}
+                        chainId={orderRef.chainId}
+                        actionIndex={orderRef.actionIndex}
+                        onBack={goBack}
+                        // The order's "Open the market" action row.
+                        onOpenMarket={(chainId, tick1, tick2) => {
+                            setActiveMarket({ chainId, tick1, tick2 });
+                            setUnlockedView('market');
+                        }}
+                        // Edit and Cancel open their own standard form routes.
+                        onEditOrder={(ref) => {
+                            setOrderRef(ref);
+                            setUnlockedView('edit-order');
+                        }}
+                        onCancelOrder={(ref) => {
+                            setOrderRef(ref);
+                            setUnlockedView('cancel-order');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'edit-order' && activeWalletId && orderRef) {
+                return (
+                    <EditOrderForm
+                        walletId={activeWalletId}
+                        accountId={activeAccountId}
+                        chainId={orderRef.chainId}
+                        actionIndex={orderRef.actionIndex}
+                        onBack={goBack}
+                    />
+                );
+            }
+            if (unlockedView === 'cancel-order' && activeWalletId && orderRef) {
+                return (
+                    <CancelOrderForm
+                        walletId={activeWalletId}
+                        accountId={activeAccountId}
+                        chainId={orderRef.chainId}
+                        actionIndex={orderRef.actionIndex}
+                        onBack={goBack}
                     />
                 );
             }
@@ -1908,6 +2121,52 @@ function AppInner() {
                         accountId={activeAccountId}
                         onBack={formBack}
                         onCreateSwap={() => setUnlockedView('swap')}
+                        onOpenSwap={(chainId, actionIndex) => {
+                            setSwapRef({ chainId, actionIndex });
+                            setUnlockedView('swap-detail');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'swap-detail' && activeWalletId && swapRef) {
+                return (
+                    <SwapDetail
+                        walletId={activeWalletId}
+                        accountId={activeAccountId}
+                        chainId={swapRef.chainId}
+                        actionIndex={swapRef.actionIndex}
+                        onBack={goBack}
+                        // Edit and Cancel open their own standard form routes.
+                        onEditSwap={(ref) => {
+                            setSwapRef(ref);
+                            setUnlockedView('edit-swap');
+                        }}
+                        onCancelSwap={(ref) => {
+                            setSwapRef(ref);
+                            setUnlockedView('cancel-swap');
+                        }}
+                    />
+                );
+            }
+            if (unlockedView === 'edit-swap' && activeWalletId && swapRef) {
+                return (
+                    <EditSwapForm
+                        walletId={activeWalletId}
+                        accountId={activeAccountId}
+                        chainId={swapRef.chainId}
+                        actionIndex={swapRef.actionIndex}
+                        onBack={goBack}
+                    />
+                );
+            }
+            if (unlockedView === 'cancel-swap' && activeWalletId && swapRef) {
+                return (
+                    <CancelSwapForm
+                        walletId={activeWalletId}
+                        accountId={activeAccountId}
+                        chainId={swapRef.chainId}
+                        actionIndex={swapRef.actionIndex}
+                        onBack={goBack}
                     />
                 );
             }
@@ -2009,35 +2268,45 @@ function AppInner() {
                     <MultisigCreate
                         walletId={activeWalletId}
                         onBack={formBack}
+                        onShare={() => setUnlockedView('multisig-share')}
                     />
                 );
             }
-            // My bets and My markets are Bet Markets tabs; links to them use
-            // openBetTab.
-            if (unlockedView === 'bet-markets' && activeWalletId) {
-                return (
-                    <BetFeedsList
-                        walletId={activeWalletId}
-                        view={betTab}
-                        onViewChange={setBetTab}
-                        onOpenMarket={(chainId, feedIndex) => { setBetRef({ chainId, feedIndex }); setUnlockedView('bet-market-detail'); }}
-                        onCreate={(chainId) => { setBetRef({ chainId }); setUnlockedView('bet-create'); }}
-                        onDuplicate={(chainId, feedIndex) => { setBetRef({ chainId, duplicateFeedIndex: feedIndex }); setUnlockedView('bet-create'); }}
-                        onBack={goBack}
-                    />
-                );
+            if (unlockedView === 'multisig-share' && activeWalletId) {
+                return <MultisigCosignerShare walletId={activeWalletId} onBack={goBack} />;
             }
-            if (unlockedView === 'bet-market-detail' && activeWalletId && betRef) {
-                return (
-                    <BetFeedDetail
-                        walletId={activeWalletId}
-                        chainId={betRef.chainId}
-                        feedIndex={betRef.feedIndex}
-                        onOpenOracle={(chainId, address) => { setBetRef({ ...betRef, chainId, oracleAddress: address }); setUnlockedView('bet-oracle-record'); }}
-                        onSettleMarket={() => openBetTab('markets')}
-                        onBack={goBack}
-                    />
-                );
+            // Bet Markets and a market opened on its own route share the wide
+            // split. Narrow content keeps the list, then the standalone detail.
+            const renderBetDetail = (ref, extra = {}) => (
+                <BetFeedDetail
+                    walletId={activeWalletId}
+                    chainId={ref.chainId}
+                    feedIndex={ref.feedIndex}
+                    onOpenOracle={(chainId, address) => { setBetRef({ ...ref, chainId, oracleAddress: address }); setUnlockedView('bet-oracle-record'); }}
+                    onDuplicate={(chainId, feedIndex) => { setBetRef({ chainId, duplicateFeedIndex: feedIndex }); setUnlockedView('bet-create'); }}
+                    onBack={goBack}
+                    {...extra}
+                />
+            );
+            if (unlockedView === 'bet-markets' || unlockedView === 'bet-market-detail') {
+                if ((unlockedView === 'bet-markets' && activeWalletId) || (unlockedView === 'bet-market-detail' && activeWalletId && betRef)) {
+                    return (
+                        <BetFeedsList
+                            walletId={activeWalletId}
+                            view={betTab}
+                            onViewChange={setBetTab}
+                            onOpenMarket={(chainId, feedIndex) => { setBetRef({ chainId, feedIndex }); setUnlockedView('bet-market-detail'); }}
+                            onCreate={(chainId) => { setBetRef({ chainId }); setUnlockedView('bet-create'); }}
+                            onBack={goBack}
+                            selectedMarket={betRef}
+                            onSelectMarket={setBetRef}
+                            renderMarket={(ref) => renderBetDetail(ref, { embedded: true })}
+                            renderMarketPage={unlockedView === 'bet-market-detail'
+                                ? (ref, page) => renderBetDetail(ref, { measureRef: page.measureRef })
+                                : undefined}
+                        />
+                    );
+                }
             }
             // Who is running this market, and what their record is. Reached from a
             // market rather than the menu: it is a check you make about one oracle,
@@ -2108,11 +2377,13 @@ function AppInner() {
                     />
                 );
             }
-            if (unlockedView === 'governance-delegations' && activeWalletId && governanceRef) {
+            // Opened from the menu there is no poll chain yet; My delegations
+            // then picks the first voting network this wallet has an address on.
+            if (unlockedView === 'governance-delegations' && activeWalletId) {
                 return (
                     <MyDelegations
                         walletId={activeWalletId}
-                        chainId={governanceRef.chainId}
+                        chainId={governanceRef?.chainId}
                         onClear={(chainId, clear) => { setGovernanceRef({ chainId, clear }); setUnlockedView('governance-clear-delegation'); }}
                         onDelegate={(chainId) => { setGovernanceRef({ chainId }); setUnlockedView('governance-delegate'); }}
                         onBack={goBack}
@@ -2137,6 +2408,11 @@ function AppInner() {
                         walletId={activeWalletId}
                         onProvision={() => setUnlockedView('cosigner-provision')}
                         onOpen={(id) => { setCoSignerAccountId(id); setUnlockedView('cosigner-detail'); }}
+                        selectedAccountId={coSignerAccountId}
+                        onSelectAccount={setCoSignerAccountId}
+                        renderAccount={(id) => (
+                            <CoSignerAccountDetail accountId={id} walletId={activeWalletId} onBack={goBack} embedded />
+                        )}
                         onBack={goBack}
                     />
                 );
@@ -2157,9 +2433,23 @@ function AppInner() {
             }
             if (unlockedView === 'cosigner-detail' && activeWalletId && coSignerAccountId) {
                 return (
-                    <CoSignerAccountDetail
-                        accountId={coSignerAccountId}
+                    <CoSignerAccountList
                         walletId={activeWalletId}
+                        onProvision={() => setUnlockedView('cosigner-provision')}
+                        onOpen={(id) => setCoSignerAccountId(id)}
+                        selectedAccountId={coSignerAccountId}
+                        onSelectAccount={setCoSignerAccountId}
+                        renderAccount={(id) => (
+                            <CoSignerAccountDetail accountId={id} walletId={activeWalletId} onBack={goBack} embedded />
+                        )}
+                        renderAccountPage={(id, page) => (
+                            <CoSignerAccountDetail
+                                accountId={id}
+                                walletId={activeWalletId}
+                                onBack={goBack}
+                                measureRef={page.measureRef}
+                            />
+                        )}
                         onBack={goBack}
                     />
                 );
@@ -2178,9 +2468,26 @@ function AppInner() {
                 return (
                     <AddressList
                         walletId={activeWalletId}
+                        // A private key import offers the backup file at once (ruling 2026-11-16).
+                        onExportBackup={() => {
+                            setWalletDetailsId(activeWalletId);
+                            setUnlockedView('wallet-backup');
+                        }}
                         accountId={activeAccountId || undefined}
+                        // Opened from Settings > Wallets: every account's addresses.
+                        scope={settingsInitialSection === 'g-wallets' ? 'wallet' : 'account'}
                         onBack={goBack}
-                        onReceive={() => { setReceivePrefill(null); setUnlockedView('receive'); }}
+                        selectedAddress={addressDetailTarget}
+                        onSelectedAddressChange={setAddressDetailTarget}
+                        onDetailBack={goBack}
+                        onReceive={(sel) => {
+                            // The detail's Receive tile hands back its address; the list's own
+                            // empty-state action passes none (or an event), so it opens as before.
+                            setReceivePrefill(sel && typeof sel.address === 'string' && sel.chainId
+                                ? { chainId: sel.chainId, address: sel.address }
+                                : null);
+                            setUnlockedView('receive');
+                        }}
                         onShowPrivateKey={(addr) => {
                             setPrivateKeyAddress(addr);
                             setUnlockedView('view-private-key');
@@ -2224,6 +2531,11 @@ function AppInner() {
                         walletId={activeWalletId}
                         activeAccountId={activeAccountId || undefined}
                         initialCounterparty={messagingThread || undefined}
+                        onContact={(target) => {
+                            setMessagingThread(target.address);
+                            setContactsOpenTarget(target);
+                            setUnlockedView('contacts');
+                        }}
                         onCompose={(prefill) => {
                             setComposePrefill(prefill || null);
                             setUnlockedView('compose-message');
@@ -2264,6 +2576,8 @@ function AppInner() {
                     <ContactsList
                         key={activeWalletId}
                         walletId={activeWalletId}
+                        openTarget={contactsOpenTarget}
+                        onOpenTargetConsumed={() => setContactsOpenTarget(null)}
                         onSend={(prefill) => {
                             setSendPrefill(prefill);
                             setUnlockedView('send');
@@ -2286,47 +2600,60 @@ function AppInner() {
                         key={activeWalletId}
                         walletId={activeWalletId}
                         onBack={goBack}
+                        accountId={activeAccountId}
                         alerts={menuAlerts}
+                        isWatcherMode={isWatcherMode}
+                        onResumeCoinpay={(ref) => { setResumeCoinpay(ref); setUnlockedView('coinpay'); }}
+                        onResumeAirdrop={(id) => { setResumeAirdropId(id); setUnlockedView('airdrop'); }}
                     />
                 );
             }
-            if (unlockedView === 'contracts-list' && activeWalletId) {
-                return (
-                    <ContractsList
-                        walletId={activeWalletId}
-                        onOpenContract={(cid, actionIndex) => {
-                            setContractRef({
-                                chainId: cid,
-                                contractActionIndex: String(actionIndex),
-                            });
-                            setUnlockedView('contract-detail');
-                        }}
-                        onDeploy={() => setUnlockedView('contract-deploy')}
-                        onBack={goBack}
-                    />
-                );
-            }
-            if (unlockedView === 'contract-detail' && activeWalletId && contractRef) {
-                return (
-                    <ContractDetail
-                        walletId={activeWalletId}
-                        chainId={contractRef.chainId}
-                        contractActionIndex={contractRef.contractActionIndex}
-                        onExecute={() => setUnlockedView('contract-execute')}
-                        onDeposit={() => setUnlockedView('contract-deposit')}
-                        onWithdraw={() => setUnlockedView('contract-withdraw')}
-                        onStakeToContract={() => setUnlockedView('contract-stake')}
-                        onBack={goBack}
-                    />
-                );
+            const renderContractDetail = (ref, extra = {}) => (
+                <ContractDetail
+                    walletId={activeWalletId}
+                    chainId={ref.chainId}
+                    contractActionIndex={ref.contractActionIndex}
+                    onExecute={(next) => { setContractRef(ref); setExecutePrefill(next?.method ? { method: next.method } : null); setUnlockedView('contract-execute'); }}
+                    onDeposit={() => { setContractRef(ref); setUnlockedView('contract-deposit'); }}
+                    onWithdraw={() => { setContractRef(ref); setUnlockedView('contract-withdraw'); }}
+                    onStakeToContract={() => { setContractRef(ref); setUnlockedView('contract-stake'); }}
+                    onBack={goBack}
+                    {...extra}
+                />
+            );
+            if (unlockedView === 'contracts-list' || unlockedView === 'contract-detail') {
+                if ((unlockedView === 'contracts-list' && activeWalletId) || (unlockedView === 'contract-detail' && activeWalletId && contractRef)) {
+                    return (
+                        <ContractsList
+                            walletId={activeWalletId}
+                            onOpenContract={(cid, actionIndex) => {
+                                setContractRef({
+                                    chainId: cid,
+                                    contractActionIndex: String(actionIndex),
+                                });
+                                setUnlockedView('contract-detail');
+                            }}
+                            onDeploy={() => setUnlockedView('contract-deploy')}
+                            onBack={goBack}
+                            selectedContract={contractRef}
+                            onSelectContract={setContractRef}
+                            renderContract={(ref, panel) => renderContractDetail(ref, {
+                                embedded: true,
+                                headerSlot: panel.toolsSlot,
+                            })}
+                            renderContractPage={unlockedView === 'contract-detail'
+                                ? (ref, page) => renderContractDetail(ref, { measureRef: page.measureRef })
+                                : undefined}
+                        />
+                    );
+                }
             }
             if (unlockedView === 'contract-stake' && activeWalletId && contractRef) {
                 return (
-                    <ContractStakeForm
+                    <StakingForm
                         walletId={activeWalletId}
-                        chainId={contractRef.chainId}
-                        contractActionIndex={contractRef.contractActionIndex}
-                        initialMode={contractRef.initialMode}
+                        target={{ kind: 'contract', chainId: contractRef.chainId, contractActionIndex: contractRef.contractActionIndex }}
+                        action={contractRef.initialMode || 'stake'}
                         initialTick={contractRef.initialTick}
                         initialSigningPubkey={contractRef.initialSigningPubkey}
                         initialFromAddress={contractRef.initialFromAddress}
@@ -2376,84 +2703,104 @@ function AppInner() {
                     />
                 );
             }
-            if (unlockedView === 'staking-dashboard' && activeWalletId) {
-                return (
-                    <StakingList
-                        walletId={activeWalletId}
-                        activeAccountId={activeAccountId || undefined}
-                        onOpenStake={(ref) => {
-                            setStakingRef(ref);
-                            setUnlockedView('stake-detail');
-                        }}
-                        onNewStake={() => setUnlockedView('stake-new')}
-                        onBack={goBack}
-                    />
-                );
-            }
-            if (unlockedView === 'stake-detail' && activeWalletId && stakingRef) {
-                return (
-                    <StakeDetail
-                        walletId={activeWalletId}
-                        kind={stakingRef.kind}
-                        chainId={stakingRef.chainId}
-                        address={stakingRef.address}
-                        contractActionIndex={stakingRef.contractActionIndex}
-                        onUnstake={stakingRef.kind === 'contract'
-                            ? (position) => {
-                                setContractRef({
-                                    chainId: stakingRef.chainId,
-                                    contractActionIndex: String(stakingRef.contractActionIndex),
-                                    initialMode: 'unstake',
-                                    // Seed the form from THIS position (xchain-wallet#34)
-                                    // instead of letting it fall back to XCHAIN/blank/default-address.
-                                    initialTick: position?.tick || undefined,
-                                    initialSigningPubkey: position?.signingPubkey || undefined,
-                                    initialFromAddress: stakingRef.address || undefined,
-                                });
-                                setUnlockedView('contract-stake');
-                            }
-                            : () => setUnlockedView('staking-unstake')}
-                        onDelegate={stakingRef.kind === 'contract'
-                            ? (position) => {
-                                setContractRef({
-                                    chainId: stakingRef.chainId,
-                                    contractActionIndex: String(stakingRef.contractActionIndex),
-                                    initialMode: 'delegate',
-                                    initialTick: position?.tick || undefined,
-                                    initialSigningPubkey: position?.signingPubkey || undefined,
-                                    initialFromAddress: stakingRef.address || undefined,
-                                });
-                                setUnlockedView('contract-stake');
-                            }
-                            : () => setUnlockedView('staking-delegate')}
-                        onRevokeDelegation={() => setUnlockedView('staking-revoke')}
-                        onClaimRewards={() => setUnlockedView('staking-claim')}
-                        onOpenOperatorDashboard={() => setUnlockedView('operator-dashboard')}
-                        onStakeMore={stakingRef.kind === 'contract'
-                            ? (position) => {
-                                setContractRef({
-                                    chainId: stakingRef.chainId,
-                                    contractActionIndex: String(stakingRef.contractActionIndex),
-                                    initialMode: 'stake',
-                                    initialTick: position?.tick || undefined,
-                                    initialSigningPubkey: position?.signingPubkey || undefined,
-                                    initialFromAddress: stakingRef.address || undefined,
-                                });
-                                setUnlockedView('contract-stake');
-                            }
-                            : undefined}
-                        onOpenContract={stakingRef.kind === 'contract'
-                            ? () => {
-                                setContractRef({
-                                    chainId: stakingRef.chainId,
-                                    contractActionIndex: String(stakingRef.contractActionIndex),
-                                });
-                                setUnlockedView('contract-detail');
-                            }
-                            : undefined}
-                        onBack={goBack}
-                    />
-                );
+            // One stake's detail, for its own page and for Staking's right
+            // panel on wide content. The stake's forms read stakingRef, which
+            // StakingList keeps on the stake the right panel shows.
+            const renderStakeDetail = (ref, extra = {}) => (
+                <StakeDetail
+                    walletId={activeWalletId}
+                    kind={ref.kind}
+                    chainId={ref.chainId}
+                    address={ref.address}
+                    contractActionIndex={ref.contractActionIndex}
+                    onUnstake={ref.kind === 'contract'
+                        ? (position) => {
+                            setContractRef({
+                                chainId: ref.chainId,
+                                contractActionIndex: String(ref.contractActionIndex),
+                                initialMode: 'unstake',
+                                // Seed the form from THIS position (xchain-wallet#34)
+                                // instead of letting it fall back to XCHAIN/blank/default-address.
+                                initialTick: position?.tick || undefined,
+                                initialSigningPubkey: position?.signingPubkey || undefined,
+                                initialFromAddress: ref.address || undefined,
+                            });
+                            setUnlockedView('contract-stake');
+                        }
+                        : () => setUnlockedView('staking-unstake')}
+                    onDelegate={ref.kind === 'contract'
+                        ? (position) => {
+                            setContractRef({
+                                chainId: ref.chainId,
+                                contractActionIndex: String(ref.contractActionIndex),
+                                initialMode: 'delegate',
+                                initialTick: position?.tick || undefined,
+                                initialSigningPubkey: position?.signingPubkey || undefined,
+                                initialFromAddress: ref.address || undefined,
+                            });
+                            setUnlockedView('contract-stake');
+                        }
+                        : () => setUnlockedView('staking-delegate')}
+                    onRevokeDelegation={() => setUnlockedView('staking-revoke')}
+                    onClaimRewards={() => setUnlockedView('staking-claim')}
+                    onStakeMore={ref.kind === 'contract'
+                        ? (position) => {
+                            setContractRef({
+                                chainId: ref.chainId,
+                                contractActionIndex: String(ref.contractActionIndex),
+                                initialMode: 'stake',
+                                initialTick: position?.tick || undefined,
+                                initialSigningPubkey: position?.signingPubkey || undefined,
+                                initialFromAddress: ref.address || undefined,
+                            });
+                            setUnlockedView('contract-stake');
+                        }
+                        : () => setUnlockedView('stake-form')}
+                    onOpenContract={ref.kind === 'contract'
+                        ? () => {
+                            setContractRef({
+                                chainId: ref.chainId,
+                                contractActionIndex: String(ref.contractActionIndex),
+                            });
+                            setUnlockedView('contract-detail');
+                        }
+                        : undefined}
+                    {...extra}
+                />
+            );
+            // Staking, and a stake opened on its own route: on wide content
+            // both are the list beside the picked stake, as the DEX shows its
+            // markets; narrower, the list and the stake's page as before.
+            // Stake detail needs its stake; without one the route falls through as before.
+            if (unlockedView === 'staking-dashboard' || unlockedView === 'stake-detail') {
+                if ((unlockedView === 'staking-dashboard' && activeWalletId) || (unlockedView === 'stake-detail' && activeWalletId && stakingRef)) {
+                    return (
+                        <StakingList
+                            walletId={activeWalletId}
+                            activeAccountId={activeAccountId || undefined}
+                            onOpenStake={(ref) => {
+                                setStakingRef(ref);
+                                setUnlockedView('stake-detail');
+                            }}
+                            onNewStake={() => setUnlockedView('stake-new')}
+                            onBack={goBack}
+                            selectedStake={stakingRef}
+                            onSelectStake={setStakingRef}
+                            onClaim={(ref) => {
+                                setStakingRef(ref);
+                                setUnlockedView('staking-claim');
+                            }}
+                            renderStake={(ref, panel) => renderStakeDetail(ref, {
+                                embedded: true,
+                                headerSlot: panel.toolsSlot,
+                                preloaded: panel.preloaded,
+                            })}
+                            renderStakePage={unlockedView === 'stake-detail'
+                                ? (ref, page) => renderStakeDetail(ref, { onBack: goBack, measureRef: page.measureRef })
+                                : undefined}
+                        />
+                    );
+                }
             }
             if (unlockedView === 'stake-new' && activeWalletId) {
                 return (
@@ -2470,19 +2817,21 @@ function AppInner() {
             }
             if (unlockedView === 'stake-form' && activeWalletId && stakingRef) {
                 return (
-                    <StakeForm
+                    <StakingForm
                         walletId={activeWalletId}
-                        chainId={stakingRef.chainId}
+                        target={{ kind: 'network', chainId: stakingRef.chainId }}
+                        action="stake"
+                        initialFromAddress={stakingRef.address || undefined}
                         onBack={goBack}
                     />
                 );
             }
             if (unlockedView === 'staking-unstake' && activeWalletId && stakingRef) {
                 return (
-                    <StakingActionForm
-                        mode="unstake"
+                    <StakingForm
                         walletId={activeWalletId}
-                        chainId={stakingRef.chainId}
+                        target={{ kind: 'network', chainId: stakingRef.chainId }}
+                        action="unstake"
                         initialFromAddress={stakingRef.address || undefined}
                         onBack={goBack}
                     />
@@ -2490,10 +2839,10 @@ function AppInner() {
             }
             if (unlockedView === 'staking-claim' && activeWalletId && stakingRef) {
                 return (
-                    <StakingActionForm
-                        mode="claim-rewards"
+                    <StakingForm
                         walletId={activeWalletId}
-                        chainId={stakingRef.chainId}
+                        target={{ kind: 'network', chainId: stakingRef.chainId }}
+                        action="claim-rewards"
                         initialFromAddress={stakingRef.address || undefined}
                         onBack={goBack}
                     />
@@ -2501,10 +2850,10 @@ function AppInner() {
             }
             if (unlockedView === 'staking-delegate' && activeWalletId && stakingRef) {
                 return (
-                    <DelegationActionForm
-                        mode="delegate"
+                    <StakingForm
                         walletId={activeWalletId}
-                        chainId={stakingRef.chainId}
+                        target={{ kind: 'network', chainId: stakingRef.chainId }}
+                        action="delegate"
                         initialFromAddress={stakingRef.address || undefined}
                         onBack={goBack}
                     />
@@ -2512,21 +2861,11 @@ function AppInner() {
             }
             if (unlockedView === 'staking-revoke' && activeWalletId && stakingRef) {
                 return (
-                    <DelegationActionForm
-                        mode="revoke"
+                    <StakingForm
                         walletId={activeWalletId}
-                        chainId={stakingRef.chainId}
+                        target={{ kind: 'network', chainId: stakingRef.chainId }}
+                        action="revoke"
                         initialFromAddress={stakingRef.address || undefined}
-                        onBack={goBack}
-                    />
-                );
-            }
-            if (unlockedView === 'operator-dashboard' && activeWalletId && stakingRef) {
-                return (
-                    <OperatorDashboard
-                        walletId={activeWalletId}
-                        chainId={stakingRef.chainId}
-                        address={stakingRef.address}
                         onBack={goBack}
                     />
                 );
@@ -2555,66 +2894,122 @@ function AppInner() {
                         entry={selectedHistoryEntry}
                         walletId={activeWalletId}
                         onBack={goBack}
+                        onOpenDispenser={(chainId, actionIndex) => {
+                            setDispenserRef({ chainId, actionIndex });
+                            setUnlockedView('dispenser-detail');
+                        }}
                     />
                 );
             }
             // Held-token detail view, ported from the web shell so
             // Home balance rows and palette token commands land somewhere.
-            if (unlockedView === 'token-detail' && activeWalletId && tokenDetailRef) {
+            // The same TokenDetail draws wide Home's detail panel (G115,
+            // `embedded`) and My Tokens' token page (`ownerView`, the
+            // manage-token route): one page, one layout. Every action first
+            // makes this asset the shell's token, so a form opened from the
+            // panel gets it.
+            const renderTokenDetail = (assetRef, { embedded = false, ownerView = false } = {}) => {
+                const asset = () => {
+                    setTokenDetailRef(assetRef);
+                    return assetRef;
+                };
+                // The issuer's actions: each form opens with this token and the
+                // issuer the page resolved, and Back returns to the page.
+                const openOwnerForm = (view, ctx, options = {}) => {
+                    setTokenDetailRef(ctx?.issuer ? { ...assetRef, issuer: ctx.issuer } : assetRef);
+                    setFormSource('token-detail');
+                    setTokenAdminInitialPicker(options.initialPicker || null);
+                    setUnlockedView(view);
+                };
+                const manageActions = {
+                    onIssueSubtoken: (ctx) => openOwnerForm('wizard', ctx),
+                    onMint: (ctx) => openOwnerForm('mint', ctx),
+                    onDestroy: (ctx) => openOwnerForm('destroy', ctx),
+                    onLock: (ctx) => openOwnerForm('lock', ctx),
+                    onMintSettings: (ctx) => openOwnerForm('mint-settings', ctx),
+                    onCallbackSettings: (ctx) => openOwnerForm('callback-settings', ctx),
+                    onExecuteCallback: (ctx) => openOwnerForm('execute-callback', ctx),
+                    onAccessLists: (ctx) => openOwnerForm('access-lists', ctx),
+                    onUseSharedBlockList: (ctx) => openOwnerForm('access-lists', ctx, { initialPicker: 'shared-block' }),
+                    onBridgeSettings: (ctx) => openOwnerForm('bridge-settings', ctx),
+                    onPauseToken: (ctx) => openOwnerForm('pause-token', ctx),
+                    onUpdateDescription: (ctx) => openOwnerForm('description', ctx),
+                    onAttachContent: (ctx) => openOwnerForm('attach-content', ctx),
+                    onGatedContent: (ctx) => openOwnerForm('gated-publish', ctx),
+                    onManageRoster: (ctx) => openOwnerForm('project-roster', ctx),
+                    onTransferOwnership: (ctx) => openOwnerForm('transfer', ctx),
+                    onSellOwnership: (ctx) => {
+                        setSellNameRef({ chainId: assetRef.chainId, tick: assetRef.tick, fromAddress: ctx?.issuer || assetRef.issuer || undefined });
+                        openOwnerForm('sell-name', ctx);
+                    },
+                    onCreateDispenser: (ctx) => openOwnerForm('dispenser', ctx),
+                    onPayDividend: (ctx) => openOwnerForm('dividend', ctx),
+                    onAirdrop: (ctx) => { setResumeAirdropId(null); openOwnerForm('airdrop', ctx); },
+                    onBroadcast: (ctx) => openOwnerForm('broadcast', ctx),
+                    onBindController: (ctx) => openOwnerForm('controller-bind', ctx),
+                    onUnbindController: (ctx) => openOwnerForm('controller-unbind', ctx),
+                };
                 return (
                     <TokenDetail
                         walletId={activeWalletId}
-                        chainId={tokenDetailRef.chainId}
-                        tick={tokenDetailRef.tick}
-                        kind={tokenDetailRef.kind}
-                        displayName={tokenDetailRef.displayName}
-                        divisibility={tokenDetailRef.divisibility}
-                        fiatRate={tokenDetailRef.fiatRate}
-                        fiatRateSource={tokenDetailRef.fiatRateSource}
-                        fiatRateStale={tokenDetailRef.fiatRateStale === true}
-                        fiatRateFetchedAt={tokenDetailRef.fiatRateFetchedAt || null}
-                        quantity={tokenDetailRef.quantity}
-                        imageUrl={tokenDetailRef.imageUrl}
+                        chainId={assetRef.chainId}
+                        tick={assetRef.tick}
+                        kind={assetRef.kind}
+                        displayName={assetRef.displayName}
+                        divisibility={assetRef.divisibility}
+                        fiatRate={assetRef.fiatRate}
+                        fiatRateSource={assetRef.fiatRateSource}
+                        fiatRateStale={assetRef.fiatRateStale === true}
+                        fiatRateFetchedAt={assetRef.fiatRateFetchedAt || null}
+                        quantity={assetRef.quantity}
+                        imageUrl={assetRef.imageUrl}
+                        embedded={embedded}
+                        manageActions={assetRef.kind === 'native' ? null : manageActions}
+                        ownerView={ownerView}
+                        onIssuerResolved={embedded ? undefined : (creator) => setTokenDetailRef(withResolvedIssuer(creator))}
                         onBack={goBack}
                         onSend={() => {
+                            const a = asset();
                             setSendPrefill({
-                                chainId: tokenDetailRef.chainId,
-                                tick: tokenDetailRef.tick,
-                                kind: tokenDetailRef.kind,
-                                displayName: tokenDetailRef.displayName,
-                                imageUrl: tokenDetailRef.imageUrl,
+                                chainId: a.chainId,
+                                tick: a.tick,
+                                kind: a.kind,
+                                displayName: a.displayName,
+                                imageUrl: a.imageUrl,
                             });
                             setUnlockedView('send');
                         }}
                         onReceive={() => {
+                            const a = asset();
                             setReceivePrefill({
-                                chainId: tokenDetailRef.chainId,
-                                tick: tokenDetailRef.tick,
-                                kind: tokenDetailRef.kind,
-                                displayName: tokenDetailRef.displayName,
-                                imageUrl: tokenDetailRef.imageUrl,
+                                chainId: a.chainId,
+                                tick: a.tick,
+                                kind: a.kind,
+                                displayName: a.displayName,
+                                imageUrl: a.imageUrl,
                             });
                             setUnlockedView('receive');
                         }}
                         onViewActivity={() => {
-                            const scope = historyScopeForAsset(tokenDetailRef);
+                            const scope = historyScopeForAsset(asset());
                             setHistoryInitialQuery(scope.searchQuery);
                             setHistoryInitialChainCoin(scope.chainCoin);
                             setUnlockedView('history');
                         }}
                         onBuy={() => {
+                            const a = asset();
                             setMarketsAsset({
-                                chainId: tokenDetailRef.chainId,
-                                tick: tokenDetailRef.tick,
-                                kind: tokenDetailRef.kind,
-                                displayName: tokenDetailRef.displayName,
+                                chainId: a.chainId,
+                                tick: a.tick,
+                                kind: a.kind,
+                                displayName: a.displayName,
                             });
                             setUnlockedView('markets');
                         }}
                         // Same hop MyTokens' onSelectTick uses: tokenDetailRef
-                        // already carries this tick's chainId/tick, so Manage
-                        // Token only needs the view switch.
-                        onManageToken={() => setUnlockedView('manage-token')}
+                        // carries this tick's chainId/tick, so Manage Token
+                        // only needs the view switch.
+                        onManageToken={() => { asset(); setUnlockedView('manage-token'); }}
                         // The Actions tab: each form opens pre-filled with this
                         // asset (the ManageToken prefill path) and Back returns
                         // here. TokenDetail offers only the ones the asset allows.
@@ -2626,6 +3021,7 @@ function AppInner() {
                         }}
                         assetActions={(() => {
                             const openFromAsset = (view) => {
+                                asset();
                                 setFormSource('token-detail');
                                 setTokenAdminInitialPicker(null);
                                 setUnlockedView(view);
@@ -2650,7 +3046,24 @@ function AppInner() {
                         })()}
                     />
                 );
+            };
+            if (unlockedView === 'token-detail' && activeWalletId && tokenDetailRef) {
+                return renderTokenDetail(tokenDetailRef);
             }
+            // Wide Home's detail panel (G115): a coin, token or NFT is the
+            // coin and token page embedded; a DeFi row is its entry detail.
+            const renderHomeDetail = (item) => (item?.type === 'entry' ? (
+                <ActionDetail
+                    embedded
+                    entry={item.entry}
+                    walletId={activeWalletId}
+                    onOpenDispenser={(chainId, actionIndex) => {
+                        setDispenserRef({ chainId, actionIndex });
+                        setUnlockedView('dispenser-detail');
+                    }}
+                />
+            ) : renderTokenDetail(item.token, { embedded: true }));
+            const selectHomeDetail = (item) => setHomeDetail({ walletId: activeWalletId, item });
             if (unlockedView === 'market-activity') {
                 return (
                     <MarketActivity
@@ -2669,7 +3082,13 @@ function AppInner() {
                         walletId={activeWalletId}
                         accountId={activeAccountId || undefined}
                         onBack={goBack}
-                        onIssue={() => setUnlockedView('wizard')}
+                        onIssue={() => { setFormSource(null); setUnlockedView('wizard'); }}
+                        renderToken={(row) => renderTokenDetail({
+                            chainId: row.chainId,
+                            tick: row.tick,
+                            kind: 'token',
+                            divisibility: row.divisibility ?? null,
+                        }, { embedded: true, ownerView: true })}
                         onSelectTick={(tick, chainId, row) => {
                             setTokenDetailRef({
                                 chainId,
@@ -2683,66 +3102,15 @@ function AppInner() {
                 );
             }
             if (unlockedView === 'manage-token' && activeWalletId && tokenDetailRef) {
-                const openForm = (view, options = {}) => {
-                    setFormSource('manage-token');
-                    setTokenAdminInitialPicker(options.initialPicker || null);
-                    setUnlockedView(view);
-                };
-                return (
-                    <ManageToken
-                        walletId={activeWalletId}
-                        chainId={tokenDetailRef.chainId}
-                        tick={tokenDetailRef.tick}
-                        divisibility={tokenDetailRef.divisibility ?? null}
-                        onBack={goBack}
-                        onIssueSubtoken={() => openForm('wizard')}
-                        onMint={() => openForm('mint')}
-                        onDestroy={() => openForm('destroy')}
-                        onLock={() => openForm('lock')}
-                        onMintSettings={() => openForm('mint-settings')}
-                        onCallbackSettings={() => openForm('callback-settings')}
-                        onExecuteCallback={() => openForm('execute-callback')}
-                        onAccessLists={() => openForm('access-lists')}
-                        onUseSharedBlockList={() => openForm('access-lists', { initialPicker: 'shared-block' })}
-                        onBridgeSettings={() => openForm('bridge-settings')}
-                        onPauseToken={() => openForm('pause-token')}
-                        onUpdateDescription={() => openForm('description')}
-                        onAttachContent={() => openForm('attach-content')}
-                        onGatedContent={() => openForm('gated-publish')}
-                        onManageRoster={() => openForm('project-roster')}
-                        onTransferOwnership={() => openForm('transfer')}
-                        onSellOwnership={() => {
-                            setSellNameRef({ chainId: tokenDetailRef.chainId, tick: tokenDetailRef.tick, fromAddress: tokenDetailRef.issuer || undefined });
-                            openForm('sell-name');
-                        }}
-                        onCreateDispenser={() => openForm('dispenser')}
-                        onPayDividend={() => openForm('dividend')}
-                        onAirdrop={() => openForm('airdrop')}
-                        onBroadcast={() => openForm('broadcast')}
-                        onBindController={() => openForm('controller-bind')}
-                        onUnbindController={() => openForm('controller-unbind')}
-                        onOpenDispenser={(chainId, actionIndex) => {
-                            setDispenserRef({ chainId, actionIndex });
-                            setUnlockedView('dispenser-detail');
-                        }}
-                        onIssuerResolved={(creator) => {
-                            setTokenDetailRef(withResolvedIssuer(creator));
-                        }}
-                        onViewActivity={() => {
-                            const scope = historyScopeForAsset(tokenDetailRef);
-                            setHistoryInitialQuery(scope.searchQuery);
-                            setHistoryInitialChainCoin(scope.chainCoin);
-                            setHistoryInitialFocus(null);
-                            setUnlockedView('history');
-                        }}
-                    />
-                );
+                // My Tokens opens the same asset page Home does (operator
+                // ruling 2026-11-15), with the issuer's groups shown at once.
+                return renderTokenDetail(tokenDetailRef, { ownerView: true });
             }
             if (unlockedView === 'actions' && activeWalletId) {
                 return (
                     <ActionsMenu
                         entries={buildActionEntries({
-                            onIssue: () => setUnlockedView('wizard'),
+                            onIssue: () => { setFormSource(null); setUnlockedView('wizard'); },
                             onMint: () => setUnlockedView('mint'),
                             onDestroy: () => setUnlockedView('destroy'),
                             onSweep: () => { setSweepCtx(null); setUnlockedView('sweep'); },
@@ -2838,10 +3206,25 @@ function AppInner() {
                                 setUnlockedView('account-picker');
                             } : undefined
                         }
+                        onOpenAddresses={
+                            activeWalletId ? () => {
+                                setSettingsInitialSection('g-wallets');
+                                setAddressDetailTarget(null);
+                                setUnlockedView('addresses');
+                            } : undefined
+                        }
                         initialSubpageId={settingsSubpage}
+                        // A row on Settings, Appearance, Tokens opens that
+                        // token's page; Back returns to the Tokens page.
+                        onOpenToken={(tok) => {
+                            setSettingsInitialSection('display-tokens');
+                            setTokenDetailRef(tok);
+                            setUnlockedView('token-detail');
+                        }}
                         onNavigateToMint={handleFaucetMint}
                         onNavigateToAdvanced={() => setUnlockedView('advanced')}
                         onNavigateToActionQueue={() => setUnlockedView('parallel-compose')}
+                        onPairAnotherPhone={() => setUnlockedView('pair-partner')}
                     />
                 );
             }
@@ -2883,6 +3266,10 @@ function AppInner() {
                             setMigrateLegacyWalletId(walletDetailsId);
                             setUnlockedView('migrate-bip39');
                         }}
+                        // A hardware wallet's Unlink removed it.
+                        onUnlinked={handleWalletUnlinked}
+                        onReconnect={handleHardwareReconnect}
+                        onOpenAccounts={handleHardwareOpenAccounts}
                     />
                 );
             }
@@ -3023,6 +3410,7 @@ function AppInner() {
                         onBack={goBack}
                         onCreated={(account) => {
                             if (account?.id) handleSwitchAccount(account.id);
+                            setSignerListKey((n) => n + 1);
                             setUnlockedView('home');
                         }}
                     />
@@ -3057,12 +3445,26 @@ function AppInner() {
                         />
                     );
                 }
+                if (onboardingStep === 'pair-signer') {
+                    return (
+                        <PairSignerForm
+                            mode="add"
+                            pairTrezor={pairTrezorSigner}
+                            pairLedger={pairLedgerSigner}
+                            onBack={() => setOnboardingStep('welcome')}
+                            onCreated={handleHardwareWalletAdded}
+                            onSignerPaired={registerLocalSigner}
+                        />
+                    );
+                }
                 return (
                     <Onboarding
                         mode="add"
                         onCreate={() => setOnboardingStep('create')}
                         onImport={() => setOnboardingStep('import')}
                         onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}
+                        onConnectHardware={() => setOnboardingStep('pair-signer')}
+                        hardwareFactories={HARDWARE_PAIR_FACTORIES}
                         onBack={() => {
                             setOnboardingStep('welcome');
                             goBack();
@@ -3077,18 +3479,11 @@ function AppInner() {
                 <Fragment key={`${activeWalletId}:${activeAccountId || 'all'}`}>
                     <Home
                     activeWalletId={activeWalletId}
-                    onLocked={refresh}
-                    onSend={activeWalletId ? () => {
-                        setSendPrefill(null);
-                        setUnlockedView('send');
-                    } : undefined}
                     onReceive={activeWalletId ? () => { setReceivePrefill(null); setUnlockedView('receive'); } : undefined}
-                    onSwap={activeWalletId ? () => setUnlockedView('swap') : undefined}
                     onExchange={activeWalletId ? () => {
                         setMarketsAsset(defaultDexAssetForNetwork(settings?.activeNetwork));
                         setUnlockedView('markets');
                     } : undefined}
-                    onActions={activeWalletId ? () => setUnlockedView('actions') : undefined}
                     onHistory={activeWalletId ? () => {
                         setHistoryInitialQuery('');
                         setHistoryInitialChainCoin('');
@@ -3102,14 +3497,6 @@ function AppInner() {
                         setSelectedHistoryEntry(entry);
                         setUnlockedView('action-detail');
                     } : undefined}
-                    onResumeAirdrop={activeWalletId ? (id) => {
-                        setResumeAirdropId(id);
-                        setUnlockedView('airdrop');
-                    } : undefined}
-                    onResumeCoinpay={activeWalletId ? (ref) => {
-                        setResumeCoinpay(ref);
-                        setUnlockedView('coinpay');
-                    } : undefined}
                     onOpenWalletPicker={() => openWalletPicker()}
                     onOpenAccountPicker={activeWalletId ? () => setUnlockedView('account-picker') : undefined}
                     onSignPsbt={activeWalletId ? () => setUnlockedView('sign-psbt') : undefined}
@@ -3117,20 +3504,26 @@ function AppInner() {
                     onVerifySignature={activeWalletId ? () => setUnlockedView('verify-signature') : undefined}
                     activeAccountId={activeAccountId}
                     onSwitchAccount={handleSwitchAccount}
+                    renderDetail={activeWalletId ? renderHomeDetail : undefined}
+                    detailSelection={homeDetail?.walletId === activeWalletId ? homeDetail.item : null}
+                    onDetailSelect={selectHomeDetail}
                     />
                 </Fragment>
             );
             })();
             const handleNavLock = handleLock;
-            const handleOpenWalletPicker = () => openWalletPicker();
-            // Settings is a tab-bar root: opening it from a nav surface starts
-            // the history over, as every bottom-bar tab does.
+            // The sidebar's wallet switcher opens My wallets as a root page.
+            const handleOpenWalletPicker = () => openRootView('wallet-picker');
+            // Opening Settings from a nav surface starts the history over on
+            // it, as every nav pick does.
             const handleOpenSettings = () => {
                 setSettingsInitialSection(null);
                 resetNav('settings');
             };
             const handleShellSelect = (view) => {
-                if (unlockedView === view) return;
+                // Picking the root page already on screen does nothing; the
+                // same page reached from another page starts over.
+                if (unlockedView === view && !nav.canGoBack) return;
                 if (view === 'send') {
                     setSendPrefill(null);
                 } else if (view === 'receive') {
@@ -3141,11 +3534,24 @@ function AppInner() {
                     setHistoryInitialFocus(null);
                 } else if (view === 'messaging') {
                     setMessagingThread(null);
+                } else if (view === 'multisig-sign') {
+                    // A fresh signing session, as the All actions row opens it.
+                    setMultisigSessionId(null);
+                    setMultisigInitialLink(null);
+                } else if (view === 'add-wallet') {
+                    // The add-wallet chooser, as My wallets' Add wallet opens it.
+                    setOnboardingStep('welcome');
+                } else if (view === 'coinpay') {
+                    // A fresh payment, as the All actions row opens it.
+                    setResumeCoinpay(null);
                 }
-                // A tab-bar root starts the history over; any other menu row
-                // opens on top of the page the user was on, so Back returns there.
-                if (TAB_BAR_DESTINATIONS.includes(view)) resetNav(view);
-                else setUnlockedView(view);
+                // A menu row opens its form free-entry: no token carried over
+                // from a Manage token or token page form (Back restores it).
+                setFormSource(null);
+                setTokenAdminInitialPicker(null);
+                // Every nav and menu row opens its page as a root: the history
+                // starts over on it, so it shows no Back (G06).
+                palette.navigate(view);
             };
             const activeWalletName =
                 walletList.find((w) => w.id === activeWalletId)?.name || undefined;
@@ -3226,6 +3632,8 @@ function AppInner() {
                             onCommandPalette={palette.openPalette}
                             walletName={activeWalletName}
                             hasVmAddress={hasVmAddress}
+                            hasBtcAddress={hasBtcAddress}
+                            hasGovernanceAddress={hasGovernanceAddress}
                             hasDexSurface
                             isSignerMode={isSignerMode}
                         />
@@ -3239,7 +3647,13 @@ function AppInner() {
                         />
                     }
                     header={
-                        <AppHeader
+                        <ShellAppHeader
+                            walletId={activeWalletId}
+                            accountId={activeAccountId}
+                            alerts={menuAlerts}
+                            onOpenNotifications={() => handleShellSelect('alerts')}
+                            onResumeCoinpay={activeWalletId ? (ref) => { setResumeCoinpay(ref); setUnlockedView('coinpay'); } : undefined}
+                            onResumeAirdrop={activeWalletId ? (id) => { setResumeAirdropId(id); setUnlockedView('airdrop'); } : undefined}
                             onMenuToggle={palette.togglePalette}
                             menuOpen={palette.open}
                             onLock={handleNavLock}
@@ -3250,6 +3664,8 @@ function AppInner() {
                     notices={
                         activeWalletId ? (
                             <>
+                                {/* An erase scheduled from a lock screen (another window) shows first. */}
+                                <EraseScheduledNotice />
                                 {waitingLinkDropped.node}
                                 <LockedSendOutcomeNotice walletId={activeWalletId} routeKey={unlockedView} />
                                 <QueuedBroadcastBanner walletId={activeWalletId} />
@@ -3264,6 +3680,7 @@ function AppInner() {
                         walletId={activeWalletId}
                         resetKey={`${unlockedView}:${palette.navigationKey}`}
                         onHome={() => setUnlockedView('home')}
+                        canGoBack={nav.canGoBack}
                     >
                         <Fragment key={`${palette.navigationKey}:${networkRevision}:${recordListRevision}`}>{routeNode}</Fragment>
                     </ShellRouteOutlet>
@@ -3291,6 +3708,7 @@ function AppInner() {
                                 hasDexSurface: true,
                                 hasVmAddress,
                                 hasBtcAddress,
+                                hasGovernanceAddress,
                             },
                             currentView: unlockedView,
                             onSelect: handleShellSelect,
@@ -3299,6 +3717,10 @@ function AppInner() {
                         }}
                     />
                     <ShortcutHelp open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} overrides={settings?.keyboard?.bindings} />
+                    {/* One sign page per shell: it shows itself while a hardware wallet signs. */}
+                    <Suspense fallback={null}>
+                        <HardwareSignPage />
+                    </Suspense>
                 </FullLayoutWithNav>
             );
             return (

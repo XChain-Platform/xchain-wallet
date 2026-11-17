@@ -25,3 +25,20 @@
     width: auto;
     justify-self: end;
 }
+
+/* A group's label line: its name, then the '?' tip (G25), in the field label style. */
+.groupLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+/* An Add button with the group's '?' tip beside it. */
+.addRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+}

@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { registry as registryLib } from '@xchain-wallet/core';
-import { AddressText, Icon } from '@xchain-wallet/core/ui';
+import { Icon } from '@xchain-wallet/core/ui';
 import { TickerIcon } from './TickerIcon.jsx';
 import { formatDecimal } from '../utils/dispenserPricing.js';
 import { formatRelativeTime } from '../utils/dateTime.js';
@@ -47,9 +47,11 @@ export function dispenserStockTotal(row) {
 }
 
 /**
- * One Dispenser Explorer card: token, price, network, seller, a stock bar
- * when the row says how much it was loaded with, and when it opened. The
- * explorer rows carry no last-fill time, so the opening time stands in.
+ * One Dispenser Explorer row, three lines: the terms ("1,000 TOKEN for 147
+ * DOGE"), a stock bar when the row says how much it was loaded with, and the
+ * stock left with when it opened. The token icon's chain badge names the
+ * network; the row prints no coin name and no address. The explorer rows
+ * carry no last-fill time, so the opening time stands in.
  *
  * @param {object} props
  * @param {string} props.chainId
@@ -61,7 +63,6 @@ export function DispenserExplorerCard({ chainId, row, priceLabel, onSelect }) {
     const tick = row?.give_tick || '?';
     const give = `${formatDecimal(row?.give_amount)} ${tick}`;
     const chainName = chainRegistry.get(chainId)?.displayName || String(chainId || '').split('-')[0];
-    const seller = row?.source || row?.address || '';
     const left = dispenserStockLeft(row);
     const total = dispenserStockTotal(row);
     const showBar = left != null && total != null;
@@ -73,14 +74,14 @@ export function DispenserExplorerCard({ chainId, row, priceLabel, onSelect }) {
         : showBar
             ? `${formatDecimal(String(left))} of ${formatDecimal(String(total))} left`
             : `${formatDecimal(String(left))} left`;
+    const openedText = opened ? t('dispenserExplorer.opened', { when: opened }) : null;
+    const footText = [stockText, openedText].filter(Boolean).join(' · ');
     return (
         <button
             type="button"
-            className={styles.card}
+            className={styles.row}
             onClick={onSelect}
-            aria-label={seller
-                ? t('dispenserExplorer.cardLabelSeller', { give, price: priceLabel, chain: chainName, seller })
-                : t('dispenserExplorer.cardLabel', { give, price: priceLabel, chain: chainName })}
+            aria-label={t('dispenserExplorer.cardLabel', { give, price: priceLabel, chain: chainName })}
         >
             <span className={styles.icon} aria-hidden="true">
                 <TickerIcon chainId={chainId} tick={tick} context="list" />
@@ -91,29 +92,21 @@ export function DispenserExplorerCard({ chainId, row, priceLabel, onSelect }) {
                 role="list"
                 aria-label={t('dispenserExplorer.terms')}
             >
-                <span className={styles.title} role="listitem">
+                <span className={styles.title} role="listitem" data-row-line="terms">
                     <span className={styles.give}>{give}</span>
                     {t('dispenserExplorer.forPrice')}
                     <span className={styles.price}>{priceLabel}</span>
                 </span>
-                <span className={styles.meta} role="listitem">
-                    <span className={styles.chain}>{chainName}</span>
-                    {seller ? <span aria-hidden="true">{' · '}</span> : null}
-                    {seller ? <AddressText address={seller} /> : null}
-                </span>
                 {showBar ? (
-                    <span className={styles.stockBar} aria-hidden="true">
+                    <span className={styles.stockBar} aria-hidden="true" data-row-line="bar">
                         <span className={`${styles.fill} ${low ? styles.fillLow : ''}`} style={{ width: `${pct}%` }} />
                     </span>
                 ) : null}
-                {stockText || opened ? (
-                    <span className={styles.foot} role="listitem">
-                        <span className={styles.stock}>{stockText}</span>
-                        {opened ? <span className={styles.when}>{t('dispenserExplorer.opened', { when: opened })}</span> : null}
-                    </span>
+                {footText ? (
+                    <span className={styles.foot} role="listitem" data-row-line="stock">{footText}</span>
                 ) : null}
             </span>
-            <span className={styles.chevron} aria-hidden="true"><Icon.ArrowRightIcon /></span>
+            <span className={`${styles.chevron} ${styles.forward}`} data-row-chevron aria-hidden="true"><Icon.ForwardIcon /></span>
         </button>
     );
 }
@@ -134,7 +127,7 @@ export function DispenserExplorerGroupRow({ leading, title, subtitle, expanded, 
     return (
         <button
             type="button"
-            className={`${styles.card} ${styles.groupRow}`}
+            className={`${styles.row} ${styles.groupRow}`}
             aria-expanded={expanded ? 'true' : 'false'}
             aria-controls={controls}
             onClick={onToggle}

@@ -103,7 +103,7 @@ function renderHome(props) {
 }
 
 // The Home Activity tab is retired (ruling n.253): History covers it, so Home
-// offers Coins, Tokens, NFTs and DeFi only and never draws activity rows or
+// offers Balances, NFTs and DeFi only and never draws activity rows or
 // the See all activity button.
 function expectNoActivityTab() {
     expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
@@ -153,9 +153,9 @@ describe('Home has no Activity tab', () => {
         expectNoActivityTab();
     });
 
-    it('opens on Coins', () => {
+    it('opens on Balances', () => {
         renderHome({ balances: {}, walletId: 'wallet-real', recentActivity: [entry(1)], onHistory: vi.fn() });
         const selected = screen.getAllByRole('tab').find((tab) => tab.getAttribute('aria-selected') === 'true');
-        expect(selected?.textContent).toMatch(/Coins/);
+        expect(selected?.textContent).toMatch(/Balances/);
     });
 });

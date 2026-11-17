@@ -20,7 +20,8 @@
 // and the Approve dispatch, on a fresh form, on the first submit.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, act as domAct, fireEvent, cleanup } from '@testing-library/react';
+import { render, act as domAct, fireEvent, cleanup, within } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
@@ -112,8 +113,18 @@ async function drainMicrotasks(rounds = 12) {
 }
 
 const setValue = (utils, label, value) => {
-    fireEvent.change(utils.getByLabelText(label), { target: { value } });
+    const control = utils.getByLabelText(label);
+    // Dropdowns are the themed Select: pick the option rather than typing a value.
+    if (control.hasAttribute('data-xc-select')) selectOption(control, value);
+    else fireEvent.change(control, { target: { value } });
 };
+
+// G122: the Fiat currency field opens its picker page and a row picks the
+// code; two steps, so the page renders between the tap and the pick.
+const openFiatPicker = (utils) => fireEvent.click(utils.getByRole('button', { name: /^Fiat currency:/ }));
+const pickFiat = (code) => (utils) => fireEvent.click(
+    within(utils.getByRole('list', { name: 'Fiat currencies' })).getByRole('button', { name: new RegExp(code) }),
+);
 
 /**
  * Mount a locked-token DispenserForm, run the optional picker steps, fill
@@ -225,8 +236,9 @@ describe('DispenserForm Mode B pricing', () => {
         const { calls } = await driveCreate({
             pricingSteps: [
                 openTerms,
+                openFiatPicker,
+                pickFiat('USD'),
                 (utils) => {
-                    setValue(utils, 'Priced in fiat', 'USD');
                     setValue(utils, /^Oracle address/, '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2');
                 },
                 // Quick keeps the Get card but holds the native price: empty and disabled.

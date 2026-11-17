@@ -13,8 +13,19 @@
 export { FormFrame } from './FormFrame.jsx';
 export { FormSection } from './FormSection.jsx';
 export { FromSection } from './FromSection.jsx';
+export { MemoSection } from './MemoSection.jsx';
 export { FeeSection, feeSummaryParts } from './FeeSection.jsx';
+export { AdvancedSection, FormAdvancedContext } from './AdvancedSection.jsx';
+export {
+    advancedCaps,
+    advancedKey,
+    useAdvancedEntry,
+    selectedUtxosOf,
+    withAdvancedOptions,
+    COIN_CONTROL_ROW_LIMIT,
+} from './advancedOptions.js';
 export { FormStatusScope, FormStatusSlot } from './FormStatusSlot.jsx';
 export { FormAction } from './FormAction.jsx';
 export { useFormSections } from './useFormSections.js';
 export { joinSummary, summaryAddress } from './summaryText.js';
+export { SummaryAddress, joinSummaryParts, summaryLineWithAddress } from './SummaryAddress.jsx';

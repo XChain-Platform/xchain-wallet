@@ -72,7 +72,7 @@ async function reachDone(legacyByChain, newByChain) {
             />
         </MessagingProvider>,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    // Upgrade opens on its first real step (no intro page).
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password1' } });
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'password1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Generate Recovery Phrase' }));
@@ -80,7 +80,7 @@ async function reachDone(legacyByChain, newByChain) {
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
     // Every step is titled Upgrade Wallet; the step reads in the subtitle.
-    await screen.findByText('Step 4 of 4: Check your copy');
+    await screen.findByText('Step 3 of 3: Check your copy');
     for (const input of screen.getAllByLabelText(/^Word \d+$/)) {
         const position = Number(input.labels[0].textContent.match(/\d+/)[0]);
         fireEvent.change(input, { target: { value: WORDS[position - 1] } });

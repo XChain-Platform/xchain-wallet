@@ -59,7 +59,8 @@ describe('STYLE_GUIDE component contracts', () => {
         const alertsRoute = read('packages/core/src/shared/routes/AlertsRoute.jsx');
         const amountFieldCss = read('packages/core/src/shared/components/AmountField.module.css');
 
-        expect(amountField).toMatch(/<Button[\s\S]*?aria-label="Use max available amount"/);
+        // Max is an in-field icon: the shared FieldIconButton, not a Button.
+        expect(amountField).toMatch(/<FieldIconButton[\s\S]*?label="Use max available amount"/);
         expect(alertsRoute).toMatch(/<Button[\s\S]*?variant="rowAction"[\s\S]*?openAlert\(alert\)/);
         expect(amountField).not.toContain('className={styles.amountMaxInline}');
         expect(alertsRoute).not.toContain('className={styles.alertAction}');
@@ -86,8 +87,8 @@ describe('STYLE_GUIDE component contracts', () => {
         expect(routes['AdvancedActionsForm.jsx']).toMatch(/<Select[\s\S]*label="Action"/);
         expect(routes['AdvancedActionsForm.jsx']).toMatch(/<Textarea[\s\S]*list values/);
         expect(routes['MultisigSigningSession.jsx']).toMatch(/<Textarea[\s\S]*aria-label="Cosigner reply chunks"/);
-        expect(routes['MyLists.jsx']).toMatch(/<ListToolbar[\s\S]*searchLabel="Search lists"/);
-        expect(routes['MyLists.jsx']).toMatch(/<Button[\s\S]*>\s*Create List\s*<\/Button>/);
+        expect(routes['MyLists.jsx']).toMatch(/<ListFilterMenu[\s\S]*searchLabel="Search lists"/);
+        expect(routes['MyLists.jsx']).toMatch(/<Button[\s\S]*icon=\{<Icon\.PlusIcon \/>\}[\s\S]*aria-label="Create list"/);
         // The standard FromSection draws the read-only signing address field.
         expect(routes['PsbtSignForm.jsx']).toMatch(/<FromSection[\s\S]*addressLabel="Signing address"/);
         expect(routes['PsbtSignForm.jsx']).toMatch(/<Textarea[\s\S]*label="Unsigned transaction/);

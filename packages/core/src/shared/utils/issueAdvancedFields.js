@@ -70,42 +70,49 @@ export const LOCK_FLAGS = [
         field: 'LOCK_MAX_SUPPLY',
         label: 'Max supply',
         hint: 'No one can raise the supply cap',
+        help: 'Turn this on to fix the maximum supply for good. It cannot be undone.',
     },
     {
         key: 'max_mint',
         field: 'LOCK_MAX_MINT',
         label: 'Max mint per transaction',
         hint: 'That limit never changes',
+        help: 'Turn this on to freeze the per-transaction mint limit for good. It cannot be undone.',
     },
     {
         key: 'mint',
         field: 'LOCK_MINT',
         label: 'Minting',
         hint: 'Blocks the public MINT',
+        help: 'Turn this on to shut off public minting for good. It cannot be undone.',
     },
     {
         key: 'mint_supply',
         field: 'LOCK_MINT_SUPPLY',
         label: 'Mint supply',
         hint: "Blocks the owner's MINT_SUPPLY through ISSUE",
+        help: 'Turn this on to stop the owner from ever setting a mint supply. It cannot be undone.',
     },
     {
         key: 'description',
         field: 'LOCK_DESCRIPTION',
         label: 'Description',
         hint: 'Description can never change',
+        help: 'Turn this on to keep the token description as it is for good. It cannot be undone.',
     },
     {
         key: 'sleep',
         field: 'LOCK_SLEEP',
         label: 'Pause',
         hint: 'The token can never be paused',
+        help: 'Turn this on so the token can never be paused. It cannot be undone.',
     },
     {
         key: 'callback',
         field: 'LOCK_CALLBACK',
         label: 'Callback',
         hint: 'No one can ever run a callback on this token again, and its block, token and amount never change',
+        help: 'Turn this on to disable the callback feature for good. It cannot be undone.',
     },
 ];
 
@@ -236,7 +243,7 @@ export function validateAdvancedIssueFields(advanced, ctx = {}) {
         // unlocked, letting the owner recall every holder's balance
         // the moment supply moves.
         if (currentHeight != null && Number(block) <= currentHeight) {
-            return `Callback block must be in the future. The chain is at block ${currentHeight.toLocaleString('en-US')}; a callback set at or below that is live the moment the token is created.`;
+            return `Callback block must be in the future. The chain is at block ${String(currentHeight)}; a callback set at or below that is live the moment the token is created.`;
         }
     }
 

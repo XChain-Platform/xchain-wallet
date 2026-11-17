@@ -38,14 +38,7 @@ describe('shared component design-token geometry', () => {
 
             for (const declaration of rawPixelDeclarations) {
                 const hairline = /^(?:border(?:-[a-z-]+)?|outline):\s*(?:1|2)px\b/.test(declaration);
-                const documentedException = (
-                    name === 'LearnNote'
-                    && [
-                        'border-inline-start: 3px solid var(--xc-accent-primary);',
-                        'text-underline-offset: 2px;',
-                        'outline-offset: 2px;',
-                    ].includes(declaration)
-                ) || (name === 'LockedTokenContext' && declaration === 'gap: 2px;')
+                const documentedException = (name === 'LockedTokenContext' && declaration === 'gap: 2px;')
                 // The split order book's caption is visually hidden with a one pixel clip box,
                 // and its table rows keep one 28px height so bids and asks line up.
                 || (name === 'MarketTrading' && ['width: 1px;', 'height: 1px;', 'height: 28px;', 'padding: 1px var(--xc-space-2);'].includes(declaration));
@@ -53,14 +46,9 @@ describe('shared component design-token geometry', () => {
             }
         }
 
-        const learnNote = readComponentCss('LearnNote');
-        expect(learnNote).not.toMatch(/border-inline-start/);
-        expect(learnNote).toMatch(
-            /\/\* Two pixels separate the underline without changing the line box\. \*\/\s*text-underline-offset:\s*2px/,
-        );
-        expect(learnNote).toMatch(
-            /\/\* Two pixels separate the focus ring without enlarging the control\. \*\/\s*outline-offset:\s*2px/,
-        );
+        // LearnNote is a kit Notice (the Notice Standard), so its box has no
+        // coloured edge bar of its own.
+        expect(readComponentCss('LearnNote')).not.toMatch(/border-inline-start/);
         expect(readComponentCss('LockedTokenContext')).toMatch(
             /\/\* Two pixels keep the two text lines visually grouped\. \*\/\s*gap:\s*2px/,
         );

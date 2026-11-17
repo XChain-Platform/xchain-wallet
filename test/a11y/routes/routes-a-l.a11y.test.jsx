@@ -34,6 +34,9 @@ const ROUTE_NAMES = [
     'BridgeOriginBadge',
     'BroadcastForm',
     'CallbackForm',
+    // Order detail's and Swap Details' Cancel and Edit form routes.
+    'CancelOrderForm',
+    'CancelSwapForm',
     'CoSignerAccountDetail',
     'CoSignerAccountList',
     'CoSignerPolicyEditor',
@@ -44,7 +47,6 @@ const ROUTE_NAMES = [
     'ContactsList',
     'ContractDetail',
     'ContractFundsForm',
-    'ContractStakeForm',
     'ContractsList',
     'ControllerBindForm',
     'CreateBetFeedForm',
@@ -54,7 +56,6 @@ const ROUTE_NAMES = [
     'CrossChainOrderForm',
     'CrossChainSwapForm',
     'DelegateVoteForm',
-    'DelegationActionForm',
     'DeployContractForm',
     'DestroyForm',
     'DispenserDetail',
@@ -62,6 +63,8 @@ const ROUTE_NAMES = [
     'DispenserForm',
     'DispensersList',
     'DividendForm',
+    'EditOrderForm',
+    'EditSwapForm',
     'ExecuteContractForm',
     'GatedPublishForm',
     'GovernancePolls',
@@ -72,10 +75,7 @@ const ROUTE_NAMES = [
     'LinkForm',
     'ListCreateForm',
     'ListDetail',
-    'ListForkForm',
-    'ListRenameForm',
-    'ListShareForm',
-    'ListTransferForm',
+    'ListLookForm',
     'Loading',
     'Locked',
 ];
@@ -128,7 +128,6 @@ const ROUTE_OVERRIDES = {
     BridgeOriginBadge: { tick: 'BTC.XCP', localCoin: 'DOGE' },
     ContractFundsForm: { mode: 'deposit' },
     DelegateVoteForm: { mode: 'delegate' },
-    DelegationActionForm: { mode: 'delegate' },
 };
 
 function pending() {
@@ -172,6 +171,32 @@ describe('A through L route accessibility', () => {
         const { container } = render(
             <MessagingProvider shell="web" messaging={messaging()}>
                 <ToastHost>{createElement(Component, props)}</ToastHost>
+            </MessagingProvider>,
+        );
+
+        await expectNoSeriousAxeViolations(container);
+    });
+
+    // Create List on the Union type (picked in its List type field), which draws the
+    // union body in place of the address and token fields.
+    it('scans ListCreateForm on the Union type', async () => {
+        const Component = componentFor('ListCreateForm');
+        const { container } = render(
+            <MessagingProvider shell="web" messaging={messaging()}>
+                <ToastHost>{createElement(Component, { ...COMMON_PROPS, initialType: '3' })}</ToastHost>
+            </MessagingProvider>,
+        );
+
+        await expectNoSeriousAxeViolations(container);
+    });
+
+    // The one List form on each list action (the list-rename, list-share,
+    // list-transfer and list-fork routes), which replaced the four list forms.
+    it.each(['edit', 'share', 'transfer', 'fork'])('scans ListCreateForm on the %s action', async (action) => {
+        const Component = componentFor('ListCreateForm');
+        const { container } = render(
+            <MessagingProvider shell="web" messaging={messaging()}>
+                <ToastHost>{createElement(Component, { ...COMMON_PROPS, action })}</ToastHost>
             </MessagingProvider>,
         );
 

@@ -34,6 +34,7 @@ import {
     settingsSectionsToCommands,
 } from '../../../packages/core/src/shared/commandPalette/commandRegistry.js';
 import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
+import { selectOption } from '../../helpers/selectOption.js';
 
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const PASSWORD = 'correct-horse-battery';
@@ -133,10 +134,10 @@ describe('Send follows the wallet it sends from', () => {
         );
     }
 
-    it('refuses for the air-gapped signer wallet and composes for the Normal one', async () => {
+    it('refuses for the signer-for-another-phone wallet and composes for the Normal one', async () => {
         const messaging = messagingStub();
         const view = mountSend('w-signer', messaging);
-        expect(await screen.findByText(/This wallet is an air-gapped signer/)).toBeInTheDocument();
+        expect(await screen.findByText(/This wallet is the signer for another phone/)).toBeInTheDocument();
         expect(screen.queryByLabelText(/^To$/)).toBeNull();
 
         view.rerender(
@@ -147,7 +148,7 @@ describe('Send follows the wallet it sends from', () => {
             ),
         );
         await waitFor(() => expect(screen.getByLabelText(/^To$/)).toBeInTheDocument());
-        expect(screen.queryByText(/This wallet is an air-gapped signer/)).toBeNull();
+        expect(screen.queryByText(/This wallet is the signer for another phone/)).toBeNull();
     });
 });
 
@@ -177,7 +178,7 @@ describe('Wallet Details shows the wallet mode read-only', () => {
     it('names each wallet\'s own mode on the Details tab', async () => {
         const signer = await detailsRow('w-signer');
         expect(signer.label).toBeTruthy();
-        expect(signer.value.textContent).toBe('Air-gapped signer');
+        expect(signer.value.textContent).toBe('Signer for another phone');
         cleanup();
         const normal = await detailsRow('w-normal');
         expect(normal.value.textContent).toBe('Normal');
@@ -200,13 +201,15 @@ describe('the mode is chosen at create and import', () => {
                 <CreateWallet mode="fresh" onBack={() => {}} onCreated={() => {}} />
             </MessagingProvider>,
         );
-        // Normal is preselected.
-        expect(screen.getByRole('radio', { name: /^Normal/ })).toBeChecked();
-        fireEvent.click(screen.getByRole('radio', { name: /^Watch-only/ }));
+        // The form offers no wallet-mode field; every create is the normal full mode.
+        expect(screen.queryByRole('combobox', { name: 'Wallet mode' })).toBeNull();
         fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: PASSWORD } });
-        fireEvent.change(screen.getByLabelText(/^Confirm/), { target: { value: PASSWORD } });
+        // Anchored: the Extra Passphrase section's "Confirm passphrase" field
+        // is always on the form now (disabled until its switch is on).
+        fireEvent.change(screen.getByLabelText(/^Confirm( password)?$/), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: /Next/ }));
-        fireEvent.click(await screen.findByRole('checkbox'));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reveal Recovery Phrase' }));
+        fireEvent.click(screen.getByRole('checkbox'));
         fireEvent.click(screen.getByRole('button', { name: /Verify Recovery Phrase/ }));
         const words = PHRASE.split(' ');
         for (const input of await screen.findAllByLabelText(/^Word \d+$/)) {
@@ -215,7 +218,7 @@ describe('the mode is chosen at create and import', () => {
         }
         fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
         await waitFor(() => expect(messaging.importMnemonic).toHaveBeenCalledTimes(1));
-        expect(messaging.importMnemonic.mock.calls[0][0]).toMatchObject({ origin: 'created', walletMode: 'watcher' });
+        expect(messaging.importMnemonic.mock.calls[0][0]).toMatchObject({ origin: 'created', walletMode: 'full' });
     });
 
     it('import sends Normal by default and the picked mode when changed', async () => {
@@ -225,14 +228,13 @@ describe('the mode is chosen at create and import', () => {
                 <ImportWallet mode="fresh" onBack={() => {}} onImported={() => {}} />
             </MessagingProvider>,
         );
-        expect(screen.getByRole('radio', { name: /^Normal/ })).toBeChecked();
-        fireEvent.click(screen.getByRole('radio', { name: /^Air-gapped signer/ }));
+        expect(screen.queryByRole('combobox', { name: 'Wallet mode' })).toBeNull();
         fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
         await waitFor(() => expect(importMnemonic).toHaveBeenCalledTimes(1));
-        expect(importMnemonic.mock.calls[0][0]).toMatchObject({ mnemonic: PHRASE, walletMode: 'signer' });
+        expect(importMnemonic.mock.calls[0][0]).toMatchObject({ mnemonic: PHRASE, walletMode: 'full' });
     });
 });
 
@@ -252,6 +254,8 @@ describe('Settings and the palette offer no wallet-mode switch', () => {
                 <Settings onBack={() => {}} activeWallet={{ id: 'w-normal', name: 'Everyday' }} />
             </MessagingProvider>,
         );
+        // The search lives behind the header filter button, so open it first.
+        fireEvent.click(await screen.findByRole('button', { name: 'Filter settings' }));
         const search = await screen.findByRole('searchbox');
         for (const query of ['Wallet mode', 'Watcher', 'air-gapped']) {
             fireEvent.change(search, { target: { value: query } });

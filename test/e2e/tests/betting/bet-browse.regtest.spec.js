@@ -92,22 +92,6 @@ const OTHER_CHAIN = REGTEST_COIN === 'RBTC'
 /** Unique per run: the venue chain carries markets from every prior session. */
 const RUN_TAG = `browse-${Date.now()}`;
 
-/**
- * The wallet's plain-language pill text per stored status.
- *
- * Copied from BetFeedsList's `statusLabel` ON PURPOSE rather than imported: a
- * spec that imports the mapping it is checking passes when the mapping changes,
- * which is the one thing it exists to notice.
- */
-const PILL_TEXT = {
-    open: 'Taking bets',
-    closed: 'Betting closed',
-    resolved: 'Settled',
-    resolved_void: 'Void, refunded',
-    cancelled: 'Cancelled, refunded',
-    expired: 'Expired, refunded',
-};
-
 async function explorerJson(path, coin = REGTEST_COIN) {
     const res = await fetch(`${EXPLORER_URL}/${coin}/api/${path}`, {
         signal: AbortSignal.timeout(15_000),
@@ -198,13 +182,16 @@ async function gotoBettingHub(page) {
 }
 
 /** Every market card currently rendered, as {index, text}. */
+// The card draws no market number or status pill (operator ruling
+// 2026-11-13); each carries its number as data-market-index, and the list
+// it sits in (the "Taking bets" filter or "All markets") is what says which
+// status the wallet read.
 async function renderedCards(page) {
-    const cards = page.getByRole('main').getByRole('button', { name: /^#\d+\s/ });
+    const cards = page.getByRole('main').locator('[data-market-index]');
     const out = [];
     for (const card of await cards.all()) {
-        const text = (await card.innerText()) || '';
-        const index = (text.match(/#(\d+)/) || [])[1];
-        if (index) out.push({ index, text });
+        const index = await card.getAttribute('data-market-index');
+        if (index) out.push({ index, text: (await card.innerText()) || '' });
     }
     return out;
 }
@@ -298,13 +285,12 @@ test.describe('BET browse', () => {
             heightAtCreate = await tipHeight();
         });
 
-        await test.step('the default list is the open ones, and every pill matches the chain', async () => {
+        await test.step('the default list is the open ones, and every card is open on chain', async () => {
             await gotoBettingHub(page);
 
-            const mine = page.getByRole('main').getByRole('button', { name: new RegExp(`^#${feedIndex}\\s`) });
+            const mine = page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`);
             await expect(mine, `the market this run created is missing from the browse list`)
                 .toBeVisible({ timeout: 30_000 });
-            await expect(mine).toContainText(PILL_TEXT.open);
 
             // The whole visible page cross-checked against the indexer, one row
             // at a time. This is also the demo-fallback sweep (D-11 / D-12):
@@ -318,9 +304,6 @@ test.describe('BET browse', () => {
                 expect(String(stored.feed_status),
                     `#${card.index} is listed under "Taking bets" but the chain stores `
                     + `${stored.feed_status}`).toBe('open');
-                expect(card.text,
-                    `#${card.index}: the pill does not match the stored status ${stored.feed_status}`)
-                    .toContain(PILL_TEXT[String(stored.feed_status)]);
             }
         });
 
@@ -377,15 +360,12 @@ test.describe('BET browse', () => {
                 await page.reload();
                 await unlockAfterReload(page, PASSWORD);
                 await gotoBettingHub(page);
-                const mine = page.getByRole('main').getByRole('button', { name: new RegExp(`^#${feedIndex}\\s`) });
+                const mine = page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`);
                 try {
                     await expect(mine,
                         'a market past its deadline but still open on chain vanished from the open list: '
                         + 'the wallet is recomputing status from the clock')
                         .toBeVisible({ timeout: 30_000 });
-                    await expect(mine,
-                        'the wallet recomputed the status from the clock instead of showing what the chain stored')
-                        .toContainText(PILL_TEXT.open);
                 } catch (err) {
                     // A parked miner does not stop another session's
                     // generate_blocks, so the chain is asked again before the
@@ -424,16 +404,15 @@ test.describe('BET browse', () => {
             // this never happened at all (a trace of the failing run showed six
             // list requests, all in the first thirty seconds), so the row stayed
             // under "Taking bets" indefinitely. Two refresh cycles of headroom.
-            await expect(page.getByRole('main').getByRole('button', { name: new RegExp(`^#${feedIndex}\\s`) }),
+            await expect(page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`),
                 'the hub never re-read the chain: a market that closed while the list was on '
                 + 'screen is still listed under "Taking bets" (D-117)')
                 .toBeHidden({ timeout: 75_000 });
 
             await page.getByRole('button', { name: 'All markets', exact: true }).click();
-            const mine = page.getByRole('main').getByRole('button', { name: new RegExp(`^#${feedIndex}\\s`) });
+            const mine = page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`);
             await expect(mine, '"All markets" does not list the market that just closed')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(mine).toContainText(PILL_TEXT.closed);
 
             // The terminal states only exist on a chain with history, which is
             // why this is asserted here rather than manufactured: the venue
@@ -444,15 +423,10 @@ test.describe('BET browse', () => {
             for (const card of cards) {
                 const row = await feedRow(card.index);
                 expect(row, `market #${card.index} is on screen but not on chain (demo row?)`).toBeTruthy();
-                const want = PILL_TEXT[String(row.feed_status)];
-                if (!want) continue;   // a status this wallet renders through its generic fallback
-                expect(card.text,
-                    `#${card.index}: the pill does not match the stored status ${row.feed_status}`)
-                    .toContain(want);
                 if (String(row.feed_status) !== 'open') terminal += 1;
             }
             expect(terminal,
-                '"All markets" showed nothing but open markets, so the non-open pills went unchecked')
+                '"All markets" showed nothing but open markets, so it never listed a non-open one')
                 .toBeGreaterThan(0);
         });
 

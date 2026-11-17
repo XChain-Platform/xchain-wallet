@@ -11,15 +11,14 @@
 // Smoke for PC-39 (contract consent manifest).
 //
 // Asserts:
-//   1. Every review screen that hands a contract authority mounts
-//      ContractConsentPanel: EXECUTE, DEPOSIT/WITHDRAW, controller bind,
-//      contract stake. This is the item's coverage claim, so it is the
-//      assertion most worth pinning against a future refactor.
-//   2. Each mount fetches through useContractManifest with a `skip` that
+//   1. Every review screen that hands a contract authority puts the
+//      manifest disclosure in the Confirm Standard facts card: EXECUTE,
+//      DEPOSIT/WITHDRAW, controller bind, and contract stake.
+//   2. Each surface fetches through useContractManifest with a `skip` that
 //      defers the lookup to the review stage.
-//   3. Bind and stake scope consent to the authority-GRANTING direction
-//      (no panel on unbind / unstake / delegate).
-//   4. The panel renders PC-39's trust states off `manifest.status` and
+//   3. Bind and stake scope consent to the authority-granting direction
+//      (no consent facts on unbind / unstake / delegate).
+//   4. The facts render PC-39's trust states off `manifest.status` and
 //      carries the indexer-reported provenance caveat (the verified path
 //      rides PC-50).
 //   5. The flow reads the raw contract row, which is what makes an
@@ -37,17 +36,17 @@ const here = dirname(fileURLToPath(import.meta.url));
 const wsRoot = join(here, '..', '..', '..');
 const core = join(wsRoot, 'packages', 'core');
 const sharedRoutes = join(core, 'src', 'shared', 'routes');
-const sharedComponents = join(core, 'src', 'shared', 'components');
 const sharedHooks = join(core, 'src', 'shared', 'hooks');
 
 const read = (p) => readFileSync(p, 'utf8');
 
-// 1 + 2: all four consent surfaces mount the panel behind the hook.
+// 1 + 2: all four consent surfaces feed the facts card behind the hook.
 const SURFACES = [
     ['ExecuteContractForm.jsx', 'EXECUTE'],
     ['ContractFundsForm.jsx', 'DEPOSIT / WITHDRAW'],
     ['ControllerBindForm.jsx', 'controller bind'],
-    ['ContractStakeForm.jsx', 'contract stake'],
+    // Contract staking is the contract target of the one Staking form.
+    ['StakingForm.jsx', 'contract stake'],
 ];
 
 for (const [file, label] of SURFACES) {
@@ -59,18 +58,42 @@ for (const [file, label] of SURFACES) {
         `${label}: imports useContractManifest`,
     );
     assert.ok(
-        /import \{ ContractConsentPanel \} from '\.\.\/components\/ContractConsentPanel\.jsx'/.test(src),
-        `${label}: imports ContractConsentPanel`,
-    );
-    assert.ok(
-        /<ContractConsentPanel[\s\S]{0,240}manifest=\{manifest\}/.test(src),
-        `${label}: mounts the panel on its review screen`,
-    );
-    assert.ok(
-        /useContractManifest\(\{[\s\S]{0,320}?skip:[\s\S]{0,160}?stage !== 'review'/.test(src),
+        /useContractManifest\(\{[\s\S]{0,320}?skip:[\s\S]{0,180}?stage !== 'review'/.test(src),
         `${label}: defers the lookup to the review stage`,
     );
+    assert.ok(
+        /status === 'unavailable'/.test(src) && /status === 'unrestricted'/.test(src),
+        `${label}: distinguishes unavailable, unrestricted, and declared manifests`,
+    );
+    assert.ok(
+        /The wallet couldn’t look up which actions/.test(src)
+            && /Anything\. By continuing, you grant this contract/.test(src)
+            && /Reported by the XChain index, not checked against the chain/.test(src)
+            && /No limit of its own, so the network limit applies\./.test(src),
+        `${label}: keeps the unavailable, unrestricted, provenance, and network-cap facts`,
+    );
 }
+
+const executeSrc = read(join(sharedRoutes, 'ExecuteContractForm.jsx'));
+const fundsSrc = read(join(sharedRoutes, 'ContractFundsForm.jsx'));
+assert.ok(
+    /facts: \[[\s\S]{0,500}?\.\.\.contractManifestFacts\(manifest\)/.test(executeSrc),
+    'EXECUTE places manifest details in the Confirm Standard facts card',
+);
+assert.ok(
+    /facts: contractManifestFacts\(manifest\)/.test(fundsSrc),
+    'DEPOSIT / WITHDRAW places manifest details in the Confirm Standard facts card',
+);
+assert.equal(
+    (executeSrc.match(/\.\.\.contractManifestFacts\(manifest\)/g) || []).length,
+    2,
+    'EXECUTE keeps manifest facts on watcher and software Confirm Standard paths',
+);
+assert.equal(
+    (fundsSrc.match(/facts: contractManifestFacts\(manifest\)/g) || []).length,
+    2,
+    'DEPOSIT / WITHDRAW keeps manifest facts on watcher and software Confirm Standard paths',
+);
 
 // 3: consent is scoped to the authority-granting direction.
 const bindSrc = read(join(sharedRoutes, 'ControllerBindForm.jsx'));
@@ -79,41 +102,25 @@ assert.ok(
     'controller bind: no manifest lookup when unbinding (revoking needs no consent)',
 );
 assert.ok(
-    /\{!unbind \? \([\s\S]{0,200}<ContractConsentPanel/.test(bindSrc),
-    'controller bind: the panel renders on bind only',
+    /const consentFacts = useMemo\(\(\) => \{[\s\S]{0,80}?if \(unbind\) return \[\];/.test(bindSrc)
+        && /\.\.\.consentFacts/.test(bindSrc)
+        && /facts: controllerFacts/.test(bindSrc),
+    'controller bind: consent facts feed Confirm Standard on bind only',
+);
+assert.equal(
+    (bindSrc.match(/facts: controllerFacts/g) || []).length,
+    2,
+    'controller bind keeps consent facts on watcher and software Confirm Standard paths',
 );
 
-const stakeSrc = read(join(sharedRoutes, 'ContractStakeForm.jsx'));
+const stakeSrc = read(join(sharedRoutes, 'StakingForm.jsx'));
 assert.ok(
-    /skip: mode !== 'stake' \|\|/.test(stakeSrc),
-    'contract stake: no manifest lookup for unstake / delegate',
+    /skip: !isContract \|\| currentAction !== 'stake' \|\|/.test(stakeSrc),
+    'contract stake: no manifest lookup for unstake / delegate or a validator stake',
 );
 assert.ok(
-    /\{mode === 'stake' \? \([\s\S]{0,200}<ContractConsentPanel/.test(stakeSrc),
-    'contract stake: the panel renders on the stake leg only',
-);
-
-// 4: the panel's three trust states + the provenance caveat.
-const panelSrc = read(join(sharedComponents, 'ContractConsentPanel.jsx'));
-assert.ok(
-    /status === 'unavailable'/.test(panelSrc) && /status === 'unrestricted'/.test(panelSrc),
-    'panel branches on manifest.status, not on a bare null permissions',
-);
-assert.ok(
-    /couldn(?:&rsquo;|’)t look up/.test(panelSrc),
-    'panel states plainly when the wallet could not check',
-);
-assert.ok(
-    /Anything\./.test(panelSrc) && /any action the protocol allows/.test(panelSrc),
-    'panel states an undeclared allowlist as unrestricted (DEPLOY.md rule), not as a missing field',
-);
-assert.ok(
-    /Reported by the XChain index, not checked against the chain by\s*\n?\s*this wallet/.test(panelSrc),
-    'panel carries the indexer-reported provenance caveat (verified path rides PC-50)',
-);
-assert.ok(
-    /the network limit applies/.test(panelSrc),
-    'an absent per-contract cap reads as the network cap, not as "not declared"',
+    /currentAction === 'stake' \? \{ facts: contractManifestFacts\(manifest\) \} : \{\}/.test(stakeSrc),
+    'contract stake: consent facts feed Confirm Standard on the stake leg only',
 );
 
 const hookSrc = read(join(sharedHooks, 'useContractManifest.js'));

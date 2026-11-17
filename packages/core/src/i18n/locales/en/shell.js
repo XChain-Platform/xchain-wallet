@@ -28,6 +28,7 @@ const messages = {
     'shell.header.appHeader': 'App header',
     'shell.header.notifications': 'Notifications',
     'shell.header.notificationsUnread': 'Notifications, {count} unread',
+    'shell.header.notificationsAction': 'Notifications, {count} unread, {action} needs your action',
     'shell.settingsButton.noWallet': 'No wallet',
     'shell.devVariantBadge.devVariant': 'Dev variant: {variant}',
     'shell.devVariantBadge.dragToMove': 'Drag to move',

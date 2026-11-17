@@ -6,9 +6,20 @@
     /* The header's actions keep the touch size at every width, as the
        app bar does, so every shell matches row for row. */
     --xc-control-h-md: 44px;
+    /* G112 insets resolve on :root; a field in the header (a list filter
+       panel) re-derives them from this height. */
+    --xc-field-icon-inset-md: calc((var(--xc-control-h-md) - var(--xc-control-icon-md)) / 2);
+    --xc-field-glyph-inset-md: calc((var(--xc-control-h-md) - var(--xc-icon-md)) / 2);
+    --xc-field-action-inset-md: calc((var(--xc-control-h-md) - var(--xc-tap-min)) / 2);
     --xc-page-header-side: var(--xc-control-h-md);
     display: grid;
-    grid-template-columns: var(--xc-page-header-side) minmax(0, 1fr) var(--xc-page-header-side);
+    /* The two side lanes are equal 1fr tracks, so the title sits on the
+       header's centre whatever the buttons on either side: the trailing lane
+       never shrinks below its buttons (two or more would otherwise spill left
+       over the title) and the leading lane takes the same width. The title
+       track takes its own width and shrinks (ellipsis) only when the
+       sides leave no more room. */
+    grid-template-columns: minmax(var(--xc-page-header-side), 1fr) minmax(0, auto) minmax(max-content, 1fr);
     align-items: center;
     gap: var(--xc-space-2);
     width: 100%;
@@ -62,9 +73,13 @@
     height: var(--xc-icon-size);
 }
 
-/* The hit target stays at the touch floor, centred on the box, as on the
-   trailing actions. */
-.header .back::before {
+/* The hit target stays at the touch floor: --xc-control-hit-min is 44px on
+   touch screens, larger than the box, and smaller than the box on pointer
+   screens, where the area is just the button. Offsetting by half the
+   shortfall centres it in both writing directions, as Button.sm does. The
+   Back control and the trailing actions share it. */
+.header .back::before,
+.trailing button:not([role="menuitem"], [role="dialog"] *)::before {
     content: '';
     position: absolute;
     inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
@@ -94,13 +109,12 @@
     font-weight: var(--xc-type-page-title-weight);
     color: var(--xc-text);
     text-align: center;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
+    /* One line that ends in an ellipsis; an address title (AddressText)
+       cuts itself in the middle to the room this box has. */
+    display: block;
     overflow: hidden;
-    overflow-wrap: anywhere;
-    white-space: normal;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     min-width: 0;
     max-width: 100%;
 }
@@ -109,6 +123,8 @@
    size and spacing, so the two rows line up column for column. */
 .trailing {
     justify-self: end;
+    min-width: var(--xc-page-header-side);
+    justify-content: flex-end;
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-1);
@@ -143,19 +159,6 @@
     flex: 0 0 auto;
 }
 
-/* The hit target stays at the touch floor: --xc-control-hit-min is 44px on
-   touch screens, larger than the box, and smaller than the box on pointer
-   screens, where the area is just the button. Offsetting by half the
-   shortfall centres it in both writing directions, as Button.sm does. */
-.trailing button:not([role="menuitem"], [role="dialog"] *)::before {
-    content: '';
-    position: absolute;
-    inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
-    inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
-    width: max(100%, var(--xc-control-hit-min, 24px));
-    height: max(100%, var(--xc-control-hit-min, 24px));
-}
-
 .trailing button:not([role="menuitem"], [role="dialog"] *) svg[data-xc-icon] {
     width: var(--xc-icon-size);
     height: var(--xc-icon-size);
@@ -172,13 +175,9 @@
     outline-offset: 2px;
 }
 
-.trailing button:not([role="dialog"] *):disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
 .spacer {
     display: block;
+    min-width: var(--xc-page-header-side);
 }
 
 /* A title with a subtitle stacks the two, centred, inside the

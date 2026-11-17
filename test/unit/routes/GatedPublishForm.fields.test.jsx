@@ -121,7 +121,8 @@ describe('GatedPublishForm fields and pickers', () => {
         expect(screen.getByRole('button', { name: 'About From' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^About File \(up to/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About Title' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'About Memo' })).toBeInTheDocument();
+        // A memo alone in its Memo section has no label row and no tip (ruling).
+        expect(screen.queryByRole('button', { name: 'About Memo' })).toBeNull();
         expect(screen.getByRole('button', { name: 'About Pack' })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: /^About File \(up to/ }));
@@ -137,17 +138,21 @@ describe('GatedPublishForm fields and pickers', () => {
         expect(publish.querySelector('svg')).not.toBeNull();
     });
 
-    it('lists owned tokens in one card and switches the gate, network, and owner', async () => {
+    it('opens the standard token picker on owned tokens and switches the gate, network, and owner', async () => {
         mount();
         const tokenField = await screen.findByRole('button', { name: /^Token: GATE/ });
         await waitFor(() => expect(tokenField).toBeEnabled());
+        expect(screen.getByRole('heading', { name: /^Gated Content/ })).toBeInTheDocument();
         fireEvent.click(tokenField);
 
-        const list = await screen.findByRole('list');
-        expect(list.children).toHaveLength(2);
-        const litecoinToken = screen.getByText('LIT').closest('button');
-        expect(litecoinToken).not.toBeNull();
-        fireEvent.click(litecoinToken);
+        // The picker's own title, not the form's, over only the owned tokens.
+        expect(await screen.findByRole('heading', { name: 'Select Token' })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: /^Gated Content/ })).toBeNull();
+        const option = (tick) => (name) => name.startsWith(`Select ${tick} on `);
+        await screen.findByRole('button', { name: option('LIT') });
+        expect(screen.getByRole('button', { name: option('GATE') })).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: (name) => name.startsWith('Select ') })).toHaveLength(2);
+        fireEvent.click(screen.getByRole('button', { name: option('LIT') }));
 
         await openSection('From');
         expect(await screen.findByRole('button', { name: /^Network: Litecoin/ })).toBeInTheDocument();

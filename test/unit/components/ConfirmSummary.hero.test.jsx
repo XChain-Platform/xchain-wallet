@@ -14,7 +14,7 @@
 // address card's slot and is not repeated under Technical details.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { ActionConfirmScreen } from '../../../packages/core/src/shared/components/ActionConfirmScreen.jsx';
 import { ConfirmHero } from '../../../packages/core/src/shared/components/ConfirmSummary.jsx';
 import { orderGiveParts } from '../../../packages/core/src/shared/utils/confirmSummaryParts.js';
@@ -119,9 +119,11 @@ describe('confirm summary text and figures', () => {
                 onPasswordChange={() => {}}
             />,
         );
-        // The per-unit rate the host decoded is not the payout, so the big
-        // line names what is paid instead of showing 0.5 as the total.
-        expect(screen.getByTestId('confirm-hero-amount').textContent).not.toContain('0.5');
+        // The per-unit rate the host decoded is not the payout, so the page
+        // never states 0.5 PAY as what leaves the wallet: no Total, and no
+        // You send row built from it.
+        expect(screen.queryByTestId('confirm-total')).toBeNull();
+        expect(screen.queryByTestId('confirm-you-send')).toBeNull();
     });
 
     it('keeps the decoded amount when the form states no figure', () => {
@@ -145,7 +147,8 @@ describe('confirm summary text and figures', () => {
                 onPasswordChange={() => {}}
             />,
         );
-        expect(screen.getByTestId('confirm-hero-amount').textContent).toMatch(/3\s*FOO/);
+        expect(screen.getByTestId('confirm-sentence').textContent).toMatch(/^Send 3 FOO/);
+        expect(screen.queryByTestId('confirm-total-main')).toBeNull();
     });
 });
 
@@ -171,36 +174,40 @@ describe('orderGiveParts', () => {
     });
 });
 
+// Confirm Standard (G127): one primary address as the first facts-card row;
+// the spender is named once, either there or as a later From row when the
+// primary address is a recipient. Nothing is folded away.
 describe('confirm summary address and From row', () => {
-    it('with no recipient, shows the From row once, in the address card slot', () => {
+    it('with no recipient, the first fact is the From address, shown once', () => {
         renderScreen({ verb: 'Cancel Order', chainId: CHAIN, direction: 'none', address: SIGNER });
         expect(screen.queryByTestId('confirm-address')).toBeNull();
         const rows = screen.getAllByTestId('confirm-source');
         expect(rows).toHaveLength(1);
-        expect(within(screen.getByTestId('confirm-technical')).queryByTestId('confirm-source')).toBeNull();
-        expect(rows[0].textContent).toContain(SIGNER);
+        expect(rows[0].previousElementSibling.textContent).toMatch(/^From/);
+        expect(screen.getByTestId('confirm-facts').querySelector('dd')).toBe(rows[0]);
+        expect(rows[0].querySelector(`[title="${SIGNER}"]`)).not.toBeNull();
+        expect(screen.queryByTestId('confirm-technical')).toBeNull();
     });
 
-    it('with a recipient, names it on the hero line and still names the signer once', () => {
+    it('with a recipient, shows it as the first fact and still names the signer once', () => {
         renderScreen({
             verb: 'Send', amount: '1', ticker: 'FOO', chainId: CHAIN, direction: 'out', address: SIGNER, recipient: RECIPIENT,
         });
-        const line = screen.getByTestId('confirm-hero-line');
-        expect(line.textContent).toMatch(/^Send on/);
-        expect(line.querySelector(`[title="${RECIPIENT}"]`) || line.textContent.includes(RECIPIENT.slice(0, 8))).toBeTruthy();
+        expect(screen.getByTestId('confirm-sentence').textContent).toBe('Send 1 FOO to');
+        expect(screen.getByTestId('confirm-address').querySelector(`[title="${RECIPIENT}"]`)).not.toBeNull();
         const rows = screen.getAllByTestId('confirm-source');
         expect(rows).toHaveLength(1);
-        expect(rows[0].textContent).toContain(SIGNER);
-        expect(within(screen.getByTestId('confirm-technical')).queryByTestId('confirm-source')).toBeNull();
+        expect(rows[0].getAttribute('title')).toBe(SIGNER);
     });
 
-    it('with a different address the action happens on, shows it in the address card and the From row under Technical details', () => {
+    it('with a different address the action happens on, shows it first and the signer as From', () => {
         const other = 'bc1qotherotherotherotherotherotherotherotq';
         renderScreen({ verb: 'Mint', amount: '1', ticker: 'FOO', chainId: CHAIN, direction: 'in', address: other });
-        // The card cuts the address in the middle; the whole address is its title.
+        // AddressText cuts in the middle when needed; the title stays complete.
         const card = screen.getByTestId('confirm-address');
-        expect(card.querySelector(`[title="${other}"]`) || card.textContent.includes(other)).toBeTruthy();
-        expect(within(screen.getByTestId('confirm-technical')).getAllByTestId('confirm-source')).toHaveLength(1);
-        expect(screen.getAllByTestId('confirm-source')).toHaveLength(1);
+        expect(card.querySelector(`[title="${other}"]`)).not.toBeNull();
+        const rows = screen.getAllByTestId('confirm-source');
+        expect(rows).toHaveLength(1);
+        expect(rows[0].getAttribute('title')).toBe(SIGNER);
     });
 });

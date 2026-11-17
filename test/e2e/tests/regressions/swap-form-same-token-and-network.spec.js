@@ -34,7 +34,7 @@ test('refuses the same token on both sides and clears terms on a network change'
     await main.getByRole('textbox', { name: /^Get amount/ }).fill('2');
     await expect(main.getByText('Give and get tickers must differ.')).toBeVisible();
     await main.getByRole('button', { name: 'Create Swap', exact: true }).click();
-    await expect(page.getByTestId('action-intent')).toHaveCount(0);
+    await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
     await expect(main.getByRole('button', { name: 'Create Swap', exact: true })).toBeEnabled();
 
     await selectNamedToken(page, 'Get token', { ...BTC, tick: 'XCP' });

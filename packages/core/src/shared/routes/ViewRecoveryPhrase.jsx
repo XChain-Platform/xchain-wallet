@@ -9,19 +9,30 @@
 // contact legal@dankest.llc.
 
 // Show Recovery Phrase is its own page for one wallet, opened from Wallet
-// Details and laid out like Show Private Key: a form with the warning card,
-// password and I understand, then the phrase. Back wipes the phrase.
+// Details: one page with the warning card, the concealed word grid, the
+// password under it and the Reveal Recovery Phrase button at the bottom. The
+// right password reveals the grid in place, by the button or by a tap on the
+// concealed area; no or a wrong password shows the error in the field. Back,
+// 60 s and window blur wipe the phrase.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, FormPage, Icon, Input, ListPage, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { FormPage, Icon, Input, Notice, PageHeader, Screen } from '@xchain-wallet/core/ui';
+import { FormAction } from '../components/formStandard/index.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useProtectedScreen } from '../utils/screenGuard.js';
-import { RECOVERY_PHRASE_WARNING } from '../utils/securityMomentCopy.js';
 import { useBackHandler } from '../../ui/backStack.js';
 import { MnemonicGrid } from '../components/MnemonicGrid.jsx';
-import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/createWallet.js';
+import '../../i18n/locales/en/importWallet.js';
+import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/settings.js';
 
 const REVEAL_TIMEOUT_MS = 60_000;
+// Until the password checks out the page holds no phrase at all: the grid gets
+// only this stand-in for its cell count (twelve, since nothing outside the
+// seed records a wallet's word count) and draws its own blurred filler words.
+const PLACEHOLDER_PHRASE = Array(12).fill('x').join(' ');
 
 /**
  * @param {object} props
@@ -61,8 +72,8 @@ export function ViewRecoveryPhrase({ walletId, walletName = '', onBack }) {
     }, [stage, clear]);
 
     async function handleSubmit(event) {
-        event.preventDefault();
-        if (stage === 'submitting') return;
+        event?.preventDefault?.();
+        if (stage !== 'warning') return;
         if (!password) {
             setSubmitError('Enter your wallet password.');
             passwordRef.current?.focus();
@@ -100,53 +111,48 @@ export function ViewRecoveryPhrase({ walletId, walletName = '', onBack }) {
     const passwordError = submitError && (passwordWrong || !password) ? submitError : undefined;
     // An error the password field does not show goes in the form's status slot.
     const showFormLevelError = Boolean(submitError) && !passwordError;
-    const header = <PageHeader onBack={leave} title="Show Recovery Phrase" />;
+    const header = <PageHeader onBack={leave} title={t('createWallet.showRecoveryPhraseTitle')} subtitle={walletName || null} />;
 
-    if (stage === 'shown') {
-        return (
-            <Screen variant={variant} header={header}>
-                <FormPage label="Recovery phrase" onSubmit={(e) => e.preventDefault()}>
-                    {walletName ? <WarningLine style={{ textAlign: 'center' }}>{walletName}</WarningLine> : null}
-                    <MnemonicGrid mnemonic={mnemonic} variant={variant === 'popup' ? 'small' : 'full'} startRevealed />
-                    <WarningLine critical>{RECOVERY_PHRASE_WARNING}</WarningLine>
-                </FormPage>
-            </Screen>
-        );
-    }
+    const shown = stage === 'shown';
 
+    // One page: the warning, the password and the concealed grid sit together.
+    // The grid shows blurred placeholder words until the password checks out,
+    // then the real words in the same box.
     return (
         <Screen variant={variant} header={header}>
             <FormPage
-                label="Before you continue"
+                label={t('importWallet.recoveryPhrase')}
                 onSubmit={handleSubmit}
-                status={showFormLevelError ? <StatusMessage variant="error">{submitError}</StatusMessage> : null}
-                actions={(
-                    <Button type="submit" variant="success" icon={<Icon.ThumbsUpIcon />} loading={stage === 'submitting'} disabled={stage === 'submitting'}>
-                        I Understand
-                    </Button>
+                actions={shown ? null : (
+                    <FormAction icon={<Icon.EyeIcon />} loading={stage === 'submitting'}>
+                        {t('settings.backup.revealRecoveryPhraseAction')}
+                    </FormAction>
                 )}
+                status={showFormLevelError ? <Notice tone="danger">{submitError}</Notice> : null}
             >
-                <WarningCard>
-                    <WarningLine>
-                        You are about to see the recovery phrase for {walletName ? <strong>{walletName}</strong> : 'this wallet'}.
-                    </WarningLine>
-                    <WarningLine>
-                        Enter your wallet password below and press I understand to see it.
-                    </WarningLine>
-                    <WarningLine critical>{RECOVERY_PHRASE_WARNING}</WarningLine>
-                    <WarningLine critical>
-                        If you are screen-sharing or recording, stop now before you reveal the phrase.
-                    </WarningLine>
-                </WarningCard>
+                {/* The recovery phrase warning is a static danger notice (U71,
+                    the Notice Standard): red, part of the page from the first paint. */}
+                <Notice tone="danger" role="note">
+                    {t('createWallet.recoveryPhraseNotice')} {t('createWallet.recoveryPhraseScreenShare')}
+                </Notice>
+                <MnemonicGrid
+                    mnemonic={shown ? mnemonic : PLACEHOLDER_PHRASE}
+                    variant={variant === 'popup' ? 'small' : 'full'}
+                    startRevealed={shown}
+                    onRevealRequest={handleSubmit}
+                    revealLoading={stage === 'submitting'}
+                    hideRevealAction
+                />
                 <Input
                     ref={passwordRef}
                     type="password"
-                    label="Wallet password"
+                    label={t('send.gated.passwordLabel')}
+                    help={t('createWallet.showRecoveryPhrasePasswordHelp')}
                     value={password}
                     error={passwordError}
                     onChange={(e) => { setPassword(e.target.value); setSubmitError(null); setPasswordWrong(false); }}
                     autoComplete="current-password"
-                    disabled={stage === 'submitting'}
+                    disabled={stage === 'submitting' || shown}
                 />
             </FormPage>
         </Screen>

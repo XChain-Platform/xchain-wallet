@@ -64,12 +64,6 @@
     font-weight: 600;
 }
 
-.choiceButtons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--xc-space-2);
-}
-
 .pickerLabel {
     display: flex;
     flex-direction: column;
@@ -77,26 +71,6 @@
     font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     margin-bottom: var(--xc-space-3);
-}
-
-/* A picker label that carries a help tip keeps the tip on the label line. */
-.pickerLabelRow {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-1);
-}
-
-/* A labelled set of checkboxes inside a form: the label keeps the label gap
-   to its options, and the options keep the label gap to each other. */
-.checkGroup {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-label-gap);
-    min-width: 0;
-}
-
-.checkGroup > .pickerLabel {
-    margin-bottom: 0;
 }
 
 .picker {
@@ -175,12 +149,15 @@ select.picker {
     border: 0;
 }
 
-.fromLine {
-    composes: card from '../../ui/Card.module.css';
+/* The Airdrop token picker button: full width, with exactly 8px (--xc-space-2)
+   between it and the line below once the form gap is counted. */
+.tokenPickerRow {
     display: flex;
-    align-items: baseline;
-    gap: var(--xc-space-2);
-    margin-bottom: var(--xc-space-3);
+    margin-block-end: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
+}
+
+.tokenPickerRow > button {
+    width: 100%;
 }
 
 .fromLabel {
@@ -191,13 +168,33 @@ select.picker {
     letter-spacing: 0.04em;
 }
 
-.checkRow {
-    display: flex;
+/* Option rows read at the list-row title size (--xc-text-md, the Settings
+   rows), never smaller. Keep the Checkbox primitive's two-cell grid: making
+   this label flex turns its invisible 100%-wide input into a flex item and
+   squeezes the visible copy into the remaining sliver. */
+.checkRow.checkRow {
+    display: grid;
+    grid-template-columns: var(--xc-control-icon-md, var(--xc-icon-md)) minmax(0, 1fr);
     align-items: center;
     gap: var(--xc-space-2);
-    font-size: var(--xc-text-sm);
+    width: 100%;
+    min-width: 0;
+    font-size: var(--xc-text-md);
     color: var(--xc-text);
-    margin: var(--xc-space-2) 0;
+    margin: 0;
+}
+
+.actionClassLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.actionClassIcon {
+    display: inline-flex;
+    flex: none;
 }
 
 /* Upload and contacts buttons share the row at full width, wrapping
@@ -229,6 +226,12 @@ select.picker {
     gap: var(--xc-space-2);
     justify-content: flex-end;
     margin-top: var(--xc-space-4);
+}
+
+/* Inside a Form Standard section the body's 8px gap spaces the button row,
+   like every other field there (operator ruling). */
+[data-form-section] .actions {
+    margin-top: 0;
 }
 
 .signingLinkBlock {
@@ -275,23 +278,6 @@ select.picker {
     max-width: 100%;
 }
 
-.betLongText {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-.betOddsRow {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--xc-space-2);
-    min-width: 0;
-}
-
-.betOddsRow > * {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
 .summary {
     font-size: var(--xc-text-md);
     font-weight: 600;
@@ -301,22 +287,39 @@ select.picker {
     overflow-wrap: anywhere;
 }
 
+/* Facts as label-left value-right rows at every width (the FactRows and
+   token Details look): a dt and its dd share a row, the label muted in
+   sentence case, the value at the trailing edge and wrapping. About 60
+   review, done and detail stages compose this list. */
 .detailsList {
     composes: card from '../../ui/Card.module.css';
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    /* Cells stretch to the row's height so both draw their divider on one
+       straight line however tall a value is (a pill, a badge, an icon). */
+    align-items: stretch;
+    /* No column gap, so each row's divider runs unbroken across both cells;
+       the label's own end padding keeps the two apart. */
     gap: 0;
     min-width: 0;
     margin: 0 0 var(--xc-space-4);
 }
 
-/* A compact key/value group that already lives inside the form's one surface.
-   It keeps the table rhythm from detailsList without drawing a second card. */
-.flatDetailsList {
-    padding: 0;
-    background: transparent;
-    border: 0;
-    border-radius: 0;
+/* A plain list of identifiers (Sweep's missing unlock-key hashes): one per
+   line, wrapping, with no card or columns. */
+.keyHashList {
+    margin: 0;
+    padding-inline-start: var(--xc-space-4);
+    font-size: var(--xc-text-sm);
+    overflow-wrap: anywhere;
+}
+
+/* Inside a Form Standard section the body's 8px gap spaces the details
+   card and the summary line (operator ruling), so their own bottom
+   margins drop. */
+[data-form-section] .detailsList,
+[data-form-section] .summary {
+    margin-block-end: 0;
 }
 
 /* Native fieldsets draw a browser border by default. Repeated form groups use
@@ -333,71 +336,59 @@ select.picker {
     border-top: 1px solid var(--xc-border);
 }
 
-.accessListGroup {
-    composes: flush from '../../ui/Card.module.css';
-    overflow: hidden;
-}
-
-.accessListRow {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--xc-space-2);
-    padding: var(--xc-list-row-padding);
-}
-
-.accessListRow + .accessListRow {
-    border-top: 1px solid var(--xc-border);
-}
-
-.accessListValue {
-    flex: 1 1 12rem;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-1);
-}
-
-.accessListValue > span {
-    padding: 0;
-    text-align: start;
-}
-
 .detailsLabel {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
     margin: 0;
-    align-self: center;
-    padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
-    padding-bottom: 0;
+    padding-block: var(--xc-space-2);
+    padding-inline: 0 var(--xc-space-3);
+    align-content: center;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
 }
 
 .detailsValue {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text);
     min-width: 0;
     margin: 0;
+    padding: var(--xc-space-2) 0;
+    align-content: center;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    text-align: end;
     overflow-wrap: anywhere;
-    padding: var(--xc-space-1) var(--xc-table-cell-padding-inline) var(--xc-table-cell-padding-block);
-    text-align: start;
     font-variant-numeric: tabular-nums;
 }
 
-.detailsLabel ~ .detailsLabel {
+/* A divider between rows, drawn on both cells of every row after the first. */
+.detailsLabel ~ .detailsLabel,
+.detailsValue ~ .detailsValue {
     border-top: var(--xc-table-row-divider);
 }
 
-.detailsValue ~ .detailsValue {
-    border-top: 0;
+/* The two action cards stack one-up at every width. The 52px connector row
+   and the 8px gap on each side keep its circle clear of both cards. */
+.linkActions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
 }
 
-.linkActions {
+.linkConnector {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    min-width: 0;
+    place-items: center;
+    min-block-size: 52px;
+}
+
+.linkConnectorBadge {
+    --xc-icon-size: 27px;
+    display: grid;
+    place-items: center;
+    inline-size: 52px;
+    block-size: 52px;
+    box-sizing: border-box;
+    border: 1px solid var(--xc-border);
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+    color: var(--xc-accent-primary);
 }
 
 .linkActionCard {
@@ -463,54 +454,21 @@ select.picker {
     font-variant-numeric: tabular-nums;
 }
 
-.linkActionCheck {
-    margin-top: var(--xc-space-2);
-    padding: var(--xc-space-2);
-    border-radius: var(--xc-radius-sm);
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
+/* The found action's facts: the shared FactRows card under the card's fields,
+   every label and value held to one line. The label column sizes to its text
+   and the value takes the rest; a long value truncates with an ellipsis and
+   keeps its full text in a title (G121). */
+.linkActionSummary {
+    grid-template-columns: fit-content(50%) minmax(0, 1fr);
+    margin-top: var(--xc-space-3);
 }
 
-.linkActionFound {
-    background: var(--xc-success-bg);
-    color: var(--xc-success);
-}
-
-.linkConnector {
-    display: grid;
-    place-items: center;
-    min-height: var(--xc-space-8);
-    color: var(--xc-text-muted);
-}
-
-.linkConnector svg {
-    width: 1.25rem;
-    height: 1.25rem;
-}
-
-.linkReviewAction {
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-}
-
-@media (min-width: 834px) {
-    .detailsList {
-        grid-template-columns: var(--xc-table-label-column) minmax(0, 1fr);
-    }
-
-    .detailsLabel {
-        padding-bottom: var(--xc-table-cell-padding-block);
-    }
-
-    .detailsValue {
-        padding: var(--xc-table-cell-padding-block) var(--xc-table-cell-padding-inline);
-        text-align: end;
-    }
-
-    .detailsValue ~ .detailsValue {
-        border-top: var(--xc-table-row-divider);
-    }
-
+.linkActionSummary > dt,
+.linkActionSummary > dd {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    overflow-wrap: normal;
 }
 
 /* Confirmation headers omit the redundant chain-name pill. */
@@ -530,11 +488,6 @@ select.picker {
         width: 100%;
     }
 
-    .betOddsRow {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
 }
 
 /* Secondary technical identifier trailing a plain-language details value
@@ -544,15 +497,6 @@ select.picker {
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
     margin-inline-start: var(--xc-space-1);
-}
-
-/* Plain-language gloss under a details value that must stay raw because the
-   user is signing that exact string. */
-.detailsNote {
-    display: block;
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    margin-top: calc(var(--xc-space-1) / 2);
 }
 
 .validationItem + .validationItem {
@@ -579,17 +523,6 @@ select.picker {
 .validationLink:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: calc(var(--xc-space-1) / 2);
-}
-
-.splitValue {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-.inlineDirectionalIcon {
-    --xc-icon-size: 1em;
-    display: inline-flex;
-    vertical-align: -0.125em;
 }
 
 .validationMessage,
@@ -684,9 +617,7 @@ select.picker {
 }
 
 .sectionIcon,
-.sectionChevron,
-.lockIcon,
-.lockIconOn {
+.sectionChevron {
     --xc-icon-size: 1rem;
     display: inline-flex;
     flex: 0 0 auto;
@@ -699,7 +630,8 @@ select.picker {
 
 .sectionTitle {
     min-width: 0;
-    font-size: var(--xc-text-sm);
+    /* Section titles are 16px (operator 2026-11-13), a step above the 13px field labels. */
+    font-size: var(--xc-text-lg);
     font-weight: 600;
 }
 
@@ -739,16 +671,21 @@ select.picker {
     display: none;
 }
 
+/* The lock rows sit 8px inside the section box like every other field
+   (operator ruling), so the list takes no bleed and the rows no side
+   padding of their own. */
 .lockRows {
-    margin: calc(-1 * var(--xc-space-3));
+    margin: 0;
 }
 
+/* Each lock is one shared Switch row: its own centred layout puts the lock
+   icon, the copy and the track on the row's vertical centre. Only the type
+   scale is raised, through the Switch's size variables, to the list-row scale
+   (14px title, 13px explanation) from the Form Standard type tokens. */
 .lockRow {
-    display: flex;
-    align-items: center;
-    min-width: 0;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-1) var(--xc-space-3);
+    --xc-switch-label-size: var(--xc-text-md);
+    --xc-switch-description-size: var(--xc-text-sm);
+    padding: var(--xc-space-1) 0;
     border-bottom: 1px solid var(--xc-border);
 }
 
@@ -756,8 +693,8 @@ select.picker {
     border-bottom: 0;
 }
 
-.lockIconOn {
-    color: var(--xc-warning-text);
+.lockRowOn {
+    --xc-switch-icon-color: var(--xc-warning-text);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -792,58 +729,18 @@ select.picker {
     overflow: hidden;
 }
 
+/* The Lock form's rows sit inside their own outlined card, so each row keeps
+   the shared list-row inset (8px) from the card edge on both sides. (The
+   Issue form's rows already sit 8px inside the Locks section body.) */
 .lockFlagList > .lockRow {
     padding-block: var(--xc-space-2);
+    padding-inline: var(--xc-list-row-padding);
 }
 
-/* A lock row's icon and switch sit at the top, level with the lock's
-   name, so a row whose explanation wraps (Callback) lines up with the rest
-   instead of centring its switch beside the paragraph. */
-.lockRow.lockRow {
-    align-items: flex-start;
-}
-
-/* Inside a lock row the switch's 44px touch box does not centre its
-   track; the track sits at the top, level with the lock's name, and the
-   icon does too. */
-.lockRow.lockRow > label {
-    min-block-size: 0;
-    align-self: flex-start;
-    /* The switch holds the name and explanation beside its track; the track
-       sits at the top of that block, not centred on a wrapped explanation. */
-    align-items: flex-start;
-}
-
-.lockRow.lockRow > label > span:last-child {
-    block-size: auto;
-    min-block-size: 0;
-}
-
-/* Lock address / Pause token current-state badge, 8px under the
-   address field. */
+/* Lock address / Pause token current state: plain muted helper text (the
+   .hint style) 8px under the field, no bubble, border or tint. */
 .sleepStateRow {
     margin: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4))) 0 0;
-}
-
-.sleepStateBadge {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px var(--xc-space-2);
-    border-radius: var(--xc-radius-pill);
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    background: var(--xc-bg-muted);
-    color: var(--xc-text-muted);
-}
-
-.sleepState_active {
-    background: color-mix(in srgb, var(--xc-success, #15803D) 14%, var(--xc-surface));
-    color: var(--xc-success, #15803D);
-}
-
-.sleepState_paused {
-    background: color-mix(in srgb, var(--xc-warning, #B45309) 16%, var(--xc-surface));
-    color: var(--xc-warning-text, var(--xc-warning, #B45309));
 }
 
 /* Bind controller's Action class box: a framed group with the card
@@ -854,10 +751,9 @@ select.picker {
     padding: var(--xc-space-2) var(--xc-space-3);
     margin: 0;
     min-width: 0;
-    /* The one-word Action class options sit in a grid (three across on
-       phones, more on wide screens) so they are quicker to scan and tick. */
+    /* Phone and popup layouts use one full-width checkbox row. */
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     column-gap: var(--xc-space-3);
     row-gap: 0;
 }
@@ -865,6 +761,14 @@ select.picker {
 .roundedFieldset > :not(legend) {
     margin: 0;
     min-width: 0;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+@media (min-width: 600px) {
+    .roundedFieldset {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 /* Collapsible sections (Issue token, Manage token) point their
@@ -902,7 +806,24 @@ select.picker {
     margin-block-start: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
 }
 
+/* The Divisible toggle is the last row of the Token section. Its 44px hit row
+   is taller than the track it draws, so the section's 8px padding plus that
+   slack read as a big gap; pulling the row's bottom edge in by the slack
+   leaves exactly 8px (--xc-space-2, the section padding) under the toggle. */
+.divisibleSwitch.divisibleSwitch {
+    margin-block-end: calc((var(--xc-switch-track-height) - var(--xc-switch-hit-size)) / 2);
+}
+
 /* Whatever follows the last section (the fee picker) sits 8px under it. */
 .optionalSection + * {
     margin-block-start: calc(var(--xc-space-2) - var(--xc-form-gap, var(--xc-space-4)));
+}
+
+/* In-field unit mark (the Usage fee percent sign). */
+.fieldUnit {
+    padding-inline: var(--xc-space-2);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    white-space: nowrap;
 }

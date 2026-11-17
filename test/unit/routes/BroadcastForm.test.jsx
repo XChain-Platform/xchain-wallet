@@ -120,8 +120,11 @@ describe('BroadcastForm plain message flow', () => {
         await fill('watcher broadcast');
         submit();
 
-        expect(await screen.findByRole('button', { name: 'Broadcast' })).toBeTruthy();
-        expect(screen.getByText(/Watcher mode: this prepares the transaction for your offline signer/)).toBeTruthy();
+        expect(await screen.findByRole('heading', { name: 'Confirm' })).toBeTruthy();
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Broadcast "watcher broadcast"');
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+        expect(screen.getByText(/Another phone signs for this wallet: this prepares the transaction for it/)).toBeTruthy();
     });
 
     it('renders only the format 0 authoring fields', async () => {
@@ -173,8 +176,12 @@ describe('BroadcastForm plain message flow', () => {
         expect(message.length).toBe(251);
         await fill(message);
 
-        expect(screen.getByText('Message is 251 characters; the network accepts at most 250 characters.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Broadcast' })).toBeDisabled();
+        expect(screen.getAllByText('Message is 251 characters; the network accepts at most 250 characters.').length).toBeGreaterThan(0);
+        // G22: Broadcast stays enabled; the press is refused before compose.
+        const broadcast = screen.getByRole('button', { name: 'Broadcast' });
+        expect(broadcast).not.toBeDisabled();
+        fireEvent.click(broadcast);
+        await waitFor(() => expect(screen.getAllByText(/Message is 251 characters/).length).toBeGreaterThan(0));
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 

@@ -53,9 +53,46 @@ describe('LinkForm with an action number the explorer does not hold', () => {
         fireEvent.change(inputs[0], { target: { value: '10' } });
         fireEvent.change(inputs[1], { target: { value: '20' } });
 
+        // The field's own error, stated once: no banner repeats it.
         await waitFor(() => expect(screen.getByRole('alert'))
-            .toHaveTextContent('No action was found for Action 1 at that number.'));
-        expect(screen.getByText('No action was found at that number.')).toBeInTheDocument();
+            .toHaveTextContent('No action with this number'));
+        expect(screen.getAllByText('No action with this number')).toHaveLength(1);
+        expect(inputs[0]).toHaveAttribute('aria-invalid', 'true');
+        expect(inputs[0].getAttribute('aria-describedby')).toContain(screen.getByRole('alert').id);
+        expect(inputs[1]).not.toHaveAttribute('aria-invalid', 'true');
         expect(document.body.textContent).not.toMatch(/HTTP 404|\/api\/action/);
+
+        // Review stops on the missing number and puts the cursor in its field.
+        fireEvent.click(await screen.findByRole('button', { name: 'Link Actions' }));
+        expect(screen.queryByText('Review Link')).not.toBeInTheDocument();
+        await waitFor(() => expect(inputs[0]).toHaveFocus());
+    });
+
+    it('shows the error again for a second missing number after typing dismissed the first', async () => {
+        const btc = address('btc-1', BTC);
+        const ltc = address('ltc-1', LTC);
+        const client = {
+            getAddressesByChain: vi.fn().mockResolvedValue({ [BTC]: [btc], [LTC]: [ltc] }),
+            getActiveAddresses: vi.fn().mockResolvedValue({ [BTC]: btc, [LTC]: ltc }),
+            getSettings: vi.fn().mockResolvedValue({}),
+            signerReady: vi.fn().mockResolvedValue({ ready: false }),
+            getActionByIndex: vi.fn().mockResolvedValue(null),
+        };
+
+        render(
+            <MessagingProvider shell="web" messaging={client}>
+                <LinkForm walletId="w" onBack={() => {}} />
+            </MessagingProvider>,
+        );
+
+        const [input] = await screen.findAllByLabelText('Action number');
+        fireEvent.change(input, { target: { value: '77' } });
+        fireEvent.blur(input);
+        expect(await screen.findByText('No action with this number')).toBeInTheDocument();
+        fireEvent.change(input, { target: { value: '78' } });
+        expect(screen.queryByText('No action with this number')).not.toBeInTheDocument();
+        fireEvent.blur(input);
+        expect(await screen.findByText('No action with this number')).toBeInTheDocument();
+        expect(client.getActionByIndex).toHaveBeenCalledTimes(2);
     });
 });

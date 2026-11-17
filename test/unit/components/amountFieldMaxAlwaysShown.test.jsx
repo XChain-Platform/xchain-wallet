@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import React from 'react';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
+import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 
 function mount(props) {
     return render(React.createElement(AmountField, {
@@ -51,6 +52,6 @@ describe('AmountField Max action', () => {
     it('keeps the input end room for Max when the form offers no max', () => {
         const { container } = mount({ tick: 'XCP' });
         const input = container.querySelector('input');
-        expect(input.getAttribute('style') || '').toContain('--amount-end-room');
+        expect(input).toHaveClass(inputStyles.inputWithFieldAction);
     });
 });

@@ -1,4 +1,4 @@
-/* My dispensers: one flat card list across every network, styled after the
+/* Dispensers: one flat card list across every network, styled after the
    Send token selector (BalanceList) but with a 48px token logo (matching the token selector) and
    the chain icon overlaid in its lower-right corner. */
 
@@ -13,6 +13,42 @@
 
 .listItem + .listItem {
     border-top: 1px solid var(--xc-border);
+}
+
+.toolbarStack {
+    display: grid;
+    width: 100%;
+    gap: var(--xc-space-2);
+}
+
+.marketRow {
+    min-width: 0;
+    padding: var(--xc-space-3);
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+}
+
+.marketBody {
+    display: grid;
+    min-width: 0;
+    gap: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+
+.marketSeller {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    gap: var(--xc-space-1);
+}
+
+.marketSeller > :last-child {
+    min-width: 0;
 }
 
 .row {
@@ -83,7 +119,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--xc-space-1);
 }
 
 .name {
@@ -104,14 +140,34 @@
     min-width: 0;
 }
 
-/* Status chip on the row's trailing edge; tinted per state. */
+/* Price line: the price truncates (ellipsis) before the status pill, which
+   never shrinks or wraps, so the pill stays at the right of line two. */
+.priceLine {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.price {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Status chip on the price line's end edge; tinted per state. */
 .status {
     flex: 0 0 auto;
     white-space: nowrap;
     font-size: var(--xc-text-xs);
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    /* Sentence case like every other status pill (PollStatusPill). */
+    text-transform: none;
+    letter-spacing: normal;
     padding: 2px var(--xc-space-2);
     border-radius: 999px;
     background: var(--xc-bg-muted);
@@ -138,25 +194,19 @@
     color: var(--xc-text-muted);
 }
 
-/* Right-hand column keeps the status chip aligned to the row's trailing edge. */
-.trailing {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: var(--xc-space-1);
-}
-
 .status_cancelling {
     background: var(--xc-warning-bg);
     color: var(--xc-warning-text);
 }
 
+/* Phones: a smaller logo and tighter padding. The text column stays three
+   lines (name, price with its pill, escrow); the price truncates, the pill
+   never wraps. */
 @media not all and (min-width: 400px) {
     .row {
         display: grid;
-        grid-template-columns: 40px minmax(0, 1fr);
-        align-items: start;
+        grid-template-columns: 40px minmax(0, 1fr) auto;
+        align-items: center;
         gap: var(--xc-space-2);
         padding: var(--xc-space-2);
     }
@@ -167,24 +217,10 @@
         height: 40px;
     }
 
-    .name,
-    .subtitle {
-        white-space: normal;
-        overflow: visible;
-        overflow-wrap: anywhere;
-    }
-
-    .trailing {
-        grid-column: 2;
-        min-width: 0;
-        max-width: 100%;
-        align-items: flex-start;
-    }
-
+    /* The chevron keeps its own end column, centred on the row (G07, G97). */
     .row > :last-child {
-        grid-column: 2;
-        max-width: 100%;
-        justify-content: flex-start;
+        grid-column: 3;
+        align-self: center;
     }
 
     .status {

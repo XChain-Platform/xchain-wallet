@@ -52,6 +52,7 @@
 import {
     addWalletFromPhrase, createWallet, expect, openIssueSection, openPaletteCommand, test,
 } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     expectConfirmModal,
     fundAddress,
@@ -100,8 +101,8 @@ function feeToggle(scope) {
 }
 
 async function setNativeFee(scope, enabled = true) {
-    // The switch sits in the Network fee section, closed until opened.
-    await openIssueSection(scope, 'Network fee');
+    // The switch sits in the Fees section, closed until opened.
+    await openIssueSection(scope, 'Speed and Fees');
     const toggle = feeToggle(scope);
     if (REGTEST_COIN === 'RBTC') {
         await expect(toggle, 'Bitcoin did not offer its native-fee choice')
@@ -362,7 +363,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
         const main = page.getByRole('main');
         await expect(main.getByLabel('Action', { exact: true })).toBeVisible({ timeout: 30_000 });
         await selectVenueChain(main);
-        await main.getByLabel('Action', { exact: true }).selectOption('SEND');
+        await pickOption(main.getByLabel('Action', { exact: true }), 'SEND');
         await main.getByRole('textbox', { name: 'TICK', exact: true }).fill(SEND_TICK);
         await main.getByRole('textbox', { name: 'AMOUNT', exact: true })
             .fill(String(SEND_AMOUNT));

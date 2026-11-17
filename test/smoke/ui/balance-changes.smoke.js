@@ -8,7 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke test for §21, Step 2: <BalanceChanges> renderer.
+// Smoke test for the retained <BalanceChanges> renderer and the G127 send
+// safety replacement. Confirm Standard has no before-and-after card, but Send
+// must still read balances, reject overspending and surface unusual sends in
+// the one warning slot.
 //
 // JSX-free harness: source-level assertions on the component module +
 // render-phase reasoning by directly testing the directionOf helper
@@ -42,16 +45,16 @@ assert.match(src, /export function BalanceChanges\(/, 'named export');
 assert.match(src, /props\.result/, 'consumes a SimulationResult prop');
 assert.match(src, /loading = false/, 'has loading prop with false default');
 assert.match(src, /error = null/, 'has error prop with null default');
-assert.match(src, /title = 'Balance changes'/, 'has overridable title');
+assert.match(src, /title = 'Balance changes'/, 'has localized overridable title');
 
 // --- Three lifecycle states -----------------------------------------------
 
 assert.match(src, /data-state="loading"/, 'loading state has data-state hook');
 assert.match(src, /aria-busy="true"/, 'loading state announces busy');
-assert.match(src, /Calculating preview…/, 'loading copy matches §21 cadence');
+assert.match(src, /Calculating preview…/, 'loading copy is localized');
 
 assert.match(src, /data-state="error"/, 'error state has data-state hook');
-assert.match(src, /\(preview unavailable/, 'error copy is honest, not alarming');
+assert.match(src, /We couldn’t estimate this transaction’s effect \(preview unavailable\)\./, 'error copy is honest and localized');
 
 assert.match(src, /if \(!result\) return null;/, 'no-result branch renders nothing');
 assert.match(
@@ -64,8 +67,8 @@ assert.match(
 
 assert.match(src, /function DeltaRow/, 'delta row helper present');
 assert.match(src, /delta\.isFee/, 'fee row branches separately');
-assert.match(src, /Network fee/, 'fee row label is "Network fee" per §21.7');
-assert.match(src, /Your \{delta\.tick\}/, 'token row label is "Your <TICK>" per §21.2');
+assert.match(src, /delta\.feeLabel \|\| 'Network fee'/, 'fee row uses the localized network fee label');
+assert.match(src, />Your \{delta\.tick\}</, 'token row uses the localized "Your <TICK>" label');
 assert.match(src, /data-direction=/, 'rows expose direction for color coding');
 
 // directionOf helper: semantic correctness
@@ -104,15 +107,30 @@ assert.match(css, /\[data-direction="down"\]/, 'down-direction rule present');
 assert.match(css, /\[data-direction="up"\]/, 'up-direction rule present');
 assert.match(css, /\[data-fee="true"\]/, 'fee-row styling distinct');
 
-// --- Wiring tracking: Send.jsx wired in Step 3; SignApproval pending Step 4 -
+// --- G127: no balance card on review; safety behavior stays in Send -------
 
 const sendSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'routes', 'Send.jsx'), 'utf8',
 );
+assert.doesNotMatch(
+    sendSrc,
+    /import \{ BalanceChanges \}|^[ \t]*<BalanceChanges\b/m,
+    'Send review does not restore the retired before-and-after card',
+);
 assert.match(
     sendSrc,
-    /import \{ BalanceChanges \}/,
-    'Send.jsx wired in Step 3',
+    /const sourceBalance = useMemo\([\s\S]{0,500}decoderLib\.balancesFromSdk/,
+    'Send still derives the selected asset balance from the wallet balance read',
+);
+assert.match(
+    sendSrc,
+    /const amountBalanceError = firstAmountBalanceError \|\| legTotalsBalanceError/,
+    'single and multi-recipient overspending still block before approval',
+);
+assert.match(
+    sendSrc,
+    /const reviewWarning = confirmWarning\(\{[\s\S]{0,220}\.\.\.unusualSendWarnings/,
+    'balance-derived unusual-send warnings feed the Confirm Standard warning slot',
 );
 
 console.log('balance-changes smoke OK');

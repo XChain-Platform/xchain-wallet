@@ -152,14 +152,18 @@ assert.match(
 );
 assert.match(
     sendSrc,
-    /isWatcherMode[\s\S]{0,120}\? t\('send\.title'\)/,
-    'submit button label is "Send" in watcher mode',
+    /<FormAction[\s\S]{0,600}>\s*\{t\('send\.title'\)\}\s*<\/FormAction>/,
+    'the standard form action remains Send in watcher mode',
 );
 assert.match(
     sendSrc,
-    /t\('common\.watcherBuildsUnsigned'\)/,
-    'review-stage hint copy explains watcher mode',
+    /<ConfirmStandard[\s\S]{0,1000}\{isWatcherMode \? \([\s\S]{0,220}t\('common\.watcherBuildsUnsigned'\)/,
+    'Confirm Standard explains that watcher approval builds an unsigned transaction',
 );
+assert.match(sendSrc, /<ConfirmStandard\b[\s\S]{0,800}warning=\{reviewWarning\}/,
+    'watcher review keeps its short warning after the details (G127 revised 2026-11-16)');
+assert.match(sendSrc, /<ConfirmDecisionFooter\b[\s\S]{0,400}approveLoading=\{stage === 'submitting'\}/,
+    'watcher review docks the shared button pair, Approve never disabled (G130)');
 // §20 Cluster W FOLLOWUP 3 (closed at v0.239.0): when the source address is
 // HW-paired AND watcher mode is on, an extra StatusMessage explains that the
 // pairing here is decorative and the same HW device must be paired on the

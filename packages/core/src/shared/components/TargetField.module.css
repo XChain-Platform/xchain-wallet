@@ -1,0 +1,79 @@
+/* TargetField: a read-only field naming what the form acts on. It has the
+   shared Input's height, radius and border, a muted fill because the value is
+   fixed, and the list icon in the field's trailing slot. */
+
+.field {
+    /* The md control size every Input and IconSelect field takes. */
+    --xc-control-height: var(--xc-control-h-md);
+    --xc-control-padding-x: var(--xc-control-pad-x-md, var(--xc-control-pad-x));
+    --xc-control-font-size: var(--xc-control-font-md, var(--xc-control-font));
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin: 0;
+}
+
+.control {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: var(--xc-field-icon-gap);
+    width: 100%;
+    min-width: 0;
+    height: var(--xc-control-height);
+    /* G112: the leading glyph and the list button sit in square slots, as
+       far from each side as from the top and bottom (tokens.css). */
+    padding-inline-start: calc(var(--xc-field-glyph-inset-md) - var(--xc-field-border));
+    padding-inline-end: calc(var(--xc-field-action-inset-md) - var(--xc-field-border));
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-control-font-size);
+    color: var(--xc-text);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-control-radius);
+}
+
+.icon {
+    --xc-icon-size: var(--xc-icon-md);
+    display: inline-flex;
+    flex: none;
+    color: var(--xc-text-muted);
+}
+
+.value {
+    display: flex;
+    align-items: baseline;
+    gap: var(--xc-space-2);
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 600;
+}
+
+.detail {
+    flex: none;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+.hint {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    margin-block-start: var(--xc-help-gap);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-text-muted);
+}
+
+.hintIcon {
+    --xc-icon-size: var(--xc-icon-sm);
+    display: inline-flex;
+    flex: none;
+}

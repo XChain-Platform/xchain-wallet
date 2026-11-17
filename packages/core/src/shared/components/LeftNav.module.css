@@ -18,6 +18,11 @@
     height: var(--xc-screen-h, var(--xc-viewport-h, 100vh));
     background: var(--xc-bg);
     color: var(--xc-text);
+    /* G100: how far the user dragged the full side menu past its default;
+       FullLayoutWithNav sets it inline. */
+    --xc-side-menu-extra: 0px;
+    --xc-side-menu-icons-width: 64px;
+    --xc-side-menu-row-inset: var(--xc-space-2);
 }
 
 /* Skip-to-content link (WCAG 2.4.1): persistent navigation and header chrome
@@ -57,12 +62,26 @@
     outline-offset: 2px;
 }
 
+/* G100: the side menu takes the width its widest row needs (its state and
+   any dragged extra are set below), never a fixed number. */
 .sidebar {
-    flex: 0 0 220px;
+    flex: 0 0 auto;
     min-width: 0;
     height: 100%;
     overflow: hidden;
-    transition: flex-basis 120ms ease-out;
+}
+
+/* Width changes animate only once the first frame has painted and never
+   during a drag, so a reload paints the saved state in place and the edge
+   tracks the pointer 1:1 (the Prometheus sidebar's sb-anim rule). */
+.layout[data-xc-side-menu-motion='on'] > .sidebar {
+    transition: width 120ms ease-out;
+}
+
+.layout[data-xc-side-menu-drag='on'],
+.layout[data-xc-side-menu-drag='on'] * {
+    cursor: col-resize;
+    user-select: none;
 }
 
 .main {
@@ -204,10 +223,23 @@
     overscroll-behavior: contain;
 }
 
+/* The shared scroll area keeps a 6px scrollbar lane with a mouse, which took
+   6px from the rail's inner width on desktop only: rows ran 41px wide with
+   15px to the right edge (iPad: 47px, 8px each side) and the icons sat left of
+   centre. The rail hides its scrollbar instead, so every width matches iPad
+   (operator 2026-11-16). Doubled class to outrank the composed scrollArea. */
+.nav.nav {
+    scrollbar-width: none;
+}
+
+.nav.nav::-webkit-scrollbar {
+    display: none;
+    width: 0;
+}
+
 .nav > .brand,
 .nav > .search,
-.nav > .list,
-.nav > .divider,
+.nav > .groups,
 .nav > .footer {
     flex-shrink: 0;
 }
@@ -220,29 +252,58 @@
     color: var(--xc-text);
 }
 
+.groups {
+    display: flex;
+    flex-direction: column;
+}
+
+.groupLabel {
+    padding: var(--xc-space-2) var(--xc-space-5) var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.groupDivider {
+    display: none;
+    height: 1px;
+    margin: var(--xc-space-2)
+        calc(var(--xc-side-menu-row-inset) + var(--xc-space-2) - var(--xc-space-1) / 2);
+    border: 0;
+    background: var(--xc-border);
+    opacity: 0.7;
+}
+
 .list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-label-help-gap);
     list-style: none;
     margin: 0;
     padding: 0;
 }
 
 /* Rows carry the shared Button base (btn, ghost, md), so this rule restates
-   every look the base would change: full-row width, start alignment, square
+   every look the base would change: inset width, start alignment, rounded
    corners, regular weight and the nav padding. The hover tokens keep the
    Button hover and press fill on the nav row colours. */
 .item {
-    --xc-button-hover-bg: var(--xc-surface);
+    --xc-button-hover-bg: color-mix(in srgb, var(--xc-text) 10%, transparent);
     --xc-button-hover-border: transparent;
     display: flex;
     align-items: center;
     justify-content: flex-start;
     gap: var(--xc-space-3);
-    width: 100%;
-    padding: var(--xc-space-2) var(--xc-space-4);
+    width: calc(100% - (2 * var(--xc-side-menu-row-inset)));
+    margin-inline: var(--xc-side-menu-row-inset);
+    padding: var(--xc-space-2) var(--xc-space-3);
     background: transparent;
     /* A transparent 1px edge on every row keeps the active row, which colours it, from shifting the list. */
     border: 1px solid transparent;
-    border-radius: 0;
+    border-radius: 10px;
     color: var(--xc-text);
     font: inherit;
     font-size: var(--xc-text-sm);
@@ -258,13 +319,21 @@
    in any sheet order; the state rules below carry the same scope so they
    still win over it. Sizing (min-height) stays with the Button base. */
 .nav .item {
+    /* One row height with a mouse or touch, so the rounded active box sits
+       the same on desktop as on iPad (36px desktop rows looked cramped beside
+       the 47px-wide box; operator 2026-11-16). */
+    /* A fixed 44px, not a control-height token: the tokens differ by
+       pointer (36/44 with a mouse, 44/48 by touch), which made iPad and
+       desktop rows differ again. */
+    min-height: 44px;
+    block-size: 44px;
     display: flex;
     justify-content: normal;
     gap: var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-4);
+    padding: var(--xc-space-2) var(--xc-space-3);
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 0;
+    border-radius: 10px;
     color: var(--xc-text);
     font: inherit;
     font-size: var(--xc-text-sm);
@@ -273,10 +342,8 @@
     transition: background-color 80ms ease;
 }
 
-.nav .item:hover,
-.nav .item:focus-visible {
-    background: var(--xc-surface);
-    outline: none;
+.nav .item:hover {
+    background: color-mix(in srgb, var(--xc-text) 10%, transparent);
 }
 
 .nav .item:focus-visible {
@@ -304,16 +371,15 @@
     padding-inline: calc(var(--xc-space-1) - 1px);
 }
 
-/* The plain selector names the active row's edge on its own; the scoped one
-   carries the same look past the Button base in any sheet order. */
+/* Layout 5: the active row is an inset rounded accent wash. */
 .nav .itemActive,
 .itemActive {
-    --xc-button-hover-border: var(--xc-control-border);
-    border: 1px solid var(--xc-control-border);
-    background: var(--xc-surface);
+    --xc-button-hover-bg: color-mix(in srgb, var(--xc-accent-primary) 20%, transparent);
+    --xc-button-hover-border: transparent;
+    border: 1px solid transparent;
+    background: color-mix(in srgb, var(--xc-accent-primary) 20%, transparent);
     font-weight: 600;
     color: var(--xc-accent-text, var(--xc-text));
-    box-shadow: var(--xc-shadow-nav-indicator);
 }
 
 .icon {
@@ -334,18 +400,13 @@
     white-space: nowrap;
 }
 
-.divider {
-    border: 0;
-    border-top: 1px solid var(--xc-border);
-    margin: var(--xc-space-2) var(--xc-space-3);
-}
-
 .spacer {
     flex: 1 1 auto;
 }
 
 .footer {
     border-top: 1px solid var(--xc-border);
+    margin-top: var(--xc-space-2);
     padding-top: var(--xc-space-2);
     display: flex;
     flex-direction: column;
@@ -374,22 +435,33 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .sidebar {
+    .layout[data-xc-side-menu-motion='on'] > .sidebar {
         transition: none;
     }
+}
+
+:global(html[data-xc-reduced-motion='reduce']) .layout[data-xc-side-menu-motion='on'] > .sidebar {
+    transition: none;
 }
 
 /* ── rail tier (640-899px) ──────────────────────────────────────
    Tablet portrait and half-screen desktop windows used to fall in a gap
    with no persistent navigation at all: too wide for the bottom tab bar,
-   too narrow for the 220px sidebar. They now keep the sidebar, collapsed
+   too narrow for the full side menu. They now keep the side menu, collapsed
    to a 64px icon rail.
 
    Labels are clipped rather than removed so every rail button keeps the
-   accessible name it gets from its label text. */
+   accessible name it gets from its label text.
 
+   G100: the side menu's Icons state draws this same rail at any width, so
+   every rail rule below also names [data-xc-side-menu='icons']. */
+
+.layout[data-xc-side-menu='icons'] .sidebar,
 .layout[data-xc-tier='rail'] .sidebar {
     flex: 0 0 64px;
+    inline-size: var(--xc-side-menu-icons-width);
+    min-inline-size: var(--xc-side-menu-icons-width);
+    max-inline-size: var(--xc-side-menu-icons-width);
 }
 
 /* The tablet and desktop layouts keep the same 8px page top as phones. */
@@ -403,17 +475,38 @@
 
 /* The brand wordmark has no icon-only form. The app header keeps the
    product identity visible at this width. */
+.layout[data-xc-side-menu='icons'] .brand,
 .layout[data-xc-tier='rail'] .brand {
     display: none;
 }
 
+.layout[data-xc-side-menu='icons'] .item,
 .layout[data-xc-tier='rail'] .item {
     position: relative;
+    box-sizing: border-box;
+    width: calc(100% - (2 * var(--xc-side-menu-row-inset)));
+    margin-inline: var(--xc-side-menu-row-inset);
     justify-content: center;
     gap: 0;
     padding-inline: 0;
 }
 
+.layout[data-xc-side-menu='icons'] .item > .icon,
+.layout[data-xc-tier='rail'] .item > .icon {
+    margin-inline: 0;
+}
+
+.layout[data-xc-side-menu='icons'] .groupLabel,
+.layout[data-xc-tier='rail'] .groupLabel {
+    display: none;
+}
+
+.layout[data-xc-side-menu='icons'] .groupDivider,
+.layout[data-xc-tier='rail'] .groupDivider {
+    display: block;
+}
+
+.layout[data-xc-side-menu='icons'] .label,
 .layout[data-xc-tier='rail'] .label {
     position: absolute;
     width: 1px;
@@ -425,21 +518,21 @@
     white-space: nowrap;
 }
 
+.layout[data-xc-side-menu='icons'] .search,
 .layout[data-xc-tier='rail'] .search {
     margin-inline: var(--xc-space-2);
 }
 
+.layout[data-xc-side-menu='icons'] .search > button,
+.layout[data-xc-side-menu='icons'] .action > button,
 .layout[data-xc-tier='rail'] .search > button,
 .layout[data-xc-tier='rail'] .action > button {
     justify-content: center;
     padding-inline: 0;
 }
 
+.layout[data-xc-side-menu='icons'] .action,
 .layout[data-xc-tier='rail'] .action {
-    margin-inline: var(--xc-space-2);
-}
-
-.layout[data-xc-tier='rail'] .divider {
     margin-inline: var(--xc-space-2);
 }
 
@@ -450,8 +543,9 @@
 }
 
 /* The header menu trigger is redundant when it would hold only Search and a
-   visible rail already shows a Search button. */
-.layout[data-xc-rail='shown'] :global([data-header-menu='search-only']) {
+   visible rail already shows a Search button; a collapsed side menu shows
+   none, so the trigger stays. */
+.layout[data-xc-rail='shown']:not([data-xc-side-menu='collapsed']) :global([data-header-menu='search-only']) {
     display: none;
 }
 
@@ -460,8 +554,9 @@
    fill the row under it. The rail has no "XChain Wallet" label: the logo names the app. */
 .layout[data-xc-rail='shown'] {
     display: grid;
-    /* The side menu keeps its own width: 220px, or the 64px icon rail on the
-       rail tier (below). */
+    /* The side menu keeps its own width (G100): as wide as its widest row
+       plus any dragged extra, the 64px icon rail, or zero when collapsed.
+       The route column takes the rest, so collapsing widens the content. */
     grid-template-columns: auto minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
 }
@@ -478,9 +573,20 @@
 .layout[data-xc-rail='shown'] > .sidebar {
     grid-column: 1;
     grid-row: 2;
-    width: 220px;
     height: auto;
     min-height: 0;
+}
+
+/* Full: the default is exactly what the widest row needs, which is also the
+   floor; a drag adds --xc-side-menu-extra (0 to 300px, set by
+   FullLayoutWithNav) to every row's end padding, so the whole menu widens
+   by that much and the hover fill still spans each row. */
+.layout[data-xc-side-menu='full'] > .sidebar {
+    width: max-content;
+}
+
+.layout[data-xc-side-menu='full'] .nav .item {
+    padding-inline-end: calc(var(--xc-space-3) + var(--xc-side-menu-extra));
 }
 
 .layout[data-xc-rail='shown'] > .main > .mainBody {
@@ -496,6 +602,96 @@
     display: none;
 }
 
+.layout[data-xc-rail='shown'][data-xc-side-menu='icons'] > .sidebar,
 .layout[data-xc-rail='shown'][data-xc-tier='rail'] > .sidebar {
     width: 64px;
+}
+
+/* Collapsed: no panel or edge line remains; the edge handle brings the menu
+   back. It must stay AFTER the 64px rule above, which ties it on
+   specificity and would otherwise leave a blank rail on the rail tier. */
+.layout[data-xc-rail='shown'][data-xc-side-menu='collapsed'] > .sidebar {
+    width: 0;
+    inline-size: 0;
+    min-inline-size: 0;
+    max-inline-size: 0;
+    flex-basis: 0;
+    background: transparent;
+    border: 0;
+}
+
+/* ── G100 side menu edge: the Prometheus sidebar's chevron tab and resize
+   strip, on the menu's inline-end edge. The edge box is a zero-width grid
+   item in the menu's cell, pinned to its end, so both controls ride the
+   edge at every width and in every state. */
+.sideMenuEdge {
+    display: none;
+}
+
+.layout[data-xc-rail='shown'] > .sideMenuEdge {
+    display: block;
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: end;
+    position: relative;
+    width: 0;
+    z-index: var(--xc-z-sticky);
+}
+
+/* The resize strip: 12px of hit area centred on the edge (the page gutter
+   is 8px, so a wider strip would take clicks meant for the content), with
+   a visible grip below the tab. The line and grip turn accent on hover,
+   focus and drag. */
+.sideMenuResizer {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: -6px;
+    width: 12px;
+    cursor: col-resize;
+    /* No pan or double-tap zoom, so a touch drag reaches the resize
+       handler, but pinch zoom stays available (WCAG 1.4.4). */
+    touch-action: pinch-zoom;
+    outline: none;
+}
+
+/* The menu's own 1px border is the line; hovering only turns it accent
+   and changes the cursor, as the DEX's panel line does (operator
+   2026-11-13). No bar, no grip. */
+.sideMenuResizer::after {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 5px;
+    width: 1px;
+    background: transparent;
+}
+
+
+.sideMenuResizer:hover::after,
+.sideMenuResizer:focus-visible::after,
+.layout[data-xc-side-menu-drag='on'] .sideMenuResizer::after {
+    background: var(--xc-accent-primary);
+}
+
+
+.sideMenuResizer:focus-visible {
+    outline: 2px solid var(--xc-accent-primary, var(--xc-text));
+    outline-offset: -2px;
+}
+
+/* The chevron tab (CollapseHandle, vertical: it draws the 10 by 40px tab,
+   the chevron and the 24px hit area) placed half off the edge at the exact
+   vertical centre of the menu's edge, by offset so the Button's 1px press
+   nudge cannot move it. Only placement lives here. */
+.sideMenuHandle.sideMenuHandle {
+    position: absolute;
+    inset-block-start: calc(50% - (var(--xc-collapse-handle-length) / 2));
+    inset-inline-start: calc((var(--xc-collapse-handle-tab) - var(--xc-tap-min)) / 2);
+}
+
+@media (forced-colors: active) {
+    .sideMenuResizer:hover::after,
+    .sideMenuResizer:focus-visible::after {
+        background: ButtonText;
+    }
 }

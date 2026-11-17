@@ -89,7 +89,8 @@ describe('BackupSection label publication confirmation', () => {
         const messaging = mount();
 
         fireEvent.click(screen.getByRole('button', { name: 'Publish Now…' }));
-        await screen.findByLabelText('Publish network');
+        // The standard Network field (operator ruling 2026-11-13).
+        await screen.findByRole('button', { name: /^Network: / });
         expect(screen.getByText(/labels \+ contacts are encrypted/i).textContent)
             .toMatch(/stored on the blockchain[\s\S]*seed can decrypt them/);
         const action = screen.getByRole('button', { name: 'Publish Labels' });
@@ -320,7 +321,7 @@ describe('AboutSection copy confirmation', () => {
                 </MessagingProvider>,
             );
 
-            const button = screen.getByRole('button', { name: 'Copy Diagnostics' });
+            const button = screen.getByRole('button', { name: /^Copy diagnostics/ });
             fireEvent.click(button);
 
             // The message row leads with its (aria-hidden) tone icon.
@@ -329,7 +330,7 @@ describe('AboutSection copy confirmation', () => {
             expect(button).toHaveTextContent('Copied');
             act(() => vi.advanceTimersByTime(1501));
             expect(screen.queryByRole('status')).toBeNull();
-            expect(button).toHaveTextContent('Copy Diagnostics');
+            expect(button).toHaveTextContent('Copy diagnostics');
         } finally {
             vi.useRealTimers();
             if (prior) Object.defineProperty(navigator, 'clipboard', prior);

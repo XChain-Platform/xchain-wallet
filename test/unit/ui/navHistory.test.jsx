@@ -5,7 +5,7 @@
 
 // One navigation history per shell: opening a page pushes it, Back pops it,
 // redirects and finished forms replace or unwind, and lock, wallet switch
-// and tab-bar roots start over. Back with nothing left lands on Home.
+// and nav picks start over on a root page. Back with nothing left lands on Home.
 
 import React, { useState } from 'react';
 import { describe, expect, it } from 'vitest';
@@ -13,6 +13,7 @@ import { act, fireEvent, render, renderHook, screen } from '@testing-library/rea
 import {
     NAV_HISTORY_LIMIT,
     WALLET_SWITCH_KEEPS,
+    canGoBackIn,
     createNavStack,
     landView,
     navItemKey,
@@ -26,6 +27,117 @@ import {
 } from '../../../packages/core/src/ui/navHistory.js';
 
 const views = (stack) => stack.map((entry) => entry.view);
+
+// G06: a page opened from a navigation surface is a root and shows no Back; a
+// page opened from another page is a push and shows Back to it.
+describe('root and pushed pages', () => {
+    it('marks a fresh history root, so neither Home nor the page started on offers Back', () => {
+        expect(canGoBackIn(createNavStack())).toBe(false);
+        expect(canGoBackIn(createNavStack('send'))).toBe(false);
+    });
+
+    it('offers Back on a page pushed from a root and keeps the root flag on the page left', () => {
+        const stack = pushView(createNavStack('token-detail'), 'send', { tick: 'AAA' });
+        expect(views(stack)).toEqual(['home', 'token-detail', 'send']);
+        expect(canGoBackIn(stack)).toBe(true);
+        const back = popView(stack);
+        expect(views(back)).toEqual(['home', 'token-detail']);
+        expect(back[1].ctx).toEqual({ tick: 'AAA' });
+        expect(canGoBackIn(back)).toBe(false);
+    });
+
+    it('offers Back from Home pushes, as Home is a root', () => {
+        const stack = pushView(createNavStack(), 'send');
+        expect(canGoBackIn(stack)).toBe(true);
+        expect(canGoBackIn(popView(stack))).toBe(false);
+    });
+
+    it('backs out of three nested pushes in order, back to the root without Back', () => {
+        let stack = createNavStack('markets');
+        stack = pushView(stack, 'market', { activeMarket: { tick1: 'A' } });
+        stack = pushView(stack, 'create-order', null);
+        stack = pushView(stack, 'my-orders', null);
+        const seen = [];
+        while (canGoBackIn(stack)) {
+            stack = popView(stack);
+            seen.push(top(stack).view);
+        }
+        expect(seen).toEqual(['create-order', 'market', 'markets']);
+        expect(stack[stack.length - 2].view).toBe('home');
+    });
+
+    it('keeps a root a root when another item opens on it, and the new item offers Back', () => {
+        const stack = pushItem(createNavStack('token-detail'), { tick: 'AAA' });
+        expect(canGoBackIn(stack)).toBe(true);
+        expect(canGoBackIn(popView(stack))).toBe(false);
+    });
+
+    it('lets a replaced page take the place of the page it replaces, root or not', () => {
+        expect(canGoBackIn(replaceView(createNavStack('scan'), 'send'))).toBe(false);
+        expect(canGoBackIn(replaceView(pushView(createNavStack(), 'scan'), 'send'))).toBe(true);
+    });
+
+    it('unwinds a landing onto a root without Back', () => {
+        let stack = createNavStack('lists');
+        stack = pushView(stack, 'list-detail');
+        stack = pushView(stack, 'list-rename');
+        const landed = landView(stack, 'lists');
+        expect(views(landed)).toEqual(['home', 'lists']);
+        expect(canGoBackIn(landed)).toBe(false);
+    });
+});
+
+function top(stack) {
+    return stack[stack.length - 1];
+}
+
+describe('useNavHistory root navigation', () => {
+    it('clears the history on a root navigation, even onto the page already showing', () => {
+        const { result } = renderHook(() => useNavHistory());
+        act(() => result.current.navigate('token-detail'));
+        act(() => result.current.navigate('send'));
+        expect(result.current.depth).toBe(3);
+        expect(result.current.canGoBack).toBe(true);
+        act(() => result.current.navigateRoot('send'));
+        expect(result.current.view).toBe('send');
+        expect(result.current.depth).toBe(2);
+        expect(result.current.canGoBack).toBe(false);
+        expect(result.current.previousView).toBe('home');
+    });
+
+    it('shows Back after a push from a root and none after the Back that returns to it', () => {
+        const { result } = renderHook(() => useNavHistory());
+        act(() => result.current.navigateRoot('markets'));
+        expect(result.current.canGoBack).toBe(false);
+        act(() => result.current.navigate('market'));
+        expect(result.current.canGoBack).toBe(true);
+        act(() => result.current.back());
+        expect(result.current.view).toBe('markets');
+        expect(result.current.canGoBack).toBe(false);
+        // The system Back from a root still leaves it, for Home.
+        act(() => result.current.back());
+        expect(result.current.view).toBe('home');
+    });
+
+    it('accepts an updater like a state setter', () => {
+        const { result } = renderHook(() => useNavHistory());
+        act(() => result.current.navigateRoot(() => 'receive'));
+        expect(result.current.view).toBe('receive');
+        expect(result.current.canGoBack).toBe(false);
+    });
+
+    // A browser Back after a root pick arrives at a page the cleared history
+    // no longer holds, so it is followed as a step on top of the root.
+    it('follows a browser Back past a root pick as a push onto the root', () => {
+        const { result } = renderHook(() => useNavHistory());
+        act(() => result.current.navigate('token-detail'));
+        act(() => result.current.navigateRoot('markets'));
+        act(() => result.current.sync('token-detail'));
+        expect(result.current.view).toBe('token-detail');
+        expect(result.current.previousView).toBe('markets');
+        expect(result.current.canGoBack).toBe(true);
+    });
+});
 
 describe('navigation history operations', () => {
     it('starts on Home, or on Home with the starting page above it', () => {
@@ -133,6 +245,8 @@ describe('navigation history operations', () => {
             .toBe(navItemKey('governance-poll-detail', { governanceRef: { chainId: 'btc', pollIndex: '7' } }));
         expect(navItemKey('wallet-details', { walletDetailsId: 'w1' })).toBe('w1');
         expect(navItemKey('market', { activeMarket: { chainId: 'btc', tick1: 'A', tick2: 'B' } })).toBe('["btc","A","B"]');
+        expect(navItemKey('addresses', { addressDetailTarget: null })).toBe('addresses:list');
+        expect(navItemKey('addresses', { addressDetailTarget: { record: { id: 'addr-1' } } })).toBe('addresses:id:addr-1');
         expect(navItemKey('token-detail', { tokenDetailRef: null })).toBeNull();
         expect(navItemKey('history', a)).toBeNull();
         expect(navItemKey('token-detail', null)).toBeNull();
@@ -324,6 +438,45 @@ describe('useNavHistory', () => {
             act(() => result.current.nav.navigate('token-detail'));
             act(() => { result.current.setToken('B'); result.current.nav.navigate('token-detail'); });
             expect(result.current.nav.depth).toBe(2);
+        });
+
+        it('walks Addresses to one address to its action, then back one level at a time', () => {
+            function AddressPages() {
+                const [addressDetailTarget, setAddressDetailTarget] = useState(null);
+                const nav = useNavHistory({
+                    initialView: 'addresses',
+                    capture: () => ({ addressDetailTarget }),
+                    restore: (ctx) => setAddressDetailTarget(ctx.addressDetailTarget ?? null),
+                    itemKey: navItemKey,
+                });
+                const title = nav.view === 'view-private-key'
+                    ? 'Show Private Key'
+                    : addressDetailTarget ? 'View Address' : 'Addresses';
+                return (
+                    <>
+                        <h1>{title}</h1>
+                        {nav.view === 'addresses' && !addressDetailTarget ? (
+                            <button type="button" onClick={() => setAddressDetailTarget({ chainId: 'btc', address: 'bc1q1', record: { id: 'addr-1' } })}>
+                                Open address
+                            </button>
+                        ) : null}
+                        {nav.view === 'addresses' && addressDetailTarget ? (
+                            <button type="button" onClick={() => nav.navigate('view-private-key')}>Show Private Key</button>
+                        ) : null}
+                        <button type="button" onClick={nav.back}>Back</button>
+                    </>
+                );
+            }
+
+            render(<AddressPages />);
+            fireEvent.click(screen.getByRole('button', { name: 'Open address' }));
+            expect(screen.getByRole('heading', { name: 'View Address' })).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: 'Show Private Key' }));
+            expect(screen.getByRole('heading', { name: 'Show Private Key' })).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+            expect(screen.getByRole('heading', { name: 'View Address' })).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+            expect(screen.getByRole('heading', { name: 'Addresses' })).toBeInTheDocument();
         });
     });
 

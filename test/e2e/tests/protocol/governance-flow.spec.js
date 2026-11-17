@@ -222,8 +222,9 @@ for (const viewport of VIEWPORTS) {
 
         await page.getByRole('button', { name: /Fund the community governance portal/ }).click();
         await expect(page.getByText(POLL.question, { exact: true })).toBeVisible();
-        await expect(page.getByText('987654321 weight', { exact: true })).toBeVisible();
-        await expectScreen(page, `${viewport.name} poll detail`, 'Poll #42');
+        // Result, the closed poll's first tab: each final result row's figures.
+        await expect(page.getByText('987654321 weight, 17 voters', { exact: true })).toBeVisible();
+        await expectScreen(page, `${viewport.name} poll detail`, 'Poll');
         await page.getByRole('button', { name: 'Back to previous screen' }).click();
 
         await page.getByRole('button', { name: 'Create poll', exact: true }).click();

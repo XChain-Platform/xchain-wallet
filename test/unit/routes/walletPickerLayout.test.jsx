@@ -295,7 +295,7 @@ describe('WalletDetails layout', () => {
                 />
             </MessagingProvider>,
         );
-        const rename = await screen.findByRole('button', { name: 'Edit wallet' });
+        const rename = await screen.findByRole('button', { name: /^Edit wallet/ });
         const upgrade = screen.getByRole('button', { name: /Upgrade/ });
         // Extra inline margins on top of the page gap spaced the buttons
         // unevenly (8 px more above one, 12 px more above the next).
@@ -340,11 +340,11 @@ describe('WalletDetails wallet changes', () => {
             </MessagingProvider>,
         );
 
-        expect(screen.queryByRole('button', { name: 'Edit wallet' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Edit wallet/ })).not.toBeInTheDocument();
         await waitFor(() => expect(resolveSecond).toBeTypeOf('function'));
         resolveSecond([secondWallet]);
         expect(await screen.findByText(secondWallet.name)).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Edit wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Edit wallet/ }));
         expect(onRename).toHaveBeenCalledWith(secondWallet);
     });
 

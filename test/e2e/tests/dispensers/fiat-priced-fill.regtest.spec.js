@@ -48,6 +48,7 @@
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import { createWallet, expect, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
+import { pickFiatCurrency } from '../../fixtures/pickerFields.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
@@ -245,7 +246,7 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // at settlement, which is exactly what makes the buyer-side model
             // below interesting.
             await main.getByRole('button', { name: /Advanced options/ }).click();
-            await main.getByLabel('Priced in fiat', { exact: true }).selectOption(FIAT_CODE);
+            await pickFiatCurrency(main, FIAT_CODE);
             await main.getByLabel(/^Fiat amount/).fill(String(FIAT_AMOUNT));
 
             await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
@@ -385,6 +386,9 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
 
             const coin = REGTEST_COIN.slice(1);
             const panel = page.getByRole('main');
+            // The dispenser page opens on Actions (G102); the buy panel is the
+            // Buy page a buyer's first action row opens.
+            await panel.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
             // The panel has to actually be there, or the two assertions under
             // this would pass on a screen that says nothing at all.
             await expect(panel, 'no pay-to-buy panel rendered for a fiat dispenser at all')

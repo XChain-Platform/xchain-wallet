@@ -33,6 +33,8 @@ const VISIBLE_FIELD_SELECTOR = [
     'input[type="week"]',
     'input[type="datetime-local"]',
     'select',
+    // The shared themed dropdown trigger (ruling G96) is a field too.
+    '[data-xc-select]',
     'textarea',
 ].map((selector) => `${selector}:visible`).join(', ');
 
@@ -142,8 +144,10 @@ async function expectInlineActionsInsideFields(page, label, requiredNames = []) 
             || element.id
             || element.tagName.toLowerCase();
 
+        // Max is an icon-only in-field action now, so it is found by its
+        // accessible name and reported under its short name.
         const actions = [...body.querySelectorAll('button')].filter((button) => (
-            visible(button) && button.textContent.trim() === 'Max'
+            visible(button) && button.getAttribute('aria-label') === 'Use max available amount'
         ));
         const measurements = actions.map((button) => {
             let owner = button.parentElement;
@@ -172,7 +176,7 @@ async function expectInlineActionsInsideFields(page, label, requiredNames = []) 
                 && buttonBox.bottom <= fieldBox.bottom + slack;
 
             return {
-                action: button.textContent.trim(),
+                action: 'Max',
                 field: field ? describe(field) : null,
                 inside,
                 buttonBox: {
@@ -251,7 +255,7 @@ for (const theme of THEMES) {
 
                 await test.step(`${context} / Settings search`, async () => {
                     await openSettings(page);
-                    await expect(page.getByRole('searchbox', { name: 'Search settings' })).toBeVisible();
+                    await expect(page.getByRole('button', { name: 'Filter settings' })).toBeVisible();
                     await checkScreen(page, `${context} / Settings search`);
                 });
 

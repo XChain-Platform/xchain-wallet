@@ -50,6 +50,7 @@ import { fundingEncoderOpts } from '../util/funding_encoder_opts.js';
  * @property {object} [waitOpts]
  * @property {(phase: string, data: object) => void} [onProgress]
  * @property {boolean} [verifyBuiltTx]                   check the built PSBT against this sweep before signing; set by the dApp bridge, whose approval precedes the build
+ * @property {boolean} [adsPayout]                       false when the approving screen cannot name an automatic donation (the dApp bridge): accrue only (submitAction)
  */
 
 /**
@@ -133,6 +134,7 @@ export async function sweepToken(opts) {
         onProgress: opts.onProgress,
         onBroadcastFailure: opts.onBroadcastFailure,
         verifyBuiltTx: opts.verifyBuiltTx === true,
+        adsPayout: opts.adsPayout !== false,
     });
 
     // PC-34 force-close interplay: ORDERS=1 cancels every open ORDER

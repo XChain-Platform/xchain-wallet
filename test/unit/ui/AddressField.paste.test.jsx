@@ -93,7 +93,8 @@ describe('New contact', () => {
                 <ContactsList walletId="wallet-1" onBack={() => {}} />
             </MessagingProvider>,
         );
-        fireEvent.click(await screen.findByRole('button', { name: 'Create first contact' }));
+        await screen.findByText('No contacts yet');
+        fireEvent.click(screen.getByRole('button', { name: 'Add contact' }));
         await screen.findByRole('heading', { level: 1, name: 'New Contact' });
         fireEvent.paste(screen.getByLabelText('Address'), {
             clipboardData: { getData: () => `  ${BTC}\n` },

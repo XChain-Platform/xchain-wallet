@@ -35,6 +35,10 @@ assert.match(
 );
 assert.match(formSrc, /if \(!isWatcherMode && !isHwSource && \(!signerReady && password\.length === 0\)\) return;/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
-assert.match(formSrc, /\{isWatcherMode \? \([\s\S]+?t\('common\.watcherBuildsUnsigned'\)/);
-assert.match(formSrc, /Create Unsigned Transaction/);
+assert.match(
+    formSrc,
+    /<ConfirmActionModal[\s\S]{0,1800}?credentialsReady=\{typedConfirmOk\}[\s\S]{0,500}?watcherBuildsUnsigned/,
+    'watcher guidance and the typed safety gate live on the Confirm Standard review',
+);
+assert.doesNotMatch(formSrc, /Create Unsigned Transaction/, 'old review action label is retired');
 console.log('advanced-watcher-mode smoke OK');

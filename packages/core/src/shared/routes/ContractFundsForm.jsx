@@ -15,7 +15,8 @@ import '../../i18n/locales/en/execute.js';
 import '../../i18n/locales/en/coSigner.js';
 // Network, From and the fee selector come from the standard FromSection and
 // FeeSection.
-import { AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Icon, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { InPageScreen } from '@xchain-wallet/core/ui/navHistory.js';
 // The Wallet Form Standard frame (From, main section, Network fee,
 // status slot, one action).
 import {
@@ -31,6 +32,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
@@ -38,16 +40,17 @@ import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
-import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useContractManifest } from '../hooks/useContractManifest.js';
-import { ContractConsentPanel } from '../components/ContractConsentPanel.jsx';
+import { permissionsToVerbs, bpsToPercent } from '../utils/contractConsentLabels.js';
 import { preferredSourceId } from '../addressSelection.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
-import { contractBalanceRows, contractBalanceOf, OWNER_WITHDRAW_DISABLED_REASON } from './contractResponseShape.js';
-import { useContractOwnerWithdraw } from '../hooks/useContractOwnerWithdraw.js';
+import { contractBalanceRows, contractBalanceOf, contractOwnerWithdraw, OWNER_WITHDRAW_DISABLED_REASON } from './contractResponseShape.js';
+import { contractFieldName, useContractRow, useContractTarget } from '../hooks/useContractTarget.js';
+import { TargetField } from '../components/TargetField.jsx';
+import { ContractsList } from './ContractsList.jsx';
 import { OwnerWithdrawWarning } from '../components/OwnerWithdrawWarning.jsx';
 import {
     estimateNativeSendFee,
@@ -60,6 +63,7 @@ import styles from './IssueTokenForm.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -70,6 +74,36 @@ const PROTOCOL_COIN_TICKER = {
 function isPositiveDecimal(value) {
     const text = String(value).trim();
     return /^\d+(?:\.\d+)?$/.test(text) && compareDecimalStrings(text, '0') === 1;
+}
+
+function contractManifestFacts(manifest) {
+    const permissions = manifest?.permissions ?? null;
+    const status = manifest?.status ?? (Array.isArray(permissions) ? 'declared' : 'unavailable');
+    if (status === 'unavailable') {
+        return [{
+            label: t('components.contractConsentPanel.permissionYouGrant'),
+            value: t('components.contractConsentPanel.theWalletCouldnTLook'),
+        }];
+    }
+    const permissionValue = status === 'unrestricted'
+        ? t('components.contractConsentPanel.anythingByContinuingYouGrant')
+        : (() => {
+            const verbs = permissionsToVerbs(permissions);
+            return verbs?.length
+                ? verbs.map((verb) => `${t('components.contractConsentPanel.itCan')} ${verb}`).join(', ')
+                : t('components.contractConsentPanel.youGrantNoActionPermissions');
+        })();
+    return [
+        { label: t('components.contractConsentPanel.permissionYouGrant'), value: permissionValue },
+        {
+            label: t('components.contractConsentPanel.maxFeeItCanTake'),
+            value: bpsToPercent(manifest?.maxTakeBps) ?? t('components.contractConsentPanel.noLimitOfItsOwn'),
+        },
+        {
+            label: t('components.contractConsentPanel.whereThisComesFrom'),
+            value: t('components.contractConsentPanel.reportedByTheXchainIndex'),
+        },
+    ];
 }
 
 /**
@@ -92,7 +126,17 @@ function isPositiveDecimal(value) {
  * @param {string} props.contractActionIndex
  * @param {() => void} props.onBack
  */
-export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex, onBack }) {
+export function ContractFundsForm({
+    mode,
+    walletId,
+    chainId: openedChainId,
+    contractActionIndex: openedContractActionIndex,
+    onBack,
+}) {
+    // The contract starts as the one the opening page named; the Contract
+    // field's list icon can pick another.
+    const contractTarget = useContractTarget(openedChainId, openedContractActionIndex);
+    const { chainId, contractActionIndex } = contractTarget;
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
@@ -204,8 +248,24 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     // one-line reason instead. A DEPOSIT into a contract whose deployer CAN
     // withdraw carries the warning. Null (loading, lookup failed, older
     // explorer) keeps the form exactly as it was.
-    const ownerWithdraw = useContractOwnerWithdraw({ messaging, chainId, contractActionIndex });
+    // One read of the contract row serves the owner-withdraw answer and the
+    // name the Contract field shows.
+    const contractRow = useContractRow({ messaging, chainId, contractActionIndex });
+    const ownerWithdraw = contractOwnerWithdraw(contractRow);
     const withdrawRefused = !isDeposit && ownerWithdraw === false;
+
+    // A different contract holds different tokens, so a picked contract
+    // starts the token and quantity over.
+    const contractIdentityRef = useRef(`${chainId}\0${contractActionIndex}`);
+    useEffect(() => {
+        const identity = `${chainId}\0${contractActionIndex}`;
+        if (contractIdentityRef.current === identity) return;
+        contractIdentityRef.current = identity;
+        setTick('');
+        setQuantity('');
+        setFormError(null);
+        setContractBalances(null);
+    }, [chainId, contractActionIndex]);
 
     const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const [hwStatus, setHwStatus] = useState('idle');
@@ -309,6 +369,10 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         TICK: tick.trim(),
         QUANTITY: String(quantity || '').trim(),
     }), [contractActionIndex, tick, quantity]);
+    const legacyComposed = useMemo(() => ({
+        action: isDeposit ? 'DEPOSIT' : 'WITHDRAW',
+        chainId,
+    }), [chainId, isDeposit]);
 
     function handleReview(event) {
         event.preventDefault();
@@ -437,15 +501,15 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
-                // The withdraw token list replaces the form in place, so Back
-                // returns to the form rather than leaving the screen.
-                : (tokenPickerOpen && !isDeposit ? () => setTokenPickerOpen(false) : onBack)}
+                : onBack}
             backDisabled={stage === 'submitting'}
+            // A fixed title; the contract is the main section's first field.
             title={stage === 'review' || stage === 'submitting'
                     ? `Review ${verb}`
-                    : `${verb} ${isDeposit ? 'to' : 'From'} Contract #${contractActionIndex}`}
+                    : (isDeposit ? 'Deposit to Contract' : 'Withdraw from Contract')}
         />
     );
     const wrap = (children) => (
@@ -489,7 +553,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         return wrap(
             <FormPage
                 label={`${verb} broadcast`}
-                actions={<Button variant="primary" onClick={onBack}>Done</Button>}
+                actions={<Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>}
             >
                 <p className={styles.summary}>
                     {verb} broadcast. The network will credit the {isDeposit ? 'contract' : 'address'} shortly.
@@ -503,83 +567,39 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label={`Review ${verb.toLowerCase()}`}
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        icon={<Icon.SignIcon />}
-                        loading={stage === 'submitting'}
-                        disabled={stage === 'submitting' || (
-                            isWatcherMode
-                                ? false
-                                : isHwSource ? hwStatus !== 'available' : (!signerReady && password.length === 0)
-                        )}
-                    >
-                        {isWatcherMode ? 'Create Unsigned Transaction' : verb}
-                    </Button>
-                )}
-            >
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Network</dt>
-                            <dd className={styles.detailsValue}>
-                                <ChainBadge descriptor={descriptor} size="sm" />
-                            </dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>{isDeposit ? 'From' : 'Recipient'}</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    <dt className={styles.detailsLabel}>Contract</dt>
-                    <dd className={styles.detailsValue}>#{actionParams.CONTRACT_ACTION_INDEX}</dd>
-                    <dt className={styles.detailsLabel}>Token</dt>
-                    <dd className={styles.detailsValue}>{actionParams.TICK}</dd>
-                    <dt className={styles.detailsLabel}>Quantity</dt>
-                    <dd className={styles.detailsValue}>{actionParams.QUANTITY}</dd>
-                    <dt className={styles.detailsLabel}>Network fee</dt>
-                    <dd className={styles.detailsValue}>
-                        {feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    </dd>
-                    <ContractConsentPanel
-                        manifest={manifest}
-                        labelClassName={styles.detailsLabel}
-                        valueClassName={styles.detailsValue}
-                    />
-                </dl>
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                )}
-            </FormPage>,
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setStage('form'); setSubmitError(null); }}
+                decoded={null}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentials={<p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>}
+                credentialsReady
+                summary={{
+                    verb: isDeposit ? t('execute.deposit') : t('coSigner.detail.withdraw'),
+                    amount: actionParams.QUANTITY,
+                    ticker: actionParams.TICK.toUpperCase(),
+                    direction: isDeposit ? 'out' : 'in',
+                    target: t('components.confirmSummary.contractTarget', { index: actionParams.CONTRACT_ACTION_INDEX }),
+                    chainId,
+                    address: fromAddress?.address,
+                    facts: contractManifestFacts(manifest),
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -596,6 +616,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
             target: t('components.confirmSummary.contractTarget', { index: actionParams.CONTRACT_ACTION_INDEX }),
             chainId,
             address: fromAddress?.address,
+            facts: contractManifestFacts(manifest),
         };
         return (
             <ActionConfirmScreen
@@ -603,6 +624,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                 summary={fundsSummary}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -618,6 +640,20 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                 chainId={chainId}
                 getSignerStatus={messaging.getSignerStatus}
             />
+        );
+    }
+
+    // The Contract field's list icon: the contracts list, rendered in place
+    // of the form; opening a contract makes it the one this form acts on.
+    if (contractTarget.pickerOpen) {
+        return (
+            <InPageScreen>
+                <ContractsList
+                    walletId={walletId}
+                    onOpenContract={contractTarget.pick}
+                    onBack={contractTarget.closePicker}
+                />
+            </InPageScreen>
         );
     }
 
@@ -638,53 +674,26 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         );
     }
 
-    // D-23: withdrawing offers the CONTRACT's holdings, not the wallet's. The
-    // wallet TokenPicker would list tokens the contract does not hold (and hide
-    // ones it does), so this mode gets a plain list of the custody rows.
-    if (tokenPickerOpen && !isDeposit) {
-        const rows = contractBalanceRows(contractBalances);
-        return wrap(
-            <ListPage>
-                <SectionHeader title="Tokens held by the contract" />
-                {rows.length === 0 ? (
-                    <EmptyState title="No contract tokens" body="Tokens held by this contract appear here." titleAs="h3" />
-                ) : (
-                    <ul className={styles.detailsList}>
-                        {rows.map((row) => (
-                            <li key={row.tick}>
-                                <Button
-                                    variant="ghost"
-                                    block
-                                    icon={<Icon.TokenIcon />}
-                                    onClick={() => {
-                                        setTick(String(row.tick).toUpperCase());
-                                        setTokenPickerOpen(false);
-                                        setFormError(null);
-                                    }}
-                                >
-                                    {String(row.tick).toUpperCase()}
-                                    {' - '}
-                                    {formatWithThousands(String(row.quantity))}
-                                </Button>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </ListPage>,
-        );
-    }
-
-    // Token picker (spendable balances, locked to the contract's chain),
-    // rendered in place of the form.
+    // Token picker, rendered in place of the form. DEPOSIT lists the wallet's
+    // spendable tokens on the contract's chain. D-23: WITHDRAW offers the
+    // CONTRACT's holdings, not the wallet's, so it hands the standard picker the
+    // custody rows with the amount the contract holds as each row's balance.
     if (tokenPickerOpen) {
         return (
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                // DEPOSIT moves a token into contract custody; the network coin is not a token.
+                // Both directions move a token in or out of contract custody; the network coin is not a token.
                 kindFilter="tokens"
                 kindLocked
                 title="Select Token"
+                rows={isDeposit ? undefined : contractBalanceRows(contractBalances).map((row) => ({
+                    chainId,
+                    tick: String(row.tick).toUpperCase(),
+                    quantity: String(row.quantity),
+                }))}
+                emptyTitle="No contract tokens"
+                emptyBody="Tokens held by this contract appear here."
                 networkFilter={coinFromChainId(chainId)}
                 onSelect={(sel) => {
                     setTick(String(sel.tick || '').toUpperCase());
@@ -705,6 +714,7 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
         <FormFrame
             demoGuard={demoGuard}
             label={`${verb} ${preposition} contract`}
+            lead={isDeposit ? <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} /> : null}
             onSubmit={handleReview}
             data-form-standard={isDeposit ? 'contract-deposit' : 'contract-withdraw'}
             status={[
@@ -769,7 +779,16 @@ export function ContractFundsForm({ mode, walletId, chainId, contractActionIndex
                 summary={mainSummary}
                 summaryUnit={quantity && tickUpper ? tickUpper : undefined}
             >
-            {isDeposit ? <OwnerWithdrawWarning ownerWithdraw={ownerWithdraw} /> : null}
+            <TargetField
+                label="Contract"
+                help={isDeposit
+                    ? 'The contract the tokens go to. Use the list icon to pick another contract.'
+                    : 'The contract the tokens come out of. Use the list icon to pick another contract.'}
+                name={contractFieldName(contractRow)}
+                detail={`#${contractActionIndex}`}
+                onPick={contractTarget.openPicker}
+                pickLabel="Choose another contract"
+            />
             <TokenField
                 label="Token"
                 help={isDeposit

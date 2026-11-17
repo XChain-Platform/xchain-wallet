@@ -50,7 +50,7 @@ import { nativeTickForChain } from '../cosigner/allowedTicks.js';
 
 export class CoSignerAccountNotFoundError extends Error {
     constructor(accountId) {
-        super(`passiveCoSignForAccount: no co-signer account with id "${accountId}"`);
+        super(`passiveCoSignForAccount: no cosigner account with id "${accountId}"`);
         this.name = 'CoSignerAccountNotFoundError';
         this.accountId = accountId;
     }

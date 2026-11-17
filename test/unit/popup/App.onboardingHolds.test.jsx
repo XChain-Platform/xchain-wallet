@@ -139,6 +139,7 @@ async function openCreateToPhrase() {
 
 async function createThroughVerify() {
     await openCreateToPhrase();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
     fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
     const words = CREATED_PHRASE.split(' ');
@@ -160,7 +161,7 @@ describe('popup onboarding holds share one session refresh', () => {
         const sessionReads = count(sent, 'session.status');
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
-        expect(await screen.findByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Automatic Donations' })).toBeInTheDocument();
         expect(count(sent, 'session.status')).toBe(sessionReads);
     });
 
@@ -184,7 +185,7 @@ describe('popup onboarding holds share one session refresh', () => {
         await createThroughVerify();
         const sessionReads = count(sent, 'session.status');
 
-        expect(await screen.findByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Automatic Donations' })).toBeInTheDocument();
         expect(screen.queryByText(STALE_NOTICE)).toBeNull();
         expect(count(sent, 'session.status')).toBe(sessionReads);
     });
@@ -195,15 +196,15 @@ describe('popup onboarding holds share one session refresh', () => {
         await createThroughVerify();
         const sessionReads = count(sent, 'session.status');
 
-        expect(await screen.findByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Automatic Donations' })).toBeInTheDocument();
         await settle(80);
 
-        expect(screen.getByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Automatic Donations' })).toBeInTheDocument();
         expect(count(sent, 'session.status')).toBe(sessionReads);
 
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         await waitFor(() => expect(count(sent, 'session.status')).toBeGreaterThan(sessionReads));
-        await waitFor(() => expect(screen.queryByRole('heading', { name: 'Automatic Donation System' })).toBeNull());
+        await waitFor(() => expect(screen.queryByRole('heading', { name: 'Automatic Donations' })).toBeNull());
     });
 
     it('releases the import hold when the lane is left, so a create screen elsewhere decides alone', async () => {

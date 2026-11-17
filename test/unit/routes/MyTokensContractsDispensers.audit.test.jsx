@@ -3,6 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -99,9 +100,12 @@ describe('ContractsList ownership and empty actions', () => {
         );
 
         // Contracts this wallet published are on the Mine tab; All is the default.
-        fireEvent.click(await screen.findByRole('tab', { name: 'Mine' }));
+        fireEvent.click(await screen.findByRole('tab', { name: 'My Contracts' }));
         const row = await screen.findByRole('button', { name: 'Open Escrow (C:BTC:12)' });
-        expect(row).toHaveTextContent('published by');
+        expect(row).toHaveTextContent('Published by');
+        // Status is a sentence-case pill, not "status VALID" text.
+        expect(row).toHaveTextContent('Valid');
+        expect(row).not.toHaveTextContent('status valid');
         expect(row).not.toHaveTextContent('owner');
         fireEvent.click(row);
         expect(onOpenContract).toHaveBeenCalledWith(CHAIN, '12');
@@ -123,7 +127,7 @@ describe('ContractsList ownership and empty actions', () => {
         fireEvent.change(screen.getByRole('searchbox', { name: 'Search contracts' }), { target: { value: 'treasury' } });
         expect(await screen.findByText('No matching contracts')).toBeInTheDocument();
         // Mine holds nothing at all, so it says so rather than claiming a filtered miss.
-        fireEvent.click(screen.getByRole('tab', { name: 'Mine' }));
+        fireEvent.click(screen.getByRole('tab', { name: 'My Contracts' }));
         expect(await screen.findByText('No published contracts')).toBeInTheDocument();
     });
 

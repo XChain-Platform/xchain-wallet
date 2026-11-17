@@ -86,10 +86,13 @@ const FORMS = [
         read: async () => (await screen.findByLabelText('From address')).value,
     },
     {
+        // Batch has no page From field: transaction 1's Network and From row
+        // names its source in an AddressText.
         name: 'BatchComposerForm',
         Form: BatchComposerForm,
         props: {},
-        read: async () => (await screen.findByLabelText(/^From(?: address)?$/)).value,
+        read: async () => (await screen.findByRole('button', { name: 'Change the network and From address of transaction 1' }))
+            .querySelector('[dir="ltr"][aria-label]').getAttribute('aria-label'),
     },
     {
         name: 'ParallelComposer',

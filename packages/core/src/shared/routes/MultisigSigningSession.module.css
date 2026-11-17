@@ -1,30 +1,35 @@
-/* Signing sessions list: sessions grouped by what the user has to do next
-   (Ready to send, Waiting on cosigners, then Done folded away), with the
-   open-a-signing-link row at the bottom. */
+/* Multisig Sessions: the Ready | Waiting | Done tabs above one rounded list
+   card of session rows. Opening a signing link is its own page, reached
+   from the header's link button. */
 
-.group {
+/* The tabs span the toolbar row, as on every list page's toggle. */
+.tabsRow {
     display: flex;
-    flex-direction: column;
-    gap: var(--xc-space-2);
+    width: 100%;
     min-width: 0;
 }
 
-.groupHeading {
+.tabsRow > * {
+    flex: 1 1 auto;
+    width: 100%;
+}
+
+/* One flush list card with divider lines, rows never boxed apart (G07, U41). */
+.list {
+    composes: flush from '../../ui/Card.module.css';
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    overflow: hidden;
+    list-style: none;
+    padding: 0;
     margin: 0;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
 }
 
-.groupCount {
-    font-variant-numeric: tabular-nums;
+.list > li + li {
+    border-top: 1px solid var(--xc-border);
 }
 
+/* The start flow's pick lists (multisig, then action). */
 .rows {
     display: flex;
     flex-direction: column;
@@ -34,18 +39,15 @@
     list-style: none;
 }
 
-/* The outer list of groups spaces the groups apart. */
-.groups {
-    gap: var(--xc-space-4);
-}
-
+/* The status pill at a row's trailing edge, sentence case like every other. */
 .pill {
     display: inline-flex;
     align-items: center;
-    padding: 2px var(--xc-space-2);
+    padding: 0 var(--xc-space-2);
     border-radius: var(--xc-radius-pill);
     font-size: var(--xc-text-xs);
     font-weight: 600;
+    line-height: 1.6;
     white-space: nowrap;
 }
 
@@ -69,63 +71,9 @@
     color: var(--xc-text-muted);
 }
 
-/* The Done group folds behind a disclosure row. */
-.doneToggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: var(--xc-space-3);
-    border: var(--xc-card-border);
-    border-radius: var(--xc-card-radius);
-    background: var(--xc-card-bg);
+/* A cosigner's name, on its own line above the key it names. */
+.cosignerName {
+    display: block;
     color: var(--xc-text);
-    font: inherit;
-    text-align: start;
-    cursor: pointer;
-}
-
-.doneChevron {
-    display: inline-flex;
-    transition: transform 0.15s ease;
-}
-
-.doneChevronOpen {
-    transform: rotate(90deg);
-}
-
-/* Open a signing link: an accent-outlined row, so it reads as a secondary
-   entry point rather than one of the sessions. */
-.openLinkRow {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-    width: 100%;
-    padding: var(--xc-space-3);
-    border: 1px dashed var(--xc-accent-primary);
-    border-radius: var(--xc-card-radius);
-    background: transparent;
-    color: var(--xc-accent-text);
-    font: inherit;
     font-weight: 600;
-    text-align: start;
-    cursor: pointer;
-}
-
-.openLinkRow svg {
-    width: 1rem;
-    height: 1rem;
-}
-
-.openLinkHint {
-    margin-inline-start: auto;
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-    font-weight: 400;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .doneChevron {
-        transition: none;
-    }
 }

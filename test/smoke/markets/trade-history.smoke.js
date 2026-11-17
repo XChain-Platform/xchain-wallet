@@ -44,18 +44,20 @@ assert.ok(/Refresh/.test(src),
 assert.ok(!/setInterval\(/.test(src),
     'TradeHistoryPanel does not poll (manual refresh only)');
 
+// Operator ruling 2026-11-13: the Market page's My Orders tab is one list of
+// the user's open orders and filled trades, newest first, with the status in
+// the header filter. OpenOrdersPanel's unified mode reads the fills itself,
+// per wallet address, so MarketView no longer renders TradeHistoryPanel.
 const marketViewPath = join(core, 'src', 'shared', 'routes', 'MarketView.jsx');
 const mv = readFileSync(marketViewPath, 'utf8');
-assert.ok(/import\s*\{\s*TradeHistoryPanel\s*\}/.test(mv),
-    'MarketView imports TradeHistoryPanel');
-assert.ok(/<TradeHistoryPanel\b/.test(mv),
-    'MarketView renders TradeHistoryPanel');
-
-const openOrdersIdx = mv.indexOf('<OpenOrdersPanel');
-const tradeHistoryIdx = mv.indexOf('<TradeHistoryPanel');
-assert.ok(openOrdersIdx > 0 && tradeHistoryIdx > openOrdersIdx,
-    'TradeHistoryPanel rendered below OpenOrdersPanel');
+assert.ok(!/<TradeHistoryPanel\b/.test(mv),
+    'MarketView shows fills inside the one My Orders list');
+assert.ok(/<OpenOrdersPanel\b[\s\S]*?status=\{orderStatus\}/.test(mv),
+    'MarketView passes the header filter status to the My Orders list');
+const ordersSrc = readFileSync(join(core, 'src', 'shared', 'components', 'OpenOrdersPanel.jsx'), 'utf8');
+assert.ok(/messaging\.getMarketHistory\(\{[\s\S]*?address: addr\.address/.test(ordersSrc),
+    'the My Orders list fans out getMarketHistory per wallet address for fills');
 
 console.log(
-    'OK: trade-history smoke (TradeHistoryPanel §41.3.6 collapsible; fans out getMarketHistory per wallet address; no polling, manual Refresh; onOpenTx reserved; rendered below OpenOrdersPanel in MarketView)',
+    'OK: trade-history smoke (TradeHistoryPanel §41.3.6; fans out getMarketHistory per wallet address; no polling, manual Refresh; onOpenTx reserved; MarketView My Orders shows fills in one newest-first list)',
 );

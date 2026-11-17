@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedDetail } from '../../../packages/core/src/shared/routes/BetFeedDetail.jsx';
+import { ContractDetail } from '../../../packages/core/src/shared/routes/ContractDetail.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
 import { ExecuteContractForm } from '../../../packages/core/src/shared/routes/ExecuteContractForm.jsx';
 import { ListDetail } from '../../../packages/core/src/shared/routes/ListDetail.jsx';
@@ -129,7 +130,69 @@ describe('protocol detail route accessibility', () => {
             host,
         );
 
-        await screen.findByRole('heading', { name: 'Actions' });
+        // The Actions tab opens first; then each other tab's content.
+        await screen.findByRole('list', { name: 'Stake actions' });
+        await expectNoSeriousAxeViolations(container);
+        for (const tab of ['Rewards', 'Details']) {
+            fireEvent.click(screen.getByRole('tab', { name: tab }));
+            await expectNoSeriousAxeViolations(container);
+        }
+    });
+
+    it('scans a loaded contract detail, each tab, the open search and the Code and State pages', async () => {
+        const host = messaging({
+            getContractByActionIndex: vi.fn().mockResolvedValue({ data: {
+                action_index: '12',
+                source: ADDRESS.address,
+                status: 'valid',
+                meta_name: 'Vault',
+                meta_version: '1.0.0',
+                code_hash: 'ab'.repeat(32),
+                gas_limit: 250000,
+                cooldown_blocks: 144,
+                abi: { methods: {
+                    balance_of: { params: [{ name: 'who', type: 'string' }], view: true },
+                    transfer: { params: [{ name: 'to', type: 'string' }], view: false },
+                } },
+            } }),
+            getContractState: vi.fn().mockResolvedValue({ data: [{ state_key: 'paused', state_value: 'false' }] }),
+            getContractBalance: vi.fn().mockResolvedValue({ data: [{ tick: 'BTC', quantity: '0.015' }] }),
+            getExecutionsForContract: vi.fn().mockResolvedValue({ data: [
+                { action: 'EXECUTE', action_index: '13', block_index: '101', method_name: 'transfer', status: 'valid', caller: ADDRESS.address },
+            ], total: 1 }),
+        });
+        const { container } = renderRoute(
+            <ContractDetail
+                walletId="wallet-1"
+                chainId={CHAIN}
+                contractActionIndex="12"
+                onBack={() => {}}
+                onExecute={() => {}}
+                onDeposit={() => {}}
+                onWithdraw={() => {}}
+                onStakeToContract={() => {}}
+            />,
+            host,
+        );
+
+        await screen.findByRole('list', { name: 'Contract functions' });
+        await expectNoSeriousAxeViolations(container);
+        fireEvent.click(screen.getByRole('button', { name: 'Search actions' }));
+        await screen.findByRole('searchbox');
+        await expectNoSeriousAxeViolations(container);
+        fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
+        await screen.findByText(/transfer #13/);
+        await expectNoSeriousAxeViolations(container);
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        await screen.findByRole('list', { name: 'Contract details' }).catch(() => {});
+        await expectNoSeriousAxeViolations(container);
+        fireEvent.click(screen.getByRole('tab', { name: 'Actions' }));
+        fireEvent.click(screen.getByRole('button', { name: /^View code/ }));
+        await screen.findByRole('heading', { level: 1, name: 'Contract Code' });
+        await expectNoSeriousAxeViolations(container);
+        fireEvent.click(screen.getByRole('button', { name: 'Back to contract' }));
+        fireEvent.click(await screen.findByRole('button', { name: /^View state/ }));
+        await screen.findByRole('heading', { level: 1, name: 'Contract State' });
         await expectNoSeriousAxeViolations(container);
     });
 

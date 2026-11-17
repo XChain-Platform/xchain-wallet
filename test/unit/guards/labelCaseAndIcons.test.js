@@ -8,7 +8,9 @@
 //   1. Every page title (PageHeader `title`) and every button label (Button and
 //      FormAction children, busy labels included) is Title Case: each word
 //      starts with a capital except the short articles, conjunctions and
-//      prepositions titleCase.js keeps lower case after the first word.
+//      prepositions (from, with, as, to, of, on, in, for, ...) titleCase.js
+//      keeps lower case between the first and the last word (operator ruling
+//      7, WALLET-UI-RULINGS G50).
 //   2. Every Button renders an icon: an explicit `icon` prop, or a plain
 //      string label the shared iconForLabel resolver maps to one.
 //
@@ -32,7 +34,7 @@ import { describe, expect, it } from 'vitest';
 
 import { en } from '../../../packages/core/src/i18n/locales/en/index.js';
 import { iconForLabel } from '../../../packages/core/src/ui/icons/index.jsx';
-import { TITLE_SMALL_WORDS } from '../../../packages/core/src/shared/utils/titleCase.js';
+import { TITLE_SMALL_WORDS, titleCase } from '../../../packages/core/src/shared/utils/titleCase.js';
 
 const traverse = _traverse.default || _traverse;
 
@@ -54,61 +56,60 @@ const OWN_CASE_WORDS = new Set(['iOS', 'macOS', 'eToken']);
 
 // Labels that are sentences on purpose, so Title Case would misread them.
 // Each names why it is not a title or a button verb.
-const SENTENCE_LABELS = new Map([
-    ["Joining someone else's multisig? Share this wallet as a cosigner",
-        'a two-sentence link that explains the other path, not an action name'],
-    ['This device watches. Pair a signer',
-        'a role card: the first sentence states the role, the second the action'],
-    ['This device signs. Pair a watcher',
-        'a role card: the first sentence states the role, the second the action'],
-]);
+const SENTENCE_LABELS = new Map([]);
 
 // Files another change is rewriting, skipped until it lands. The test fails
 // once a listed file is clean, so the entry must then be removed.
 const PENDING_FILES = new Map([
-    'AirdropForm', 'ComposeMessage', 'ContactsList', 'ControllerBindForm', 'CoSignerAccountDetail',
-    'CoSignerPolicyEditor', 'CoSignerProvision', 'GovernancePolls',
-    'History', 'IssueTokenForm', 'ParallelComposer', 'PublishFileForm',
-].map((name) => [`packages/core/src/shared/routes/${name}.jsx`, 'another change is rewriting this form'])
-    .concat([['packages/core/src/shared/components/OperatorPublisherMode.jsx', 'another change is rewriting this panel']]));
+    'AirdropForm', 'ComposeMessage', 'ContactsList', 'GovernancePolls',
+    'History', 'ParallelComposer', 'PublishFileForm',
+].map((name) => [`packages/core/src/shared/routes/${name}.jsx`, 'another change is rewriting this form']));
 
 // Labels the scan cannot resolve to text, keyed `file :: role :: source`.
 // Each value says why the label is safe or where its text is checked.
 const UNRESOLVED = new Map([
+    ['packages/core/src/shared/components/settings/SettingsInlineRow.jsx :: button :: {control.label}',
+        "an inline Settings row's action label from its row entry in Settings.jsx ('Reset'), each a Title Case literal"],
+    ['packages/core/src/shared/routes/Onboarding.jsx :: title :: {title}',
+        'firstRunFrame passes the license, wallet setup or product name title, each from onboarding keys'],
+    ['packages/extension/src/approval/kinds/SignApproval.jsx :: title :: {title}',
+        'the KIND_TITLE table (Sign Message, Sign Transaction, Sign Action, Co-sign Transaction, Sign In) or the Approve Request fallback, each Title Case'],
     ['packages/core/src/shared/routes/BetFeedDetail.jsx :: button :: {feed.source}',
         'the oracle source address, shown as a link; data, not copy'],
     ['packages/core/src/shared/routes/DeployContractForm.jsx :: button :: {t}',
         'a contract template name from the template catalogue; data, not copy'],
     ['packages/core/src/shared/routes/GatedPublishForm.jsx :: title :: {pageTitle}',
         "the shared form's title or gatedPublish.title, both Title Case"],
-    ['packages/core/src/shared/routes/HistoryDetailCard.jsx :: button :: {link.label}',
-        'a block explorer name (Mempool.space, Blockchair); a brand, not copy'],
+    ["packages/core/src/shared/routes/MessagingInbox.jsx :: button :: {copiedKey === item.key ? 'Copied' : item.label}",
+        "CopyMenu rows built beside it (Copy Address, Copy Message, Edit Contact, View in Explorer, ...), all Title Case, or 'Copied'"],
     ['packages/core/src/shared/routes/ImportWallet.jsx :: button :: {word}',
         'a recovery word suggestion; data, not copy'],
-    ['packages/core/src/shared/routes/ListForkForm.jsx :: button :: {t.label}',
+    ['packages/core/src/shared/routes/ListCreateForm.jsx :: button :: {target.label}',
         'a list row naming a list consumer; list rows keep sentence case'],
-    ['packages/core/src/shared/routes/MarketActivity.jsx :: button :: {opt.label}',
-        'tab labels from the literal table beside it (Offers, Swaps, Trades)'],
-    ['packages/core/src/shared/routes/MarketTrade.jsx :: button :: {opt.label}',
-        'tab labels from the literal table beside it (Swap, Market)'],
-    ['packages/core/src/shared/routes/MarketView.jsx :: button :: {opt.label}',
-        'tab labels from the literal table beside it (Book, Trades, My Orders)'],
+    ["packages/core/src/shared/routes/ListCreateForm.jsx :: title :: {stage === 'review-1' ? 'Review List Edit' : stage === 'wait-index' ? 'Waiting f",
+        "the Edit and Fork stage titles, each a Title Case literal, then LIST_ACTIONS title ('Edit List')"],
+    ['packages/core/src/shared/routes/ListCreateForm.jsx :: title :: {cfg.title}',
+        "LIST_ACTIONS title beside it: 'Share List' or 'Transfer List', both Title Case"],
+    ["packages/core/src/shared/routes/ListCreateForm.jsx :: button :: {lane.isWatcherMode ? 'Create Unsigned Transaction' : cfg.actionLabel}",
+        "LIST_ACTIONS actionLabel beside it: 'Share List' or 'Transfer List', both Title Case"],
     ['packages/core/src/shared/routes/MultisigSigningSession.jsx :: title :: {title}',
         'screenFor(title) takes multisig.start.pickActionTitle or pickMultisigTitle, both Title Case'],
-    ["packages/core/src/shared/routes/PairPartnerWallet.jsx :: title :: {lane.title || 'Pair an Offline Signer'}",
-        'lane.title is flows.pairPartner.pairSigner or pairWatcher, both Title Case'],
     ["packages/core/src/shared/routes/PairPartnerWallet.jsx :: button :: {lane.cta || 'Pair'}",
         'lane.cta is flows.pairPartner.pairSigner or pairWatcher, both Title Case'],
+    ['packages/core/src/shared/routes/StakingForm.jsx :: title :: {pageTitle}',
+        "ACTIONS labels (Stake, Unstake, Claim, Delegate, Revoke) or STAKING_ACTIONS reviewTitle run through titleCase, all Title Case"],
+    ['packages/core/src/shared/routes/StakingForm.jsx :: button :: {isWatcherMode ? cfg.unsignedLabel : cfg.reviewSubmit}',
+        'STAKING_ACTIONS unsignedLabel and reviewSubmit beside it, all Title Case verbs'],
     ['packages/core/src/shared/routes/VaultUnavailable.jsx :: button :: {wipeCopy.button}',
         'WIPE_COPY button strings beside it and vaultUnavailable.incomplete.reset, all Title Case'],
     ['packages/core/src/ui/FormPage.jsx :: button :: shellNotice.retryLabel',
         'ReachabilityBanner sets it to common.tryAgain or common.checking'],
     ['packages/core/src/shared/components/formStandard/FormStatusSlot.jsx :: button :: shellNotice.retryLabel',
         'ReachabilityBanner sets it to common.tryAgain or common.checking'],
+    // One NoticeAction draws the lone notice's action and each group line's
+    // (Notice Standard, 2026-11-15).
     ['packages/core/src/ui/StatusMessage.jsx :: button :: {recovery.label}',
-        'every caller-side recovery={{ label }} is checked as a recovery.label site'],
-    ['packages/core/src/ui/StatusMessage.jsx :: button :: {entry.recovery.label}',
-        'every caller-side recovery: { label } is checked as a recovery.label site'],
+        'every caller-side recovery={{ label }} and recovery: { label } is checked as a recovery.label site'],
     ['packages/web/src/style-guide/sections/ButtonsSection.jsx :: button :: {LABELS[v]}',
         'the style guide LABELS table beside it, all Title Case'],
     ["packages/core/src/shared/routes/ReceivePicker.jsx :: title :: {rest.title ?? t('shell.markets.selectAsset')}",
@@ -117,8 +118,8 @@ const UNRESOLVED = new Map([
 
 // Buttons that render without an icon on purpose, keyed `file :: label`.
 const ICONLESS = new Map([
-    ['packages/core/src/shared/components/PlaceOrderPanel.jsx :: Max | {}%',
-        'amount chips (Max, 25%, 50%) are one-tap values, not actions'],
+    ['packages/core/src/shared/components/PlaceOrderPanel.jsx :: {}%',
+        'amount chips (25%, 50%, 75%, 100%) are one-tap values, not actions; Max is the in-field icon'],
     ['packages/core/src/shared/routes/BetFeedDetail.jsx :: Max | {}%',
         'amount chips (Max, 25%, 50%) are one-tap values, not actions'],
     ['packages/core/src/shared/routes/ImportWallet.jsx :: word',
@@ -173,17 +174,22 @@ function icuVariants(message, args = {}) {
 
 /**
  * Words in `text` that break Title Case. `continued` marks a piece that does
- * not start the label (the text after an interpolated value).
+ * not start the label (the text after an interpolated value); `ends` is false
+ * for a piece that an interpolated value follows, so its last word is not
+ * the label's last word.
  */
-export function titleCaseProblems(text, continued = false) {
+export function titleCaseProblems(text, continued = false, ends = true) {
     const problems = [];
     let first = !continued;
-    for (const token of text.split(/\s+/)) {
-        if (!token) continue;
+    const tokens = text.split(/\s+/).filter(Boolean);
+    tokens.forEach((token, position) => {
         if (token.includes(PLACEHOLDER)) {
             first = false;
-            continue;
+            return;
         }
+        // The label's last word, or the last word before a colon or a full
+        // stop, is an edge word like the first one.
+        const tail = (ends && position === tokens.length - 1) || /[:.?!]$/.test(token);
         const parts = token.split('-');
         parts.forEach((part, index) => {
             const word = part.replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9']+$/, '');
@@ -192,13 +198,13 @@ export function titleCaseProblems(text, continued = false) {
             // reads as part of one word, so it may take a capital.
             const small = TITLE_SMALL_WORDS.has(word.toLowerCase());
             if (small && parts.length > 1) return;
-            const lead = first && index === 0;
-            if (/^[a-z]/.test(word) && (lead || !small)) problems.push(word);
-            else if (small && !lead && index === 0 && word !== word.toLowerCase()) problems.push(word);
+            const edge = (first && index === 0) || tail;
+            if (/^[a-z]/.test(word) && (edge || !small)) problems.push(word);
+            else if (small && !edge && index === 0 && word !== word.toLowerCase()) problems.push(word);
         });
         // A new sentence or clause after a colon starts a fresh title.
         first = /[:.?!]$/.test(token);
-    }
+    });
     return problems;
 }
 
@@ -536,8 +542,9 @@ function caseViolations() {
             if (SENTENCE_LABELS.has(text)) continue;
             const pieces = entry.text.split(PLACEHOLDER);
             // Text after an interpolated value (a ticker, a count) continues
-            // the label, so a short word there stays lower case.
-            const problems = pieces.flatMap((piece, index) => titleCaseProblems(piece, index > 0));
+            // the label, so a short word there stays lower case; a piece an
+            // interpolated value follows does not hold the label's last word.
+            const problems = pieces.flatMap((piece, index) => titleCaseProblems(piece, index > 0, index === pieces.length - 1));
             if (problems.length) {
                 out.push(`${site.file}:${site.line} ${site.role}${site.via ? ` (${site.via})` : ''}${entry.key ? ` [${entry.key}]` : ''} "${text}" -> ${problems.join(', ')}`);
             }
@@ -607,8 +614,42 @@ describe('page titles and button labels are Title Case', () => {
         expect(titleCaseProblems('Creating Unsigned Transaction…')).toEqual([]);
         expect(titleCaseProblems('Allow-list')).toEqual(['list']);
         expect(titleCaseProblems('of 3 shown', true)).toEqual(['shown']);
+        // Ruling 7: small words stay lower case between the first and last word.
+        expect(titleCaseProblems('Import from FreeWallet')).toEqual([]);
+        expect(titleCaseProblems('Import From FreeWallet')).toEqual(['From']);
+        expect(titleCaseProblems('Sign with Ledger')).toEqual([]);
+        expect(titleCaseProblems('Sign With Ledger')).toEqual(['With']);
+        expect(titleCaseProblems('Save as Draft')).toEqual([]);
+        expect(titleCaseProblems('Save As Draft')).toEqual(['As']);
+        expect(titleCaseProblems('Restore from Recovery Phrase or Backup')).toEqual([]);
+        expect(titleCaseProblems('Send but Wait')).toEqual([]);
+        expect(titleCaseProblems('Send But Wait')).toEqual(['But']);
+        expect(titleCaseProblems('Turn On')).toEqual([]);
+        expect(titleCaseProblems('Turn on')).toEqual(['on']);
+        expect(titleCaseProblems('Send to', false, false)).toEqual([]);
+        expect(titleCaseProblems('Sign In: Ledger')).toEqual([]);
+        expect(titleCaseProblems('Cross-Chain Swap')).toEqual([]);
         expect(icuVariants('{count, plural, one {Hide # Hidden Address} other {Hide # Hidden Addresses}}'))
             .toEqual(['Hide 1 Hidden Address', 'Hide 1 Hidden Addresses']);
+    });
+
+    it('titleCase.js writes the small-word rule the guard reads', () => {
+        expect(titleCase('import from FreeWallet')).toBe('Import from FreeWallet');
+        expect(titleCase('Import From FreeWallet')).toBe('Import from FreeWallet');
+        expect(titleCase('sign with my key')).toBe('Sign with My Key');
+        expect(titleCase('save as draft')).toBe('Save as Draft');
+        expect(titleCase('send but wait')).toBe('Send but Wait');
+        expect(titleCase('turn on')).toBe('Turn On');
+        expect(titleCase('lock to address')).toBe('Lock to Address');
+        expect(titleCase('to the moon')).toBe('To the Moon');
+        expect(titleCase('sign in: ledger')).toBe('Sign In: Ledger');
+        expect(titleCase('cross-chain swap')).toBe('Cross-Chain Swap');
+        expect(titleCase('trade on-chain')).toBe('Trade On-Chain');
+        expect(titleCase('send OR burn')).toBe('Send OR Burn');
+        expect(titleCase('plan A for BTC')).toBe('Plan A for BTC');
+        for (const text of ['import from FreeWallet', 'sign with my key', 'turn on', 'restore from recovery phrase or backup']) {
+            expect(titleCaseProblems(titleCase(text))).toEqual([]);
+        }
     });
 
     it('reads literals inside ternary, && and template children of Button and FormAction', () => {
@@ -649,7 +690,7 @@ describe('page titles and button labels are Title Case', () => {
         for (const site of SITES) {
             if (!inPending(site.file)) continue;
             const bad = site.label.some((entry) => entry.text !== undefined
-                && entry.text.split(PLACEHOLDER).some((piece, index) => titleCaseProblems(piece, index > 0).length > 0));
+                && entry.text.split(PLACEHOLDER).some((piece, index, pieces) => titleCaseProblems(piece, index > 0, index === pieces.length - 1).length > 0));
             if (bad) dirty.add(site.file);
         }
         expect([...PENDING_FILES.keys()].filter((file) => !dirty.has(file))).toEqual([]);

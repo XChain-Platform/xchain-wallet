@@ -1,47 +1,98 @@
+/* The one look for every view toggle in the wallet: SegmentedControl
+   (role="radiogroup") and Tabs (role="tablist") both draw it, so Home's
+   Coins | Tokens | NFTs | DeFi, Swap | Market, Buy | Sell, Quick | Full and
+   every detail page's tabs read the same.
+
+   The group spans its row and takes the card corner radius. Items share the
+   width evenly with no gap and no inset; the active item fills its segment
+   edge to edge with straight inner sides, and the group's rounded clip gives
+   the fill its rounding only at the outer ends. Inactive neighbours are
+   split by a 1px divider; the active item and the one after it drop theirs,
+   so no line ever sits against the fill. The active fill is the selected
+   blue, or green for Buy and red for Sell (data-tone). */
 .segmented {
+    /* One touch height in every shell and width, so a toggle lines up with
+       the 44px filter and header buttons beside it. */
+    --xc-control-h-md: 44px;
+    /* G112 insets resolve on :root; any icon slot here re-derives them. */
+    --xc-field-icon-inset-md: calc((var(--xc-control-h-md) - var(--xc-control-icon-md)) / 2);
+    --xc-field-glyph-inset-md: calc((var(--xc-control-h-md) - var(--xc-icon-md)) / 2);
+    --xc-field-action-inset-md: calc((var(--xc-control-h-md) - var(--xc-tap-min)) / 2);
     box-sizing: border-box;
-    display: inline-flex;
+    display: flex;
     align-items: stretch;
+    width: 100%;
     min-width: 0;
     height: var(--xc-control-h-md);
-    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    gap: 0;
+    /* Clips the active fill to the rounded corners. A row whose labels
+       cannot fit even at the narrow padding scrolls sideways rather than
+       clipping or wrapping a label. */
+    overflow-x: auto;
+    overflow-y: hidden;
     border: 1px solid var(--xc-border-strong);
-    border-radius: var(--xc-control-radius);
+    border-radius: var(--xc-card-radius);
     background: var(--xc-surface);
+    scrollbar-width: none;
+}
+
+.segmented::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
 }
 
 .segment {
     /* The pointer target never drops below the WCAG 2.5.8 floor; a later
        min-height or height here may raise it. */
     min-block-size: var(--xc-tap-min);
+    --xc-icon-size: var(--xc-icon-sm);
     appearance: none;
     box-sizing: border-box;
     display: inline-flex;
+    /* Even shares while the labels fit; an item never shrinks below its own
+       icon and label, so a label never wraps or clips. */
     flex: 1 1 0;
     align-items: center;
     justify-content: center;
-    min-width: 0;
+    gap: var(--xc-space-2);
+    min-width: max-content;
     height: 100%;
-    padding: 0 var(--xc-control-pad-x);
+    margin: 0;
+    padding: 0 var(--xc-space-3);
     /* The group draws the outer edge; a segment draws only its divider. */
     border: 0;
+    border-radius: 0;
     background: transparent;
     color: var(--xc-text-muted);
     font: inherit;
-    font-size: var(--xc-control-font);
+    font-size: var(--xc-text-sm);
     font-weight: 600;
-    line-height: 1;
+    line-height: 1.2;
     white-space: nowrap;
+    text-align: center;
     cursor: pointer;
     transition: background var(--xc-transition), color var(--xc-transition);
+}
+
+.segment svg {
+    flex: 0 0 auto;
 }
 
 .segment + .segment {
     border-inline-start: 1px solid var(--xc-control-border);
 }
 
-.segment:hover:not(:disabled):not([aria-checked='true']) {
-    background: var(--xc-bg-muted);
+/* A hovered or pressed item only darkens its label; it never fills. */
+@media (hover: hover) and (pointer: fine) {
+    .segment:hover:not(:disabled):not(:is([aria-checked='true'], [aria-selected='true'])) {
+        color: var(--xc-text);
+    }
+}
+
+.segment:active:not(:disabled):not(:is([aria-checked='true'], [aria-selected='true'])) {
     color: var(--xc-text);
 }
 
@@ -52,28 +103,44 @@
     outline-offset: -2px;
 }
 
-.segment[aria-checked='true'] {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
+.segment:is([aria-checked='true'], [aria-selected='true']) {
+    background: var(--xc-control-selected);
+    color: var(--xc-control-selected-text);
 }
 
-.segment[data-tone='success'][aria-checked='true'] {
+/* No divider touches the fill: the active item and the item after it keep
+   a transparent edge, which the active item paints with its own fill. */
+.segment:is([aria-checked='true'], [aria-selected='true']),
+.segment:is([aria-checked='true'], [aria-selected='true']) + .segment {
+    border-inline-start-color: transparent;
+}
+
+.segment[data-tone='success']:is([aria-checked='true'], [aria-selected='true']) {
     background: var(--xc-success-fill);
     color: var(--xc-on-success);
 }
 
-.segment[data-tone='danger'][aria-checked='true'] {
+.segment[data-tone='danger']:is([aria-checked='true'], [aria-selected='true']) {
     background: var(--xc-danger);
     color: var(--xc-on-danger);
 }
 
-.segment:disabled {
-    cursor: not-allowed;
-    opacity: var(--xc-disabled-opacity);
+/* A disabled segment keeps its colours: a button never looks disabled (G130). */
+
+/* Narrow rows give up side padding before any label could wrap. */
+@media (max-width: 400px) {
+    .segment {
+        gap: var(--xc-space-1);
+        padding: 0 var(--xc-space-2);
+    }
 }
 
 @media (forced-colors: active) {
-    .segment[aria-checked='true'] {
+    .segment + .segment {
+        border-inline-start-color: CanvasText;
+    }
+
+    .segment:is([aria-checked='true'], [aria-selected='true']) {
         border-color: Highlight;
         background: Highlight;
         color: HighlightText;

@@ -106,7 +106,7 @@ async function fillBasicOrder({ full = false } = {}) {
 
 async function renderForm(props = {}) {
     render(<CreateOrderForm walletId="wallet-1" onBack={vi.fn()} {...props} />);
-    await screen.findByDisplayValue('mSourceAddress');
+    await screen.findAllByDisplayValue('mSourceAddress');
 }
 
 beforeEach(() => {
@@ -161,6 +161,8 @@ describe('CreateOrderForm coverage', () => {
         showFullOrderView();
         await renderForm();
 
+        // Ownership is its own optional section in both input styles (operator 2026-11-13).
+        openOrderSection('Ownership');
         expect(screen.getByRole('switch', {
             name: 'Trade ownership of the give token (not a balance)',
         })).toBeInTheDocument();
@@ -170,7 +172,7 @@ describe('CreateOrderForm coverage', () => {
         // Ownership is a token-side choice, so a coin side carries no switch.
         expect(screen.queryByRole('switch', { name: /^Trade ownership of the give/ })).toBeNull();
         openOrderSection('Order Terms');
-        expect(screen.getByRole('switch', { name: 'Enable auto-pay' })).toBeChecked();
+        expect(screen.getByRole('switch', { name: 'Auto pay' })).toBeChecked();
         // The keep-open fact is a confirm-screen notice, never a form gate.
         expect(screen.queryByRole('checkbox', { name: /I understand/ })).toBeNull();
     });
@@ -182,7 +184,8 @@ describe('CreateOrderForm coverage', () => {
         const sectionOf = (el) => el.closest('[data-form-section]')?.getAttribute('data-form-section');
         expect(sectionOf(screen.getByLabelText('Receive at'))).toBe('order');
         openOrderSection('Order Terms');
-        expect(sectionOf(screen.getByRole('group', { name: 'Expiration' }))).toBe('options');
+        // Expiration is the icon dropdown (G44), not a radio group.
+        expect(sectionOf(screen.getByRole('combobox', { name: /^Expiration/ }))).toBe('options');
         expect(screen.queryByRole('heading', { name: 'Expiration' })).toBeNull();
         // The same-network note lives in the From address help tip, not as a line under Network,
         // and the Network field carries its own help tip.
@@ -203,18 +206,24 @@ describe('CreateOrderForm coverage', () => {
         await fillBasicOrder({ full: true });
         fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: 'bad|address' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
-        expect(await screen.findByText('This is not a valid address.')).toBeInTheDocument();
+        // The form error and the Receive at field error both carry it.
+        expect((await screen.findAllByText('This is not a valid address.')).length).toBeGreaterThan(0);
 
         fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: '' } });
         openOrderSection('Order Terms');
+        // Memo is its own section (operator 2026-11-13).
+        openOrderSection('Memo');
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: 'bad;memo' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
         expect(await screen.findByText('Memo cannot contain "|" or ";".')).toBeInTheDocument();
 
         fireEvent.change(screen.getByLabelText('Memo'), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('radio', { name: 'Expire at a specific time' }));
+        fireEvent.click(screen.getByRole('combobox', { name: /^Expiration/ }));
+        fireEvent.click(screen.getByRole('option', { name: 'Expire at a specific time' }));
+        // The specific time starts from the Expires shown; clearing it is the empty expiry.
+        fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
-        expect(await screen.findByText('Pick an expiration date and time, or switch to the default window.'))
+        expect(await screen.findByText('Pick an expiration date and time, or choose a common term.'))
             .toBeInTheDocument();
     });
 
@@ -303,15 +312,16 @@ describe('CreateOrderForm coverage', () => {
         fireEvent.change(screen.getByLabelText('Receive at'), { target: { value: '1devmockabc' } });
 
         fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
-        expect(await screen.findByText('Review Order')).toBeInTheDocument();
-        expect(screen.getByText(/prepares the transaction for your offline signer/)).toBeInTheDocument();
-        expect(screen.getByTestId('action-intent')).toHaveTextContent('2.5 XCP');
-        expect(screen.getByTestId('action-intent')).toHaveTextContent('0.1 BTC');
-        expect(screen.getByTestId('action-intent')).toHaveTextContent('1devmockabc');
-        expect(screen.getByText('Settlement address')).toBeInTheDocument();
-        expect(screen.getByText('Default window')).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Confirm' })).toBeInTheDocument();
+        expect(screen.getByText(/Another phone signs for this wallet: this prepares the transaction for it/)).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('2.5 XCP');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('0.1 BTC');
+        expect(screen.getByTestId('confirm-facts')).toHaveTextContent('1devmockabc');
+        expect(screen.getByTestId('confirm-facts')).toHaveTextContent('Expiration3 months');
+        expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent('0.000015 BTC');
+        expect(document.body).not.toHaveTextContent('Estimate unavailable');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+        fireEvent.click(screen.getByTestId('confirm-reject'));
         expect(screen.getAllByRole('button', { name: /^Asset:/ })[0]).toHaveAccessibleName(/^Asset: XCP/);
         expect(screen.getAllByLabelText('Amount')[0]).toHaveValue('2.5');
         // Back from review the coin amount shows padded to 8 decimals (U61).
@@ -319,7 +329,9 @@ describe('CreateOrderForm coverage', () => {
         expect(screen.getByLabelText('Receive at')).toHaveValue('1devmockabc');
         fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Create Unsigned Transaction' }));
+        const approve = screen.getByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
         await waitFor(() => expect(state.submit).toHaveBeenCalledWith(expect.objectContaining({
             params: expect.objectContaining({ GIVE_TICK: 'XCP', GET_AMOUNT: '0.1' }),
             password: '',
@@ -335,13 +347,15 @@ describe('CreateOrderForm coverage', () => {
         await fillBasicOrder();
 
         fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Create Unsigned Transaction' }));
+        const approve = await screen.findByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Could not create the order. Check the details and try again.',
         );
         expect(document.body).not.toHaveTextContent('/internal/order');
-        expect(screen.getByTestId('action-intent')).toHaveTextContent('2.5 XCP');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('2.5 XCP');
     });
 
     it.each([

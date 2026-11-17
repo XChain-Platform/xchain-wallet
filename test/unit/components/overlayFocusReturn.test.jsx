@@ -48,14 +48,17 @@ describe('overlay focus return', () => {
         );
         const trigger = screen.getByRole('button', { name: 'Network: Bitcoin' });
 
+        // ChainPicker opens the full-screen network list; its Back and
+        // Escape close only the list, never the parent layer.
         fireEvent.click(trigger);
-        fireEvent.mouseDown(document.body);
-        expect(screen.queryByRole('listbox')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /Back/ }));
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(trigger).toHaveFocus();
 
         fireEvent.click(trigger);
+        expect(screen.getByRole('dialog', { name: 'Network' })).toBeInTheDocument();
         fireEvent.keyDown(window, { key: 'Escape' });
-        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(trigger).toHaveFocus();
         expect(onParentBack).not.toHaveBeenCalled();
     });
@@ -103,14 +106,17 @@ describe('overlay focus return', () => {
         );
         const trigger = screen.getByRole('button', { name: /All networks/ });
 
+        // The filter opens the full-screen network list; its Back and Escape
+        // close only the list, never the parent layer.
         fireEvent.click(trigger);
-        fireEvent.mouseDown(document.body);
-        expect(screen.queryByRole('listbox')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^Back/ }));
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(trigger).toHaveFocus();
 
         fireEvent.click(trigger);
+        expect(screen.getByRole('dialog', { name: 'Network' })).toBeInTheDocument();
         fireEvent.keyDown(window, { key: 'Escape' });
-        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
         expect(trigger).toHaveFocus();
         expect(onParentBack).not.toHaveBeenCalled();
     });

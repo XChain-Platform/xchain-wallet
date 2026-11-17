@@ -110,7 +110,7 @@ describe('IssueTokenForm max mint per transaction', () => {
         await fill({ supply: '5000', maxMint: '0' });
         await submit();
 
-        await screen.findByText(
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(
             'Max mint per transaction must be a positive number, or left blank for no limit.',
         );
         expect(composeForConfirm).not.toHaveBeenCalled();

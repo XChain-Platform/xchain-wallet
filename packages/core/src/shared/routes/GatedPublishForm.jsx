@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 // Network, From and the fee selector render inside the standard FromSection
 // and FeeSection.
-import { Button, ChainBadge, EmptyState, FieldNote, FormPage, Input, ListPage, ListRow, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, ChainBadge, FieldNote, FormPage, IconSelect, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -26,6 +26,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { formatBytes } from '../utils/formatBytes.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
@@ -33,10 +34,12 @@ import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
-import { TickerIcon } from '../components/TickerIcon.jsx';
 import { TokenField } from '../components/TokenField.jsx';
+import { TokenPicker } from './TokenPicker.jsx';
 import { FileField } from '../components/FileField.jsx';
-import { CheckIcon, DocumentIcon, GearIcon, MessageIcon, PlusIcon, UploadIcon } from '../../ui/icons/index.jsx';
+import { UploadMethodField, useUploadMethod } from '../components/UploadMethodField.jsx';
+import { gatedFileCompiledBytes } from '../../flows/uploadMethod.js';
+import { CheckIcon, DocumentIcon, GearIcon, KeyIcon, PlusIcon, UploadIcon } from '../../ui/icons/index.jsx';
 // Gated content is laid out on the Wallet Form Standard frame.
 import {
     FeeSection,
@@ -45,10 +48,11 @@ import {
     FormSection,
     FromSection,
     joinSummary,
+    MemoSection,
     useFormSections,
 } from '../components/formStandard/index.js';
+import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
 import styles from './IssueTokenForm.module.css';
-import publishStyles from './GatedPublishForm.module.css';
 import { t } from '../../i18n/index.js';
 import { titleCase } from '../utils/titleCase.js';
 import '../../i18n/locales/en/gatedPublish.js';
@@ -56,6 +60,11 @@ import '../../i18n/locales/en/palette.js';
 import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+
+/** The gated BATCH payload the upload method fee estimate prices. */
+function gatedUploadBytes(file, meta) {
+    return gatedFileCompiledBytes({ ...meta, name: file.name, type: file.type }, file.bytes.length);
+}
 
 /**
  * PC-25 gated-content publisher (Token_Gated_Content.md). Owner-only
@@ -94,6 +103,8 @@ const chainRegistry = registryLib.defaultRegistry();
  * @property {(next: string) => void} setMemo
  * @property {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} feePick
  * @property {(next: any) => void} setFeePick
+ * @property {string | null} [uploadPick]            the explicit Upload method pick (null: the default)
+ * @property {(next: string | null) => void} [setUploadPick]
  * @property {import('react').ReactNode} modeControl  the Publish as choice, first in the File section
  * @property {string[]} chainIds                     networks offered before a token is picked
  * @property {string} pageTitle
@@ -356,19 +367,47 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
         : null;
 
-    // Encoding-aware ceiling for the CURRENT metadata: exact once the
-    // signing address is known, the conservative floor until then.
+    // The metadata the BATCH string carries besides the file's own name and type.
+    const batchMeta = {
+        title,
+        memo: memo.trim(),
+        gateTicker: gateTick || '',
+        coin: coinTicker,
+        address: fromAddress?.address || '',
+        gateMinAmount: thresholdActive && gateMinAmount.trim() ? gateMinAmount.trim() : null,
+    };
+    const capWith = (name, type, ceilingOpts) => flowsLib.maxGatedPlaintextBytes(
+        { ...batchMeta, name, type },
+        ceilingOpts,
+    );
+
+    // The Upload method (flows/uploadMethod.js): Taproot envelope by default
+    // where a software signer on the confirm lane and a Taproot chain can carry
+    // it, Standard otherwise. Inside Publish file the pick is shared with the
+    // Public mode, like the rest of the draft.
+    const upload = useUploadMethod({
+        descriptor,
+        fromAddress,
+        isWatcherMode,
+        feeEstimate,
+        coinTicker,
+        file: fileMeta,
+        // Typed fields settle before they re-estimate; the token, coin and
+        // address are picked, so they re-estimate at once.
+        metadata: { title: batchMeta.title, memo: batchMeta.memo, gateMinAmount: batchMeta.gateMinAmount },
+        context: { gateTicker: batchMeta.gateTicker, coin: batchMeta.coin, address: batchMeta.address },
+        compiledBytesFor: gatedUploadBytes,
+        standardCap: fileMeta && fromAddress ? capWith(fileMeta.name, fileMeta.type, {}) : null,
+        ...(shared && typeof shared.setUploadPick === 'function'
+            ? { picked: shared.uploadPick ?? null, onPick: shared.setUploadPick }
+            : {}),
+    });
+
+    // Encoding-aware ceiling for the CURRENT metadata and the picked upload
+    // method: exact once the signing address is known, the conservative
+    // floor until then.
     const plainCapFor = (name, type) => (fromAddress
-        ? flowsLib.maxGatedPlaintextBytes({
-            name,
-            type,
-            title,
-            memo: memo.trim(),
-            gateTicker: gateTick,
-            coin: coinTicker,
-            address: fromAddress.address,
-            gateMinAmount: thresholdActive && gateMinAmount.trim() ? gateMinAmount.trim() : null,
-        })
+        ? capWith(name, type, upload.ceilingOpts)
         : MAX_BYTES_FLOOR);
 
     // The File arrives from the file field's dialog or a drop on it.
@@ -388,7 +427,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         }
         if (file.size > cap) {
             setFileMeta(null);
-            setFormError(`That file is ${file.size.toLocaleString()} bytes; this publish lane supports up to ${cap.toLocaleString()}.`);
+            setFormError(`That file is ${formatBytes(file.size)}; this publish lane supports up to ${formatBytes(cap, { limit: true })}.`);
             return;
         }
         const reader = new FileReader();
@@ -401,7 +440,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             const bytes = new Uint8Array(reader.result);
             if (bytes.length === 0) { setFormError('That file is empty.'); return; }
             if (bytes.length > cap) {
-                setFormError(`That file is ${bytes.length.toLocaleString()} bytes; this publish lane supports up to ${cap.toLocaleString()}.`);
+                setFormError(`That file is ${formatBytes(bytes.length)}; this publish lane supports up to ${formatBytes(cap, { limit: true })}.`);
                 return;
             }
             setFileMeta({
@@ -430,8 +469,8 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     useEffect(() => {
         if (!carriedTooLarge) return;
         setFormError(t('gatedPublish.carriedTooLarge', {
-            bytes: fileMeta.bytes.length.toLocaleString(),
-            max: carriedCap.toLocaleString(),
+            bytes: formatBytes(fileMeta.bytes.length),
+            max: formatBytes(carriedCap, { limit: true }),
         }));
         setFormErrorSection('file');
         // Keyed on the file and the ceiling, so a new pick or a shorter
@@ -489,8 +528,8 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         if (fileMeta.bytes.length > reviewCap) {
             failIn(
                 'file',
-                `With this title/memo the on-chain ceiling is ${reviewCap.toLocaleString()} bytes `
-                + `and the file is ${fileMeta.bytes.length.toLocaleString()}. Shorten the title or memo.`,
+                `With this title/memo the on-chain ceiling is ${formatBytes(reviewCap, { limit: true })} `
+                + `and the file is ${formatBytes(fileMeta.bytes.length)}. Shorten the title or memo.`,
             );
             return;
         }
@@ -571,6 +610,9 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 ? { gateMinAmount: gateMinAmount.trim() }
                 : {}),
             ...(feePerKb != null ? { feePerKb } : {}),
+            // The picked upload method: the envelope's AUTO request, or no
+            // encoding at all for Standard (the flow sizes its ceiling to match).
+            ...(upload.encoderOpts.encoding ? { encoding: upload.encoderOpts.encoding } : {}),
         };
     }
 
@@ -591,7 +633,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 r = await actionConfirm.run({
                     chainId: selectedChainId,
                     from: base.from,
-                    compose: () => messaging.composeGatedPublishForConfirm(base),
+                    compose: () => messaging.composeGatedPublishForConfirm(withAdvancedOptions(base)),
                     onApprove: (prebuiltPsbt, composed) => submitConfirmed({
                         ...base,
                         prebuiltPsbt,
@@ -634,54 +676,25 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         );
     }
 
+    // The standard picker, limited to the tokens this wallet owns on any of
+    // its networks; the picked token decides the network.
     if (gateTokenPickerOpen) {
-        const rows = ownedTokens || [];
         return (
-            <Screen
-                variant={variant}
-                header={(
-                    <PageHeader
-                        onBack={() => setGateTokenPickerOpen(false)}
-                        title={t('gatedPublish.tokens.choose')}
-                    />
-                )}
-            >
-                <ListPage>
-                    {rows.length === 0 ? (
-                        <EmptyState
-                            title={t('gatedPublish.tokens.noneTitle')}
-                            titleAs="h3"
-                            body={t('gatedPublish.tokens.noneBody')}
-                        />
-                    ) : (
-                        <div className={publishStyles.tokenPickerCard} role="list">
-                            {rows.map((token) => {
-                                const tokenDescriptor = chainRegistry.get(token.chainId);
-                                return (
-                                    <ListRow
-                                        role="listitem"
-                                        key={`${token.chainId}:${token.tick}`}
-                                        leading={(
-                                            <TickerIcon
-                                                tick={token.tick}
-                                                chainId={token.chainId}
-                                                size={28}
-                                            />
-                                        )}
-                                        title={token.tick}
-                                        subtitle={tokenDescriptor?.displayName || token.chainId}
-                                        chevron
-                                        onClick={() => {
-                                            selectGateToken(token);
-                                            setGateTokenPickerOpen(false);
-                                        }}
-                                    />
-                                );
-                            })}
-                        </div>
-                    )}
-                </ListPage>
-            </Screen>
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                kindFilter="tokens"
+                kindLocked
+                rows={ownedTokens === null ? null : ownedTokens.map((token) => ({ chainId: token.chainId, tick: token.tick }))}
+                emptyTitle={t('gatedPublish.tokens.noneTitle')}
+                emptyBody={t('gatedPublish.tokens.noneBody')}
+                onSelect={(sel) => {
+                    const token = ownedTokens?.find((row) => row.chainId === sel.chainId && row.tick === sel.tick);
+                    if (token) selectGateToken(token);
+                    setGateTokenPickerOpen(false);
+                }}
+                onBack={() => setGateTokenPickerOpen(false)}
+            />
         );
     }
 
@@ -706,19 +719,23 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
-                // The permanence fact, as a plain line on the confirm screen.
+                // The upload method and the permanence fact, as one plain line
+                // on the confirm screen under the cost card's fee.
                 summary={{
                     verb: 'Publish',
                     chainId: selectedChainId,
                     direction: 'none',
                     address: fromAddress?.address,
-                    notice: t('gatedPublish.confirmNotice', { tick: gateTick }),
+                    notice: `${upload.confirmLine} ${t('gatedPublish.confirmNotice', { tick: gateTick })}`,
                 }}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
-                feeText={feeEstimate?.coinAmount
+                // The picked method's estimate for this file, shown only until
+                // the composed transactions state their exact fee.
+                feeEstimate={upload.fee?.coinAmount ? upload.fee : feeEstimate}
+                feeText={(upload.fee?.coinAmount || feeEstimate?.coinAmount)
                     ? t('send.networkFeeValue', {
-                        amount: feeEstimate.coinAmount,
+                        amount: upload.fee?.coinAmount || feeEstimate.coinAmount,
                         ticker: coinTicker,
                     }).trim()
                     : undefined}
@@ -887,6 +904,10 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 <FieldNote variant="info">{t('gatedPublish.tokens.noneToGate')}</FieldNote>
             ) : null}
 
+            {/* How the ciphertext rides the chain; the pick sets the ceiling
+                the file field names. */}
+            <UploadMethodField upload={upload} disabled={ownerMissing} />
+
             {/* Title comes before the file, as on Attach artwork. */}
             <Input
                 type="text"
@@ -904,7 +925,10 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             {/* The standard file field; the label names the gated ceiling. */}
             <FileField
                 label={t('gatedPublish.fileLimit', {
-                    bytes: plainCapFor(fileMeta?.name || `file${'.bin'}`, fileMeta?.type || 'application/octet-stream').toLocaleString(),
+                    bytes: formatBytes(
+                        plainCapFor(fileMeta?.name || `file${'.bin'}`, fileMeta?.type || 'application/octet-stream'),
+                        { limit: true },
+                    ),
                 })}
                 help={(
                     <>
@@ -939,7 +963,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                     <p className={styles.hint}>
                         {t('gatedPublish.fileMetadata', {
                             name: fileMeta.name,
-                            bytes: fileMeta.bytes.length.toLocaleString(),
+                            bytes: formatBytes(fileMeta.bytes.length),
                             type: fileMeta.type,
                         })}
                     </p>
@@ -952,28 +976,18 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             ) : null}
             </FormSection>
 
-            {/* Memo is its own optional closed section. */}
-            <FormSection
-                id="memo"
-                title={t('send.memo')}
-                icon={MessageIcon}
-                optional
+            {/* Memo is its own optional closed section holding only the memo:
+                the section title names the field and carries its count. */}
+            <MemoSection
                 {...formSections.bind('memo')}
                 revealKey={sectionErrorKey('memo')}
-                summary={memo.trim() || t('send.advanced.none')}
-            >
-            <Input
                 type="text"
-                label={t('send.memo')}
-                help={t('gatedPublish.memoHelp')}
                 enterKeyHint={thresholdActive ? 'next' : 'go'}
-                aria-label={t('send.memo')}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 maxLength={MAX_MEMO_LENGTH}
                 disabled={ownerMissing}
             />
-            </FormSection>
 
             {/* The unlock threshold and the pack choice share one
                 optional closed Access section; it shows only when either applies. */}
@@ -1008,23 +1022,21 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             {/* With no existing pack the only choice is a new one, so
                 the Pack question shows only when there is a pack to add to. */}
             {(packs || []).length > 0 ? (
-            <RadioGroup
-                legend={t('gatedPublish.pack')}
+            // The themed dropdown with an icon per option, never radios (G119).
+            // Labels stay plain text, since the trigger's name reads the label.
+            <IconSelect
+                label={t('gatedPublish.pack')}
                 help={t('gatedPublish.pack.empty')}
-                name="pack"
                 value={packChoice}
                 onChange={(nextValue) => setPackChoice(nextValue)}
                 disabled={ownerMissing}
                 options={[
-                    { value: 'new', label: t('gatedPublish.pack.new') },
+                    { value: 'new', label: t('gatedPublish.pack.new'), icon: <PlusIcon /> },
                     ...(packs || []).map((p) => ({
                         value: p.keyHash,
-                        label: (
-                            <>
-                                {t('gatedPublish.pack.add')} <code>{String(p.keyHash).slice(0, 12)}…</code>
-                                {' '}{t('gatedPublish.pack.unlockTogether')}
-                            </>
-                        ),
+                        label: `${t('gatedPublish.pack.add')} ${String(p.keyHash).slice(0, 12)}…`,
+                        sub: t('gatedPublish.pack.unlockTogether'),
+                        icon: <KeyIcon />,
                     })),
                 ]}
             />

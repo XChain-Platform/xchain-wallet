@@ -6,6 +6,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { selectOption, selectOptionValues } from '../../helpers/selectOption.js';
 
 vi.mock('../../../packages/core/src/shared/hooks/useFeeFiat.js', () => ({
     useFeeFiat: () => ({
@@ -102,7 +103,10 @@ function makeMessaging(overrides = {}, { quoteTransport = true } = {}) {
         listPendingDeploys: vi.fn().mockResolvedValue([]),
         planDeploy: vi.fn().mockResolvedValue({ single: true, totalChunks: 0, codeHash: 'ab' }),
         getContractExportedMeta: vi.fn().mockResolvedValue(null),
-        getContractByActionIndex: vi.fn().mockResolvedValue({}),
+        // EXECUTE picks its method from the declared list.
+        getContractByActionIndex: vi.fn().mockResolvedValue({
+            data: { abi: { version: 1, methods: { fundLoan: { params: [] } } } },
+        }),
         buildBatchCommand: vi.fn().mockResolvedValue({ command: 'BROADCAST|0|hello' }),
         ...(quoteTransport ? { quoteProtocolFee } : {}),
         ...overrides,
@@ -128,10 +132,18 @@ function mount(Form, props, messaging) {
     );
 }
 
-async function expectLiveQuote(quoteProtocolFee, expected) {
+async function expectLiveQuote(quoteProtocolFee, expected, { reviewScreen = false } = {}) {
     await waitFor(() => expect(quoteProtocolFee).toHaveBeenCalledWith(expected), { timeout: 2500 });
-    expect(await screen.findByText('0.064 XCHAIN')).toBeInTheDocument();
-    expect(screen.getByText(/\+ 0\.064 XCHAIN/)).toBeInTheDocument();
+    // The Speed and Fees section's Protocol fee line shows the live quote; the
+    // Total lives on the confirm screen, never in the form.
+    await waitFor(() => expect(document.querySelector('[data-fees-row="protocol"]'))
+        .toHaveTextContent('0.064 XCHAIN'), { timeout: 3000 });
+    if (reviewScreen) {
+        // A review screen (BATCH) still sums the quote into its Total.
+        expect(document.querySelector('[data-fees-row="total"]')).toHaveTextContent('0.064 XCHAIN');
+    } else {
+        expect(document.querySelector('[data-fees-row="total"]')).toBeNull();
+    }
 }
 
 async function chooseToken(label, pickerTitle) {
@@ -203,9 +215,9 @@ describe('Fees card live quotes for contracts and swaps', () => {
         const { messaging, quoteProtocolFee } = makeMessaging();
         mount(AdvancedActionsForm, {}, messaging);
 
-        fireEvent.change(await screen.findByRole('combobox', { name: 'Action' }), {
-            target: { value: 'BATCH' },
-        });
+        const action = await screen.findByRole('combobox', { name: 'Action' });
+        await waitFor(() => expect(selectOptionValues(action)).toContain('BATCH'));
+        selectOption(action, 'BATCH');
         fireEvent.change(await screen.findByLabelText('COMMAND'), {
             target: { value: 'BROADCAST|0|hello' },
         });
@@ -226,9 +238,9 @@ describe('Fees card live quotes for contracts and swaps', () => {
         });
         mount(BatchComposerForm, {}, messaging);
 
-        fireEvent.change(await screen.findByRole('combobox', { name: 'Action' }), {
-            target: { value: 'BROADCAST' },
-        });
+        const action = await screen.findByRole('combobox', { name: 'Action' });
+        await waitFor(() => expect(selectOptionValues(action)).toContain('BROADCAST'));
+        selectOption(action, 'BROADCAST');
         fireEvent.click(screen.getByRole('button', { name: 'Review 1 Transaction' }));
 
         await expectLiveQuote(quoteProtocolFee, {
@@ -238,7 +250,7 @@ describe('Fees card live quotes for contracts and swaps', () => {
                 action: 'BATCH',
                 params: { VERSION: '0', COMMAND: 'BROADCAST|0|hello' },
             },
-        });
+        }, { reviewScreen: true });
     });
 
     it('quotes the single-transaction DEPLOY payload', async () => {
@@ -280,7 +292,7 @@ describe('Fees card live quotes for contracts and swaps', () => {
             expect(toggle).toBeTruthy();
             return toggle;
         }));
-        await chooseToken(/^Deposit:/, 'Token to Deposit');
+        await chooseToken(/^Token:/, 'Token to Deposit');
         fireEvent.change(screen.getByLabelText(/^Deposit amount/), { target: { value: '10' } });
 
         await expectLiveQuote(quoteProtocolFee, {
@@ -329,6 +341,10 @@ describe('Fees card live quotes for contracts and swaps', () => {
         fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '3' } });
 
-        await waitFor(() => expect(screen.getAllByText('Priced at review')).toHaveLength(2));
+        // The default 3-month swap sits inside the free period, so the
+        // Protocol fee line says Free with no quote (operator 2026-11-13).
+        await waitFor(() => expect(document.querySelector('[data-fees-row="protocol"]'))
+            .toHaveTextContent('Free'));
+        expect(screen.queryByText('Priced at review')).toBeNull();
     });
 });

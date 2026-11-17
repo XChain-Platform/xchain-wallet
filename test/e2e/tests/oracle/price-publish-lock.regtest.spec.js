@@ -63,6 +63,7 @@
 //       --config=playwright.regtest.config.js tests/oracle/price-publish-lock.regtest.spec.js
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { pickFiatCurrency, pickToken } from '../../fixtures/pickerFields.js';
 import {
     EXPLORER_URL,
     expectConfirmModal,
@@ -204,7 +205,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Publish oracle price');
             let main = page.getByRole('main');
-            await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
             // D-145: this form mounted no chain picker at all until this
             // session, so on a multi-chain wallet it published on whichever
             // chain the wallet listed first. Without the field this call fails
@@ -221,7 +222,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Publish oracle price');
             main = page.getByRole('main');
-            await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             // An address that has published nothing must say so, and say what
@@ -230,8 +231,9 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'a never-published address does not say its feed list is empty')
                 .toContainText('has not published any prices yet');
 
-            await main.getByLabel(/^Token ticker/).fill(TICK);
-            await main.getByLabel('Currency').selectOption(FIAT);
+            // G122: the Token and Fiat currency fields open picker pages.
+            await pickToken(main, TICK);
+            await pickFiatCurrency(main, FIAT);
             await main.getByLabel(/^Price of one/).fill(VALUE);
             await main.getByLabel(/^Usage fee/).fill(USAGE_FEE);
             await expect(main, 'the form does not warn that a first price is inert for 24 hours')
@@ -327,7 +329,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             // reload the feed list.
             const main = page.getByRole('main');
             await main.getByRole('button', { name: 'Publish Another' }).click();
-            await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
 
             // The list is loaded by an effect keyed on (chain, address), and the
             // only extra refresh is fired the instant the broadcast returns -
@@ -359,7 +361,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
                 await mineIfPending();
                 await page.getByRole('button', { name: /^Back/ }).first().click();
                 await openPaletteCommand(page, 'Publish oracle price');
-                await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
+                await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(main);
             }
 
@@ -387,7 +389,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByLabel('Escrow amount').fill(String(ESCROW));
 
             await main.getByRole('button', { name: /Advanced options/ }).click();
-            await main.getByLabel('Priced in fiat', { exact: true }).selectOption(FIAT);
+            await pickFiatCurrency(main, FIAT);
             // Mode B: no fiat amount at all. The oracle prices the token; the
             // dispenser only names whose quote to use.
             await main.getByLabel(/^Oracle address/).fill(oracle);

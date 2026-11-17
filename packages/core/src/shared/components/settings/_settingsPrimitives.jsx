@@ -23,6 +23,7 @@ import { InfoTip } from '../../../ui/InfoTip.jsx';
 import { useBackHandler } from '../../../ui/backStack.js';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/ui.js';
+import { formatBytes } from '../../utils/formatBytes.js';
 
 // A row's layout. The rows below draw their surface with the shared card
 // class (ui/Card.module.css), so a row inside a wide form card flattens.
@@ -71,7 +72,8 @@ export const ROW_COPY = {
 const ROW_LABEL_LINE = {
     display: 'flex',
     alignItems: 'center',
-    gap: 'var(--xc-space-1)',
+    // The tip's own start margin (--xc-label-help-gap) spaces it from the label.
+    gap: 0,
 };
 const preventSwitchLabelActivation = (event) => {
     if (event.target.closest?.('button')) event.preventDefault();
@@ -351,7 +353,18 @@ function findRememberedControl(remembered) {
         .find((candidate) => controlLabel(candidate) === remembered.label)) || null;
 }
 
-export const SETTINGS_LOAD_FALLBACK = 'Settings could not be loaded. Close and reopen the wallet, then try again.';
+/**
+ * A size as people read it: KB below one MB, MB above, never raw bytes.
+ *
+ * @param {number} bytes
+ * @returns {string}
+ */
+export function formatByteSize(bytes) {
+    // The one shared byte formatter: a size rounds up and never reads as 0 KB.
+    return formatBytes(bytes);
+}
+
+export const SETTINGS_LOAD_FALLBACK ='Settings could not be loaded. Close and reopen the wallet, then try again.';
 
 /**
  * The settings-load failure as copy a user can read. Copy written for a user

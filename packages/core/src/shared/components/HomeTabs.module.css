@@ -27,31 +27,29 @@
     width: auto;
 }
 
+/* The tabs share the row evenly, as every view toggle does. */
 .tabsRow [role='tab'] {
-    flex: 0 0 auto;
+    flex: 1 1 0;
     white-space: nowrap;
 }
 
 @media not all and (min-width: 600px) {
-    /* The tab row has the whole width here. The five labels take about
-       16.4em at the tab font size on the widest text rendering a platform
-       gives Inter (hinted, whole-pixel advances run several percent wider
-       than the unhinted measure), so each tab's side padding gives way, down
-       to 1px, when the 12px default would push Activity behind a sideways
-       scroll: a 320px phone, or 130 and 150 percent text. When even 1px of
-       padding cannot hold the labels, the tab font size gives way to what
-       the row can carry, so the tabs never scroll sideways. Rows with room
-       keep the 12px padding and the token font size unchanged. A WebView
-       without container queries keeps the 12px padding and the scrolling
-       row. */
+    /* The tab row has the whole width here. The four labels (Coins, Tokens,
+       NFTs, DeFi) take about 11em at the tab font size on the widest text
+       rendering a platform gives Inter, and the rest of the row is fixed:
+       four 16px icons, their gaps, the tabs' side padding and the dividers,
+       about 136px. When a 320px phone or 130 and 150 percent text leaves the
+       labels less than that, the tab font size gives way to what the row can
+       carry, so no label runs into its neighbour and the tabs never scroll
+       sideways. Rows with room keep the token font size unchanged. A WebView
+       without container queries keeps the token size and the scrolling row. */
     @supports (container-type: inline-size) and (width: 1cqw) {
         .tabsRow {
             container-type: inline-size;
         }
 
         .tabsRow [role='tab'] {
-            font-size: min(var(--xc-text-sm), calc((100cqw - var(--home-tabs-aside) - 10px) / 16.4));
-            padding-inline: clamp(calc(var(--xc-space-1) / 4), calc((100cqw - var(--home-tabs-aside) - 16.4em) / 10), var(--xc-space-3));
+            font-size: min(var(--xc-text-sm), calc((100cqw - var(--home-tabs-aside) - 136px) / 11));
         }
     }
 
@@ -161,14 +159,15 @@
     padding-bottom: calc(var(--xc-space-6) + var(--xc-space-1) + var(--xc-space-2));
 }
 
-/* The Home tabs take the shared framed style (Tabs.module.css). */
+/* The Home tabs take the shared view-toggle look (SegmentedControl.module.css). */
 
-/* Inside the framed row the tabs share the width evenly (the shared
-   min-width: max-content would size them by label), with side padding tight
-   enough that all four tabs fit beside the filter button on a 360px popup. */
+/* Inside the row the tabs share the width evenly while they fit; a tab never
+   shrinks below its icon and label (the shared min-width: max-content), so a
+   longer label such as Tokens takes room from a shorter one instead of
+   running into its neighbour. The side padding stays tight enough that all
+   four tabs fit beside the filter button on a 360px popup. */
 .tabsRow.tabsRow [role='tab'] {
     flex: 1 1 0;
-    min-width: 0;
     padding-inline: var(--xc-space-1);
 }
 

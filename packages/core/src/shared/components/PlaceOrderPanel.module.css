@@ -1,0 +1,60 @@
+/* Copyright © 2025–2026 Dankest, LLC
+   Based on XChain Platform by Dankest, LLC – https://dankest.llc
+
+   SPDX-License-Identifier: AGPL-3.0-or-later
+
+   This file is part of XChain Platform. Licensed under the GNU Affero
+   General Public License v3.0 or later; see LICENSE.md. A commercial
+   license (without AGPL source-disclosure terms) is available -
+   contact legal@dankest.llc. */
+
+/* The Trade page's order summary: one line just above Place Order, tinted in
+   the side colour, led by a filled BUY or SELL pill. It sits in the action
+   row, so it takes the whole row and the button wraps under it; the doubled
+   class outranks FormPage's `.actions > *` basis whatever the sheet order. */
+.summary.summary {
+    flex: 1 1 100%;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+    margin: 0;
+    padding: var(--xc-space-2);
+    border-radius: var(--xc-radius-sm);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.summary[data-side='buy'] {
+    background: color-mix(in srgb, var(--xc-success) 12%, var(--xc-surface));
+    color: var(--xc-success);
+}
+
+.summary[data-side='sell'] {
+    background: color-mix(in srgb, var(--xc-danger) 12%, var(--xc-surface));
+    color: var(--xc-danger-fg);
+}
+
+.sidePill {
+    flex: 0 0 auto;
+    padding: calc(var(--xc-space-1) / 4) var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    font-size: var(--xc-text-xs);
+    font-weight: 800;
+    letter-spacing: 0.06em;
+}
+
+.summary[data-side='buy'] .sidePill {
+    background: var(--xc-success-fill);
+    color: var(--xc-on-success);
+}
+
+.summary[data-side='sell'] .sidePill {
+    background: var(--xc-danger);
+    color: var(--xc-on-danger);
+}
+
+.summaryText {
+    min-width: 0;
+}

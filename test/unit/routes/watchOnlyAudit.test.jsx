@@ -92,9 +92,9 @@ afterEach(() => { cleanup(); resetWalletModes(); });
 describe('watch-only mode audit', () => {
     it('shows the wallet badge only in watcher mode', () => {
         const { rerender } = render(<WatchOnlyBadge visible={false} />);
-        expect(screen.queryByRole('status', { name: 'Watch-only wallet' })).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Another phone signs for this wallet' })).toBeNull();
         rerender(<WatchOnlyBadge visible />);
-        expect(screen.getByRole('status', { name: 'Watch-only wallet' }).textContent).toBe('Watch-only');
+        expect(screen.getByRole('status', { name: 'Another phone signs for this wallet' }).textContent).toBe('Signs on another phone');
     });
 
     it('explains that message signing is unavailable without showing a password prompt', async () => {
@@ -131,7 +131,11 @@ describe('watch-only mode audit', () => {
         });
         fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
         fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
-        fireEvent.click(await screen.findByRole('button', { name: /Create Transaction for Signing/ }));
+        expect(await screen.findByTestId('confirm-sentence')).toHaveTextContent('Issue a new token, WATCH');
+        expect(screen.getByTestId('confirm-source').querySelector('span[title]'))
+            .toHaveAttribute('title', ADDRESS.address);
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
         await waitFor(() => expect(buildActionPsbtRequest).toHaveBeenCalledOnce());
         expect(buildActionPsbtRequest.mock.calls[0][0]).toMatchObject({
@@ -153,7 +157,7 @@ describe('watch-only mode audit', () => {
         const messaging = watchOnlyAccountMessaging();
         mount(createUi(), messaging);
 
-        expect(await screen.findByText('This watch-only account cannot sign.')).toBeTruthy();
+        expect(await screen.findByText('This address has no key in this wallet, so it cannot sign.')).toBeTruthy();
         expect(screen.queryByLabelText('Password')).toBeNull();
         expect(messaging.buildSendPsbtRequest).not.toHaveBeenCalled();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();

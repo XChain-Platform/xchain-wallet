@@ -94,11 +94,12 @@ describe('SwapForm network switch', () => {
         fireEvent.change(screen.getByLabelText('Give amount (ALPHA)'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Get amount (BETA)'), { target: { value: '3' } });
         await openSection('Swap Terms');
-        fireEvent.click(screen.getByRole('button', { name: 'Set Allow-List' }));
+        await openSection('Lists');
+        fireEvent.click(screen.getByRole('button', { name: 'Allow list: None set' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick Choose Allow-List' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Set Block-List' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Block list: None set' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick Choose Block-List' }));
-        expect(screen.getByRole('button', { name: 'Allow-List #12' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Allow list: List #12' })).toBeInTheDocument();
         fireEvent.change(screen.getByLabelText(/Receive at/, { selector: 'input' }), { target: { value: 'bc1qdevmockabcdef' } });
 
         // Picking a give token that lives on Dogecoin moves the swap there and
@@ -113,8 +114,8 @@ describe('SwapForm network switch', () => {
         expect(screen.getByRole('button', { name: /Get token:/ })).toHaveTextContent('Select a token');
         expect(screen.getByLabelText('Give amount (GAMMA)')).toHaveValue('');
         expect(screen.getByLabelText('Get amount')).toHaveValue('');
-        expect(screen.getByRole('button', { name: 'Set Allow-List' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Set Block-List' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Allow list: None set' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Block list: None set' })).toBeInTheDocument();
         expect(screen.getByLabelText(/Receive at/, { selector: 'input' })).toHaveValue('');
     });
 

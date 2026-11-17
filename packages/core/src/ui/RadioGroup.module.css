@@ -19,7 +19,7 @@
 }
 
 .legendHelp {
-    margin-inline-start: var(--xc-space-2);
+    margin-inline-start: var(--xc-label-help-gap);
 }
 
 .options {

@@ -132,6 +132,9 @@ describe('Mode B oracle settlement staleness', () => {
                     walletId: 'w',
                     onBack() {},
                     initialChainId: 'bitcoin-mainnet',
+                    // The Token field takes no typed text (G122), so the
+                    // priced ticker arrives at mount.
+                    initialTick: 'PEPECASH',
                 }),
             ));
             await drainMicrotasks();
@@ -141,7 +144,6 @@ describe('Mode B oracle settlement staleness', () => {
         expect(utils.queryByText(/0\.05 USD live/)).toBeNull();
 
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText(/^Token ticker/), { target: { value: 'PEPECASH' } });
             fireEvent.change(utils.getByLabelText(/^Price of one/), { target: { value: '0.055' } });
             await drainMicrotasks();
         });
@@ -152,7 +154,12 @@ describe('Mode B oracle settlement staleness', () => {
 
         expect(utils.getByText('Stale price')).toBeTruthy();
         expect(utils.getByText(/24h 0m old/)).toBeTruthy();
-        expect(utils.getByText(/previous effective price is stale/i)).toBeTruthy();
+        expect(utils.getByTestId('confirm-facts')).toHaveTextContent('Stale price');
+        expect(utils.getByTestId('confirm-facts')).toHaveTextContent('0.05 USD (24h 0m old)');
+        // The status notice says the check did not run; the short warning
+        // after the details carries the oracle line (G127 revised 2026-11-16).
+        expect(utils.getByTestId('confirm-status')).toHaveAttribute('data-state', 'unknownAction');
+        expect(utils.getByTestId('confirm-warning')).toHaveTextContent(/Nothing sells on this pair until it matures/i);
         expect(utils.queryByText(/current price keeps selling/i)).toBeNull();
     });
 });

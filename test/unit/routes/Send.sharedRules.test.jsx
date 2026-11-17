@@ -24,12 +24,24 @@ vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
     ),
 }));
 
+// The test-send threshold is in the display currency and needs the coin's
+// price to convert (operator ruling 2026-11-14); a case that sets one also
+// gets a BTC price of $50,000, every other case keeps the no-price form.
+const price = vi.hoisted(() => ({ rate: null }));
+vi.mock('../../../packages/core/src/shared/hooks/useFiatRate.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    useTickFiatRate: () => price.rate,
+}));
+
 const CHAIN = 'bitcoin-mainnet';
 const FROM = 'bc1qsendersendersendersendersendersendersa';
 const TO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 const TXID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0';
 
-function mount({ thresholdSats = 0, onViewHistory = undefined } = {}) {
+function mount({ thresholdFiat = '0', onViewHistory = undefined } = {}) {
+    price.rate = thresholdFiat === '0' ? null : {
+        rate: 50000, chainCoin: 'bitcoin', fiatCurrency: 'USD', source: 'oracle', fetchedAt: '2026-11-14T00:00:00.000Z', stale: false,
+    };
     const base = {
         getAddressesByChain: vi.fn().mockResolvedValue({
             [CHAIN]: [{
@@ -47,7 +59,7 @@ function mount({ thresholdSats = 0, onViewHistory = undefined } = {}) {
         getAddressUtxos: vi.fn().mockResolvedValue({ utxos: [] }),
         getSettings: vi.fn().mockResolvedValue({
             walletMode: 'full',
-            grace: { testSendThresholdSats: thresholdSats },
+            grace: { testSendThresholdFiat: thresholdFiat },
         }),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getSignerStatus: vi.fn().mockResolvedValue({ unlocked: true }),
@@ -128,41 +140,51 @@ describe('Send shared field and action rules', () => {
             'How much of the selected asset to send. Max fills the most this From address can send after the network fee.',
         );
 
-        fireEvent.click(screen.getByRole('button', { name: /^Asset/ }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
+        // Multi's add-recipient form: its own help on To and Amount, the
+        // shared AmountField with Max, and icons on every button.
+        fireEvent.click(screen.getByRole('tab', { name: 'Multi' }));
         const addRecipient = await screen.findByRole('button', { name: /Add Recipient/ });
         expectIcon(addRecipient);
         fireEvent.click(addRecipient);
+        fireEvent.click(screen.getByRole('button', { name: /^Token/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
 
-        const toTips = screen.getAllByRole('button', { name: 'About To' });
-        expectTip(toTips[toTips.length - 1], 'The address or contact that receives this payment.');
         expectTip(
-            screen.getByRole('button', { name: 'About Recipient 2 amount (PEPE)' }),
-            'How much of the selected asset to send.',
+            screen.getByRole('button', { name: 'About To' }),
+            'The address that receives this amount.',
+        );
+        expectTip(
+            screen.getByRole('button', { name: 'About Amount (PEPE)' }),
+            'How much of the token this recipient receives.',
         );
 
-        const maxButtons = screen.getAllByRole('button', { name: 'Use max available amount' });
-        const rowMax = maxButtons[maxButtons.length - 1];
+        const rowMax = screen.getByRole('button', { name: 'Use max available amount' });
         expect(rowMax).not.toBeDisabled();
         fireEvent.click(rowMax);
-        expect(screen.getByLabelText(/^Recipient 2 amount/)).toHaveValue('1,000');
+        expect(screen.getByLabelText(/^Amount \(PEPE\)/, { selector: 'input' })).toHaveValue('1,000');
+        expectIcon(screen.getByRole('button', { name: /^Add$/ }));
+        expectIcon(screen.getByRole('button', { name: /^Cancel$/ }));
 
-        expectIcon(screen.getByRole('button', { name: 'Remove recipient 2' }));
+        fireEvent.change(screen.getByLabelText(/^To$/), { target: { value: TO } });
+        fireEvent.click(screen.getByRole('button', { name: /^Add$/ }));
+        const recipientRow = screen.getByRole('button', { name: /^Edit recipient 1:/ });
+        expectIcon(recipientRow);
+        fireEvent.click(recipientRow);
+        expectIcon(screen.getByRole('button', { name: 'Remove Recipient 1' }));
         // Memo is its own optional section, closed on load.
+        // It holds only the memo, so the field has no label row or tip (ruling).
         fireEvent.click(screen.getByRole('button', { name: /^Memo/, expanded: false }));
-        expectTip(
-            screen.getByRole('button', { name: 'About Memo' }),
-            'The memo is stored with this token send on chain and is readable by anyone, up to 250 characters.',
-        );
+        expect(screen.queryByRole('button', { name: 'About Memo' })).toBeNull();
+        expect(screen.getByRole('textbox', { name: 'Memo' })).toBeInTheDocument();
     });
 
     it('gives both test-send choices icons', async () => {
-        mount({ thresholdSats: 1 });
+        mount({ thresholdFiat: '1' });
         fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.02' } });
         await screen.findByText(/First payment to this address/);
 
-        expectIcon(screen.getByRole('button', { name: /Continue With the Full Amount/ }));
+        expectIcon(screen.getByRole('button', { name: /Continue with the Full Amount/ }));
         expectIcon(screen.getByRole('button', { name: /Send a Small Test First/ }));
     });
 

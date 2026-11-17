@@ -171,8 +171,10 @@ for (const viewport of VIEWPORTS) {
         // Each category shows only its checkbox, count and description, with
         // no item list (ruling U83), so the held tokens are not named here.
         await expect(main.getByText(/PEPECASH/)).toHaveCount(0);
-        await expect(main.getByRole('alert').filter({ hasText: 'Sweep moves everything selected at once.' }))
-            .toContainText('The counts are a snapshot; the sweep moves whatever the address holds when it confirms.');
+        // The "counts are a snapshot" fact now lives in the field's ? tip
+        // (U57), not in a loose notice on the form.
+        await expect(main.getByText('The counts are a snapshot; the sweep moves whatever the address holds when it confirms.'))
+            .toHaveCount(0);
         await expectScreenLayout(page, 'Sweep address', `${viewport.name} populated sweep preview`);
 
         const scrolled = await main.evaluate((element) => {

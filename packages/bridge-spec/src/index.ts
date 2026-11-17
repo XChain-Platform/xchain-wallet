@@ -178,6 +178,12 @@ export interface BridgeErrorResult {
 export interface ConnectOpts {
     // App-declared identity, shown in the approval modal (§43.4).
     appName?: string;
+    // Optional icon: an http(s) URL with a .png/.jpg/.jpeg/.webp/.gif/.ico
+    // path, or a base64 data URL of one of those types. SVG is refused. The
+    // wallet never fetches it: the extension draws it inside this page and
+    // keeps a PNG of at most 128x128 px and 32 KB, so a cross-origin URL must
+    // allow CORS. Without it (or if it fails) the wallet uses the page's own
+    // <link rel="icon"> / apple-touch-icon, else the site's initials.
     appIcon?: string;
     // Chain ids from getSupportedChains()[].id that the dApp wants to use.
     // Wallet presents these pre-selected; the user may narrow the set.

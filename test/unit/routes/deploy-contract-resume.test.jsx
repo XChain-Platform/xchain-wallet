@@ -223,11 +223,13 @@ describe('DeployContractForm review of a chunked publish', () => {
         return utils;
     }
 
-    it('says the network fee is paid for every transaction of the run', async () => {
+    it('totals the known network fees and names every transaction of the run', async () => {
         const utils = await review({ single: false, totalChunks: 2, codeHash: 'ab' });
 
-        // The review title is Title Case.
-        expect(utils.getByRole('heading', { name: 'Review Publish' })).toBeInTheDocument();
-        expect(utils.getByText('Network fee').nextSibling).toHaveTextContent(/ for each of 3 transactions$/);
+        expect(utils.getByRole('heading', { name: 'Confirm' })).toBeInTheDocument();
+        expect(utils.getByText('Transactions').nextSibling)
+            .toHaveTextContent('2 chunks and 1 assembling transaction');
+        expect(utils.getByTestId('confirm-fee-network')).toHaveTextContent('0.000045 BTC');
+        expect(utils.queryByTestId('confirm-total-main')).toBeNull();
     });
 });
