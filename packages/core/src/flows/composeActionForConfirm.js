@@ -400,6 +400,7 @@ export async function composeActionForConfirm({
                     ? satsToCoinDecimal(networkFeeSats)
                     : null,
                 protocolFee,
+                source,
                 chainId,
                 chainRegistry,
             });

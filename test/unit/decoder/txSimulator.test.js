@@ -63,6 +63,51 @@ describe('simulateAction', () => {
             expect(feeRow.feeAmount).toBe('0.0001');
         });
 
+        it('charges only the fee when sending coin to the source address', () => {
+            const r = simulateAction({
+                action: 'SEND',
+                params: { TICK: 'BTC', AMOUNT: '1.61', DESTINATION: 'bc1qsource' },
+                balances: balances('BTC', '1.61'),
+                feeEstimate: '0.276',
+                source: 'bc1qsource',
+                chainId: 'bitcoin-mainnet',
+                chainRegistry,
+            });
+            const coinRow = r.deltas.find((d) => d.tick === 'BTC' && d.before !== '');
+            expect(coinRow.before).toBe('1.61');
+            expect(coinRow.after).toBe('1.334');
+            expect(r.notes).toContain('Sent to the same address; only the fee leaves.');
+        });
+
+        it('leaves the token balance unchanged when sending a token to the source address', () => {
+            const r = simulateAction({
+                action: 'SEND',
+                params: { TICK: 'XCP', AMOUNT: '10', DESTINATION: 'bc1qsource' },
+                balances: balances('BTC', '1', [['XCP', '100']]),
+                feeEstimate: '0.0001',
+                source: 'bc1qsource',
+                chainId: 'bitcoin-mainnet',
+                chainRegistry,
+            });
+            expect(r.deltas.find((d) => d.tick === 'XCP')).toBeUndefined();
+            expect(r.deltas.find((d) => d.isFee)?.after).toBe('0.9999');
+            expect(r.notes).toContain('Sent to the same address; only the fee leaves.');
+        });
+
+        it('still debits a send to a different wallet-owned address', () => {
+            const r = simulateAction({
+                action: 'SEND',
+                params: { TICK: 'XCP', AMOUNT: '10', DESTINATION: 'bc1qother' },
+                balances: balances('BTC', '1', [['XCP', '100']]),
+                feeEstimate: '0.0001',
+                source: 'bc1qsource',
+                chainId: 'bitcoin-mainnet',
+                chainRegistry,
+            });
+            expect(r.deltas.find((d) => d.tick === 'XCP')?.after).toBe('90');
+            expect(r.notes).not.toContain('Sent to the same address; only the fee leaves.');
+        });
+
         it('produces no deltas when TICK and AMOUNT are empty', () => {
             const r = simulateAction({
                 action: 'SEND',

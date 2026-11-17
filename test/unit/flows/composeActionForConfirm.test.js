@@ -172,6 +172,22 @@ describe('composeActionForConfirm', () => {
         expect(composed.simulation).toBeTruthy();
     });
 
+    it('passes the source address to the simulator', async () => {
+        const h = makeHarness({ inputs: [{ value: 5000 }, { value: 1000 }] });
+        h.sdk.decoder.parse = vi.fn(() => ({
+            ok: true,
+            action: 'SEND',
+            params: { TICK: 'JDOG', AMOUNT: '1', DESTINATION: 'chg' },
+        }));
+        h.sdk.getBalances = vi.fn(async () => ([{ tick: 'JDOG', quantity: '1000000000', divisibility: 8 }]));
+        h.sdk.getAddress = vi.fn(async () => ({ balance: '100000000' }));
+        h.chainRegistry.descriptorFor = () => ({ coin: 'bitcoin', networkKind: 'regtest' });
+
+        const composed = await composeActionForConfirm(ARGS(h));
+        expect(composed.simulation.deltas.find((d) => d.tick === 'JDOG')).toBeUndefined();
+        expect(composed.simulation.notes).toContain('Sent to the same address; only the fee leaves.');
+    });
+
     // §1.1 / §5.2.2. The decisive case: the caller's params and the composed
     // action string DISAGREE. That is the mirror-drift hazard - a form
     // that hand-builds wire params can produce a self-consistent PSBT for the
