@@ -75,19 +75,19 @@ describe('validateCosignerXpub', () => {
 
     it('rejects paths that conflict with the xpub depth or child index', () => {
         expect(validateCosignerXpub(XPUB, 'mainnet', "m/84'/0'", PUBKEY))
-            .toBe('Derivation path does not match the xpub depth.');
+            .toBe('Account path does not match the account public key depth.');
         expect(validateCosignerXpub(XPUB, 'mainnet', "m/84'/0'/1'/0/7", PUBKEY))
-            .toBe('Derivation path does not match the xpub child index.');
+            .toBe('Account path does not match the account public key child index.');
         expect(validateCosignerXpub(XPUB, 'mainnet', 'not-a-path', PUBKEY))
-            .toBe('Derivation path does not match the xpub depth.');
+            .toBe('Account path does not match the account public key depth.');
     });
 
     it('rejects hardened descendants and keys from another descendant', () => {
         expect(validateCosignerXpub(XPUB, 'mainnet', `${ACCOUNT_PATH}/0'/7`, PUBKEY))
-            .toBe('Derivation path asks this public xpub to derive a hardened child.');
+            .toBe('Account path asks this account public key to derive a hardened child.');
         const otherPubkey = Buffer.from(ROOT.derive(`${ACCOUNT_PATH}/0/8`).publicKey).toString('hex');
         expect(validateCosignerXpub(XPUB, 'mainnet', FULL_PATH, otherPubkey))
-            .toBe('Public key does not match the xpub and derivation path.');
+            .toBe('Public key does not match the account public key and account path.');
     });
 
     it('reports a public derivation index outside the BIP32 range', () => {
@@ -96,7 +96,7 @@ describe('validateCosignerXpub', () => {
             'mainnet',
             `${ACCOUNT_PATH}/2147483648`,
             PUBKEY,
-        )).toBe('Derivation path cannot be derived from this xpub.');
+        )).toBe('Account path cannot be derived from this account public key.');
     });
 });
 

@@ -41,6 +41,8 @@ import { externalIndexOf } from '../addressSelection.js';
 import { pickQuizPositions } from '../utils/pickQuizPositions.js';
 import { nextPaint } from '../utils/nextPaint.js';
 import { NAME_MAX_LENGTH } from '../../util/display_name.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/migration.js';
 import {
     dismissMigrationSweeps,
     pendingMigrationSweeps,
@@ -52,7 +54,6 @@ import {
 
 const chainRegistry = registryLib.defaultRegistry();
 const MIN_PASSWORD_LENGTH = 8;
-const DEFAULT_WALLET_NAME = 'XChain BIP39 Wallet';
 
 /**
  * Migrate-to-BIP39 wizard (§40.13).
@@ -101,7 +102,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     const [stage, setStage] = useState(
         /** @type {'create' | 'backup' | 'verify' | 'submitting' | 'done'} */ (resumed ? 'done' : 'create'),
     );
-    const [name, setName] = useState(DEFAULT_WALLET_NAME);
+    const [name, setName] = useState(() => t('migration.defaultWalletName'));
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
     const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -305,7 +306,12 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             if (typeof messaging.addImportedWallet !== 'function') {
                 throw new Error('Adding a second wallet is not supported in this version of the app.');
             }
-            const result = await messaging.addImportedWallet({ password, mnemonic, name: name.trim() || DEFAULT_WALLET_NAME, origin: 'created' });
+            const result = await messaging.addImportedWallet({
+                password,
+                mnemonic,
+                name: name.trim() || t('migration.defaultWalletName'),
+                origin: 'created',
+            });
             const id = result?.walletId || result?.id || result?.wallet?.id;
             // Warn against a blind retry: the save may have stored the wallet even without returning its id
             if (!id) throw new Error('The new wallet could not be confirmed. Check your wallet list before trying again.');
@@ -394,11 +400,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 // its own danger notice beside it, never inside the card (G120).
                 status={[
                     <WarningCard key="backup-note">
-                        <WarningLine>
-                            These 12 words are your new recovery phrase. Write
-                            them on paper and store them safely. You can use the
-                            phrase to restore your BIP39 wallet on another device.
-                        </WarningLine>
+                        <WarningLine>{t('migration.backupRestore')}</WarningLine>
                     </WarningCard>,
                     // The same red line Create wallet shows.
                     <Notice key="backup-warning" tone="danger" role="note">{RECOVERY_PHRASE_WARNING}</Notice>,
@@ -453,7 +455,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
                 ]}
                 actions={(
                     <Button type="submit" variant="success" icon={<Icon.CheckIcon />}>
-                        Create BIP39 Wallet
+                        {t('migration.createWallet')}
                     </Button>
                 )}
             >
@@ -486,12 +488,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
             <FormPage label="Wallet creation status">
                 <div role="status" aria-live="polite">
                     <WarningCard>
-                        <WarningLine>
-                            XChain Platform is encrypting the new BIP39 wallet
-                            with your password. This can take a minute on some
-                            devices. Keep the app open. Your legacy wallet stays
-                            unchanged.
-                        </WarningLine>
+                        <WarningLine>{t('migration.encryptingWallet')}</WarningLine>
                     </WarningCard>
                 </div>
             </FormPage>,
@@ -612,7 +609,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
     return wrap(
         <FormPage
             key="migrate-create"
-            label="Set up new BIP39 wallet"
+            label={t('migration.setupWallet')}
             onSubmit={handleCreate}
             // Why upgrade is this step's one notice (the old intro page and
             // its Continue button are gone); the error shows in the one status
@@ -642,7 +639,7 @@ export function MigrateToBip39({ legacyWalletId, onBack, onMigrated, onSweepChai
         >
             <Input
                 label="New wallet name"
-                help="Names the new BIP39 wallet in wallet lists on this device."
+                help={t('migration.walletNameHelp')}
                 value={name}
                 maxLength={NAME_MAX_LENGTH}
                 onChange={(e) => setName(e.target.value)}

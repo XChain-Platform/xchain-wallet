@@ -100,6 +100,7 @@ import keyboard from './keyboard.js';
 import locked from './locked.js';
 import manageToken from './manageToken.js';
 import market from './market.js';
+import migration from './migration.js';
 import multisig from './multisig.js';
 import mySwaps from './mySwaps.js';
 import onboarding from './onboarding.js';
@@ -181,6 +182,7 @@ export const en = {
     ...locked,
     ...manageToken,
     ...market,
+    ...migration,
     ...multisig,
     ...mySwaps,
     ...onboarding,

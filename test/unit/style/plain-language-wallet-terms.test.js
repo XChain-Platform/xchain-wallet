@@ -5,21 +5,10 @@ import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { PLAIN_LANGUAGE_TERM_PATTERN } from './plain-language-jargon.js';
 
 const ROOT = process.cwd();
 const EN_DIR = resolve(ROOT, 'packages/core/src/i18n/locales/en');
-
-// Wallet and protocol terms a non-technical person does not know. Whole-word,
-// case-insensitive, matched against the visible string values.
-const TERMS = [
-    'Token Spec', 'UTXO', 'UTXOs', 'sat/vB', 'vbyte', 'vbytes', 'nonce', 'scriptPubKey', 'xpub', 'descriptor',
-    'derivation path', 'BIP39', 'BIP32', 'OP_RETURN', 'payload', 'envelope', 'witness', 'mempool', 'RBF',
-    'CPFP', 'pubkey', 'sighash', 'txid', 'ABI', 'calldata', 'hex',
-];
-const TERM_PATTERN = new RegExp(
-    `(?<![A-Za-z0-9_])(?:${TERMS.map((t) => t.replace(/[/_]/g, '\\$&').replace(/ /g, '\\s+')).join('|')})(?![A-Za-z0-9_])`,
-    'i',
-);
 
 // Keys shown only in Developer mode. The Test Networks pages (custom networks
 // and the regtest faucet) are Developer mode tools split out of
@@ -31,8 +20,8 @@ const ALLOWED = new Set(['walletPicker.js walletPicker.bip39']);
 
 export function jargonLabels(messages, file = 'fixture') {
     return Object.entries(messages)
-        .filter(([key, text]) => typeof text === 'string' && !DEVELOPER_KEY.test(key) && !ALLOWED.has(`${file} ${key}`) && TERM_PATTERN.test(text))
-        .map(([key, text]) => `${file} ${key}: ${text.match(TERM_PATTERN)[0]}`);
+        .filter(([key, text]) => typeof text === 'string' && !DEVELOPER_KEY.test(key) && !ALLOWED.has(`${file} ${key}`) && PLAIN_LANGUAGE_TERM_PATTERN.test(text))
+        .map(([key, text]) => `${file} ${key}: ${text.match(PLAIN_LANGUAGE_TERM_PATTERN)[0]}`);
 }
 
 describe('plain-language labels (jargon scan of visible strings)', () => {

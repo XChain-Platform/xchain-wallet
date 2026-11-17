@@ -186,7 +186,7 @@ describe('MultisigCreate local cosigner', () => {
             "Choose the address whose key this wallet adds as a cosigner.",
             "Enter the cosigner's compressed public key.",
             "Enter the 8-character fingerprint of the cosigner's wallet, used by signers to find their key.",
-            "Enter the derivation path of the cosigner's key.",
+            "Enter the account path for the cosigner's key.",
             'Paste the setup another wallet shared to fill the fields below.',
             'Enter the xpub from the other wallet.',
         ]) {
@@ -463,6 +463,17 @@ describe('MultisigCreate key validation', () => {
         expect(messaging.createMultisigConfig).not.toHaveBeenCalled();
     });
 
+    it('describes an invalid account path without derivation jargon', async () => {
+        await mount(mkMessaging());
+        await fillExternalCosigner();
+        const path = screen.getAllByLabelText(/^Account path/i)[1];
+        fireEvent.change(path, { target: { value: 'not-a-path' } });
+        fireEvent.blur(path);
+
+        expect(await screen.findByText(/enter a valid account path starting with m/i)).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/derivation path/i);
+    });
+
     it('keeps the errors of untouched fields silent while another field is typed', async () => {
         await mount(mkMessaging());
         await act(async () => {
@@ -521,7 +532,7 @@ describe('MultisigCreate key validation', () => {
         await pickLocalAddress();
         await fillExternalCosigner({ ...EXTERNAL, pubkey: UNRELATED_EXTERNAL.pubkey });
 
-        expect(screen.getByText(/Public key does not match the xpub and derivation path/i)).toBeTruthy();
+        expect(screen.getByText(/Public key does not match the account public key and account path/i)).toBeTruthy();
     });
 
     it('locks Taproot signatures to the cosigner count', async () => {

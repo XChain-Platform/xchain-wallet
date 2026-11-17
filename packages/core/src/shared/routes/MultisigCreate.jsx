@@ -22,6 +22,8 @@ import styles from './MultisigCreate.module.css';
 // Review and done facts as label-left value-right rows, never stacked uppercase labels.
 import facts from './FactRows.module.css';
 import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
+import { t as translate } from '../../i18n/index.js';
+import '../../i18n/locales/en/multisig.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -80,7 +82,7 @@ export function parseCosignerSharePayload(value, networkKind) {
         throw new Error('Shared cosigner setup contains an invalid master fingerprint.');
     }
     if (!/^m(?:\/\d+'?)*$/.test(payload.derivationPath || '')) {
-        throw new Error('Shared cosigner setup contains an invalid derivation path.');
+        throw new Error(translate('multisig.create.invalidSharedAccountPath'));
     }
     if (typeof payload.xpub !== 'string' || payload.xpub.length === 0) {
         throw new Error('Shared cosigner setup does not contain an extended public key.');
@@ -355,7 +357,7 @@ export function MultisigCreate({ walletId, onBack, onShare }) {
             }
             if (!r.fingerprint || !/^[0-9a-fA-F]{8}$/.test(r.fingerprint)) add(at('fingerprint'), `${tag}: fingerprint must be 8 characters, using 0 to 9 and a to f.`);
             if (!/^m(?:\/\d+'?)*$/.test(r.derivationPath)) {
-                add(at('derivationPath'), `${tag}: enter a valid derivation path starting with m.`);
+                add(at('derivationPath'), translate('multisig.create.invalidAccountPath', { tag }));
                 continue;
             }
             if (r.origin === 'external-xpub') {
@@ -859,7 +861,7 @@ function CosignerRow({ index, row, addresses, networkKind, onChange, onRemove, c
             <Input
                 id={`${row.id}:derivationPath`}
                 label="Account path"
-                help="Enter the derivation path of the cosigner's key."
+                help={translate('multisig.create.accountPathHelp')}
                 onBlur={() => onTouch('derivationPath')}
                 value={row.derivationPath}
                 onChange={(e) => onChange({ derivationPath: e.target.value.trim() })}
