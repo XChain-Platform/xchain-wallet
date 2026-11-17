@@ -32,7 +32,7 @@ Electron main
 preload.cjs
   contextBridge.exposeInMainWorld(
     'xchainWalletBridge',
-    { sendMessage(message) { … }, wipeStorage(), saveBackupFile(request) },
+    { filePathOf(file), sendMessage(message), wipeStorage(), saveBackupFile(request) },
   )
   … and the other worlds pinned in BRIDGE_WORLDS
     (xchainWalletWindow, xchainWalletUpdater,
@@ -60,7 +60,7 @@ Electron renderer
 - `preload.cjs` - exposes exactly the function-only worlds pinned in
   `BRIDGE_WORLDS`
   (`test/integration/shells/desktop-preload-contract.test.js`) and nothing
-  else: `xchainWalletBridge` (`sendMessage`, `wipeStorage`,
+  else: `xchainWalletBridge` (`filePathOf`, `sendMessage`, `wipeStorage`,
   `saveBackupFile`), `xchainWalletWindow`, `xchainWalletUpdater`,
   `xchainWalletRegistry`, `xchainWalletSignerBridge`, `xchainWalletDeepLink`
   (`onUri`, `takePending`), `xchainWalletTrezorBridge` (`call`, `close`).

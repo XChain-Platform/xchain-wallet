@@ -45,7 +45,7 @@ const RUNTIME_GLOBALS = new Set([
     'Infinity', 'Intl', 'isFinite', 'JSON', 'localStorage', 'location', 'Map',
     'Math', 'module', 'MutationObserver', 'NaN', 'navigator', 'Node', 'Notification',
     'Number', 'Object', 'parseFloat', 'parseInt', 'process', 'Promise', 'Proxy',
-    'queueMicrotask', 'Reflect', 'RegExp', 'Request', 'requestAnimationFrame', 'require',
+    'queueMicrotask', 'RangeError', 'Reflect', 'RegExp', 'Request', 'requestAnimationFrame', 'require',
     'ResizeObserver', 'sessionStorage', 'Set', 'setImmediate', 'setInterval',
     'setTimeout', 'String', 'Symbol', 'TextDecoder', 'TextEncoder', 'TypeError',
     'Uint8Array', 'undefined', 'unescape', 'URL', 'URLSearchParams', 'WeakMap',
