@@ -169,6 +169,23 @@ describe('multipart publish funding and envelope delivery', () => {
     });
 });
 
+// The explorer can know a piece transaction before the indexer numbers its FILE
+// action (the rail showed this at part 70 of 101): the piece is read again.
+describe('multipart publish piece action indexes', () => {
+    it('reads a piece again until the indexer gives its FILE action an index', async () => {
+        const h = harness();
+        const numbered = h.sdk.waitForAction.getMockImplementation();
+        h.sdk.waitForAction.mockImplementationOnce(async () => ({ actions: [{ action: 'FILE', action_index: null }] }));
+        h.sdk.waitForAction.mockImplementation(numbered);
+        const result = await publishMultipartFile(options(h));
+        expect(result.record.stage).toBe('complete');
+        const sent = h.vault.history.findLast((record) => record.wave?.pieces.every(
+            (piece) => piece.actionIndex !== null,
+        ));
+        expect(sent).toBeDefined();
+    });
+});
+
 describe('multipart publish lane-specific builds', () => {
     it('uses two create calls for each non-segwit envelope piece', async () => {
         const h = harness({ buildMode: 'two_step' });

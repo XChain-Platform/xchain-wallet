@@ -235,21 +235,34 @@ function indexedActionIndex(indexed) {
     return result === undefined || result === null ? null : String(result);
 }
 
+// The explorer can know a piece transaction before the indexer numbers its FILE
+// action (the SDK then reports status=valid as an assumption), so a piece read
+// without an action index is read again until it has one or patience runs out.
+const PIECE_INDEX_POLL_MS = 2000;
+const PIECE_INDEX_PATIENCE_MS = 300_000;
+
 async function waitForPiece(ctx, index) {
     const pieces = ctx.record.wave?.pieces ?? ctx.record.pieces;
     const piece = pieces.find((item) => item.index === index);
-    const indexed = await waitForFilePieceIndexed({
-        waitForTxid: ctx.waitForTxid,
-        sdk: ctx.sdk,
-        txid: piece.txid,
-        address: ctx.source.address,
-        pieceLabel: index === -1 ? 'File manifest' : `File part ${index + 1} of ${ctx.plan.totalParts}`,
-        patienceMs: ctx.opts.indexPatienceMs,
-        onChainWait: (state) => progress(ctx.opts, 'piece-wait', { index, ...state }),
-    });
-    const actionIndex = indexedActionIndex(indexed);
-    if (!actionIndex) throw new Error(`File piece ${index} indexed without an action index`);
-    return { index, actionIndex };
+    const sleep = ctx.opts.sleep ?? defaultSleep;
+    const pollMs = Number(ctx.opts.multipartPollMs) > 0 ? Number(ctx.opts.multipartPollMs) : PIECE_INDEX_POLL_MS;
+    const patienceMs = Number(ctx.opts.indexPatienceMs) > 0 ? Number(ctx.opts.indexPatienceMs) : PIECE_INDEX_PATIENCE_MS;
+    const reads = Math.max(1, Math.ceil(patienceMs / pollMs));
+    for (let read = 1; ; read += 1) {
+        const indexed = await waitForFilePieceIndexed({
+            waitForTxid: ctx.waitForTxid,
+            sdk: ctx.sdk,
+            txid: piece.txid,
+            address: ctx.source.address,
+            pieceLabel: index === -1 ? 'File manifest' : `File part ${index + 1} of ${ctx.plan.totalParts}`,
+            patienceMs: ctx.opts.indexPatienceMs,
+            onChainWait: (state) => progress(ctx.opts, 'piece-wait', { index, ...state }),
+        });
+        const actionIndex = indexedActionIndex(indexed);
+        if (actionIndex) return { index, actionIndex };
+        if (read >= reads) throw new Error(`File piece ${index} indexed without an action index`);
+        await sleep(pollMs);
+    }
 }
 
 function normalizeOutput(output, index) {
