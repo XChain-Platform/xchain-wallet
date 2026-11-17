@@ -20,8 +20,9 @@ function chainStateOf(chainStates, txid) {
 }
 
 function fundingPlan(record, chainStates) {
-    if (!record.fundingTxid) return 'send';
-    const state = chainStateOf(chainStates, record.fundingTxid);
+    const wave = record.wave ?? record;
+    if (!wave.fundingTxid) return 'send';
+    const state = chainStateOf(chainStates, wave.fundingTxid);
     if (state === 'confirmed') return 'done';
     if (state === 'dropped') return 'send';
     return 'wait';
@@ -34,12 +35,13 @@ function txidsOf(piece) {
 }
 
 function fundingOutputFor(record, index) {
-    const outputs = Array.isArray(record.fundingOutputs) ? record.fundingOutputs : [];
+    const wave = record.wave ?? record;
+    const outputs = Array.isArray(wave.fundingOutputs) ? wave.fundingOutputs : [];
     const named = outputs.find((output) => (
         output?.index === index || output?.pieceIndex === index
     ));
     if (named) return named;
-    const offset = record.pieces?.findIndex((piece) => piece?.index === index) ?? -1;
+    const offset = wave.pieces?.findIndex((piece) => piece?.index === index) ?? -1;
     return offset >= 0 ? outputs[offset] : null;
 }
 
@@ -65,6 +67,7 @@ function piecePlan(piece, record, chainStates) {
 }
 
 export function planResend({ record, chainStates }) {
+    const wave = record.wave ?? record;
     const plan = {
         funding: fundingPlan(record, chainStates),
         send: [],
@@ -72,9 +75,12 @@ export function planResend({ record, chainStates }) {
         wait: [],
         blocked: null,
     };
-    const pieces = new Map((record.pieces || []).map((piece) => [piece.index, piece]));
-    for (let index = 0; index < record.totalParts; index += 1) {
-        const verdict = piecePlan(pieces.get(index), record, chainStates);
+    const ordered = Array.isArray(wave.pieces) ? wave.pieces : [];
+    const pieces = new Map(ordered.map((piece) => [piece.index, piece]));
+    for (const piece of ordered) {
+        if (piece.index === -1) continue;
+        const index = piece.index;
+        const verdict = piecePlan(piece, record, chainStates);
         if (verdict === 'blocked') {
             plan.wait.push(index);
             plan.blocked = 'FUNDING_OUTPUT_SPENT';
@@ -82,11 +88,13 @@ export function planResend({ record, chainStates }) {
             plan[verdict].push(index);
         }
     }
-    if (plan.send.length > 0 || plan.blocked) {
+    if (!record.wave && (plan.send.length > 0 || plan.blocked)) {
         plan.wait.push(-1);
         return plan;
     }
-    const manifestVerdict = piecePlan(pieces.get(-1), record, chainStates);
+    const manifest = pieces.get(-1);
+    if (!manifest) return plan;
+    const manifestVerdict = piecePlan(manifest, record, chainStates);
     if (manifestVerdict === 'blocked') {
         plan.wait.push(-1);
         plan.blocked = 'FUNDING_OUTPUT_SPENT';

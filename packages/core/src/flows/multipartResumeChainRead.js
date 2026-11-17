@@ -24,17 +24,19 @@ function invalid(field) {
 function validate(record, address) {
     if (!record || typeof record !== 'object') throw invalid('record');
     if (typeof address !== 'string' || address.trim().length === 0) throw invalid('address');
-    if (!Array.isArray(record.fundingOutputs)) throw invalid('fundingOutputs');
-    if (!Array.isArray(record.pieces)) throw invalid('pieces');
+    const wave = record.wave ?? record;
+    if (!Array.isArray(wave.fundingOutputs)) throw invalid('fundingOutputs');
+    if (!Array.isArray(wave.pieces)) throw invalid('pieces');
 }
 
 function recordTxids(record) {
+    const wave = record.wave ?? record;
     const txids = [];
     const add = (txid) => {
         if (typeof txid === 'string' && txid.length > 0 && !txids.includes(txid)) txids.push(txid);
     };
-    add(record.fundingTxid);
-    for (const piece of record.pieces) {
+    add(wave.fundingTxid);
+    for (const piece of wave.pieces) {
         for (const txid of Array.isArray(piece?.signedTxids) ? piece.signedTxids : []) add(txid);
         add(piece?.txid);
     }
@@ -85,8 +87,9 @@ function statusOf(txid, blocks, addressState, hasReadSurface) {
 }
 
 function markFundingOutputs(record, address, addressState) {
+    const wave = record.wave ?? record;
     const utxosByAddress = addressState.utxos === null ? {} : { [address]: addressState.utxos };
-    return record.fundingOutputs.map((output) => {
+    return wave.fundingOutputs.map((output) => {
         const result = checkInputLiveness({
             inputs: [{
                 prevTxHash: output?.txid,
@@ -115,8 +118,12 @@ export async function readResumeChainState({ sdk, record, address } = {}) {
             txid, blocks, addressState, canBlock || canUtxos || canUnconfirmed,
         );
     }
+    const fundingOutputs = markFundingOutputs(record, address, addressState);
+    const nextRecord = record.wave
+        ? { ...record, wave: { ...record.wave, fundingOutputs } }
+        : { ...record, fundingOutputs };
     return {
         chainStates,
-        record: { ...record, fundingOutputs: markFundingOutputs(record, address, addressState) },
+        record: nextRecord,
     };
 }

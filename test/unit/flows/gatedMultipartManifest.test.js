@@ -206,8 +206,8 @@ describe('multipart publish manifest action selection', () => {
         const h = harness();
         await publishMultipartFile(options(h, { gate: { key: KEY } }));
         const data = pieceData(h);
-        expect(data.slice(0, 2)).toEqual([`FILE|2|${FILE_HASH}|0`, `FILE|2|${FILE_HASH}|1`]);
-        const manifest = JSON.parse(data[2]);
+        expect(data.slice(1)).toEqual([`FILE|2|${FILE_HASH}|0`, `FILE|2|${FILE_HASH}|1`]);
+        const manifest = JSON.parse(data[0]);
         expect(manifest).toMatchObject({ action: 'BATCH', params: { VERSION: '0' } });
         expect(manifest.params.COMMAND).toContain(`;MESSAGE|2|BTC|${ADDRESS}|ciphertext`);
     });
@@ -215,7 +215,7 @@ describe('multipart publish manifest action selection', () => {
     it('keeps an ungated manifest as a bare FILE version 1', async () => {
         const h = harness();
         await publishMultipartFile(options(h));
-        expect(pieceData(h)[2]).toMatch(new RegExp(`^FILE\\|1\\|${FILE_HASH}\\|`));
+        expect(pieceData(h)[0]).toMatch(new RegExp(`^FILE\\|1\\|${FILE_HASH}\\|`));
         expect(h.sdk.actions.createAction).not.toHaveBeenCalled();
         expect(h.sdk.messaging.eciesEncryptBytes).not.toHaveBeenCalled();
     });
@@ -227,7 +227,7 @@ describe('multipart publish manifest action selection', () => {
         }));
         await publishMultipartFile(options(h, { gate: { key: KEY }, manifestActionData }));
         expect(manifestActionData).toHaveBeenCalledOnce();
-        expect(JSON.parse(pieceData(h)[2]).params.COMMAND).toBe('caller');
+        expect(JSON.parse(pieceData(h)[0]).params.COMMAND).toBe('caller');
         expect(h.sdk.messaging.eciesEncryptBytes).not.toHaveBeenCalled();
     });
 });

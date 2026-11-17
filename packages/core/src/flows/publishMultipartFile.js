@@ -24,8 +24,12 @@ import {
 } from './filePieceWait.js';
 import { matchFundingOutputs } from './multipartFundingMatch.js';
 import { multipartFundingEncoderOpts } from './multipartFundingOpts.js';
+import { waitForFundingConfirmed } from './multipartFundingWait.js';
 import { planMultipartFile, quoteMultipartFile } from './multipartFilePlan.js';
+import { planMultipartStream, readPlannedParts } from './multipartStreamPlan.js';
+import { bytesPartSource } from './filePartSource.js';
 import { multipartQuoteLanes } from './multipartQuoteLanes.js';
+import { multipartWaveCount, multipartWaveRanges } from './multipartWaves.js';
 import { multipartFileActionString } from './multipartFileAction.js';
 import { confirmResumePick } from './multipartResumeMatch.js';
 import { advanceUploadStage, withFunding } from './multipartUploadRecord.js';
@@ -120,7 +124,7 @@ function pieceInput(plan, index, ctx) {
     return {
         kind: index === -1 ? 'manifest' : 'part',
         data,
-        rawData: index === -1 ? undefined : plan.parts[index].rawData,
+        rawData: index === -1 ? undefined : ctx.part?.rawData,
     };
 }
 
@@ -178,6 +182,18 @@ async function standardSignedPair(ctx, input) {
 }
 
 function replacePiece(record, index, fields) {
+    const wave = record.wave;
+    if (wave) {
+        return {
+            ...record,
+            wave: {
+                ...wave,
+                pieces: wave.pieces.map((piece) => (
+                    piece.index === index ? { ...piece, ...fields } : piece
+                )),
+            },
+        };
+    }
     return {
         ...record,
         pieces: record.pieces.map((piece) => (
@@ -220,7 +236,8 @@ function indexedActionIndex(indexed) {
 }
 
 async function waitForPiece(ctx, index) {
-    const piece = ctx.record.pieces.find((item) => item.index === index);
+    const pieces = ctx.record.wave?.pieces ?? ctx.record.pieces;
+    const piece = pieces.find((item) => item.index === index);
     const indexed = await waitForFilePieceIndexed({
         waitForTxid: ctx.waitForTxid,
         sdk: ctx.sdk,
@@ -278,27 +295,21 @@ async function waitForFunding(ctx, txid) {
     const timeout = Number(ctx.opts.fundingTimeoutMs) > 0 ? Number(ctx.opts.fundingTimeoutMs) : 900000;
     const grace = Number(ctx.opts.fundingDropGraceMs) >= 0
         ? Number(ctx.opts.fundingDropGraceMs) : FUNDING_DROP_GRACE_MS;
-    const started = Date.now();
-    let droppedReadings = 0;
-    for (;;) {
-        const state = await legChainStatus({ sdk: ctx.sdk, txid, address: ctx.source.address });
-        if (state === 'confirmed') return;
-        const settled = Date.now() - started >= grace;
-        droppedReadings = state === 'dropped' && settled ? droppedReadings + 1 : 0;
-        if (state === null || droppedReadings >= 2 || Date.now() - started >= timeout) {
-            const error = new Error('The upload is saved and funding is not confirmed. Do not pay again.');
-            error.code = 'FILE_FUNDING_NOT_CONFIRMED';
-            error.chainState = state ?? 'unknown';
-            error.txid = txid;
-            throw error;
-        }
-        await sleep(pollMs);
-    }
+    return waitForFundingConfirmed({
+        sdk: ctx.sdk,
+        txid,
+        address: ctx.source.address,
+        timeoutMs: timeout,
+        pollMs,
+        sleep,
+        now: Date.now,
+        dropGraceMs: grace,
+    });
 }
 
-async function fundUpload(ctx, quote) {
+async function fundUpload(ctx, pieceValues) {
     const opts = multipartFundingEncoderOpts({
-        source: ctx.source, pieceValues: quote.outputs, rate: ctx.rate,
+        source: ctx.source, pieceValues, rate: ctx.rate,
     });
     const encoded = await ctx.sdk.encoder.createTx(opts);
     const signed = await signPsbt({ ...ctx, psbt: encoded.psbt });
@@ -307,26 +318,31 @@ async function fundUpload(ctx, quote) {
     ctx.record = withFunding(ctx.record, { fundingTxid: signed.txid, fundingOutputs: outputs });
     await ctx.save(ctx.record);
     await broadcast(ctx.sdk.encoder, signed);
-    progress(ctx.opts, 'funding-broadcast', { txid: signed.txid });
+    progress(ctx.opts, 'funding-broadcast', {
+        wave: ctx.record.wave?.index ?? 0, txid: signed.txid,
+    });
     await waitForFunding(ctx, signed.txid);
-    ctx.record = advanceUploadStage(ctx.record, 'sending');
-    await ctx.save(ctx.record);
+    if (ctx.record.stage === 'funding') {
+        ctx.record = advanceUploadStage(ctx.record, 'sending');
+        await ctx.save(ctx.record);
+    }
 }
 
 async function chainStatesFor(ctx) {
     let utxos = null;
     try { utxos = utxoListOf(await ctx.sdk.encoder.getUTXOs(ctx.source.address)); } catch {}
     const live = new Set((utxos || []).map((item) => `${String(item.txid).toLowerCase()}:${item.vout}`));
-    ctx.record = {
-        ...ctx.record,
-        fundingOutputs: ctx.record.fundingOutputs.map((output) => ({
+    const wave = ctx.record.wave ?? ctx.record;
+    const fundingOutputs = wave.fundingOutputs.map((output) => ({
             ...output,
             unspent: live.has(`${String(output.txid).toLowerCase()}:${output.vout}`),
-        })),
-    };
+        }));
+    ctx.record = ctx.record.wave
+        ? { ...ctx.record, wave: { ...ctx.record.wave, fundingOutputs } }
+        : { ...ctx.record, fundingOutputs };
     const txids = new Set([
-        ctx.record.fundingTxid,
-        ...ctx.record.pieces.flatMap((piece) => [...piece.signedTxids, piece.txid]),
+        wave.fundingTxid,
+        ...wave.pieces.flatMap((piece) => [...piece.signedTxids, piece.txid]),
     ]);
     const entries = await Promise.all([...txids].filter(Boolean).map(async (txid) => {
         if (!TXID.test(txid)) return [txid, 'dropped'];
@@ -339,7 +355,7 @@ async function resumePlan(ctx) {
     const chainStates = await chainStatesFor(ctx);
     const resend = planResend({ record: ctx.record, chainStates });
     if (resend.funding !== 'done') {
-        await waitForFunding(ctx, ctx.record.fundingTxid);
+        await waitForFunding(ctx, ctx.record.wave?.fundingTxid ?? ctx.record.fundingTxid);
     }
     if (resend.blocked) {
         const error = new Error('A missing file piece no longer has an unspent funding output.');
@@ -348,19 +364,68 @@ async function resumePlan(ctx) {
     }
     const wait = new Set(resend.wait);
     for (const index of resend.skip) {
-        const piece = ctx.record.pieces.find((item) => item.index === index);
+        const pieces = ctx.record.wave?.pieces ?? ctx.record.pieces;
+        const piece = pieces.find((item) => item.index === index);
         if (!piece?.actionIndex) wait.add(index);
     }
     return { send: resend.send, wait: [...wait] };
 }
 
 function outputFor(record, index) {
-    const position = record.pieces.findIndex((piece) => piece.index === index);
-    return record.fundingOutputs[position];
+    const wave = record.wave ?? record;
+    const position = wave.pieces.findIndex((piece) => piece.index === index);
+    return wave.fundingOutputs[position];
+}
+
+async function streamingParts(ctx, indexes) {
+    if (!ctx.partSource || indexes.length === 0) return null;
+    const wanted = [...indexes].filter((index) => index >= 0).sort((a, b) => a - b);
+    if (wanted.length === 0) return null;
+    if (ctx.streamingPartReader) return ctx.streamingPartReader;
+    const reader = ctx.opts.readPlannedParts || readPlannedParts;
+    let readPlan = ctx.plan;
+    let readSource = ctx.partSource;
+    let fromPart = wanted[0];
+    if (reader === readPlannedParts && !ctx.plan.compressed && fromPart > 0) {
+        const start = ctx.plan.parts.slice(0, fromPart)
+            .reduce((total, part) => total + part.byteLength, 0);
+        const source = ctx.partSource;
+        readSource = {
+            size: source.size - start,
+            name: source.name,
+            type: source.type,
+            readSlice: (from, to) => source.readSlice(start + from, start + to),
+        };
+        readPlan = {
+            ...ctx.plan,
+            parts: ctx.plan.parts.slice(fromPart),
+            originalBytes: readSource.size,
+        };
+        fromPart = 0;
+    }
+    const iterable = await reader(readPlan, readSource, fromPart);
+    const iterator = iterable[Symbol.asyncIterator]();
+    ctx.streamingPartReader = {
+        async get(index) {
+            for (;;) {
+                const next = await iterator.next();
+                if (next.done) throw new Error(`Planned part ${index} was not regenerated`);
+                if (next.value.partIndex === index) return next.value;
+                if (next.value.partIndex > index) {
+                    throw new Error(`Planned part ${index} was skipped while regenerating`);
+                }
+            }
+        },
+    };
+    return ctx.streamingPartReader;
 }
 
 async function sendAndIndex(ctx, plan) {
+    const partReader = await streamingParts(ctx, plan.send);
     for (const index of plan.send) {
+        ctx.part = index === -1
+            ? null
+            : (partReader ? await partReader.get(index) : ctx.plan.parts[index]);
         ctx.fundingOutput = outputFor(ctx.record, index);
         await signAndBroadcastPiece(ctx, index);
     }
@@ -368,6 +433,14 @@ async function sendAndIndex(ctx, plan) {
     const results = await Promise.all(indexes.map((index) => waitForPiece(ctx, index)));
     for (const result of results) {
         ctx.record = replacePiece(ctx.record, result.index, { actionIndex: result.actionIndex });
+        if (result.index === -1) {
+            const manifest = ctx.record.wave.pieces.find((piece) => piece.index === -1);
+            ctx.record = {
+                ...ctx.record,
+                manifestActionIndex: result.actionIndex,
+                manifestTxid: manifest.txid,
+            };
+        }
     }
     await ctx.save(ctx.record);
 }
@@ -384,7 +457,13 @@ async function finishAssembly(ctx) {
         ctx.record = advanceUploadStage(ctx.record, 'assembling');
         await ctx.save(ctx.record);
     }
-    const manifest = ctx.record.pieces.find((piece) => piece.index === -1);
+    const manifest = {
+        actionIndex: ctx.record.manifestActionIndex,
+        txid: ctx.record.manifestTxid,
+    };
+    if (!manifest.actionIndex) {
+        throw new Error('Multipart manifest action index is unavailable');
+    }
     try {
         const multipart = await waitForMultipartComplete({
             sdk: ctx.sdk,
@@ -420,7 +499,7 @@ function laneConfig(opts) {
     return { lane, buildMode };
 }
 
-async function initialRecord(opts, source, plan, quote, originalSha256, config) {
+async function initialRecord(opts, source, plan, quote, rate, originalSha256, config) {
     const record = createPendingFileUpload({
         walletId: opts.walletId,
         chainId: opts.chainId,
@@ -434,7 +513,8 @@ async function initialRecord(opts, source, plan, quote, originalSha256, config) 
         compression: plan.compression || '',
         totalParts: plan.totalParts,
         totalBytes: plan.totalBytes,
-        partDigests: plan.parts.map((part) => part.digest),
+        partCapacity: plan.partCapacity,
+        approvedRate: rate,
         fundingOutputs: quote.outputs,
         linkTarget: opts.linkTarget || null,
     });
@@ -455,9 +535,9 @@ function planningGate(opts, record) {
     return resumeGateOf(record.gate, opts.gate?.key);
 }
 
-async function recordForRun(opts, record, source, plan, quote, originalSha256, config) {
+async function recordForRun(opts, record, source, plan, quote, rate, originalSha256, config) {
     if (!opts.resumeId) {
-        return initialRecord(opts, source, plan, quote, originalSha256, config);
+        return initialRecord(opts, source, plan, quote, rate, originalSha256, config);
     }
     if (record.originalSha256 !== originalSha256) {
         const error = new Error('Resume pick does not match the original file.');
@@ -469,7 +549,35 @@ async function recordForRun(opts, record, source, plan, quote, originalSha256, c
         totalParts: plan.totalParts,
         sourceAddress: source.address,
     });
-    return record;
+    const manifest = record.wave?.pieces.find((piece) => piece.index === -1);
+    return {
+        ...record,
+        manifestActionIndex: record.manifestActionIndex ?? manifest?.actionIndex ?? null,
+        manifestTxid: record.manifestTxid ?? manifest?.txid ?? null,
+    };
+}
+
+function partSourceFor(opts) {
+    if (opts.partSource) return opts.partSource;
+    if (opts.bytes instanceof Uint8Array) return bytesPartSource(opts.bytes);
+    return null;
+}
+
+function waveFor(plan, quote, index) {
+    const range = multipartWaveRanges(plan.totalParts)[index];
+    if (!range) return null;
+    const pieces = Array.from({ length: range.to - range.from + 1 }, (_unused, offset) => ({
+        index: range.from + offset - 1,
+        signedTxids: [],
+        txid: null,
+        actionIndex: null,
+    }));
+    return {
+        index,
+        fundingTxid: null,
+        fundingOutputs: quote.outputs.slice(range.from, range.to + 1),
+        pieces,
+    };
 }
 
 function runConfig(opts, record) {
@@ -484,23 +592,47 @@ async function prepareRun(opts, source, sdk) {
     const config = runConfig(opts, savedRecord);
     const effectiveOpts = withManifestActionData({ ...opts, ...config }, sdk, source);
     const gate = planningGate(effectiveOpts, savedRecord);
-    const planner = opts.planMultipartFile || planMultipartFile;
-    const plan = await planner(opts.bytes, config.meta, { carrier: config.lane, gate });
-    const rate = await feeRate(opts, sdk);
+    const partSource = partSourceFor(opts);
+    let plan;
+    let streamed = false;
+    if (gate !== null || opts.planMultipartFile) {
+        const planner = opts.planMultipartFile || planMultipartFile;
+        plan = await planner(opts.bytes, config.meta, { carrier: config.lane, gate });
+    } else {
+        const planner = opts.planMultipartStream || planMultipartStream;
+        plan = await planner(partSource, config.meta, { carrier: config.lane });
+        streamed = true;
+    }
+    const rate = savedRecord?.approvedRate ?? await feeRate(opts, sdk);
     const quote = quoteFor(opts, plan, rate, config.lane);
-    const originalSha256 = bytesToHex(sha256(opts.bytes));
+    const originalSha256 = plan.originalSha256
+        ?? bytesToHex(sha256(opts.bytes));
     const record = await recordForRun(
-        effectiveOpts, savedRecord, source, plan, quote, originalSha256, config,
+        effectiveOpts, savedRecord, source, plan, quote, rate, originalSha256, config,
     );
-    return { config, effectiveOpts, plan, quote, rate, record };
+    return {
+        config,
+        effectiveOpts,
+        partSource: streamed ? partSource : null,
+        plan,
+        quote,
+        rate,
+        record,
+    };
 }
 
 function assertInputs(opts) {
     if (!opts?.vault?.pendingFileUploads) throw new Error('publishMultipartFile: vault is required');
     if (!opts.sdkRegistry) throw new Error('publishMultipartFile: sdkRegistry is required');
     if (!opts.signer) throw new Error('publishMultipartFile: signer is required');
-    if (!(opts.bytes instanceof Uint8Array) || opts.bytes.length === 0) {
-        throw new Error('publishMultipartFile: bytes are required');
+    const hasBytes = opts.bytes instanceof Uint8Array && opts.bytes.length > 0;
+    const hasPartSource = opts.partSource && Number.isSafeInteger(opts.partSource.size)
+        && opts.partSource.size > 0 && typeof opts.partSource.readSlice === 'function';
+    if (!hasBytes && !hasPartSource) {
+        throw new Error('publishMultipartFile: bytes or partSource are required');
+    }
+    if (opts.gate && !hasBytes) {
+        throw new Error('publishMultipartFile: gated uploads require bytes');
     }
 }
 
@@ -542,22 +674,53 @@ export async function publishMultipartFile(opts) {
         activationTimes: opts.activationTimes || FILE_MULTIPART_ACTIVATION_TIME,
     });
     const run = await prepareRun(opts, source, sdk);
-    const { config, plan, quote, rate } = run;
+    const { config, partSource, plan, quote, rate } = run;
     let { record } = run;
     const save = async (next) => opts.vault.pendingFileUploads.put(next);
     const waitForTxid = opts.waitForTxid
         || ((txid, waitOpts) => sdk.waitForAction(txid, waitOpts));
     const ctx = {
         opts: run.effectiveOpts, sdk, source, lane: config.lane, buildMode: config.buildMode,
-        plan, rate, record, save, waitForTxid,
+        partSource, plan, rate, record, save, waitForTxid,
         signer: opts.signer, chainId: opts.chainId,
     };
-    if (!record.fundingTxid) await fundUpload(ctx, quote);
-    else ctx.record = record;
-    const sendPlan = opts.resumeId
-        ? await resumePlan(ctx)
-        : { send: [...Array(plan.totalParts).keys(), -1], wait: [] };
-    await sendAndIndex(ctx, sendPlan);
+    const totalWaves = multipartWaveCount(plan.totalParts);
+    while (ctx.record.wavesDone < totalWaves) {
+        const waveIndex = ctx.record.wavesDone;
+        if (!ctx.record.wave || ctx.record.wave.index !== waveIndex) {
+            ctx.record = { ...ctx.record, wave: waveFor(plan, quote, waveIndex) };
+            await ctx.save(ctx.record);
+        }
+        if (!ctx.record.wave.fundingTxid) {
+            const values = quote.outputs.slice(
+                multipartWaveRanges(plan.totalParts)[waveIndex].from,
+                multipartWaveRanges(plan.totalParts)[waveIndex].to + 1,
+            );
+            await fundUpload(ctx, values);
+        }
+        const hasProgress = ctx.record.wave.pieces.some((piece) => (
+            piece.txid || piece.signedTxids.length > 0 || piece.actionIndex
+        ));
+        const sendPlan = opts.resumeId && hasProgress
+            ? await resumePlan(ctx)
+            : { send: ctx.record.wave.pieces.map((piece) => piece.index), wait: [] };
+        await sendAndIndex(ctx, sendPlan);
+        ctx.record = { ...ctx.record, wavesDone: waveIndex + 1 };
+        progress(ctx.opts, 'wave-confirmed', { wave: waveIndex, waves: totalWaves });
+        await ctx.save(ctx.record);
+        if (ctx.record.wavesDone < totalWaves) {
+            ctx.record = {
+                ...ctx.record,
+                wave: waveFor(plan, quote, ctx.record.wavesDone),
+            };
+            await ctx.save(ctx.record);
+        }
+    }
+    if (ctx.record.stage === 'sending') {
+        ctx.record = advanceUploadStage(ctx.record, 'assembling');
+        ctx.record = { ...ctx.record, wave: null };
+        await ctx.save(ctx.record);
+    }
     const { multipart, manifest } = await finishAssembly(ctx);
     return {
         record: ctx.record,

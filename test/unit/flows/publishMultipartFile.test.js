@@ -37,11 +37,13 @@ function fakePlan() {
 
 function memoryVault(seed = null, events = []) {
     const rows = new Map(seed ? [[seed.id, seed]] : []);
+    const history = [];
     return {
-        rows,
+        rows, history,
         pendingFileUploads: {
             put: vi.fn(async (record) => {
-                events.push(`put:${record.stage}:${record.fundingTxid ? 'funded' : 'empty'}`);
+                events.push(`put:${record.stage}:${record.wave?.fundingTxid ? 'funded' : 'empty'}`);
+                history.push(structuredClone(record));
                 rows.set(record.id, structuredClone(record));
             }),
             get: vi.fn(async (id) => rows.get(id) ? structuredClone(rows.get(id)) : null),
@@ -53,10 +55,12 @@ function txid(number) {
     return number.toString(16).padStart(2, '0').repeat(32);
 }
 
-function harness({ lane = 'envelope', buildMode = 'one_call', multipart = 'complete' } = {}) {
+function harness({
+    lane = 'envelope', buildMode = 'one_call', multipart = 'complete', signedStart = 0,
+} = {}) {
     const events = [];
     const broadcasts = [];
-    let signedNumber = 0;
+    let signedNumber = signedStart;
     let actionIndex = 40;
     const outputs = [0, 1, 2].map((vout) => ({
         vout, address: SOURCE.address, value: 400, scriptPubKey: `script-${vout}`,
@@ -134,9 +138,9 @@ function resumedRecord() {
         })),
         linkTarget: null,
     });
-    record.fundingTxid = txid(90);
+    record.wave.fundingTxid = txid(90);
     record.stage = 'sending';
-    record.pieces = [
+    record.wave.pieces = [
         { index: -1, signedTxids: [txid(7), txid(8)], txid: txid(8), actionIndex: null },
         { index: 0, signedTxids: [txid(1), txid(2)], txid: txid(2), actionIndex: '31' },
         { index: 1, signedTxids: [txid(3), txid(4)], txid: txid(4), actionIndex: null },
@@ -158,8 +162,10 @@ describe('multipart publish funding and envelope delivery', () => {
         expect(h.events.slice(firstPieceBuild, firstBroadcast)
             .filter((event) => event === 'put:sending:funded'))
             .toHaveLength(2);
-        expect(result.record.pieces.every((piece) => piece.signedTxids.length === 2)).toBe(true);
-        expect(result.record.pieces.every((piece) => piece.actionIndex !== null)).toBe(true);
+        const sent = h.vault.history.findLast((record) => record.wave?.pieces.every(
+            (piece) => piece.actionIndex !== null,
+        ));
+        expect(sent.wave.pieces.every((piece) => piece.signedTxids.length === 2)).toBe(true);
     });
 });
 
@@ -178,8 +184,11 @@ describe('multipart publish lane-specific builds', () => {
         const h = harness({ lane: 'standard' });
         const result = await publishMultipartFile(options(h));
         expect(h.encoder.spendP2sh).toHaveBeenCalledTimes(3);
-        expect(result.record.pieces.every((piece) => piece.signedTxids.length === 3)).toBe(true);
-        expect(result.record.pieces.every((piece) => piece.signedTxids[0].endsWith('aa'))).toBe(true);
+        const sent = h.vault.history.findLast((record) => record.wave?.pieces.every(
+            (piece) => piece.actionIndex !== null,
+        ));
+        expect(sent.wave.pieces.every((piece) => piece.signedTxids.length === 3)).toBe(true);
+        expect(sent.wave.pieces.every((piece) => piece.signedTxids[0].endsWith('aa'))).toBe(true);
     });
 });
 
@@ -206,22 +215,26 @@ describe('multipart publish activation and terminal mismatch', () => {
 describe('multipart publish resume safety', () => {
     it('waits on mined and mempool pieces and re-sends only a missing funded piece', async () => {
         const record = resumedRecord();
-        const h = harness();
+        const h = harness({ signedStart: 100 });
         h.vault = memoryVault(record, h.events);
         h.encoder.getTxBlock.mockImplementation(async (id) => (
-            [record.fundingTxid, txid(2)].includes(id) ? { block_height: 12 } : null
+            [record.wave.fundingTxid, txid(2), txid(8)].includes(id)
+                ? { block_height: 12 } : null
         ));
         h.encoder.getUTXOs.mockResolvedValue({ utxos: [
-            { txid: record.fundingTxid, vout: 0, confirmations: 1 },
-            { txid: txid(4), vout: 0, confirmations: 0 },
+            { txid: record.wave.fundingTxid, vout: 0, confirmations: 1 },
+            { txid: record.wave.fundingTxid, vout: 2, confirmations: 1 },
         ] });
         const result = await publishMultipartFile(options(h, { resumeId: record.id }));
         expect(result.record.stage).toBe('complete');
         expect(h.signer.signPsbt).toHaveBeenCalledTimes(2);
         expect(h.broadcasts).toHaveLength(2);
         expect(h.sdk.waitForAction).toHaveBeenCalledTimes(2);
-        expect(result.record.pieces.find((piece) => piece.index === 0).txid).toBe(txid(2));
-        expect(result.record.pieces.find((piece) => piece.index === 1).txid).toBe(txid(4));
+        const sent = h.vault.history.findLast((saved) => saved.wave?.pieces.every(
+            (piece) => piece.actionIndex !== null,
+        ));
+        expect(sent.wave.pieces.find((piece) => piece.index === 0).txid).toBe(txid(2));
+        expect(sent.wave.pieces.find((piece) => piece.index === 1).txid).toBe(txid(102));
     });
 
     it('refuses a re-picked file before any chain or signing effect', async () => {

@@ -57,7 +57,10 @@ export function recoveryRecordFor({ lane, signedCommitHex, commitTxid, revealPla
  */
 export async function recordPieceBeforeBroadcast({ record, index, lane, signedTxids, save }) {
     assertLane(lane);
-    const pieces = Array.isArray(record?.pieces) ? record.pieces : [];
+    const wave = record?.wave;
+    const pieces = Array.isArray(wave?.pieces)
+        ? wave.pieces
+        : (Array.isArray(record?.pieces) ? record.pieces : []);
     const position = pieces.findIndex((piece) => piece?.index === index);
     if (position < 0) throw new RangeError(`No file piece has index ${index}`);
 
@@ -71,7 +74,9 @@ export async function recordPieceBeforeBroadcast({ record, index, lane, signedTx
 
     const nextPieces = pieces.slice();
     nextPieces[position] = { ...pieces[position], signedTxids: [...signedTxids] };
-    const nextRecord = { ...record, pieces: nextPieces };
+    const nextRecord = wave
+        ? { ...record, wave: { ...wave, pieces: nextPieces } }
+        : { ...record, pieces: nextPieces };
     try {
         await save(nextRecord);
     } catch (cause) {

@@ -57,6 +57,8 @@ export const PENDING_FILE_UPLOAD_STAGES = /** @type {const} */ ([
  * @property {number | null} partCapacity
  * @property {string} fileHash
  * @property {string} originalSha256
+ * @property {string | null} manifestActionIndex
+ * @property {string | null} manifestTxid
  * @property {number | null} approvedRate
  * @property {number} wavesDone
  * @property {typeof PENDING_FILE_UPLOAD_STAGES[number]} stage
@@ -122,6 +124,8 @@ export function createPendingFileUpload(input) {
         partCapacity: input.partCapacity ?? MULTIPART_FILE_PART_CAPACITY[lane] ?? null,
         fileHash: input.fileHash,
         originalSha256: input.originalSha256,
+        manifestActionIndex: input.manifestActionIndex ?? null,
+        manifestTxid: input.manifestTxid ?? null,
         approvedRate: input.approvedRate ?? null,
         wavesDone: input.wavesDone ?? 0,
         stage: input.stage ?? 'funding',
@@ -231,6 +235,12 @@ function validateProgress(errors, record) {
     check(errors, 'source', !(isNonEmptyString(record.blobKey) && isNonEmptyString(record.path)),
         'must use blobKey or path, not both');
     check(errors, 'createdAt', isIsoTimestamp(record.createdAt), 'must be an ISO timestamp');
+    check(errors, 'manifestActionIndex', record.manifestActionIndex === null
+        || isNonEmptyString(record.manifestActionIndex),
+    'must be null or a non-empty string');
+    check(errors, 'manifestTxid', record.manifestTxid === null
+        || isNonEmptyString(record.manifestTxid),
+    'must be null or a non-empty string');
     validateWave(errors, record);
 }
 

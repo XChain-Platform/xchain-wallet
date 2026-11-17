@@ -130,7 +130,11 @@ function validateFundingOutput(output, index, fundingTxid) {
 }
 
 export function withFunding(record, funding) {
-    if (record?.stage !== 'funding') {
+    const wave = record?.wave;
+    if (wave && !['funding', 'sending'].includes(record?.stage)) {
+        throw invalid(FILE_UPLOAD_FUNDING_INVALID, 'stage', 'must be funding or sending');
+    }
+    if (!wave && record?.stage !== 'funding') {
         throw invalid(FILE_UPLOAD_FUNDING_INVALID, 'stage', 'must be funding');
     }
     const fundingTxid = funding?.fundingTxid;
@@ -138,13 +142,17 @@ export function withFunding(record, funding) {
         throw invalid(FILE_UPLOAD_FUNDING_INVALID, 'fundingTxid', 'must be 64 hexadecimal characters');
     }
     const outputs = funding?.fundingOutputs;
-    if (!Array.isArray(outputs) || outputs.length !== record.totalParts + 1) {
+    const pieces = wave?.pieces ?? record.pieces;
+    if (!Array.isArray(outputs) || outputs.length !== pieces.length) {
         throw invalid(FILE_UPLOAD_FUNDING_INVALID, 'fundingOutputs', 'must contain one output per piece');
     }
     for (let index = 0; index < outputs.length; index += 1) {
         validateFundingOutput(outputs[index], index, fundingTxid);
     }
-    return { ...record, fundingTxid, fundingOutputs: outputs.map((output) => ({ ...output })) };
+    const fundingOutputs = outputs.map((output) => ({ ...output }));
+    return wave
+        ? { ...record, wave: { ...wave, fundingTxid, fundingOutputs } }
+        : { ...record, fundingTxid, fundingOutputs };
 }
 
 function hasEveryPieceTxid(record) {
@@ -173,13 +181,19 @@ export function advanceUploadStage(record, next) {
         stageError(current, next, 'terminal stage cannot advance');
     }
     if (current === 'funding' && next === 'sending') {
-        if (typeof record.fundingTxid !== 'string' || record.fundingTxid.trim().length === 0) {
+        const fundingTxid = record.wave?.fundingTxid ?? record.fundingTxid;
+        if (typeof fundingTxid !== 'string' || fundingTxid.trim().length === 0) {
             stageError(current, next, 'fundingTxid is not set');
         }
         return { ...record, stage: next };
     }
     if (current === 'sending' && next === 'assembling') {
-        if (!hasEveryPieceTxid(record)) stageError(current, next, 'every piece must have a txid');
+        const complete = record.wave
+            ? record.wave.pieces.every((piece) => typeof piece?.txid === 'string'
+                && piece.txid.trim().length > 0)
+                && record.wavesDone === Math.ceil((record.totalParts + 1) / 100)
+            : hasEveryPieceTxid(record);
+        if (!complete) stageError(current, next, 'every piece must have a txid');
         return { ...record, stage: next };
     }
     if (current === 'assembling' && (next === 'complete' || next === 'mismatch')) {

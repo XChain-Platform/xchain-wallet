@@ -23,6 +23,7 @@ import {
     encryptGatedStoredBytes,
     freshGatedIv,
 } from './gatedStoredBytes.js';
+import { multipartTransactionCount, multipartWaveRanges } from './multipartWaves.js';
 
 const { deflateRaw } = pako;
 const COMPRESSION_MAX_RATIO = 150;
@@ -238,7 +239,11 @@ function pieceLengths(plan) {
     if (!plan || !Array.isArray(plan.parts) || plan.parts.length === 0) {
         throw new TypeError('quoteMultipartFile: plan.parts must be a non-empty array');
     }
-    return [0, ...plan.parts.map((part) => bytesOfPart(part).length)];
+    return [0, ...plan.parts.map((part) => (
+        Number.isSafeInteger(part?.byteLength) && part.byteLength > 0
+            ? part.byteLength
+            : bytesOfPart(part).length
+    ))];
 }
 
 export function quoteMultipartFile(plan, rate, lane, sizes = {}) {
@@ -272,11 +277,29 @@ export function quoteMultipartFile(plan, rate, lane, sizes = {}) {
         return pieceFee + floorCount * selected.outputFloor;
     });
     const fundingTotal = outputs.reduce((sum, value) => sum + value, 0);
-    return {
+    const result = {
         parts: plan.totalParts ?? plan.parts.length,
-        transactions: 1 + 2 * outputs.length,
+        transactions: multipartTransactionCount(outputs.length - 1),
         outputs,
         fundingTotal,
         fee,
     };
+    const ranges = multipartWaveRanges(outputs.length - 1);
+    if (ranges.length > 1) {
+        const fundingFees = ranges.map(({ from, to }) => {
+            const outputCount = to - from + 1;
+            const supplied = sizes.fundingTxVbytes;
+            const vbytes = typeof supplied === 'function'
+                ? Number(supplied(outputCount))
+                : 192 + (34 * outputCount);
+            if (!Number.isFinite(vbytes) || vbytes < 0) {
+                throw new TypeError('quoteMultipartFile: funding transaction estimator returned an invalid size');
+            }
+            return Math.ceil(1.25 * feeRate * vbytes);
+        });
+        result.fundingFees = fundingFees;
+        result.fundingFee = fundingFees.reduce((sum, value) => sum + value, 0);
+        result.fee += result.fundingFee;
+    }
+    return result;
 }

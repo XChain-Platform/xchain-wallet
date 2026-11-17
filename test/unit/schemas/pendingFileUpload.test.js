@@ -76,7 +76,7 @@ function removalHarness() {
 }
 
 describe('createPendingFileUpload', () => {
-    it('creates a valid funding-stage record with a manifest and every part', () => {
+    it('creates a valid funding-stage record with a bounded current wave', () => {
         const pending = createPendingFileUpload(BASE_INPUT);
 
         expect(pending).toMatchObject({
@@ -86,11 +86,11 @@ describe('createPendingFileUpload', () => {
             sourceAddress: BASE_INPUT.sourceAddress,
             originalSha256: BASE_INPUT.originalSha256,
             fileHash: BASE_INPUT.fileHash,
-            fundingTxid: null,
+            wavesDone: 0,
             stage: 'funding',
             linkTarget: null,
         });
-        expect(pending.pieces).toEqual([
+        expect(pending.wave.pieces).toEqual([
             { index: -1, signedTxids: [], txid: null, actionIndex: null },
             { index: 0, signedTxids: [], txid: null, actionIndex: null },
             { index: 1, signedTxids: [], txid: null, actionIndex: null },
@@ -118,8 +118,8 @@ describe('createPendingFileUpload', () => {
         input.linkTarget.tick = 'OTHER';
         expect(pending.meta.name).toBe('art.bin');
         expect(pending.gate.ticker).toBe('ART');
-        expect(pending.partDigests[0]).toBe('c'.repeat(64));
-        expect(pending.fundingOutputs[0].value).toBe(21_000);
+        expect(pending).not.toHaveProperty('partDigests');
+        expect(pending.wave.fundingOutputs[0].value).toBe(21_000);
         expect(pending.linkTarget).toEqual({ tick: 'ART', issueActionIndex: '101' });
     });
 });
@@ -133,7 +133,7 @@ describe('pending file upload plan validation', () => {
     });
 
     it.each([
-        ['schemaVersion', 2],
+        ['schemaVersion', 1],
         ['id', ''],
         ['walletId', ''],
         ['chainId', ''],
@@ -144,16 +144,18 @@ describe('pending file upload plan validation', () => {
         ['gate', []],
         ['compression', 1],
         ['totalParts', 1],
-        ['totalParts', 33],
+        ['totalParts', 65_536],
         ['totalBytes', 0],
-        ['totalBytes', 12_000_001],
+        ['totalBytes', 262_140_000_001],
         ['partDigests', ['c'.repeat(64)]],
     ])('rejects an invalid %s value %#', (field, value) => {
         const pending = createPendingFileUpload(BASE_INPUT);
         const validation = invalidField(pending, field, value);
 
         expect(validation.ok).toBe(false);
-        expect(validation.errors).toContainEqual(expect.stringMatching(new RegExp(`^${field}:`)));
+        expect(validation.errors).toContainEqual(expect.stringMatching(
+            new RegExp(`^${field}(?:\\.|:)`),
+        ));
     });
 
     it('accepts public and gated plan metadata', () => {
@@ -171,10 +173,10 @@ describe('pending file upload progress validation', () => {
     });
 
     it.each([
-        ['fundingTxid', ''],
-        ['fundingOutputs', BASE_INPUT.fundingOutputs.slice(1)],
-        ['fundingOutputs', [21_000, null, 23_000]],
-        ['pieces', []],
+        ['wave', { ...createPendingFileUpload(BASE_INPUT).wave, fundingTxid: '' }],
+        ['wave', { ...createPendingFileUpload(BASE_INPUT).wave, fundingOutputs: BASE_INPUT.fundingOutputs.slice(1) }],
+        ['wave', { ...createPendingFileUpload(BASE_INPUT).wave, fundingOutputs: [21_000, null, 23_000] }],
+        ['wave', { ...createPendingFileUpload(BASE_INPUT).wave, pieces: [] }],
         ['stage', 'failed'],
         ['linkTarget', { tick: 'ART', issueActionIndex: '' }],
         ['createdAt', 'not-a-date'],
@@ -183,7 +185,9 @@ describe('pending file upload progress validation', () => {
         const validation = invalidField(pending, field, value);
 
         expect(validation.ok).toBe(false);
-        expect(validation.errors).toContainEqual(expect.stringMatching(new RegExp(`^${field}:`)));
+        expect(validation.errors).toContainEqual(expect.stringMatching(
+            new RegExp(`^${field}(?:\\.|:)`),
+        ));
     });
 
     it.each([
@@ -193,18 +197,19 @@ describe('pending file upload progress validation', () => {
         ['actionIndex', ''],
     ])('rejects a piece with an invalid %s', (field, value) => {
         const pending = createPendingFileUpload(BASE_INPUT);
-        const pieces = pending.pieces.map((piece, offset) =>
+        const pieces = pending.wave.pieces.map((piece, offset) =>
             offset === 0 ? { ...piece, [field]: value } : piece);
 
-        expect(invalidField(pending, 'pieces', pieces)).toEqual({
+        const validation = invalidField(pending, 'wave', { ...pending.wave, pieces });
+        expect(validation).toEqual({
             ok: false,
-            errors: ['pieces: must contain manifest index -1 followed by every part index'],
+            errors: ['wave.pieces: must contain 1 to 100 unique valid pieces'],
         });
     });
 
     it('accepts persisted transaction progress and a null link target', () => {
         const pending = createPendingFileUpload(BASE_INPUT);
-        const pieces = pending.pieces.map((piece, offset) => offset === 0 ? {
+        const pieces = pending.wave.pieces.map((piece, offset) => offset === 0 ? {
             ...piece,
             signedTxids: ['signed-commit', 'signed-reveal'],
             txid: 'manifest-txid',
@@ -212,8 +217,7 @@ describe('pending file upload progress validation', () => {
         } : piece);
         const progressed = {
             ...pending,
-            fundingTxid: 'funding-txid',
-            pieces,
+            wave: { ...pending.wave, fundingTxid: 'funding-txid', pieces },
             linkTarget: { tick: 'ART', issueActionIndex: '99' },
         };
 

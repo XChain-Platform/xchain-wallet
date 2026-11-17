@@ -274,6 +274,8 @@ export const pendingFileUploadMigrations = {
             partCapacity: MULTIPART_FILE_PART_CAPACITY[lane] ?? null,
             approvedRate: null,
             wavesDone: 0,
+            manifestActionIndex: pieces.find((piece) => piece.index === -1)?.actionIndex ?? null,
+            manifestTxid: pieces.find((piece) => piece.index === -1)?.txid ?? null,
             blobKey: null,
             path: null,
             wave: {
