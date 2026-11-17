@@ -12,11 +12,18 @@ function invalid(field) {
     return error;
 }
 
-function validate({ entry, bytes, chainId, sourceAddress, gated }) {
+function validateEntry(entry) {
     if (!entry || typeof entry !== 'object') throw invalid('entry');
     if (typeof entry.id !== 'string' || entry.id.trim() === '') throw invalid('entry.id');
     if (!SHA256_RE.test(entry.originalSha256)) throw invalid('entry.originalSha256');
+}
+
+function validateBytes(bytes) {
     if (!(bytes instanceof Uint8Array) || bytes.length === 0) throw invalid('bytes');
+}
+
+function validateMeta({ entry, chainId, sourceAddress, gated }) {
+    validateEntry(entry);
     if (typeof chainId !== 'string' || chainId.trim() === '') throw invalid('chainId');
     if (typeof sourceAddress !== 'string' || sourceAddress.trim() === '') {
         throw invalid('sourceAddress');
@@ -24,17 +31,29 @@ function validate({ entry, bytes, chainId, sourceAddress, gated }) {
     if (typeof gated !== 'boolean') throw invalid('gated');
 }
 
-export function checkResumePick({ entry, bytes, chainId, sourceAddress, gated }) {
-    validate({ entry, bytes, chainId, sourceAddress, gated });
+export function checkResumePickMeta({ entry, chainId, sourceAddress, gated }) {
+    validateMeta({ entry, chainId, sourceAddress, gated });
     if (entry.stage === 'complete' || entry.stage === 'mismatch') {
         return { ok: false, reason: 'not_resumable' };
     }
     if (entry.chainId !== chainId) return { ok: false, reason: 'chain_mismatch' };
     if (entry.sourceAddress !== sourceAddress) return { ok: false, reason: 'source_mismatch' };
     if (entry.gated !== gated) return { ok: false, reason: 'gate_mismatch' };
-    const originalSha256 = bytesToHex(sha256(bytes));
-    if (entry.originalSha256.toLowerCase() !== originalSha256) {
+    return { ok: true };
+}
+
+export function checkResumePickDigest(entry, originalSha256) {
+    if (!SHA256_RE.test(originalSha256)) throw invalid('originalSha256');
+    if (entry.originalSha256.toLowerCase() !== originalSha256.toLowerCase()) {
         return { ok: false, reason: 'file_mismatch' };
     }
     return { ok: true, resumeId: entry.id };
+}
+
+export function checkResumePick({ entry, bytes, chainId, sourceAddress, gated }) {
+    validateEntry(entry);
+    validateBytes(bytes);
+    const meta = checkResumePickMeta({ entry, chainId, sourceAddress, gated });
+    if (!meta.ok) return meta;
+    return checkResumePickDigest(entry, bytesToHex(sha256(bytes)));
 }
