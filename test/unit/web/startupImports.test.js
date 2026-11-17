@@ -38,6 +38,22 @@ const styleGuideMainSource = readFileSync(
     resolve(process.cwd(), 'packages/web/src/style-guide/main.jsx'),
     'utf8',
 );
+const lockedSource = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/shared/routes/Locked.jsx'),
+    'utf8',
+);
+const autoLockPolicySource = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/shared/hooks/useAutoLockPolicy.js'),
+    'utf8',
+);
+const effectiveNetworkSource = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/flows/effectiveNetwork.js'),
+    'utf8',
+);
+const clipboardSource = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/shared/clipboard.js'),
+    'utf8',
+);
 
 const deferredRoutes = [
     'Home',
@@ -114,6 +130,20 @@ describe('web startup imports', () => {
             "import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';",
         );
         expect(appSource).not.toContain('const Locked = lazyRoute(');
+    });
+
+    it('defers Forgot Password without adding a loading flash to the lock screen', () => {
+        expect(lockedSource).toContain("() => import('./ForgotPassword.jsx')");
+        expect(lockedSource).not.toContain("import { ForgotPassword } from './ForgotPassword.jsx';");
+        expect(lockedSource).toContain('useIdlePreload(DemoExitConfirm, ForgotPassword);');
+        expect(lockedSource).toContain('openWhenLoaded(ForgotPassword, () => setForgotOpen(true))');
+    });
+
+    it('keeps the persisted-settings validator out of first-paint helpers', () => {
+        for (const source of [autoLockPolicySource, effectiveNetworkSource, clipboardSource]) {
+            expect(source).toContain('schemas/settingsStartup.js');
+            expect(source).not.toMatch(/schemas\/settings\.js/);
+        }
     });
 
     it('loads the QR encoder only when the private-key route renders it', () => {

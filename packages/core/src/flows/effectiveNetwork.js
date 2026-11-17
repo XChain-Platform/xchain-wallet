@@ -29,7 +29,7 @@
 //     picker (filters derived `activeChainIds = Object.entries(...)`)
 //   - Every caller of `checkReachability` (filters the chainIds arg)
 
-import { NETWORK_DEFAULT } from '../schemas/settings.js';
+import { NETWORK_DEFAULT } from '../schemas/settingsStartup.js';
 
 /**
  * Read the active-network preference from a settings record. Falls

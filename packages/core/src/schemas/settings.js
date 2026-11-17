@@ -26,6 +26,25 @@ import {
     result,
 } from './validate.js';
 import { WALLET_MODES, WALLET_MODE_DEFAULT } from './wallet.js';
+import {
+    AUTOLOCK_MINUTES_DEFAULT,
+    AUTOLOCK_MINUTES_MAX,
+    AUTOLOCK_MINUTES_MIN,
+    AUTOLOCK_NEVER,
+    CLIPBOARD_AUTO_CLEAR_DEFAULT,
+    CLIPBOARD_AUTO_CLEAR_MAX,
+    NETWORK_DEFAULT,
+} from './settingsStartup.js';
+
+export {
+    AUTOLOCK_MINUTES_DEFAULT,
+    AUTOLOCK_MINUTES_MAX,
+    AUTOLOCK_MINUTES_MIN,
+    AUTOLOCK_NEVER,
+    CLIPBOARD_AUTO_CLEAR_DEFAULT,
+    CLIPBOARD_AUTO_CLEAR_MAX,
+    NETWORK_DEFAULT,
+};
 
 export const CURRENT_VERSION = 5;
 
@@ -83,7 +102,6 @@ export { WALLET_MODES, WALLET_MODE_DEFAULT };
 // clarification, not a regression, since cross-mainnet-testnet bridges
 // don't exist anyway.
 export const NETWORKS = /** @type {const} */ (['mainnet', 'testnet', 'regtest']);
-export const NETWORK_DEFAULT = 'mainnet';
 
 // Automatic donations (§36, operator ruling 2026-11-14): ONE wallet-wide
 // queue kept in fiat. Every mainnet transaction the wallet sends, on any chain,
@@ -198,17 +216,11 @@ export function resolvePreflightPrivacy(settings) {
 // protection back can read it again without a schema bump. Nothing in
 // the app reads `privacy.clipboardAutoClearSeconds` today.
 export const CLIPBOARD_AUTO_CLEAR_MIN = 0;
-export const CLIPBOARD_AUTO_CLEAR_MAX = 600;
-export const CLIPBOARD_AUTO_CLEAR_DEFAULT = 60;
 
 // §26: auto-lock idle timeout, in minutes. The Settings Safety panel
 // offers 1 / 5 / 15 / 30 / 60 / 240 and "Never", where "Never" is the
 // sentinel 0. Anything above the ceiling is a hand-edited record, not a
 // choice the UI can produce. useAutoLockPolicy is the single reader.
-export const AUTOLOCK_NEVER = 0;
-export const AUTOLOCK_MINUTES_MIN = 1;
-export const AUTOLOCK_MINUTES_MAX = 1440;
-export const AUTOLOCK_MINUTES_DEFAULT = 15;
 
 // Undo-send grace window, in seconds, 0 (no hold) to 30. validateSettings
 // only checks for a non-negative integer, so a hand-edited 600 validates;
