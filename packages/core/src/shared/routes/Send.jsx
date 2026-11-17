@@ -2777,7 +2777,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // this fires only when the balances came back clean and this address holds none of the
     // selected token.
     const sourceLacksTick = useMemo(() => {
-        if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape) return null;
+        const unavailable = Array.isArray(previewBalances.sdkShape?.unavailable)
+            && previewBalances.sdkShape.unavailable.includes(isNativeSend ? 'native' : 'tokens');
+        if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape || unavailable) return null;
         const tickUpper = tick.trim().toUpperCase();
         // A native coin always comes back as a row, holding "0" when empty, so a
         // zero amount counts as none too (an empty BTC address on a phone showed
@@ -2792,7 +2794,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         }
         return `This address holds no ${tickUpper}. A send spends from one address, not from the `
             + 'whole wallet, so pick the address that holds it in the From field above.';
-    }, [previewBalances, sourceBalance, tick, otherAddressHasTick]);
+    }, [previewBalances, sourceBalance, tick, otherAddressHasTick, isNativeSend]);
 
     /**
      * The amount to fill in for "send everything", priced by the encoder that
@@ -4749,15 +4751,18 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             ? t('send.balance.unavailable', { error: previewBalances.error })
                             : networkOffline && !isDemo && !previewBalances.sdkShape
                                 ? t('send.balance.unknown')
-                            : sourceBalance
-                                ? t('send.balance.available', {
-                                    amount: formatWithThousands(sourceBalance.amount),
-                                    ticker: sourceBalance.tick,
-                                })
-                                : t('send.balance.available', {
-                                    amount: '0',
-                                    ticker: tick.trim().toUpperCase(),
-                                }).replace(/\s+/g, ' ').trim()
+                                : Array.isArray(previewBalances.sdkShape?.unavailable)
+                                    && previewBalances.sdkShape.unavailable.includes(isNativeSend ? 'native' : 'tokens')
+                                    ? t('send.balance.unknown')
+                                    : sourceBalance
+                                        ? t('send.balance.available', {
+                                            amount: formatWithThousands(sourceBalance.amount),
+                                            ticker: sourceBalance.tick,
+                                        })
+                                        : t('send.balance.available', {
+                                            amount: '0',
+                                            ticker: tick.trim().toUpperCase(),
+                                        }).replace(/\s+/g, ' ').trim()
                 }
             />
             {maxNote ? (

@@ -99,6 +99,9 @@ describe('Send empty state and the balance check', () => {
     it('keeps the form instead of claiming there is nothing to send when the coin balance was unreadable', async () => {
         mount('0', { balances: { native: null, tokens: [], unavailable: ['native'], unavailableReason: 'balance service unavailable' } });
         expect(await screen.findByRole('form', { name: 'Send' }, { timeout: 10_000 })).toBeInTheDocument();
+        expect(await screen.findByText('Balance unavailable')).toBeInTheDocument();
+        expect(screen.queryByText('0 BTC available')).toBeNull();
+        expect(screen.queryByText(/This address holds no BTC/)).toBeNull();
         expect(screen.queryByRole('heading', { name: 'Nothing to send yet' })).toBeNull();
     });
 

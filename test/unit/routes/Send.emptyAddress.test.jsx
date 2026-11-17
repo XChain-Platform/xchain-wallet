@@ -97,6 +97,8 @@ describe('Send from an address holding no coin', () => {
         const { messaging } = mount('0', { walletMode: 'watcher' });
 
         expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
+        expect(await screen.findByText('0 BTC available')).toBeInTheDocument();
+        expect(await screen.findByText(/This wallet has no funds to send yet/)).toBeInTheDocument();
         expect(messaging.getWalletBalances).not.toHaveBeenCalled();
     });
 
