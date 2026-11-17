@@ -18,11 +18,17 @@ import {
     bitcoinDescriptors,
     dogecoinDescriptors,
 } from '../../../packages/core/src/registry/descriptors/index.js';
+import {
+    MULTIPART_FILE_MAX_PARTS,
+    multipartPartCapacity,
+} from '../../../packages/core/src/flows/fileSizeLimits.js';
 
 const BITCOIN = bitcoinDescriptors.find(({ networkKind }) => networkKind === 'regtest');
 const DOGECOIN = dogecoinDescriptors.find(({ networkKind }) => networkKind === 'regtest');
 const SOFTWARE = Object.freeze({ source: 'hd', label: 'Primary' });
-const STANDARD_MAX_BYTES = 531_750_990;
+// The Standard cap sizes every part for the widest index a 65,535-part file uses.
+const STANDARD_MAX_BYTES = MULTIPART_FILE_MAX_PARTS
+    * multipartPartCapacity('STANDARD', String(MULTIPART_FILE_MAX_PARTS - 1).length);
 
 class LengthStub extends Uint8Array {
     get byteLength() { return STANDARD_MAX_BYTES + 1; }
