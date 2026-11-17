@@ -156,7 +156,6 @@ test.describe(`Publish a multipart file in funding waves on ${REGTEST_CHAIN_LABE
                 buffer: bytes,
             });
             await expect(main).toContainText(`Size${formatBytes(FILE_BYTES)}`);
-            await main.getByRole('checkbox', { name: /on-chain forever/ }).check();
 
             const method = main.getByRole('button', { name: /^Upload method:/ });
             await expect(method).toContainText(
