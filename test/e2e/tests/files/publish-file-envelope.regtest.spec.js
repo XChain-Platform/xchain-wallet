@@ -31,6 +31,7 @@ import {
     unlockAfterReload,
     waitForValidAction,
 } from '../../fixtures/regtest.js';
+import { formatBytes } from '../../../../packages/core/src/shared/utils/formatBytes.js';
 
 const PASSWORD = 'regtestpassword123';
 // Well over the legacy 8,192-byte compiled ceiling of a plain data carrier.
@@ -76,7 +77,7 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
                 mimeType: 'application/octet-stream',
                 buffer: randomBytes(FILE_BYTES),
             });
-            await expect(main).toContainText(`${FILE_BYTES.toLocaleString('en-US')} bytes`);
+            await expect(main).toContainText(`Size${formatBytes(FILE_BYTES)}`);
             await main.getByLabel('Title', { exact: true }).fill(TITLE);
             await main.getByLabel('Memo', { exact: true }).fill(MEMO);
             await main.getByRole('button', { name: 'Publish File', exact: true }).click();

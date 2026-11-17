@@ -26,11 +26,14 @@ import {
     switchToRegtest,
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
+import { multipartPartCapacity } from '../../../../packages/core/src/flows/fileSizeLimits.js';
+import { formatBytes } from '../../../../packages/core/src/shared/utils/formatBytes.js';
 
 const UNLOCK_VALUE = ['multipart', 'waves', 'word123'].join('');
-const PART_BYTES = 389_920;
+// 101 parts reach a three-digit part index, which leaves each full part one
+// byte less room (389,919); the last part is short.
 const EXPECTED_PARTS = 101;
-const FILE_BYTES = EXPECTED_PARTS * PART_BYTES;
+const FILE_BYTES = (EXPECTED_PARTS - 1) * multipartPartCapacity('TAPROOT', 3) + 1_000;
 const EXPECTED_TRANSACTIONS = 206;
 const MAX_MINED_BLOCKS = 150;
 const STAMP = Date.now().toString().slice(-8);
@@ -152,7 +155,7 @@ test.describe(`Publish a multipart file in funding waves on ${REGTEST_CHAIN_LABE
                 mimeType: 'application/octet-stream',
                 buffer: bytes,
             });
-            await expect(main).toContainText(`${FILE_BYTES.toLocaleString('en-US')} bytes`);
+            await expect(main).toContainText(`Size${formatBytes(FILE_BYTES)}`);
             await main.getByRole('checkbox', { name: /on-chain forever/ }).check();
 
             const method = main.getByRole('button', { name: /^Upload method:/ });
