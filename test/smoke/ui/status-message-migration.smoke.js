@@ -33,8 +33,9 @@
 //       heading, several paragraphs, a button group). `<StatusMessage>`
 //       now wraps its children in a block body, so a paragraph-per-line
 //       warning fits; a panel with a heading and controls still stays out.
-//   (f) field errors. These use the compact shared Input error row because
-//       the control references the message through `aria-describedby`.
+//   (f) field errors. These use the compact shared Input error row, or the
+//       host's own error style, because the control references the message
+//       through `aria-describedby`; the reference is what makes it a field error.
 //   (g) an error appended inside a shared StatusMessage. The outer primitive
 //       owns the status layout while the nested alert announces the new error.
 //
@@ -132,6 +133,10 @@ for (const f of files) {
         if (/style=/.test(tag)) continue;                                    // (c)
         if (/data-testid/.test(tag)) continue;                               // (b)
         if (/className=\{inputStyles\.error\}/.test(tag)) continue;          // (f)
+        // (f) also covers a field error drawn in its host's own style, as long
+        // as a control in the same file names it through aria-describedby.
+        const idExpr = /\sid=\{([A-Za-z0-9_.]+)\}/.exec(tag);
+        if (idExpr && f.src.includes(`aria-describedby={${idExpr[1]}}`)) continue; // (f)
         const before = f.src.slice(0, m.index);
         if (before.lastIndexOf('<StatusMessage') > before.lastIndexOf('</StatusMessage>')) continue; // (g)
         const cls = /className=\{styles\.([A-Za-z0-9_]+)\}/.exec(tag);
