@@ -362,11 +362,11 @@ describe('(c) the My predictions tab names each bet\'s outcome on its market car
         const onOpenMarket = vi.fn();
         const utils = await openMyBets(messaging, { onOpenMarket });
         expect(listed(utils)).toEqual(['1169']);
-        // One short summary stays in the question row's footer.
+        // One short summary on the right of the row: amount and asset only.
         const chips = utils.container.querySelectorAll('[data-testid="bet-market-your-bet"]');
         expect(chips.length).toBe(1);
         expect(chips[0].textContent).toBe('Your position: 100 XCHAIN on No');
-        expect(chips[0].closest('span[class*="footer"]')).not.toBeNull();
+        expect(chips[0].closest('span[class*="right"]')).not.toBeNull();
         expect(utils.container.textContent).toContain(' on No');
         fireEvent.click(utils.container.querySelector('[data-market-index="1169"]'));
         expect(onOpenMarket).toHaveBeenCalledWith(CHAIN, '1169');

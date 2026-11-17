@@ -15,7 +15,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedsList, marketsForView } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import cardStyles from '../../../packages/core/src/shared/components/BetMarketCard.module.css';
-import questionStyles from '../../../packages/core/src/shared/components/QuestionList.module.css';
+import listStyles from '../../../packages/core/src/shared/routes/BetFeedsList.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const OWN = 'bc1qownownownownownownownownownownownownow';
@@ -115,7 +115,7 @@ describe('Prediction markets: one list for All, My predictions and My markets', 
         expect(myMarkets).toBe(all);
     });
 
-    it('renders the same shared row in the same framed list on every tab, differing only in rows', async () => {
+    it('renders the same card component in the same grid on every tab, differing only in rows', async () => {
         // 1: bet and created, 2: bet only, 3: created only, 4: neither.
         const markets = [market(1, OWN), market(2, OTHER), market(3, OWN), market(4, OTHER)];
         const { messaging } = harness({ markets, bets: [bet(markets[0], 0), bet(markets[1], 1)] });
@@ -126,13 +126,12 @@ describe('Prediction markets: one list for All, My predictions and My markets', 
             await pick(view);
             const ul = list(utils.container);
             expect(ul, view).toBeTruthy();
-            expect(ul.className).toBe(questionStyles.list);
-            expect(ul.parentElement.className).toBe(questionStyles.panel);
+            expect(ul.className).toBe(listStyles.marketList);
+            expect(ul.parentElement.className).toBe(listStyles.cardArea);
             for (const li of ul.children) {
                 expect(li.tagName).toBe('LI');
                 expect(li.firstElementChild.tagName).toBe('BUTTON');
-                expect(li.firstElementChild.className).toContain(questionStyles.row);
-                expect(li.firstElementChild.className).toContain(cardStyles.card);
+                expect(li.firstElementChild.className).toBe(cardStyles.card);
             }
             seen[view] = listed(utils.container);
         }
