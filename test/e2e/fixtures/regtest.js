@@ -2058,14 +2058,12 @@ export function networkOption(page, network) {
  * it the Network page offers Mainnet and Testnet but not Regtest.
  * Idempotent: a wallet that already has it on is left alone.
  *
- * Settings is a list of group rows and each group page a list of setting rows
- * (G08), so Developer mode sits on Advanced > Developer mode and Back is
- * pressed twice (row page, then group page) to land on the index.
+ * Developer mode is a switch on the Advanced group page's own row, named by
+ * the row title (screen walk 2b842b099), so one Back lands on the index.
  */
 export async function enableDeveloperMode(page) {
     await page.getByRole('button', { name: /^Advanced\b/ }).click();
-    await page.getByRole('button', { name: /^Developer mode\b/ }).click();
-    const devToggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
+    const devToggle = page.getByRole('switch', { name: 'Developer mode', exact: true });
     await expect(devToggle).toBeVisible();
     if (!(await devToggle.isChecked())) {
         // `.check()` fails here: the input is fully controlled by PERSISTED
@@ -2075,10 +2073,7 @@ export async function enableDeveloperMode(page) {
         await devToggle.click();
         await expect(devToggle).toBeChecked();
     }
-    const back = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
-    await back.click();
-    await expect(page.getByRole('button', { name: /^Developer mode\b/ })).toBeVisible();
-    await back.click();
+    await page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first().click();
     await expect(page.getByRole('button', { name: /^Network and Fees\b/ })).toBeVisible();
 }
 
