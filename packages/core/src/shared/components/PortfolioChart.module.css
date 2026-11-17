@@ -283,27 +283,20 @@
     outline-color: var(--xc-hero-text);
 }
 
-/* Every range is a frosted pill like the card's other buttons, so
-   each one reads as a button over the chart; the selected one is white. */
+/* Every range is a solid pill over the chart. */
 .behind .rangeSlot .rangeLabel {
     border-radius: var(--xc-radius-pill);
-}
-
-.behind .rangeSlot .rangeLabel::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
+    border: 1px solid var(--xc-hero-border);
     background: var(--xc-hero-chip-bg);
 }
 
-.behind .rangeSlot:hover .rangeLabel::after {
-    background: color-mix(in srgb, var(--xc-hero-chip-bg) 87.5%, var(--xc-hero-text));
+.behind .rangeSlot .rangeLabel::after {
+    display: none;
 }
 
-.behind .rangeSlot.rangeActive .rangeLabel::after,
-.behind .rangeSlot.rangeActive:hover .rangeLabel::after {
+.behind .rangeSlot.rangeActive .rangeLabel,
+.behind .rangeSlot.rangeActive:hover .rangeLabel {
+    border-color: var(--xc-hero-chip-selected-bg);
     background: var(--xc-hero-chip-selected-bg);
 }
 

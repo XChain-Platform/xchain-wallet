@@ -48,6 +48,7 @@ import {
     OutcomeResult,
 } from '../components/outcomeDetail/OutcomeDetailLayout.jsx';
 import outcomeStyles from '../components/outcomeDetail/OutcomeDetail.module.css';
+import { RANGES as CHART_RANGES, defaultRangeId } from '../components/PortfolioChart.jsx';
 // The bet market's outcome list and marks, so the Vote tab reads exactly
 // like the Bet tab (operator ruling 2026-11-13).
 import { OutcomeList, OutcomeMark, outcomeMarkOf } from './OutcomeList.jsx';
@@ -96,6 +97,7 @@ import {
 
 const chainRegistry = registryLib.defaultRegistry();
 const NO_ACKNOWLEDGMENTS = new Set();
+const POLL_RANGES = CHART_RANGES.filter((range) => range.id !== 'ytd');
 
 /** The poll's ballot read for Activity is one bounded page. */
 const POLL_VOTE_LIMIT = 500;
@@ -198,6 +200,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack, embedded = fa
     // The tab strip under the hero. Vote leads on an open poll; a closed poll
     // offers Result in its place, so a held 'vote' reads as Result there.
     const [tab, setTab] = useState(/** @type {'vote' | 'result' | 'activity' | 'details'} */ ('vote'));
+    const [rangeId, setRangeId] = useState(defaultRangeId());
     // The poll's own ballots, for the Activity tab and the voter count of an
     // open poll.
     const [pollVotes, setPollVotes] = useState(/** @type {any[] | null} */ (null));
@@ -942,10 +945,11 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack, embedded = fa
     // the status and closing chips, the question, the winning or leading
     // option's share (or "Counted at close" while weight is still unset), the
     // legend and stacked split bar, and the standing foot with the votes and
-    // voters where the bet shows pool and bets and the quorum where it shows
-    // the oracle. Ballots carry no weight until the close and the explorer
-    // keeps no tally over time, so a poll has no history to chart and opens
-    // on the outlined surface (G16) rather than the blue chart hero.
+    // voters where the prediction market shows its pool and positions and the
+    // quorum where it shows its oracle. The shared fixed 0 to 100 chart draws
+    // one line per answer. Governance exposes only the frozen close tally, so
+    // those shares are flat and an open poll stays at zero with Counted at
+    // close rather than pretending ballot counts are token voting weight.
     const statusText = awaitingFinal ? t('governance.detail.awaitingFinal') : pollStatusLabel(poll.poll_status, outcome);
     const heroChips = [
         {
@@ -1010,25 +1014,33 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack, embedded = fa
         ? t('governance.detail.tied')
         : isOpen ? t('governance.detail.countedAtCloseShort') : noTallyText;
     const hasSplit = tally.entries.length > 0;
+    const resultByOption = new Map(tally.entries.map((entry) => [entry.optionIndex, entry.percent]));
+    const chartLines = options.map((_, optionIndex) => {
+        const share = resultByOption.get(optionIndex) ?? 0;
+        return { key: optionIndex, values: [share, share] };
+    });
     const hero = (
         <OutcomeHero
-            hasChart={false}
+            hasChart={true}
             chips={heroChips}
             title={poll.question || t('governance.pollNumber', { id: String(pollIndex) })}
             lead={heroLead}
             leadMessage={heroLeadMessage}
-            legend={hasSplit ? {
+            lines={chartLines}
+            chartLabel={hasSplit ? 'Frozen vote share by answer' : 'Vote shares are counted at the close block'}
+            chartRegionLabel="Vote shares from 0% to 100%"
+            legend={{
                 label: t('governance.detail.shareOfEach'),
-                items: tally.entries.map((entry) => ({
-                    key: entry.optionIndex,
-                    label: String(options[entry.optionIndex] ?? ''),
-                    value: `${entry.percent}%`,
+                items: options.map((option, optionIndex) => ({
+                    key: optionIndex,
+                    label: String(option),
+                    value: `${resultByOption.get(optionIndex) ?? 0}%`,
                 })),
-            } : null}
-            bar={hasSplit ? {
-                segments: tally.entries.map((entry) => ({ key: entry.optionIndex, percent: entry.percent })),
-            } : null}
+            }}
             foot={heroFoot}
+            ranges={POLL_RANGES}
+            rangeId={rangeId}
+            onRangeChange={setRangeId}
         />
     );
 

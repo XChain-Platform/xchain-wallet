@@ -50,7 +50,7 @@ describe('StakeDetail Validator tab', () => {
     it('shows the roster row that names this key and this address as label and value rows', async () => {
         mount([
             { source: OTHER, signing_pubkey: KEY, uptime: '99%', status: 'valid' },
-            { source: ADDRESS, signing_pubkey: KEY.toUpperCase(), uptime: '41%', score: 77, votes: 1200, missed: 3, last_seen_block: 198, status: 'valid' },
+            { source: ADDRESS, signing_pubkey: KEY.toUpperCase(), uptime: '41%', score: 77, votes: 1200, missed: 3, last_seen_block: 12345, status: 'valid' },
         ]);
 
         fireEvent.click(await screen.findByRole('tab', { name: 'Validator' }));
@@ -58,9 +58,10 @@ describe('StakeDetail Validator tab', () => {
         expect(valueOf(list, 'Status')).toHaveTextContent('Active');
         expect(valueOf(list, 'Uptime')).toHaveTextContent('41%');
         expect(valueOf(list, 'Score')).toHaveTextContent('77');
-        expect(valueOf(list, 'Votes recorded')).toHaveTextContent('1200');
+        expect(valueOf(list, 'Votes recorded')).toHaveTextContent('1,200');
         expect(valueOf(list, 'Missed')).toHaveTextContent('3');
-        expect(valueOf(list, 'Last seen block')).toHaveTextContent('198');
+        expect(valueOf(list, 'Last seen block')).toHaveTextContent('12345');
+        expect(valueOf(list, 'Last seen block')).not.toHaveTextContent('12,345');
         // G99: the key is the fitting AddressText (whole when the row has room),
         // named by the full key; jsdom has no layout, so it shows its short form.
         const key = within(valueOf(list, 'Signing key')).getByLabelText(KEY);

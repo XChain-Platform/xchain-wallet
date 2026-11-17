@@ -37,7 +37,7 @@ describe('BetFeedsList states', () => {
     it('shows the initial loading state while wallet addresses resolve', () => {
         mount({ getAddressesByChain: vi.fn(() => pending()) });
 
-        expect(screen.getByRole('heading', { name: 'Prediction markets' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Prediction Markets' })).toBeInTheDocument();
         expect(screen.getByText(/Loading/)).toBeInTheDocument();
         expect(screen.queryByText('No markets')).toBeNull();
     });

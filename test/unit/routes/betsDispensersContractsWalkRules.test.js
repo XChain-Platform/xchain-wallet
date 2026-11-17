@@ -18,6 +18,34 @@ const read = (path) => readFileSync(join(root, path), 'utf8');
 const narrow = (css) => css.slice(css.indexOf('@media not all and (min-width: 400px)'));
 
 describe('dispenser, staking, contract and bet walk rules', () => {
+    it('uses hero foreground tokens on every light hero header', () => {
+        const heroSheets = [
+            'components/outcomeDetail/OutcomeDetail.module.css',
+            'routes/DispenserHero.module.css',
+            'routes/CreateBetFeedForm.module.css',
+            'routes/MarketActivity.module.css',
+            'routes/MarketView.module.css',
+        ];
+        for (const file of heroSheets) {
+            const sheet = read(file);
+            expect(sheet, file).toContain('var(--xc-hero-text');
+            expect(sheet, file).not.toContain('var(--xc-on-accent)');
+            expect(sheet, file).not.toMatch(/color:\s*(?:#(?:fff(?:fff)?|BBF7D0|FECACA)|rgba\(255,\s*255,\s*255)/i);
+        }
+
+        const allocation = read('components/AllocationCard.module.css');
+        expect(allocation).toContain('background: var(--xc-hero-bg)');
+        expect(allocation).toContain('color: var(--xc-hero-text)');
+
+        const stake = read('routes/StakeDetail.jsx');
+        expect(stake).toContain('homeTabsStyles.heroStackWithChart');
+        expect(stake).toContain('heroStyles.hero');
+
+        for (const file of ['routes/ContractHero.jsx', 'components/NftIdentityCard.module.css']) {
+            expect(read(file), file).not.toContain('var(--xc-hero-bg)');
+        }
+    });
+
     it('keeps the chevron in its own end column on phone-width dispenser and staking rows', () => {
         const dispensers = narrow(read('routes/DispensersList.module.css'));
         expect(dispensers).toMatch(/grid-template-columns:\s*40px minmax\(0, 1fr\) auto/);

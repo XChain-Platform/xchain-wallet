@@ -81,16 +81,24 @@ afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 afterEach(() => cleanup());
 
 describe('PortfolioChart range switching', () => {
-    it('shows five matching labels and guides on a non-flat hero chart', async () => {
+    it('shows five right-edge labels on alternating lines in a nine-guide hero grid', async () => {
         mount(async () => ({ prices: {} }), { behind: true });
 
         const chart = await screen.findByRole('img', { name: /Range high .*, low .*/ });
         const labels = [...chart.parentElement.querySelectorAll('[data-chart-scale]')];
         const guides = [...chart.parentElement.querySelectorAll('[data-chart-guide]')];
         expect(labels).toHaveLength(5);
-        expect(guides).toHaveLength(labels.length);
+        expect(guides).toHaveLength(9);
         expect(labels[0].parentElement).toHaveAttribute('data-chart-scale-band', 'hero');
-        expect(guides[0].ownerSVGElement).toHaveAttribute('data-chart-scale-band', 'hero');
+        expect(guides.map((guide) => guide.getAttribute('y1')))
+            .toEqual(['4', '15.5', '27', '38.5', '50', '61.5', '73', '84.5', '96']);
+        expect(guides.map((guide) => guide.getAttribute('data-chart-guide-kind')))
+            .toEqual(['labelled', 'halfway', 'labelled', 'halfway', 'labelled', 'halfway', 'labelled', 'halfway', 'labelled']);
+        expect(labels.map((label) => label.style.top)).toEqual(['4%', '27%', '50%', '73%', '96%']);
+        expect(labels.every((label) => !label.hasAttribute('data-scale-collision'))).toBe(true);
+        const points = chart.querySelector('polyline').getAttribute('points');
+        expect(points).toContain(',4.00');
+        expect(points).toContain(',96.00');
     });
 
     it('uses a 2px directional line and matching 22 percent gradient', async () => {

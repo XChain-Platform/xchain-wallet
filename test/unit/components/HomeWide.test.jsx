@@ -55,7 +55,7 @@ import {
     HOME_LIST_MIN_PX,
     HOME_LIST_WIDTH_KEY,
 } from '../../../packages/core/src/shared/components/HomeWideLayout.jsx';
-import { allocationSlices, liftForBlue } from '../../../packages/core/src/shared/components/AllocationCard.jsx';
+import { allocationSlices, fitAllocationColor } from '../../../packages/core/src/shared/components/AllocationCard.jsx';
 import { clampPanelSplit, panelSplitMax } from '../../../packages/core/src/shared/components/PanelSplit.jsx';
 import { showHomeBalances } from '../../helpers/homeBalances.js';
 
@@ -622,6 +622,6 @@ describe('allocationSlices', () => {
             { chainId: 'bitcoin-mainnet', tick: 'NOPRICE', kind: 'token', quantity: '9', divisibility: 0, fiatRate: null },
             { chainId: 'bitcoin-mainnet', tick: 'ZERO', kind: 'token', quantity: '0', divisibility: 0, fiatRate: 3 },
         ], chainRegistry);
-        expect(slices).toEqual([expect.objectContaining({ label: 'BTC', color: liftForBlue('#F7931A'), percent: 100 })]);
+        expect(slices).toEqual([expect.objectContaining({ label: 'BTC', color: fitAllocationColor('#F7931A'), percent: 100 })]);
     });
 });

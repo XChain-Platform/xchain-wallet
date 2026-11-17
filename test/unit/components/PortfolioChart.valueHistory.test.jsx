@@ -9,7 +9,7 @@
 // holding line.
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 vi.mock('../../../packages/core/src/flows/demoMode.js', async (importOriginal) => {
@@ -19,6 +19,7 @@ vi.mock('../../../packages/core/src/flows/demoMode.js', async (importOriginal) =
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PortfolioChart, RANGES } from '../../../packages/core/src/shared/components/PortfolioChart.jsx';
+import { TotalBalanceHero } from '../../../packages/core/src/shared/components/TotalBalanceHero.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
 import { HoldingValueContext, holdingValueSeries } from '../../../packages/core/src/shared/components/holdingValueContext.js';
 import { sumFiatValue } from '../../../packages/core/src/shared/components/BalanceList.jsx';
@@ -462,6 +463,95 @@ describe('wide Home detail panel', () => {
         );
     }
 
+    it('keeps the Home hero and embedded asset hero unit toggles independent', async () => {
+        const rows = [btcRow('100000000')];
+        const source = { prepared: prepareValuation({ rows }), priceMap: PRICES, seedId: 'real-wallet', synthesize: false };
+        const messaging = {
+            ...messagingStub(),
+            getNativePricesRequest: vi.fn(async () => ({ prices: PRICES })),
+        };
+
+        function PairedHeroes() {
+            const [homeUnit, setHomeUnit] = React.useState(null);
+            return (
+                <>
+                    <section data-testid="home-hero">
+                        <TotalBalanceHero
+                            rows={rows}
+                            walletId="real-wallet"
+                            networkFilter="all"
+                            nativePriceMap={PRICES}
+                            onUnitChange={setHomeUnit}
+                        />
+                        <PortfolioChart
+                            rows={rows}
+                            walletId="real-wallet"
+                            nativePriceMap={PRICES}
+                            nativePricesLoading={false}
+                            behind
+                            unit={homeUnit}
+                        />
+                    </section>
+                    <section data-testid="detail-hero">
+                        <HoldingValueContext.Provider value={source}>
+                            <TokenDetail
+                                embedded
+                                walletId="real-wallet"
+                                chainId={BTC}
+                                tick="BTC"
+                                kind="native"
+                                quantity="100000000"
+                                divisibility={8}
+                                fiatRate={SPARKLINE.at(-1)}
+                                onBack={() => {}}
+                            />
+                        </HoldingValueContext.Provider>
+                    </section>
+                </>
+            );
+        }
+
+        const view = render(<MessagingProvider shell="web" messaging={messaging}><PairedHeroes /></MessagingProvider>);
+        const home = screen.getByTestId('home-hero');
+        const detail = screen.getByTestId('detail-hero');
+        const detailFiatChart = await within(detail).findByRole('img', { name: /Range 1W\./ });
+        const detailFiatLabel = detailFiatChart.getAttribute('aria-label');
+        expect(within(detail).getByText('Value')).toBeTruthy();
+        expect(detailFiatLabel).toMatch(/^Value over 1W\./);
+
+        fireEvent.click(within(home).getByRole('button', { name: 'Show wallet balance in BTC' }));
+        await waitFor(() => expect(within(home).getByRole('button', { name: 'Show wallet value in USD' })).toBeTruthy());
+        expect(within(home).getByRole('img', { name: /^Wallet balance over 1W\./ }).getAttribute('aria-label'))
+            .toContain('End 1 BTC.');
+        expect(within(detail).getByRole('button', { name: 'Show balance in BTC' })).toBeTruthy();
+        expect(within(detail).getByRole('img', { name: /Range 1W\./ }).getAttribute('aria-label')).toBe(detailFiatLabel);
+
+        fireEvent.click(within(detail).getByRole('button', { name: 'Show balance in BTC' }));
+        const detailBalanceChart = await within(detail).findByRole('img', { name: /^Balance over 1W/ });
+        expect(within(detail).getByText('Balance')).toBeTruthy();
+        expect(detailBalanceChart.getAttribute('aria-label')).toContain('End 1 BTC.');
+        expect(within(home).getByRole('button', { name: 'Show wallet value in USD' })).toBeTruthy();
+        expect(within(home).getByRole('img', { name: /^Wallet balance over 1W\./ }).getAttribute('aria-label'))
+            .toContain('End 1 BTC.');
+
+        fireEvent.click(within(home).getByRole('button', { name: 'Show wallet value in USD' }));
+        await waitFor(() => expect(within(home).getByRole('button', { name: 'Show wallet balance in BTC' })).toBeTruthy());
+        expect(within(detail).getByRole('button', { name: 'Show value in USD' })).toBeTruthy();
+        expect(within(detail).getByRole('img', { name: /^Balance over 1W/ })).toBe(detailBalanceChart);
+        expect(window.localStorage.getItem('xc:balanceUnit')).toBe('fiat');
+        expect(window.localStorage.getItem('xc:assetBalanceUnit')).toBe('asset');
+
+        view.unmount();
+        render(<MessagingProvider shell="web" messaging={messaging}><PairedHeroes /></MessagingProvider>);
+        const restoredHome = screen.getByTestId('home-hero');
+        const restoredDetail = screen.getByTestId('detail-hero');
+        expect(within(restoredHome).getByRole('button', { name: 'Show wallet balance in BTC' })).toBeTruthy();
+        expect(within(restoredHome).getByRole('img', { name: /^Wallet value over 1W\./ }).getAttribute('aria-label'))
+            .toContain('USD.');
+        expect(within(restoredDetail).getByRole('button', { name: 'Show value in USD' })).toBeTruthy();
+        expect(await within(restoredDetail).findByRole('img', { name: /^Balance over 1W/ })).toBeTruthy();
+    });
+
     it('draws the holding\'s value (balance then times price then), the wallet chart\'s share of it', async () => {
         const now = Date.now();
         const rows = [btcRow('100000000')];
@@ -487,8 +577,8 @@ describe('wide Home detail panel', () => {
         expect(label).toMatch(/Start \$0\./);
         expect(label).toMatch(/End \$[\d.]+K\./);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Show in BTC' }));
-        chart = await screen.findByRole('img', { name: /^Balance trend/ });
+        fireEvent.click(screen.getByRole('button', { name: 'Show balance in BTC' }));
+        chart = await screen.findByRole('img', { name: /^Balance over 1W/ });
         label = chart.getAttribute('aria-label');
         expect(label).toMatch(/Start 0 BTC\./);
         expect(label).toContain('End 1 BTC.');

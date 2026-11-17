@@ -90,7 +90,7 @@
     font-size: var(--xc-text-xs);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
+    color: var(--xc-hero-text-muted);
 }
 
 .pillIdle {

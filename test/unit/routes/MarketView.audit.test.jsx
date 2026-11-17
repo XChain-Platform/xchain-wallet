@@ -8,6 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { selectOption } from '../../helpers/selectOption.js';
 import { useTablistKeys } from '../../../packages/core/src/shared/keyboard/useTablistKeys.js';
+import homeTabsStyles from '../../../packages/core/src/shared/components/HomeTabs.module.css';
+import portfolioChartStyles from '../../../packages/core/src/shared/components/PortfolioChart.module.css';
+import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 
 let messaging;
 const widgetFailure = vi.hoisted(() => ({ current: null }));
@@ -32,9 +35,14 @@ vi.mock('../../../packages/core/src/shared/components/Sparkline.jsx', async (imp
     const actual = await importOriginal();
     return {
         ...actual,
-        Sparkline: () => {
+        Sparkline: (props) => {
             if (widgetFailure.current === 'chart') throw new Error('market chart failed');
-            return React.createElement('div', null, 'Chart panel');
+            return React.createElement(
+                React.Fragment,
+                null,
+                React.createElement(actual.Sparkline, props),
+                React.createElement('span', { className: 'sr-only' }, 'Chart panel'),
+            );
         },
     };
 });
@@ -219,6 +227,40 @@ describe('MarketView market state', () => {
         });
         expect(within(screen.getByRole('region', { name: 'Market summary' })).getByLabelText('0.020000 BTC')).toBeInTheDocument();
         expect(messaging.getMarketHistory).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses the shared full-height hero scale for market prices', async () => {
+        const now = Date.UTC(2026, 10, 16, 12) / 1000;
+        vi.spyOn(Date, 'now').mockReturnValue(now * 1000);
+        messaging.getMarketHistory = vi.fn().mockResolvedValue([
+            { price: '1000', amount: '2', type: 'buy', timestamp: now - 6 * 3600 },
+            { price: '3000', amount: '2', type: 'buy', timestamp: now - 2 * 3600 },
+        ]);
+        messaging.getSettings = vi.fn().mockResolvedValue({
+            ...createDefaultSettings(),
+            language: 'fr-FR',
+        });
+        const { container } = renderMarket();
+
+        const chart = await screen.findByRole('img', { name: /XCHAIN\/BTC price\./i });
+        const behind = container.querySelector('[data-chart-behind="true"]');
+        expect(behind).toHaveClass(portfolioChartStyles.wrap, portfolioChartStyles.behind);
+        expect(behind.parentElement).toHaveClass(homeTabsStyles.heroStack, homeTabsStyles.heroStackWithChart);
+
+        expect(chart.querySelector('polyline')).toHaveAttribute('stroke', 'var(--xc-hero-chart-up)');
+        expect(chart.querySelector('polyline')).toHaveAttribute('stroke-width', '2');
+        expect(chart.querySelectorAll('[data-chart-guide]')).toHaveLength(9);
+        expect(chart.querySelectorAll('[data-chart-guide-kind="labelled"]')).toHaveLength(5);
+        expect(chart.querySelectorAll('[data-chart-guide-kind="halfway"]')).toHaveLength(4);
+        await waitFor(() => {
+            expect(Array.from(behind.querySelectorAll('[data-chart-scale]'), (mark) => mark.textContent)).toEqual([
+                '3 k BTC',
+                '2,5 k BTC',
+                '2 k BTC',
+                '1,5 k BTC',
+                '1 k BTC',
+            ]);
+        });
     });
 
     it('ignores malformed history rows while rendering usable partial data', async () => {

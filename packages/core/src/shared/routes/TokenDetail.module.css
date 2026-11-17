@@ -60,6 +60,13 @@
     overflow: visible;
 }
 
+.cardIdentity {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
 .cardCaptionText {
     min-width: 0;
     overflow: hidden;
@@ -131,8 +138,8 @@
     font-size: var(--xc-text-sm);
     font-weight: 500;
     line-height: 1.2;
-    /* The card's soft white for secondary figures. */
-    color: color-mix(in srgb, var(--xc-on-accent) 80%, transparent);
+    /* Secondary figures follow the scheme-owned hero palette. */
+    color: var(--xc-hero-text-muted);
 }
 
 /* The age of a kept price takes the card's text color, not the muted one. */
@@ -679,16 +686,9 @@
     min-width: 0;
 }
 
-/* The card has no icon-and-name line of its own (the header has
-   it); the caption stays for screen readers only, and the round buttons sit
-   beside the change pill. */
-.cardNoCaption.cardNoCaption.cardNoCaption {
-    grid-template-areas:
-        'meta actions'
-        'amount amount';
-}
-
-.cardNoCaption .cardCaption {
+/* The page header already names the asset, so its identity stays available to
+   the hero's region name without repeating visually. The mode caption remains. */
+.cardNoCaption .cardIdentity {
     position: absolute;
     width: 1px;
     height: 1px;

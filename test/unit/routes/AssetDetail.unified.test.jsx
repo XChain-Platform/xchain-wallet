@@ -181,6 +181,11 @@ async function layoutOf(heading) {
         pageTabs: pageTabs.map((tab) => tab.textContent),
         firstTabChosen: pageTabs[0].getAttribute('aria-selected'),
         actionsIsOneList: Boolean(screen.getByRole('list', { name: new RegExp(`^Actions for `) })),
+        guidePositions: [...chart.querySelectorAll('[data-chart-guide]')].map((guide) => guide.getAttribute('y1')),
+        guideKinds: [...chart.querySelectorAll('[data-chart-guide]')].map((guide) => guide.getAttribute('data-chart-guide-kind')),
+        labelPositions: [...chart.querySelectorAll('[data-chart-scale]')].map((label) => label.style.top),
+        labelsHaveCollisionShift: [...chart.querySelectorAll('[data-chart-scale]')]
+            .some((label) => label.hasAttribute('data-scale-collision')),
     };
 }
 
@@ -201,6 +206,10 @@ describe('asset and token-management pages', () => {
             pageTabs: ['Actions', 'Details', 'History'],
             firstTabChosen: 'true',
             actionsIsOneList: true,
+            guidePositions: ['4', '15.5', '27', '38.5', '50', '61.5', '73', '84.5', '96'],
+            guideKinds: ['labelled', 'halfway', 'labelled', 'halfway', 'labelled', 'halfway', 'labelled', 'halfway', 'labelled'],
+            labelPositions: ['4%', '27%', '50%', '73%', '96%'],
+            labelsHaveCollisionShift: false,
         };
         expect(coin).toEqual(expected);
         expect(await screen.findByRole('region', { name: 'Token identity' })).toBeInTheDocument();
@@ -214,11 +223,11 @@ describe('asset and token-management pages', () => {
         renderHeldToken();
         await screen.findByRole('region', { name: 'MYTOKEN' });
         const chart = await screen.findByRole('region', { name: 'Balance chart' });
-        const line = await within(chart).findByRole('img', { name: /^Balance trend/ });
+        const line = await within(chart).findByRole('img', { name: /^Balance over 1W/ });
         // 1W: 4 sent 3 days ago (from 6), then 1 and 2 received; the line ends at 5.
         expect(line.getAttribute('aria-label') || line.textContent).toMatch(/End 5\b/);
         fireEvent.click(screen.getByRole('tab', { name: '24h' }));
-        expect(await within(chart).findByRole('img', { name: /^Balance trend.*Range 24h/ })).toBeTruthy();
+        expect(await within(chart).findByRole('img', { name: /^Balance over 24h/ })).toBeTruthy();
     });
 
     it('puts the Details facts in the standard card, 8px under the tab row', async () => {

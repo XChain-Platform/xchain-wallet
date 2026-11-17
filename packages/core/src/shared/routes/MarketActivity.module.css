@@ -45,7 +45,7 @@
     padding: 0;
     border: 0;
     background: transparent;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
     font-family: inherit;
     text-align: start;
     box-shadow: none;
@@ -53,7 +53,7 @@
 
 .tokenButton.tokenButton:hover:not(:disabled) {
     background: transparent;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
 }
 
 .tokenButtonContent,
@@ -66,7 +66,7 @@
 
 .tokenIdentity {
     grid-area: token;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
 }
 
 .tokenText {
@@ -88,7 +88,7 @@
 .tokenChevron {
     display: inline-flex;
     --xc-icon-size: 18px;
-    color: color-mix(in srgb, var(--xc-on-accent) 80%, transparent);
+    color: var(--xc-hero-text-muted);
 }
 
 .tokenChevron svg {
@@ -99,7 +99,7 @@
 .tokenSub {
     font-size: var(--xc-text-sm);
     font-weight: 500;
-    color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
+    color: var(--xc-hero-text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -119,14 +119,6 @@
     font-weight: 600;
 }
 
-/* The chart is layered behind the card text as on Home, but its plot fills
-   only the card's lower area, under the price and move line, so the line never
-   runs through the token name. The range buttons stay on the card's foot. */
-.chartLayer.chartLayer > [role='tabpanel'] {
-    inset: auto 0 0 0;
-    height: 58%;
-}
-
 /* Text drawn over the plot keeps a soft shadow so it reads on the line and
    its fill. */
 .price,
@@ -140,7 +132,7 @@
     align-items: center;
     gap: var(--xc-space-1);
     font-size: var(--xc-text-xs);
-    color: color-mix(in srgb, var(--xc-on-accent) 90%, transparent);
+    color: var(--xc-hero-text-muted);
 }
 
 .holdings svg {

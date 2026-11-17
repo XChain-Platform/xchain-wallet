@@ -704,7 +704,7 @@ describe('governance route audit', () => {
 
         // The delegation rule is the help of the editable ballot: Cast Vote's
         // Change opens the choice editor, whose help tip states it.
-        fireEvent.click(screen.getAllByRole('tab')[0]);
+        fireEvent.click(screen.getByRole('tab', { name: 'Vote' }));
         fireEvent.click(screen.getByRole('button', { name: 'Vote for No' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Change your choice' }));
         expect(await screen.findByText(/A direct vote overrides any standing VOTE delegation/)).toBeTruthy();

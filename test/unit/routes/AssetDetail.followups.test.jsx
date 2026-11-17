@@ -55,7 +55,7 @@ beforeAll(() => {
 });
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 
-beforeEach(() => window.localStorage.removeItem('xc:balanceUnit'));
+beforeEach(() => window.localStorage.removeItem('xc:assetBalanceUnit'));
 
 afterEach(() => {
     cleanup();
@@ -145,7 +145,7 @@ describe('a coin on a test network', () => {
         expect(stack.contains(chart)).toBe(true);
         expect(chart.getAttribute('data-series-kind')).toBe('balance');
         // 1W: 1.0 BTC before the 0.5 BTC receive two days ago; the line ends at 1.5.
-        const line = await within(chart).findByRole('img', { name: /^Balance trend/ });
+        const line = await within(chart).findByRole('img', { name: /^Balance over 1W/ });
         expect(line.getAttribute('aria-label') || line.textContent).toMatch(/End 1\.5\b/);
         expect(line.getAttribute('aria-label') || line.textContent).toMatch(/Start 1 BTC\. End 1\.5 BTC\./);
         expect(line.querySelector('polyline[data-chart-tone="up"]')).toHaveAttribute('stroke', 'var(--xc-hero-chart-up)');
@@ -182,7 +182,7 @@ describe('a coin on a test network', () => {
     it('takes the chain\'s decimals when the row did not carry its divisibility', async () => {
         renderTestnetCoin(testnetCoinMessaging(), { divisibility: null });
         const chart = await screen.findByRole('region', { name: 'Balance chart' });
-        const line = await within(chart).findByRole('img', { name: /^Balance trend/ });
+        const line = await within(chart).findByRole('img', { name: /^Balance over 1W/ });
         // Read in whole BTC, the 0.5 receive steps the line (never a flat line at 0 units).
         expect(line.getAttribute('aria-label') || line.textContent).toMatch(/Start 1 BTC\. End 1\.5 BTC\./);
     });
@@ -196,14 +196,14 @@ describe('the change pill', () => {
             </MessagingProvider>,
         );
         const chart = await screen.findByRole('region', { name: 'Balance chart' });
-        await within(chart).findByRole('img', { name: /^Balance trend/ });
+        await within(chart).findByRole('img', { name: /^Balance over 1W/ });
         expect(screen.queryByLabelText(CHANGE_PILL)).toBeNull();
     });
 
     it('is left off a coin\'s balance line on a test network', async () => {
         renderTestnetCoin();
         const chart = await screen.findByRole('region', { name: 'Balance chart' });
-        await within(chart).findByRole('img', { name: /^Balance trend/ });
+        await within(chart).findByRole('img', { name: /^Balance over 1W/ });
         expect(screen.queryByLabelText(CHANGE_PILL)).toBeNull();
     });
 
@@ -213,7 +213,7 @@ describe('the change pill', () => {
                 <TokenDetail walletId="w1" chainId={MAINNET} tick="MYTOKEN" quantity="5" divisibility={0} fiatRate={2} onBack={() => {}} />
             </MessagingProvider>,
         );
-        await screen.findByRole('button', { name: 'Show in MYTOKEN' });
+        await screen.findByRole('button', { name: 'Show balance in MYTOKEN' });
         const chart = screen.getByRole('region', { name: 'Value chart' });
         expect(within(chart).queryByRole('img')).toBeNull();
         expect(within(chart).getByText('No price history yet')).toBeTruthy();

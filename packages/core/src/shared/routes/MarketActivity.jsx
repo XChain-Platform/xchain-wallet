@@ -16,6 +16,7 @@ import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useSupportedChains } from '../hooks/useSupportedChains.js';
 import { useSettings } from '../hooks/useSettings.js';
+import { getLocale } from '../../i18n/index.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { RelativeTime } from '../components/RelativeTime.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -39,7 +40,7 @@ import { actionRowIdentity, uniqueRows } from '../utils/pagedRows.js';
 import { BuyGlyph, SellGlyph, tidyQuotePrice } from '../components/marketTradeParts.jsx';
 import { DispenserGlyph, mergedOffers, tickText, tradePoints } from '../components/tokenMarketParts.jsx';
 import { MarketTrade } from './MarketTrade.jsx';
-import { Sparkline } from '../components/Sparkline.jsx';
+import { formatCompactChartValue, Sparkline } from '../components/Sparkline.jsx';
 import { BEHIND_CHART_FILL, BEHIND_CHART_STROKE, ChartRangeTabs, RANGES as CHART_RANGES, defaultRangeId } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import heroStyles from '../components/TotalBalanceHero.module.css';
@@ -131,6 +132,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
     // settings load, so nothing escapes the filter; a shell that cannot read
     // settings gets the default network.
     const { settings, loading: settingsLoading } = useSettings();
+    const numberLocale = settings?.language || getLocale();
     const supportedChains = useSupportedChains(chainRegistry);
     const chains = useMemo(() => {
         if (settingsLoading) return [];
@@ -537,8 +539,7 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                 </div>
             </section>
             <section
-                /* Layered behind the card text as on Home; chartLayer keeps the plot in the card's lower area. */
-                className={`${portfolioChartStyles.wrap} ${portfolioChartStyles.behind} ${styles.chartLayer}`}
+                className={`${portfolioChartStyles.wrap} ${portfolioChartStyles.behind}`}
                 data-chart-behind="true"
                 aria-label={`${tick} price chart`}
             >
@@ -555,6 +556,9 @@ export function MarketActivity({ walletId, accountId, onBack, onOpenDispenser })
                                     rangeLabel={range.label}
                                     label={`${tick} price in ${heroQuote}`}
                                     formatValue={(value) => `${tidyQuotePrice(String(value))} ${heroQuote}`}
+                                    formatScaleValue={(value) => formatCompactChartValue(value, { locale: numberLocale, unit: heroQuote })}
+                                    showScale
+                                    heroScale
                                 />
                             </div>
                         ) : null}

@@ -42,11 +42,11 @@ describe('list row hover and selected styles', () => {
     it('marks the selected DEX row like the side menu, with no border or ring', () => {
         const css = read('packages/core/src/shared/routes/MarketsList.module.css');
         const rule = css.match(/\.row\[data-selected='true'\]\s*\{([^}]*)\}/);
-        expect(rule[1]).toMatch(/background:\s*color-mix\([^)]*--xc-accent-primary/);
+        expect(rule[1]).toMatch(/background:\s*var\(--xc-row-active-bg\)/);
         expect(rule[1]).toMatch(/box-shadow:\s*var\(--xc-shadow-nav-indicator\)/);
         expect(rule[1]).not.toMatch(/border|outline|0 0 0/);
         const nav = read('packages/core/src/shared/components/LeftNav.module.css');
-        expect(nav).toMatch(/\.nav \.itemActive[\s\S]*background:\s*color-mix\([^)]*--xc-accent-primary/);
+        expect(nav).toMatch(/\.nav \.itemActive[\s\S]*background:\s*var\(--xc-row-active-bg\)/);
     });
 
     it('keeps the focus ring to keyboard focus', () => {
@@ -59,7 +59,7 @@ describe('list row hover and selected styles', () => {
     it('marks the selected wide History row with the shared split-list tint', () => {
         const css = read('packages/core/src/shared/routes/History.module.css');
         const rule = css.match(/\n\.row\.row\[data-xc-split-row\]\[aria-current='true'\]\s*\{([^}]*)\}/);
-        expect(rule[1]).toMatch(/color-mix\([^)]*--xc-accent-primary/);
+        expect(rule[1]).toMatch(/background:\s*var\(--xc-row-active-bg\)/);
         expect(rule[1]).toMatch(/box-shadow:\s*none/);
     });
 });

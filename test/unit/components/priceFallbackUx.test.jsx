@@ -70,11 +70,11 @@ describe('TokenDetail kept price', () => {
             fiatRateFetchedAt: new Date(Date.now() - 2 * HOUR_MS).toISOString(),
         });
 
-        // The card prints the quantity; a kept rate adds its age line under it, and the
-        // swap button offers the fiat value.
+        // The card leads with the fiat value; a kept rate adds its age line under it,
+        // and the swap button offers the token quantity and balance chart.
         const note = (await screen.findByText(/Updated/)).closest('[class*="_cardSecondary_"]');
         expect(note).not.toBeNull();
-        expect(screen.getByRole('button', { name: 'Show in USD' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Show balance in PRICEPROBE' })).toBeEnabled();
     });
 
     it('shows a fresh mainnet rate with no age label', async () => {
@@ -84,7 +84,7 @@ describe('TokenDetail kept price', () => {
             fiatRateFetchedAt: new Date().toISOString(),
         });
 
-        expect(await screen.findByRole('button', { name: 'Show in USD' })).toBeEnabled();
+        expect(await screen.findByRole('button', { name: 'Show balance in PRICEPROBE' })).toBeEnabled();
         expect(screen.queryByText(/Updated/)).toBeNull();
         expect(document.querySelector('[class*="_cardSecondary_"]')).toBeNull();
     });

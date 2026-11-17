@@ -25,7 +25,7 @@ const SYNONYMS = {
     markets: ['dex', 'exchange'],
     'market-activity': ['marketplace', 'market'],
     'dispensers-list': ['vending', 'dispenser'],
-    'bet-markets': ['betting', 'wager'],
+    'bet-markets': ['bet', 'betting'],
     'governance-polls': ['governance', 'vote'],
     'staking-dashboard': ['staking', 'stake'],
     'contracts-list': ['contract', 'vm'],

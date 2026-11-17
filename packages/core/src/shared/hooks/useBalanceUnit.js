@@ -10,52 +10,68 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-const STORAGE_KEY = 'xc:balanceUnit';
-const EVENT = 'xc:balance-unit-change';
+const PREFERENCES = Object.freeze({
+    home: Object.freeze({
+        storageKey: 'xc:balanceUnit',
+        eventName: 'xc:balance-unit-change',
+    }),
+    asset: Object.freeze({
+        storageKey: 'xc:assetBalanceUnit',
+        eventName: 'xc:asset-balance-unit-change',
+    }),
+});
 
-function readAssetUnit() {
+function readAssetUnit(storageKey) {
     try {
         if (typeof globalThis === 'undefined' || !globalThis.localStorage) return false;
-        return globalThis.localStorage.getItem(STORAGE_KEY) === 'asset';
+        return globalThis.localStorage.getItem(storageKey) === 'asset';
     } catch {
         return false;
     }
 }
 
-/** A device-wide fiat or asset-unit preference shared by balance heroes. */
-export function useBalanceUnit() {
-    const [assetUnit, setAssetUnit] = useState(readAssetUnit);
+/**
+ * A device-wide fiat or asset-unit preference within one hero family.
+ * Home and asset-detail heroes are deliberately separate; asset details share
+ * one preference across assets and across standalone and embedded surfaces.
+ *
+ * @param {'home' | 'asset'} [scope]
+ */
+export function useBalanceUnit(scope = 'home') {
+    const preference = scope === 'asset' ? PREFERENCES.asset : PREFERENCES.home;
+    const { storageKey, eventName } = preference;
+    const [assetUnit, setAssetUnit] = useState(() => readAssetUnit(storageKey));
 
     useEffect(() => {
         const onCustom = (event) => setAssetUnit(event?.detail === 'asset');
         const onStorage = (event) => {
-            if (event.key === STORAGE_KEY) setAssetUnit(event.newValue === 'asset');
+            if (event.key === storageKey) setAssetUnit(event.newValue === 'asset');
         };
-        window.addEventListener(EVENT, onCustom);
+        window.addEventListener(eventName, onCustom);
         window.addEventListener('storage', onStorage);
         return () => {
-            window.removeEventListener(EVENT, onCustom);
+            window.removeEventListener(eventName, onCustom);
             window.removeEventListener('storage', onStorage);
         };
-    }, []);
+    }, [eventName, storageKey]);
 
     const toggle = useCallback(() => {
         setAssetUnit((previous) => {
             const next = !previous;
             const stored = next ? 'asset' : 'fiat';
             try {
-                globalThis.localStorage?.setItem(STORAGE_KEY, stored);
+                globalThis.localStorage?.setItem(storageKey, stored);
             } catch { /* storage may be blocked in some shells */ }
             const broadcast = () => {
                 try {
-                    window.dispatchEvent(new CustomEvent(EVENT, { detail: stored }));
+                    window.dispatchEvent(new CustomEvent(eventName, { detail: stored }));
                 } catch { /* CustomEvent may be unavailable outside browsers */ }
             };
             if (typeof queueMicrotask === 'function') queueMicrotask(broadcast);
             else Promise.resolve().then(broadcast);
             return next;
         });
-    }, []);
+    }, [eventName, storageKey]);
 
     return [assetUnit, toggle];
 }

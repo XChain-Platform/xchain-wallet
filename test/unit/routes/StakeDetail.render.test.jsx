@@ -140,7 +140,7 @@ describe('StakeDetail rendering', () => {
         expect(list.tagName).toBe('UL');
         const rows = within(list).getAllByRole('listitem');
         expect(rows.map((item) => item.querySelector('[data-action-id]')?.getAttribute('data-action-id')))
-            .toEqual(['add-stake', 'unstake', 'claim', 'delegate', 'revoke']);
+            .toEqual(['add-stake', 'unstake', 'claim', 'delegate', 'revoke', 'share']);
         // Each row carries its one-line description and the default tone; the
         // stake has no destructive action.
         const claim = within(list).getByRole('button', row('Claim'));

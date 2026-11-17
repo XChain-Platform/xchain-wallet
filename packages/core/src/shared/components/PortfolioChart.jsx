@@ -438,7 +438,11 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
                                 strokeColor={behind ? BEHIND_CHART_STROKE : undefined}
                                 areaFill={behind ? BEHIND_CHART_FILL : undefined}
                                 edgeToEdge={behind}
-                                label={t('components.portfolioChart.portfolioPerformanceChart')}
+                                label={behind
+                                    ? unitTick
+                                        ? t('components.portfolioChart.walletBalanceOver', { range: drawnLine.rangeLabel })
+                                        : t('components.portfolioChart.walletValueOver', { range: drawnLine.rangeLabel })
+                                    : t('components.portfolioChart.portfolioPerformanceChart')}
                                 rangeLabel={drawnLine.rangeLabel}
                                 formatValue={formatTooltipAmount}
                                 formatScaleValue={formatChartAmount}

@@ -14,7 +14,7 @@ import { DexHeaderSlot } from '../components/dexHeaderSlot.js';
 import { Button, EmptyState, Icon, ListPage, PageHeader, Screen, Select, Skeleton, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { InPageScreen } from '@xchain-wallet/core/ui/navHistory.js';
 import { flows as flowsLib } from '@xchain-wallet/core';
-import { t } from '../../i18n/index.js';
+import { getLocale, t } from '../../i18n/index.js';
 import '../../i18n/locales/en/market.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/settings.js';
@@ -34,7 +34,7 @@ import { RouteErrorBoundary } from '../components/RouteErrorBoundary.jsx';
 import { PageLoadFailureScope, andList, usePageLoadFailures } from '../components/pageLoadFailures.jsx';
 // The Token detail page's blue card with the price chart behind it,
 // built from the same pieces (hero, chart-behind styles, Sparkline, range tabs).
-import { Sparkline } from '../components/Sparkline.jsx';
+import { formatCompactChartValue, Sparkline } from '../components/Sparkline.jsx';
 import { BEHIND_CHART_FILL, BEHIND_CHART_STROKE, ChartRangeTabs, RANGES as CHART_RANGES, defaultRangeId } from '../components/PortfolioChart.jsx';
 import portfolioChartStyles from '../components/PortfolioChart.module.css';
 import heroStyles from '../components/TotalBalanceHero.module.css';
@@ -103,6 +103,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, on
     const [query, setQuery] = useState('');
     const [orderStatus, setOrderStatus] = useState(/** @type {'all' | 'open' | 'filled'} */ ('all'));
     const { settings } = useSettings();
+    const numberLocale = settings?.language || getLocale();
     // The Trade page shown in place, for a shell with no route for it.
     const [localTrade, setLocalTrade] = useState(/** @type {any} */ (null));
     // The market, price and order-book loads share one page error and one reload.
@@ -439,6 +440,9 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, on
                                     rangeLabel={range.label}
                                     label={t('market.priceLabel', { pair: `${tick1}/${tick2}` })}
                                     formatValue={(value) => `${formatPrice(String(value))} ${tick2}`}
+                                    formatScaleValue={(value) => formatCompactChartValue(value, { locale: numberLocale, unit: tick2 })}
+                                    showScale
+                                    heroScale
                                 />
                             </div>
                         ) : null}

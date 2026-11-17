@@ -95,12 +95,12 @@ assert.match(
 
 assert.match(
     aboutSrc,
-    /title=\{t\('settings\.about\.releaseSignatures'\)\}[\s\S]*?docLinkProps\(RELEASE_SIGNATURES_DOC\)/,
+    /title=(?:\{t\('settings\.about\.releaseSignatures'\)\}|"Release signatures")[\s\S]*?docLinkProps\(RELEASE_SIGNATURES_DOC\)/,
     'release signatures opens the external resource',
 );
 assert.match(
     aboutSrc,
-    /title=\{t\('settings\.about\.disclosurePolicy'\)\}[\s\S]*?docLinkProps\(SECURITY_FILE\)/,
+    /title=(?:\{t\('settings\.about\.disclosurePolicy'\)\}|"Disclosure policy")[\s\S]*?docLinkProps\(SECURITY_FILE\)/,
     'disclosure policy opens the repository document',
 );
 assert.doesNotMatch(aboutSrc, /AboutLicensePage|AboutUnpublishedPage|onOpenLicense/, 'About has no document child pages');

@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // Wide Home's allocation card (G115; the operator's pick of 2026-11-15,
-// layout 1's donut with layout 3's share bars): a blue hero beside the
-// wallet value card, because it holds a chart (G10). The donut, with the
+// layout 1's donut with layout 3's share bars): a hero surface beside the
+// wallet value card. The donut, with the
 // asset and chain count in its centre, sits on the left; on the right a
 // table of the top five assets by value plus Other, each row a colour dot,
 // the ticker, a bar as long as the asset's share, then Share and Value
@@ -29,17 +29,10 @@ export const ALLOCATION_TOP_ASSETS = 5;
 /** Rows the table can hold: the top assets plus Other. */
 export const ALLOCATION_MAX_SLICES = ALLOCATION_TOP_ASSETS + 1;
 
-/**
- * The card's surface, `--xc-accent-primary` in the light and dark themes.
- * Slice colours are checked against it; a unit test keeps it in step with
- * tokens.css.
- */
-export const ALLOCATION_BLUE = '#1A7BAC';
-/** Dots and arcs need this much contrast against the blue (non-text, 3:1). */
+export const ALLOCATION_HERO_SURFACES = ['#EEF6FC', '#10213A'];
+/** Dots and arcs need this much contrast against both hero surfaces. */
 export const ALLOCATION_DOT_CONTRAST = 3;
 
-// Tokens take these in turn: light tints that read on the blue. A coin
-// takes its chain's own colour, lifted the same way (liftForBlue).
 const TOKEN_COLORS = [
     '#E7A6EB',
     '#7CE3B5',
@@ -49,8 +42,7 @@ const TOKEN_COLORS = [
     '#9FE7F5',
     '#D6DEE8',
 ];
-// Other is a dark slate, the one dark slice, so it never reads as a token.
-export const ALLOCATION_OTHER_COLOR = '#0B2235';
+export const ALLOCATION_OTHER_COLOR = '#64748B';
 
 function channel(v) {
     const c = v / 255;
@@ -83,24 +75,21 @@ export function contrastRatio(a, b) {
     return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
-/**
- * The colour mixed toward white, in 5% steps, until it reaches 3:1 on the
- * card's blue, so a dark chain colour (Litecoin's navy) or a mid one
- * (Bitcoin's orange) still shows as a distinct dot and arc. A colour that
- * is not #RRGGBB falls back to the first token tint.
- *
- * @param {string} hex
- * @returns {string} #RRGGBB
- */
-export function liftForBlue(hex) {
+export function fitAllocationColor(hex) {
     const rgb = parseHex(hex);
-    if (!rgb) return TOKEN_COLORS[0];
-    for (let step = 0; step <= 20; step += 1) {
+    if (!rgb) return fitAllocationColor(TOKEN_COLORS[0]);
+    const readable = (candidate) => ALLOCATION_HERO_SURFACES.every(
+        (surface) => contrastRatio(candidate, surface) >= ALLOCATION_DOT_CONTRAST,
+    );
+    const original = toHex(rgb);
+    if (readable(original)) return original;
+    const toward = relativeLuminance(original) > 0.27 ? 0 : 255;
+    for (let step = 1; step <= 20; step += 1) {
         const mix = step / 20;
-        const candidate = toHex(rgb.map((v) => v + (255 - v) * mix));
-        if (contrastRatio(candidate, ALLOCATION_BLUE) >= ALLOCATION_DOT_CONTRAST) return candidate;
+        const candidate = toHex(rgb.map((v) => v + (toward - v) * mix));
+        if (readable(candidate)) return candidate;
     }
-    return '#FFFFFF';
+    return ALLOCATION_OTHER_COLOR;
 }
 
 /**
@@ -150,8 +139,8 @@ export function allocationSlices(rows, chainRegistry) {
     const slices = kept.map((s, i) => {
         let color;
         if (s.other) color = ALLOCATION_OTHER_COLOR;
-        else if (s.native && s.chainColor) color = liftForBlue(s.chainColor);
-        else { color = liftForBlue(TOKEN_COLORS[tokenColor % TOKEN_COLORS.length]); tokenColor += 1; }
+        else if (s.native && s.chainColor) color = fitAllocationColor(s.chainColor);
+        else { color = fitAllocationColor(TOKEN_COLORS[tokenColor % TOKEN_COLORS.length]); tokenColor += 1; }
         return {
             key: s.key,
             label: s.label,

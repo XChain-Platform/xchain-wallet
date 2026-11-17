@@ -134,24 +134,24 @@ assert.doesNotMatch(SIGNED_NOT_BROADCAST_UNSAVED_WARNING, /automatically|retry/i
 
 // --- 3. Every queued done screen says the same thing ---------------------
 
-// Each surface owns its own noun ("your bet", "your order"), so the sentences
+// Each surface owns its own noun ("your purchase", "your order"), so the sentences
 // differ; what may not differ is the promise inside them.
 const QUEUED_SURFACES = [
-    ['components/ResultScreen.jsx', /don't submit this again/i],
-    ['routes/Send.jsx', /don't send this payment again/i],
-    ['components/PlaceOrderPanel.jsx', /don't place it again/i],
-    ['routes/BetFeedDetail.jsx', /do not place it again/i],
+    ['components/ResultScreen.jsx', /don't submit this again/i, 'components.queuedResultPanel.isSignedButCouldnT'],
+    ['routes/Send.jsx', /don't send this payment again/i, 'send.queued.body'],
+    ['components/PlaceOrderPanel.jsx', /don't place it again/i, 'components.placeOrderPanel.itWaitsInTheQueued'],
+    ['routes/BetFeedDetail.jsx', /do not buy it again/i],
     ['routes/OracleConsole.jsx', /do not submit it again/i],
 ];
-for (const [rel, dontRepeat] of QUEUED_SURFACES) {
+for (const [rel, dontRepeat, localizedKey] of QUEUED_SURFACES) {
     // Copy wraps across lines and escapes its apostrophes, so read it the way
     // the DOM ends up showing it.
     const routeSrc = readFileSync(join(shared, rel), 'utf8');
-    if (rel === 'routes/Send.jsx') {
-        assert.match(routeSrc, /t\('send\.queued\.body'\)|body="/,
-            'Send routes its queued result copy through i18n');
+    if (localizedKey) {
+        assert.ok(routeSrc.includes(`t('${localizedKey}')`),
+            `${rel} routes its queued result copy through i18n`);
     }
-    const localizedSrc = rel === 'routes/Send.jsx'
+    const localizedSrc = localizedKey
         ? `${routeSrc} ${englishDictionarySource()}`
         : routeSrc;
     const src = localizedSrc
@@ -188,8 +188,13 @@ assert.ok(
 
 const confirmModal = readFileSync(join(shared, 'components', 'ConfirmActionModal.jsx'), 'utf8');
 assert.ok(
-    /Signed - not broadcast yet\./.test(confirmModal),
-    'ConfirmActionModal\'s signed-not-broadcast phase states the fact, not a retry promise',
+    /t\('components\.confirmActionModal\.signedNotBroadcastYet'\)/.test(confirmModal),
+    'ConfirmActionModal routes its signed-not-broadcast heading through i18n',
+);
+assert.ok(
+    /'components\.confirmActionModal\.signedNotBroadcastYet': 'Signed - not broadcast yet\.'/.
+        test(englishDictionarySource()),
+    'ConfirmActionModal\'s translated signed-not-broadcast phase states the fact, not a retry promise',
 );
 
 // --- 4. The behaviour the copy describes still exists --------------------

@@ -228,7 +228,7 @@
    The tint stays faint so the row chart and the muted orders line keep their
    contrast. */
 .row[data-selected='true'] {
-    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
+    background: var(--xc-row-active-bg);
     box-shadow: var(--xc-shadow-nav-indicator);
 }
 

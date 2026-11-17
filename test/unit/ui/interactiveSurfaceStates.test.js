@@ -35,6 +35,7 @@ const surfaces = [
         hoverSelectors: ['.segment:hover'],
         underlineOnly: true,
         selectedSelector: "[aria-selected='true']",
+        selectedToken: '--xc-toggle-selected',
     },
     {
         file: 'packages/core/src/ui/ListRow.module.css',
@@ -122,8 +123,9 @@ function inspectSurface(source, surface) {
         (selector) => selector.includes(surface.selectedSelector),
     ));
     const selectedDeclarations = selectedRules.flatMap((rule) => Object.values(declarations(rule)));
-    if (!selectedDeclarations.some((value) => value.includes('--xc-control-selected'))) {
-        failures.push('selected state needs the shared selected token');
+    const selectedToken = surface.selectedToken || '--xc-control-selected';
+    if (!selectedDeclarations.some((value) => value.includes(selectedToken))) {
+        failures.push('selected state needs the assigned selected token');
     }
     return failures;
 }
@@ -153,7 +155,7 @@ describe('desktop interactive surface states', () => {
             'interactive surface needs pointer cursor',
             'hover must require a fine pointer',
             'pressed state needs a background',
-            'selected state needs the shared selected token',
+            'selected state needs the assigned selected token',
         ]);
     });
 

@@ -158,10 +158,11 @@
     min-width: 0;
     padding: var(--xc-card-pad, var(--xc-space-3));
     border-radius: var(--xc-card-radius);
-    /* The bet market's blue card (BetMarketHero on Home's heroStack). */
-    background: linear-gradient(180deg, var(--xc-accent-primary) 0%, var(--xc-accent-primary-hover) 100%);
-    box-shadow: var(--xc-shadow-md);
-    color: var(--xc-on-accent);
+    /* The preview uses the same scheme-owned surface as the market hero. */
+    background: var(--xc-hero-bg);
+    border: 1px solid var(--xc-hero-border);
+    box-shadow: var(--xc-hero-shadow);
+    color: var(--xc-hero-text);
 }
 
 /* The card's gradient may be dropped in forced-colors mode, so its surface
@@ -176,7 +177,7 @@
 
 .previewQuestion {
     margin: 0;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
     font-size: var(--xc-text-md);
     font-weight: 700;
     line-height: 1.25;
@@ -195,7 +196,7 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--xc-space-1) var(--xc-space-3);
-    color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
+    color: var(--xc-hero-text-muted);
     font-size: var(--xc-text-xs);
 }
 
@@ -221,8 +222,8 @@
     min-width: 0;
     padding: var(--xc-space-2);
     border-radius: var(--xc-radius-sm, 6px);
-    background: rgba(255, 255, 255, 0.16);
-    color: var(--xc-on-accent);
+    background: var(--xc-hero-chip-bg);
+    color: var(--xc-hero-text);
     font-size: var(--xc-text-sm);
     font-weight: 700;
 }

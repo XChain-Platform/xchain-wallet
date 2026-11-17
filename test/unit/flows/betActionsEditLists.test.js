@@ -109,7 +109,7 @@ describe('BET v4 signing description', () => {
         expect(decoded.details.find((row) => row.label === 'Allow list')?.value).toBe('Retain current');
         expect(decoded.details.find((row) => row.label === 'Block list')?.value).toBe('Detach');
         expect(decoded.warnings.join(' ')).toMatch(/market creator.*market is open/);
-        expect(decoded.warnings.join(' ')).toContain('future bets only');
+        expect(decoded.warnings.join(' ')).toContain('future purchases only');
     });
 });
 
@@ -213,7 +213,7 @@ describe('OracleConsole owner-only open-feed editor', () => {
         // unbound one reads "None set".
         expect(utils.getByRole('button', { name: 'Allow list: Existing members (List #12)' })).toBeTruthy();
         expect(utils.getByRole('button', { name: 'Block list: None set' })).toBeTruthy();
-        expect(utils.container.textContent).toContain('Changes affect future bets only');
+        expect(utils.container.textContent).toContain('Changes affect future purchases only');
 
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: /^Allow list:/ }));

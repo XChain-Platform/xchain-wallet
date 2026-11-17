@@ -163,9 +163,31 @@ describe('the shared outcome hero', () => {
         expect(lead()).toBe('62%Yes▲ 4 pts 1W');
         // No oracle or its address in the header (walk note on screen 97).
         expect(hero().querySelector('[data-bet-hero-stats]').textContent).toBe('Total 100 EXAMPLE · 2 positions');
-        // A two-sided market draws the leading side alone, filled.
-        expect(hero().querySelectorAll('[data-outcome-line]')).toHaveLength(1);
-        expect(hero().querySelector('polygon')).not.toBeNull();
+        // The fixed probability chart draws one distinct line per outcome.
+        const lines = [...hero().querySelectorAll('[data-outcome-line]')];
+        expect(lines).toHaveLength(2);
+        expect(lines.map((line) => line.getAttribute('data-outcome-line'))).toEqual(['0', '1']);
+        expect(lines[0].getAttribute('stroke')).not.toBe(lines[1].getAttribute('stroke'));
+        expect(hero().querySelector('polygon')).toBeNull();
+        const legend = within(hero()).getByRole('list', { name: 'Current probability by outcome' });
+        expect(legend.textContent).toBe('Yes62%No38%');
+        const swatches = [...legend.querySelectorAll('[data-outcome-legend]')];
+        expect(swatches.map((swatch) => swatch.getAttribute('data-outcome-color')))
+            .toEqual(lines.map((line) => line.getAttribute('stroke')));
+
+        // The probability axis never zooms to the observed values: five
+        // labelled guides and four fainter halfway guides span 0 to 100.
+        const guides = [...hero().querySelectorAll('[data-probability-guide]')];
+        expect(guides.map((guide) => guide.getAttribute('data-probability-guide')))
+            .toEqual(['100', '87.5', '75', '62.5', '50', '37.5', '25', '12.5', '0']);
+        expect(guides.map((guide) => Number(guide.getAttribute('y1'))))
+            .toEqual([4, 15.5, 27, 38.5, 50, 61.5, 73, 84.5, 96]);
+        expect(guides.map((guide) => guide.getAttribute('data-probability-guide-kind')))
+            .toEqual(['labelled', 'halfway', 'labelled', 'halfway', 'labelled', 'halfway', 'labelled', 'halfway', 'labelled']);
+        expect([...hero().querySelectorAll('[data-probability-scale]')].map((mark) => mark.textContent))
+            .toEqual(['100%', '75%', '50%', '25%', '0%']);
+        expect(readFileSync('packages/core/src/shared/components/outcomeDetail/OutcomeDetail.module.css', 'utf8'))
+            .toMatch(/\.chartGuideHalfway\s*\{[^}]*opacity:\s*calc\(var\(--xc-hero-guide-opacity\) \* 0\.65\)/s);
         expect(rangeChips().map((tab) => tab.textContent)).toEqual(['24h', '1W', '1M', '3M', '6M', '1Y', 'All']);
         expect(rangeChips().map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'true', 'false', 'false', 'false', 'false', 'false']);
     });
@@ -179,7 +201,7 @@ describe('the shared outcome hero', () => {
         expect(lead()).toBe('62%Yes▲ 4 pts 1W');
     });
 
-    it('draws a finalized poll with the bet hero\'s content: status and closed chips, the winner\'s share, the split bar, votes and voters, quorum (G16 surface)', async () => {
+    it('draws a finalized poll with the shared probability chart and frozen answer shares', async () => {
         await openPoll({
             poll: FINAL_POLL,
             results: FINAL_RESULTS,
@@ -190,16 +212,16 @@ describe('the shared outcome hero', () => {
             ],
         });
 
-        expectIdentityCard();
+        expect(hero().hasAttribute('data-outcome-chart-hero')).toBe(true);
         // Status and closing chips only, as the bet's; the token is a Details fact.
         expect(chips()).toEqual(['Decided', 'Closed 1 day ago']);
         expect(screen.getByRole('heading', { level: 2, name: 'Which wallet improvement should ship next?' })).toBeTruthy();
         // The winner's share big, its plain name, and the Final pill.
         expect(lead()).toBe('52%Hardware wallet supportFinal');
         expect(hero().querySelector('[data-outcome-lead] [aria-label="Final result"]').textContent).toBe('Final');
-        // The stacked bar, a segment per option, named by the legend.
-        expect([...hero().querySelectorAll('[data-outcome-segment]')].map((s) => s.style.width)).toEqual(['52%', '30%', '18%']);
-        expect(hero().querySelector('[data-outcome-bar]').getAttribute('aria-hidden')).toBe('true');
+        expect([...hero().querySelectorAll('[data-outcome-line]')].map((line) => line.getAttribute('data-outcome-line')))
+            .toEqual(['0', '1', '2']);
+        expect(hero().querySelector('[data-probability-chart="0-100"]')).not.toBeNull();
         expect(within(hero()).getByRole('list', { name: 'Share of each option' }).textContent)
             .toBe('Hardware wallet support52%Faster sync30%Address book import18%');
         // Votes and voters where the bet shows pool and bets, and the
@@ -212,11 +234,17 @@ describe('the shared outcome hero', () => {
     it('draws an open poll with "Counted at close" in place of a share, its votes and voters, and the quorum still needed', async () => {
         await openPoll();
 
-        expectIdentityCard();
+        expect(hero().hasAttribute('data-outcome-chart-hero')).toBe(true);
         expect(chips()).toEqual(['Open', 'Closes in 3 h']);
         expect(screen.getByRole('heading', { level: 2, name: 'Which wallet improvement should ship next?' })).toBeTruthy();
         expect(lead()).toBe('Counted at close');
         expect(hero().querySelector('[data-outcome-bar]')).toBeNull();
+        expect([...hero().querySelectorAll('[data-outcome-line]')]).toHaveLength(3);
+        expect(within(hero()).getByRole('list', { name: 'Share of each option' }).textContent)
+            .toBe('Hardware wallet support0%Faster sync0%Address book import0%');
+        expect(screen.getByRole('tab', { name: 'Vote' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Vote for Hardware wallet support' })).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/\bbet(?:s|ting)?\b/i);
         // G121: the read-only votes and voters line carries no help tip.
         expect(hero().querySelector('[data-poll-hero-stats]').textContent).toBe('0 votes · 0 votersQuorum 20% of supply needed');
     });
@@ -238,18 +266,21 @@ describe('the shared outcome hero', () => {
             ],
         });
         expect(lead()).toBe('Tied at the top');
-        expect([...hero().querySelectorAll('[data-outcome-segment]')].map((s) => s.style.width)).toEqual(['50%', '50%']);
+        expect([...hero().querySelectorAll('[data-outcome-line]')]).toHaveLength(3);
+        expect(within(hero()).getByRole('list', { name: 'Share of each option' }).textContent)
+            .toContain('Hardware wallet support50%Faster sync50%');
     });
 
-    it('draws a market with no bet history on the same surface: its split as the share, the bar and the legend', async () => {
+    it('draws a market with no earlier position rows as flat pool-share lines', async () => {
         await openBet(OPEN_BET, []);
-        expectIdentityCard();
+        expect(hero().hasAttribute('data-outcome-chart-hero')).toBe(true);
         expect(lead()).toBe('62%Yes');
-        expect([...hero().querySelectorAll('[data-outcome-segment]')].map((s) => s.style.width)).toEqual(['62%', '38%']);
-        expect(within(hero()).getByRole('list', { name: 'Chance of each outcome' }).textContent).toBe('Yes62%No38%');
+        expect([...hero().querySelectorAll('[data-outcome-line]')]).toHaveLength(2);
+        expect(within(hero()).getByRole('list', { name: 'Current probability by outcome' }).textContent).toBe('Yes62%No38%');
+        expect(hero().querySelector('[data-outcome-bar]')).toBeNull();
     });
 
-    it('keeps the blue chart hero for a market with bet history, and draws the identity card for one with none', async () => {
+    it('keeps the blue chart hero for a market split, and draws the identity card only before any positions exist', async () => {
         await openBet();
         expect(hero().hasAttribute('data-outcome-chart-hero')).toBe(true);
         expect(hero().className).toMatch(/heroStack/);
@@ -258,11 +289,25 @@ describe('the shared outcome hero', () => {
         expect(rangeChips()).toHaveLength(7);
         cleanup();
 
-        // Pools but no bet rows: nothing to rebuild a history from.
-        await openBet(OPEN_BET, []);
+        await openBet({ ...OPEN_BET, pools: [] }, []);
         expectIdentityCard();
         expect(chips()).toEqual(['Open', 'Closes in 12 days']);
-        expect(hero().querySelector('[data-bet-hero-stats]').textContent).toBe('Total 100 EXAMPLE · 2 positions');
+        expect(hero().querySelector('[data-bet-hero-stats]').textContent).toBe('Total 0 EXAMPLE · 0 positions');
+    });
+
+    it('rebuilds the probability lines from one bulk position-history read', async () => {
+        let reads = 0;
+        const messaging = betMessaging();
+        messaging.bets = () => {
+            reads += 1;
+            return Promise.resolve({ data: BET_ROWS });
+        };
+        await mount(
+            <BetFeedDetail walletId="w" chainId={CHAIN} feedIndex="730010" onBack={() => {}} />,
+            messaging,
+        );
+        expect(reads).toBe(1);
+        expect(hero().querySelectorAll('[data-outcome-line]')).toHaveLength(2);
     });
 
     it('counts an open poll\'s votes and voters from accepted ballots only, and drops the counts when the read is a full page', async () => {

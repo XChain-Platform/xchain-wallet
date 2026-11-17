@@ -38,7 +38,7 @@ beforeAll(() => {
 });
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 
-beforeEach(() => window.localStorage.removeItem('xc:balanceUnit'));
+beforeEach(() => window.localStorage.removeItem('xc:assetBalanceUnit'));
 
 afterEach(() => {
     cleanup();
@@ -97,7 +97,7 @@ describe('token market history slot', () => {
         await vi.waitFor(() => expect(screen.getByRole('tab', { name: 'Details' })).toBeTruthy());
         // No price line is invented; the hero draws the balance the wallet holds.
         expect(within(chartPanel()).queryByRole('img', { name: /^Price trend/ })).toBeNull();
-        await vi.waitFor(() => expect(within(slot).getByRole('img', { name: /^Balance trend/ })).toBeTruthy());
+        await vi.waitFor(() => expect(within(slot).getByRole('img', { name: /^Balance over 1W/ })).toBeTruthy());
         expect(document.body).not.toHaveTextContent('Market data is unavailable.');
         expect(document.body).not.toHaveTextContent('No price history yet');
         expect(inBalanceCard(slot)).toBe(true);
@@ -108,7 +108,7 @@ describe('token market history slot', () => {
         renderToken('real-wallet', { creator: 'bcrt1qx' });
         const slot = await settledSlot();
         expect(within(chartPanel()).queryByRole('img', { name: /^Price trend/ })).toBeNull();
-        await vi.waitFor(() => expect(within(slot).getByRole('img', { name: /^Balance trend/ })).toBeTruthy());
+        await vi.waitFor(() => expect(within(slot).getByRole('img', { name: /^Balance over 1W/ })).toBeTruthy());
         expect(document.body).not.toHaveTextContent('No price history yet');
         expect(inBalanceCard(slot)).toBe(true);
         expect(document.body).not.toHaveTextContent('Indexed market activity builds');
@@ -119,7 +119,7 @@ describe('token market history slot', () => {
 
     it('draws the selected asset-unit series in the same slot when market data loads', async () => {
         renderToken('demo-wallet', { creator: 'bcrt1qx', marketPrice: '0.5', totalSupply: '1000' });
-        const chart = await screen.findByRole('img', { name: /^Balance trend/ });
+        const chart = await screen.findByRole('img', { name: /^Balance over 1W/ });
         const slot = chartSlot();
         expect(slot.contains(chart)).toBe(true);
         expect(slot.textContent).not.toContain('No price history yet');

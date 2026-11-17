@@ -116,15 +116,12 @@ export function BetMarketHero({ feed = null, outcomes: outcomesProp, pools = [],
     const chartLabel = !current
         ? 'No positions to chart yet'
         : series.fromBets
-            ? `Chance of ${count <= 2 ? leadingLabel : 'each outcome'} over ${range.label}, rebuilt from market positions`
-            : `Current split of ${leadingLabel} ${pctText(current[leading])}; no position history to draw`;
+            ? `Probability of each outcome over ${range.label}, rebuilt from position history`
+            : `Current pool share of each outcome over ${range.label}; no earlier position history available`;
 
-    // Only a market with bet rows to rebuild has a history to chart (G10);
-    // one with none opens with the outlined identity card (G16). While the
-    // rows load the chart hero holds its place, so a market with history
-    // does not flash the identity card first, unless the pools already say
-    // no bet was ever placed.
-    const hasChart = bets === null ? betCount > 0 : series.fromBets;
+    // A current split can draw flat while the one bulk position-history read
+    // loads or when it has no earlier rows. Markets with no split keep G16.
+    const hasChart = series.fromBets || Boolean(current) || (bets === null && betCount > 0);
 
     return (
         <OutcomeHero
@@ -142,13 +139,12 @@ export function BetMarketHero({ feed = null, outcomes: outcomesProp, pools = [],
             } : null}
             leadMessage={live ? 'No positions yet' : 'No positions'}
             lines={series.lines.map((line) => ({ key: line.outcome, values: line.values }))}
-            leading={leading}
             chartLabel={chartLabel}
-            chartRegionLabel="Chance over time"
+            chartRegionLabel="Outcome probabilities over time"
             // Without a chart the split is drawn as the stacked bar a poll
             // shows, named by the legend, in place of the range chips.
-            legend={(count > 2 || !hasChart) && current ? {
-                label: 'Chance of each outcome',
+            legend={current ? {
+                label: 'Current probability by outcome',
                 items: outcomes.map((_, i) => ({ key: i, label: labelOf(i), value: pctText(current[i]) })),
             } : null}
             bar={!hasChart && current ? {

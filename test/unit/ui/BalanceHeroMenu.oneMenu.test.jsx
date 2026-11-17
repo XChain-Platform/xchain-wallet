@@ -123,9 +123,9 @@ function tokenRegion() {
 }
 
 // The balance card holds two round buttons and nothing else: the unit swap
-// ("Show in ...") and the eye (privacy). There is no three-dots menu and no
+// ("Show wallet balance" or "Show value") and the eye (privacy). There is no three-dots menu and no
 // chart toggle on a hero any more.
-const swapButton = (scope, unit) => within(scope).getByRole('button', { name: `Show in ${unit}` });
+const swapButton = (scope, name) => within(scope).getByRole('button', { name });
 const eyeButton = (scope, name = 'Hide balance') => within(scope).getByRole('button', { name });
 
 function amountCodes(scope) {
@@ -142,7 +142,7 @@ describe.each(WIDTHS)('balance hero menu at %ipx', (width) => {
         const hero = homeRegion();
 
         const buttons = within(hero).getAllByRole('button');
-        expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['Show in BTC', 'Hide balance']);
+        expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['Hide balance', 'Show wallet balance in BTC']);
         expect(within(hero).queryByRole('button', { name: 'Balance actions' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Hide chart' })).toBeNull();
         expect(eyeButton(hero)).toHaveAttribute('aria-pressed', 'true');
@@ -151,32 +151,37 @@ describe.each(WIDTHS)('balance hero menu at %ipx', (width) => {
     it('gives the token hero the swap and the eye, and the swap changes the primary unit', async () => {
         renderWith(tokenDetail());
         const hero = tokenRegion();
-        await waitFor(() => expect(amountCodes(hero)).toEqual([TICK]));
+        await waitFor(() => expect(amountCodes(hero)).toEqual(['USD']));
 
         const buttons = within(hero).getAllByRole('button');
-        expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['Show in USD', 'Hide balance']);
+        expect(within(hero).getByText('Value')).toBeInTheDocument();
+        expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['Hide balance', `Show balance in ${TICK}`]);
         expect(within(hero).queryByRole('button', { name: 'Balance actions' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Swap primary unit' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Hide chart' })).toBeNull();
-        expect(swapButton(hero, 'USD')).not.toBeDisabled();
+        expect(swapButton(hero, `Show balance in ${TICK}`)).toHaveAttribute('title', `Show balance in ${TICK}`);
+        expect(swapButton(hero, `Show balance in ${TICK}`)).not.toBeDisabled();
 
-        fireEvent.click(swapButton(hero, 'USD'));
-        expect(amountCodes(hero)).toEqual(['USD']);
-        fireEvent.click(swapButton(hero, TICK));
+        fireEvent.click(swapButton(hero, `Show balance in ${TICK}`));
         expect(amountCodes(hero)).toEqual([TICK]);
+        expect(within(hero).getByText('Balance')).toBeInTheDocument();
+        expect(swapButton(hero, 'Show value in USD')).toHaveAttribute('title', 'Show value in USD');
+        fireEvent.click(swapButton(hero, 'Show value in USD'));
+        expect(amountCodes(hero)).toEqual(['USD']);
+        expect(within(hero).getByText('Value')).toBeInTheDocument();
     });
 
     it('keeps the swap button disabled without a price', async () => {
         renderWith(tokenDetail({ fiatRate: null }));
         const hero = tokenRegion();
-        expect(within(hero).getByRole('button', { name: /^Show in / })).toBeDisabled();
+        expect(within(hero).getByRole('button', { name: /^Show (balance|value) in / })).toBeDisabled();
     });
 
     it('keeps the swap disabled and the eye working where fiat is unsupported', async () => {
         renderWith(tokenDetail({ fiatRate: null, chainId: 'bitcoin-regtest' }), { activeNetwork: 'regtest' });
         const hero = tokenRegion();
         await act(async () => { await Promise.resolve(); });
-        expect(within(hero).getByRole('button', { name: /^Show in / })).toBeDisabled();
+        expect(within(hero).getByRole('button', { name: /^Show (balance|value) in / })).toBeDisabled();
         expect(eyeButton(hero)).toBeEnabled();
         expect(within(hero).queryByRole('button', { name: /chart/i })).toBeNull();
     });
@@ -214,7 +219,7 @@ describe('balance hero buttons keyboard', () => {
         renderWith(homeHero());
         const hero = homeRegion();
         const user = userEvent.setup();
-        const swap = within(hero).getByRole('button', { name: /^Show in / });
+        const swap = within(hero).getByRole('button', { name: /^Show wallet balance in / });
         const eye = eyeButton(hero);
 
         swap.focus();

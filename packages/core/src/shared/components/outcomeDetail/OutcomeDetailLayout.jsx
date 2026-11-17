@@ -29,41 +29,34 @@
 import { useId } from 'react';
 import { Button, Checkbox, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { ActionList } from '../ActionList.jsx';
-import { BEHIND_CHART_FILL, BEHIND_CHART_STROKE, ChartRangeTabs } from '../PortfolioChart.jsx';
+import { ChartRangeTabs } from '../PortfolioChart.jsx';
 import portfolioChartStyles from '../PortfolioChart.module.css';
 import homeTabsStyles from '../HomeTabs.module.css';
 import heroStyles from '../TotalBalanceHero.module.css';
-import { outcomeColor, outcomeSurfaceColor } from './outcomeColors.js';
+import { outcomeSurfaceColor } from './outcomeColors.js';
 import styles from './OutcomeDetail.module.css';
 
+const outcomeHeroColor = (key) => `color-mix(in srgb, ${outcomeSurfaceColor(key)} 75%, var(--xc-hero-text))`;
+
 /**
- * The lines drawn behind the hero: the leading side alone, with Home's purple
- * area under it, for a two-sided market or poll; one line per outcome for
- * three or more. The y axis is the share itself, padded so a quiet line is
- * not drawn as a cliff.
+ * The lines drawn behind the hero, one per outcome, on a fixed probability
+ * scale. The labelled and halfway guides match the Home hero grid.
  *
  * @param {object} props
  * @param {Array<{ key: number, values: Array<number | null> }>} props.lines
- * @param {number} props.leading   the key of the leading line
  * @param {string} props.label     what the chart shows, for assistive tech
  */
-function OutcomeLines({ lines, leading, label }) {
-    const drawn = lines.length <= 2 ? lines.filter((l) => l.key === leading) : lines;
-    const values = drawn.flatMap((l) => l.values).filter((v) => typeof v === 'number' && Number.isFinite(v));
+function OutcomeLines({ lines, label }) {
+    const values = lines.flatMap((l) => l.values).filter((v) => typeof v === 'number' && Number.isFinite(v));
     if (values.length === 0) return null;
-    let lo = Math.max(0, Math.min(...values) - 8);
-    let hi = Math.min(100, Math.max(...values) + 8);
-    if (hi - lo < 24) {
-        const mid = (hi + lo) / 2;
-        lo = Math.max(0, mid - 12);
-        hi = Math.min(100, lo + 24);
-        lo = Math.max(0, hi - 24);
-    }
-    // The plot spans the whole card behind the figures, on the Sparkline's
-    // own 1 to 99 band, the way Home's chart is drawn.
-    const TOP = 1;
-    const BOTTOM = 99;
-    const y = (v) => BOTTOM - ((v - lo) / (hi - lo)) * (BOTTOM - TOP);
+    const TOP = 4;
+    const BOTTOM = 96;
+    const scale = [100, 87.5, 75, 62.5, 50, 37.5, 25, 12.5, 0].map((value, index) => ({
+        value,
+        y: TOP + ((BOTTOM - TOP) * index) / 8,
+        labelled: index % 2 === 0,
+    }));
+    const y = (v) => BOTTOM - (Math.max(0, Math.min(100, v)) / 100) * (BOTTOM - TOP);
     const pointsOf = (vals) => {
         const n = vals.length;
         const pts = [];
@@ -74,19 +67,16 @@ function OutcomeLines({ lines, leading, label }) {
         return pts;
     };
     return (
-        <svg className={styles.chartSvg} viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={label}>
-            {drawn.map((line) => {
-                const pts = pointsOf(line.values);
-                if (pts.length === 0) return null;
-                const solo = drawn.length === 1;
-                const first = pts[0].split(',')[0];
-                const color = solo ? BEHIND_CHART_STROKE : outcomeColor(line.key);
-                return (
-                    <g key={line.key} data-outcome-line={line.key}>
-                        {solo ? (
-                            <polygon fill={BEHIND_CHART_FILL} stroke="none" points={`${first},100 ${pts.join(' ')} 100,100`} />
-                        ) : null}
+        <div className={styles.probabilityChart} data-probability-chart="0-100">
+            <svg className={styles.chartSvg} viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={label}>
+                {lines.map((line) => {
+                    const pts = pointsOf(line.values);
+                    if (pts.length === 0) return null;
+                    const color = outcomeHeroColor(line.key);
+                    return (
                         <polyline
+                            key={line.key}
+                            data-outcome-line={line.key}
                             fill="none"
                             stroke={color}
                             strokeWidth="2"
@@ -95,10 +85,30 @@ function OutcomeLines({ lines, leading, label }) {
                             vectorEffect="non-scaling-stroke"
                             points={pts.length === 1 ? `${pts[0]} 100,${pts[0].split(',')[1]}` : pts.join(' ')}
                         />
-                    </g>
-                );
-            })}
-        </svg>
+                    );
+                })}
+                {scale.map((mark) => (
+                    <line
+                        key={mark.value}
+                        className={`${styles.chartGuide}${mark.labelled ? '' : ` ${styles.chartGuideHalfway}`}`}
+                        data-probability-guide={mark.value}
+                        data-probability-guide-kind={mark.labelled ? 'labelled' : 'halfway'}
+                        x1="0"
+                        x2="100"
+                        y1={mark.y}
+                        y2={mark.y}
+                        vectorEffect="non-scaling-stroke"
+                    />
+                ))}
+            </svg>
+            <div className={styles.probabilityScale} aria-hidden="true">
+                {scale.filter((mark) => mark.labelled).map((mark) => (
+                    <span key={mark.value} data-probability-scale={mark.value} style={{ top: `${mark.y}%` }}>
+                        {mark.value}%
+                    </span>
+                ))}
+            </div>
+        </div>
     );
 }
 
@@ -160,7 +170,13 @@ function OutcomeLegend({ legend, colorOf }) {
         <ul className={styles.legend} aria-label={legend.label}>
             {legend.items.map((item) => (
                 <li key={item.key} className={styles.legendItem}>
-                    <span className={styles.legendSwatch} style={{ background: colorOf(item.key) }} aria-hidden="true" />
+                    <span
+                        className={styles.legendSwatch}
+                        data-outcome-legend={item.key}
+                        data-outcome-color={colorOf(item.key)}
+                        style={{ background: colorOf(item.key) }}
+                        aria-hidden="true"
+                    />
                     <span className={styles.legendText}>{item.label}</span>
                     <span className={styles.legendValue}>{item.value}</span>
                 </li>
@@ -204,7 +220,6 @@ function OutcomeBar({ bar, colorOf }) {
  * @param {{ value: string, label: string, change?: { text: string, direction: 'positive' | 'negative' | 'neutral' | 'final', label: string } | null } | null} props.lead
  * @param {string} props.leadMessage                       shown in place of the share when there is none
  * @param {Array<{ key: number, values: Array<number | null> }>} props.lines
- * @param {number} props.leading
  * @param {string} props.chartLabel
  * @param {string} props.chartRegionLabel
  * @param {{ label: string, items: Array<{ key: number, label: string, value: string }> } | null} [props.legend]
@@ -221,7 +236,6 @@ export function OutcomeHero({
     lead = null,
     leadMessage = '',
     lines = [],
-    leading = 0,
     chartLabel = '',
     chartRegionLabel = '',
     legend = null,
@@ -252,8 +266,8 @@ export function OutcomeHero({
                 <OutcomeChips chips={chips} />
                 <h2 id={titleId} className={styles.question}>{title}</h2>
                 <OutcomeLead lead={lead} leadMessage={leadMessage} />
-                <OutcomeLegend legend={legend} colorOf={outcomeColor} />
-                <OutcomeBar bar={bar} colorOf={outcomeColor} />
+                <OutcomeLegend legend={legend} colorOf={outcomeHeroColor} />
+                <OutcomeBar bar={bar} colorOf={outcomeHeroColor} />
                 {foot ? <div className={styles.foot}>{foot}</div> : null}
             </section>
             <section
@@ -264,7 +278,7 @@ export function OutcomeHero({
                 <div id={chartPanelId} role="tabpanel" aria-labelledby={`${chartPanelId}-tab-${rangeId}`}>
                     <div className={portfolioChartStyles.slot}>
                         <div className={portfolioChartStyles.chart}>
-                            <OutcomeLines lines={lines} leading={leading} label={chartLabel} />
+                            <OutcomeLines lines={lines} label={chartLabel} />
                         </div>
                     </div>
                 </div>
