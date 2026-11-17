@@ -3,6 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { MULTIPART_WAVE_PIECES } from './multipartWaves.js';
+
 function invalid(field) {
     const error = new Error(`multipartFundingEncoderOpts: invalid ${field}`);
     error.code = 'FILE_FUNDING_OPTS_INVALID';
@@ -26,7 +28,9 @@ export function multipartFundingEncoderOpts({ source, pieceValues, rate } = {}) 
     if (typeof source?.address !== 'string' || source.address.trim().length === 0) {
         throw invalid('source.address');
     }
-    if (!Array.isArray(pieceValues) || pieceValues.length < 3 || pieceValues.length > 33) {
+    if (!Array.isArray(pieceValues)
+        || pieceValues.length < 1
+        || pieceValues.length > MULTIPART_WAVE_PIECES) {
         throw invalid('pieceValues');
     }
     const badValue = pieceValues.findIndex((value) => !Number.isSafeInteger(value) || value <= 0);
