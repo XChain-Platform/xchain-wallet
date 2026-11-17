@@ -175,8 +175,8 @@ describe.each(WIDTHS)('balance hero menu at %ipx', (width) => {
         expect(within(hero).getByText('Value')).toBeInTheDocument();
     });
 
-    it('keeps the swap enabled and shows the Value empty state without a price', async () => {
-        renderWith(tokenDetail({ fiatRate: null, chainId: 'bitcoin-regtest' }), { activeNetwork: 'regtest' });
+    it('keeps the mainnet swap enabled and shows the Value empty state without a price', async () => {
+        renderWith(tokenDetail({ fiatRate: null }));
         const hero = tokenRegion();
         await act(async () => { await Promise.resolve(); });
         const showBalance = within(hero).getByRole('button', { name: `Show balance in ${TICK}` });
@@ -198,6 +198,18 @@ describe.each(WIDTHS)('balance hero menu at %ipx', (width) => {
         expect(window.localStorage.getItem('xc:assetBalanceUnit')).toBe('fiat');
         expect(eyeButton(hero)).toBeEnabled();
         expect(within(hero).queryByRole('button', { name: /chart/i })).toBeNull();
+    });
+
+    it('shows only Balance and no unit swap on test networks', async () => {
+        renderWith(tokenDetail({ fiatRate: null, chainId: 'bitcoin-regtest' }), { activeNetwork: 'regtest' });
+        const hero = tokenRegion();
+        await act(async () => { await Promise.resolve(); });
+
+        expect(within(hero).getByText('Balance')).toBeInTheDocument();
+        expect(within(hero).getByLabelText(`100 ${TICK}`)).toBeInTheDocument();
+        expect(within(hero).queryByText('No price yet')).toBeNull();
+        expect(within(hero).queryByRole('button', { name: /Show (?:value|balance) in/ })).toBeNull();
+        expect(eyeButton(hero)).toBeEnabled();
     });
 });
 

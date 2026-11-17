@@ -201,8 +201,6 @@ describe('asset and token-management pages', () => {
         cleanup();
         __clearTokenInfoCache();
         renderManagedToken();
-        const managedHero = await screen.findByRole('region', { name: 'MYTOKEN' });
-        fireEvent.click(within(managedHero).getByRole('button', { name: 'Show balance in MYTOKEN' }));
         const managedToken = await layoutOf('MYTOKEN');
 
         const expected = {
@@ -227,12 +225,13 @@ describe('asset and token-management pages', () => {
         expect(document.querySelector('[data-nft-identity]')).toBeNull();
     });
 
-    it('gives a token with no price history its balance line from the wallet rows', async () => {
+    it('shows only the wallet balance and its history line for a test-network token', async () => {
         renderHeldToken();
         const hero = await screen.findByRole('region', { name: 'MYTOKEN' });
-        expect(within(hero).getByText('No price yet')).toBeTruthy();
-        expect(screen.getByText('No market price for MYTOKEN yet')).toBeTruthy();
-        fireEvent.click(within(hero).getByRole('button', { name: 'Show balance in MYTOKEN' }));
+        expect(within(hero).getByText('Balance')).toBeTruthy();
+        expect(within(hero).getByLabelText('5 MYTOKEN')).toBeTruthy();
+        expect(within(hero).queryByText('No price yet')).toBeNull();
+        expect(within(hero).queryByRole('button', { name: /Show (?:value|balance) in/ })).toBeNull();
         const chart = await screen.findByRole('region', { name: 'Balance chart' });
         const line = await within(chart).findByRole('img', { name: /^Balance over 1W/ });
         // 1W: 4 sent 3 days ago (from 6), then 1 and 2 received; the line ends at 5.

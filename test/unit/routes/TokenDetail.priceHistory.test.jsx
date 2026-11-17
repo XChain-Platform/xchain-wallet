@@ -467,9 +467,10 @@ describe('TokenDetail price history', () => {
         expect(balance.textContent).not.toContain('$');
         expect(balance.textContent).not.toContain('USD');
         expect(screen.queryByRole('img', { name: /^Price trend/ })).toBeNull();
-        expect(within(balance).getByText('No price yet')).toBeTruthy();
-        fireEvent.click(within(balance).getByRole('button', { name: 'Show balance in PRICEPROBE' }));
-        // Balance mode draws the wallet's own rows, so its range buttons show.
+        expect(within(balance).getByText('Balance')).toBeTruthy();
+        expect(within(balance).queryByText('No price yet')).toBeNull();
+        expect(within(balance).queryByRole('button', { name: /Show (?:value|balance) in/ })).toBeNull();
+        // Test-network Balance mode draws the wallet's own rows, so its range buttons show.
         expect(await screen.findByRole('img', { name: /^Balance over 1W/ })).toBeTruthy();
         expect(screen.getByRole('tablist', { name: 'Chart range' }).className).not.toMatch(/rangesIdle/);
     });
