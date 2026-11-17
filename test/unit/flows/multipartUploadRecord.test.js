@@ -14,6 +14,7 @@ import {
     newPendingFileUpload,
     withFunding,
 } from '../../../packages/core/src/flows/multipartUploadRecord.js';
+import { MULTIPART_FILE_MAX_BYTES } from '../../../packages/core/src/flows/fileSizeLimits.js';
 
 const UPPER_A = 'A'.repeat(64);
 const UPPER_B = 'B'.repeat(64);
@@ -115,7 +116,7 @@ describe('new pending file upload refusals', () => {
         expectCode(() => newPendingFileUpload(input({ totalParts })), 'FILE_UPLOAD_RECORD_INVALID', 'totalParts');
     });
 
-    it.each([0, 12_000_001, 1.5])('rejects totalBytes %s', (totalBytes) => {
+    it.each([0, MULTIPART_FILE_MAX_BYTES + 1, 1.5])('rejects totalBytes %s', (totalBytes) => {
         expectCode(() => newPendingFileUpload(input({ totalBytes })), 'FILE_UPLOAD_RECORD_INVALID', 'totalBytes');
     });
 
