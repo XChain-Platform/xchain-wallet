@@ -20,12 +20,13 @@ function invalidWaitError(field) {
     return err;
 }
 
-function validateWait({ txid, timeoutMs, pollMs, sleep, now }) {
+function validateWait({ txid, timeoutMs, pollMs, sleep, now, dropGraceMs }) {
     if (!/^[0-9a-fA-F]{64}$/.test(String(txid || ''))) throw invalidWaitError('txid');
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw invalidWaitError('timeoutMs');
     if (!Number.isFinite(pollMs) || pollMs <= 0) throw invalidWaitError('pollMs');
     if (typeof sleep !== 'function') throw invalidWaitError('sleep');
     if (typeof now !== 'function') throw invalidWaitError('now');
+    if (!Number.isFinite(dropGraceMs) || dropGraceMs < 0) throw invalidWaitError('dropGraceMs');
 }
 
 function notConfirmedError({ chainState, txid }) {
@@ -43,9 +44,9 @@ export function fundingMayBeOnChain(err) {
 }
 
 export async function waitForFundingConfirmed({
-    sdk, txid, address, timeoutMs, pollMs, sleep, now, onWait,
+    sdk, txid, address, timeoutMs, pollMs, sleep, now, onWait, dropGraceMs = 0,
 }) {
-    validateWait({ txid, timeoutMs, pollMs, sleep, now });
+    validateWait({ txid, timeoutMs, pollMs, sleep, now, dropGraceMs });
     const startedAt = now();
     let droppedReadings = 0;
     for (;;) {
@@ -53,8 +54,9 @@ export async function waitForFundingConfirmed({
         const chainState = status === null ? 'unknown' : status;
         if (status === 'confirmed') return { txid, chainState: 'confirmed' };
         if (status === null) throw notConfirmedError({ chainState, txid });
-        droppedReadings = status === 'dropped' ? droppedReadings + 1 : 0;
         const waitedMs = now() - startedAt;
+        const settled = waitedMs >= dropGraceMs;
+        droppedReadings = status === 'dropped' && settled ? droppedReadings + 1 : 0;
         if (droppedReadings >= 2 || waitedMs >= timeoutMs) {
             throw notConfirmedError({ chainState, txid });
         }

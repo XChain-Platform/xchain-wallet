@@ -84,7 +84,7 @@ function harness(seed = null) {
         broadcastTx: vi.fn(async () => {}),
         getTxBlock: vi.fn(async () => ({ block_height: 12 })),
         getUTXOs: vi.fn(async () => ({ utxos: outputs.map(({ vout }) => ({
-            txid: seed?.fundingTxid, vout, confirmations: 1,
+            txid: seed?.wave?.fundingTxid, vout, confirmations: 1,
         })) })),
     };
     const sdk = {
@@ -137,9 +137,9 @@ function resumedRecord() {
         })),
         linkTarget: null,
     });
-    record.fundingTxid = txid(90);
+    record.wave.fundingTxid = txid(90);
     record.stage = 'sending';
-    record.pieces = [
+    record.wave.pieces = [
         { index: -1, signedTxids: [txid(7), txid(8)], txid: txid(8), actionIndex: '30' },
         { index: 0, signedTxids: [txid(1), txid(2)], txid: txid(2), actionIndex: '31' },
         { index: 1, signedTxids: [], txid: null, actionIndex: null },
