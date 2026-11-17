@@ -66,12 +66,8 @@ function parseTopLevelMap(text, topKey) {
  * copied out of the pin it is meant to check would agree with anything.
  */
 const ADVISORY_FLOORS = {
-    // GHSA-3jxr-9vmj-r5cp / CVE-2026-13149 (exponential-time {} expansion)
-    // patched 1.1.16 / 2.1.2 / 5.0.7; GHSA-rgw5-rvv9-x895 / CVE-2026-69152
-    // (unbounded intermediate arrays, an UNCATCHABLE OOM) supersedes it on
-    // every line at 1.1.18 / 2.1.4 / 5.0.9.
-    'brace-expansion@1': { floor: '1.1.18', advisories: ['GHSA-rgw5-rvv9-x895'] },
-    'brace-expansion@2': { floor: '2.1.4', advisories: ['GHSA-rgw5-rvv9-x895', 'GHSA-3jxr-9vmj-r5cp'] },
+    // GHSA-3jxr-9vmj-r5cp / CVE-2026-13149 (exponential-time {} expansion),
+    // superseded by GHSA-rgw5-rvv9-x895 / CVE-2026-69152.
     'brace-expansion@5': { floor: '5.0.9', advisories: ['GHSA-rgw5-rvv9-x895', 'GHSA-3jxr-9vmj-r5cp'] },
     // CVE-2026-71848 (languageDetector quadratic blowup), -71849 (proxy helper
     // forwards Connection-scoped response headers), -71850 (memo() retains SSR

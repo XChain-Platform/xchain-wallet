@@ -50,26 +50,23 @@ supportedArchitectures:
 # an uncapped `>=4.0.6` permits a future 5.x major to be pulled in
 # silently, which is the opposite of what a pin is for.
 overrides:
+  minimatch: ^11.0.9
+  glob: ^14.0.6
+  'xcode>uuid': ^11.1.1
   tar: ^7.5.7
   # GHSA-8vv3-6qpc-gpw6 (merkle node duplication validates a forged transaction list):
   # the Ledger libraries resolve the 5.x line, patched in 5.2.1; the shells pin 6.1.8.
   bitcoinjs-lib@5: ^5.2.1
   ws: ^8.20.1
-  # Three major lines are resident, so brace-expansion is pinned per major.
-  # Two advisories stack here, and the SECOND one supersedes the first on
-  # every line:
+  # Two advisories stack here, and the SECOND one supersedes the first:
   #   GHSA-3jxr-9vmj-r5cp / CVE-2026-13149 - exponential-time expansion of
-  #     consecutive non-expanding {} groups. Patched in 1.1.16 / 2.1.2 / 5.0.7.
+  #     consecutive non-expanding {} groups. Patched in 5.0.7.
   #   GHSA-rgw5-rvv9-x895 / CVE-2026-69152 - the 5.0.8 maxLength mitigation is
   #     incomplete: the arrays feeding combine() stay unbounded, so ~25 KB of
   #     input kills the process with an UNCATCHABLE out-of-memory error.
-  #     Patched in 1.1.18 / 2.1.4 / 5.0.9.
-  # Floor every line at the later of the two, not the first patch that
+  #     Patched in 5.0.9.
+  # Floor the resident line at the later of the two, not the first patch that
   # happened to clear the alert that was open at the time.
-  # GHSA-q2hr-2g5m-vwhr / CVE-2026-102277 (quadratic {a},b} rewrite) is
-  # flagged on the 1.x line only and patched in 1.1.21.
-  brace-expansion@1: ^1.1.21
-  brace-expansion@2: ^2.1.7
   brace-expansion@5: ^5.0.12
   vite: '>=6.4.4 <7'
   protobufjs: ^7.5.8
@@ -203,6 +200,7 @@ allowBuilds:
 # (release-management.md section 6, amendment v12).
 minimumReleaseAgeExclude:
   - '@dankest-llc/*'
+  - minimatch@11.0.9
 
 # A headless CI runner has no TTY, and pnpm asks for confirmation
 # before purging node_modules when the modules directory no longer matches
