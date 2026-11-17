@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import {
+    approveConfirm,
     explorerJson,
     minerRpc,
     REGTEST_CHAIN_ID,
@@ -316,15 +317,9 @@ export async function waitForShownTxid(scope, { timeout = 180_000, message = 'th
 
 /** Approves the open confirm modal and returns the txid the wallet reports. */
 export async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    // Generous, because Approve stays disabled until the pre-flight report
-    // resolves and a COLD dry-run on this shared venue has been measured at
-    // several seconds. A real blocking verdict fails here too, which is why
-    // the message names both possibilities rather than guessing.
-    await expect(approve, 'Approve never became enabled: either the pre-flight report never '
-        + 'arrived, or the venue really does refuse this action')
-        .toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    // Approve is never disabled (G130); approveConfirm taps until the wallet
+    // takes the tap and names the screen's refusal when it never does.
+    await approveConfirm(page, 'the pending payment');
 
     await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
         .toBeVisible({ timeout: 180_000 });

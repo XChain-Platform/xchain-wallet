@@ -1762,29 +1762,87 @@ async function readConfirmBlockers(page) {
 }
 
 /**
- * Clicks Approve on the open confirm screen once it is enabled, and fails in a
- * bounded time naming what the screen says when it never is.
+ * What one tap on Approve did, read from the screen for up to `windowMs`:
+ * `accepted` (Approve went busy or the review closed), `blocked` with the
+ * reason the screen gave, `error` with the message a signing failure left, or
+ * `ignored` when nothing changed at all.
+ */
+async function readApproveOutcome(page, approve, windowMs = 1_500) {
+    const blocked = page.getByTestId('confirm-blocked');
+    const failed = page.getByTestId('confirm-error').or(page.getByTestId('confirm-notice'));
+    const deadline = Date.now() + windowMs;
+    for (;;) {
+        if (await approve.count() === 0 || !(await approve.isVisible().catch(() => false))) {
+            return { kind: 'accepted' };
+        }
+        if (await approve.getAttribute('aria-busy').catch(() => null) === 'true') return { kind: 'accepted' };
+        if (await blocked.isVisible().catch(() => false)) {
+            return {
+                kind: 'blocked',
+                reason: await blocked.getAttribute('data-reason').catch(() => null),
+                text: (await blocked.innerText().catch(() => '')).trim(),
+            };
+        }
+        if (await failed.first().isVisible().catch(() => false)) {
+            return { kind: 'error', text: (await failed.first().innerText().catch(() => '')).trim() };
+        }
+        if (Date.now() >= deadline) return { kind: 'ignored' };
+        await page.waitForTimeout(100);
+    }
+}
+
+/**
+ * Taps Approve on the open confirm screen until the wallet takes the tap, and
+ * fails in a bounded time naming what the screen says when it never does.
  *
- * A bare `click()` on a disabled Approve retries until the TEST timeout, which
- * on this suite is 30 minutes: one refused compose then eats the job cap and
- * reports "Test timeout exceeded" with nothing about the refusal. Approve
- * waits on the pre-flight report, and a cold dry run on this shared venue has
- * been measured at several seconds, so the budget is generous but finite.
+ * Approve is never disabled (G130, 2026-11-16), so `toBeEnabled` is true the
+ * moment the screen opens and says nothing about readiness. A tap while the
+ * pre-flight is still checking is answered with a "still checking" notice and
+ * sends nothing (G129), and a tap inside the short settle after the review
+ * opens (approveSettle, 700 ms) is dropped without a word. Both left the
+ * gas-token bootstrap's ISSUE sitting on Confirm until its 180 s chain wait
+ * ran out (#83). So this waits out the check, taps, and reads what the tap
+ * did: busy means it was taken, "checking" or silence means tap again, and
+ * any other refusal ends the wait with the screen's own reason. Repeat taps
+ * are safe: the confirm screen ignores a tap while a request is in flight.
+ *
+ * A cold dry run on this shared venue has been measured at several seconds,
+ * so the budget is generous but finite: a bare click on an Approve that can
+ * never go ahead would otherwise wait out the 30 min test timeout.
  */
 export async function approveConfirm(page, what = 'this action', timeoutMs = 120_000) {
     const approve = page.getByTestId('confirm-approve');
-    try {
-        await expect(approve).toBeEnabled({ timeout: timeoutMs });
-    } catch {
+    const checking = page.getByTestId('confirm-checking');
+    const deadline = Date.now() + timeoutMs;
+    let last = null;
+    const fail = async (why) => {
         const said = await readConfirmBlockers(page);
-        throw new Error(
-            `Approve never became enabled for ${what} within ${Math.round(timeoutMs / 1000)}s`
-            + (said
-                ? `, and the confirm screen says: ${said}`
-                : ': the pre-flight report never arrived, and the screen names no refusal'),
-        );
+        throw new Error(`Approve was not taken for ${what}: ${why}`
+            + (said ? `; the confirm screen says: ${said}` : ''));
+    };
+    while (Date.now() < deadline) {
+        const left = Math.max(1_000, deadline - Date.now());
+        await expect(checking).toHaveCount(0, { timeout: left }).catch(() => {});
+        if (await checking.count() > 0) break;
+        await expect(approve).toBeVisible({ timeout: Math.max(1_000, deadline - Date.now()) })
+            .catch(() => {});
+        if (!(await approve.isVisible().catch(() => false))) {
+            await fail('the Approve button is not on screen');
+        }
+        await approve.click();
+        last = await readApproveOutcome(page, approve);
+        if (last.kind === 'accepted') return;
+        if (last.kind === 'error') await fail(`signing stopped with "${last.text}"`);
+        if (last.kind === 'blocked' && last.reason !== 'checking') {
+            await fail(`the tap was refused (${last.reason || 'no reason code'}): "${last.text}"`);
+        }
+        // `checking` or a tap inside the settle window: wait a beat, tap again.
+        await page.waitForTimeout(500);
     }
-    await approve.click();
+    await fail(`no tap was taken within ${Math.round(timeoutMs / 1000)}s`
+        + (last?.kind === 'blocked'
+            ? ', the pre-flight check never finished'
+            : last ? ', each tap changed nothing on screen' : ', the pre-flight check never finished'));
 }
 
 /**
