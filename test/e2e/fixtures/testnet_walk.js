@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { approveConfirm } from './regtest.js';
 import { expect, openPaletteCommand } from './wallet.js';
 
 export const WALLET_UNLOCK = 'testnetpassword123';
@@ -17,8 +18,8 @@ export async function approve(page, password = WALLET_UNLOCK) {
     await expect(confirm).toBeVisible({ timeout: 120_000 });
     const passwordInput = page.getByLabel('Password', { exact: true });
     if (await passwordInput.count() && await passwordInput.isVisible()) await passwordInput.fill(password);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-    await page.getByTestId('confirm-approve').click();
+    // Approve is never disabled (G130): tap until the wallet takes it.
+    await approveConfirm(page);
 }
 
 export async function gotoPalette(page, title) {
