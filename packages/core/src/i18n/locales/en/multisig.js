@@ -15,9 +15,6 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
-    'multisig.create.invalidSharedAccountPath': 'Shared cosigner setup contains an invalid account path.',
-    'multisig.create.invalidAccountPath': '{tag}: enter a valid account path starting with m.',
-    'multisig.create.accountPathHelp': "Enter the account path for the cosigner's key.",
     'multisig.create.accountPathDepthMismatch': 'Account path and account public key have different depths.',
     'multisig.create.accountPathChildMismatch': 'Account path and account public key have different child indexes.',
     'multisig.create.accountPathHardenedChild': 'Account path asks this account public key to derive a hardened child.',
