@@ -7,7 +7,10 @@
     padding-inline-end: var(--xc-control-h-lg);
 }
 
-/* The discard X is pinned 8px from the notice's block-start and inline-end edges. */
+/* The discard X is pinned 8px from the notice's block-start and inline-end edges.
+   The 44px hit area keeps its size, but its icon sits in the top corner so it
+   lines up with the "Draft saved" title line instead of centring 22px down
+   (operator 2026-11-17). */
 .notice [data-notice-dismiss] {
     position: absolute;
     top: 8px;
@@ -15,10 +18,18 @@
     width: var(--xc-control-h-lg);
     height: var(--xc-control-h-lg);
     margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
 }
 
 .actions {
     width: calc(100% + var(--xc-icon-sm) + var(--xc-space-2));
     margin-top: var(--xc-space-2);
     margin-inline-start: calc(-1 * (var(--xc-icon-sm) + var(--xc-space-2)));
+}
+
+.restore {
+    padding: var(--xc-space-2);
 }

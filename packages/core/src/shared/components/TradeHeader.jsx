@@ -32,10 +32,12 @@ export function TradeHeader({ ring, verb, amount, counter = null, chip = null, l
         <section className={styles.header} aria-label={label} data-trade-header>
             {ring}
             <div className={styles.text}>
-                <span className={styles.verb}>{verb}</span>
+                <span className={styles.topLine} data-trade-header-top-line>
+                    <span className={styles.verb}>{verb}</span>
+                    {chip ? <span className={styles.chip}>{chip}</span> : null}
+                </span>
                 <span className={styles.amount}>{amount}</span>
                 {counter ? <span className={styles.counter}>{counter}</span> : null}
-                {chip ? <span className={styles.chip}>{chip}</span> : null}
             </div>
         </section>
     );

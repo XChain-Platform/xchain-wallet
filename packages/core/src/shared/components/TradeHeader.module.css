@@ -1,5 +1,5 @@
-/* The Order and Swap detail header card: the large fill ring, then the
-   verb, the big amount, what it is for and the status chip, stacked. */
+/* The Order and Swap detail header card: the large fill ring, then three
+   lines: verb with status, the big amount, and what it is for. */
 .header {
     composes: card from '../../ui/Card.module.css';
     display: flex;
@@ -14,6 +14,15 @@
     flex-direction: column;
     align-items: flex-start;
     gap: var(--xc-space-1);
+    min-inline-size: 0;
+}
+
+.topLine {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    inline-size: 100%;
     min-inline-size: 0;
 }
 
@@ -44,6 +53,7 @@
 
 .chip {
     display: inline-flex;
+    flex: 0 0 auto;
     max-inline-size: 100%;
 }
 

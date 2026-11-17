@@ -29,8 +29,8 @@ const messages = {
     'createWallet.copyingIsDisabledToKeep':
         'Copying is disabled to keep your recovery phrase out of shared clipboards.',
     'createWallet.iHaveSavedMyRecovery': 'I have saved my recovery phrase safely.',
-    'createWallet.revealPhraseFirst': 'Reveal your recovery phrase and write it down first.',
-    'createWallet.tickSavedFirst': 'Write the recovery phrase down, then tick "I have saved my recovery phrase safely."',
+    'createWallet.revealPhraseFirst': 'Reveal your phrase first.',
+    'createWallet.tickSavedFirst': "Tick this box once you've saved your phrase.",
     'createWallet.savedPhraseHelp': 'Confirms that the recovery phrase is written down somewhere safe. Next you type back a few of its words to prove it.',
     'createWallet.step1Of3': 'Step 1 of 3',
     'createWallet.walletNameHelp': 'The name this wallet shows under on this device. You can rename it later.',

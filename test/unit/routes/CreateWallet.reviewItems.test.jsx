@@ -76,9 +76,8 @@ describe('CreateWallet review items', () => {
         // G130: enabled while concealed; the tap explains the reveal gate.
         expect(verify).toBeEnabled();
         fireEvent.click(verify);
-        expect(screen.getByRole('alert', { name: /form errors/i })).toHaveTextContent(
-            'Reveal your recovery phrase and write it down first.',
-        );
+        expect(screen.queryByRole('alert', { name: /form errors/i })).toBeNull();
+        expect(screen.getByRole('alert')).toHaveTextContent('Reveal your phrase first.');
         expect(screen.getByRole('button', { name: 'Verify Recovery Phrase' })).toBeInTheDocument();
         expect(verify.className.split(' ')).toContain(buttonStyles.success);
         expect(verify.closest('form').className.split(' ')).toContain(formStyles.cardlessForm);

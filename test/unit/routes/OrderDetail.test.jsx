@@ -325,6 +325,11 @@ describe('Order detail', () => {
         expect(within(card).getByText('500 DOGESWAP')).toBeTruthy();
         expect(within(card).getByText('for 10.5 DOGE')).toBeTruthy();
         expect(within(card).getByText('Partly filled')).toBeTruthy();
+        const topLine = card.querySelector('[data-trade-header-top-line]');
+        expect(within(topLine).getByText('Selling')).toBeTruthy();
+        expect(within(topLine).getByText('Partly filled')).toBeTruthy();
+        expect(topLine.nextElementSibling).toHaveTextContent('500 DOGESWAP');
+        expect(topLine.nextElementSibling.nextElementSibling).toHaveTextContent('for 10.5 DOGE');
     });
 
     it('shows Actions first and chosen, every action one ActionList row', async () => {

@@ -68,6 +68,14 @@ describe('DraftNotice', () => {
         expect(css).toMatch(/margin-inline-start:\s*calc\(-1 \* \(var\(--xc-icon-sm\) \+ var\(--xc-space-2\)\)\);/);
     });
 
+    it('pads Restore by 8px on every side', () => {
+        const component = read('packages/core/src/shared/components/DraftNotice.jsx');
+        const css = read('packages/core/src/shared/components/DraftNotice.module.css');
+        expect(component).toContain('className={styles.restore}');
+        expect(css).toMatch(/\.restore\s*\{[^}]*padding:\s*var\(--xc-space-2\);/s);
+        expect(read('packages/core/src/ui/tokens.css')).toMatch(/--xc-space-2:\s*8px;/);
+    });
+
     it('guards every restore-capable draft form behind the shared top notice', () => {
         const restoreForms = readdirSync(routesDir)
             .filter((name) => name.endsWith('.jsx'))

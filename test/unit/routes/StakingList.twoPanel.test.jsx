@@ -139,8 +139,13 @@ describe('StakingList two panels on wide content', () => {
         expect(list.closest('[data-list-detail]')).toHaveAttribute('data-list-detail', 'two-panel');
         expect(panel.contains(list)).toBe(false);
         expect(screen.getByRole('separator', { name: 'Resize the staking list' })).toBeInTheDocument();
-        // The stake's card names it; the page header stays Staking's.
-        expect(await within(panel).findByText('Validator Stake')).toBeInTheDocument();
+        // The chart hero keeps the same three-line title at wide widths; the
+        // page header stays Staking's and does not add the position as line four.
+        const heroTitle = await within(panel).findByText('Staked + rewards');
+        const hero = heroTitle.closest('section');
+        expect([...hero.querySelectorAll('[data-stake-hero-line]')].map((line) => line.dataset.stakeHeroLine))
+            .toEqual(['title', 'change', 'total']);
+        expect(within(hero).queryByText('Validator Stake')).toBeNull();
         expect(h1s()).toEqual(['Staking']);
         expect(document.querySelectorAll('main')).toHaveLength(1);
         const pageHeader = screen.getByRole('heading', { level: 1, name: 'Staking' }).parentElement.parentElement;
@@ -198,7 +203,8 @@ describe('StakingList two panels on wide content', () => {
         fireEvent.click(screen.getByRole('button', { name: /^Open Contract #2 stake/ }));
 
         const panel = await screen.findByRole('region', { name: 'Contract #2 stake' });
-        expect(await within(panel).findByText('Contract #2 Stake')).toBeInTheDocument();
+        expect(await within(panel).findByText('Staked + rewards')).toBeInTheDocument();
+        expect(within(panel).queryByText('Contract #2 Stake')).toBeNull();
         expect(screen.queryByRole('region', { name: 'Validator stake' })).toBeNull();
         expect(onOpenStake).not.toHaveBeenCalled();
         expect(stakeList()).toBe(list);
@@ -364,7 +370,8 @@ describe('Stake detail opened on its own route', () => {
         renderShell(makeMessaging(2), { route: 'stake-detail', initialRef: contract2 });
 
         const panel = await screen.findByRole('region', { name: 'Contract #2 stake' });
-        expect(await within(panel).findByText('Contract #2 Stake')).toBeInTheDocument();
+        expect(await within(panel).findByText('Staked + rewards')).toBeInTheDocument();
+        expect(within(panel).queryByText('Contract #2 Stake')).toBeNull();
         expect(screen.getByRole('button', { name: /^Open Contract #2 stake/ })).toHaveAttribute('aria-current', 'true');
         expect(h1s()).toEqual(['Staking']);
     });
