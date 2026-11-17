@@ -44,6 +44,7 @@ import { SignerPool } from '../../core/src/signers/SignerPool.js';
 import { Vault } from '../../core/src/storage/Vault.js';
 import { VaultConflictError, VaultEvictedError, VaultIncompleteError } from '../../core/src/storage/backend.js';
 import { configureFiatRateSource } from '../../core/src/flows/priceLookup.js';
+import { createFileRefResolver } from '../../core/src/flows/fileRefSource.js';
 import { PassphraseMismatchError } from '../../core/src/flows/unlockWallet.js';
 import { NotificationService } from '../../core/src/notifications/NotificationService.js';
 import { PriceAlertWatcher } from '../../core/src/notifications/PriceAlertWatcher.js';
@@ -1519,6 +1520,7 @@ export async function createWalletLocal(req) {
             sdkRegistry,
             signerPool,
             fileBlobs: null,
+            resolveFileRef: createFileRefResolver(),
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
@@ -1665,6 +1667,7 @@ export async function importMnemonicLocal(req) {
             sdkRegistry,
             signerPool,
             fileBlobs: null,
+            resolveFileRef: createFileRefResolver(),
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
@@ -1865,6 +1868,7 @@ export async function importBackupLocal(req) {
             sdkRegistry,
             signerPool,
             fileBlobs: null,
+            resolveFileRef: createFileRefResolver(),
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
@@ -2015,6 +2019,7 @@ export async function unlockWalletLocal(req) {
             sdkRegistry,
             signerPool,
             fileBlobs: null,
+            resolveFileRef: createFileRefResolver(),
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),

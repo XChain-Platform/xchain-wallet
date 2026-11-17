@@ -13,6 +13,7 @@ import {
 } from '../../../packages/core/src/flows/fileMultipartRoutes.js';
 import { fileUploadStart } from '../../../packages/core/src/flows/fileUploadStart.js';
 import { createFileRefResolver } from '../../../packages/core/src/flows/fileRefSource.js';
+import { digestPickedFile } from '../../../packages/core/src/shared/hooks/useResumeFilePick.js';
 
 const TWO_HUNDRED_MB = 200 * 1024 * 1024;
 const FROM = Object.freeze({
@@ -86,6 +87,24 @@ describe('large file request transport', () => {
         expect(request.fileRef.blob).toBe(file);
         expectWholeFileUnread(file);
         expect(file.slice).not.toHaveBeenCalled();
+
+        const partSource = await createFileRefResolver()(request.fileRef);
+        await expect(partSource.readSlice(2, 5)).resolves.toEqual(Uint8Array.of(2, 3, 4));
+        expect(file.slice).toHaveBeenCalledWith(2, 5);
+    });
+});
+
+describe('resume file identity', () => {
+    it('hashes bounded slices without reading the whole Blob', async () => {
+        const file = fileStub((4 * 1024 * 1024) + 3);
+
+        await expect(digestPickedFile(file)).resolves.toBe(
+            '7f2c8b99946b32a2b75927b283a4057d2f92bbdf7a4769842b425cd6da808377',
+        );
+        expect(file.slice).toHaveBeenCalledTimes(2);
+        expect(file.slice).toHaveBeenNthCalledWith(1, 0, 4 * 1024 * 1024);
+        expect(file.slice).toHaveBeenNthCalledWith(2, 4 * 1024 * 1024, file.size);
+        expectWholeFileUnread(file);
     });
 });
 
