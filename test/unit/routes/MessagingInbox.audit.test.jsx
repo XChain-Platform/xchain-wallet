@@ -12,6 +12,7 @@ import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MessagingInbox } from '../../../packages/core/src/shared/routes/MessagingInbox.jsx';
+import notificationStyles from '../../../packages/core/src/shared/routes/AlertsRoute.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const OWNER = Object.freeze({
@@ -129,6 +130,39 @@ describe('MessagingInbox audit states', () => {
 
         expect(await screen.findByText('valid message remains visible')).toBeTruthy();
         expect(screen.queryByText('invalid row')).toBeNull();
+    });
+
+    it('shows the Notifications unread dot beside the time only for unread conversations', async () => {
+        const unreadPeer = 'peer-unread';
+        const readPeer = 'peer-read';
+        localStorage.setItem('xc:msgRead:wallet-1:account-1', JSON.stringify({
+            [readPeer]: ['read-tx'],
+        }));
+        mount(messagingFor({ messages: [
+            incoming({
+                from: unreadPeer,
+                txid: 'unread-tx',
+                text: 'Unread preview',
+                timestamp: 2,
+            }),
+            incoming({
+                from: readPeer,
+                txid: 'read-tx',
+                text: 'Read preview',
+                timestamp: 1,
+            }),
+        ] }));
+
+        const unreadRow = (await screen.findByText('Unread preview')).closest('li');
+        const readRow = screen.getByText('Read preview').closest('li');
+        const dot = unreadRow.querySelector('[aria-label="Unread"]');
+        const time = unreadRow.querySelector('time');
+
+        expect(dot).not.toBeNull();
+        expect(dot).toHaveClass(notificationStyles.unreadDot);
+        expect(time.nextElementSibling).toBe(dot);
+        expect(dot.parentElement).toBe(time.parentElement);
+        expect(readRow.querySelector('[aria-label="Unread"]')).toBeNull();
     });
 
     it('neutralizes invisible direction controls while keeping message markup inert', async () => {

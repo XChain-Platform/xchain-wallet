@@ -78,6 +78,7 @@ function openingTags(source, name) {
 const NOT_A_MAIN_ACTION = {
     'packages/core/src/shared/components/OpenOrdersPanel.jsx|danger': 'cancels open orders, a destructive action',
     'packages/core/src/shared/routes/DispenserDetail.jsx|danger': 'closes a dispenser, a destructive action',
+    'packages/core/src/shared/routes/ForgotPassword.jsx|danger': 'erases wallet storage before restoring or starting over, a destructive action',
     'packages/core/src/shared/components/settings/ThisWalletSection.jsx|danger': // G125 (2026-11-15): the final button that permanently removes a wallet is red, with its icon. Remove wallet only.
     'removes the wallet from this device, a destructive action',
 };

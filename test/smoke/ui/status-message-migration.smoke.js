@@ -35,6 +35,8 @@
 //       warning fits; a panel with a heading and controls still stays out.
 //   (f) field errors. These use the compact shared Input error row because
 //       the control references the message through `aria-describedby`.
+//   (g) an error appended inside a shared StatusMessage. The outer primitive
+//       owns the status layout while the nested alert announces the new error.
 //
 // Static source-analysis smoke, matching error-recovery-sweep.smoke.js.
 
@@ -113,7 +115,7 @@ for (const el of elements) {
 // --- 5. every residual role="alert" falls in a declared carve-out -----
 
 // Walks the opening tag of each residual inline alert / aria-live row and
-// checks it against the four reasons above. A row matching none of them is a
+// checks it against the declared reasons above. A row matching none of them is a
 // genuine miss and fails here rather than sitting in the tree unnoticed.
 const CARVED_FILE = /(Toast|Banner|Overlay)[A-Za-z]*\.jsx$/;
 const BLOCK_CHILD = /<(div|p|ul|ol|table|li|section|pre|h[1-6])[\s/>]/;
@@ -130,6 +132,8 @@ for (const f of files) {
         if (/style=/.test(tag)) continue;                                    // (c)
         if (/data-testid/.test(tag)) continue;                               // (b)
         if (/className=\{inputStyles\.error\}/.test(tag)) continue;          // (f)
+        const before = f.src.slice(0, m.index);
+        if (before.lastIndexOf('<StatusMessage') > before.lastIndexOf('</StatusMessage>')) continue; // (g)
         const cls = /className=\{styles\.([A-Za-z0-9_]+)\}/.exec(tag);
         if (cls && /warn/i.test(cls[1])) continue;                           // (a)
         // (e): peek at the body. A row whose children are block elements is a

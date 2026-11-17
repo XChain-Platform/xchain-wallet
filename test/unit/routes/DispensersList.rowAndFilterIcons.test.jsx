@@ -8,10 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// My dispensers: the Status and Sort dropdowns carry a distinct icon on
-// every option (like the network filter), and the status pill stays at the
-// right of the price line on narrow windows: the price truncates, the pill
-// never shrinks or wraps.
+// My dispensers: filter options keep distinct icons, while each row puts its
+// status on line one and stock on line two without cutting words.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup, within } from '@testing-library/react';
@@ -59,14 +57,14 @@ describe('My dispensers filter dropdown icons', () => {
 });
 
 describe('My dispensers row status pill', () => {
-    it('renders the pill beside the price inside one price line', async () => {
+    it('renders the pill on line one and stock count on line two', async () => {
         const messaging = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ id: 'a1', address: OWNER, source: 'hd' }] }),
             getDispensersForSource: vi.fn().mockResolvedValue({
                 data: [{
                     action_index: '40', block_index: 200, source: OWNER,
                     give_tick: 'JAVIERTEST', give_amount: '2', get_coin: 'BTC', get_amount: '0.00001',
-                    status: 'valid', current_status: 'open', escrow_remaining: '48',
+                    status: 'valid', current_status: 'open', escrow_remaining: '48', dispense_count: 0,
                 }],
             }),
         };
@@ -79,32 +77,38 @@ describe('My dispensers row status pill', () => {
         );
         const row = await screen.findByRole('button', { name: 'Open JAVIERTEST dispenser #40' });
         const pill = within(row).getByText('Open');
-        const line = pill.parentElement;
-        expect(line.children.length).toBe(2);
-        expect(line.children[0].textContent).toMatch(/JAVIERTEST/);
-        expect(line.children[1]).toBe(pill);
-        // The escrow line is a separate line below.
-        expect(line.nextElementSibling.textContent).toMatch(/in escrow/);
+        const amount = within(row).getByText('2 JAVIERTEST');
+        const price = within(row).getByText('0.00001 BTC');
+        const stock = within(row).getByText('24 of 24 left');
+        expect(pill.parentElement).toContainElement(amount);
+        expect(stock.parentElement).toContainElement(price);
     });
 
-    it('the price line is nowrap; the price truncates with min-width 0; the pill never shrinks', () => {
-        const line = cssRule('.priceLine');
+    it('keeps both lines aligned and lets amount words wrap intact', () => {
+        const line = (css.match(/\.primaryLine,\s*\.secondaryLine\s*\{([^}]*)\}/) || [])[1] || '';
         expect(line).toMatch(/display:\s*flex/);
-        expect(line).toMatch(/flex-wrap:\s*nowrap/);
+        expect(line).toMatch(/justify-content:\s*space-between/);
         expect(line).toMatch(/min-width:\s*0/);
-        const price = cssRule('.price');
-        expect(price).toMatch(/min-width:\s*0/);
-        expect(price).toMatch(/text-overflow:\s*ellipsis/);
-        expect(price).toMatch(/white-space:\s*nowrap/);
-        expect(price).toMatch(/overflow:\s*hidden/);
+        const amount = (css.match(/\.rowAmount,\s*\.priceText\s*\{([^}]*)\}/) || [])[1] || '';
+        expect(amount).toMatch(/overflow-wrap:\s*break-word/);
+        expect(amount).toMatch(/word-break:\s*normal/);
+        const stock = cssRule('.stockCount');
+        expect(stock).toMatch(/white-space:\s*nowrap/);
         const status = cssRule('.status');
         expect(status).toMatch(/flex:\s*0 0 auto/);
         expect(status).toMatch(/white-space:\s*nowrap/);
     });
 
-    it('no phone rule lets the price wrap or moves the pill to its own line', () => {
+    it('the phone row keeps fixed icon and chevron columns without breaking words', () => {
         const phone = css.slice(css.indexOf('@media not all and (min-width: 400px)'));
-        expect(phone).not.toMatch(/white-space:\s*normal/);
-        expect(phone).not.toMatch(/grid-row/);
+        expect(phone).toMatch(/grid-template-columns:\s*40px minmax\(0, 1fr\) auto/);
+        expect(phone).toMatch(/overflow-wrap:\s*break-word/);
+        expect(phone).not.toMatch(/overflow-wrap:\s*anywhere/);
+    });
+
+    it('uses the required success, warning, and neutral status tones', () => {
+        expect(cssRule('.status_open')).toMatch(/var\(--xc-success-bg\)/);
+        expect(cssRule('.status_cancelling')).toMatch(/var\(--xc-warning-bg\)/);
+        expect(css).toMatch(/\.status_complete,\s*\.status_closed,\s*\.status_empty\s*\{[^}]*var\(--xc-bg-muted\)/);
     });
 });

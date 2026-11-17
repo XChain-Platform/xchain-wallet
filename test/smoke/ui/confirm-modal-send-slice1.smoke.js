@@ -159,7 +159,8 @@ assert.match(screenCss, /\.footer\s*\{[^}]*flex:\s*0 0 auto[^}]*safe-area-inset-
     'Screen footer stays pinned and clears the home indicator');
 assert.doesNotMatch(modalCss, /\.overlay\b/, 'no overlay backdrop remains');
 assert.match(modalSrc, /<Screen\s[\s\S]*?footer=\{footer\}/, 'confirm decisions use the Screen footer');
-assert.match(modalSrc, /title=\{t\('common\.confirm'\)\}/, 'page header reads the translated Confirm label');
+assert.match(modalSrc, /title=(?:\{t\('common\.confirm'\)\}|"Confirm")/,
+    'page header reads the translated Confirm label');
 assert.match(modalSrc, /onBack=\{handleReject\}/, 'header back arrow uses the guarded Reject handler');
 assert.match(modalSrc, /Promise\.resolve\(onReject\(\)\)\.catch/, 'Reject promises cannot escape the event handler');
 

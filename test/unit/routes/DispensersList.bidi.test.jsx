@@ -31,7 +31,7 @@ const ROW = {
 afterEach(cleanup);
 
 describe('dispenser rows on a right-to-left page', () => {
-    it('isolates the rate and escrow lines as left-to-right text', async () => {
+    it('isolates the get and pay amounts as left-to-right text', async () => {
         const messaging = {
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [{ id: 'a1', address: OWNER, source: 'hd' }] }),
             getDispensersForSource: vi.fn().mockResolvedValue({ data: [ROW] }),
@@ -42,7 +42,7 @@ describe('dispenser rows on a right-to-left page', () => {
             </MessagingProvider>,
         );
 
-        for (const pattern of [/per 100 DOGE/, /in escrow/]) {
+        for (const pattern of [/250 JAVIERTEST/, /100 DOGE/]) {
             const line = await screen.findByText(pattern);
             expect(line.tagName, String(pattern)).toBe('BDI');
             expect(line.getAttribute('dir'), String(pattern)).toBe('ltr');

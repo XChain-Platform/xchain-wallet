@@ -14,10 +14,10 @@
 //   - <RawPsbtViewer> exists with the expected public API
 //   - Returns null when developerMode=false (the only way the gate
 //     short-circuits; caller never gets a stray reveal block)
-//   - G127 removes the collapsed raw disclosure from review screens and routes
-//     caller PSBTs through PsbtIntentPanel, which shows every input and output
-//   - both extension approval and the in-wallet Sign Transaction flow use that
-//     fail-closed replacement, with Developer Mode as the explicit escape hatch
+//   - G127 removes raw transaction inventories from review screens and routes
+//     caller PSBTs through decoded Confirm Standard facts
+//   - both extension approval and the in-wallet Sign Transaction flow remain
+//     fail-closed, with Developer Mode as the explicit escape hatch
 //   - approval-side messaging exposes getSettings
 
 import { strict as assert } from 'node:assert';
@@ -96,7 +96,11 @@ for (const cls of ['root', 'toggle', 'body', 'section', 'label', 'hex', 'json', 
 // --- 3. SignApproval replacement ---------------------------------------
 
 assert.doesNotMatch(signSrc, /RawPsbtViewer/, 'G127 approval has no collapsed technical-details viewer');
-assert.match(signSrc, /import \{ PsbtIntentPanel \}/, 'imports the PSBT safety panel');
+assert.match(
+    signSrc,
+    /import \{ amountLabel, barePsbtSendPresentation \} from '@xchain-wallet\/core\/shared\/components\/PsbtIntentPanel\.jsx'/,
+    'imports decoded bare-payment presentation helpers',
+);
 assert.match(signSrc, /getSettings/, 'imports getSettings from approval messaging');
 
 // Settings fetch on mount.
@@ -115,20 +119,24 @@ assert.match(
     'fetch failure leaves developerMode false (gate stays closed)',
 );
 
-// A caller PSBT exposes the decoded input/output set, and an unreadable action
-// that spends this wallet's inputs stays fail-closed outside Developer Mode.
-assert.match(
+// A caller PSBT enters Confirm Standard as decoded action facts or a bare
+// payment, never as a raw input/output inventory. An unreadable action that
+// spends this wallet's inputs stays fail-closed outside Developer Mode.
+assert.doesNotMatch(
     signSrc,
-    /<PsbtIntentPanel[\s\S]*?decomposed=\{psbtIntent\.error \? null : psbtIntent\.decomposed\}/,
-    'signPsbt renders the decomposed transaction through PsbtIntentPanel',
+    /<PsbtIntentPanel/,
+    'signPsbt approval has no raw PSBT inventory panel',
 );
+assert.match(signSrc, /const confirmationDecoded = kind === 'signPsbt'/, 'signPsbt enters the shared decoded confirmation model');
+assert.match(signSrc, /<ConfirmStandard/, 'approval renders Confirm Standard');
 assert.match(
     signSrc,
     /psbtRefusalReason\(\{[\s\S]*?developerMode[\s\S]*?\}\)/,
     'developer mode gates the fail-closed unreadable-action escape hatch',
 );
-assert.match(intentSrc, /inputs\.map\(/, 'PSBT safety panel enumerates every input');
-assert.match(intentSrc, /outputs\.map\(/, 'PSBT safety panel enumerates every output');
+assert.match(intentSrc, /!own\.has\(output\.address\)/, 'bare payments exclude wallet-owned change');
+assert.doesNotMatch(intentSrc, /data-testid="psbt-input"/, 'raw input rows stay removed');
+assert.doesNotMatch(intentSrc, /data-testid="psbt-output"/, 'raw output rows stay removed');
 
 // --- 4. approval/messaging.js ------------------------------------------
 
@@ -146,7 +154,7 @@ assert.match(
 assert.match(
     psbtConfirmSrc,
     /variant="psbt"[\s\S]*?psbtPanel=\{\([\s\S]*?<PsbtIntentPanel/,
-    'PsbtConfirmScreen puts the input/output panel on the shared confirm page',
+    'PsbtConfirmScreen keeps the fail-closed decoded intent panel on the shared confirm page',
 );
 assert.match(
     psbtConfirmSrc,

@@ -303,6 +303,7 @@ export function PanelSplitDivider({ split, label, hint, controls, className }) {
  * @param {string} props.detailLabel the detail region's accessible name
  * @param {boolean} [props.detailBusy]
  * @param {import('react').ReactNode} [props.detailFallback] shown while a lazily loaded detail loads
+ * @param {number} [props.listMax] optional page-specific maximum for the list panel
  */
 export function ListDetailSplit({
     measureRef,
@@ -317,12 +318,13 @@ export function ListDetailSplit({
     detailLabel,
     detailBusy = false,
     detailFallback = null,
+    listMax = LIST_DETAIL_LIST_MAX_PX,
 }) {
     const listId = useId();
     const split = usePanelSplit({
         storageKey,
         min: LIST_DETAIL_LIST_MIN_PX,
-        max: LIST_DETAIL_LIST_MAX_PX,
+        max: listMax,
         minOther: LIST_DETAIL_DETAIL_MIN_PX,
         defaultShare: LIST_DETAIL_LIST_SHARE,
     });

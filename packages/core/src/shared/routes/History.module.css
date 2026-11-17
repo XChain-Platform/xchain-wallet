@@ -41,12 +41,8 @@
     gap: var(--xc-space-1);
 }
 
-/* PanelSplit already places its panel 8px below the page header. With no
-   fixed list header, cancel the list scroller's second 8px top inset so the
-   first History block starts on that same 8px rhythm. */
-:global([data-list-detail='two-panel']) .historyListPage {
-    margin-block-start: calc(-1 * var(--xc-space-2));
-}
+/* The list panel no longer pads its top (PanelSplit), so no negative
+   offset is needed here (2026-11-16). */
 
 /* The title line's outlined square icon buttons, the filter's size. The kit
    Button draws their border and control radius. */
@@ -295,9 +291,9 @@
 }
 
 .row.row[data-xc-split-row] {
-    width: calc(100% - (2 * var(--xc-space-2)));
-    margin-inline: var(--xc-space-2);
-    border-radius: 10px;
+    width: 100%;
+    margin-inline: 0;
+    border-radius: 0;
     box-shadow: none;
 }
 

@@ -46,8 +46,9 @@ assert.match(src, /Allow list must be a list number \(digits only\)/, 'validates
 assert.match(src, /Block list must be a list number \(digits only\)/, 'validates block-list index is numeric');
 assert.doesNotMatch(src, /LIST action index/, 'list copy names a list number, not the wire opcode');
 
-// Edit requires at least one changed field (no empty no-op edits).
-assert.match(src, /Change at least one field to submit an edit\./, 'blocks a no-op edit');
+// Each edit page requires a change in the field group it owns (no empty no-op edits).
+assert.match(src, /Choose a new expiration date and time\./, 'blocks a no-op expiration edit');
+assert.match(src, /Change at least one list before updating\./, 'blocks a no-op list edit');
 
 // 1-hour list-edit delay surfaced in both the confirm form and done screen.
 assert.match(src, /take effect about 1 hour after this[\s\S]*?transaction\s+confirms/,

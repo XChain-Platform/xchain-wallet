@@ -134,6 +134,8 @@ describe('DispensersList two panels', () => {
         renderShell(makeMessaging(), { onOpenDispenser });
         fireEvent.click(screen.getByRole('radio', { name: 'My Dispensers' }));
         const list = await screen.findByRole('region', { name: 'Dispensers' });
+        expect(screen.getByRole('separator', { name: 'Resize the dispensers list' }))
+            .toHaveAttribute('aria-valuenow', '420');
 
         fireEvent.click(screen.getByRole('button', { name: 'Open BETA dispenser #31' }));
         const panel = await screen.findByRole('region', { name: 'BETA dispenser #31' });
@@ -141,6 +143,21 @@ describe('DispensersList two panels', () => {
         expect(screen.getByRole('region', { name: 'Dispensers' })).toBe(list);
         expect(onOpenDispenser).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: 'Open BETA dispenser #31' })).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('keeps two panels and shows a quiet detail state when the first list is empty', async () => {
+        layoutWidth = 1046;
+        const messaging = makeMessaging();
+        messaging.getDispensersForSource.mockResolvedValue({ data: [] });
+        renderShell(messaging);
+
+        expect(await screen.findByRole('heading', { name: 'No dispensers yet' })).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Dispensers' }))
+            .toContainElement(screen.getByRole('heading', { name: 'No dispensers yet' }));
+        const detail = screen.getByRole('region', { name: 'Dispenser' });
+        expect(within(detail).getByRole('heading', { name: 'Select a dispenser' })).toBeInTheDocument();
+        expect(detail).not.toHaveAttribute('aria-busy');
+        expect(screen.getByRole('separator', { name: 'Resize the dispensers list' })).toBeInTheDocument();
     });
 
     it.each([

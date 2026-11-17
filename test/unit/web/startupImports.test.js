@@ -103,13 +103,17 @@ describe('web startup imports', () => {
         },
     );
 
-    it('keeps the first onboarding and lock screens synchronous', () => {
-        for (const routeName of ['Onboarding', 'Locked']) {
-            expect(appSource).toContain(
-                `import { ${routeName} } from '@xchain-wallet/core/shared/routes/${routeName}.jsx';`,
-            );
-            expect(appSource).not.toContain(`const ${routeName} = lazyRoute(`);
-        }
+    it('defers onboarding while keeping the returning-user lock screen synchronous', () => {
+        expect(appSource).toContain(
+            "const Onboarding = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Onboarding.jsx'), 'Onboarding');",
+        );
+        expect(appSource).toMatch(
+            /<Suspense fallback=\{<Loading \/>\}>[\s\S]*?<Onboarding\b/,
+        );
+        expect(appSource).toContain(
+            "import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';",
+        );
+        expect(appSource).not.toContain('const Locked = lazyRoute(');
     });
 
     it('loads the QR encoder only when the private-key route renders it', () => {

@@ -115,7 +115,7 @@ describe('regression/send-review-opens-at-top', () => {
 
         await screen.findByRole('form', { name: 'Review payment' });
         expect(scroller.scrollTop).toBe(0);
-        expect(screen.getByRole('heading', { name: 'Review and Send' })).toHaveFocus();
+        expect(screen.getByRole('heading', { name: 'Confirm' })).toHaveFocus();
     });
 
     it('[REGRESSION P1] opens shared confirmation at the top and submits one double-tapped approval', async () => {

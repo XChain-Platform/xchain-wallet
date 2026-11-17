@@ -128,8 +128,8 @@ assert.deepEqual(hits, [], 'user-facing copy carries wire jargon:\n' + hits.join
 const multisigCreate = readFileSync(join(SHARED, 'routes', 'MultisigCreate.jsx'), 'utf8');
 assert.doesNotMatch(multisigCreate, /Classic multi-signature|SegWit multi-signature|Taproot multi-signature/,
     'the Type dropdown uses the short Classic, SegWit and Taproot labels');
-assert.match(multisigCreate, /Joining someone else's multisig\? Share this wallet as a cosigner/,
-    'the cosigner sharing path uses plain link copy');
+assert.match(multisigCreate, /aria-label="Share Wallet as Cosigner"/,
+    'the cosigner sharing action uses plain copy');
 
 // The en dictionary follows its own pending-block convention: "the network", never the mempool.
 const { en } = await import(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'));

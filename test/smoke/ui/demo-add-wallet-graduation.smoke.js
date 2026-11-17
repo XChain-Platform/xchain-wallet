@@ -145,7 +145,10 @@ assert.match(
     /'onboarding\.leaveTheDemoFirst': 'Leave the Demo First'/,
     'the gate title reads Leave the Demo First',
 );
-for (const lane of ['create', 'import', 'import-freewallet']) {
+// FreeWallet is now a wallet type inside Import Wallet, so graduation has
+// only the two visible onboarding choices. The legacy resume intent remains
+// supported for extension handoffs and older stored state.
+for (const lane of ['create', 'import']) {
     assert.match(
         onboardingSrc,
         new RegExp(`handleGraduate\\('${escapeRegExp(lane)}'`),

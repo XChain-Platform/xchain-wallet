@@ -29,13 +29,13 @@ const ROWS = [
         action_index: '40', block_index: 200, source: OWNER,
         give_tick: 'JAVIERTEST', give_amount: '2',
         get_coin: 'BTC', get_amount: '0.00001',
-        status: 'valid', current_status: 'open', escrow_remaining: '48',
+        status: 'valid', current_status: 'open', escrow_remaining: '48', dispense_count: 0,
     },
     {
         action_index: '31', block_index: 150, source: OWNER,
         give_tick: 'JAVIERTEST', give_amount: '1',
         get_coin: 'BTC', get_amount: '0.0000001',
-        status: 'valid', current_status: 'cancelled', escrow_remaining: '0',
+        status: 'valid', current_status: 'cancelled', escrow_remaining: '0', dispense_count: 24,
     },
 ];
 
@@ -75,10 +75,11 @@ describe('DispensersList lifecycle badges', () => {
         expect(screen.queryByText('cancelled')).not.toBeInTheDocument();
     });
 
-    it('states escrow on the open row only; a cancelled row holds nothing', async () => {
+    it('states remaining fills for open and terminal rows without escrow copy', async () => {
         mount();
-        expect(await screen.findByText(/48 JAVIERTEST in escrow/)).toBeInTheDocument();
-        expect(screen.queryByText(/0 JAVIERTEST in escrow/)).not.toBeInTheDocument();
+        expect(await screen.findByText('24 of 24 left')).toBeInTheDocument();
+        expect(screen.getByText('0 of 24 left')).toBeInTheDocument();
+        expect(screen.queryByText(/in escrow/)).not.toBeInTheDocument();
     });
 
     it('refreshes a mounted list so an indexed close updates the status', async () => {
@@ -113,7 +114,7 @@ describe('DispensersList closing badge', () => {
         vi.setSystemTime((CANCEL_AT + 37 * 60) * 1000);
         const lifecycle = vi.fn().mockResolvedValue({ data: [cancelRow] });
         mount({ rows: [CLOSING_ROW, ROWS[1]], lifecycle });
-        expect(await screen.findByText('Closing · ~23 min')).toBeInTheDocument();
+        expect(await screen.findByText('Closing, ~23 min')).toBeInTheDocument();
         expect(lifecycle).toHaveBeenCalledTimes(1);
         expect(lifecycle).toHaveBeenCalledWith({ chainId: CHAIN, kind: 'cancels', query: OWNER, type: 'address' });
         expect(screen.queryByText('cancelling')).not.toBeInTheDocument();
@@ -129,18 +130,18 @@ describe('DispensersList closing badge', () => {
         });
         const tipRead = vi.fn().mockResolvedValue({ chainId: CHAIN, blockTime: null, protocolTime: CANCEL_AT + 3600 - 29 * 60 });
         mount({ rows: [CLOSING_ROW, second], lifecycle, tipRead });
-        expect(await screen.findAllByText('Closing · ~29 min')).toHaveLength(2);
+        expect(await screen.findAllByText('Closing, ~29 min')).toHaveLength(2);
         expect(tipRead).toHaveBeenCalledTimes(1);
         expect(tipRead).toHaveBeenCalledWith({ chainId: CHAIN, withProtocolTime: true });
     });
 
-    it('reads "Closing · next block" once the chain has passed the window', async () => {
+    it('reads "Closing, next block" once the chain has passed the window', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime((CANCEL_AT + 3600 + 90) * 1000);
         const lifecycle = vi.fn().mockResolvedValue({ data: [cancelRow] });
         const tipRead = vi.fn().mockResolvedValue({ chainId: CHAIN, blockTime: null, protocolTime: CANCEL_AT + 3601 });
         mount({ rows: [CLOSING_ROW], lifecycle, tipRead });
-        expect(await screen.findByText('Closing · next block')).toBeInTheDocument();
+        expect(await screen.findByText('Closing, next block')).toBeInTheDocument();
     });
 
     it('keeps the wall-clock countdown when the chain read has no protocol time', async () => {
@@ -149,7 +150,7 @@ describe('DispensersList closing badge', () => {
         const lifecycle = vi.fn().mockResolvedValue({ data: [cancelRow] });
         const tipRead = vi.fn().mockResolvedValue({ chainId: CHAIN, blockTime: 1790460068, protocolTime: null });
         mount({ rows: [CLOSING_ROW], lifecycle, tipRead });
-        expect(await screen.findByText('Closing · ~23 min')).toBeInTheDocument();
+        expect(await screen.findByText('Closing, ~23 min')).toBeInTheDocument();
     });
 
     it('reads "Closing" alone when the cancel time is not available', async () => {

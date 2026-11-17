@@ -40,7 +40,7 @@ assert.match(form, /key: 'ownerships', label: [^,]+, icon: '\w+', defaultOn: tru
 assert.match(form, /key: 'orders', label: [^,]+, icon: '\w+', defaultOn: false/, 'orders default OFF');
 assert.match(form, /key: 'swaps', label: [^,]+, icon: '\w+', defaultOn: false/, 'swaps default OFF');
 assert.match(form, /key: 'dispensers', label: [^,]+, icon: '\w+', defaultOn: false/, 'dispensers default OFF');
-assert.match(form, /<OptionSwitchList data-sweep-what-list="">[\s\S]*?<OptionSwitch\b[\s\S]*?checked=\{flags\[c\.key\]\}/,
+assert.match(form, /<OptionSwitchList\b[^>]*data-sweep-what-list="">[\s\S]*?<OptionSwitch\b[\s\S]*?checked=\{flags\[c\.key\]\}/,
     'the sweep options are OptionSwitch rows inside [data-sweep-what-list] bound to flags');
 assert.match(
     form,

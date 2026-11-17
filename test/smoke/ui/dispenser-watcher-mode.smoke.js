@@ -30,7 +30,11 @@ assert.match(
     /messaging\.buildActionPsbtRequest\(\{[\s\S]+?action: 'DISPENSER'/,
     'submit handler routes through buildActionPsbtRequest with action DISPENSER',
 );
-assert.match(formSrc, /if \(!isWatcherMode && !hw && \(!signerReady && password\.length === 0\)\) return;/);
+assert.match(
+    formSrc,
+    /if \(!isWatcherMode && !hw && \(!signerReady && password\.length === 0\)\) \{[\s\S]{0,180}formErrors\.validate\(\{ 'dispenser-password':[\s\S]{0,120}return;\s*\}/,
+    'software password gate is skipped in watcher mode and reports a field error when empty',
+);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
 assert.match(formSrc, /\{isWatcherMode \? \([\s\S]+?t\('common\.watcherBuildsUnsigned'\)/);
 assert.match(formSrc, /Create Unsigned Transaction/);

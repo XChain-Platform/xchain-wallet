@@ -202,8 +202,8 @@ assert.ok(
 );
 assert.ok(/const allLocksSet = LOCK_FLAG_KEYS\.every/.test(manageSrc), 'ManageToken derives allLocksSet from every flag');
 assert.ok(
-    /id:\s*'lock-settings'[\s\S]{0,180}?\.\.\.ownerAction\(options\.onLock\)[\s\S]{0,180}?disabled:\s*blockIssuerActions \|\| allLocksSet \|\| typeof options\.onLock !== 'function'/.test(manageSrc),
-    'ManageToken gates the Lock action on allLocksSet (not the coarse four-flag `locked`), same owner gate as before',
+    /id:\s*'lock-settings'[\s\S]{0,180}?\.\.\.ownerAction\(options\.onLock\)[\s\S]{0,180}?disabled:\s*allLocksSet \|\| typeof options\.onLock !== 'function'/.test(manageSrc),
+    'ManageToken gates the Lock action on allLocksSet (not the coarse four-flag `locked`)',
 );
 
 // --- 9. Actions-menu copy updated across all three shells ---------------

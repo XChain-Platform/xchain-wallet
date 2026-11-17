@@ -109,8 +109,8 @@ assert.ok(
     'ViewPrivateKey is a named export',
 );
 
-// Four-stage flow + two informational panels.
-for (const stage of ['warning', 'password', 'submitting', 'revealed']) {
+// One-page warning and password form, submitting state, reveal state, and two informational panels.
+for (const stage of ['warning', 'submitting', 'revealed']) {
     assert.ok(
         viewSrc.includes(`'${stage}'`),
         `ViewPrivateKey tracks stage "${stage}"`,

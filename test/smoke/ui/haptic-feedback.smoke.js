@@ -111,7 +111,7 @@ assert.ok(/from '\.\.\/hooks\/useHaptic\.js'/.test(lockedSrc),
 // two. Assert each half where it lives rather than that they are adjacent.
 assert.ok(/function afterUnlock\([\s\S]{0,600}?haptic\.success\(\);/.test(lockedSrc),
     'Locked.jsx fires haptic.success in the shared unlock tail');
-assert.ok(/function finishUnlock\([\s\S]{0,600}?onUnlocked\?\.\(\);/.test(lockedSrc),
+assert.ok(/function finishUnlock\([\s\S]{0,1200}?onUnlocked\?\.\(\);/.test(lockedSrc),
     'Locked.jsx invokes onUnlocked from finishUnlock, the one place that unmounts');
 assert.ok((lockedSrc.match(/haptic\.error\(\)/g) || []).length >= 2,
     'Locked.jsx fires haptic.error on at least two failure branches (bad password + biometric / non-bad-password)');

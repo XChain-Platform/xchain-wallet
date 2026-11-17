@@ -104,8 +104,8 @@ assert.match(form, /ResultScreen/, 'signed but unbroadcast publishes use the que
 const manage = read('packages', 'core', 'src', 'shared', 'components', 'TokenOwnerActions.jsx');
 assert.match(manage, /id: 'gated-content'[^\n]*\.\.\.ownerAction\(options\.onGatedContent\)/,
     'ManageToken action is owner-gated');
-assert.match(manage, /const ownerAction = \(handler\) => \(\{[\s\S]*?onSelect: blockIssuerActions \? undefined : handler,[\s\S]*?disabled: blockIssuerActions/,
-    'ManageToken owner action helper disables actions for non-owners');
+assert.match(manage, /const ownerAction = \(handler\) => \(\{[\s\S]*?onSelect: handler,[\s\S]*?disabled: typeof handler !== 'function'/,
+    'ManageToken owner action helper leaves authorization to form preflight');
 for (const [label, ...p] of [
     ['web', 'packages', 'web', 'src', 'App.jsx'],
     ['desktop', 'packages', 'desktop', 'renderer', 'App.jsx'],

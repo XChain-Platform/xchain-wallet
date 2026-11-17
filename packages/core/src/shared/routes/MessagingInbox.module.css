@@ -65,8 +65,10 @@
 /* In the right panel the reply field stays available at the panel's bottom,
    matching the dedicated thread screen's docked footer. */
 .wideComposer {
+    /* safe-area-in-container: this sticks inside the detail panel scroller,
+       which is already inset by the shell safe area. */
     position: sticky;
-    z-index: 1;
+    z-index: var(--xc-z-base);
     bottom: calc(-1 * var(--xc-page-top));
     margin-top: auto;
     margin-inline: calc(-1 * var(--xc-space-1));
@@ -325,14 +327,6 @@
     overflow: hidden;
 }
 
-/* The wide list begins at the shared scroller's 8px top inset. Its rows are
-   the panel surface, so the narrow list card's frame does not sit above them. */
-.convList[data-wide='true'] {
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-}
-
 /* Thin dividers between the rows of the one list card. */
 .convList > li + li {
     border-top: 1px solid var(--xc-border);
@@ -383,16 +377,15 @@
     }
 }
 
-/* The current wide conversation matches Home's selected balance: the same
-   faint accent token and leading indicator, rounded and inset by one row pad.
-   Inline-only margin keeps its box top exactly at the scroller's 8px inset. */
+/* The current wide conversation keeps the active colour but fills the full
+   row width. The list card clips the first and last row corners. */
 .convList[data-wide='true'] .convItem[aria-current='true'] {
     --xc-button-hover-bg: color-mix(in srgb, var(--xc-accent-primary) 20%, transparent);
     --xc-button-hover-border: transparent;
-    width: calc(100% - (2 * var(--xc-list-row-padding)));
-    margin-inline: var(--xc-list-row-padding);
+    width: 100%;
+    margin-inline: 0;
     background: color-mix(in srgb, var(--xc-accent-primary) 20%, transparent);
-    border-radius: var(--xc-card-radius);
+    border-radius: 0;
     box-shadow: none;
     font-weight: inherit;
 }
@@ -408,8 +401,8 @@
     min-width: 0;
 }
 
-/* Holds the unread dot + name at the start of line 1, taking the row's free
-   width so the name still ellipsizes and the timestamp keeps its place. */
+/* Holds the name at the start of line 1, taking the row's free width so the
+   name still ellipsizes and the timestamp keeps its place. */
 .convNameWrap {
     display: flex;
     align-items: baseline;
@@ -420,27 +413,10 @@
     overflow: hidden;
 }
 
-/* Unread indicator: a small accent dot before a conversation's name,
-   iOS-Messages style. Cleared once the thread is opened. */
-.unreadDot {
-    flex: 0 0 auto;
-    width: var(--xc-space-2);
-    height: var(--xc-space-2);
-    border-radius: 50%;
-    background: var(--xc-accent-primary);
-    /* Nudge onto the text center so it reads as inline with the name. */
-    align-self: center;
-}
-
-/* Bold the name + preview while a conversation has unread messages. */
+/* Match the Notifications unread title weight without changing the preview. */
 .convNameUnread {
     color: var(--xc-text);
     font-weight: 700;
-}
-
-.convPreviewUnread {
-    color: var(--xc-text);
-    font-weight: 600;
 }
 
 .convName {
@@ -463,6 +439,10 @@
 .convTime {
     flex: 0 0 auto;
     white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--xc-space-1);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }

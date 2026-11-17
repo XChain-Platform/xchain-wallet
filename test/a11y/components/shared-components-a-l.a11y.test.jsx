@@ -21,6 +21,7 @@ import { AdsNotice } from '../../../packages/core/src/shared/components/AdsNotic
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
 import { AppHeader } from '../../../packages/core/src/shared/components/AppHeader.jsx';
 import { BootHeader } from '../../../packages/core/src/shared/components/BootHeader.jsx';
+import { BackupAfterKeyImportPrompt } from '../../../packages/core/src/shared/components/BackupAfterKeyImportPrompt.jsx';
 import { BackupReminderCard } from '../../../packages/core/src/shared/components/BackupReminderCard.jsx';
 import { BalanceChanges } from '../../../packages/core/src/shared/components/BalanceChanges.jsx';
 import { BalanceHeroMenu } from '../../../packages/core/src/shared/components/BalanceHeroMenu.jsx';
@@ -259,6 +260,9 @@ const fixtures = [
             onLock={noop}
             activeWallet={{ id: 'wallet-1', name: 'Primary wallet' }}
         />
+    )],
+    ['BackupAfterKeyImportPrompt', () => (
+        <BackupAfterKeyImportPrompt onSaveBackup={noop} onDismiss={noop} />
     )],
     ['BackupReminderCard', () => (
         <BackupReminderCard walletId="wallet-1" walletCreatedAt="2025-01-01T00:00:00.000Z" onAction={noop} />

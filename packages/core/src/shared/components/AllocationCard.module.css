@@ -19,7 +19,6 @@
     --xc-allocation-col-gap: var(--xc-space-2);
     --xc-allocation-dot: 10px;
     --xc-allocation-ticker-max: 88px;
-    container-type: inline-size;
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-2);
@@ -32,6 +31,12 @@
     border: 1px solid var(--xc-border-strong);
     border-radius: var(--xc-card-radius);
     box-shadow: var(--xc-shadow-md);
+}
+
+@supports (container-type: inline-size) {
+    .card {
+        container-type: inline-size;
+    }
 }
 
 .titleRow {
@@ -247,23 +252,25 @@
 /* A wider card (the 1920 window) takes the larger donut and longer tickers.
    A container query styles only what is inside the card, so the sizes are
    set on the body, which the donut and the table inherit them from. */
-@container (min-width: 480px) {
-    .body {
-        --xc-allocation-donut: 120px;
-        --xc-allocation-ticker-max: 120px;
-    }
-}
-
-/* A narrow card (a phone, should it ever show there) stacks the donut over
-   the table. */
-@container (max-width: 299px) {
-    .body {
-        flex-direction: column;
-        align-items: stretch;
+@supports (container-type: inline-size) {
+    @container (min-width: 480px) {
+        .body {
+            --xc-allocation-donut: 120px;
+            --xc-allocation-ticker-max: 120px;
+        }
     }
 
-    .donut {
-        align-self: center;
+    /* A narrow card (a phone, should it ever show there) stacks the donut over
+       the table. */
+    @container (max-width: 299px) {
+        .body {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .donut {
+            align-self: center;
+        }
     }
 }
 

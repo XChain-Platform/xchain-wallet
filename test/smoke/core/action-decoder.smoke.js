@@ -619,11 +619,11 @@ assert.ok(
     'the action.describe host route runs sdk.decoder.describe',
 );
 assert.ok(
-    /decodedWarnings:\s*Array\.isArray\(formattedIntent\?\.warnings\)\s*\?\s*formattedIntent\.warnings\s*:\s*\[\]/.test(sign),
-    'SignApproval.jsx sends decoded warnings to the Confirm Standard warning slot',
+    /decodedWarnings:\s*psbtWarningIds[\s\S]{0,300}?withoutCoveredWarnings\(confirmationDecoded\?\.warnings,\s*psbtWarningIds\)[\s\S]{0,200}?Array\.isArray\(confirmationDecoded\?\.warnings\)/.test(sign),
+    'SignApproval.jsx sends uncovered decoded warnings to the Confirm Standard warning slot',
 );
 assert.ok(
-    /decodedFacts\(\{[\s\S]{0,120}decoded:\s*formattedIntent/.test(sign)
+    /decodedFacts\(\{[\s\S]{0,120}decoded:\s*confirmationDecoded/.test(sign)
         && /facts=\{confirmationFacts\}/.test(sign),
     'SignApproval.jsx maps decoded details into the Confirm Standard facts card',
 );

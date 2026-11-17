@@ -118,11 +118,11 @@ describe('regression/preflight-findings-copy', () => {
         // Confirm Standard (G127): the warning slot's one danger notice holds
         // every finding, each said once: the blocking reason, the warning, and
         // that the network check went unanswered.
-        await waitFor(() => expect(screen.getByTestId('confirm-warning'))
+        await waitFor(() => expect(screen.getByTestId('confirm-status'))
             .toHaveAttribute('data-state', 'fail'));
         const page = screen.getByTestId('confirm-modal');
-        const notice = screen.getByTestId('confirm-warning');
-        expect(screen.getAllByTestId('confirm-warning')).toHaveLength(1);
+        const notice = screen.getByTestId('confirm-status');
+        expect(screen.getAllByTestId('confirm-status')).toHaveLength(1);
         expect(within(notice).getAllByText(/TICK \(reserved\)/i)).toHaveLength(1);
         expect(within(page).getAllByText(/TICK \(reserved\)/i)).toHaveLength(1);
         expect(within(page).getAllByText(warningText(FINDINGS[1]).headline)).toHaveLength(1);
@@ -130,7 +130,9 @@ describe('regression/preflight-findings-copy', () => {
         expect(within(page).getAllByText('Ticker format needs review before signing.')).toHaveLength(1);
         expect(within(notice).getAllByText(/verdict was not reached/i)).toHaveLength(1);
         expect(within(page).getAllByText('The dry-run service did not return a second verdict.')).toHaveLength(1);
-        expect(screen.getByTestId('confirm-approve')).toBeDisabled();
+        // G130 keeps Approve enabled; pressing it re-checks and focuses the
+        // blocking status instead of hiding the reason behind a disabled action.
+        expect(screen.getByTestId('confirm-approve')).toBeEnabled();
         expect(messaging.issueToken).not.toHaveBeenCalled();
         // Nothing was broadcast, so the review says what the network would do,
         // never that it refused.

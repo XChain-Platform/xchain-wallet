@@ -63,10 +63,10 @@ assert.equal(
 
 // --- 2. Three sections ------------------------------------------------
 
-// One list at a time, picked by an icon tab above it.
-assert.ok(/<Icon\.UserIcon \/>Mine</.test(listSrc), 'My contracts tab');
-assert.ok(/<Icon\.DollarIcon \/>Interactions</.test(listSrc), 'My interactions tab');
-assert.ok(/<Icon\.GridIcon \/>All</.test(listSrc), 'Browse all tab');
+// One list at a time, picked by the operator-ruled icon tabs above it.
+assert.ok(/<Icon\.GridIcon \/>All</.test(listSrc), 'All contracts tab');
+assert.ok(/<Icon\.UserIcon \/>My Contracts</.test(listSrc), 'My Contracts tab');
+assert.ok(/<Icon\.DollarIcon \/>Interactions</.test(listSrc), 'Interactions tab');
 
 // --- 3. Messaging wiring + row merging --------------------------------
 

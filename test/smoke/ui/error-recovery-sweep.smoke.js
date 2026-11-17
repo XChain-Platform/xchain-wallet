@@ -95,8 +95,8 @@ assert.ok(/<ConfirmActionModal[\s\S]{0,900}error=\{submitError\}/.test(issueSrc)
 assert.ok(/onReject=\{\(\) => \{ setSubmitError\(null\); setStage\('form'\); \}\}/.test(issueSrc),
     'IssueTokenForm Reject clears the error and returns to the form');
 // Field validation uses the focusable summary and its direct field links.
-assert.ok(/errors=\{formErrors\}\s+status=\{\[offlineNotice, draftBanner\]\}/.test(issueSrc),
-    'IssueTokenForm hands its error map to the form, which renders the notice at the top');
+assert.ok(/errors=\{formErrors\}\s+lead=\{draftBanner\}\s+status=\{offlineNotice\}/.test(issueSrc),
+    'IssueTokenForm renders field errors at the top and keeps draft and offline notices in their fixed slots');
 // Inline div role="alert" for those two error sites is gone (modulo
 // the warnings + chain-empty fallback row, which are not recovery
 // candidates).
@@ -109,8 +109,8 @@ assert.equal(
 //    error path until that remaining review adapter moves to Confirm Standard.
 assert.ok(/\(isWatcherMode \|\| hw\) && submitError \?[\s\S]{0,500}<StatusMessage[\s\S]{0,800}\{ label: 'Edit', onAction: \(\) => \{ setSubmitError\(null\); setStage\('form'\); \} \}/.test(dispSrc),
     'DispenserForm wraps post-submit error in StatusMessage with an Edit recovery');
-assert.ok(/errors=\{formErrors\}\s+status=\{\[draftBanner, closedTermsNotes\]\}/.test(dispSrc),
-    'DispenserForm hands its error map to the form, which renders the notice at the top');
+assert.ok(/errors=\{formErrors\}\s+lead=\{draftBanner\}\s+status=\{closedTermsNotes\}/.test(dispSrc),
+    'DispenserForm renders field errors at the top and keeps draft and terms notices in their fixed slots');
 assert.equal(
     (dispSrc.match(/<div role="alert" className=\{styles\.error\}>\{(submitError|formError)\}<\/div>/g) || []).length,
     0,

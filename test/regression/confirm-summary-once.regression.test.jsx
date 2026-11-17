@@ -76,9 +76,7 @@ describe('regression/confirm-summary-once', () => {
     it('[REGRESSION P1] renders the recipient with AddressText truncation', () => {
         render(sendScreen());
 
-        const address = Array.from(screen.getByTestId('confirm-modal').querySelectorAll('[title]'))
-            .find((node) => node.getAttribute('title') === RECIPIENT);
-        expect(address).toBeTruthy();
+        const address = screen.getByLabelText(RECIPIENT);
         expect(address).toHaveAttribute('aria-label', RECIPIENT);
         expect(address).toHaveTextContent('bc1qre…uvwxyz');
         expect(address).not.toHaveTextContent(RECIPIENT);

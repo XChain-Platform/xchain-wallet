@@ -144,8 +144,8 @@ const manageSrc = readFileSync(join(sharedRoutes, '..', 'components', 'TokenOwne
 assert.ok(/onAttachContent/.test(manageSrc), 'ManageToken accepts onAttachContent');
 assert.ok(/id:\s*['"]artwork['"][^\n]*\.\.\.ownerAction\(options\.onAttachContent\)/.test(manageSrc),
     'ManageToken renders the Artwork action');
-assert.ok(/const ownerAction = \(handler\) => \(\{[\s\S]*?onSelect: blockIssuerActions \? undefined : handler,[\s\S]*?disabled: blockIssuerActions/.test(manageSrc),
-    'ManageToken disables owner actions for non-owners');
+assert.ok(/const ownerAction = \(handler\) => \(\{[\s\S]*?onSelect: handler,[\s\S]*?disabled: typeof handler !== 'function'/.test(manageSrc),
+    'ManageToken leaves authorization to the owner form preflight');
 
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],

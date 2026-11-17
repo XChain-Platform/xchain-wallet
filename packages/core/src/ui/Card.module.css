@@ -129,12 +129,13 @@
     border: 1px solid transparent;
 }
 
-/* In a wide list-and-detail split the scroller already supplies the 8px gap
-   under its header line. The narrow layout's list-card frame must not add a
-   border before the first row. Hosts opt in only while their split is shown.
-   This comes last so nested-card rules cannot restore the narrow frame. */
-[data-xc-split-list] {
-    background: transparent;
-    border: 0;
-    border-radius: 0;
+/* A wide list-and-detail split keeps the same flush card as its narrow list.
+   The scroller supplies the 8px gap from the header line to this frame. The
+   frame clips the first and last row fills to its rounded outer corners. */
+:root [data-xc-split-list] {
+    padding: 0;
+    background: var(--xc-card-bg);
+    border: var(--xc-card-border);
+    border-radius: var(--xc-card-radius);
+    overflow: hidden;
 }

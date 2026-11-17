@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { AddressText, Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, SegmentedControl, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, SegmentedControl, Select, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import * as branding from '../../branding/branding.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -21,20 +21,21 @@ import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { coinFromChainId, isAssetImageSourceAllowed, tickerColor } from '../components/BalanceList.jsx';
 import { useOracleFeeds } from '../hooks/useOracleFeeds.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { dispenserRateLabel } from '../utils/dispenserPricing.js';
+import { dispenserFillPriceLabel } from '../utils/dispenserPricing.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
+import { GiveGetQuick } from '../components/giveGet/index.js';
 import {
     CHAIN_TIME_REFRESH_MS, chainClockFromTipRead, dispenserCancelTimestamp, dispenserCloseEta,
 } from '../utils/dispenserCloseWindow.js';
 import { dispenserStatusLabel } from '../utils/dispenserReopen.js';
+import { dispenserStock } from '../utils/dispenserStock.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
 import {
     LIST_DETAIL_MIN_WIDTH, ListDetailSplit, listDetailStyles, useWideContent,
 } from '../components/PanelSplit.jsx';
 import styles from './ActionsMenu.module.css';
 import local from './DispensersList.module.css';
-import marketsStyles from './MarketsList.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
 const DISPENSER_REFRESH_MS = 20000;
@@ -167,7 +168,7 @@ export function DispensersList({
     }, [walletId, messaging, activeAccountId, addressesReload, listShown, view]);
 
     const marketKey = marketAsset?.chainId && marketAsset?.tick
-        ? `${marketAsset.chainId}:${String(marketAsset.tick).toUpperCase()}`
+        ? `${marketAsset.chainId}:${String(marketAsset.tick).toUpperCase()}:${marketSide}`
         : '';
     const nativeMarketUnsupported = view === 'all' && marketAsset?.kind === 'native';
     useEffect(() => {
@@ -182,7 +183,10 @@ export function DispensersList({
             setMarketState({
                 key: marketKey,
                 loading: false,
-                rows: extractRows(response).map((row) => ({ ...row, chainId: marketAsset.chainId })),
+                rows: extractRows(response)
+                    .filter((row) => (marketSide === 'buy' ? giveAsset(row) : getAsset(row))
+                        === String(marketAsset.tick).toUpperCase())
+                    .map((row) => ({ ...row, chainId: marketAsset.chainId })),
                 error: null,
             });
         }).catch(() => {
@@ -196,7 +200,7 @@ export function DispensersList({
             }
         });
         return () => { cancelled = true; };
-    }, [listShown, view, marketKey, nativeMarketUnsupported, offline, marketReload, messaging, marketAsset?.chainId, marketAsset?.tick]);
+    }, [listShown, view, marketKey, marketSide, nativeMarketUnsupported, offline, marketReload, messaging, marketAsset?.chainId, marketAsset?.tick]);
 
     // Local labels for this account's dispenser sub-addresses (role=2
     // branch), keyed by address. A dispenser row whose on-chain dispenser
@@ -427,31 +431,33 @@ export function DispensersList({
         [chainsWithAddresses, view, marketAsset?.chainId],
     );
 
+    const requestedDispenser = selectedDispenser ?? localPick;
     const shownDispenser = useMemo(() => {
+        if (!twoPanel) return null;
+        if (requestedDispenser) return requestedDispenser;
         const ready = view === 'all'
             ? marketState.key === marketKey && !marketState.loading
             : Boolean(addressesByChain);
-        if (!twoPanel || !ready) return null;
-        const pick = selectedDispenser ?? localPick;
-        if (pick && sortedRows.some((row) => sameDispenser(row, pick))) return pick;
-        if (activeLoading) return null;
+        if (!ready) return null;
+        const maySeedDefault = (view === 'all' && marketSide === 'buy')
+            || (!marketReadSupported || !marketAsset);
+        if (!maySeedDefault || activeLoading) return null;
         const first = sortedRows[0];
         return first ? dispenserRef(first) : null;
-    }, [twoPanel, view, marketState.key, marketState.loading, marketKey, addressesByChain, selectedDispenser, localPick, activeLoading, sortedRows]);
+    }, [twoPanel, view, marketSide, marketReadSupported, marketAsset, marketState.key, marketState.loading, marketKey, addressesByChain, requestedDispenser, activeLoading, sortedRows]);
     const shownRow = shownDispenser
         ? sortedRows.find((row) => sameDispenser(row, shownDispenser))
         : null;
-    const activeAddressError = view === 'mine' ? addressesError : null;
     const dataPending = view === 'all'
         ? marketState.key !== marketKey || marketState.loading
         : !addressesByChain || anyLoading;
-    const showPanel = twoPanel && listShown && !activeAddressError && !activeError
-        && (Boolean(shownDispenser) || (!offline && dataPending));
+    const showPanel = twoPanel && listShown;
     useEffect(() => {
+        if (showPanel && shownDispenser && !requestedDispenser) setLocalPick(shownDispenser);
         if (showPanel && shownDispenser && !sameDispenser(shownDispenser, selectedDispenser)) {
             onSelectDispenser?.(shownDispenser);
         }
-    }, [showPanel, shownDispenser, selectedDispenser, onSelectDispenser]);
+    }, [showPanel, shownDispenser, requestedDispenser, selectedDispenser, onSelectDispenser]);
     const pickDispenser = (ref) => {
         setLocalPick(ref);
         onSelectDispenser?.(ref);
@@ -506,8 +512,6 @@ export function DispensersList({
             value={view}
             onChange={(next) => {
                 setView(next);
-                setLocalPick(null);
-                onSelectDispenser?.(null);
             }}
             items={[
                 { id: 'all', disabled: !marketReadSupported, label: <><Icon.GridIcon aria-hidden="true" /><span>All</span></> },
@@ -515,42 +519,39 @@ export function DispensersList({
             ]}
         />
     );
+    const marketTick = marketAsset?.displayName || marketAsset?.tick || 'an asset';
+    const marketCardLabel = marketSide === 'buy' ? 'You get' : 'You pay with';
+    const marketCardHelp = marketSide === 'buy'
+        ? `Dispensers that give ${marketTick}`
+        : `Dispensers that take ${marketTick} as payment`;
+    const marketCardSide = {
+        label: marketCardLabel,
+        asset: marketAsset,
+        assetLabel: 'Market asset',
+        assetPlaceholder: 'Select an asset',
+        onOpenAsset: onChangeMarket,
+        amount: '',
+        onAmountChange: () => {},
+        amountLabel: 'Market amount',
+        footNote: marketCardHelp,
+    };
     const marketSelector = view === 'all' ? (
-        <Button
-            type="button"
-            className={`${marketsStyles.assetCard} ${marketsStyles.assetButton}`}
-            icon={null}
-            onClick={onChangeMarket}
-            disabled={!onChangeMarket}
-            aria-label={marketAsset ? `Change market (currently ${marketAsset.displayName || marketAsset.tick})` : 'Select market'}
-        >
-            {marketAsset ? <TickerIcon chainId={marketAsset.chainId} tick={marketAsset.tick} /> : null}
-            <span className={marketsStyles.assetText}>
-                <span className={marketsStyles.assetName}>{marketAsset?.displayName || marketAsset?.tick || 'Select Market'}</span>
-            </span>
-            <span className={marketsStyles.assetChevron} aria-hidden="true">›</span>
-        </Button>
-    ) : null;
-    const sideToggle = view === 'all' ? (
-        <SegmentedControl
-            aria-label="Market side"
-            value={marketSide}
-            onChange={(next) => {
-                setMarketSide(next);
-                setLocalPick(null);
-                onSelectDispenser?.(null);
-            }}
-            items={[
-                { id: 'buy', label: <><Icon.ReceiveIcon aria-hidden="true" /><span>Buy</span></> },
-                { id: 'sell', label: <><Icon.SendIcon aria-hidden="true" /><span>Sell</span></> },
-            ]}
-        />
+        <div className={local.marketChoiceCard} data-market-side={marketSide}>
+            <GiveGetQuick
+                give={marketCardSide}
+                get={marketCardSide}
+                singleSide
+                onFlip={() => {
+                    setMarketSide((current) => current === 'buy' ? 'sell' : 'buy');
+                }}
+                flipLabel={`Flip to ${marketSide === 'buy' ? 'You pay with' : 'You get'} ${marketTick}`}
+            />
+        </div>
     ) : null;
     const listToolbar = (
         <div className={local.toolbarStack}>
             {viewToggle}
             {marketSelector}
-            {sideToggle}
         </div>
     );
     const header = (
@@ -581,6 +582,13 @@ export function DispensersList({
             );
         }
         const detailSkeleton = <div aria-hidden="true"><Skeleton height={190} /></div>;
+        const detailEmpty = (
+            <EmptyState
+                title="Select a dispenser"
+                body="Choose a dispenser from the list to see its details."
+            />
+        );
+        const detailPlaceholder = dataPending && !offline ? detailSkeleton : detailEmpty;
         return (
             <Screen variant={variant} header={header} bodyClassName={listDetailStyles.twoPanelBody}>
                 <ListDetailSplit
@@ -589,17 +597,20 @@ export function DispensersList({
                     resizeLabel="Resize the dispensers list"
                     resizeHint="Drag to resize the dispensers list, or press Enter to reset."
                     layoutName="two-panel"
+                    listMax={420}
                     listHeader={<ListPage notices={notices} toolbar={listToolbar} />}
                     list={<ListPage>{body}</ListPage>}
                     listLabel="Dispensers"
-                    detailLabel={shownRow ? `${giveAsset(shownRow) || 'Asset'} dispenser #${shownRow.action_index}` : 'Dispenser'}
-                    detailBusy={!shownDispenser}
+                    detailLabel={shownRow
+                        ? `${giveAsset(shownRow) || 'Asset'} dispenser #${shownRow.action_index}`
+                        : shownDispenser ? `Dispenser #${shownDispenser.actionIndex}` : 'Dispenser'}
+                    detailBusy={!shownDispenser && dataPending && !offline}
                     detailFallback={detailSkeleton}
                     detail={shownDispenser ? (
                         <Fragment key={`${shownDispenser.chainId}:${shownDispenser.actionIndex}`}>
                             {renderDispenser(shownDispenser)}
                         </Fragment>
-                    ) : detailSkeleton}
+                    ) : detailPlaceholder}
                 />
             </Screen>
         );
@@ -701,7 +712,7 @@ export function DispensersList({
                     />
                 )
     ) : (
-                <ul className={local.list} data-xc-split-list={showPanel ? '' : undefined}>
+                <ul className={local.list}>
                     {sortedRows.map((row) => (
                         <li
                             className={local.listItem}
@@ -758,8 +769,7 @@ function statusGroup(row) {
 function MarketDispenserRow({ row, onSelect, selected = false, split = false }) {
     const give = giveAsset(row) || '?';
     const get = getAsset(row) || '?';
-    const remaining = flowsLib.dispenserLiveState(row).giveRemaining;
-    const seller = String(row.source || row.address || 'Unknown');
+    const stock = stockForRow(row);
     return (
         <ListRow
             type="button"
@@ -770,17 +780,7 @@ function MarketDispenserRow({ row, onSelect, selected = false, split = false }) 
             aria-label={`Open ${give} dispenser #${row.action_index ?? '?'}`}
             chevron
             leading={<TickerIcon chainId={row.chainId} tick={give} />}
-            title={`Get ${formatNum(row.give_amount)} ${give}`}
-            subtitle={(
-                <span className={local.marketBody}>
-                    <span>{`Pay ${formatNum(row.get_amount)} ${get} per dispense`}</span>
-                    <span>{remaining == null ? 'Remaining unavailable' : `${formatNum(remaining)} ${give} left`}</span>
-                    <span className={local.marketSeller}>
-                        <span>Seller </span>
-                        {seller === 'Unknown' ? seller : <AddressText address={seller} focusable={false} />}
-                    </span>
-                </span>
-            )}
+            title={<DispenserRowSummary row={row} stock={stock} give={give} get={get} />}
         />
     );
 }
@@ -797,18 +797,17 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
     // list lane's `current_status`, demo fixtures' `status`, and falls back
     // to validity against an explorer that predates the lifecycle column.
     const status = String(flowsLib.dispenserLiveState(row).status || '?');
-    // A terminal dispenser's escrow went back to its owner with the closing
-    // action; saying "in escrow" on such a row misstates where the tokens
-    // are, so the line only renders while the figure still means something.
-    const isTerminal = ['cancelled', 'expired', 'complete', 'closed'].includes(status);
     // A cancelling dispenser is in its close window: say "Closing", with the
     // countdown when the cancel time is known.
     const closeEta = status === 'cancelling' && cancelTimestamp != null
         ? dispenserCloseEta(cancelTimestamp, { nowMs, ...(chainClock || {}) })
         : null;
     const badge = status === 'cancelling'
-        ? (closeEta ? `Closing · ${closeEta.shortCountdown}` : 'Closing')
+        ? (closeEta ? `Closing, ${closeEta.shortCountdown}` : 'Closing')
         : dispenserStatusLabel(status);
+    const give = giveAsset(row) || '?';
+    const get = getAsset(row) || '?';
+    const stock = stockForRow(row);
     return (
         <ListRow
             type="button"
@@ -849,36 +848,71 @@ function DispenserRow({ row, label, oracleFeeds, cancelTimestamp, nowMs, chainCl
                     />
                 ) : null}
             </span>}
-            title={<span className={local.name}>{label ? `${label}: ` : ''}{row.give_tick || '?'}</span>}
-            subtitle={(
-                <span className={local.body}>
-                    {/* The status pill rides the price line's end edge: the
-                        price truncates first, the pill never shrinks or wraps. */}
-                    <span className={local.priceLine}>
-                        <span className={`${local.subtitle} ${local.price}`}><bdi dir="ltr">{dispenserRateLabel(row, oracleFeeds)}</bdi></span>
-                        <span
-                            className={`${local.status} ${local[`status_${status}`] || ''}`}
-                            title={closeEta && !closeEta.pastDue ? `Earliest close ${new Date(closeEta.closeAtMs).toLocaleString()}` : undefined}
-                        >
-                            {badge}
-                        </span>
-                    </span>
-                {/* Escrow is only stated when it is known. The explorer's
-                    dispenser LIST lane carries no escrow column (remaining is
-                    derived per action, in the detail read path), so on real
-                    dispensers this is absent - and the old 'Escrow pending'
-                    fallback then told every owner their fully-escrowed
-                    dispenser had not funded yet (D-40). Open the dispenser to
-                    see its live balance. */}
-                {row.escrow_remaining != null && !isTerminal ? (
-                    <span className={local.subtitle}>
-                        <bdi dir="ltr">{`${formatNum(row.escrow_remaining)} ${row.give_tick || ''} in escrow`.trim()}</bdi>
-                    </span>
-                ) : null}
-                </span>
+            title={(
+                <DispenserRowSummary
+                    row={row}
+                    stock={stock}
+                    give={give}
+                    get={get}
+                    status={status}
+                    badge={badge}
+                    badgeTitle={closeEta && !closeEta.pastDue ? `Earliest close ${new Date(closeEta.closeAtMs).toLocaleString()}` : undefined}
+                    label={label}
+                    oracleFeeds={oracleFeeds}
+                />
             )}
         />
     );
+}
+
+function DispenserRowSummary({ row, stock, give, get, status, badge, badgeTitle, oracleFeeds }) {
+    const mine = status != null;
+    const payText = mine ? dispenserFillPriceLabel(row, oracleFeeds) : `${formatNum(row.get_amount)} ${get}`;
+    return (
+        <span className={local.rowSummary}>
+            <span className={local.primaryLine}>
+                <strong className={local.rowAmount}>
+                    <bdi dir="ltr">{`${formatNum(row.give_amount)} ${give}`}</bdi>
+                </strong>
+                {mine ? (
+                    <span
+                        className={`${local.status} ${local[`status_${status}`] || ''}`}
+                        title={badgeTitle}
+                    >
+                        {badge}
+                    </span>
+                ) : <span className={local.stockCount}>{stock.label}</span>}
+            </span>
+            <span className={local.secondaryLine}>
+                <span className={local.priceText}>
+                    <span>for </span>
+                    <strong><bdi dir="ltr">{payText}</bdi></strong>
+                </span>
+                {mine ? <span className={local.stockCount}>{stock.label}</span> : null}
+            </span>
+            <span
+                className={local.stockTrack}
+                role="progressbar"
+                aria-label={`${give} stock`}
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow={stock.percent}
+                aria-valuetext={stock.label}
+            >
+                <span className={local.stockFill} style={{ width: `${stock.percent}%` }} />
+            </span>
+        </span>
+    );
+}
+
+function stockForRow(row) {
+    return dispenserStock({
+        remainingEscrow: flowsLib.dispenserLiveState(row).giveRemaining,
+        giveAmount: row.give_amount,
+        originalEscrow: row.original_give_escrow ?? row.give_escrow,
+        totalDispenses: row.total_dispenses ?? row.dispense_total,
+        dispenseCount: row.dispense_count,
+    });
 }
 
 function giveAsset(row) {

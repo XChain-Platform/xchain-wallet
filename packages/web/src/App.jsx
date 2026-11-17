@@ -41,7 +41,6 @@ import { useActiveWalletModeSource, useWalletMode } from '@xchain-wallet/core/sh
 import { useWalletFilters } from '@xchain-wallet/core/shared/hooks/useWalletFilters.js';
 import { Loading } from '@xchain-wallet/core/shared/routes/Loading.jsx';
 import { VaultUnavailable } from '@xchain-wallet/core/shared/routes/VaultUnavailable.jsx';
-import { Onboarding } from '@xchain-wallet/core/shared/routes/Onboarding.jsx';
 import { vaultErrorKind } from '../../core/src/storage/backend.js';
 import { clearActiveAccount, writeActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountMemory.js';
 import { reconcileActiveAccount } from '@xchain-wallet/core/shared/utils/activeAccountScope.js';
@@ -159,6 +158,7 @@ const RenameWalletForm = lazyRoute(() => import('@xchain-wallet/core/shared/rout
 const RenameAccountForm = lazyRoute(() => import('@xchain-wallet/core/shared/routes/RenameAccountForm.jsx'), 'RenameAccountForm');
 const AlertsRoute = lazyRoute(() => import('@xchain-wallet/core/shared/routes/AlertsRoute.jsx'), 'AlertsRoute');
 const KeyQR = lazyRoute(() => import('@xchain-wallet/core/shared/components/KeyQR.jsx'), 'KeyQR');
+const Onboarding = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Onboarding.jsx'), 'Onboarding');
 const CreateWallet = lazyRoute(() => import('@xchain-wallet/core/shared/routes/CreateWallet.jsx'), 'CreateWallet');
 const ImportWallet = lazyRoute(() => import('@xchain-wallet/core/shared/routes/ImportWallet.jsx'), 'ImportWallet');
 const PairPartnerWallet = lazyRoute(() => import('@xchain-wallet/core/shared/routes/PairPartnerWallet.jsx'), 'PairPartnerWallet');
@@ -1406,15 +1406,17 @@ function AppInner() {
                 );
             }
             return (
-                <Onboarding
-                    onCreate={() => setOnboardingStep('create')}
-                    onImport={() => setOnboardingStep('import')}
-                    onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}
-                    onConnectHardware={() => setOnboardingStep('pair-signer')}
-                    hardwareFactories={HARDWARE_PAIR_FACTORIES}
-                    onDemoEntered={refresh}
-                    onWalletFound={refresh}
-                />
+                <Suspense fallback={<Loading />}>
+                    <Onboarding
+                        onCreate={() => setOnboardingStep('create')}
+                        onImport={() => setOnboardingStep('import')}
+                        onImportFromFreeWallet={() => setOnboardingStep('import-freewallet')}
+                        onConnectHardware={() => setOnboardingStep('pair-signer')}
+                        hardwareFactories={HARDWARE_PAIR_FACTORIES}
+                        onDemoEntered={refresh}
+                        onWalletFound={refresh}
+                    />
+                </Suspense>
             );
         case 'locked':
             return <Locked onUnlocked={refresh} />;

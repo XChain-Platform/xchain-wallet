@@ -21,36 +21,40 @@
     gap: var(--xc-space-2);
 }
 
-.marketRow {
-    min-width: 0;
-    padding: var(--xc-space-3);
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    color: inherit;
-}
-
-.marketBody {
-    display: grid;
-    min-width: 0;
-    gap: var(--xc-space-1);
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-    white-space: normal;
-    overflow-wrap: break-word;
-}
-
-.marketSeller {
-    display: flex;
-    min-width: 0;
-    align-items: baseline;
-    gap: var(--xc-space-1);
-}
-
-.marketSeller > :last-child {
+.marketChoiceCard {
+    position: relative;
     min-width: 0;
 }
 
+.marketChoiceCard > div {
+    position: relative;
+}
+
+.marketChoiceCard input {
+    display: none;
+}
+
+.marketChoiceCard button[aria-label^='Market asset:'] {
+    flex: 1 1 auto;
+    justify-content: flex-start;
+    max-width: calc(100% - 52px);
+}
+
+.marketChoiceCard > div > div {
+    position: absolute;
+    z-index: calc(var(--xc-z-base) + 1);
+    inset-block-start: 50%;
+    inset-inline-end: var(--xc-space-3);
+    height: auto;
+    margin: 0;
+    transform: translateY(-50%);
+}
+
+.marketChoiceCard > div > div > button {
+    margin: 0;
+}
+
+.marketRow,
 .row {
     min-width: 0;
     padding: var(--xc-space-3);
@@ -60,10 +64,12 @@
     color: inherit;
 }
 
+.marketRow:hover,
 .row:hover {
     background: var(--xc-bg-muted);
 }
 
+.marketRow:focus-visible,
 .row:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: -2px;
@@ -114,49 +120,69 @@
     display: block;
 }
 
-.body {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
+.rowSummary {
+    display: grid;
     gap: var(--xc-space-1);
-}
-
-.name {
-    font-weight: 600;
-    color: var(--xc-text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     min-width: 0;
+    font-weight: 400;
 }
 
-.subtitle {
-    font-size: var(--xc-text-sm);
-    color: var(--xc-text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-}
-
-/* Price line: the price truncates (ellipsis) before the status pill, which
-   never shrinks or wraps, so the pill stays at the right of line two. */
-.priceLine {
+.primaryLine,
+.secondaryLine {
     display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
+    align-items: baseline;
     justify-content: space-between;
     gap: var(--xc-space-2);
     min-width: 0;
 }
 
-.price {
-    flex: 1 1 0;
+.rowAmount,
+.priceText {
+    overflow-wrap: break-word;
+    word-break: normal;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+}
+
+.rowAmount {
+    color: var(--xc-text);
+    font-weight: 700;
+}
+
+.priceText {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 400;
+}
+
+.priceText strong {
+    color: var(--xc-text);
+    font-weight: 700;
+}
+
+.stockCount {
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-variant-numeric: tabular-nums;
+    font-weight: 400;
+    text-align: end;
     white-space: nowrap;
+}
+
+.stockTrack {
+    display: block;
+    width: 100%;
+    height: 4px;
+    overflow: hidden;
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-success-bg);
+}
+
+.stockFill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--xc-success);
 }
 
 /* Status chip on the price line's end edge; tinted per state. */
@@ -199,10 +225,10 @@
     color: var(--xc-warning-text);
 }
 
-/* Phones: a smaller logo and tighter padding. The text column stays three
-   lines (name, price with its pill, escrow); the price truncates, the pill
-   never wraps. */
+/* Phones keep the icon, two-line summary and chevron in fixed columns while
+   the words inside the summary wrap without being cut. */
 @media not all and (min-width: 400px) {
+    .marketRow,
     .row {
         display: grid;
         grid-template-columns: 40px minmax(0, 1fr) auto;
@@ -218,6 +244,7 @@
     }
 
     /* The chevron keeps its own end column, centred on the row (G07, G97). */
+    .marketRow > :last-child,
     .row > :last-child {
         grid-column: 3;
         align-self: center;
@@ -225,7 +252,7 @@
 
     .status {
         box-sizing: border-box;
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
         line-height: 1.3;
     }
 }

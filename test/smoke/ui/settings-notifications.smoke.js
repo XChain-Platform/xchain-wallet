@@ -129,7 +129,7 @@ assert.match(
     'each family\'s Choose Sound page offers No sound with its muted icon',
 );
 assert.match(src, /export function SoundPickerPage\b/, 'the Choose Sound page is the shared sound picker page');
-assert.match(settingsSrc, /\|\|\s*soundPickerSectionFor\(id\)/, 'Settings resolves the Choose Sound page ids');
+assert.match(settingsSrc, /\|\|\s*soundPickerSectionFor\(id,\s*\{/, 'Settings resolves the Choose Sound page ids with navigation context');
 
 assert.match(src, /import \{ useMessaging \}/, 'imports useMessaging to read platform capabilities');
 assert.match(

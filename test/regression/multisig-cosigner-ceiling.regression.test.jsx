@@ -122,6 +122,8 @@ describe('regression/multisig-cosigner-ceiling', () => {
         selectOption(screen.getByLabelText('Type'), 'p2wsh-multisig');
         await act(async () => {});
         expect(screen.getByText(/supports at most 16 cosigners/i)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Create Multisig' }).disabled).toBe(true);
+        // G22/G130: submit remains enabled so pressing it can focus and explain
+        // the invalid row count in the form error notice.
+        expect(screen.getByRole('button', { name: 'Create Multisig' }).disabled).toBe(false);
     });
 });
