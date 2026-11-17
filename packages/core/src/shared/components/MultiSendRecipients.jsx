@@ -41,36 +41,6 @@ function toAddressParts() {
     return at === -1 ? [line, ''] : [line.slice(0, at), line.slice(at + ADDRESS_MARK.length)];
 }
 
-/** Example lines for the Advanced box, shaped like the chain's addresses. */
-const EXAMPLE_ADDRESSES = {
-    bitcoin: [
-        'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
-        '1BoogrfDADPLQpq8LMASmWQUVYDp4t2hF9',
-        'bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el',
-    ],
-    litecoin: [
-        'ltc1qg82tk2rm9rk0xfqx4q2qzfd2nmhdxhmaxfg4vw',
-        'LM2WMpR1Rp6j3Sa59cMXMs1SPzj9eXpGc1',
-        'ltc1q3ufpwzzzy84s5kf6cny6s2w3c4q4ym4hhxq0az',
-    ],
-    dogecoin: [
-        'DH5yaieqoZN36fDVciNyRueRGvGLR3mr7L',
-        'DBs4WcRE7eysKwRxHNX88XZVCQ9M6QSUSz',
-        'DRSqEwcnJX3GZWH9Twtwk8D5ewqdJzi13k',
-    ],
-};
-
-/**
- * The Advanced box's placeholder: three lines in the exact format, with plain
- * amounts, since a grouped "100,000" would split the line.
- * @param {string | undefined} coin
- * @returns {string}
- */
-export function advancedPlaceholder(coin) {
-    const [a, b, c] = EXAMPLE_ADDRESSES[coin] || EXAMPLE_ADDRESSES.bitcoin;
-    return `${a},XCHAIN,100000\n${b},PEPE,25.5\n${c},XCHAIN,250`;
-}
-
 /**
  * The add-recipient form or an expanded row editor. Enter adds or updates the
  * row instead of submitting the whole Send form.
@@ -298,7 +268,6 @@ export function MultiRecipientList({
  * @param {object} props
  * @param {string} props.text
  * @param {(text: string) => void} props.onTextChange
- * @param {string} [props.coin]                 the chain's coin, for the example lines
  * @param {string} [props.fileName]
  * @param {(args: { name: string, text: string }) => void} props.onFileText
  * @param {() => void} props.onClearFile
@@ -310,7 +279,7 @@ export function MultiRecipientList({
  * @param {string} [props.id]
  */
 export function AdvancedRecipientText({
-    text, onTextChange, coin, fileName = '', onFileText, onClearFile, onFileError,
+    text, onTextChange, fileName = '', onFileText, onClearFile, onFileError,
     fileError = null, error = null, countLine = null, overLimit = false, id = 'send-advanced-text',
 }) {
     const drop = useDropZone({
@@ -326,7 +295,7 @@ export function AdvancedRecipientText({
             <Textarea
                 id={id}
                 label={t('send.multi.listLabel')}
-                help={t('send.multiText.help', { format: RECIPIENT_LINE_FORMAT, count: MAX_MULTI_RECIPIENTS })}
+                help={t('send.multiText.help')}
                 rows={6}
                 wrap="off"
                 className={styles.advancedText}
@@ -338,7 +307,7 @@ export function AdvancedRecipientText({
                 }}
                 value={text}
                 onChange={(event) => onTextChange(event.target.value)}
-                placeholder={advancedPlaceholder(coin)}
+                placeholder={t('send.multiText.placeholder')}
                 spellCheck={false}
                 autoCapitalize="off"
                 autoComplete="off"

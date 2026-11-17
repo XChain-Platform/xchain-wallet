@@ -4687,7 +4687,6 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 <AdvancedRecipientText
                     text={advancedText}
                     onTextChange={changeAdvancedText}
-                    coin={descriptor?.coin}
                     fileName={advancedFileName}
                     onFileText={loadAdvancedFile}
                     onClearFile={clearAdvancedFile}

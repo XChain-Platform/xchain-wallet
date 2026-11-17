@@ -10,9 +10,18 @@
     position: absolute;
     inset: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: var(--xc-help-gap);
     padding: var(--xc-card-pad);
+}
+
+.revealError {
+    color: var(--xc-danger-fg);
+    font-size: var(--xc-text-xs);
+    line-height: 1.4;
+    text-align: center;
 }
 
 .gridPopup {

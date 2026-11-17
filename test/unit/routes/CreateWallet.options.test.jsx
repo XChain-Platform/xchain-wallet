@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MnemonicGrid } from '../../../packages/core/src/shared/components/MnemonicGrid.jsx';
 import { CreateWallet } from '../../../packages/core/src/shared/routes/CreateWallet.jsx';
+import checkboxStyles from '../../../packages/core/src/ui/Checkbox.module.css';
 
 const { generateBip39Mnemonic, phrase24 } = vi.hoisted(() => ({
     generateBip39Mnemonic: vi.fn(),
@@ -270,7 +271,7 @@ describe('CreateWallet security options', () => {
         expect(document.querySelector('form [data-variant="warning"], form [data-tone="danger"]')).toBeNull();
     });
 
-    it('rejects the acknowledgement until the phrase is revealed', () => {
+    it('routes an acknowledgement attempt before reveal to the Reveal control', () => {
         generateBip39Mnemonic.mockReturnValue(phrase24.split(' ').slice(0, 12).join(' '));
         draw();
         fillPasswords();
@@ -279,28 +280,61 @@ describe('CreateWallet security options', () => {
         const checkbox = screen.getByRole('checkbox', { name: /saved my recovery phrase/i });
         fireEvent.click(checkbox);
 
+        const reveal = screen.getByRole('button', { name: 'Reveal Recovery Phrase' });
         expect(checkbox).not.toBeChecked();
-        expect(checkbox).toHaveAttribute('aria-invalid', 'true');
-        expect(screen.getByText('Reveal your recovery phrase and write it down first.')).toBeInTheDocument();
+        expect(checkbox).not.toHaveAttribute('aria-invalid', 'true');
+        expect(reveal).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByRole('alert')).toHaveTextContent('Reveal your phrase first.');
+        expect(reveal).toHaveFocus();
         expect(screen.queryByRole('alert', { name: 'Form errors' })).toBeNull();
     });
 
-    it('keeps Verify on the phrase step and shows the reveal reason in the top summary', () => {
+    it('keeps Verify on the phrase step and shows only the inline Reveal error', () => {
         generateBip39Mnemonic.mockReturnValue(phrase24.split(' ').slice(0, 12).join(' '));
-        const { container } = draw();
+        draw();
         fillPasswords();
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        const main = container.querySelector('main');
-        main.scrollTop = 400;
 
         fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
 
-        const summary = screen.getByRole('alert', { name: 'Form errors' });
-        expect(summary).toHaveTextContent('Reveal your recovery phrase and write it down first.');
-        expect(summary).toHaveFocus();
-        expect(main.scrollTop).toBe(0);
+        const reveal = screen.getByRole('button', { name: 'Reveal Recovery Phrase' });
+        expect(screen.queryByRole('alert', { name: 'Form errors' })).toBeNull();
+        expect(screen.getByRole('alert')).toHaveTextContent('Reveal your phrase first.');
+        expect(reveal).toHaveAttribute('aria-invalid', 'true');
+        expect(css('packages/core/src/ui/Button.module.css')).toMatch(
+            /\.btn\[aria-invalid='true'\]\s*\{[^}]*border-color:\s*var\(--xc-danger\)/,
+        );
+        expect(reveal).toHaveFocus();
         expect(screen.getByRole('heading', { name: 'Recovery Phrase' })).toBeInTheDocument();
         expect(screen.queryByLabelText(/^Word \d+$/)).toBeNull();
+    });
+
+    it('marks and focuses the unticked saved-phrase checkbox, then clears it on tick', () => {
+        generateBip39Mnemonic.mockReturnValue(phrase24.split(' ').slice(0, 12).join(' '));
+        draw();
+        fillPasswords();
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
+        const checkbox = screen.getByRole('checkbox', { name: /saved my recovery phrase/i });
+        const verify = screen.getByRole('button', { name: 'Verify Recovery Phrase' });
+
+        expect(verify).toBeEnabled();
+        fireEvent.click(verify);
+
+        expect(screen.queryByRole('alert', { name: 'Form errors' })).toBeNull();
+        expect(screen.getByRole('alert')).toHaveTextContent("Tick this box once you've saved your phrase.");
+        expect(screen.getAllByText("Tick this box once you've saved your phrase.")).toHaveLength(1);
+        expect(checkbox).toHaveAttribute('aria-invalid', 'true');
+        expect(checkbox.closest('label')).toHaveClass(checkboxStyles.invalid);
+        expect(checkbox).toHaveFocus();
+        expect(screen.getByRole('heading', { name: 'Recovery Phrase' })).toBeInTheDocument();
+
+        fireEvent.click(checkbox);
+
+        expect(checkbox).toBeChecked();
+        expect(checkbox).not.toHaveAttribute('aria-invalid', 'true');
+        expect(screen.queryByRole('alert', { name: 'Form errors' })).toBeNull();
+        expect(screen.queryByText("Tick this box once you've saved your phrase.")).toBeNull();
     });
 
     it('allows acknowledgement and verification after Reveal', () => {

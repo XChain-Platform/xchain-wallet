@@ -194,8 +194,9 @@ const messages = {
         'One transaction carries at most {count, plural, one {# recipient} other {# recipients}}. Send to anyone else in another payment.',
     'send.multi.total':
         'Total: {total} to {count, plural, one {# recipient} other {# recipients}}, in one transaction with one network fee.',
-    'send.multiText.help':
-        'One recipient per line: {format}. Recipients can get different tokens and amounts, up to {count} in one transaction.',
+    'send.multiText.placeholder':
+        'address, token, amount\naddress, token, amount\naddress, token, amount',
+    'send.multiText.help': 'One recipient per line: address, token, amount.',
     'send.multiText.fileLabel': 'Upload CSV (up to 2 MB)',
     'send.multiText.fileHelp':
         'A .csv or .txt file with one recipient per line: {format}. A header row is fine. A valid file fills the box above, where you can still edit it.',

@@ -266,9 +266,13 @@ describe('detail screens with sparse records', () => {
                 listAutopayOrders: vi.fn().mockResolvedValue([]),
             }),
         );
-        // The header card says the trade; its unknown sides read as dashes.
+        // The header card keeps status beside the verb; unknown sides read as dashes.
         const header = await screen.findByRole('region', { name: 'Order' });
-        expect(header).toHaveTextContent('Selling-for -');
+        const topLine = header.querySelector('[data-trade-header-top-line]');
+        expect(within(topLine).getByText('Selling')).toBeTruthy();
+        expect(within(topLine).getByText('Open')).toBeTruthy();
+        expect(topLine.nextElementSibling).toHaveTextContent('-');
+        expect(topLine.nextElementSibling.nextElementSibling).toHaveTextContent('for -');
         // The facts sit under Details (G102).
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
         await screen.findByLabelText('Order details');
