@@ -73,15 +73,23 @@ describe('useResumeFilePick requests', () => {
 });
 
 describe('useResumeFilePick matching selection', () => {
-    it('resumes once with the selected bytes and resets the input', async () => {
+    it('resumes once with the selected file and resets the input', async () => {
         const { result, entry, onResume } = mountHook();
         request(result);
-        const target = change(result, new File([Uint8Array.from([1, 2, 3])], 'same.bin'));
+        const file = new File([Uint8Array.from([1, 2, 3])], 'same.bin');
+        const target = change(result, file);
         expect(target.value).toBe('');
 
         await waitFor(() => expect(onResume).toHaveBeenCalledTimes(1));
         expect(onResume).toHaveBeenCalledWith({
-            entry, bytes: Uint8Array.from([1, 2, 3]), resumeId: 'upload-1',
+            entry,
+            bytes: {
+                byteLength: 390_001,
+                file,
+                fileRef: { kind: 'inline', blob: file },
+                originalSha256: DIGEST,
+            },
+            resumeId: 'upload-1',
         });
         expect(result.current.pendingId).toBeNull();
         expect(result.current.reason).toBeNull();
@@ -120,13 +128,13 @@ describe('useResumeFilePick rejected selections', () => {
         await waitFor(() => expect(empty.result.current.reason).toBe('file_mismatch'));
     });
 
-    it('reports a read failure', () => {
+    it('reports a read failure', async () => {
         class FailingReader { readAsArrayBuffer() { this.onerror?.(); } }
         vi.stubGlobal('FileReader', FailingReader);
         const { result } = mountHook();
         request(result);
         change(result, new File(['x'], 'unreadable.bin'));
-        expect(result.current.reason).toBe('read_failed');
+        await waitFor(() => expect(result.current.reason).toBe('read_failed'));
     });
 
     it('turns invalid validator input into not_resumable', async () => {
@@ -153,25 +161,26 @@ describe('useResumeFilePick ignored changes', () => {
 });
 
 describe('useResumeFilePick stale reads', () => {
-    it('drops a read that finishes after unmount', () => {
+    it('drops a read that finishes after unmount', async () => {
         const readers = deferredReaders();
         const { result, onResume, unmount } = mountHook();
         request(result);
         change(result, new File(['x'], 'late.bin'));
         unmount();
-        act(() => readers[0].finish());
+        await act(async () => readers[0].finish());
         expect(onResume).not.toHaveBeenCalled();
     });
 
-    it('drops a read after a request moves to another upload', () => {
+    it('drops a read after a request moves to another upload', async () => {
         const readers = deferredReaders();
         const { result, onResume, uploadById } = mountHook();
         request(result);
         change(result, new File(['x'], 'first.bin'));
         act(() => result.current.requestPick('upload-2'));
-        act(() => readers[0].finish());
+        await act(async () => readers[0].finish());
         expect(onResume).not.toHaveBeenCalled();
-        expect(uploadById).not.toHaveBeenCalled();
+        expect(uploadById).toHaveBeenCalledOnce();
+        expect(uploadById).toHaveBeenCalledWith('upload-1');
         expect(result.current.pendingId).toBe('upload-2');
         expect(result.current.reason).toBeNull();
     });

@@ -3,7 +3,9 @@
 
 import { useCallback, useMemo } from 'react';
 import { fileUploadStart } from '../../flows/fileUploadStart.js';
+import { fileRefFor } from '../../flows/fileMultipartRequest.js';
 import { chooseFileUploadPath } from '../../flows/fileUploadPath.js';
+import { randomUUID } from '../../util/uuid.js';
 import { multipartResumeRequestBuilder } from '../../flows/multipartResumeRequest.js';
 import { useMultipartUploadPanel } from './useMultipartUploadPanel.js';
 
@@ -41,16 +43,25 @@ export function useFormMultipartUpload({
         pollMs,
     });
     const startFile = useCallback(async ({
-        bytes, meta, linkTarget = null, existingKeyHash,
+        bytes, file, meta, linkTarget = null, existingKeyHash,
     }) => {
         const optionalKeyHash = existingKeyHash === undefined ? {} : { existingKeyHash };
-        const planned = fileUploadStart({
-            walletId, chainId, from, bytes, meta, singleTransactionCap,
+        let planned = fileUploadStart({
+            walletId, chainId, from, bytes, file,
+            ...(file ? { fileRef: { kind: 'inline', blob: file } } : {}),
+            meta, singleTransactionCap,
             support, linkTarget, gate, rate, ...optionalKeyHash,
         });
         if (planned.path === 'single') return { path: 'single', maxBytes: planned.maxBytes };
         if (planned.path === 'refused') {
             return { path: 'refused', reason: planned.reason, maxBytes: planned.maxBytes };
+        }
+        if (file) {
+            const fileRef = await fileRefFor(file, { key: randomUUID() });
+            planned = fileUploadStart({
+                walletId, chainId, from, file, fileRef, meta, singleTransactionCap,
+                support, linkTarget, gate, rate, ...optionalKeyHash,
+            });
         }
         const reply = await panel.start(planned.request, planned.match);
         return { path: 'multipart', reply };

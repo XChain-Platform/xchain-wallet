@@ -56,8 +56,9 @@ describe('PublishFileForm multipart publish', () => {
         fireEvent.click(screen.getAllByRole('option')[1]);
         expect(screen.getByRole('button', { name: 'Upload method: Standard' })).toBeEnabled();
         const bytes = new Uint8Array(20_000).fill(7);
+        const file = new File([bytes], 'large.bin', { type: 'application/octet-stream' });
         fireEvent.change(input, {
-            target: { files: [new File([bytes], 'large.bin', { type: 'application/octet-stream' })] },
+            target: { files: [file] },
         });
         await waitFor(() => expect(document.body.textContent).toContain('20,000 bytes'));
         fireEvent.click(screen.getByRole('checkbox'));
@@ -71,8 +72,9 @@ describe('PublishFileForm multipart publish', () => {
             lane: 'standard',
             buildMode: 'one_call',
             meta: expect.objectContaining({ name: 'large.bin', type: 'application/octet-stream' }),
+            fileRef: { kind: 'inline', blob: file },
         }));
-        expect(shell.fileMultipart.mock.calls[0][0].rawData).toHaveLength(bytes.length);
+        expect(shell.fileMultipart.mock.calls[0][0]).not.toHaveProperty('rawData');
         expect(await screen.findByRole('heading', { name: 'File published' })).toBeInTheDocument();
         expect(screen.getByText('Action index').nextElementSibling).toHaveTextContent('777');
         expect(screen.getByText('Transaction').nextElementSibling).toHaveTextContent(TXID);

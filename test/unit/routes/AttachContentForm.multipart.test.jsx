@@ -153,7 +153,7 @@ describe('resumed multipart artwork upload', () => {
         await screen.findByRole('heading', { name: 'Unfinished uploads' });
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         fireEvent.change(screen.getByLabelText('Choose the file to resume'), {
-            target: { files: [new File(['picked'], 'art.txt')] },
+            target: { files: [new File([BYTES], 'art.txt', { type: 'text/plain' })] },
         });
 
         await screen.findByRole('form', { name: 'Review artwork link' });
