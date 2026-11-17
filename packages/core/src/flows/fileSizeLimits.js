@@ -57,8 +57,9 @@ export const MAX_COMPILED_ACTION_BYTES = 8192;
 export const ENVELOPE_MAX_PAYLOAD = 390000;
 
 /** Multi-part FILE protocol bounds and exact per-piece stored-byte capacities. */
-export const MULTIPART_FILE_MAX_PARTS = 32;
-export const MULTIPART_FILE_MAX_BYTES = 12_000_000;
+export const MULTIPART_FILE_MAX_PARTS = 65535;
+export const MULTIPART_FILE_MAX_BYTES = 262_140_000_000;
+export const GATED_MULTIPART_MAX_BYTES = 67_108_864;
 export const MULTIPART_ENVELOPE_PART_CAPACITY = 389_920;
 export const MULTIPART_STANDARD_PART_CAPACITY = 8_114;
 

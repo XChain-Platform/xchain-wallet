@@ -7,12 +7,13 @@ import { chooseFileUploadPath } from '../../flows/fileUploadPath.js';
 import { multipartResumeRequestBuilder } from '../../flows/multipartResumeRequest.js';
 import { useMultipartUploadPanel } from './useMultipartUploadPanel.js';
 
-function uploadMaxBytes(singleTransactionCap, support) {
+function uploadMaxBytes(singleTransactionCap, support, gated) {
     try {
         return chooseFileUploadPath({
             byteLength: 1,
             singleTransactionCap,
             support,
+            gated,
         }).maxBytes;
     } catch {
         return null;
@@ -24,8 +25,8 @@ export function useFormMultipartUpload({
     support, gate = null, rate, pollMs,
 }) {
     const maxBytes = useMemo(
-        () => uploadMaxBytes(singleTransactionCap, support),
-        [singleTransactionCap, support],
+        () => uploadMaxBytes(singleTransactionCap, support, gate !== null),
+        [singleTransactionCap, support, gate],
     );
     const buildResumeRequest = useMemo(() => multipartResumeRequestBuilder({
         walletId, chainId, from, singleTransactionCap, support, gate, rate,

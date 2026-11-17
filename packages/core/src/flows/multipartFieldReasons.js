@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import {
+    GATED_MULTIPART_MAX_BYTES,
     MULTIPART_FILE_MAX_BYTES,
     MULTIPART_FILE_MAX_PARTS,
     MULTIPART_FILE_PART_CAPACITY,
@@ -38,6 +39,9 @@ function mapMethod(method, quote, reason) {
     if (quote != null && reason != null) throw invalid(method);
     if (quote != null || reason == null) return { reason: null, cap: null, single: false };
     if (reason === 'SINGLE_PART') return { reason: null, cap: null, single: true };
+    if (reason === 'GATED_BYTES_TOO_LARGE') {
+        return { reason: 'tooLarge', cap: GATED_MULTIPART_MAX_BYTES, single: false };
+    }
     if (SIZE_REASONS.has(reason)) {
         return { reason: 'tooLarge', cap: MULTIPART_FILE_MAX_BYTES, single: false };
     }

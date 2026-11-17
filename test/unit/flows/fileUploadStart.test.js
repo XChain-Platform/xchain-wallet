@@ -39,7 +39,7 @@ describe('fresh multipart upload start', () => {
         const result = fileUploadStart(args);
         expect(result).toMatchObject({
             path: 'multipart', lane: 'envelope', buildMode: 'one_call',
-            maxBytes: 12_000_000,
+            maxBytes: 262_140_000_000,
         });
         expect(result.request).toMatchObject({
             rawData: expect.any(String), meta: META, linkTarget: null, gate: null, rate: 2,
@@ -55,7 +55,7 @@ describe('fresh multipart upload start', () => {
 describe('single-transaction upload start', () => {
     it('returns a fresh path result without building a request', () => {
         const result = fileUploadStart(input({ bytes: new Uint8Array(1_000) }));
-        expect(result).toEqual({ path: 'single', maxBytes: 12_000_000 });
+        expect(result).toEqual({ path: 'single', maxBytes: 262_140_000_000 });
         expect(result).not.toHaveProperty('request');
     });
 });
@@ -73,10 +73,16 @@ describe('unsupported multipart upload start', () => {
 });
 
 describe('oversized multipart upload start', () => {
-    it('returns the multipart size refusal without building a request', () => {
-        const result = fileUploadStart(input({ bytes: new Uint8Array(12_000_001) }));
+    it('returns the gated size refusal without building a request', () => {
+        class LengthStub extends Uint8Array {
+            get byteLength() { return 67_108_865; }
+        }
+        const result = fileUploadStart(input({
+            bytes: new LengthStub(1),
+            gate: { ticker: 'PASS', minAmount: '10' },
+        }));
         expect(result).toEqual({
-            path: 'refused', reason: 'too_large', maxBytes: 12_000_000,
+            path: 'refused', reason: 'too_large', maxBytes: 67_108_864,
         });
         expect(result).not.toHaveProperty('request');
     });
@@ -89,6 +95,7 @@ describe('artwork and gated multipart upload start', () => {
             gate: { ticker: 'PASS', minAmount: '10' },
             existingKeyHash: KEY_HASH,
         }));
+        expect(result.maxBytes).toBe(67_108_864);
         expect(result.request.linkTarget).toEqual({ tick: 'ART', issueActionIndex: '42' });
         expect(result.request.gate).toEqual({ ticker: 'PASS', minAmount: '10' });
         expect(result.request.existingKeyHash).toBe(KEY_HASH);

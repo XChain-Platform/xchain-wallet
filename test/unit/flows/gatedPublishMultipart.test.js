@@ -11,7 +11,7 @@ const formHooks = vi.hoisted(() => ({
     start: vi.fn(),
     multipart: {
         options: {
-            taproot: { reason: null, cap: 12_000_000, multipart: true, pending: false, summary: '2 parts, 7 transactions', fee: 100 },
+            taproot: { reason: null, cap: 67_108_864, multipart: true, pending: false, summary: '2 parts, 7 transactions', fee: 100 },
             standard: { reason: 'tooLarge', cap: 259_648, multipart: false, pending: false, summary: null, fee: null },
         },
         reasons: { taproot: null, standard: 'tooLarge' },
@@ -134,7 +134,7 @@ afterEach(() => {
 describe('gated publish multipart path selection', () => {
     it('keeps a file within the selected carrier cap on the single path', () => {
         expect(start(new Uint8Array(1_000))).toEqual({
-            path: 'single', maxBytes: 12_000_000,
+            path: 'single', maxBytes: 67_108_864,
         });
     });
 

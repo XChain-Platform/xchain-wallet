@@ -14,6 +14,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     useMultipartUploadMethod,
 } from '../../../packages/core/src/shared/hooks/useMultipartUploadMethod.js';
+import { planMultipartFile } from '../../../packages/core/src/flows/multipartFilePlan.js';
+import { previewMultipartQuotes } from '../../../packages/core/src/flows/multipartQuotePreview.js';
 import {
     bitcoinDescriptors,
     dogecoinDescriptors,
@@ -22,6 +24,24 @@ import {
 const BITCOIN = bitcoinDescriptors.find(({ networkKind }) => networkKind === 'regtest');
 const DOGECOIN = dogecoinDescriptors.find(({ networkKind }) => networkKind === 'regtest');
 const SOFTWARE = Object.freeze({ source: 'hd', label: 'Primary' });
+const STANDARD_MAX_BYTES = 531_750_990;
+
+class LengthStub extends Uint8Array {
+    get byteLength() { return STANDARD_MAX_BYTES + 1; }
+}
+
+async function standardCapPlanner(bytes, meta, options) {
+    if (options.carrier === 'standard' && bytes.byteLength > STANDARD_MAX_BYTES) {
+        throw Object.assign(new RangeError('stored bytes require too many multipart pieces'), {
+            code: 'TOO_MANY_PARTS',
+        });
+    }
+    return planMultipartFile(bytes, meta, options);
+}
+
+function standardCapPreview(input) {
+    return previewMultipartQuotes({ ...input, planner: standardCapPlanner });
+}
 const LANES = Object.freeze({
     envelope: Object.freeze({ type: 'envelope', outputFloor: 546, revealPad: false }),
     standard: Object.freeze({ type: 'standard', outputFloor: 546 }),
@@ -75,14 +95,15 @@ async function settled(result) {
 
 describe('real multipart upload method preview', () => {
     it('shows the Taproot quote and the Standard multipart cap', async () => {
-        const hook = mount(props({ bytes: Uint8Array.from(randomBytes(400_000)) }));
+        const bytes = new LengthStub(randomBytes(400_000));
+        const hook = mount(props({ bytes, preview: standardCapPreview }));
         await settled(hook.result);
         expect(hook.result.current.options.taproot).toMatchObject({
             reason: null, multipart: true, summary: '2 parts, 7 transactions',
             fee: expect.any(Number),
         });
         expect(hook.result.current.options.standard).toMatchObject({
-            reason: 'tooLarge', cap: 259_648, multipart: false,
+            reason: 'tooLarge', cap: STANDARD_MAX_BYTES, multipart: false,
         });
         expect(hook.result.current.reasons).toEqual({ taproot: null, standard: 'tooLarge' });
         expect(hook.result.current).toMatchObject({ ready: true, loading: false, error: null });

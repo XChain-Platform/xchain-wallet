@@ -26,8 +26,8 @@ const partsOf = (vector) => vector.parts.map((part) => hexToBytes(part.hex));
 
 describe('multipart FILE protocol constants', () => {
     it('pins caps, capacities, and chain-id activation segments', () => {
-        expect(MULTIPART_FILE_MAX_PARTS).toBe(32);
-        expect(MULTIPART_FILE_MAX_BYTES).toBe(12_000_000);
+        expect(MULTIPART_FILE_MAX_PARTS).toBe(65_535);
+        expect(MULTIPART_FILE_MAX_BYTES).toBe(262_140_000_000);
         expect(MULTIPART_ENVELOPE_PART_CAPACITY).toBe(389_920);
         expect(MULTIPART_STANDARD_PART_CAPACITY).toBe(8_114);
         expect(FILE_MULTIPART_ACTIVATION_TIME).toEqual({

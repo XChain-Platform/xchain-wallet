@@ -10,7 +10,23 @@
 
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
+import { planMultipartFile } from '../../../packages/core/src/flows/multipartFilePlan.js';
 import { previewMultipartQuotes } from '../../../packages/core/src/flows/multipartQuotePreview.js';
+
+const STANDARD_MAX_BYTES = 531_750_990;
+
+class LengthStub extends Uint8Array {
+    get byteLength() { return STANDARD_MAX_BYTES + 1; }
+}
+
+async function standardCapPlanner(bytes, meta, options) {
+    if (options.carrier === 'standard' && bytes.byteLength > STANDARD_MAX_BYTES) {
+        throw Object.assign(new RangeError('stored bytes require too many multipart pieces'), {
+            code: 'TOO_MANY_PARTS',
+        });
+    }
+    return planMultipartFile(bytes, meta, options);
+}
 
 const lanes = Object.freeze({
     envelope: Object.freeze({ type: 'envelope', outputFloor: 546, revealPad: false }),
@@ -44,9 +60,10 @@ function multipartPlan(carrier) {
 
 describe('multipart quote preview with the real planner and quoter', () => {
     it('quotes a two-part envelope while isolating the Standard part cap', async () => {
+        const bytes = new LengthStub(randomBytes(400_000));
         const result = await previewMultipartQuotes({
-            bytes: Uint8Array.from(randomBytes(400_000)), meta: {}, gate: null, rate: 2,
-            methods: ['taproot', 'standard'], lanes, sizes,
+            bytes, meta: {}, gate: null, rate: 2,
+            methods: ['taproot', 'standard'], lanes, sizes, planner: standardCapPlanner,
         });
         expect(result.quotes.taproot).toMatchObject({ parts: 2, transactions: 7 });
         expect(result.quotes.standard).toBeNull();

@@ -78,11 +78,11 @@ describe('gated multipart batch hash refusals', () => {
 describe('gated multipart batch numeric refusals', () => {
     it.each([
         ['TOTAL_PARTS_RANGE', { totalParts: '1' }],
-        ['TOTAL_PARTS_RANGE', { totalParts: '33' }],
+        ['TOTAL_PARTS_RANGE', { totalParts: '65536' }],
         ['TOTAL_PARTS_RANGE', { totalParts: '02' }],
         ['TOTAL_PARTS_RANGE', { totalParts: '2.5' }],
         ['TOTAL_BYTES_RANGE', { totalBytes: '0' }],
-        ['TOTAL_BYTES_RANGE', { totalBytes: '12000001' }],
+        ['TOTAL_BYTES_RANGE', { totalBytes: '262140000001' }],
         ['TOTAL_BYTES_RANGE', { totalBytes: '01' }],
         ['TOTAL_BYTES_RANGE', { totalBytes: '1.5' }],
     ])('uses %s for an invalid integer', (code, fields) => {
@@ -110,8 +110,8 @@ describe('gated multipart batch text refusals', () => {
 
 describe('gated multipart batch boundaries and shape', () => {
     it.each([
-        ['totalParts', 3, 2], ['totalParts', 3, 32],
-        ['totalBytes', 4, 1], ['totalBytes', 4, 12000000],
+        ['totalParts', 3, 2], ['totalParts', 3, 65535],
+        ['totalBytes', 4, 1], ['totalBytes', 4, 262140000000],
     ])('accepts the %s boundary %s', (field, wireIndex, value) => {
         const result = compose({ manifest: manifest({ [field]: value }) });
         const fileFields = result.params.COMMAND.split(';')[0].split('|');

@@ -12,6 +12,7 @@ import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { multipartFieldOptions } from '../../../packages/core/src/flows/multipartFieldOptions.js';
 import { multipartFieldReasons } from '../../../packages/core/src/flows/multipartFieldReasons.js';
+import { planMultipartFile } from '../../../packages/core/src/flows/multipartFilePlan.js';
 import { multipartMethodSummaries } from '../../../packages/core/src/flows/multipartMethodOptions.js';
 import {
     multipartSupportForMethod,
@@ -24,6 +25,20 @@ import {
 
 const METHODS = ['taproot', 'standard'];
 const SOFTWARE = Object.freeze({ source: 'hd', label: 'Primary' });
+const STANDARD_MAX_BYTES = 531_750_990;
+
+class LengthStub extends Uint8Array {
+    get byteLength() { return STANDARD_MAX_BYTES + 1; }
+}
+
+async function standardCapPlanner(bytes, meta, options) {
+    if (options.carrier === 'standard' && bytes.byteLength > STANDARD_MAX_BYTES) {
+        throw Object.assign(new RangeError('stored bytes require too many multipart pieces'), {
+            code: 'TOO_MANY_PARTS',
+        });
+    }
+    return planMultipartFile(bytes, meta, options);
+}
 const BITCOIN = bitcoinDescriptors.find(({ networkKind }) => networkKind === 'regtest');
 const DOGECOIN = dogecoinDescriptors.find(({ networkKind }) => networkKind === 'regtest');
 const LANES = Object.freeze({
@@ -44,10 +59,14 @@ function supportFor(descriptor = BITCOIN, addressType = 'p2wpkh', addressRecord 
     })]));
 }
 
-async function realQuoteOptions(byteLength) {
+async function realQuoteOptions(byteLength, planner) {
+    const bytes = byteLength instanceof Uint8Array
+        ? byteLength
+        : Uint8Array.from(randomBytes(byteLength));
     const preview = await previewMultipartQuotes({
-        bytes: Uint8Array.from(randomBytes(byteLength)),
+        bytes,
         meta: {}, gate: null, rate: 2, methods: METHODS, lanes: LANES, sizes: SIZES,
+        ...(planner ? { planner } : {}),
     });
     const summaries = multipartMethodSummaries(preview.quotes);
     const fields = multipartFieldReasons(preview);
@@ -78,14 +97,15 @@ function expectInvalid(overrides, field) {
 
 describe('settled multipart field options', () => {
     it('shows a large Bitcoin file as taproot multipart and refuses Standard at its cap', async () => {
-        const quoteOptions = await realQuoteOptions(400_000);
+        const bytes = new LengthStub(randomBytes(400_000));
+        const quoteOptions = await realQuoteOptions(bytes, standardCapPlanner);
         const result = multipartFieldOptions(input({ quoteOptions }));
         expect(result.options.taproot).toMatchObject({
             reason: null, multipart: true, pending: false,
             summary: '2 parts, 7 transactions', fee: expect.any(Number),
         });
         expect(result.options.standard).toEqual({
-            ...EMPTY, reason: 'tooLarge', cap: 259_648,
+            ...EMPTY, reason: 'tooLarge', cap: STANDARD_MAX_BYTES,
         });
         expect(result.reasons).toEqual({ taproot: null, standard: 'tooLarge' });
         expect(result.ready).toBe(true);

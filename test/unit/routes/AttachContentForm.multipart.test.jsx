@@ -96,7 +96,7 @@ async function pickMultipartFile() {
 
 async function openMultipartLink(client) {
     await pickMultipartFile();
-    expect(screen.getByText('Up to 12,000,000 bytes with the current title and memo.')).toBeInTheDocument();
+    expect(screen.getByText('Up to 262,140,000,000 bytes with the current title and memo.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Attach artwork' }));
     await screen.findByRole('form', { name: 'Review artwork upload' });
     fireEvent.click(screen.getByRole('button', { name: 'Upload file' }));
@@ -193,7 +193,7 @@ describe('unsupported multipart artwork lane', () => {
         });
         mount(client);
         await screen.findByLabelText('Choose file to attach');
-        expect(screen.queryByText('Up to 12,000,000 bytes with the current title and memo.')).toBeNull();
+        expect(screen.queryByText('Up to 262,140,000,000 bytes with the current title and memo.')).toBeNull();
         fireEvent.drop(screen.getByRole('group', { name: 'Artwork file' }), {
             dataTransfer: { files: [new File([new Uint8Array(40_000)], 'art.txt', { type: 'text/plain' })] },
         });

@@ -28,12 +28,14 @@ function expectInvalid(input, subject) {
 
 describe('multipart field size refusal mapping', () => {
     it.each([
-        ['taproot', 'TOO_MANY_PARTS', 12_000_000],
-        ['standard', 'TOO_MANY_PARTS', 259_648],
-        ['taproot', 'ORIGINAL_BYTES_TOO_LARGE', 12_000_000],
-        ['standard', 'ORIGINAL_BYTES_TOO_LARGE', 12_000_000],
-        ['taproot', 'STORED_BYTES_TOO_LARGE', 12_000_000],
-        ['standard', 'STORED_BYTES_TOO_LARGE', 12_000_000],
+        ['taproot', 'TOO_MANY_PARTS', 25_553_407_200],
+        ['standard', 'TOO_MANY_PARTS', 531_750_990],
+        ['taproot', 'ORIGINAL_BYTES_TOO_LARGE', 262_140_000_000],
+        ['standard', 'ORIGINAL_BYTES_TOO_LARGE', 262_140_000_000],
+        ['taproot', 'STORED_BYTES_TOO_LARGE', 262_140_000_000],
+        ['standard', 'STORED_BYTES_TOO_LARGE', 262_140_000_000],
+        ['taproot', 'GATED_BYTES_TOO_LARGE', 67_108_864],
+        ['standard', 'GATED_BYTES_TOO_LARGE', 67_108_864],
     ])('maps %s %s to tooLarge with cap %i', (method, code, cap) => {
         const result = multipartFieldReasons(preview(method, code));
         expect(result.reasons[method]).toBe('tooLarge');
@@ -41,9 +43,9 @@ describe('multipart field size refusal mapping', () => {
         expect(result.single[method]).toBe(false);
     });
 
-    it('derives the Standard part-count cap from 32 parts of 8114 bytes', () => {
+    it('derives the Standard part-count cap from 65,535 parts of 8,114 bytes', () => {
         const result = multipartFieldReasons(preview('standard', 'TOO_MANY_PARTS'));
-        expect(result.caps.standard).toBe(32 * 8_114);
+        expect(result.caps.standard).toBe(65_535 * 8_114);
     });
 });
 
