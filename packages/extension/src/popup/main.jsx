@@ -23,6 +23,8 @@ import { App } from './App.jsx';
 import { initPanicModePersistence } from '../background/panicModeStorage.js';
 import { RUNTIME_MESSAGE_TIMEOUT_MS, sendMessage } from '../shared/chromeMessaging.js';
 import { installExtensionWipeHook } from '../storage/wipeHook.js';
+import { createPendingFileBlobs } from '../storage/pendingFileBlobs.js';
+import { setFileBlobStoreFactory } from '@xchain-wallet/core/flows/fileMultipartRequest.js';
 import { installShellErrorCapture } from './errorCapture.js';
 import { isToolbarPopupView } from './launchState.js';
 
@@ -38,6 +40,8 @@ installShellErrorCapture();
 // password"), VaultUnavailable and demo-exit escapes, every one of which
 // calls core's wipeWalletStorage().
 installExtensionWipeHook();
+// Picked files reach the background as IndexedDB keys, never as bytes.
+setFileBlobStoreFactory(createPendingFileBlobs);
 
 // §26.5 panic-mode freeze. Share the freeze state with the background worker
 // and the approval window via chrome.storage.local, and tell the worker

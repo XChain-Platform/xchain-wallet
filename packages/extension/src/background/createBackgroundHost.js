@@ -1221,9 +1221,13 @@ export function createBackgroundHost(deps) {
         // host in one process reads the same store (lockedSendOutcomes.js).
         lockedSendOutcomes = createLockedSendOutcomeStore(),
         fileBlobs = createPendingFileBlobs(),
-        resolveFileRef = createFileRefResolver({ blobStore: fileBlobs }),
+        resolveFileRef: injectedResolveFileRef,
         ...hostDeps
     } = deps ?? {};
+    // Resolved here, not as a destructuring default, so the default stays bound to fileBlobs.
+    const resolveFileRef = injectedResolveFileRef === undefined
+        ? createFileRefResolver({ blobStore: fileBlobs })
+        : injectedResolveFileRef;
     const host = new MessageHost(hostDeps);
     if (hostDeps.vault && !Object.prototype.hasOwnProperty.call(hostDeps.vault, 'pendingFileBlobs')) {
         Object.defineProperty(hostDeps.vault, 'pendingFileBlobs', {
