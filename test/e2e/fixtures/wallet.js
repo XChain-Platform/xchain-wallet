@@ -189,7 +189,7 @@ export function nav(page) {
 /**
  * The unlocked shell's signal that onboarding finished, in ANY shell.
  *
- * Anchored on Home's balance hero `<section>` (labelled by the wallet name, or "Active address balance" when unnamed; core's
+ * Anchored on Home's balance hero `<section>` (labelled by the wallet name; core's
  * `TotalBalanceHero`, rendered via `HomeTabs` by every shell) rather than on
  * navigation, because the three shells do not agree on navigation at all:
  * web/desktop render the rail or the bottom bar, and the MV3 popup renders
@@ -201,15 +201,12 @@ export function nav(page) {
  * rail is absent and Lock lives inside the closed wallet menu.
  */
 export function unlockedShell(page) {
-    // The hero is captioned with the wallet name once a wallet is active (G11),
-    // and only falls back to "Active address balance" when it has no name, so
-    // the name cannot be the anchor. The balance-visibility toggle is the
-    // hero card's own control, present under either caption.
-    return page.getByRole('region', { name: 'Active address balance' })
-        .or(page.getByRole('region').filter({
-            has: page.getByRole('button', { name: /^(?:Show|Hide) balance$/ }),
-        }))
-        .first();
+    // The hero's visible mode caption is Wallet value or Wallet balance, while
+    // its accessible name is the active wallet's name. The balance-visibility
+    // toggle is the stable card control under either caption.
+    return page.getByRole('region').filter({
+        has: page.getByRole('button', { name: /^(?:Show|Hide) balance$/ }),
+    }).first();
 }
 
 /**
@@ -1029,14 +1026,36 @@ export async function acknowledgeImportNotice(page, ads = 'on') {
 }
 
 /**
+ * Opens Settings -> Network and Fees -> Automatic Donations. The screen walk
+ * folded the donations row into the Network and Fees group, so it is no longer
+ * a row on the Settings list.
+ */
+export async function openAutomaticDonations(page) {
+    await openSettings(page);
+    await page.getByRole('button', { name: /^Network and Fees/ }).click();
+    await page.getByRole('button', { name: /^Automatic Donations/ }).click();
+}
+
+/** Backs out of a Settings drill-in page to the Settings list. */
+export async function backToSettingsList(page) {
+    const back = page.getByRole('button', { name: 'Back to settings', exact: true });
+    const list = page.getByRole('button', { name: /^Network and Fees/ });
+    for (let step = 0; step < 4; step++) {
+        await expect(back.or(list).first()).toBeVisible();
+        if (await list.isVisible()) return;
+        await back.click();
+    }
+    await expect(list).toBeVisible();
+}
+
+/**
  * Turns automatic donations off the only way the wallet offers: Settings ->
- * Automatic Donations -> Per transaction -> None (ruling 2026-11-14: one
- * wallet-wide setting, no switch). Ends back on Home.
+ * Network and Fees -> Automatic Donations -> Per transaction -> None (ruling
+ * 2026-11-14: one wallet-wide setting, no switch). Ends back on Home.
  */
 export async function turnOffDonations(page, { waitForBalances = true } = {}) {
     await expect(createdWalletShell(page, waitForBalances)).toBeVisible({ timeout: KDF_STEP_MS });
-    await openSettings(page);
-    await page.getByRole('button', { name: /^Automatic Donations/ }).click();
+    await openAutomaticDonations(page);
     const perTransaction = page.getByRole('combobox', { name: 'Per transaction', exact: true });
     await expect(perTransaction).toBeVisible();
     if (!/None/.test(await perTransaction.textContent())) {
@@ -1047,7 +1066,7 @@ export async function turnOffDonations(page, { waitForBalances = true } = {}) {
         await expect(perTransaction).toHaveText(/None/);
     }
     await expect(page.getByTestId('ads-hero')).toContainText('Automatic Donations off');
-    await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
+    await backToSettingsList(page);
     if (await nav(page).count() > 0) await gotoSection(page, 'Home');
     else await page.getByRole('button', { name: 'Back', exact: true }).click();
     await expect(createdWalletShell(page, waitForBalances)).toBeVisible();

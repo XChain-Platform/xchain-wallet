@@ -24,8 +24,10 @@
 import { writeFileSync } from 'node:fs';
 import {
     dismissIntroCarousel,
+    backToSettingsList,
     expect,
     gotoSection,
+    openAutomaticDonations,
     openSettings,
     test,
     unlockedShell,
@@ -63,7 +65,7 @@ const PALETTE_ROUTES = [
 
 const SETTINGS_SECTIONS = [
     'This wallet', 'Accounts & addresses', 'Display', 'Keyboard', 'Privacy', 'Safety',
-    'Backup', 'Fees', 'Network & endpoints', 'Connected sites', 'Automatic Donations', 'Developer', 'About',
+    'Backup', 'Fees', 'Network & endpoints', 'Connected sites', 'Developer', 'About',
 ];
 
 async function palette(page, destination) {
@@ -442,6 +444,11 @@ async function walk(page, size, out) {
             if (await cancel.count()) await cancel.click().catch(() => {});
         }
     }
+    // Automatic Donations is nested under Network and Fees, not a Settings
+    // landing-page row.
+    await openAutomaticDonations(page);
+    await record('Settings Automatic Donations');
+    await backToSettingsList(page);
     return results;
 }
 

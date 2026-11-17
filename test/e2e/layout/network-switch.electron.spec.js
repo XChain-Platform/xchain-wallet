@@ -107,15 +107,13 @@ test('desktop network round trip leaves Receive usable', async () => {
 
         await openSettings(page);
         await page.getByRole('button', { name: /^Advanced\b/ }).click();
-        await page.getByRole('button', { name: /^Developer mode\b/ }).click();
-        const developerMode = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
+        const developerMode = page.getByRole('switch', { name: 'Developer mode', exact: true });
         if (!(await developerMode.isChecked())) {
             await developerMode.click();
             await expect(developerMode).toBeChecked();
         }
-        // Back twice: row page to the Advanced group page, then to the index.
+        // Back once: the switch lives on the Advanced group page.
         const back = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
-        await back.click();
         await back.click();
         await openNetworkPage(page);
 

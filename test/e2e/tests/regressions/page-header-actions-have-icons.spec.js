@@ -21,7 +21,6 @@ const VIEWPORTS = [
 // create or refresh action sits in the content, in the ListPage actions row,
 // or in the EmptyState when the list is empty (the demo wallet has no lists).
 const CONTENT_ACTION_ROUTES = [
-    { paletteName: 'Dispensers', heading: 'My dispensers', actionName: 'Create dispenser' },
     { paletteName: 'Messaging', heading: 'Messaging', actionName: 'New Conversation' },
     { paletteName: 'Addresses', heading: 'Addresses', actionName: 'Add or import address' },
     { paletteName: 'Staking', heading: 'Staking', actionName: 'New Stake' },
@@ -35,6 +34,7 @@ const CONTENT_ACTION_ROUTES = [
 
 // List pages (G95): the filter icon, then the create plus at the far right.
 const HEADER_ACTION_ROUTES = [
+    { paletteName: 'Dispensers', heading: 'Dispensers', actionName: 'New dispenser' },
     { paletteName: 'My tokens', heading: 'My tokens', actionName: 'Create token' },
     { paletteName: 'Contacts', heading: 'Contacts', actionName: 'Add contact' },
     { paletteName: 'Lists', heading: 'My Lists', actionName: 'Create list' },

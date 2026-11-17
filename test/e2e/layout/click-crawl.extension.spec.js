@@ -98,7 +98,9 @@ for (let shard = 0; shard < SHARDS; shard += 1) {
                 const accept = page.getByRole('button', { name: 'Accept and continue' });
                 const past = page.getByRole('button', { name: 'Try in demo mode' })
                     .or(page.getByRole('button', { name: 'Skip' }))
-                    .or(page.getByRole('region', { name: 'Active address balance' }));
+                    .or(page.getByRole('region').filter({
+                        has: page.getByText(/^(?:Wallet value|Wallet balance)$/),
+                    }));
                 await accept.or(past).first().waitFor({ state: 'visible', timeout: 60_000 });
                 if (await accept.isVisible()) {
                     await page.getByRole('region', { name: 'License terms' }).or(page.getByLabel('License terms')).first()
