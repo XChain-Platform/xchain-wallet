@@ -82,6 +82,7 @@ import {
     venueDisagreement,
     writeRowsScript,
 } from './priceSeed.js';
+import { APPROVE_SETTLE_MS } from '../../../packages/core/src/shared/utils/approveSettle.js';
 
 /**
  * The three regtest chains this stack runs, and the ports each one answers on.
@@ -1784,6 +1785,9 @@ export async function approveConfirm(page, what = 'this action', timeoutMs = 120
                 : ': the pre-flight report never arrived, and the screen names no refusal'),
         );
     }
+    // Approve stays inert for APPROVE_SETTLE_MS after the review appears, so a
+    // click the moment it enables is dropped without a word; wait it out.
+    await page.waitForTimeout(APPROVE_SETTLE_MS + 100);
     await approve.click();
 }
 
