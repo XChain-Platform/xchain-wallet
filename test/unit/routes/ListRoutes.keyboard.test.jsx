@@ -74,14 +74,14 @@ describe('list route keyboard flows', () => {
         });
     });
 
-    it('reaches Create dispenser and leaves My dispensers with Back', async () => {
+    it('reaches New dispenser and leaves My dispensers with Back', async () => {
         await exerciseRoute({
             Component: DispensersList,
             messaging: {
                 getAddressesByChain: vi.fn().mockResolvedValue({}),
                 getDispensersForSource: vi.fn().mockResolvedValue([]),
             },
-            primaryName: 'Create dispenser',
+            primaryName: 'New dispenser',
             props: (onPrimary) => ({
                 activeAccountId: 'account-1',
                 onCreateDispenser: onPrimary,
@@ -120,26 +120,26 @@ describe('list route keyboard flows', () => {
         });
     });
 
-    it('reaches Create an order and leaves My orders with Back', async () => {
+    it('reaches New order and leaves My orders with Back', async () => {
         await exerciseRoute({
             Component: MyOrdersView,
             messaging: {
                 getAddressesByChain: vi.fn().mockResolvedValue({}),
                 getOrdersForAddress: vi.fn().mockResolvedValue([]),
             },
-            primaryName: 'Create an order',
+            primaryName: 'New order',
             props: (onPrimary) => ({ onCreateOrder: onPrimary }),
         });
     });
 
-    it('reaches Create a swap and leaves My swaps with Back', async () => {
+    it('reaches New swap and leaves My swaps with Back', async () => {
         await exerciseRoute({
             Component: MySwapsView,
             messaging: {
                 getAddressesByChain: vi.fn().mockResolvedValue({}),
                 getSwapsForAddress: vi.fn().mockResolvedValue([]),
             },
-            primaryName: 'Create a swap',
+            primaryName: 'New swap',
             props: (onPrimary) => ({ onCreateSwap: onPrimary }),
         });
     });
@@ -155,7 +155,7 @@ describe('list route keyboard flows', () => {
                     { tick: 'KEYBOARD', locked: false },
                 ]),
             },
-            primaryName: 'Create token',
+            primaryName: 'Create Token',
             props: (onPrimary) => ({ onIssue: onPrimary, onSelectTick: vi.fn() }),
         });
     });
@@ -166,7 +166,7 @@ describe('list route keyboard flows', () => {
             messaging: {
                 getAddressesByChain: vi.fn().mockResolvedValue({}),
             },
-            primaryName: 'New stake',
+            primaryName: 'New Stake',
             props: (onPrimary) => ({
                 activeAccountId: 'account-1',
                 onNewStake: onPrimary,

@@ -21,8 +21,10 @@ vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
 const { PrivacySection } = await import(
     '../../../packages/core/src/shared/components/settings/PrivacySection.jsx'
 );
-const { WalletModeSection } = await import(
-    '../../../packages/core/src/shared/components/settings/WalletModeSection.jsx'
+// §20: the Settings wallet-mode section is gone; the per-wallet field on
+// create and import carries the written tip now.
+const { WalletModeField } = await import(
+    '../../../packages/core/src/shared/components/WalletModeField.jsx'
 );
 
 afterEach(() => {
@@ -53,14 +55,14 @@ describe('Privacy fields (U57)', () => {
 describe('Privacy reset (U63)', () => {
     it('draws an icon on Reset to defaults', () => {
         render(<PrivacySection />);
-        const reset = screen.getByRole('button', { name: /Reset to defaults/ });
+        const reset = screen.getByRole('button', { name: /Reset to Defaults/ });
         expect(reset.querySelector('svg')).not.toBeNull();
     });
 });
 
 describe('Wallet mode (U57)', () => {
-    it('puts a written tip on the Transaction handling group', () => {
-        render(<WalletModeSection />);
-        expect(within(tipText(/More info|Transaction handling/)).getByText(/Whether this device signs and broadcasts/)).toBeTruthy();
+    it('puts a written tip on the Wallet mode group', () => {
+        render(<WalletModeField value="full" onChange={() => {}} />);
+        expect(within(tipText(/More info|Wallet mode/)).getByText(/How this wallet handles transactions/)).toBeTruthy();
     });
 });

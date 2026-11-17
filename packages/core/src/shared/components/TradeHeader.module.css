@@ -1,0 +1,69 @@
+/* The Order and Swap detail header card: the large fill ring, then the
+   verb, the big amount, what it is for and the status chip, stacked. */
+.header {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    min-inline-size: 0;
+}
+
+.text {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--xc-space-1);
+    min-inline-size: 0;
+}
+
+.verb {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.amount {
+    max-inline-size: 100%;
+    color: var(--xc-text);
+    font-size: var(--xc-text-xl);
+    font-weight: 800;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+    /* An amount and its ticker read left to right inside RTL prose. */
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.counter {
+    max-inline-size: 100%;
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    overflow-wrap: anywhere;
+}
+
+.chip {
+    display: inline-flex;
+    max-inline-size: 100%;
+}
+
+/* A list row's second line: the parts on one wrapping line, a middle dot
+   between them. */
+.rowMeta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    min-inline-size: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.metaItem {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+}
+
+.metaItem + .metaItem::before {
+    content: '·';
+    padding-inline: var(--xc-space-1);
+}

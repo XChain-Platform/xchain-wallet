@@ -47,7 +47,7 @@ describe('badge presentation', () => {
             </>,
         );
 
-        const watchOnly = screen.getByRole('status', { name: 'Watch-only wallet' });
+        const watchOnly = screen.getByRole('status', { name: 'Another phone signs for this wallet' });
         const dispenser = await screen.findByRole('status', {
             name: '1 open dispenser for XCHAIN on bitcoin-mainnet',
         });

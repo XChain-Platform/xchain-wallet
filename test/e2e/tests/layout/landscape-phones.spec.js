@@ -111,7 +111,7 @@ for (const phone of LANDSCAPE_PHONES) {
                 await openSettingsRow(page, /^This wallet/);
                 await page.getByRole('button', { name: 'Switch account…' }).click();
                 // U48 keeps page actions directly under their content, never in a pinned footer.
-                await expect(page.getByRole('main').getByRole('button', { name: 'Add account' })).toBeVisible();
+                await expect(page.getByRole('main').getByRole('button', { name: 'Add Account' })).toBeVisible();
                 await expect(page.locator('footer')).toHaveCount(0);
                 await settle(page);
                 expect((await shellGeometry(page)).screenOverflow).toBe(0);
@@ -119,7 +119,7 @@ for (const phone of LANDSCAPE_PHONES) {
             await test.step('Wallets', async () => {
                 await openSettingsRow(page, /This wallet/);
                 await page.getByRole('button', { name: /Switch/ }).first().click();
-                await expect(page.getByRole('button', { name: /Add wallet/ })).toBeVisible();
+                await expect(page.getByRole('button', { name: /Add Wallet/ })).toBeVisible();
                 await settle(page);
                 expect((await shellGeometry(page)).screenOverflow).toBe(0);
             });

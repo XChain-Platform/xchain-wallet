@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
+import { typeCustomRate } from '../../helpers/customNetworkFee.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AttachContentForm } from '../../../packages/core/src/shared/routes/AttachContentForm.jsx';
 
@@ -68,6 +69,8 @@ function mount(client = messagingFor(), issuerAddress = SOURCE.address) {
 }
 
 async function chooseFile(name = 'art.txt', type = 'text/plain') {
+    // The artwork file is the standard file field; its hidden picker input
+    // carries its own name beside the visible label with the ceiling.
     const input = await screen.findByLabelText('Choose file to attach');
     fireEvent.change(input, {
         target: { files: [new File(['abc'], name, { type })] },
@@ -78,7 +81,13 @@ async function chooseFile(name = 'art.txt', type = 'text/plain') {
 }
 
 async function review() {
-    fireEvent.click(screen.getByRole('button', { name: 'Attach artwork' }));
+    // The standard action label is Title Case.
+    fireEvent.click(screen.getByRole('button', { name: 'Attach Artwork' }));
+}
+
+// Opens a closed standard section by its title.
+function openSection(title) {
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${title}\\b`), expanded: false }));
 }
 
 function compositionClient() {
@@ -140,7 +149,7 @@ describe('AttachContentForm validation and review', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(screen.getByRole('button', { name: 'Attach artwork' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Attach Artwork' })).toBeDisabled();
         expect(client.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -158,7 +167,8 @@ describe('AttachContentForm validation and review', () => {
         expect(await screen.findByRole('form', { name: 'Review artwork upload' })).toBeInTheDocument();
         expect(screen.getByText('File').nextElementSibling).toHaveTextContent('art.png');
         expect(screen.getByText('Type').nextElementSibling).toHaveTextContent('image/png');
-        expect(screen.getByText('Size').nextElementSibling).toHaveTextContent('3 bytes');
+        // Sizes read in KB, never bytes; a 3-byte file reads as the 0.1 KB floor.
+        expect(screen.getByText('Size').nextElementSibling).toHaveTextContent('0.1 KB');
         expect(screen.getByText('Title').nextElementSibling).toHaveTextContent('Gallery');
         expect(screen.getByText('Memo').nextElementSibling.textContent).toBe(' memo with spaces ');
 
@@ -186,6 +196,8 @@ describe('AttachContentForm metadata validation', () => {
             'Memo is 252 characters; the network accepts at most 250 characters.',
         );
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
+        // The refusal reopens the closed Memo section holding the field.
+        expect(screen.getByRole('button', { name: /^Memo\b/ })).toHaveAttribute('aria-expanded', 'true');
     });
 });
 
@@ -220,23 +232,21 @@ describe('AttachContentForm title safety', () => {
 });
 
 describe('AttachContentForm custom fee validation', () => {
+    // Typed into the one custom fee editor, the Network fee line (G113), as
+    // the fee each named rate prices to; a rate of more than 8 decimals
+    // cannot be typed there any more.
     it.each([
-        ['', 'Enter a custom fee rate.'],
+        ['', 'Enter a custom network fee.'],
         ['0', 'Custom fee rate must be greater than zero.'],
-        ['-1', 'Custom fee rate must be greater than zero.'],
-        ['0.123456789', 'Enter a rate of at least 1 sat/vB.'],
-        ['1.123456789', 'Custom fee rate can have at most 8 decimal places.'],
+        ['-1', 'Enter a valid non-negative network fee amount.'],
+        ['0.5', 'Enter a rate of at least 1 sat/vB.'],
         ['0.00000001', 'Enter a rate of at least 1 sat/vB.'],
-        ['100000000000000000000', 'Enter a rate no higher than 1,000 sat/vB.'],
+        ['50000', 'Enter a rate no higher than 1,000 sat/vB.'],
     ])('refuses custom fee %j before review', async (rate, message) => {
         mount();
         await chooseFile();
-        fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
-            target: { value: '3' },
-        });
-        fireEvent.change(await screen.findByLabelText('Custom fee rate (sat/vB)'), {
-            target: { value: rate },
-        });
+        openSection('Speed and Fees');
+        await typeCustomRate(rate);
 
         await review();
 
@@ -329,7 +339,7 @@ describe('AttachContentForm indexed file validation', () => {
         await review();
         await screen.findByRole('form', { name: 'Review artwork upload' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Upload file' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Upload File' }));
         const approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
@@ -344,23 +354,51 @@ describe('AttachContentForm indexed file validation', () => {
     });
 });
 
-describe('AttachContentForm composed follow-up values', () => {
-    it('shows the exact LINK and token-info values passed to composition', async () => {
-        const client = compositionClient();
-        await reachTokenInfoReview(client);
-        const expectedJson = JSON.stringify({
-            tick: 'ART',
-            categories: [{ type: 'main', data: 'NFT' }],
-            images: [{ data_ref: 'action:12', type: 'image/png', name: 'art.png' }],
-            name: 'Gallery',
+describe('AttachContentForm link leg and page title', () => {
+    it('always reaches the link step and ends after it, with no token-info leg', async () => {
+        globalThis.FileReader = PngFileReader;
+        const client = messagingFor({
+            overrides: {
+                composeForConfirm: vi.fn().mockResolvedValue({
+                    psbt: 'aa00',
+                    encoding: 'psbt',
+                    version: 1,
+                    chainId: CHAIN,
+                    actionString: 'encoded action',
+                    decoded: { summary: 'Review action', details: [], warnings: [] },
+                }),
+                preflight: vi.fn().mockResolvedValue({ verdict: 'pass', findings: [] }),
+                fileAction: vi.fn().mockResolvedValue({ txid: 'file-tx' }),
+                linkAction: vi.fn().mockResolvedValue({ txid: 'link-tx' }),
+                getActionByTxid: vi.fn().mockResolvedValue({ action_index: 12 }),
+            },
         });
-        expect(screen.getByText('Document').nextElementSibling).toHaveTextContent('ART.json');
-        expect(screen.getByText('Type').nextElementSibling).toHaveTextContent('application/json');
-        expect(screen.getByText('Title').nextElementSibling).toHaveTextContent('Token information');
-        expect(screen.getByText('Contents').nextElementSibling.textContent).toBe(expectedJson);
+        mount(client);
+        await chooseFile('art.png', 'image/png');
+        fireEvent.change(screen.getByLabelText('Title'), {
+            target: { value: ' Gallery ' },
+        });
+        expect(screen.queryByRole('checkbox')).toBeNull();
+        await review();
+        await screen.findByRole('form', { name: 'Review artwork upload' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Upload token info' }));
-        await waitFor(() => expect(client.composeForConfirm).toHaveBeenCalledTimes(3));
+        fireEvent.click(screen.getByRole('button', { name: 'Upload File' }));
+        let approve = await screen.findByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
+
+        await screen.findByRole('form', { name: 'Review artwork link' });
+        expect(screen.getByText('Artwork file record').nextElementSibling).toHaveTextContent('BTC#12');
+        expect(screen.getByText('Token creation record').nextElementSibling).toHaveTextContent('BTC#7');
+        fireEvent.click(screen.getByRole('button', { name: 'Link Artwork to ART' }));
+        approve = await screen.findByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
+
+        // The link is the last leg: the flow ends on Done with both txids.
+        expect(await screen.findByRole('button', { name: 'Done' })).toBeInTheDocument();
+        expect(screen.queryByRole('form', { name: 'Upload token info' })).toBeNull();
+        expect(client.composeForConfirm).toHaveBeenCalledTimes(2);
         expect(client.composeForConfirm.mock.calls[1][0].actionData.params).toEqual({
             VERSION: '0',
             COIN1: 'BTC',
@@ -369,18 +407,12 @@ describe('AttachContentForm composed follow-up values', () => {
             COIN2_ACTION_INDEX: '7',
             MEMO: '',
         });
-        expect(client.composeForConfirm.mock.calls[2][0]).toMatchObject({
-            actionData: {
-                action: 'FILE',
-                params: {
-                    VERSION: '0',
-                    NAME: 'ART.json',
-                    TYPE: 'application/json',
-                    TITLE: 'Token information',
-                    MEMO: '',
-                },
-            },
-            encoderOpts: { rawData: expectedJson },
-        });
+    });
+
+    it('titles the page Attach Artwork without the token name', async () => {
+        mount();
+        expect(await screen.findByRole('heading', { name: 'Attach Artwork' })).toBeInTheDocument();
+        expect(screen.queryByText('Attach Artwork to ART')).toBeNull();
+        expect(screen.queryByText(/Token Picture/)).toBeNull();
     });
 });

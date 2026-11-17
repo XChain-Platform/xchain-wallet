@@ -73,8 +73,13 @@ function mount({ settings, prefill } = {}) {
     );
 }
 
-const fromField = () => screen.getByLabelText(/^From$/);
-const rbfSwitch = () => screen.getByRole('switch', { name: 'Allow a higher network fee later' });
+const fromField = () => screen.getByLabelText('From address');
+const rbfSwitch = () => {
+    // The switch sits in the closed Advanced section: open it first.
+    const header = screen.queryByRole('button', { name: /^Advanced/, expanded: false });
+    if (header) fireEvent.click(header);
+    return screen.getByRole('switch', { name: 'Allow a higher network fee later' });
+};
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 

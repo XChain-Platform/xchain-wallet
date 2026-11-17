@@ -128,7 +128,7 @@ describe('test-network fiat suppression', () => {
         },
     );
 
-    it('hides TokenDetail value, change, chart, and price alerts on regtest', async () => {
+    it('hides TokenDetail value, change, price chart, and price alerts on regtest', async () => {
         const getNativePricesRequest = vi.fn().mockResolvedValue({
             prices: {
                 [CHAIN]: {
@@ -150,16 +150,27 @@ describe('test-network fiat suppression', () => {
                 tick="BTC"
                 kind="native"
                 quantity="50000000"
+                divisibility={8}
                 fiatRate={RATE}
                 onBack={() => {}}
             />
         )));
 
-        expect(await screen.findByText('Test coins have no value.')).toBeInTheDocument();
-        const balance = screen.getByRole('region', { name: 'BTC balance' });
+        // The coin page's hero shows the coin amount only; the "Test coins have
+        // no value" line belongs to Home's hero (checked above).
+        const balance = await screen.findByRole('region', { name: 'BTC' });
         expect(balance).not.toHaveTextContent('$');
-        expect(screen.queryByText('24h')).toBeNull();
-        expect(screen.queryByRole('tablist', { name: 'Chart range' })).toBeNull();
+        // Test networks have no fiat mode, so the hero shows only Balance and
+        // offers no Value/Balance unit toggle.
+        expect(balance).toHaveTextContent('Balance');
+        expect(balance).toHaveAccessibleName('BTC');
+        expect(within(balance).getByLabelText('0.50000000 BTC')).toBeInTheDocument();
+        expect(within(balance).queryByText('No price yet')).toBeNull();
+        expect(within(balance).queryByRole('button', { name: /Show (?:value|balance) in/ })).toBeNull();
+        expect(await screen.findByRole('region', { name: 'Balance chart' })).toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'Price chart' })).toBeNull();
+        expect(screen.queryByRole('region', { name: 'Value chart' })).toBeNull();
+        expect(screen.queryByLabelText(/ change\. /)).toBeNull();
         expect(screen.queryByRole('button', { name: /chart/i })).toBeNull();
         expect(screen.queryByRole('button', { name: /price alert/i })).toBeNull();
         expect(getNativePricesRequest).not.toHaveBeenCalled();

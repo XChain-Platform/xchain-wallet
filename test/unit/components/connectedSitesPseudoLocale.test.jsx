@@ -55,9 +55,11 @@ afterEach(async () => {
 describe('Connected sites copy goes through the dictionary', () => {
     it('the Disconnect confirmation is translated', async () => {
         render(<ConnectedSitesSection />);
+        // Disconnect lives on the site detail, opened from its Allowed row.
+        fireEvent.click((await screen.findByText('Example')).closest('button'));
         const buttons = await screen.findAllByRole('button', { name: /Disconnect/ });
         fireEvent.click(buttons[0]);
         expect(await screen.findByText(/⟦Disconnect Example\?⟧/)).toBeTruthy();
-        expect(screen.getByText(/⟦https:\/\/example\.com will lose access/)).toBeTruthy();
+        expect(screen.getAllByText(/⟦https:\/\/example\.com will lose access/)).toHaveLength(2);
     });
 });

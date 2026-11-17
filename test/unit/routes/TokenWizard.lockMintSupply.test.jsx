@@ -25,14 +25,15 @@
 // checked BEFORE the gated cumulative cap), and it costs one more field in the
 // same ISSUE transaction at the same fee.
 //
-// These tests drive the real wizard and read the params handed to the host
-// compose, so they fail if the composer stops writing the flag - the template
-// would go back to promising something only the network can keep.
+// These tests pick each template on the real Issue Token form and read the
+// params handed to the host compose, so they fail if a template stops writing
+// the flag - it would go back to promising something only the network can keep.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 
 const ADDRESSES = {
@@ -73,14 +74,15 @@ function mountWizard() {
 }
 
 async function pickTemplate(label) {
-    fireEvent.click(await screen.findByText(label));
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    await waitFor(() => expect(screen.getByLabelText('Token name (ticker)')).toBeTruthy());
+    fireEvent.click(await screen.findByRole('button', { name: /^Select template/ }));
+    fireEvent.click(screen.getByRole('option', { name: new RegExp(label) }));
+    await waitFor(() => expect(screen.getByLabelText('Ticker')).toBeTruthy());
 }
 
+const supplyField = () => screen.getByRole('textbox', { name: 'Max supply' });
+
 async function submit() {
-    fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Issue token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 }
 
 async function composedParams() {
@@ -92,11 +94,11 @@ async function composedParams() {
 
 afterEach(() => cleanup());
 
-describe('TokenWizard fixed-supply templates lock MINT_SUPPLY', () => {
+describe('Issue Token fixed-supply templates lock MINT_SUPPLY', () => {
     it('the collectible composes all three locks, so its 1-of-1 needs no flag day', async () => {
         mountWizard();
         await pickTemplate('Collectible');
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+        fireEvent.change(screen.getByLabelText('Ticker'), {
             target: { value: 'ONEOFONE' },
         });
         fireEvent.change(screen.getByLabelText('Image URL'), {
@@ -115,16 +117,18 @@ describe('TokenWizard fixed-supply templates lock MINT_SUPPLY', () => {
             // Without this the re-ISSUE below is refused only where
             // ISSUE_MINT_SUPPLY_CUMULATIVE_CAP has already activated.
             LOCK_MINT_SUPPLY: '1',
+            // The artwork rides DESCRIPTION.
+            DESCRIPTION: 'https://example.com/art.png',
         });
     });
 
     it('the meme token composes all three locks, so its fixed supply is the token\'s own', async () => {
         mountWizard();
         await pickTemplate('Meme token');
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+        fireEvent.change(screen.getByLabelText('Ticker'), {
             target: { value: 'DANKCOIN' },
         });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '21000000' } });
+        fireEvent.change(supplyField(), { target: { value: '21000000' } });
         await submit();
 
         expect(await composedParams()).toMatchObject({
@@ -136,6 +140,8 @@ describe('TokenWizard fixed-supply templates lock MINT_SUPPLY', () => {
             LOCK_MAX_SUPPLY: '1',
             LOCK_MINT: '1',
             LOCK_MINT_SUPPLY: '1',
+            // The form's meme preset also freezes the per-mint limit.
+            LOCK_MAX_MINT: '1',
         });
     });
 
@@ -146,29 +152,61 @@ describe('TokenWizard fixed-supply templates lock MINT_SUPPLY', () => {
         // LOCK_MINT_SUPPLY there would permanently break them.
         mountWizard();
         await pickTemplate('Limited edition');
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+        fireEvent.change(screen.getByLabelText('Ticker'), {
             target: { value: 'PRINTS' },
         });
-        fireEvent.change(screen.getByLabelText('Edition size'), { target: { value: '10' } });
-        fireEvent.change(screen.getByLabelText('Copies per mint'), { target: { value: '1' } });
+        // Edition size is the max supply; copies per mint the per-transaction max.
+        fireEvent.change(supplyField(), { target: { value: '10' } });
+        fireEvent.change(screen.getByLabelText('Max per transaction'), { target: { value: '1' } });
         fireEvent.change(screen.getByLabelText('Image URL'), {
             target: { value: 'https://example.com/prints.png' },
         });
         await submit();
 
         const params = await composedParams();
+        expect(params).toMatchObject({
+            TICK: 'PRINTS',
+            MAX_SUPPLY: '10',
+            MAX_MINT: '1',
+            MINT_ADDRESS_MAX: '1',
+            DECIMALS: '0',
+            DESCRIPTION: 'https://example.com/prints.png',
+        });
         expect(params.LOCK_MAX_SUPPLY).toBe('1');
         expect(params.LOCK_MINT).toBeUndefined();
         expect(params.LOCK_MINT_SUPPLY).toBeUndefined();
+        // A fair mint: nothing is minted to the issuer at creation.
+        expect(params.MINT_SUPPLY).toBeUndefined();
+    });
+
+    it('a meme picked after Limited edition still mints its whole supply', async () => {
+        // Edition is a fair mint (initial mint 0); carried onto Meme, whose
+        // locks close minting, it would issue a token that can never have
+        // supply. Each template names its own initial mint.
+        mountWizard();
+        await pickTemplate('Limited edition');
+        await pickTemplate('Meme token');
+        fireEvent.change(screen.getByLabelText('Ticker'), { target: { value: 'SWITCHED' } });
+        fireEvent.change(supplyField(), { target: { value: '500' } });
+        await submit();
+
+        const params = await composedParams();
+        expect(params).toMatchObject({
+            MAX_SUPPLY: '500',
+            MINT_SUPPLY: '500',
+            LOCK_MINT: '1',
+            LOCK_MINT_SUPPLY: '1',
+        });
+        expect(params.MINT_ADDRESS_MAX).toBeUndefined();
     });
 
     it('leaves the utility template mintable', async () => {
         mountWizard();
         await pickTemplate('Utility token');
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+        fireEvent.change(screen.getByLabelText('Ticker'), {
             target: { value: 'UTIL' },
         });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
+        fireEvent.change(supplyField(), { target: { value: '1000' } });
         await submit();
 
         const params = await composedParams();

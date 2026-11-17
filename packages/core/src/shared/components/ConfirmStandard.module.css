@@ -1,0 +1,233 @@
+/*
+ * Copyright © 2025–2026 Dankest, LLC
+ * Based on XChain Platform by Dankest, LLC – https://dankest.llc
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * This file is part of XChain Platform. Licensed under the GNU Affero
+ * General Public License v3.0 or later; see LICENSE.md. A commercial
+ * license (without AGPL source-disclosure terms) is available -
+ * contact legal@dankest.llc.
+ */
+
+/* The Confirm Standard (G127 revised 2026-11-16, round 5 layout 1 "Centred
+   64, One Card"): the status notice first, a centred 64px icon, the name and
+   sentence, one facts card with the address first, the short warning, and Reject
+   and Approve docked with 8px all round. Every item is 8px (space-2) from the
+   next; no text is under 13px (text-sm). */
+
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* The stack's gap is the only space between items: no block margins. */
+.stack > * {
+    margin: 0;
+}
+
+/* The status notice takes focus when a tap on Approve is answered there. */
+.statusSlot:focus {
+    outline: none;
+}
+
+@media (forced-colors: active) {
+    .statusSlot:focus {
+        outline: 2px solid Highlight;
+        outline-offset: -2px;
+    }
+}
+
+/* --- the centred top --- */
+
+/* 64px with a 24px network pip, the operator's pick. */
+.mark {
+    align-self: center;
+    display: inline-flex;
+    line-height: 0;
+    --xc-avatar-size-hero: calc(var(--xc-space-8) * 2);
+    --xc-avatar-pip-hero: var(--xc-space-6);
+    --xc-avatar-initials-hero: 28px;
+}
+
+.disc {
+    align-self: center;
+    flex: 0 0 auto;
+    display: inline-grid;
+    place-items: center;
+    width: calc(var(--xc-space-8) * 2);
+    height: calc(var(--xc-space-8) * 2);
+    border-radius: 50%;
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border-subtle, var(--xc-border));
+    color: var(--xc-text);
+}
+
+.disc svg {
+    width: calc(var(--xc-space-8) - (var(--xc-space-1) / 2));
+    height: calc(var(--xc-space-8) - (var(--xc-space-1) / 2));
+}
+
+/* A user-chosen name (a list's, a file's) on its own line above the
+   sentence, wrapping as far as it needs. Centred as a block too: the global
+   paragraph measure caps its width. */
+.name {
+    align-self: center;
+    color: var(--xc-text);
+    font-size: var(--xc-text-lg);
+    font-weight: 700;
+    line-height: 1.3;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.sentence {
+    align-self: center;
+    color: var(--xc-text);
+    font-size: var(--xc-text-xl);
+    font-weight: 700;
+    line-height: 1.3;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+/* --- the one facts card (G121): one line per fact, cut with an ellipsis --- */
+
+.facts {
+    width: 100%;
+}
+
+.oneLine {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.assetLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    color: var(--xc-text);
+    font-weight: 600;
+}
+
+/* A row of chips (a token's locks) spans the card under its label. The
+   doubled class outranks FactRows' sibling divider rule for the value. */
+.wideLabel {
+    grid-column: 1 / -1;
+    padding-bottom: 0;
+}
+
+.wideValue.wideValue {
+    grid-column: 1 / -1;
+    text-align: start;
+    padding-top: var(--xc-space-1);
+    border-top: 0;
+}
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--xc-space-1);
+}
+
+.chip {
+    --xc-icon-size: var(--xc-icon-xs);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    padding: calc(var(--xc-space-1) / 2) var(--xc-space-2);
+    border-radius: var(--xc-radius-pill, 999px);
+    background: var(--xc-bg-muted);
+    border: 1px solid var(--xc-border-subtle, var(--xc-border));
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+/* --- plain lines and the signed message --- */
+
+.note {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+}
+
+.messageBox {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.messageLabel {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.messageText {
+    margin: 0;
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    line-height: 1.4;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: normal;
+}
+
+/* --- notice lines --- */
+
+.points {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+.points > p {
+    margin: 0;
+}
+
+/* The producer's own words under the line the wallet vouches for. */
+.pointDetail {
+    display: block;
+    font-size: var(--xc-text-sm);
+    opacity: 0.85;
+}
+
+/* --- Reject and Approve: half the width each, 8px apart, at every width --- */
+
+.decision {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+.buttons {
+    display: flex;
+    flex-direction: row;
+    gap: var(--xc-space-2);
+}
+
+.button {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* The docked footer that holds Reject and Approve pads 8px all round (left,
+   right, top and bottom) in place of Screen's 12px block padding and page
+   gutter, its short-landscape rule included; the bottom still pays the home
+   indicator inset. The element-plus-:has selector outranks Screen's .footer
+   class, so no !important is needed. A browser without :has (Chrome 102)
+   keeps Screen's own footer padding. */
+@supports selector(:has(*)) {
+    footer:has(.buttons) {
+        padding: var(--xc-space-2);
+        padding-bottom: calc(var(--xc-space-2) + var(--xc-screen-safe-bottom, env(safe-area-inset-bottom, 0)));
+    }
+}

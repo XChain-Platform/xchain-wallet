@@ -32,49 +32,117 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
-import { Button, EmptyState, FormSection, Icon, Input } from '@xchain-wallet/core/ui';
+import {
+    Button,
+    EmptyState,
+    FormErrorSummary,
+    FormErrorsContext,
+    Icon,
+    Input,
+    ListRow,
+    Notice,
+    useFormErrors,
+} from '@xchain-wallet/core/ui';
 import { useSettings } from '../../hooks/useSettings.js';
 import { useMessaging } from '../../useMessaging.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
-import { ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { NetworkRowList } from './NetworkRowsPage.jsx';
 import styles from './NetworkEndpointsSection.module.css';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
-import '../../../i18n/locales/en/ui.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-export function NetworkEndpointsSection() {
-    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
-    if (loading) return <Status text={t('common.loading')} />;
-    if (error) return <SettingsLoadError error={error} />;
-    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
+// Network & endpoints is a list of networks; a row opens that network's own
+// page with its three URL fields and the Save and Reset actions (G117). The
+// registry refresh row stays on the list because it is not per network.
+// A network's endpoint page id carries the chain id after the prefix.
+export const ENDPOINTS_NETWORK_PAGE_PREFIX = 'network-endpoints-network:';
 
-    const descriptors = registryLib.filterChainsForUser(chainRegistry.supportedChains(), settings)
+function listedDescriptors(settings) {
+    return registryLib.filterChainsForUser(chainRegistry.supportedChains(), settings)
         .slice()
         .sort((a, b) => {
             if (a.coin !== b.coin) return a.coin.localeCompare(b.coin);
             const order = { mainnet: 0, testnet: 1, regtest: 2 };
             return (order[a.networkKind] ?? 9) - (order[b.networkKind] ?? 9);
         });
+}
+
+export function NetworkEndpointsSection({ onOpen }) {
+    const { settings, loading, error } = useSettings({ reportsOwnError: true });
+    if (loading) return <Status text={t('common.loading')} />;
+    if (error) return <SettingsLoadError error={error} />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
+
+    const descriptors = listedDescriptors(settings);
 
     if (descriptors.length === 0) {
         return <EmptyState title={t('settings.endpoints.noChainsRegistered')} titleAs="p" body={t('settings.endpoints.registeredChainsAndTheirEndpoints')} />;
     }
 
+    const rows = descriptors.map((d) => ({
+        id: d.id,
+        descriptor: d,
+        name: networkRowName(d),
+        summary: settings.sdkEndpoints[d.id]?.custom
+            ? t('settings.endpoints.summaryCustom')
+            : t('settings.endpoints.summaryDefault'),
+    }));
+
     return (
-        <div className={styles.groups} style={STACK}>
-            <ChainRegistryRefreshRow />
-            {descriptors.map((d) => (
-                <ChainEndpointBlock
-                    key={d.id}
-                    descriptor={d}
-                    override={settings.sdkEndpoints[d.id]}
-                    onSave={(next) => update({ sdkEndpoints: { [d.id]: next } })}
-                />
-            ))}
-        </div>
+        <NetworkRowList
+            groupLabel={t('settings.fees.networksGroup')}
+            above={<ChainRegistryRefreshRow />}
+            rows={rows}
+            onOpen={(chainId) => onOpen?.(`${ENDPOINTS_NETWORK_PAGE_PREFIX}${chainId}`)}
+        />
     );
+}
+
+// One network's page: its three URL fields with Save and Reset.
+export function NetworkEndpointsNetworkPage({ chainId }) {
+    const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
+    if (loading) return <Status text={t('common.loading')} />;
+    if (error) return <SettingsLoadError error={error} />;
+    if (!settings) return <Status text={t('common.settingsUnavailable')} tone="error" />;
+    const d = listedDescriptors(settings).find((x) => x.id === chainId);
+    if (!d) return <EmptyState title={t('settings.endpoints.noChainsRegistered')} titleAs="p" body={t('settings.endpoints.registeredChainsAndTheirEndpoints')} />;
+    return (
+        <ChainEndpointBlock
+            key={d.id}
+            descriptor={d}
+            override={settings.sdkEndpoints[d.id]}
+            onSave={(next) => update({ sdkEndpoints: { [d.id]: next } })}
+        />
+    );
+}
+
+/**
+ * The Settings page for a network's endpoints, or null when `pageId` is not
+ * one. Settings resolves ids it does not list itself here.
+ *
+ * @param {string | null} pageId
+ */
+export function endpointsNetworkSectionFor(pageId) {
+    if (typeof pageId !== 'string' || !pageId.startsWith(ENDPOINTS_NETWORK_PAGE_PREFIX)) return null;
+    const chainId = pageId.slice(ENDPOINTS_NETWORK_PAGE_PREFIX.length);
+    const d = chainRegistry.get(chainId);
+    return {
+        id: pageId,
+        kind: 'internal-drill',
+        title: d ? networkRowName(d) : chainId,
+        Component: NetworkEndpointsNetworkPage,
+        props: { chainId },
+    };
+}
+
+// The row's name carries the network kind off mainnet, as the card title did.
+function networkRowName(descriptor) {
+    return descriptor.networkKind !== 'mainnet'
+        ? `${descriptor.displayName} · ${descriptor.networkKind}`
+        : descriptor.displayName;
 }
 
 // §9.7 / G007: Runtime chain-registry refresh from hub. The wallet
@@ -123,25 +191,19 @@ function ChainRegistryRefreshRow() {
     };
 
     return (
-        <FormSection
-            headingLevel="h3"
-            title={t('settings.endpoints.chainRegistryRefresh')}
-            description={registryStatusText(status, manualResult)}
-            className={styles.endpointCard}
-        >
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                    type="button"
+        /* Safari needs an explicit list role because this class removes list styling. */
+        <ul className={styles.refreshList} role="list" aria-label={t('settings.endpoints.chainRegistryRefresh')}>
+            <li>
+                <ListRow
                     onClick={onRefresh}
                     disabled={refreshing}
-                    size="sm"
-                    variant="secondary"
-                    icon={<Icon.RefreshIcon />}
-                >
-                    {refreshing ? t('settings.endpoints.refreshing') : t('settings.endpoints.refreshNow')}
-                </Button>
-            </div>
-        </FormSection>
+                    leading={<Icon.RefreshIcon />}
+                    title={refreshing ? t('settings.endpoints.refreshing') : t('settings.endpoints.refreshNow')}
+                    subtitle={registryStatusText(status, manualResult)}
+                    chevron
+                />
+            </li>
+        </ul>
     );
 }
 
@@ -248,15 +310,18 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
         hubUrl: seed(override?.hubUrl, descriptor.hub, defaults.hubUrl),
     });
     const [draft, setDraft] = useState(seeded);
-    const [editing, setEditing] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [saveError, setSaveError] = useState(/** @type {string|null} */ (null));
+    const form = useFormErrors();
+    const fieldIds = {
+        explorerUrl: `${descriptor.id}-explorer-url`,
+        encoderUrl: `${descriptor.id}-encoder-url`,
+        hubUrl: `${descriptor.id}-hub-url`,
+    };
 
     useEffect(() => {
         // re-sync draft when the persisted record changes underneath
         setDraft(seeded());
-        setEditing(false);
-        setSaveError(null);
+        form.reset();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         override?.explorerUrl,
@@ -280,6 +345,7 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
     );
 
     const onCommit = async () => {
+        if (saving) return;
         // An emptied field means "use the default for this one", not
         // "send requests to nowhere".
         const next = {
@@ -287,45 +353,46 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
             encoderUrl: canonicalEndpoint(draft.encoderUrl) || defaults.encoderUrl,
             hubUrl: canonicalEndpoint(draft.hubUrl) || defaults.hubUrl,
         };
-        const bad = [
-            [t('settings.endpoints.explorerUrl'), next.explorerUrl, defaults.explorerUrl],
-            [t('settings.endpoints.encoderUrl'), next.encoderUrl, defaults.encoderUrl],
-            [t('settings.endpoints.hubUrl'), next.hubUrl, defaults.hubUrl],
+        const problems = [
+            ['explorerUrl', t('settings.endpoints.explorerUrl'), next.explorerUrl, defaults.explorerUrl],
+            ['encoderUrl', t('settings.endpoints.encoderUrl'), next.encoderUrl, defaults.encoderUrl],
+            ['hubUrl', t('settings.endpoints.hubUrl'), next.hubUrl, defaults.hubUrl],
         ]
-            .map(([label, value, fallback]) => {
+            .map(([field, label, value, fallback]) => {
                 // A chain that ships without this endpoint (testnet has no hub)
                 // seeds the field empty; left empty, it keeps that default.
-                if (value === '' && fallback === '') return null;
+                if (value === '' && fallback === '') return [fieldIds[field], null];
                 const err = endpointError(value, descriptor);
-                return err ? `${label}: ${err}` : null;
-            })
-            .filter(Boolean);
-        if (bad.length > 0) {
-            setSaveError(bad.join(' '));
-            return;
+                return [fieldIds[field], err ? `${label}: ${err}` : null];
+            });
+        const hasEffectiveChange = (
+            next.explorerUrl !== persisted.explorerUrl
+            || next.encoderUrl !== persisted.encoderUrl
+            || next.hubUrl !== persisted.hubUrl
+        );
+        if (!hasEffectiveChange && !problems.some(([, message]) => message)) {
+            problems[0] = [fieldIds.explorerUrl, 'Change at least one endpoint before saving.'];
         }
+        if (!form.validate(Object.fromEntries(problems))) return;
         const matchesDefault = (
             next.explorerUrl === defaults.explorerUrl
             && next.encoderUrl === defaults.encoderUrl
             && next.hubUrl === defaults.hubUrl
         );
-        setSaveError(null);
         setDraft(next);
         setSaving(true);
         try {
             await onSave({ ...next, custom: !matchesDefault });
-            setEditing(false);
         } catch (err) {
             setDraft(persisted);
-            setEditing(false);
-            setSaveError(userFacingMessage(err, 'Could not save these endpoints. Try again.'));
+            form.fail(userFacingMessage(err, 'Could not save these endpoints. Try again.'));
         } finally {
             setSaving(false);
         }
     };
     const onReset = async () => {
         setDraft(defaults);
-        setSaveError(null);
+        form.reset();
         setSaving(true);
         try {
             await onSave({
@@ -334,78 +401,69 @@ function ChainEndpointBlock({ descriptor, override, onSave }) {
                 hubUrl: defaults.hubUrl,
                 custom: false,
             });
-            setEditing(false);
         } catch (err) {
             setDraft(persisted);
-            setEditing(false);
-            setSaveError(userFacingMessage(err, 'Could not reset these endpoints. Try again.'));
+            form.fail(userFacingMessage(err, 'Could not reset these endpoints. Try again.'));
         } finally {
             setSaving(false);
         }
     };
 
     return (
-        <FormSection
-            headingLevel="h3"
-            title={`${descriptor.displayName}${networkSuffix}`}
-            description={isCustom ? t('ui.feeSelector.custom') : t('settings.endpoints.default')}
-            className={styles.endpointCard}
-        >
+        <FormErrorsContext.Provider value={form}>
+        <div role="region" aria-label={`${descriptor.displayName}${networkSuffix}`} style={STACK}>
+            <FormErrorSummary form={form} />
+            <Notice
+                tone="info"
+                role="note"
+                title={t('settings.endpoints.endpointChanges')}
+                testId="endpoint-guidance"
+            >
+                {`${t('settings.endpoints.savingPointsThisChainS')} ${t('settings.endpoints.urlFormatIsCheckedHere')}`}
+            </Notice>
             <UrlField
+                id={fieldIds.explorerUrl}
                 label={t('settings.endpoints.explorerUrl')}
                 help={t('settings.help.endpoints.explorerUrl')}
                 value={draft.explorerUrl}
                 placeholder={defaults.explorerUrl}
-                onChange={(v) => { setDraft((d) => ({ ...d, explorerUrl: v })); setEditing(true); }}
+                onChange={(v) => setDraft((d) => ({ ...d, explorerUrl: v }))}
             />
             <UrlField
+                id={fieldIds.encoderUrl}
                 label={t('settings.endpoints.encoderUrl')}
                 help={t('settings.help.endpoints.encoderUrl')}
                 value={draft.encoderUrl}
                 placeholder={defaults.encoderUrl}
-                onChange={(v) => { setDraft((d) => ({ ...d, encoderUrl: v })); setEditing(true); }}
+                onChange={(v) => setDraft((d) => ({ ...d, encoderUrl: v }))}
             />
             <UrlField
+                id={fieldIds.hubUrl}
                 label={t('settings.endpoints.hubUrl')}
                 help={t('settings.help.endpoints.hubUrl')}
                 value={draft.hubUrl}
                 placeholder={defaults.hubUrl}
-                onChange={(v) => { setDraft((d) => ({ ...d, hubUrl: v })); setEditing(true); }}
+                onChange={(v) => setDraft((d) => ({ ...d, hubUrl: v }))}
             />
-            {saveError ? <Status text={saveError} tone="error" /> : null}
-            {dirty ? (
-                <div style={ROW_HINT}>
-                    {t('settings.endpoints.savingPointsThisChainS')}
-                </div>
-            ) : null}
-            {isCustom || dirty ? (
-                <div style={ROW_HINT}>
-                    {t('settings.endpoints.urlFormatIsCheckedHere')}
-                </div>
-            ) : null}
-            {/* The action row renders only with an action in it, so an untouched
-                default card keeps even padding instead of a blank gap at its foot. */}
-            {isCustom || dirty || editing ? (
-                <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
-                    {isCustom || dirty ? (
-                        <Button type="button" onClick={onReset} size="sm" variant="secondary" icon={<Icon.RefreshIcon />} disabled={saving}>
-                            {t('settings.endpoints.resetToDefault')}
-                        </Button>
-                    ) : null}
-                    {dirty || editing ? (
-                        <Button type="button" onClick={onCommit} size="sm" variant="success" icon={<Icon.SaveIcon />} disabled={!dirty || saving}>
-                            {saving ? t('settings.help.endpoints.savingEndpoints') : t('settings.help.endpoints.saveEndpoints')}
-                        </Button>
-                    ) : null}
-                </div>
-            ) : null}
-        </FormSection>
+            <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 'var(--xc-space-2)', justifyContent: 'flex-end' }}>
+                {isCustom || dirty ? (
+                    <Button type="button" onClick={onReset} size="sm" variant="secondary" icon={<Icon.RefreshIcon />} disabled={saving}>
+                        {t('settings.endpoints.resetToDefault')}
+                    </Button>
+                ) : null}
+                <Button type="button" onClick={onCommit} size="sm" variant="success" icon={<Icon.SaveIcon />} loading={saving}>
+                    {saving ? t('settings.help.endpoints.savingEndpoints') : t('settings.help.endpoints.saveEndpoints')}
+                </Button>
+            </div>
+        </div>
+        </FormErrorsContext.Provider>
     );
 }
 
-function UrlField({ label, help, value, placeholder, onChange }) {
+function UrlField({ id, label, help, value, placeholder, onChange }) {
     return (
         <Input
+            id={id}
             type="url"
             label={label}
             help={help}

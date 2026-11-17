@@ -20,9 +20,9 @@
     overflow: hidden;
 }
 
-/* The full-screen carousel fills the page gutter like any other first block
-   and centres its 480px reading column inside it. The column takes the
-   root's gap so both variants and the landscape rule keep their spacing. */
+/* The carousel fills the page gutter like any other first block. The column
+   takes the root's gap so both variants and the landscape rule keep their
+   spacing. */
 .column {
     display: flex;
     flex-direction: column;
@@ -30,50 +30,6 @@
     min-height: 0;
     inline-size: 100%;
     gap: inherit;
-}
-
-.centeredFull > .column {
-    max-inline-size: 480px;
-    margin-inline: auto;
-}
-
-.skipRow {
-    display: flex;
-    justify-content: flex-end;
-    flex: 0 0 auto;
-}
-
-/* Skip reads as quiet text but keeps a kit control's target: the small
-   control height (above the --xc-tap-min floor at every width) and, on a
-   touch screen, the --xc-control-hit-min area a kit Button adds. At 24px tall
-   with no hit area it was the smallest target on the first onboarding
-   screen. The markup carries the shared btn and link classes, which give it
-   the kit border, radius, transparent fill and focus ring; this rule only
-   sizes it and keeps its quieter text. */
-.skipBtn {
-    position: relative;
-    min-block-size: var(--xc-tap-min);
-    min-height: max(var(--xc-tap-min), var(--xc-control-h-sm));
-    min-width: max(var(--xc-tap-min), var(--xc-control-h-sm));
-    padding: var(--xc-space-1) var(--xc-space-2);
-    color: var(--xc-text-muted);
-    font-size: var(--xc-text-sm);
-}
-
-/* Centred on the box in both writing directions, as Button.sm does. */
-@media (pointer: coarse), (hover: none) {
-    .skipBtn::before {
-        content: '';
-        position: absolute;
-        inset-block-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
-        inset-inline-start: min(0px, calc(50% - var(--xc-control-hit-min, 24px) / 2));
-        width: max(100%, var(--xc-control-hit-min, 24px));
-        height: max(100%, var(--xc-control-hit-min, 24px));
-    }
-}
-
-.skipBtn:hover {
-    color: var(--xc-text);
 }
 
 .frameViewport {
@@ -185,11 +141,10 @@
     height: var(--xc-space-2);
     border-radius: var(--xc-radius-pill);
     background: var(--xc-border-strong);
-    transition: width 200ms ease, background 200ms ease;
+    transition: background 200ms ease;
 }
 
 .dotActive::before {
-    width: var(--xc-space-5);
     background: var(--xc-accent-primary);
 }
 
@@ -206,17 +161,22 @@
     outline-offset: calc(var(--xc-space-1) / 2);
 }
 
+/* Back, Skip and Next share three equal columns on every slide. */
 .nav {
-    display: flex;
-    justify-content: flex-end;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: center;
     gap: var(--xc-space-2);
     flex: 0 0 auto;
 }
 
-.actions {
-    display: flex;
-    flex-direction: column;
+.hiddenBack {
+    visibility: hidden;
+}
+
+.actionsRow {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--xc-space-2);
     flex: 0 0 auto;
 }
@@ -246,8 +206,8 @@
     .frame {
         animation: none;
     }
-    .dot,
-    .dotActive {
+    .dot::before,
+    .dotActive::before {
         transition: none;
     }
 }

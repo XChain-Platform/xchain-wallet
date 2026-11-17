@@ -37,8 +37,12 @@ assert.match(admin, /setAllowListIdx\('0'\)/,
     'allow-list removal sends the zero sentinel');
 assert.match(admin, /setBlockListIdx\('0'\)/,
     'block-list removal sends the zero sentinel');
-assert.match(admin, /Remove list/,
-    'list removal choice is visible');
+assert.match(admin, /clearLabel="Remove allow-list"/,
+    'allow-list removal is the Allow list field\'s clear action');
+assert.match(admin, /clearLabel="Remove block-list"/,
+    'block-list removal is the Block list field\'s clear action');
+assert.match(admin, /<ListField/, 'Allow list and Block list are picker fields');
+assert.doesNotMatch(admin, /Use a Shared Block List/, 'published lists are reached through the picker');
 assert.match(admin, /<ListPickerScreen/, 'uses the shared list picker');
 assert.match(admin, /filterType="2"/, 'picker restricted to TYPE=2 address lists');
 assert.match(admin, /getListByActionIndex/, 'member counts read for current bindings');
@@ -48,15 +52,17 @@ const picker = read('packages', 'core', 'src', 'shared', 'components', 'ListPick
 assert.match(picker, /getListsForSource/, 'picker fans out getListsForSource');
 assert.match(picker, /String\(row\.type\) === String\(filterType\)/, 'filters by list type');
 assert.match(picker, /member/, 'shows member counts');
+assert.match(picker, /useSharedListDirectory/, 'All view carries the published lists');
+assert.match(picker, /recordListPickerRecent/, 'picks are kept as recents');
 
 // ---- tokenInfo ----
 const info = read('packages', 'core', 'src', 'flows', 'tokenInfo.js');
 assert.match(info, /allowList/, 'tokenInfo exposes allowList');
 assert.match(info, /blockList/, 'tokenInfo exposes blockList');
 
-// ---- ManageToken + shell wiring ----
-const manage = read('packages', 'core', 'src', 'shared', 'routes', 'ManageToken.jsx');
-assert.match(manage, /onAccessLists/, 'ManageToken offers Access lists');
+// ---- Issuer actions (the asset page's issuer groups) + shell wiring ----
+const manage = read('packages', 'core', 'src', 'shared', 'components', 'TokenOwnerActions.jsx');
+assert.match(manage, /onAccessLists/, 'the issuer groups offer Access lists');
 assert.match(manage, /id: 'access-lists'/, 'access-lists menu entry present');
 
 for (const shell of [
@@ -66,7 +72,7 @@ for (const shell of [
 ]) {
     const src = read(...shell);
     assert.ok(src.includes("unlockedView === 'access-lists'"), `${shell.join('/')} routes access-lists into TokenAdminForm`);
-    assert.ok(src.includes("onAccessLists={() => openForm('access-lists')}"), `${shell.join('/')} wires onAccessLists`);
+    assert.ok(src.includes("onAccessLists: (ctx) => openOwnerForm('access-lists', ctx)"), `${shell.join('/')} wires onAccessLists`);
     assert.ok(/'access-lists'/.test(src), `${shell.join('/')} view union includes access-lists`);
 }
 

@@ -158,7 +158,7 @@ test.describe('BET oracle record against a live explorer', () => {
             await page.getByRole('button', { name: 'All markets', exact: true }).click();
 
             const main = page.getByRole('main');
-            const row = main.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) }).first();
+            const row = main.locator(`[data-market-index="${feedIndex}"]`).first();
             await expect(row, `market #${feedIndex} is listed`).toBeVisible({ timeout: 60_000 });
             await row.click();
 
@@ -174,9 +174,11 @@ test.describe('BET oracle record against a live explorer', () => {
             await oracleButton.click();
 
             // The route title sits outside main, so arrival is asserted on the
-            // record's first row within main.
-            await expect(page.getByRole('main').getByText('Markets opened', { exact: true }))
-                .toBeVisible({ timeout: 30_000 });
+            // record's Actions list, the tab it opens on (G102); the counts
+            // and fees are on Details.
+            await expect(main.getByRole('list', { name: 'Oracle actions' })).toBeVisible({ timeout: 30_000 });
+            await main.getByRole('tab', { name: 'Details' }).click();
+            await expect(main.getByText('Markets opened', { exact: true })).toBeVisible({ timeout: 30_000 });
         });
 
         await test.step('the numbers on screen match the explorer', async () => {
@@ -236,7 +238,8 @@ test.describe('BET oracle record against a live explorer', () => {
 
         await test.step("the oracle's own markets are listed", async () => {
             const main = page.getByRole('main');
-            await expect(main.getByRole('heading', { name: 'Their markets' })).toBeVisible();
+            // The market rows are on the Markets tab, next after Actions (G102).
+            await main.getByRole('tab', { name: 'Markets' }).click();
             // The record page reached this list through getBetFeeds(address,
             // 'source'), a different query from the one that populated the market
             // browser, so this also proves that passthrough works live.

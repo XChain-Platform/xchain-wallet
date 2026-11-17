@@ -65,7 +65,8 @@ const CONSUMERS = [
     ['shared/components/PortfolioChart.module.css', 'the chart range chips (were 20px tall)'],
     ['shared/routes/Send.module.css', 'the Advanced disclosure (was 21px tall)'],
     ['shared/commandPalette/CommandPalette.module.css', 'the palette search field (was 19px tall)'],
-    ['shared/routes/MarketsList.jsx', 'the watchlist star (was 18x18)'],
+    // The watchlist star and market row button now use the kit ListRow, whose
+    // large control height sits above the floor.
 ];
 
 for (const [rel, what] of CONSUMERS) {

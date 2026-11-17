@@ -10,7 +10,7 @@
 
 // Every card looks the same: walk the key routes of the demo wallet at a
 // phone, a tablet and a desktop size, with the Settings inline forms opened,
-// and the Locked screen with its lockout notice and forgot-password panel,
+// and the Locked screen with its lockout notice and Forgot Password page,
 // and measure each bordered card in the page content. All of them share one
 // solid 1px border in the border colour, the card radius and the card
 // padding (or none, for a flush list whose rows carry their own), no card or
@@ -52,11 +52,11 @@ const ROUTES = [
     { label: 'Settings', open: (page) => openSettings(page) },
     { label: 'Settings This wallet', open: (page) => settingsSection(page, 'This wallet') },
     { label: 'Settings This wallet Export', form: true, open: (page) => settingsForm(page, 'This wallet', 'Export…') },
-    { label: 'Settings This wallet Change password', form: true, open: (page) => settingsForm(page, 'This wallet', 'Change…') },
+    { label: 'Settings This wallet Change password', form: true, open: (page) => settingsDirectPage(page, 'Security', 'Wallet password') },
     { label: 'Settings This wallet Remove', form: true, open: (page) => settingsForm(page, 'This wallet', 'Remove…') },
-    { label: 'Settings Backup Export', form: true, open: (page) => settingsForm(page, 'Backup', 'Export…') },
-    { label: 'Settings Backup Show phrase', form: true, open: (page) => settingsForm(page, 'Backup', 'Show…') },
-    { label: 'Settings Backup Test', form: true, open: (page) => settingsForm(page, 'Backup', 'Test…') },
+    { label: 'Settings Backup Export', form: true, open: (page) => settingsDirectPage(page, 'Backup', 'Encrypted backup file') },
+    { label: 'Settings Backup Show phrase', form: true, open: (page) => settingsDirectPage(page, 'Backup', 'Recovery phrase') },
+    { label: 'Settings Backup Test', form: true, open: (page) => settingsDirectPage(page, 'Backup', 'Test backup') },
     { label: 'Settings Fees', open: (page) => settingsSection(page, 'Fees') },
     { label: 'Settings About', open: (page) => settingsSection(page, 'About') },
 ];
@@ -87,7 +87,7 @@ async function palette(page, destination, query = destination) {
 async function issueForm(page) {
     await palette(page, 'Choose a token template', 'Issue token');
     await page.getByRole('main').getByRole('button', { name: /^Custom/ }).click();
-    await expect(page.getByRole('form', { name: 'Issue token', exact: true })).toBeVisible();
+    await expect(page.getByRole('form', { name: 'Issue Token', exact: true })).toBeVisible();
 }
 
 /** Opens a section and then the first item its list offers. */
@@ -114,6 +114,17 @@ async function settingsForm(page, section, action) {
     await settingsSection(page, section);
     await page.getByRole('main').getByRole('button', { name: action, exact: true }).first().click();
     await expect(page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first()).toBeVisible();
+}
+
+/**
+ * Opens a Settings group and then one of its rows. These pages land straight
+ * on their form (no intro button, no Cancel; Back leaves), so the form itself
+ * is what must show.
+ */
+async function settingsDirectPage(page, group, row) {
+    await settingsSection(page, group === 'Backup' ? 'Backup and Recovery' : group);
+    await page.getByRole('main').getByRole('button', { name: new RegExp(`^${row}`) }).first().click();
+    await expect(page.getByRole('main').locator('form').filter({ visible: true }).first()).toBeVisible();
 }
 
 /** Locks from whichever lock control this width shows. */
@@ -335,23 +346,30 @@ for (const viewport of VIEWPORTS) {
     });
 }
 
-test('the Locked screen and its forgot-password panel share the card rules at every size', async ({ page }) => {
+test('the Locked screen and its Forgot Password page share the card rules at every size', async ({ page }) => {
     test.setTimeout(10 * 60 * 1000);
     await createWallet(page);
     await lock(page);
     const faults = [];
     let measured = 0;
+    // The Forgot Password button opens its own page (operator ruling
+    // 2026-11-16: phrase reset, backup restore, erase); Back steps from a
+    // way-back page to the choices, then to the Locked screen.
+    const back = () => page.getByRole('button', { name: 'Back to previous screen' });
     for (const viewport of VIEWPORTS) {
         const size = `${viewport.width}x${viewport.height}`;
         await page.setViewportSize(viewport);
         measured += await measure(page, `Locked ${size}`, faults);
-        await page.getByRole('button', { name: 'Forgot password?' }).click();
+        await page.getByRole('button', { name: 'Forgot Password?' }).click();
+        await expect(page.getByRole('list', { name: 'Ways back into your wallet' })).toBeVisible();
         measured += await measure(page, `Locked forgot ${size}`, faults);
-        await page.getByRole('button', { name: 'Use recovery phrase' }).click();
-        await expect(page.getByText(/This permanently deletes every wallet/)).toBeVisible();
-        measured += await measure(page, `Locked forgot phrase ${size}`, faults);
-        await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-        await expect(page.getByRole('button', { name: 'Forgot password?' })).toBeVisible();
+        await page.getByRole('button', { name: /^Erase Everything/ }).click();
+        await expect(page.getByText(/This removes every wallet, imported private key/)).toBeVisible();
+        measured += await measure(page, `Locked forgot erase ${size}`, faults);
+        await back().click();
+        await expect(page.getByRole('list', { name: 'Ways back into your wallet' })).toBeVisible();
+        await back().click();
+        await expect(page.getByRole('button', { name: 'Forgot Password?' })).toBeVisible();
     }
     // Wide sizes draw the form card, so the walk measured at least those.
     expect(measured).toBeGreaterThan(1);
@@ -374,7 +392,7 @@ test('every card in the confirm stack is the same width at every size', async ({
     const amounts = main.getByLabel('Amount', { exact: true });
     await amounts.first().fill('2');
     await amounts.last().fill('1');
-    await main.getByRole('button', { name: 'Place order', exact: true }).click();
+    await main.getByRole('button', { name: 'Place Order', exact: true }).click();
     await expect(page.getByTestId('confirm-modal')).toBeVisible();
     for (const viewport of VIEWPORTS) {
         await page.setViewportSize(viewport);

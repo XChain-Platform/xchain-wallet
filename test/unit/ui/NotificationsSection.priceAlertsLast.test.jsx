@@ -3,9 +3,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Manage notifications puts Price alerts last: the Quiet hours and Sounds
-// controls sit above the price-alert manager in every shell, and the Price
-// alerts switch stays directly above the manager it unlocks.
+// Manage notifications keeps the Price alerts on/off master (G08) as the last
+// switch in every shell, below Quiet hours and Sounds. The alert list, the
+// Add form and every alert's page moved to the Price Alerts page, so the
+// notifications panel carries no alert manager and reads no alerts.
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,15 +16,15 @@ import { t } from '../../../packages/core/src/i18n/index.js';
 
 let settings;
 let update;
-let priceAlerts;
 let shell = 'web';
+const listAlerts = vi.fn();
 
 vi.mock('../../../packages/core/src/shared/hooks/useSettings.js', () => ({
     useSettings: () => ({ settings, loading: false, error: null, update }),
 }));
 
 vi.mock('../../../packages/core/src/shared/hooks/usePriceAlerts.js', () => ({
-    usePriceAlerts: () => priceAlerts,
+    usePriceAlerts: () => { listAlerts(); return { alerts: [] }; },
 }));
 
 vi.mock('../../../packages/core/src/shared/useMessaging.js', () => ({
@@ -39,17 +40,7 @@ beforeEach(() => {
     settings = createDefaultSettings();
     settings.notifications.priceAlerts = true;
     update = vi.fn().mockResolvedValue(settings);
-    priceAlerts = {
-        alerts: [],
-        loading: false,
-        supported: true,
-        error: null,
-        addAlert: vi.fn().mockResolvedValue(undefined),
-        updateAlert: vi.fn().mockResolvedValue(undefined),
-        removeAlert: vi.fn().mockResolvedValue(undefined),
-        rearm: vi.fn().mockResolvedValue(undefined),
-        reload: vi.fn().mockResolvedValue(undefined),
-    };
+    listAlerts.mockClear();
     priorNotification = globalThis.Notification;
     globalThis.Notification = { permission: 'granted', requestPermission: vi.fn() };
 });
@@ -67,36 +58,32 @@ function precedes(a, b) {
 
 describe('Manage notifications order', () => {
     for (const shellName of ['web', 'desktop', 'extension']) {
-        it(`renders Quiet hours and Sounds above the price-alert manager on ${shellName}`, () => {
+        it(`renders the Price alerts switch after Quiet hours and Sounds on ${shellName}`, () => {
             shell = shellName;
             render(<NotificationsSection walletId="wallet-1" />);
 
             const priceSwitch = screen.getByRole('switch', { name: t('settings.notifications.priceAlerts') });
             expect(priceSwitch).toBeChecked();
-            const quietHours = screen.getByRole('switch', { name: t('settings.notifications.quietHours') });
-            const sounds = screen.getByRole('switch', { name: t('settings.notifications.notificationSounds') });
-            const manager = screen.getByRole('button', { name: 'Add alert' });
+            const quietHours = screen.getByRole('switch', { name: t('settings.notifications.pauseNotifications') });
+            const sounds = screen.getByRole('switch', { name: t('settings.notifications.playNotificationSounds') });
 
-            expect(precedes(quietHours, manager)).toBe(true);
-            expect(precedes(sounds, manager)).toBe(true);
-            expect(precedes(priceSwitch, manager)).toBe(true);
+            expect(precedes(quietHours, priceSwitch)).toBe(true);
+            expect(precedes(sounds, priceSwitch)).toBe(true);
         });
     }
 
-    it('names token alerts by ticker', () => {
-        priceAlerts.alerts = [{
-            id: 'token-alert',
-            chainId: 'bitcoin-mainnet',
-            tick: 'XCHAIN',
-            direction: 'above',
-            targetFiat: 1.2,
-            fiatCurrency: 'usd',
-            status: 'armed',
-        }];
-
+    it('carries no alert manager: no Add Alert form and no alert read', () => {
         render(<NotificationsSection walletId="wallet-1" />);
 
-        expect(screen.getByText(/XCHAIN rises above \$1\.2/)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Edit XCHAIN price alert' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Add Alert' })).toBeNull();
+        expect(screen.queryByText('No price alerts yet')).toBeNull();
+        expect(listAlerts).not.toHaveBeenCalled();
+    });
+
+    it('renders the Price alerts switch alone for the page that holds only the master', () => {
+        render(<NotificationsSection only="priceAlerts" />);
+
+        expect(screen.getAllByRole('switch')).toHaveLength(1);
+        expect(screen.getByRole('switch', { name: t('settings.notifications.priceAlerts') })).toBeChecked();
     });
 });

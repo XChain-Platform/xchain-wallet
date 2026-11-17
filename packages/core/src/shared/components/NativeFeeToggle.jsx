@@ -10,6 +10,8 @@
 
 import { ToggleRow, ROW_LAYOUT, ROW_HINT } from './settings/_settingsPrimitives.jsx';
 import { protocolFeeRowCopy } from '../../flows/protocolFeeRow.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/flows.js';
 
 /**
  * How this action's protocol fee gets paid, in the one place a form shows it.
@@ -99,6 +101,7 @@ export function NativeFeeToggle({
     return (
         <ToggleRow
             label={copy.label}
+            help={t('flows.protocolFee.toggleHelp', { ticker: coinTicker })}
             hint={showHint ? hint : undefined}
             checked={!!checked}
             onChange={onChange}

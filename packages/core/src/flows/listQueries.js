@@ -15,7 +15,7 @@
 // now also backs the PC-10 "My Lists" manager: `listsForSource` finds
 // the LIST actions a wallet address has authored, and
 // `listByActionIndex` doubles as the membership + fork-lineage read
-// for ListDetail/ListForkForm (the explorer's per-action LIST detail
+// for ListDetail and the List form's Edit and Fork (the explorer's per-action LIST detail
 // already returns `list` (current members) and `edits` (the v1 delta
 // history), see xchain-explorer/src/db.js getActionData).
 //

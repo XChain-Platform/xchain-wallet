@@ -7,6 +7,7 @@ import {
     createWallet,
     expect,
     gotoSection,
+    revealChainPicker,
     test,
 } from '../../fixtures/wallet.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
@@ -130,7 +131,7 @@ async function openPaletteRoute(page, name) {
 async function selectBitcoinMainnet(page) {
     const main = page.getByRole('main');
     const trigger = main.getByRole('button', { name: /^Network:/ });
-    await expect(trigger).toBeVisible();
+    await revealChainPicker(main, trigger, 'Network');
     await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
     await trigger.click();
     const picker = page.getByRole('dialog', { name: 'Network' });

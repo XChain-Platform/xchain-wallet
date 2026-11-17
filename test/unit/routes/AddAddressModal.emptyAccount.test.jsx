@@ -51,7 +51,7 @@ describe('Add address on an account with no addresses', () => {
             generateReceiveAddress: vi.fn(async () => ({ address: 'bcrt1qexample' })),
         });
 
-        await waitFor(() => expect(screen.getByRole('button', { name: /Generate/ })).toBeTruthy());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Address' })).toBeTruthy());
         await expectNoSeriousAxeViolations(view.container);
     });
 
@@ -64,7 +64,7 @@ describe('Add address on an account with no addresses', () => {
 
         // The dead end: no options at all, only a Close button.
         await waitFor(() => expect(screen.queryByText(/No coins available/)).toBeNull());
-        expect(screen.getByRole('button', { name: /Generate/ })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Add Address' })).toBeTruthy();
         // The picker preselects the first active chain rather than nothing.
         expect(screen.getByText('Bitcoin')).toBeTruthy();
         expect(document.body.textContent).not.toMatch(/regtest|testnet|not mainnet/i);
@@ -74,8 +74,8 @@ describe('Add address on an account with no addresses', () => {
         const generateReceiveAddress = vi.fn(async () => ({ address: 'bcrt1qexample' }));
         renderModal({ getSettings: async () => REGTEST_SETTINGS, generateReceiveAddress });
 
-        await waitFor(() => expect(screen.getByRole('button', { name: /Generate/ })).toBeTruthy());
-        fireEvent.click(screen.getByRole('button', { name: /Generate/ }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Address' })).toBeTruthy());
+        fireEvent.click(screen.getByRole('button', { name: 'Add Address' }));
 
         await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledTimes(1));
         expect(generateReceiveAddress.mock.calls[0][0]).toMatchObject({
@@ -106,12 +106,51 @@ describe('Add address on an account with no addresses', () => {
         );
 
         fireEvent.change(await screen.findByLabelText('Number of addresses'), { target: { value: '3' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Generate 3' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add 3 Addresses' }));
 
         await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledTimes(3));
         expect(maxInFlight).toBe(1);
         expect(onGenerated).toHaveBeenCalledWith(3);
         expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('generates the next address by default, with no index passed', async () => {
+        const generateReceiveAddress = vi.fn(async () => ({ address: 'bcrt1qexample' }));
+        renderModal({ getSettings: async () => REGTEST_SETTINGS, generateReceiveAddress });
+
+        await screen.findByTestId('add-address-index');
+        fireEvent.click(screen.getByRole('button', { name: 'Add Address' }));
+
+        await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledTimes(1));
+        expect(generateReceiveAddress.mock.calls[0][0]).not.toHaveProperty('derivationIndex');
+    });
+
+    it('generates at the specified index when Address index is given', async () => {
+        const generateReceiveAddress = vi.fn(async () => ({ address: 'bcrt1qexample' }));
+        const onGenerated = vi.fn();
+        renderModal({ getSettings: async () => REGTEST_SETTINGS, generateReceiveAddress }, { onGenerated });
+
+        fireEvent.change(await screen.findByTestId('add-address-index'), { target: { value: '7' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Add Address' }));
+
+        await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledTimes(1));
+        expect(generateReceiveAddress.mock.calls[0][0]).toMatchObject({
+            walletId: 'w1',
+            chainId: 'bitcoin-regtest',
+            derivationIndex: 7,
+        });
+        expect(onGenerated).toHaveBeenCalledWith(1);
+    });
+
+    it.each(['-1', '1.5', '2147483648'])('rejects the address index %s', async (bad) => {
+        const generateReceiveAddress = vi.fn(async () => ({ address: 'bcrt1qexample' }));
+        renderModal({ getSettings: async () => REGTEST_SETTINGS, generateReceiveAddress });
+
+        fireEvent.change(await screen.findByTestId('add-address-index'), { target: { value: bad } });
+        fireEvent.click(screen.getByRole('button', { name: 'Add Address' }));
+
+        expect(await screen.findByText(/Enter an address number from 0 to 2147483647/)).toBeTruthy();
+        expect(generateReceiveAddress).not.toHaveBeenCalled();
     });
 
     it('rejects a fractional address count instead of rounding it down', async () => {
@@ -120,7 +159,7 @@ describe('Add address on an account with no addresses', () => {
 
         const count = await screen.findByLabelText('Number of addresses');
         fireEvent.change(count, { target: { value: '1.5' } });
-        fireEvent.click(screen.getByRole('button', { name: /^Generate$/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Address' }));
 
         expect(await screen.findByText(/Enter a number between 1 and 25/)).toBeTruthy();
         expect(generateReceiveAddress).not.toHaveBeenCalled();
@@ -138,7 +177,7 @@ describe('Add address on an account with no addresses', () => {
         );
 
         fireEvent.change(await screen.findByLabelText('Number of addresses'), { target: { value: '3' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Generate 3' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add 3 Addresses' }));
 
         expect(await screen.findByText('device disconnected')).toBeTruthy();
         expect(generateReceiveAddress).toHaveBeenCalledTimes(2);
@@ -153,8 +192,8 @@ describe('Add address on an account with no addresses', () => {
             { chainIds: ['bitcoin-mainnet'] },
         );
 
-        await waitFor(() => expect(screen.getByRole('button', { name: /Generate/ })).toBeTruthy());
-        fireEvent.click(screen.getByRole('button', { name: /Generate/ }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Address' })).toBeTruthy());
+        fireEvent.click(screen.getByRole('button', { name: 'Add Address' }));
 
         await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledTimes(1));
         // The account's own chain stays first, so this screen behaves exactly

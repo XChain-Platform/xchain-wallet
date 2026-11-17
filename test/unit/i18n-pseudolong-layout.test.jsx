@@ -36,6 +36,7 @@ const chipCss = readCss('packages/core/src/ui/Chip.module.css');
 const dispensersCss = readCss('packages/core/src/shared/routes/DispensersList.module.css');
 const stakingCss = readCss('packages/core/src/shared/routes/StakingList.module.css');
 const pageHeaderCss = readCss('packages/core/src/ui/PageHeader.module.css');
+const confirmStandardCss = readCss('packages/core/src/shared/components/ConfirmStandard.module.css');
 const homeCss = readCss('packages/core/src/shared/routes/Home.module.css');
 const tileCss = readCss('packages/core/src/ui/QuickActionTile.module.css');
 const sendCss = readCss('packages/core/src/shared/routes/Send.module.css');
@@ -53,24 +54,24 @@ function rule(css, selector) {
 
 const SHARED_TEXT_RULES = [
     [pageHeaderCss, '.title'],
+    [confirmStandardCss, '.sentence'],
+    [confirmStandardCss, '.facts'],
+    [confirmStandardCss, '.oneLine'],
+    [confirmStandardCss, '.note'],
+    // The Total block is gone (G127 revised 2026-11-16); the long item name
+    // line, the full address and the lock chips carry text in its place.
+    [confirmStandardCss, '.name'],
+    [confirmStandardCss, '.chip'],
 ];
 
 const SCREEN_TEXT_RULES = {
     Home: [
         [tileCss, '.tile'],
         [tileCss, '.tile > span:last-child'],
-        [homeCss, '.quickActionsReason'],
-        [homeCss, '.pendingAirdropTitle'],
-        [homeCss, '.pendingAirdropHint'],
     ],
     Send: [
         [sendCss, '.hint'],
-        [sendCss, '.summary'],
-        [sendCss, '.detailsToggle'],
-        [sendCss, '.detailsLabel'],
-        [sendCss, '.detailsValue'],
         [sendCss, '.testSendBody'],
-        [sendCss, '.recipientRowLabel'],
         [sendCss, '.successTitle'],
         [sendCss, '.successHint'],
     ],
@@ -85,7 +86,7 @@ const SCREEN_TEXT_RULES = {
 
 const BUTTON_TEXT_RULES = [
     [tileCss, '.tile'],
-    [sendCss, '.detailsToggle'],
+    [confirmStandardCss, '.button'],
 ];
 
 function auditClassRules(screenName) {
@@ -324,9 +325,12 @@ describe('pseudo-long narrow layouts', () => {
         expect(rule(buttonCss, '.btn')).toMatch(/flex-shrink:\s*1/);
         expect(rule(buttonCss, '.btn')).toMatch(/min-width:\s*auto/);
         expect(rule(buttonCss, '.btn')).toMatch(/white-space:\s*normal/);
-        for (const listCss of [dispensersCss, stakingCss]) {
+        for (const [listCss, bodySelector] of [
+            [dispensersCss, '.rowSummary'],
+            [stakingCss, '.body'],
+        ]) {
             expect(rule(listCss, '.row')).toMatch(/min-width:\s*0/);
-            expect(rule(listCss, '.body')).toMatch(/min-width:\s*0/);
+            expect(rule(listCss, bodySelector)).toMatch(/min-width:\s*0/);
             expect(rule(listCss, '.status')).toMatch(/white-space:\s*nowrap/);
         }
         expect(rule(stakingCss, '.claimable > :first-child'))

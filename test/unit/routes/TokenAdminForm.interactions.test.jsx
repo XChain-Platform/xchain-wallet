@@ -9,6 +9,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenAdminForm } from '../../../packages/core/src/shared/routes/TokenAdminForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const NEW_OWNER = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
@@ -21,7 +22,8 @@ const SOURCE = {
     signerId: 'signer-1',
 };
 
-const ADMIN_ACTION_PATTERN = /^(Lock token|Update description|Transfer ownership|Update mint settings|Update callback settings|Update access lists|Update bridge settings)$/;
+// Action labels are Title Case verbs.
+const ADMIN_ACTION_PATTERN = /^(Lock Token|Update Description|Transfer Ownership|Update Mint Settings|Update Callback Settings|Update Access Lists|Update Bridge Settings)$/;
 const adminAction = () => screen.getByRole('button', { name: ADMIN_ACTION_PATTERN });
 
 function mountAdmin(mode, overrides = {}, initialTick = 'TOKEN') {
@@ -52,6 +54,9 @@ function mountAdmin(mode, overrides = {}, initialTick = 'TOKEN') {
             return vi.fn().mockResolvedValue({});
         },
     });
+    // A wallet's mode is published by the shell from the wallet list, not read
+    // from settings; these cases run the watcher wallet.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: 'watcher' }], activeWalletId: 'w' });
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <TokenAdminForm
@@ -74,26 +79,29 @@ async function pickCallbackToken(tick) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
 });
 
 describe('TokenAdminForm review interaction safety', () => {
     it('gives the Network, Token and Callback token fields a help tip', async () => {
         mountAdmin('callback-settings', {}, '');
-        await screen.findByLabelText('From');
+        // Network and From address sit in the closed From section.
+        await screen.findByLabelText('From address');
+        fireEvent.click(screen.getByRole('button', { name: /^From / }));
         expect(screen.getByRole('button', { name: 'About Network' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'About Token' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'About Callback token' })).toBeTruthy();
     });
 
     it.each([
-        ['lock', 'Lock token'],
-        ['description', 'Update description'],
-        ['transfer', 'Transfer ownership'],
-        ['mint-settings', 'Update mint settings'],
-        ['callback-settings', 'Update callback settings'],
-        ['access-lists', 'Update access lists'],
-        ['bridge-settings', 'Update bridge settings'],
+        ['lock', 'Lock Token'],
+        ['description', 'Update Description'],
+        ['transfer', 'Transfer Ownership'],
+        ['mint-settings', 'Update Mint Settings'],
+        ['callback-settings', 'Update Callback Settings'],
+        ['access-lists', 'Update Access Lists'],
+        ['bridge-settings', 'Update Bridge Settings'],
     ])('names the watcher %s action %s', async (mode, label) => {
         mountAdmin(mode);
 
@@ -115,9 +123,11 @@ describe('TokenAdminForm review interaction safety', () => {
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
         expect(await screen.findByText(
-            'Watcher mode: this prepares the transaction for your offline signer. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
+            'Another phone signs for this wallet: this prepares the transaction for it. Sign it there, then bring the signed transaction to a wallet that can broadcast it.',
         )).toBeInTheDocument();
-        fireEvent.submit(await screen.findByRole('form', { name: 'Review description update' }));
+        const approve = await screen.findByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
+        fireEvent.click(approve);
 
         await waitFor(() => expect(buildActionPsbtRequest).toHaveBeenCalled());
         const params = buildActionPsbtRequest.mock.calls[0][0].actionData.params;
@@ -135,7 +145,7 @@ describe('TokenAdminForm review interaction safety', () => {
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
 
-        expect(await screen.findByRole('alert'))
+        expect(await screen.findByRole('alert', { name: 'Form errors' }))
             .toHaveTextContent('Description cannot be longer than 249 characters.');
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -157,8 +167,9 @@ describe('TokenAdminForm review interaction safety', () => {
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
 
-        expect(await screen.findByText(/Transferring ownership cannot be undone/))
-            .toBeInTheDocument();
+        const card = await screen.findByTestId('confirm-warning');
+        expect(card).toHaveTextContent("You can't undo this");
+        expect(card).toHaveTextContent('After it confirms, only the new owner can administer this token.');
     });
 
     it('refuses an admin action when this wallet is not the token owner', async () => {
@@ -177,10 +188,16 @@ describe('TokenAdminForm review interaction safety', () => {
             target: { value: NEW_OWNER },
         });
 
+        // No early error once the token is picked and its owner is known.
+        const action = adminAction();
+        await waitFor(() => expect(action).toBeEnabled());
+        expect(screen.queryByText(/does not own TOKEN/)).toBeNull();
+
+        // The refusal comes at submit.
+        fireEvent.click(action);
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'This wallet does not own TOKEN.',
         );
-        expect(adminAction()).toBeDisabled();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -199,7 +216,10 @@ describe('TokenAdminForm review interaction safety', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
         );
-        expect(adminAction()).toBeDisabled();
+        // G22: the action stays enabled; a press is refused before review.
+        expect(adminAction()).not.toBeDisabled();
+        fireEvent.click(adminAction());
+        await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0));
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -220,7 +240,12 @@ describe('TokenAdminForm review interaction safety', () => {
         expect(screen.getByRole('alert')).toHaveTextContent(
             'Description is permanently locked for TOKEN and cannot be updated.',
         );
-        expect(adminAction()).toBeDisabled();
+        // G22: the action stays enabled; a press repeats the refusal and
+        // never marks the locked field as missing.
+        expect(adminAction()).not.toBeDisabled();
+        fireEvent.click(adminAction());
+        await waitFor(() => expect(screen.getAllByText(/Description is permanently locked/).length).toBeGreaterThan(0));
+        expect(screen.queryByText('Enter the new description.')).toBeNull();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -233,9 +258,9 @@ describe('TokenAdminForm review interaction safety', () => {
 
         fireEvent.click(adminAction());
 
-        expect(await screen.findByRole('alert'))
+        expect(await screen.findByRole('alert', { name: 'Form errors' }))
             .toHaveTextContent('Description cannot contain text-direction control characters.');
-        expect(screen.queryByRole('form', { name: 'Review description update' })).toBeNull();
+        expect(screen.queryByTestId('confirm-modal')).toBeNull();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -260,7 +285,8 @@ describe('TokenAdminForm review interaction safety', () => {
     });
 
     it('requires a fresh lock confirmation after going back', async () => {
-        mountAdmin('lock');
+        const buildActionPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '70736274ff00' });
+        mountAdmin('lock', { buildActionPsbtRequest });
 
         fireEvent.click(await screen.findByLabelText('Max supply'));
         const preview = adminAction();
@@ -273,11 +299,15 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.click(adminAction());
 
         expect(await screen.findByLabelText('Type LOCK to confirm')).toHaveValue('');
-        expect(screen.getByRole('button', { name: /Create unsigned transaction/ })).toBeDisabled();
+        const approve = screen.getByTestId('confirm-approve');
+        expect(approve).toBeEnabled();
+        fireEvent.click(approve);
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
     it('keeps the irreversible warning in confirmation instead of above the lock flags', async () => {
-        mountAdmin('lock');
+        const buildActionPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '70736274ff00' });
+        mountAdmin('lock', { buildActionPsbtRequest });
 
         expect(await screen.findByText(/^No one can ever run a callback on this token again/))
             .toHaveTextContent('No one can ever run a callback on this token again, and its block, token and amount never change');
@@ -289,9 +319,12 @@ describe('TokenAdminForm review interaction safety', () => {
         fireEvent.click(preview);
 
         const confirmation = await screen.findByLabelText('Type LOCK to confirm');
-        expect(screen.getByRole('button', { name: /Create unsigned transaction/ })).toBeDisabled();
+        const approve = screen.getByTestId('confirm-approve');
+        expect(approve).toBeEnabled();
+        fireEvent.click(approve);
+        expect(buildActionPsbtRequest).not.toHaveBeenCalled();
         fireEvent.change(confirmation, { target: { value: 'LOCK' } });
-        expect(screen.getByRole('button', { name: /Create unsigned transaction/ })).toBeEnabled();
+        expect(approve).toBeEnabled();
     });
 
     it('picks the callback token from held tokens on the form network', async () => {
@@ -301,7 +334,7 @@ describe('TokenAdminForm review interaction safety', () => {
 
         const field = await screen.findByRole('button', { name: 'Callback token: Select a token' });
         fireEvent.click(field);
-        expect(await screen.findByRole('heading', { name: 'Select callback token' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Select Callback Token' })).toBeInTheDocument();
         fireEvent.click(await screen.findByRole('button', { name: /^Select PAY on Bitcoin/ }));
 
         expect(await screen.findByRole('button', { name: 'Callback token: PAY on Bitcoin' }))
@@ -321,11 +354,12 @@ describe('TokenAdminForm review interaction safety', () => {
         const preview = adminAction();
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
-        const review = await screen.findByRole('form', { name: 'Review description update' });
+        const approve = await screen.findByTestId('confirm-approve');
+        await waitFor(() => expect(approve).toBeEnabled());
 
         act(() => {
-            review.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-            review.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            approve.click();
+            approve.click();
         });
 
         expect(buildActionPsbtRequest).toHaveBeenCalledTimes(1);
@@ -373,7 +407,7 @@ describe('TokenAdminForm review interaction safety', () => {
         });
         fireEvent.click(adminAction());
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(
             'Callback amount must be a whole number until the wallet confirms whether PENDING supports decimals.',
         );
         await act(async () => {
@@ -399,7 +433,7 @@ describe('TokenAdminForm review interaction safety', () => {
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
 
-        expect(await screen.findByRole('alert'))
+        expect(await screen.findByRole('alert', { name: 'Form errors' }))
             .toHaveTextContent('Callback amount must be a positive number.');
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -439,7 +473,7 @@ describe('Callback settings reads the holders again at Review', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             "Couldn't check whether TOKEN has holders. Callback settings can change only before any supply is distributed, so try again when the explorer answers.",
         );
-        expect(screen.queryByRole('form', { name: /Review callback settings/ })).toBeNull();
+        expect(screen.queryByTestId('confirm-modal')).toBeNull();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
@@ -452,13 +486,13 @@ describe('Callback settings reads the holders again at Review', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Callback settings can only be changed before any supply is distributed. This token already has holders.',
         );
-        expect(screen.queryByRole('form', { name: /Review callback settings/ })).toBeNull();
+        expect(screen.queryByTestId('confirm-modal')).toBeNull();
         expect(buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 
     it('reaches review while supply is still undistributed', async () => {
         mountAdmin('callback-settings', base(vi.fn().mockResolvedValue({ isDistributed: false, holderCount: 1 }), vi.fn()));
         await fillCallback();
-        expect(await screen.findByRole('form', { name: /Review callback settings/ })).toBeInTheDocument();
+        expect(await screen.findByTestId('confirm-modal')).toBeInTheDocument();
     });
 });

@@ -83,11 +83,14 @@ assert.ok(reviewFnStart !== -1 && submitFnStart !== -1 && reviewFnStart < submit
 const reviewFnBody = src.slice(reviewFnStart, submitFnStart);
 assert.ok(!reviewFnBody.includes('linkAction'),
     'handleReview body does not call linkAction (signing is gated by review)');
-// Review block renders a plain-language preview for both actions.
-assert.ok(/>First action</.test(src),
-    'Review stage shows the First action label');
-assert.ok(/>Second action</.test(src),
-    'Review stage shows the Second action label');
+// Confirm Standard carries the two decoded previews as facts, without the
+// retired bespoke review rows.
+assert.ok(/<ConfirmActionModal/.test(src),
+    'watcher review uses the shared Confirm Standard modal');
+assert.ok(/label: 'Action 1'[\s\S]*?decodePreview\(preview1\.action\)/.test(src),
+    'Confirm facts show the first decoded action');
+assert.ok(/label: 'Action 2'[\s\S]*?decodePreview\(preview2\.action\)/.test(src),
+    'Confirm facts show the second decoded action');
 assert.ok(!/Side [AB] decoded/.test(src),
     'Review stage carries no decoder jargon in its labels');
 assert.ok(!/JSON\.stringify\(action\)/.test(src),
@@ -95,11 +98,8 @@ assert.ok(!/JSON\.stringify\(action\)/.test(src),
 // Network fee row from estimateNativeSendFee.
 assert.ok(/estimateNativeSendFee/.test(src),
     'LinkForm imports and uses estimateNativeSendFee for the Network fee row');
-assert.ok(/Network fee/.test(src),
-    'Review stage shows a Network fee row');
-// Header title switches on review.
-assert.ok(/Review link/.test(src),
-    "Header switches to 'Review link' in review/submitting stages");
+assert.ok(/networkFee=\{feeEstimate\?\.coinAmount && feeCoinTicker \? \{[\s\S]*?ticker: feeCoinTicker/.test(src),
+    'Confirm Standard receives the known Network fee');
 
 // --- Core flow ---
 

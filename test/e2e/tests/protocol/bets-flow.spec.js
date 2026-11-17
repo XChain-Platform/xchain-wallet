@@ -258,14 +258,14 @@ async function openCreateReview(page) {
     await expect(page.getByRole('heading', { name: 'Token bets are placed in' })).toBeVisible();
     await page.getByRole('button', { name: /^Select Example Token on Bitcoin/ }).click();
 
-    await page.getByLabel('What is being bet on', { exact: true }).fill('Will the XChain release ship this week?');
+    await page.getByLabel('Question', { exact: true }).fill('Will the XChain release ship this week?');
     await page.getByLabel('Outcome 0', { exact: true }).fill('Yes');
     await page.getByLabel('Outcome 1', { exact: true }).fill('No');
-    await page.getByLabel('Betting closes', { exact: true }).fill(
+    await page.getByLabel('Purchases Close', { exact: true }).fill(
         new Date(Date.now() + 86_400_000).toISOString().slice(0, 16),
     );
     await page.getByLabel('Your fee', { exact: true }).fill('2.5');
-    await page.getByLabel('Smallest bet allowed', { exact: true }).fill('25');
+    await page.getByLabel('Minimum Purchase', { exact: true }).fill('25');
 }
 
 for (const viewport of VIEWPORTS) {
@@ -305,17 +305,19 @@ for (const viewport of VIEWPORTS) {
         expect(scroll.main, `${viewport.name} review main scroll position`).toBeLessThanOrEqual(1);
         expect(scroll.document, `${viewport.name} review document scroll position`).toBeLessThanOrEqual(1);
 
-        const intent = page.getByTestId('action-intent');
-        await expect(intent.getByText('2.5%', { exact: true })).toBeVisible();
-        await expect(intent.getByText('25 EXAMPLE', { exact: true })).toBeVisible();
+        const facts = page.getByTestId('confirm-facts');
+        await expect(facts.getByText('2.5%', { exact: true })).toBeVisible();
+        await expect(facts.getByText('25 EXAMPLE', { exact: true })).toBeVisible();
         await expectScreenLayout(page, `${viewport.name} market review`);
 
         await page.keyboard.press('Escape');
         await expect(page.getByRole('heading', { name: 'Open a market' })).toBeVisible();
         await page.getByRole('button', { name: /^Back/ }).click();
         await expect(page.getByRole('heading', { name: 'Betting' })).toBeVisible();
-        await page.getByRole('button', { name: 'My bets', exact: true }).click();
-        await expect(page.getByText(`Market #${FEED_INDEX}`, { exact: true })).toBeVisible();
+        // My bets is the All list narrowed to the markets bet in (ruling
+        // 2026-11-13): the same card, found by its market number.
+        await page.getByRole('tab', { name: 'My predictions', exact: true }).click();
+        await expect(page.getByRole('main').locator(`[data-market-index="${FEED_INDEX}"]`)).toBeVisible();
         await expectScreenLayout(page, `${viewport.name} my bets`);
     });
 }

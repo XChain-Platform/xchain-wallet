@@ -77,7 +77,7 @@ describe('Issue token draft after a confirmed issuance', () => {
         fireEvent.change(screen.getByLabelText('Initial mint'), { target: { value: '100' } });
         await waitFor(() => expect(savedDraftKeys()).toHaveLength(1));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         const approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
@@ -100,7 +100,7 @@ describe('Issue token draft after a confirmed issuance', () => {
         fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '10' } });
         await waitFor(() => expect(savedDraftKeys()).toHaveLength(1));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         fireEvent.click(await screen.findByTestId('confirm-reject'));
         await screen.findByLabelText('Ticker');
         expect(messaging.issueToken).not.toHaveBeenCalled();

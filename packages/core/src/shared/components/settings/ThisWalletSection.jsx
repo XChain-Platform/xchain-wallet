@@ -15,15 +15,19 @@ import { useEffect, useRef, useState } from 'react';
 import {
     Button,
     CopyButton,
+    FormErrorSummary,
     FormPage,
     FormSection,
     Icon,
     Input,
     PageNotice as Status,
+    StatusMessage,
+    useFormErrors,
 } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../../useMessaging.js';
 import { KeyQR } from '../KeyQR.jsx';
+import { WarningCard, WarningLine } from '../WarningCard.jsx';
 import { useToast } from '../ToastHost.jsx';
 import { addressTypeLabel } from '../../utils/addressTypeLabel.js';
 import { clearLastView } from '../../utils/lastViewMemory.js';
@@ -31,6 +35,7 @@ import { sweepMsgMemoryForWallet } from '../../utils/msgReadMemory.js';
 import { clearRemovedWalletStorage } from '../../utils/wipeWalletStorage.js';
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { retireBiometricAfterPasswordChange } from '../../../flows/biometricUnlock.js';
+import { isHardwareWallet } from '../../../flows/hardwareWallet.js';
 import { DURESS_PASSWORD_COLLISION_MESSAGE, walletPasswordCollidesWithDuress } from '../../../flows/duressPassphrase.js';
 import { SettingsActionRow, SettingsInlineForm } from './_settingsPrimitives.jsx';
 import cardStyles from '../../../ui/Card.module.css';
@@ -94,6 +99,11 @@ export function ThisWalletSection({
     onOpenAccountPicker,
     onWalletRemoved,
     onBusyChange,
+    // Render one part only (password, xpub or remove), for pages that host a single part.
+    only = null,
+    // With only="remove", land straight on the final confirm step; with
+    // only="password", straight on the change-password form.
+    direct = false,
 }) {
     const { messaging } = useMessaging();
     const [exportStage, setExportStage] = useState(
@@ -114,6 +124,12 @@ export function ThisWalletSection({
         setExportError(null);
         setExportedKeys([]);
     }, [activeWallet?.id, activeAccount?.id]);
+
+    // Account Details' Extended public keys page shows the keys at once. The
+    // key remounts it per account, so a switch never shows the last keys.
+    if (only === 'xpub') {
+        return <AccountPublicKeys key={`${activeWallet?.id || ''}:${activeAccount?.index ?? 0}`} activeWallet={activeWallet} activeAccount={activeAccount} />;
+    }
 
     if (removed) {
         return (
@@ -203,6 +219,22 @@ export function ThisWalletSection({
         setExportedKeys([]);
     };
 
+    // A hardware wallet has no seed to export keys from, so it shows no export row.
+    const hardware = isHardwareWallet(activeWallet);
+    const removePart = (direct && only === 'remove') ? (
+        <RemoveConfirm direct walletName={activeWallet.name} busy={removing} error={removeError} onConfirm={onConfirmRemove} />
+    ) : confirmingRemove ? (
+        <RemoveConfirm walletName={activeWallet.name} busy={removing} error={removeError} onCancel={() => { setConfirmingRemove(false); setRemoveError(null); }} onConfirm={onConfirmRemove} />
+    ) : (
+        <SettingsActionRow label={t('settings.thisWallet.removeWallet')} hint={t('settings.thisWallet.deletesTheWalletAndAll')}>
+            <Button variant="danger" size="sm" icon={<Icon.TrashIcon />} onClick={() => { setConfirmingRemove(true); setRemoveError(null); }}>
+                {t('settings.thisWallet.remove')}
+            </Button>
+        </SettingsActionRow>
+    );
+    if (only === 'password') return <div className={styles.stack}><ChangePasswordRow walletId={activeWallet.id} disabled={removing} direct={direct} /></div>;
+    if (only === 'remove') return <div className={styles.stack}>{removePart}</div>;
+
     return (
         <div className={styles.stack}>
             <Row
@@ -234,7 +266,7 @@ export function ThisWalletSection({
                     disabled={removing}
                 />
             ) : null}
-            {activeWallet.format === 'wif-only' ? (
+            {hardware ? null : activeWallet.format === 'wif-only' ? (
                 <Row
                     label={t('settings.thisWallet.extendedPublicKeys')}
                     hint={t('settings.thisWallet.notAvailableForAPrivate')}
@@ -289,12 +321,18 @@ export function ThisWalletSection({
 }
 
 const MIN_WALLET_PASSWORD_LENGTH = 8;
+// The Remove wallet confirm field: its id keys its error entry (G130).
+const REMOVE_CONFIRM_ID = 'remove-wallet-confirm-name';
 const passwordMismatch = () => t('settings.thisWallet.passwordsDoNotMatch');
 
-function ChangePasswordRow({ walletId, disabled }) {
+// `direct` is the Wallet password page of its own: it lands on the form, with
+// no Change button first and no Cancel (Back leaves), and stays on it after a
+// change.
+function ChangePasswordRow({ walletId, disabled, direct = false }) {
     const { messaging } = useMessaging();
     const { showToast } = useToast();
-    const [open, setOpen] = useState(false);
+    const [openState, setOpen] = useState(false);
+    const open = openState || direct;
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmation, setConfirmation] = useState('');
@@ -435,12 +473,18 @@ function ChangePasswordRow({ walletId, disabled }) {
         : fieldError('confirm');
 
     return (
-        <SettingsInlineForm onCancel={close} cancelDisabled={busy}>
+        <SettingsInlineForm onCancel={direct ? undefined : close} cancelDisabled={busy}>
             <Status text={error && error.field === null ? error.text : null} tone="error" />
-            <FormPage onSubmit={submit} sectioned label={t('settings.thisWallet.changeWalletPassword')} aria-busy={busy}>
+            {/* The page names the action; its note sits in the notice card. */}
+            {direct ? (
+                <WarningCard>
+                    <WarningLine>{t('settings.thisWallet.useAtLeastCharactersA', { MIN_WALLET_PASSWORD_LENGTH })}</WarningLine>
+                </WarningCard>
+            ) : null}
+            <FormPage onSubmit={submit} sectioned={!direct} label={t('settings.thisWallet.changeWalletPassword')} aria-busy={busy}>
                 <FormSection
-                    title={t('settings.thisWallet.changeWalletPassword')}
-                    description={t('settings.thisWallet.useAtLeastCharactersA', { MIN_WALLET_PASSWORD_LENGTH })}
+                    title={direct ? undefined : t('settings.thisWallet.changeWalletPassword')}
+                    description={direct ? undefined : t('settings.thisWallet.useAtLeastCharactersA', { MIN_WALLET_PASSWORD_LENGTH })}
                 >
                     <Input
                         ref={currentRef}
@@ -484,10 +528,12 @@ function ChangePasswordRow({ walletId, disabled }) {
                         errorKey={confirmation}
                     />
                     <div className={styles.actions}>
-                        <Button type="button" variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={close} disabled={busy}>
-                            {t('common.cancel')}
-                        </Button>
-                        <Button type="submit" variant="success" size="sm" icon={<Icon.KeyIcon />} disabled={busy}>
+                        {direct ? null : (
+                            <Button type="button" variant="secondary" size="sm" icon={<Icon.XIcon />} onClick={close} disabled={busy}>
+                                {t('common.cancel')}
+                            </Button>
+                        )}
+                        <Button type="submit" variant="success" size={direct ? 'md' : 'sm'} block={direct} icon={<Icon.KeyIcon />} disabled={busy}>
                             {busy ? t('settings.thisWallet.changingPassword') : t('settings.thisWallet.changePassword')}
                         </Button>
                     </div>
@@ -495,6 +541,90 @@ function ChangePasswordRow({ walletId, disabled }) {
             </FormPage>
         </SettingsInlineForm>
     );
+}
+
+// The Extended public keys page opened from Account Details (operator ruling
+// 2026-11-15): one page that shows the account's keys at once, with no intro
+// step and no password. The host reads them from the unlocked session's
+// signer and returns only xpub strings, which are filtered again here. A
+// hardware wallet keeps its keys on the device and a private-key-only wallet
+// has no HD keys, so each says so instead.
+function AccountPublicKeys({ activeWallet, activeAccount }) {
+    const { messaging } = useMessaging();
+    const [state, setState] = useState(
+        /** @type {{ status: 'loading' | 'shown' | 'error', entries: Array<any>, error: string | null }} */
+        ({ status: 'loading', entries: [], error: null }),
+    );
+    const walletId = activeWallet?.id || '';
+    const format = activeWallet?.format || '';
+    const hardware = isHardwareWallet(activeWallet);
+    const accountIndex = Number.isInteger(activeAccount?.index) ? activeAccount.index : 0;
+    const readable = !!walletId && !hardware && format !== 'wif-only';
+
+    useEffect(() => {
+        if (!readable) return undefined;
+        let cancelled = false;
+        setState({ status: 'loading', entries: [], error: null });
+        if (typeof messaging?.pairingPayloadRequest !== 'function') {
+            setState({ status: 'error', entries: [], error: 'Extended public key export is not wired in this shell yet.' });
+            return undefined;
+        }
+        Promise.resolve(messaging.pairingPayloadRequest({ walletId, accountIndex, publicExport: true }))
+            .then((result) => {
+                if (cancelled) return;
+                const entries = publicKeyEntries(result);
+                setState(entries.length > 0
+                    ? { status: 'shown', entries, error: null }
+                    : { status: 'error', entries: [], error: 'This wallet returned no valid extended public keys.' });
+            })
+            .catch((err) => {
+                if (!cancelled) setState({ status: 'error', entries: [], error: userFacingMessage(err, 'Could not read the extended public keys.') });
+            });
+        return () => { cancelled = true; };
+    }, [messaging, readable, walletId, accountIndex]);
+
+    if (!activeWallet) return <Status text={t('settings.thisWallet.noActiveWallet')} />;
+    if (hardware) return <Status text={t('settings.thisWallet.publicKeysOnDevice')} />;
+    if (format === 'wif-only') return <Status text={t('settings.thisWallet.notAvailableForAPrivate')} />;
+    if (state.status === 'error') return <Status text={state.error} tone="error" />;
+    if (state.status === 'loading') return <div role="status" aria-busy="true">{t('settings.thisWallet.readingPublicKeys')}</div>;
+    const accountName = activeAccount?.name;
+    return (
+        <div className={styles.stack}>
+            <FormSection
+                title={accountName ? t('settings.thisWallet.extendedPublicKeysFor', { name: accountName }) : t('settings.thisWallet.extendedPublicKeys')}
+                description={t('settings.thisWallet.publicKeysNote')}
+                className={cardStyles.card}
+            >
+                <PublicKeyEntries entries={state.entries} />
+            </FormSection>
+        </div>
+    );
+}
+
+function PublicKeyEntries({ entries }) {
+    return entries.map((entry) => (
+        <FormSection
+            key={`${entry.chainId}:${entry.path}`}
+            title={publicKeyTitle(entry)}
+            description={entry.path ? t('settings.thisWallet.accountPath', { path: entry.path }) : undefined}
+            headingLevel="h3"
+        >
+            <div className={styles.xpub}>{entry.xpub}</div>
+            <div className={styles.qr}>
+                <KeyQR
+                    value={entry.xpub}
+                    size={180}
+                    alt={t('settings.thisWallet.qrCodeForExtendedPublic', { chainId: chainDisplayName(entry.chainId) })}
+                />
+                <CopyButton
+                    value={entry.xpub}
+                    label={t('settings.thisWallet.copyExtendedPublicKey')}
+                    sensitive
+                />
+            </div>
+        </FormSection>
+    ));
 }
 
 function PublicKeyExport({
@@ -535,7 +665,7 @@ function PublicKeyExport({
                             disabled={busy}
                         />
                         <div className={styles.actions}>
-                            <Button type="button" variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onClose} disabled={busy}>
+                            <Button type="button" variant="secondary" size="sm" icon={<Icon.XIcon />} onClick={onClose} disabled={busy}>
                                 {t('common.cancel')}
                             </Button>
                             <Button type="submit" variant="success" size="sm" icon={<Icon.DownloadIcon />} disabled={busy}>
@@ -551,30 +681,9 @@ function PublicKeyExport({
                     className={cardStyles.card}
                 >
                     <>
-                        {entries.map((entry) => (
-                            <FormSection
-                                key={`${entry.chainId}:${entry.path}`}
-                                title={publicKeyTitle(entry)}
-                                description={entry.path ? t('settings.thisWallet.accountPath', { path: entry.path }) : undefined}
-                                headingLevel="h3"
-                            >
-                                <div className={styles.xpub}>{entry.xpub}</div>
-                                <div className={styles.qr}>
-                                    <KeyQR
-                                        value={entry.xpub}
-                                        size={180}
-                                        alt={t('settings.thisWallet.qrCodeForExtendedPublic', { chainId: chainDisplayName(entry.chainId) })}
-                                    />
-                                    <CopyButton
-                                        value={entry.xpub}
-                                        label={t('settings.thisWallet.copyExtendedPublicKey')}
-                                        sensitive
-                                    />
-                                </div>
-                            </FormSection>
-                        ))}
+                        <PublicKeyEntries entries={entries} />
                         <div className={styles.actions}>
-                            <Button type="button" variant="ghost" size="sm" icon={<Icon.CheckIcon />} onClick={onClose}>{t('common.done')}</Button>
+                            <Button type="button" variant="secondary" size="sm" icon={<Icon.CheckIcon />} onClick={onClose}>{t('common.done')}</Button>
                         </div>
                     </>
                 </FormSection>
@@ -589,7 +698,7 @@ function Row({ label, hint, actionLabel, actionIcon, onClick, disabled = false }
             {actionLabel && onClick ? (
                 <Button
                     type="button"
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
                     icon={actionIcon}
                     onClick={onClick}
@@ -602,13 +711,66 @@ function Row({ label, hint, actionLabel, actionIcon, onClick, disabled = false }
     );
 }
 
-function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
+function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm, direct = false }) {
     const [typed, setTyped] = useState('');
-    // Require the exact wallet name so accidental destructive clicks stay disabled.
+    // Require the exact wallet name, so an accidental tap never removes the
+    // wallet. The red button stays enabled (G130): a tap before the name
+    // matches marks the field and leads the form with the error summary.
     const matches = typed === walletName;
+    const formErrors = useFormErrors();
+    const confirmIfTyped = () => {
+        if (busy) return;
+        if (!formErrors.validate({
+            [REMOVE_CONFIRM_ID]: matches ? null : t('settings.thisWallet.typeTheWalletName', { walletName }),
+        })) return;
+        onConfirm();
+    };
+    if (direct) {
+        const submit = (event) => {
+            event.preventDefault();
+            confirmIfTyped();
+        };
+        return (
+            <>
+                <Status text={error} tone="error" />
+                {/* One danger notice first, then the confirm field and the red
+                    main action. Bare on a phone; on wide screens FormPage draws
+                    its own centred card at the shared form width. */}
+                <FormPage className={styles.removeDirect} onSubmit={submit} label={t('walletDetails.remove.title')} errors={formErrors}>
+                    <StatusMessage variant="error" title={t('settings.thisWallet.removeDirectTitle')} testId="remove-wallet-danger-notice">
+                        <p className={styles.confirmName}>{walletName}</p>
+                        {/* One flowing paragraph: the two sentences never sit on their own lines. */}
+                        <p data-testid="remove-wallet-danger-body">
+                            {t('settings.thisWallet.removeDirectDeleted')} {t('settings.thisWallet.removeDirectLost')}
+                        </p>
+                    </StatusMessage>
+                    <Input
+                        id={REMOVE_CONFIRM_ID}
+                        type="text"
+                        enterKeyHint="done"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        value={typed}
+                        onChange={(e) => setTyped(e.target.value)}
+                        placeholder={walletName}
+                        label={t('settings.thisWallet.confirmWalletName')}
+                        help={t('settings.thisWallet.removeNameHelp')}
+                        aria-label={t('settings.thisWallet.confirmWalletName')}
+                        autoFocus
+                        disabled={busy}
+                    />
+                    <Button type="submit" variant="danger" block icon={<Icon.TrashIcon />} disabled={busy}>
+                        {busy ? t('settings.thisWallet.removing') : t('settings.thisWallet.removeWalletAction')}
+                    </Button>
+                </FormPage>
+            </>
+        );
+    }
     return (
         <SettingsInlineForm onCancel={onCancel} cancelDisabled={busy}>
             <Status text={error} tone="error" />
+            <FormErrorSummary form={formErrors} />
             <FormSection
                 title={t('settings.thisWallet.remove2', { walletName })}
                 description={(
@@ -626,7 +788,7 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                     autoCorrect="off"
                     spellCheck={false}
                     value={typed}
-                    onChange={(e) => setTyped(e.target.value)}
+                    onChange={(e) => { setTyped(e.target.value); formErrors.clear(REMOVE_CONFIRM_ID); }}
                     onKeyDown={(event) => {
                         if (event.key === 'Enter' && matches && !busy) onConfirm();
                     }}
@@ -636,9 +798,11 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                     aria-label={t('settings.thisWallet.confirmWalletName')}
                     autoFocus
                     disabled={busy}
+                    error={formErrors.errorFor(REMOVE_CONFIRM_ID)}
+                    errorKey={formErrors.attempt}
                 />
                 <div className={styles.actions}>
-                    <Button type="button" variant="ghost" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>
+                    <Button type="button" variant="secondary" size="sm" icon={<Icon.XIcon />} onClick={onCancel} disabled={busy}>
                         {t('common.cancel')}
                     </Button>
                     <Button
@@ -646,10 +810,10 @@ function RemoveConfirm({ walletName, busy, error, onCancel, onConfirm }) {
                         variant="danger"
                         size="sm"
                         icon={<Icon.TrashIcon />}
-                        onClick={onConfirm}
-                        disabled={!matches || busy}
+                        onClick={confirmIfTyped}
+                        disabled={busy}
                     >
-                        {busy ? t('settings.thisWallet.removing') : t('settings.thisWallet.removeWallet')}
+                        {busy ? t('settings.thisWallet.removing') : t('settings.thisWallet.removeWalletAction')}
                     </Button>
                 </div>
             </FormSection>

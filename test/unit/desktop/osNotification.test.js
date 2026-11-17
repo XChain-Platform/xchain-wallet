@@ -15,26 +15,44 @@ function fakeNotification({ supported = true, show = vi.fn() } = {}) {
 }
 
 describe('desktop OS notifier', () => {
-    it('reports true after showing the notification', () => {
+    it('reports true after showing the notification', async () => {
         const { FakeNotification, shown } = fakeNotification();
         const notify = createOsNotifier({ Notification: FakeNotification });
-        expect(notify({ title: 'Price alert', body: 'Bitcoin rose above $1.' })).toBe(true);
+        expect(await notify({ title: 'Price alert', body: 'Bitcoin rose above $1.' })).toBe(true);
         expect(shown).toEqual([{ title: 'Price alert', body: 'Bitcoin rose above $1.' }]);
     });
 
-    it('reports false when the platform has no notifications', () => {
+    it.each([
+        ['true', { notifications: { desktop: true } }, 1],
+        ['false', { notifications: { desktop: false } }, 0],
+        ['undefined', { notifications: {} }, 1],
+    ])('desktop setting %s controls whether the OS notification shows', async (_label, settings, count) => {
+        const { FakeNotification, shown } = fakeNotification();
+        const notify = createOsNotifier({ Notification: FakeNotification, getSettings: async () => settings });
+        expect(await notify({ title: 't', body: 'b' })).toBe(true);
+        expect(shown).toHaveLength(count);
+    });
+
+    it('shows the notification when settings cannot be read (vault locked)', async () => {
+        const { FakeNotification, shown } = fakeNotification();
+        const notify = createOsNotifier({ Notification: FakeNotification, getSettings: () => { throw new Error('locked'); } });
+        await notify({ title: 't', body: 'b' });
+        expect(shown).toHaveLength(1);
+    });
+
+    it('reports false when the platform has no notifications', async () => {
         const { FakeNotification, shown } = fakeNotification({ supported: false });
         const notify = createOsNotifier({ Notification: FakeNotification });
-        expect(notify({ title: 't', body: 'b' })).toBe(false);
+        expect(await notify({ title: 't', body: 'b' })).toBe(false);
         expect(shown).toEqual([]);
     });
 
-    it('reports false and the failure when showing throws', () => {
+    it('reports false and the failure when showing throws', async () => {
         const error = new Error('denied');
         const { FakeNotification } = fakeNotification({ show: () => { throw error; } });
         const reportFailure = vi.fn();
         const notify = createOsNotifier({ Notification: FakeNotification, reportFailure });
-        expect(notify({ title: 't', body: 'b' })).toBe(false);
+        expect(await notify({ title: 't', body: 'b' })).toBe(false);
         expect(reportFailure).toHaveBeenCalledWith('desktop notification', error);
     });
 });

@@ -1,0 +1,286 @@
+/* The allocation card (G115): the same hero surface as the wallet value card beside
+   it, including its border, shadow,
+   padding and title size. Its own content stays inside the height the top
+   row already had (the donut and seven table lines fit in about 131px), so
+   the wallet value card never grows to match it. Every gap and padding is a
+   spacing token.
+
+   Text uses the hero foreground. Slice colours reach 3:1 on both hero surfaces. */
+.card {
+    /* Sized so an eight-letter ticker fits beside a share bar on a 1280
+       window (measured in Chromium with the app font: PEPECASH 70px,
+       WOWDOGEM 86px at 13px bold); a longer ticker ends in an ellipsis. */
+    --xc-allocation-donut: 92px;
+    --xc-allocation-row-h: 18px;
+    --xc-allocation-head-h: 14px;
+    --xc-allocation-col-gap: var(--xc-space-2);
+    --xc-allocation-dot: 10px;
+    --xc-allocation-ticker-max: 88px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    height: 100%;
+    box-sizing: border-box;
+    padding: var(--xc-card-pad);
+    background: var(--xc-hero-bg);
+    color: var(--xc-hero-text);
+    border: 1px solid var(--xc-hero-border);
+    border-radius: var(--xc-card-radius);
+    box-shadow: var(--xc-hero-shadow);
+}
+
+@supports (container-type: inline-size) {
+    .card {
+        container-type: inline-size;
+    }
+}
+
+.titleRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* The wallet value card's caption size. */
+.title {
+    flex: 0 0 auto;
+    margin: 0;
+    font-size: var(--xc-text-xl);
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--xc-hero-text);
+}
+
+.subtitle {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+    color: var(--xc-hero-text);
+}
+
+.empty {
+    margin: 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-hero-text);
+}
+
+.body {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+}
+
+.donut {
+    position: relative;
+    flex: 0 0 auto;
+    width: var(--xc-allocation-donut);
+    height: var(--xc-allocation-donut);
+}
+
+.donutSvg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.donutTrack {
+    stroke: var(--xc-hero-border);
+}
+
+.donutCenter {
+    position: absolute;
+    inset: 24%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.2;
+    color: var(--xc-hero-text);
+}
+
+.donutCount {
+    font-size: var(--xc-text-xl);
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.donutAssets,
+.donutChains {
+    font-size: var(--xc-text-xs);
+    white-space: nowrap;
+}
+
+.donutAssets {
+    font-weight: 700;
+}
+
+.donutChains {
+    font-weight: 600;
+}
+
+/* One table, so each header shares its column with the figures under it:
+   Share and Value are right-aligned over right-aligned cells. */
+.table {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    font-size: var(--xc-text-sm);
+    color: var(--xc-hero-text);
+}
+
+.table th,
+.table td {
+    padding: 0;
+    color: var(--xc-hero-text);
+    white-space: nowrap;
+}
+
+.table td {
+    padding-inline-start: var(--xc-allocation-col-gap);
+    line-height: var(--xc-allocation-row-h);
+}
+
+/* The header row: small capitals with a thin line under it, so it reads as
+   a header and not a first row. */
+.table thead th {
+    padding-block-end: var(--xc-space-1);
+    border-block-end: 1px solid var(--xc-hero-border);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    line-height: var(--xc-allocation-head-h);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.table thead th + th {
+    padding-inline-start: var(--xc-allocation-col-gap);
+}
+
+.table tbody tr:first-child > * {
+    padding-block-start: var(--xc-space-1);
+}
+
+.headAsset {
+    text-align: start;
+}
+
+/* Share and Value: right-aligned (end) in the header and in every cell,
+   with digits of equal width so the decimal points line up. */
+.num {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.share {
+    font-weight: 600;
+}
+
+.value {
+    font-weight: 700;
+}
+
+.asset {
+    text-align: start;
+    font-weight: 700;
+    line-height: var(--xc-allocation-row-h);
+}
+
+.assetInner {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    min-width: 0;
+}
+
+.dot {
+    flex: 0 0 auto;
+    width: var(--xc-allocation-dot);
+    height: var(--xc-allocation-dot);
+    border-radius: 50%;
+}
+
+.ticker {
+    display: block;
+    max-width: var(--xc-allocation-ticker-max);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The bar column takes the room the other columns leave, and never less
+   than a short bar. */
+.barCell {
+    --xc-allocation-bar-min: 16px;
+    width: 100%;
+    min-width: var(--xc-allocation-bar-min);
+}
+
+/* The share bar's track: a decorative 8px line that holds no text. */
+.shareTrack {
+    display: block;
+    height: 8px;
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-hero-border);
+    overflow: hidden;
+}
+
+.barFill {
+    display: block;
+    height: 100%;
+    min-width: 2px;
+    border-radius: var(--xc-radius-pill);
+}
+
+/* A wider card (the 1920 window) takes the larger donut and longer tickers.
+   A container query styles only what is inside the card, so the sizes are
+   set on the body, which the donut and the table inherit them from. */
+@supports (container-type: inline-size) {
+    @container (min-width: 480px) {
+        .body {
+            --xc-allocation-donut: 120px;
+            --xc-allocation-ticker-max: 120px;
+        }
+    }
+
+    /* A narrow card (a phone, should it ever show there) stacks the donut over
+       the table. */
+    @container (max-width: 299px) {
+        .body {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .donut {
+            align-self: center;
+        }
+    }
+}
+
+/* Pin the surface and its text to one system pair in forced-colors mode,
+   as the wallet value card does. */
+@media (forced-colors: active) {
+    .card {
+        background: var(--xc-hero-bg);
+        color: var(--xc-hero-text);
+    }
+
+    .dot,
+    .barFill {
+        forced-color-adjust: none;
+    }
+}

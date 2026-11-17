@@ -30,7 +30,27 @@ import {
 import { validateMultisigConfig } from './multisigConfig.js';
 import { randomUUID } from '../util/uuid.js';
 
-export const CURRENT_VERSION = 3;
+export const CURRENT_VERSION = 4;
+
+// §20: each wallet's mode, chosen once at create, import or pair. `full`
+// (Normal) signs and broadcasts here, `watcher` (Watch-only) builds unsigned
+// PSBTs, `signer` (Air-gapped signer) signs a watcher's PSBTs, never broadcasts.
+export const WALLET_MODES = /** @type {const} */ (['full', 'watcher', 'signer']);
+export const WALLET_MODE_DEFAULT = 'full';
+
+/**
+ * The mode a wallet record carries, with anything unrecognised read as the
+ * default so the three modes stay exhaustive for every reader.
+ *
+ * @param {{ walletMode?: unknown } | null | undefined} wallet
+ * @returns {typeof WALLET_MODES[number]}
+ */
+export function walletModeOf(wallet) {
+    const mode = wallet?.walletMode;
+    return WALLET_MODES.includes(/** @type {any} */ (mode))
+        ? /** @type {typeof WALLET_MODES[number]} */ (mode)
+        : WALLET_MODE_DEFAULT;
+}
 
 export const WALLET_ORIGINS = /** @type {const} */ ([
     'created',
@@ -39,12 +59,19 @@ export const WALLET_ORIGINS = /** @type {const} */ ([
     'imported-wif',
     'imported-xchain-backup',
     'imported-freewallet',
+    // A wallet whose keys live only on a Trezor or Ledger (format 'hardware').
+    'connected-hardware',
 ]);
 
+// 'hardware' holds no key material at all: no seed, no imported keys, no
+// passphrase. Its addresses carry the device's signerId and every signature
+// comes from the device. Older builds refuse the enum value, so a vault that
+// holds one cannot be opened by a downgrade.
 export const WALLET_FORMATS = /** @type {const} */ ([
     'bip39',
     'counterwallet-legacy',
     'wif-only',
+    'hardware',
 ]);
 
 /**
@@ -65,7 +92,7 @@ export const WALLET_FORMATS = /** @type {const} */ ([
 
 /**
  * @typedef {Object} Wallet
- * @property {3} schemaVersion
+ * @property {4} schemaVersion
  * @property {string} id
  * @property {string} name
  * @property {string} createdAt
@@ -78,6 +105,7 @@ export const WALLET_FORMATS = /** @type {const} */ ([
  * @property {KdfParams} kdfParams
  * @property {ImportedKey[]} importedKeys
  * @property {import('./multisigConfig.js').MultisigConfig[]} multisigs   §22: multiple per wallet (BTC-only at launch)
+ * @property {typeof WALLET_MODES[number]} walletMode   §20: chosen once at create, import or pair; read-only afterwards
  */
 
 /**
@@ -88,6 +116,7 @@ export const WALLET_FORMATS = /** @type {const} */ ([
  * @param {boolean} input.passphraseEnabled
  * @param {string} input.encryptedSeed
  * @param {KdfParams} input.kdfParams
+ * @param {typeof WALLET_MODES[number]} [input.walletMode]   defaults to `full`
  * @returns {Wallet}
  */
 export function createWallet(input) {
@@ -107,6 +136,7 @@ export function createWallet(input) {
         kdfParams: input.kdfParams,
         importedKeys: [],
         multisigs: [],
+        walletMode: walletModeOf(input),
     };
 }
 
@@ -146,11 +176,14 @@ export function validateWallet(record) {
     // imported private keys stored in importedKeys).
     if (r.format === 'wif-only') {
         check(errors, 'encryptedSeed', isString(r.encryptedSeed), 'must be a string (may be empty for wif-only)');
+    } else if (r.format === 'hardware') {
+        check(errors, 'encryptedSeed', r.encryptedSeed === '', 'must be empty for a hardware wallet');
     } else {
         check(errors, 'encryptedSeed', isNonEmptyString(r.encryptedSeed), 'must be a non-empty string');
     }
     check(errors, 'kdfParams', isKdfParams(r.kdfParams), 'malformed');
     checkEach(errors, 'importedKeys', r.importedKeys, isImportedKey, 'malformed');
+    check(errors, 'walletMode', isOneOf(r.walletMode, WALLET_MODES), `must be one of ${WALLET_MODES.join(', ')}`);
 
     // A wif-only wallet must have at least one imported key (otherwise
     // there's literally no key material and nothing to unlock).
@@ -159,6 +192,25 @@ export function validateWallet(record) {
     }
     if (r.format === 'wif-only' && r.passphraseEnabled === true) {
         errors.push('passphraseEnabled: wif-only wallet has no mnemonic; must be false');
+    }
+    // A hardware wallet keeps every key on the device, so the record holds
+    // none, and it is always the normal mode (the device signs and this app
+    // broadcasts). The origin and format travel together both ways.
+    if (r.format === 'hardware') {
+        if (isArray(r.importedKeys) && r.importedKeys.length > 0) {
+            errors.push('importedKeys: a hardware wallet holds no imported keys');
+        }
+        if (r.passphraseEnabled === true) {
+            errors.push('passphraseEnabled: a hardware wallet has no phrase here; must be false');
+        }
+        if (r.walletMode !== undefined && r.walletMode !== 'full') {
+            errors.push('walletMode: a hardware wallet must be "full"');
+        }
+        if (r.origin !== 'connected-hardware') {
+            errors.push('origin: a hardware wallet must be "connected-hardware"');
+        }
+    } else if (r.origin === 'connected-hardware') {
+        errors.push('format: a connected-hardware wallet must be "hardware"');
     }
 
     // encryptedPassphrase (§15.6). The `format` half is carried here and not

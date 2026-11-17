@@ -18,7 +18,9 @@ import {
     clickManageTokenAction,
     createWallet,
     expect,
+    openIssueSection,
     openPaletteCommand,
+    pickIssuePreset,
     submitTokenWizard,
     test,
 } from '../../fixtures/wallet.js';
@@ -137,13 +139,20 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create a token');
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: /^Limited edition/ }).click();
+            await pickIssuePreset(main, /^Limited edition/);
+            // The network sits in the From section, closed until opened.
+            await openIssueSection(main, 'From');
             await selectVenueChain(main);
-            await main.getByRole('button', { name: 'Next', exact: true }).click();
-            await expect(main.getByLabel('Token name (ticker)')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Token name (ticker)').fill(TICK);
-            await main.getByLabel('Edition size').fill(String(EDITION_SIZE));
-            await main.getByLabel('Copies per mint').fill(String(MAX_MINT));
+            await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await main.getByLabel('Ticker', { exact: true }).fill(TICK);
+            await main.getByLabel('Max supply', { exact: true }).fill(String(EDITION_SIZE));
+            // The edition preset caps each address at one copy, and the form
+            // refuses a per-address cap below the per-transaction one, so the
+            // per-address cap is raised to match.
+            await openIssueSection(main, 'Public minting');
+            await main.getByLabel('Max per transaction', { exact: true }).fill(String(MAX_MINT));
+            await main.getByLabel('Max per address', { exact: true }).fill(String(MAX_MINT));
+            await openIssueSection(main, 'Description');
             await main.getByLabel('Image URL').fill(IMAGE_URL);
             await submitTokenWizard(page);
 
@@ -164,7 +173,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('set LOCK_MAX_MINT, LOCK_MINT_SUPPLY, LOCK_SLEEP, and LOCK_CALLBACK', async () => {
             await openTokenAdmin(page, 'Lock');
             const main = page.getByRole('main');
-            const submit = main.getByRole('button', { name: 'Lock token', exact: true });
+            const submit = main.getByRole('button', { name: 'Lock Token', exact: true });
             await expect(submit).toBeVisible({ timeout: 30_000 });
 
             const locks = [
@@ -233,7 +242,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = page.getByRole('main');
             await expect(main.getByRole('alert').filter({ hasText: /Pausing and resuming are permanently locked/ }))
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.getByRole('radio', { name: /Pause indefinitely/ })).toBeDisabled();
+            await expect(main.getByRole('button', { name: /^Pause setting/ })).toBeDisabled();
             await expect(main.getByRole('button', { name: 'Pause token', exact: true })).toBeDisabled();
             await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
         });

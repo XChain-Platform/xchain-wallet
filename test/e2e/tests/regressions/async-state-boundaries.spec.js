@@ -228,7 +228,7 @@ test('leaving Receive during generation does not paint its late address after re
     const initialAddress = await address.inputValue();
 
     await holdAfterNext(page, 'receive.getAddress');
-    await page.getByRole('button', { name: 'Generate new address' }).click();
+    await page.getByRole('button', { name: /^Generate new address/ }).click();
     await waitForHold(page, 'after:receive.getAddress');
     const generatedAddress = await page.evaluate(
         () => window.__xchainRaceProbe.results['receive.getAddress'],

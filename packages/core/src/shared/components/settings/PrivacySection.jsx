@@ -46,7 +46,8 @@ import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/history.js';
 import '../../../i18n/locales/en/settings.js';
 
-const PRIVACY_CONTROL_DEFAULTS = Object.freeze({
+// The Reset privacy settings row on the Privacy and Sites page writes these too.
+export const PRIVACY_CONTROL_DEFAULTS = Object.freeze({
     torRouting: false,
     changeAddressRotation: false,
     blurOnBlur: false,
@@ -59,7 +60,11 @@ const PRIVACY_CONTROL_DEFAULTS = Object.freeze({
     formDraftTtlMs: FORM_DRAFT_TTL_DEFAULT,
 });
 
-export function PrivacySection() {
+// `only` renders one control (tor, changeAddress, blur, labels,
+// haptics, priceData, metadata, hardware, clipboard, formDraft or reset) on
+// its own Settings page; null renders every control.
+export function PrivacySection({ only = null } = {}) {
+    const show = (part) => !only || only === part;
     const { settings, loading, error, update } = useSettings({ reportsOwnError: true });
     const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
@@ -93,11 +98,11 @@ export function PrivacySection() {
         <div style={STACK}>
             {/* Only a host that can proxy wallet-owned traffic exposes the
                 live setting. Browser-based shells show the disabled row. */}
-            {shellCapabilities().socksProxy && (
+            {show('tor') && shellCapabilities().socksProxy && (
                 <>
                     <ToggleRow
                         label={t('settings.privacy.torRouting')}
-                        hint={t('settings.privacy.desktopOnlySendWalletTraffic')}
+                        help={t('settings.privacy.desktopOnlySendWalletTraffic')}
                         checked={settings.privacy.torRouting}
                         onChange={(v) => onToggle('torRouting', v)}
                     />
@@ -106,9 +111,10 @@ export function PrivacySection() {
             )}
             {/* An unavailable shell always renders this switch off because
                 its stored desktop preference cannot affect local traffic. */}
-            {!shellCapabilities().socksProxy && (
+            {show('tor') && !shellCapabilities().socksProxy && (
                 <ToggleRow
                     label={t('settings.privacy.torRouting')}
+                    help={t('settings.help.privacy.tor')}
                     hint={isNativeShell()
                         ? t('settings.privacy.notAvailableInNativeApp')
                         : t('settings.privacy.notAvailableOnThisPlatform')}
@@ -117,57 +123,86 @@ export function PrivacySection() {
                     onChange={() => {}}
                 />
             )}
+            {show('changeAddress') ? (
+            <>
             <ToggleRow
                 label={t('settings.privacy.changeAddressRotation')}
-                hint={t('settings.privacy.importedKeyAndWatchOnly')}
+                help={t('settings.privacy.importedKeyAndWatchOnly')}
                 checked={settings.privacy.changeAddressRotation}
                 onChange={(v) => onToggle('changeAddressRotation', v)}
             />
             <PrivacySaveError visible={saveError === 'changeAddressRotation'} />
+            </>
+            ) : null}
+            {show('blur') ? (
+            <>
             <ToggleRow
                 label={t('settings.privacy.blurSensitiveDataOnBlur')}
-                hint={t('settings.privacy.blurTheEntireWalletDisplay')}
+                help={t('settings.privacy.blurTheEntireWalletDisplay')}
                 checked={Boolean(settings.privacy.blurOnBlur)}
                 onChange={(v) => onToggle('blurOnBlur', v)}
             />
             <PrivacySaveError visible={saveError === 'blurOnBlur'} />
+            </>
+            ) : null}
+            {show('labels') ? (
+            <>
             <ToggleRow
                 label={t('settings.privacy.labelsSurviveRestore')}
-                hint={t('settings.privacy.inTheBrowserExtensionBatch')}
+                help={t('settings.privacy.inTheBrowserExtensionBatch')}
                 checked={Boolean(settings.privacy.labelsSurviveRestore)}
                 onChange={(v) => onToggle('labelsSurviveRestore', v)}
             />
             <PrivacySaveError visible={saveError === 'labelsSurviveRestore'} />
+            </>
+            ) : null}
+            {show('haptics') ? (
+            <>
             <ToggleRow
                 label={t('settings.privacy.hapticFeedback')}
-                hint={t('settings.privacy.allowVibrationForTapSuccess')}
+                help={t('settings.privacy.allowVibrationForTapSuccess')}
                 checked={settings.privacy.hapticsEnabled !== false}
                 onChange={(v) => onToggle('hapticsEnabled', v)}
             />
             <PrivacySaveError visible={saveError === 'hapticsEnabled'} />
+            </>
+            ) : null}
+            {show('priceData') ? (
+            <>
             <ToggleRow
                 label={t('settings.notifications.nativeCoinPriceData')}
-                hint={t('settings.privacy.allowCoingeckoRequestsForNative')}
+                help={t('settings.privacy.allowCoingeckoRequestsForNative')}
                 checked={settings.privacy.priceDataEnabled !== false}
                 onChange={(v) => onToggle('priceDataEnabled', v)}
             />
             <PrivacySaveError visible={saveError === 'priceDataEnabled'} />
+            </>
+            ) : null}
+            {show('metadata') ? (
+            <>
             <ToggleRow
                 label={t('settings.privacy.fetchTokenMetadata')}
-                hint={t('settings.privacy.fetchTokenInformationStandardTis')}
+                help={t('settings.privacy.fetchTokenInformationStandardTis')}
                 checked={settings.privacy.metadataFetchEnabled !== false}
                 onChange={(v) => onToggle('metadataFetchEnabled', v)}
             />
             <PrivacySaveError visible={saveError === 'metadataFetchEnabled'} />
+            </>
+            ) : null}
+            {show('hardware') ? (
+            <>
             <ToggleRow
                 label={t('settings.privacy.alwaysRequireHardwareCrossCheck')}
-                hint={t('settings.privacy.requireTheIVeVerified')}
+                help={t('settings.privacy.requireTheIVeVerified')}
                 checked={settings.privacy.alwaysRequireHwExplicitConfirm === true}
                 onChange={(v) => onToggle('alwaysRequireHwExplicitConfirm', v)}
             />
             <PrivacySaveError visible={saveError === 'alwaysRequireHwExplicitConfirm'} />
-            <ClipboardAutoClearRow settings={settings} update={update} />
-            <FormDraftTtlRow settings={settings} update={update} />
+            </>
+            ) : null}
+            {show('clipboard') ? <ClipboardAutoClearRow settings={settings} update={update} /> : null}
+            {show('formDraft') ? <FormDraftTtlRow settings={settings} update={update} /> : null}
+            {show('reset') ? (
             <div style={ROW}>
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <span style={ROW_VALUE}>{t('settings.privacy.resetPrivacySettings')}</span>
@@ -178,6 +213,7 @@ export function PrivacySection() {
                     {t('settings.display.resetToDefaults')}
                 </Button>
             </div>
+            ) : null}
         </div>
     );
 }
@@ -288,10 +324,10 @@ function FormDraftTtlRow({ settings, update }) {
                     aria-label={t('settings.privacy.formDraftRetention')}
                     style={{ width: '7.5rem' }}
                 >
-                    <option value={FORM_DRAFT_TTL_OFF}>{t('settings.privacy.off')}</option>
-                    <option value={FORM_DRAFT_TTL_1H}>{t('settings.developer.1Hour')}</option>
-                    <option value={FORM_DRAFT_TTL_24H}>{t('settings.privacy.24Hours')}</option>
-                    <option value={FORM_DRAFT_TTL_7D}>{t('history.filters.last7Days')}</option>
+                    <Select.Option value={FORM_DRAFT_TTL_OFF} icon={<Icon.BanIcon />}>{t('settings.privacy.off')}</Select.Option>
+                    <Select.Option value={FORM_DRAFT_TTL_1H} icon={<Icon.ClockIcon />}>{t('settings.developer.1Hour')}</Select.Option>
+                    <Select.Option value={FORM_DRAFT_TTL_24H} icon={<Icon.ClockIcon />}>{t('settings.privacy.24Hours')}</Select.Option>
+                    <Select.Option value={FORM_DRAFT_TTL_7D} icon={<Icon.HistoryIcon />}>{t('history.filters.last7Days')}</Select.Option>
                 </Select>
             </div>
             <PrivacySaveError visible={saveError} />

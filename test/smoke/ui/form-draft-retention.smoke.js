@@ -146,7 +146,8 @@ assert.match(
 );
 assert.match(
     privacySrc,
-    /<Select[\s\S]+?aria-label=(?:\{t\('settings\.privacy\.formDraftRetention'\)\}|"Form draft retention")[\s\S]+?<option value=\{FORM_DRAFT_TTL_OFF\}>(?:\{t\('settings\.privacy\.off'\)\}|Off)<\/option>[\s\S]+?<option value=\{FORM_DRAFT_TTL_1H\}>(?:\{t\('settings\.developer\.1Hour'\)\}|1 hour)<\/option>[\s\S]+?<option value=\{FORM_DRAFT_TTL_24H\}>(?:\{t\('settings\.privacy\.24Hours'\)\}|24 hours)<\/option>[\s\S]+?<option value=\{FORM_DRAFT_TTL_7D\}>(?:\{t\('history\.filters\.last7Days'\)\}|7 days)<\/option>[\s\S]+?<\/Select>/,
+    // Each option is a themed Select.Option with its icon since G119.
+    /<Select[\s\S]+?aria-label=(?:\{t\('settings\.privacy\.formDraftRetention'\)\}|"Form draft retention")[\s\S]+?<Select\.Option value=\{FORM_DRAFT_TTL_OFF\} icon=\{[^}]+\}>(?:\{t\('settings\.privacy\.off'\)\}|Off)<\/Select\.Option>[\s\S]+?<Select\.Option value=\{FORM_DRAFT_TTL_1H\} icon=\{[^}]+\}>(?:\{t\('settings\.developer\.1Hour'\)\}|1 hour)<\/Select\.Option>[\s\S]+?<Select\.Option value=\{FORM_DRAFT_TTL_24H\} icon=\{[^}]+\}>(?:\{t\('settings\.privacy\.24Hours'\)\}|24 hours)<\/Select\.Option>[\s\S]+?<Select\.Option value=\{FORM_DRAFT_TTL_7D\} icon=\{[^}]+\}>(?:\{t\('history\.filters\.last7Days'\)\}|7 days)<\/Select\.Option>[\s\S]+?<\/Select>/,
     'select renders all four options with the right labels',
 );
 assert.match(

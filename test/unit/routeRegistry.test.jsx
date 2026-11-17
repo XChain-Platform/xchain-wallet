@@ -91,6 +91,10 @@ describe('route registry consistency', () => {
         }
     });
 
+    it('titles the wizard route with the Issue Token page heading, never "Wizard"', () => {
+        expect(ROUTE_REGISTRY.wizard.title).toBe('Issue Token');
+    });
+
     it('does not leave grouped or hidden routes outside the registry', () => {
         const classified = [
             ...Object.values(ROUTE_NAV_GROUPS).flat(),

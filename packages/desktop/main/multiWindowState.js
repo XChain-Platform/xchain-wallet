@@ -10,16 +10,20 @@
 
 const SESSION_CHANGE_TYPES = new Set([
     'wallet.create',
+    'wallet.create.hardware',
     'wallet.import',
     'wallet.importBackup.fresh',
     'wallet.lock',
     'wallet.unlock',
+    // Forgot Password's phrase reset ends in an unlock (operator ruling 2026-11-16).
+    'wallet.recovery.resetWithPhrase',
 ]);
 
 // Messages that add a wallet record to the open vault. A sibling window
 // re-reads its wallet list so its switcher and pickers match.
 const WALLET_ADD_TYPES = new Set([
     'wallet.add.import',
+    'wallet.hardware.add',
     'wallet.importBackup',
     'wallet.importBackupPointer',
 ]);

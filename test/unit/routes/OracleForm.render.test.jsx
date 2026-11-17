@@ -43,12 +43,22 @@ describe('OracleForm rendering', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByRole('heading', { name: 'My oracle' })).toBeInTheDocument();
+        // Page titles are Title Case.
+        expect(await screen.findByRole('heading', { name: 'My Oracle' })).toBeInTheDocument();
         expect(screen.getByLabelText('Publishing address')).toHaveValue(ADDRESS.address);
-        expect(screen.getByLabelText('Token ticker')).toHaveValue('PRICE');
-        expect(screen.getByLabelText('Currency')).toHaveValue('USD');
+        // G122: the standard Token field and the Fiat currency field.
+        expect(screen.getByRole('button', { name: 'Token: PRICE on Bitcoin' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Fiat currency: USD, US Dollar' })).toBeInTheDocument();
         expect(await screen.findByText(/has not published any prices yet/i)).toBeInTheDocument();
         expect(oracleFeeds).toHaveBeenCalledWith({ chainId: CHAIN, address: ADDRESS.address });
+    });
+
+    it('has no Prices wrapper heading or its help tip above the form', async () => {
+        mountOracle();
+        await screen.findByLabelText('Publishing address');
+        expect(screen.queryByRole('heading', { name: /^Prices$/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^About Prices$/, hidden: true })).toBeNull();
+        expect(document.body.textContent).not.toMatch(/token price in traditional currency/);
     });
 });
 
@@ -69,7 +79,9 @@ function mountOracle() {
 }
 
 const tipText = (name) => {
-    const tip = screen.getByRole('button', { name });
+    // From and Memo are standard sections, closed on load, so their
+    // help buttons are found with hidden: true.
+    const tip = screen.getByRole('button', { name, hidden: true });
     return document.getElementById(tip.getAttribute('aria-describedby')).textContent;
 };
 
@@ -87,12 +99,13 @@ describe('OracleForm fields follow the form rulings', () => {
         expect(screen.getByText('Cross-chain: a BTC transaction publishing the price of a DOGE token.')).toBeInTheDocument();
     });
 
-    it('explains the publishing address and memo in help tips, not in label text', async () => {
+    it('explains the publishing address in its help tip; the lone memo has none', async () => {
         mountOracle();
         expect(await screen.findByLabelText('Publishing address')).toHaveValue(ADDRESS.address);
         expect(screen.queryByText(/this is your oracle's identity/)).toBeNull();
         expect(tipText('About Publishing address')).toMatch(/your oracle's identity/);
-        expect(tipText('About Memo')).toBe('A short note recorded on-chain with this price publication.');
+        // A memo alone in its Memo section has no label row and no tip (ruling).
+        expect(screen.queryByRole('button', { name: 'About Memo', hidden: true })).toBeNull();
     });
 
     it('moves the decimal-places rule into the price tip and marks the usage fee optional with the pill', async () => {

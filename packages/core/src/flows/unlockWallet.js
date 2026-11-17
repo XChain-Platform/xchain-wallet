@@ -19,6 +19,7 @@
 // shell that needs a signer.
 
 import { SoftwareSigner } from '../signers/SoftwareSigner.js';
+import { refuseHardwareWallet } from './hardwareWallet.js';
 
 export class WalletNotFoundError extends Error {
     constructor(walletId) {
@@ -100,6 +101,10 @@ export async function unlockWalletRecord({
     sdkRegistry,
 }) {
     if (!wallet) throw new Error('unlockWalletRecord: wallet is required');
+    // Every seed reader that builds a SoftwareSigner funnels through here, so
+    // this one check refuses them all for a device-only wallet, before any
+    // password check or KDF round.
+    refuseHardwareWallet(wallet);
     if (masterKey === undefined && (typeof password !== 'string' || password.length === 0)) {
         throw new Error('unlockWalletRecord: either password or masterKey is required');
     }

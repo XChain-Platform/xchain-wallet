@@ -1,20 +1,3 @@
-.gatedTokenField {
-    display: flex;
-    flex-direction: column;
-    gap: var(--xc-label-gap);
-    margin-top: var(--xc-space-3);
-}
-
-.tokenPickerCard {
-    composes: card from '../../ui/Card.module.css';
-    padding: 0;
-    overflow: hidden;
-}
-
-.tokenPickerCard > :not(:last-child) {
-    border-block-end: 1px solid var(--xc-border);
-}
-
 .reviewPreview,
 .composePreview {
     display: block;

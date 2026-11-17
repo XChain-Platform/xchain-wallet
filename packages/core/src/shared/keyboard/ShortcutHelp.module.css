@@ -17,7 +17,8 @@
     align-items: flex-start;
     justify-content: center;
     padding-block: min(10vh, var(--xc-space-8));
-    padding-inline: var(--xc-space-4);
+    /* The 8px gutter of every page (G80). */
+    padding-inline: var(--xc-space-2);
     /* Now fixed to the viewport, the panel keeps clear of the notch and the
        home indicator. */
     padding-top: calc(min(10vh, var(--xc-space-8)) + env(safe-area-inset-top, 0));
@@ -50,7 +51,7 @@
     gap: var(--xc-space-2);
     flex: 0 0 auto;
     min-height: var(--xc-control-h-md);
-    padding: var(--xc-space-2) var(--xc-space-4);
+    padding: var(--xc-space-2);
     border-bottom: 1px solid var(--xc-border);
 }
 
@@ -79,12 +80,13 @@
 .body {
     flex: 1 1 auto;
     min-height: 0;
-    padding: var(--xc-space-3) var(--xc-space-4);
+    /* 8px insets and 8px between groups (G80). */
+    padding: var(--xc-space-2);
     overflow-y: auto;
     overscroll-behavior: contain;
 }
 
-.group { margin-bottom: var(--xc-space-4); }
+.group { margin-bottom: var(--xc-space-2); }
 .group:last-child { margin-bottom: 0; }
 
 .groupTitle {
@@ -122,8 +124,7 @@
     white-space: nowrap;
 }
 
+/* The last group's 8px margin already spaces the note (G80). */
 .footerNote {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-    margin: var(--xc-space-3) 0 0;
+    margin: 0;
 }

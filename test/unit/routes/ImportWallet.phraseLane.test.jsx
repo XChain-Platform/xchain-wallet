@@ -25,7 +25,7 @@ import {
 } from '../../../packages/core/src/shared/utils/importPhraseCheck.js';
 
 const PASSWORD = 'correct-horse-battery';
-const REFUSAL = "This phrase doesn't pass the recovery phrase check. If it came from FreeWallet, use the From FreeWallet option.";
+const REFUSAL = "This phrase doesn't pass the standard recovery phrase check. Choose FreeWallet / PartyWallet as the Wallet type.";
 
 // Deterministic draw so the test never depends on a lucky random phrase.
 function seededRandom(seed) {
@@ -88,9 +88,9 @@ describe('regular recovery phrase lane', () => {
 
     it('refuses a one-word typo of a BIP39 phrase whose words are also FreeWallet words', async () => {
         const messaging = await fill('default', TYPO_SHARED);
-        expect(screen.queryByText('Counterwallet/FreeWallet recovery phrase detected')).toBeNull();
+        expect(screen.queryByText('FreeWallet / Counterwallet recovery phrase detected')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
-        expect(await screen.findByRole('alert')).toHaveTextContent(REFUSAL);
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(REFUSAL);
         expect(messaging.importMnemonic).not.toHaveBeenCalled();
     });
 
@@ -102,9 +102,9 @@ describe('regular recovery phrase lane', () => {
         expect(messaging.importMnemonic.mock.calls[0][0]).toMatchObject({ format: 'bip39' });
     });
 
-    it('imports the same typo words through From FreeWallet as a FreeWallet phrase', async () => {
+    it('imports the same typo words through Import FreeWallet as a FreeWallet phrase', async () => {
         const messaging = await fill('freewallet', TYPO_SHARED);
-        expect(screen.getByText('Counterwallet/FreeWallet recovery phrase detected')).toBeInTheDocument();
+        expect(screen.getByText('FreeWallet / Counterwallet recovery phrase detected')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
         await waitFor(() => expect(messaging.importMnemonic).toHaveBeenCalled());
         expect(messaging.importMnemonic.mock.calls[0][0]).toMatchObject({ format: 'counterwallet-legacy' });
@@ -112,16 +112,15 @@ describe('regular recovery phrase lane', () => {
 });
 
 describe('importPhraseFormat', () => {
-    it('accepts only BIP39 on the regular lane and FreeWallet first on the FreeWallet lane', () => {
+    it('keeps BIP39 and legacy wallet types strict', () => {
         expect(importPhraseFormat(TYPO_SHARED, false)).toBeNull();
         expect(importPhraseFormat(TYPO_SHARED, true)).toBe('counterwallet');
         expect(importPhraseFormat(VALID_SHARED, false)).toBe('bip39');
         expect(importPhraseFormat(VALID_SHARED, true)).toBe('counterwallet');
     });
 
-    it('pins BIP39 on the regular lane and leaves the FreeWallet lane request as it was', () => {
-        expect(importPhraseFormatArg('bip39', false)).toEqual({ format: 'bip39' });
-        expect(importPhraseFormatArg('bip39', true)).toEqual({});
-        expect(importPhraseFormatArg('counterwallet', true)).toEqual({ format: 'counterwallet-legacy' });
+    it('pins both accepted formats on the request', () => {
+        expect(importPhraseFormatArg('bip39')).toEqual({ format: 'bip39' });
+        expect(importPhraseFormatArg('counterwallet')).toEqual({ format: 'counterwallet-legacy' });
     });
 });

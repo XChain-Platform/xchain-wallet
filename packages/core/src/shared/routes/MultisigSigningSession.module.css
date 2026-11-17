@@ -1,0 +1,79 @@
+/* Multisig Sessions: the Ready | Waiting | Done tabs above one rounded list
+   card of session rows. Opening a signing link is its own page, reached
+   from the header's link button. */
+
+/* The tabs span the toolbar row, as on every list page's toggle. */
+.tabsRow {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+}
+
+.tabsRow > * {
+    flex: 1 1 auto;
+    width: 100%;
+}
+
+/* One flush list card with divider lines, rows never boxed apart (G07, U41). */
+.list {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.list > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+/* The start flow's pick lists (multisig, then action). */
+.rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* The status pill at a row's trailing edge, sentence case like every other. */
+.pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    line-height: 1.6;
+    white-space: nowrap;
+}
+
+.pillWaiting {
+    background: var(--xc-warning-bg);
+    color: var(--xc-warning-text);
+}
+
+.pillReady {
+    background: var(--xc-info-bg);
+    color: var(--xc-info-text);
+}
+
+.pillSent {
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
+}
+
+.pillCancelled {
+    background: var(--xc-surface-raised);
+    color: var(--xc-text-muted);
+}
+
+/* A cosigner's name, on its own line above the key it names. */
+.cosignerName {
+    display: block;
+    color: var(--xc-text);
+    font-weight: 600;
+}

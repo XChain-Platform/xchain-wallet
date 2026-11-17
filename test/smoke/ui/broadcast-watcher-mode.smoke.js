@@ -31,9 +31,9 @@ assert.match(
 );
 assert.match(formSrc, /if \(!isWatcherMode && !isHwSource && \(!signerReady && password\.length === 0\)\) return;/);
 assert.match(formSrc, /if \(result\?\.psbtHex && !txid\) \{[\s\S]+?<ResultScreen/);
-assert.match(formSrc, /\{isWatcherMode \? \([\s\S]+?t\('common\.watcherBuildsUnsigned'\)/);
-assert.match(formSrc, /isWatcherMode\s*\?\s*'Create unsigned transaction'/);
-assert.doesNotMatch(formSrc, /isWatcherMode\s*\?\s*'Broadcast'/);
+assert.match(formSrc, /singleEncode = !isWatcherMode/);
+assert.match(formSrc, /<ConfirmActionModal[\s\S]+?credentials=\{<p[^>]*>\{t\('common\.watcherBuildsUnsigned'\)\}<\/p>\}/);
+assert.match(formSrc, /<FormAction[\s\S]+?<Icon\.BroadcastIcon \/>[\s\S]+?>\s*Announce\s*<\/FormAction>/);
 assert.match(formSrc, /\{ VERSION: '0', MESSAGE: message \}/);
 assert.doesNotMatch(formSrc, /broadcastSignedTxRequest|Signed transaction code/);
 console.log('broadcast-watcher-mode smoke OK');

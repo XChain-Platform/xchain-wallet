@@ -87,8 +87,11 @@ async function expectLiveQuote(messaging, actionData) {
         source: SOURCE,
         actionData,
     }), { timeout: 3000 });
-    expect(await screen.findByText('0.064 XCHAIN')).toBeInTheDocument();
-    expect(screen.getByText(/\+ 0\.064 XCHAIN/)).toBeInTheDocument();
+    // The Fees section's Protocol fee line shows the live quote; the Total
+    // lives on the confirm screen, never in the form.
+    await waitFor(() => expect(document.querySelector('[data-fees-row="protocol"]'))
+        .toHaveTextContent('0.064 XCHAIN'), { timeout: 3000 });
+    expect(document.querySelector('[data-fees-row="total"]')).toBeNull();
 }
 
 describe('live fee quotes for issue and dispenser forms', () => {
@@ -163,7 +166,9 @@ describe('live fee quotes for issue and dispenser forms', () => {
             messaging,
         );
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
+        // Close is a row of the Actions tab's action list (G101); its name
+        // carries its description, so it is matched by its leading title.
+        fireEvent.click(await screen.findByRole('button', { name: /^Close(?! Dispenser$)/ }));
         await expectLiveQuote(messaging, {
             action: 'DISPENSER',
             params: { VERSION: '1', DISPENSER_ACTION_INDEX: '2868' },
@@ -218,17 +223,18 @@ describe('live fee quotes for issue and dispenser forms', () => {
         const messaging = makeMessaging();
         mount(<TokenWizard walletId="wallet-1" onBack={() => {}} />, messaging);
 
-        fireEvent.click(await screen.findByRole('button', { name: /Meme token/ }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
-        fireEvent.change(await screen.findByLabelText('Token name (ticker)'), { target: { value: 'MEME' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
+        // The wizard entry is the one Issue Token form; Meme token is its template.
+        fireEvent.click(await screen.findByRole('button', { name: /Select template/ }));
+        fireEvent.click(await screen.findByRole('option', { name: /Meme token/ }));
+        fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'MEME' } });
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
 
         await expectLiveQuote(messaging, {
             action: 'ISSUE',
             params: {
                 VERSION: '0', TICK: 'MEME', DECIMALS: '0',
                 MAX_SUPPLY: '1000', MINT_SUPPLY: '1000',
-                LOCK_MAX_SUPPLY: '1', LOCK_MINT: '1', LOCK_MINT_SUPPLY: '1',
+                LOCK_MAX_SUPPLY: '1', LOCK_MINT: '1', LOCK_MINT_SUPPLY: '1', LOCK_MAX_MINT: '1',
             },
         });
     });
@@ -240,7 +246,11 @@ describe('live fee quotes for issue and dispenser forms', () => {
             messaging,
         );
 
-        fireEvent.click(await screen.findByRole('tab', { name: 'Instant buy' }));
+        // Selling at once to the first buyer is the Dispenser choice of Sell via.
+        const sellVia = (await screen.findAllByRole('button', { name: /Sell via/ }))
+            .find((button) => !/^About/.test(button.getAttribute('aria-label') || ''));
+        fireEvent.click(sellVia);
+        fireEvent.click(await screen.findByRole('option', { name: /Dispenser/ }));
         fireEvent.change(screen.getByLabelText(/^Price/), { target: { value: '5' } });
 
         await expectLiveQuote(messaging, {
@@ -259,6 +269,9 @@ describe('live fee quotes for issue and dispenser forms', () => {
         fireEvent.change(await screen.findByLabelText('Ticker'), { target: { value: 'NEW' } });
         fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '100' } });
 
-        await waitFor(() => expect(screen.getAllByText('Priced at review')).toHaveLength(2));
+        // The Protocol fee line says so; no Total row repeats it in the form.
+        await waitFor(() => expect(document.querySelector('[data-fees-row="protocol"]'))
+            .toHaveTextContent('Priced at review'));
+        expect(screen.getAllByText('Priced at review')).toHaveLength(1);
     });
 });

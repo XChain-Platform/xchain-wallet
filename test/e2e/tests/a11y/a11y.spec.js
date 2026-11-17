@@ -61,7 +61,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Create new wallet' }).click();
         await expect(
-            page.getByRole('heading', { name: 'Create a new wallet' }),
+            page.getByRole('heading', { name: 'Create a New Wallet' }),
         ).toBeVisible();
         await scan(page, 'CreateWallet password stage');
     });
@@ -89,10 +89,10 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await page.getByLabel('Confirm password', { exact: true }).fill('a11ypassword123');
         await page.getByRole('button', { name: 'Next' }).click();
         await readRecoveryPhrase(page);
-        await page.getByLabel(/saved my recovery phrase/i).check();
+        await page.getByRole('checkbox', { name: /saved my recovery phrase/i }).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
         await expect(
-            page.getByRole('heading', { name: 'Verify your recovery phrase' }),
+            page.getByRole('heading', { name: 'Verify Your Recovery Phrase' }),
         ).toBeVisible();
         await scan(page, 'CreateWallet verification stage');
     });
@@ -106,7 +106,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await page.getByRole('button', { name: 'Next' }).click();
 
         const words = await readRecoveryPhrase(page);
-        await page.getByLabel(/saved my recovery phrase/i).check();
+        await page.getByRole('checkbox', { name: /saved my recovery phrase/i }).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
         for (let position = 1; position <= words.length; position += 1) {
             const box = page.getByRole('textbox', { name: `Word ${position}`, exact: true });
@@ -119,7 +119,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         // shared budget rather than a bare number that happens to be big
         // enough today.
         await expect(
-            page.getByRole('heading', { name: /Automatic Donation System/i }),
+            page.getByRole('heading', { name: /Automatic Donations/i }),
         ).toBeVisible({ timeout: kdfStepTimeout() });
         await scan(page, 'Donation notice');
 

@@ -32,11 +32,11 @@ const formSrc = readFileSync(
 
 assert.match(formSrc, /import \{ useWalletMode \} from '\.\.\/hooks\/useWalletMode\.js';/);
 assert.match(formSrc, /const \{ isWatcherMode \} = useWalletMode\(\);/);
-assert.match(formSrc, /Not available in watcher mode/);
+assert.match(formSrc, /Not available when another phone signs/);
 assert.match(formSrc, /two-phase action/);
 assert.match(
     formSrc,
-    /if \(isWatcherMode\) \{[\s\S]+?Not available in watcher mode/,
+    /if \(isWatcherMode\) \{[\s\S]+?Not available when another phone signs/,
     'watcher-mode block fires before the stage-based returns',
 );
 // AIRDROP form should NOT call buildActionPsbtRequest; the action is

@@ -28,17 +28,23 @@ const sf = read('packages', 'core', 'src', 'shared', 'routes', 'SwapForm.jsx');
 assert.match(sf, /ALLOW_LIST: allowListIdx/, 'SwapForm emits ALLOW_LIST');
 assert.match(sf, /BLOCK_LIST: blockListIdx/, 'SwapForm emits BLOCK_LIST');
 assert.match(sf, /GET_ADDRESS: getAddress\.trim\(\)/, 'SwapForm emits GET_ADDRESS');
-assert.match(sf, /EXPIRATION: String\(Math\.floor\(ms \/ 1000\)\)/, 'SwapForm emits EXPIRATION as a Unix timestamp');
+assert.match(sf, /expirationParam\(expMode, expInput\)/, 'SwapForm emits EXPIRATION as a Unix timestamp');
 assert.match(sf, /ListPickerScreen/, 'SwapForm uses the shared list picker for allow/block');
 
 // ---- Cross-chain SwapForm: EXPIRATION fix + ownership flags ----
 const xf = read('packages', 'core', 'src', 'shared', 'routes', 'CrossChainSwapForm.jsx');
 assert.ok(!/expirationBlocks/.test(xf), 'CrossChainSwapForm no longer uses a block-count expiration');
 assert.ok(!/Expiration \(blocks\)/.test(xf), 'CrossChainSwapForm drops the "Expiration (blocks)" input');
-assert.match(xf, /EXPIRATION: String\(Math\.floor\(ms \/ 1000\)\)/, 'CrossChainSwapForm emits EXPIRATION as a Unix timestamp');
+// expirationParam turns the Expires time into Unix seconds, and
+// ExpirationFields draws the datetime-local Expires picker (expirationChoice.jsx).
+assert.match(xf, /expirationParam\(expMode, expInput\)/, 'CrossChainSwapForm emits EXPIRATION as a Unix timestamp');
+assert.match(xf, /\{ EXPIRATION: expiration \}/, 'CrossChainSwapForm carries the EXPIRATION param');
 assert.match(xf, /GIVE_OWNERSHIP: '1'/, 'CrossChainSwapForm can give ownership');
 assert.match(xf, /GET_OWNERSHIP: '1'/, 'CrossChainSwapForm can require get ownership');
-assert.match(xf, /type="datetime-local"/, 'CrossChainSwapForm uses a datetime expiration picker');
+assert.match(xf, /<ExpirationFields\b/, 'CrossChainSwapForm uses the shared datetime expiration picker');
+const expirationChoice = read('packages', 'core', 'src', 'shared', 'components', 'expirationChoice.jsx');
+assert.match(expirationChoice, /type="datetime-local"/, 'the shared expiration picker is a datetime input');
+assert.match(expirationChoice, /String\(Math\.floor\(ms \/ 1000\)\)/, 'expirationParam returns Unix seconds');
 
 // ---- swapAction wire (all versions through one flow) ----
 const flow = read('packages', 'core', 'src', 'flows', 'swapAction.js');

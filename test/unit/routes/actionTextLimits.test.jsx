@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -18,11 +18,6 @@ import { CallbackForm } from '../../../packages/core/src/shared/routes/CallbackF
 import { ComposeMessage } from '../../../packages/core/src/shared/routes/ComposeMessage.jsx';
 import { LinkForm } from '../../../packages/core/src/shared/routes/LinkForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
-import {
-    MAX_MESSAGE_ATTACHMENT_BYTES,
-    parseMessageContent,
-    serializeMessageContent,
-} from '../../../packages/core/src/shared/utils/messageContent.js';
 import {
     memoLength,
     memoLengthError,
@@ -141,8 +136,11 @@ describe('BroadcastForm text limits', () => {
         await waitFor(() => expect(submit.disabled).toBe(false));
 
         fireEvent.change(message, { target: { value: overLimit } });
-        expect(screen.getByText(`Message is ${MAX_TEXT_LENGTH + 1} characters; the network accepts at most ${MAX_TEXT_LENGTH} characters.`)).toBeTruthy();
-        expect(submit.disabled).toBe(true);
+        expect(screen.getAllByText(`Message is ${MAX_TEXT_LENGTH + 1} characters; the network accepts at most ${MAX_TEXT_LENGTH} characters.`).length).toBeGreaterThan(0);
+        // G22: Announce stays enabled; a press past the limit is refused.
+        expect(submit.disabled).toBe(false);
+        fireEvent.click(submit);
+        await waitFor(() => expect(screen.getAllByText(/the network accepts at most/).length).toBeGreaterThan(0));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -152,8 +150,12 @@ describe('BroadcastForm text limits', () => {
 
         fireEvent.change(message, { target: { value: 'safe\u202eunsafe' } });
 
-        expect(screen.getByText('Message cannot contain text-direction control characters.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Announce' }).disabled).toBe(true);
+        expect(screen.getAllByText('Message cannot contain text-direction control characters.').length).toBeGreaterThan(0);
+        // G22: Announce stays enabled; the press is refused before compose.
+        const submit = screen.getByRole('button', { name: 'Announce' });
+        expect(submit.disabled).toBe(false);
+        fireEvent.click(submit);
+        await waitFor(() => expect(screen.getAllByText('Message cannot contain text-direction control characters.').length).toBeGreaterThan(0));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });
@@ -167,21 +169,26 @@ describe('ComposeMessage text limit', () => {
             toAddress: recipient,
         });
         const message = await screen.findByLabelText('Message');
-        const submit = screen.getByRole('button', { name: 'Send message' });
+        const submit = screen.getByRole('button', { name: 'Send Message' });
 
         fireEvent.change(message, { target: { value: '📦' } });
-        const counter = screen.getByText(`4 / ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`);
-        const labelRow = counter.parentElement;
-        expect(labelRow).toContainElement(screen.getByText('Message'));
-        expect(labelRow).not.toContainElement(message);
-        expect(counter).toHaveAttribute('aria-live', 'polite');
+        // Hidden until the message reaches 80% of the limit.
+        expect(screen.queryByText(/ of 1 MB$/)).toBeNull();
         expect(submit.disabled).toBe(false);
+
+        fireEvent.change(message, { target: { value: 'a'.repeat(900000) } });
+        const counter = screen.getByText(/^\d+(\.\d)? KB of 1 MB$/);
+        // The message's own size rounds up (shared formatBytes): 878.9x KB reads 879 KB.
+        expect(counter.textContent).toBe('879 KB of 1 MB');
+        expect(counter).toHaveAttribute('aria-live', 'polite');
 
         fireEvent.change(message, { target: { value: `${'é'.repeat(MAX_MESSAGE_BYTES / 2)}a` } });
         expect(screen.getByText(
             `Message is ${(MAX_MESSAGE_BYTES + 1).toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`,
         )).toBeTruthy();
-        expect(submit.disabled).toBe(true);
+        expect(submit.disabled).toBe(false);
+        fireEvent.click(submit);
+        expect(screen.getAllByText(/the network accepts at most/).length).toBeGreaterThan(1);
         expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
     });
 
@@ -189,21 +196,21 @@ describe('ComposeMessage text limit', () => {
         const recipient = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
         const messaging = mount(ComposeMessage, { chainId: BTC, toAddress: recipient });
         const message = await screen.findByLabelText('Message');
-        const submit = screen.getByRole('button', { name: 'Send message' });
+        const submit = screen.getByRole('button', { name: 'Send Message' });
         const atLimit = 'é'.repeat((MAX_MESSAGE_BYTES / 2 - 62) / 2);
 
         fireEvent.change(message, { target: { value: atLimit } });
         expect(messageWireByteLength(atLimit, 1)).toBe(MAX_MESSAGE_BYTES);
-        expect(screen.getByText(
-            `${MAX_MESSAGE_BYTES.toLocaleString()} / ${MAX_MESSAGE_BYTES.toLocaleString()} encrypted bytes.`,
-        )).toBeTruthy();
+        expect(screen.getByText('1 MB of 1 MB')).toBeTruthy();
         expect(submit.disabled).toBe(false);
 
         fireEvent.change(message, { target: { value: `${atLimit}a` } });
         expect(screen.getByText(
             `Encrypted message is ${(MAX_MESSAGE_BYTES + 2).toLocaleString()} bytes; the network accepts at most ${MAX_MESSAGE_BYTES.toLocaleString()} bytes.`,
         )).toBeTruthy();
-        expect(submit.disabled).toBe(true);
+        expect(submit.disabled).toBe(false);
+        fireEvent.click(submit);
+        expect(screen.getAllByText(/the network accepts at most/).length).toBeGreaterThan(1);
         expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
     });
 
@@ -236,9 +243,9 @@ describe('ComposeMessage text limit', () => {
         const message = await screen.findByLabelText('Message');
 
         fireEvent.change(message, { target: { value: '   \n  ' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Send Message' }));
 
-        expect(await screen.findByText('Write a message to send, or attach a file.')).toBeTruthy();
+        expect(await screen.findAllByText('Write a message to send.')).toHaveLength(2);
         expect(messaging.composeMessageForConfirm).not.toHaveBeenCalled();
     });
 
@@ -250,82 +257,31 @@ describe('ComposeMessage text limit', () => {
 
         expect(await screen.findByText('Enter a valid address')).toBeTruthy();
         expect(messaging.getRecipientPubkey).not.toHaveBeenCalled();
-        expect(screen.queryByRole('button', { name: /Request encrypted session/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Request Encrypted Session (Publish Your Key)' })).toBeNull();
     });
 
-    it('refuses unsupported and oversized attachments with specific limits', async () => {
-        mount(ComposeMessage, { chainId: BTC, fixedEncryption: 'plaintext' });
-        // The limit rides in the label, like Publish file's field (U94).
-        const input = await screen.findByLabelText(`Attachment (up to ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes)`);
-
-        fireEvent.change(input, {
-            target: { files: [new File(['#!/bin/sh'], 'run.sh', { type: 'application/x-sh' })] },
+    it('has no attachment field', async () => {
+        mount(ComposeMessage, {
+            chainId: BTC,
+            fixedEncryption: 'plaintext',
+            toAddress: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
         });
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Unsupported attachment type. Choose a PNG, JPEG, GIF, WebP, PDF, or plain-text file.',
-        );
+        await screen.findByLabelText('Message');
 
-        fireEvent.change(input, {
-            target: {
-                files: [new File(
-                    [new Uint8Array(MAX_MESSAGE_ATTACHMENT_BYTES + 1)],
-                    'large.png',
-                    { type: 'image/png' },
-                )],
-            },
-        });
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            `Attachments can be at most ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes.`,
-        );
-    });
-
-    it('accepts a supported attachment and reports its exact size', async () => {
-        mount(ComposeMessage, { chainId: BTC, fixedEncryption: 'plaintext' });
-        // The limit rides in the label, like Publish file's field (U94).
-        const input = await screen.findByLabelText(`Attachment (up to ${MAX_MESSAGE_ATTACHMENT_BYTES.toLocaleString()} bytes)`);
-
-        fireEvent.change(input, {
-            target: { files: [new File(['hello'], 'note.txt', { type: 'text/plain' })] },
-        });
-
-        expect(await screen.findByText(/Attached: note\.txt \(5 bytes\)/)).toBeTruthy();
-        expect(screen.queryByRole('alert')).toBeNull();
-    });
-
-    it('round-trips supported attachment metadata without mixing it into visible text', () => {
-        const wire = serializeMessageContent('See the file', {
-            name: 'photo.png',
-            type: 'image/png',
-            dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
-            size: 8,
-        });
-
-        expect(parseMessageContent(wire)).toEqual({
-            text: 'See the file',
-            attachment: {
-                name: 'photo.png',
-                type: 'image/png',
-                dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
-                size: 8,
-            },
-        });
-        expect(parseMessageContent('javascript:alert(1)')).toEqual({
-            text: 'javascript:alert(1)',
-            attachment: null,
-        });
-        const falseSize = wire.replace('"size":8', '"size":7');
-        expect(parseMessageContent(falseSize)).toEqual({ text: falseSize, attachment: null });
+        expect(screen.queryByLabelText(/attach/i)).toBeNull();
+        expect(screen.queryByText(/attach/i)).toBeNull();
+        expect(document.querySelector('input[type="file"]')).toBeNull();
     });
 });
 
 describe('LinkForm memo limit', () => {
-    it('shows a live counter and explains the memo limit when Link actions is pressed', async () => {
+    it('shows a live counter and explains the memo limit when Link Actions is pressed', async () => {
         const messaging = mount(LinkForm);
         const [firstIndex, secondIndex] = await screen.findAllByLabelText('Action number');
         fireEvent.change(firstIndex, { target: { value: '11' } });
         fireEvent.change(secondIndex, { target: { value: '22' } });
         const memo = screen.getByLabelText('Memo');
-        const submit = await screen.findByRole('button', { name: 'Link actions' });
+        const submit = await screen.findByRole('button', { name: 'Link Actions' });
 
         fireEvent.change(memo, { target: { value: AT_LIMIT } });
         expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH}`)).toBeTruthy();
@@ -348,15 +304,18 @@ describe('CallbackForm memo limit', () => {
             initialFromAddress: SOURCE.address,
         });
         const memo = await screen.findByLabelText('Memo');
-        const submit = await screen.findByRole('button', { name: 'Recall tokens' });
+        const submit = await screen.findByRole('button', { name: 'Recall Tokens' });
 
         fireEvent.change(memo, { target: { value: AT_LIMIT } });
         expect(screen.getByText(`${MAX_TEXT_LENGTH} / ${MAX_TEXT_LENGTH}`)).toBeTruthy();
         await waitFor(() => expect(submit.disabled).toBe(false));
 
         fireEvent.change(memo, { target: { value: OVER_LIMIT } });
-        expect(screen.getByText(/Memo is 251 characters/)).toBeTruthy();
-        expect(submit.disabled).toBe(true);
+        expect(screen.getAllByText(/Memo is 251 characters/).length).toBeGreaterThan(0);
+        // G22: the button stays enabled; a press past the limit is refused.
+        expect(submit.disabled).toBe(false);
+        fireEvent.click(submit);
+        await waitFor(() => expect(screen.getAllByText(/Memo is 251 characters/).length).toBeGreaterThan(0));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -370,8 +329,12 @@ describe('CallbackForm memo limit', () => {
 
         fireEvent.change(memo, { target: { value: 'safe\u0000unsafe' } });
 
-        expect(screen.getByText('Memo cannot contain control characters.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Recall tokens' }).disabled).toBe(true);
+        expect(screen.getAllByText('Memo cannot contain control characters.').length).toBeGreaterThan(0);
+        // G22: the button stays enabled; the press is refused before compose.
+        const submit = screen.getByRole('button', { name: 'Recall Tokens' });
+        expect(submit.disabled).toBe(false);
+        fireEvent.click(submit);
+        await waitFor(() => expect(screen.getAllByText('Memo cannot contain control characters.').length).toBeGreaterThan(0));
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });

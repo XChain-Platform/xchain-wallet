@@ -51,7 +51,8 @@ function mount({ settings = {}, props = {}, addresses = ADDRESSES } = {}) {
     );
 }
 
-const chainButton = () => screen.findByRole('button', { name: /^Network: / });
+// The Network field sits in the From section, which starts closed.
+const chainButton = () => screen.findByRole('button', { name: /^Network: /, hidden: true });
 
 afterEach(() => cleanup());
 
@@ -64,7 +65,7 @@ describe('SwapForm opens on the last-used network', () => {
             addresses: { [chainId]: ADDRESSES[BTC] },
         });
 
-        await screen.findByRole('button', { name: 'Network: Bitcoin' });
+        await screen.findByRole('button', { name: 'Network: Bitcoin', hidden: true });
         expect(document.body).not.toHaveTextContent(/regtest|testnet|Not mainnet/i);
     });
 

@@ -358,3 +358,36 @@ describe('gated publish confirm envelope signer', () => {
         });
     });
 });
+
+// The Advanced section's choices (ruling G98) reach the four routes that build
+// their own encoder options, as they reach the generic one: the chosen coins,
+// fee bumping, and a change address that must be one of the wallet's own.
+describe('every route-specific compose honours the Advanced choices', () => {
+    const OWN_CHANGE = 'addr_0_0_1';
+    const specific = Object.entries(ROUTES).filter(([name]) => (
+        name !== 'action.composeForConfirm' && name !== 'action.quoteMaxSendable'));
+
+    for (const [type, build] of specific) {
+        it(`${type} passes the chosen coins, RBF and an own change address to the encoder`, async () => {
+            const { host, createTx, vault } = makeHost();
+            await vault.addresses.put({
+                ...SOURCE_ROW, id: 'addr-change', address: OWN_CHANGE, derivationPath: "m/84'/1'/0'/0/1",
+            });
+            await drive(host, type, { ...build('hd'), utxos: [SOURCE_UTXOS[1]], rbf: true, change: OWN_CHANGE });
+            const opts = createTx.mock.calls[0][0];
+            expect(opts.utxos).toEqual([SOURCE_UTXOS[1]]);
+            // The request reaches the encoder, capped to the chain: this test
+            // chain declares no RBF support, so it arrives as false.
+            expect(opts).toHaveProperty('rbf', false);
+            expect(opts.change).toBe(OWN_CHANGE);
+        });
+
+        it(`${type} refuses a change address outside the wallet before encoding`, async () => {
+            const { host, createTx } = makeHost();
+            const res = await host.handle({ type, request: { ...build('hd'), change: 'bcrt1qstranger' } });
+            expect(res.ok).toBe(false);
+            expect(res.error.message).toMatch(/does not belong to this wallet/);
+            expect(createTx).not.toHaveBeenCalled();
+        });
+    }
+});

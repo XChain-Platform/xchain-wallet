@@ -11,19 +11,34 @@
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FeeSelector, FormNotice, FormPage, Icon, Input, NetworkField, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector come from the Wallet Form
+// Standard's FromSection and FeeSection.
+import { Button, ChainBadge, FormNotice, FormPage, Icon, PageHeader, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
+// Pay Dividend is laid out on the Wallet Form Standard: From
+// (closed), Dividend (open), Memo (optional, closed), Network fee (the
+// FeesCard with the native-fee switch), the status slot and Pay Dividend.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    MemoSection,
+    useFormSections,
+} from '../components/formStandard/index.js';
 import {
     registry as registryLib,
     decoder as decoderLib,
 } from '@xchain-wallet/core';
 import '../../i18n/locales/en/send.js';
+import '../../i18n/locales/en/components.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useGatedTickNotice, gatedTickWarningCopy } from '../hooks/useGatedTickNotice.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
-import { LockedTokenContext } from '../components/LockedTokenContext.jsx';
-import { SignCredentials } from '../components/SignCredentials.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -31,7 +46,7 @@ import { useSignerInfo } from '../hooks/useSignerInfo.js';
 import { AmountField } from '../components/AmountField.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
-import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { compareDecimalStrings, formatWithThousands, groupDecodedAmounts, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import {
     perUnitMax,
     dividendPreview,
@@ -39,8 +54,7 @@ import {
     exceedsBalance,
 } from '../utils/dividendPerUnit.js';
 import { TokenField } from '../components/TokenField.jsx';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
+// NativeFeeToggle and FeesCard render inside the standard FeeSection.
 
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
@@ -62,12 +76,13 @@ import { isNativeCoinTick, nativeCoinTickMessage, unknownTickMessage } from '../
 import styles from './IssueTokenForm.module.css';
 import { preferredSourceId } from '../addressSelection.js';
 import { pickDefaultChainId } from '../chainSelection.js';
-import { MAX_MEMO_LENGTH, MEMO_HINT, memoLengthError } from '../utils/memoLimit.js';
+import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { listMembers } from '../../flows/allowListSelfCheck.js';
 import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
 import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -126,11 +141,21 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
     const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
     const [dividendPickerOpen, setDividendPickerOpen] = useState(false);
+    // The standard sections' open state, held above every early
+    // return (pickers, review). Only Dividend opens.
+    const formSections = useFormSections({ from: false, dividend: true, memo: false, fee: false });
+    // Counts Pay Dividend presses, so the section holding the error
+    // reopens on every attempt even after the user closed it.
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    // Set by a Pay Dividend press (G22): each required field still empty
+    // then shows red with its own message.
+    const [attempted, setAttempted] = useState(false);
 
     const [stage, setStage] = useState(
         /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const formErrors = useFormErrors();
     // The amount field reports when the per-unit amount holds more decimals
     // than the dividend token allows, so the submit gate matches its error.
     const [amountPrecisionError, setAmountPrecisionError] = useState(/** @type {string | null} */ (null));
@@ -294,11 +319,10 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
 
     useEffect(() => {
         setTickCheck({ verdict: null, error: null });
-        // A locked TICK arrived from a real token context (Token Detail's
-        // pre-fill), never hand-typed, so the existence check - built for
-        // the manual-entry field this component also renders - stays off;
-        // the field it would annotate isn't even on screen in this mode.
-        if (lockedToken) return undefined;
+        // A preset TICK arrived from a real token context (Token Detail's
+        // pre-fill), never hand-typed, so the existence check stays off while
+        // the field holds that preset; picking another token or network runs it.
+        if (lockedToken && trimmedTick === initialTick && chainId === initialChainId) return undefined;
         if (!chainId || !trimmedTick || trimmedTick.startsWith('^') || tickIsNativeCoin) return undefined;
         if (typeof messaging?.getTokenInfo !== 'function') return undefined;
         let cancelled = false;
@@ -318,7 +342,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                 });
         }, 400);
         return () => { cancelled = true; clearTimeout(handle); };
-    }, [trimmedTick, chainId, messaging, tickIsNativeCoin, lockedToken]);
+    }, [trimmedTick, chainId, messaging, tickIsNativeCoin, lockedToken, initialTick, initialChainId]);
 
     const trimmedDividendTick = dividendTick.trim();
     useEffect(() => {
@@ -450,13 +474,24 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
 
     const decoded = useMemo(() => {
         if (stage !== 'review' && stage !== 'submitting') return null;
-        return decoderLib.decodeAction({
+        return groupDecodedAmounts(decoderLib.decodeAction({
             action: 'DIVIDEND',
             params: actionParams,
             chainId: chainId || undefined,
             chainRegistry,
-        });
+        }));
     }, [stage, actionParams, chainId]);
+    const legacyComposed = useMemo(() => {
+        if (!decoded) return null;
+        const quote = normalizeProtocolFee(protocolFeeQuote);
+        return {
+            action: 'DIVIDEND',
+            chainId,
+            decoded,
+            quote: protocolFeeQuote,
+            protocolFeeKnownFree: quote.known && quote.free,
+        };
+    }, [chainId, decoded, protocolFeeQuote]);
 
     // Holder-count preview excludes the source address per DIVIDEND.md
     // ("SOURCE address is excluded from receiving dividends"). When
@@ -582,10 +617,26 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
 
     async function handleReview(event) {
         event.preventDefault();
+        setReviewAttempt((n) => n + 1);
+        setAttempted(true);
+        // G22: an empty required field is marked on the field itself and
+        // takes the cursor; nothing else is checked until it is filled.
+        const missing = {
+            'dividend-holder-token': !tick.trim() ? 'Pick the holder token.' : null,
+            'dividend-token': !dividendTick.trim() ? 'Pick the dividend token.' : null,
+            'dividend-amount': !String(amount).trim() ? 'Enter the per-unit amount.' : amountPrecisionError,
+        };
+        const firstMissing = Object.keys(missing).find((id) => missing[id]) || null;
+        if (!formErrors.validate(missing)) {
+            setFormError(null);
+            setTimeout(() => document.getElementById(firstMissing)?.focus(), 0);
+            return;
+        }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { setFormError(null); formErrors.fail(feeStop.formError, 'form:fee'); return; }
         if (!chainId || !fromAddress) {
-            setFormError('Pick a source address first.');
+            setFormError(null);
+            formErrors.fail('Pick a source address first.', 'form:from');
             return;
         }
         if (!tick.trim()) {
@@ -598,11 +649,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             return;
         }
         if (tickIsNativeCoin) {
-            setFormError(nativeCoinTickMessage(coinTicker, 'the active network'));
+            formErrors.validate({ 'dividend-holder-token': nativeCoinTickMessage(coinTicker, 'the active network') });
             return;
         }
         if (tickCheck.verdict === 'missing') {
-            setFormError(unknownTickMessage(trimmedTick, 'the active network'));
+            formErrors.validate({ 'dividend-holder-token': unknownTickMessage(trimmedTick, 'the active network') });
             return;
         }
         if (!dividendTick.trim()) {
@@ -615,7 +666,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             return;
         }
         if (dividendTickCheck.verdict === 'missing') {
-            setFormError(unknownTickMessage(trimmedDividendTick, 'the active network'));
+            formErrors.validate({ 'dividend-token': unknownTickMessage(trimmedDividendTick, 'the active network') });
             return;
         }
         const amt = String(amount).trim();
@@ -625,9 +676,9 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         }
         const amountComparison = compareDecimalStrings(amt, '0');
         if (amountComparison !== 1) {
-            setFormError(amountComparison === null
+            formErrors.validate({ 'dividend-amount': amountComparison === null
                 ? 'Per-unit amount must be a positive decimal number.'
-                : 'Per-unit amount must be greater than zero.');
+                : 'Per-unit amount must be greater than zero.' });
             return;
         }
         // Keep each payout within the dividend token's on-chain decimal scale.
@@ -637,14 +688,14 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             noun: 'Per-unit amount',
         });
         if (precisionError) {
-            setFormError(precisionError);
+            formErrors.validate({ 'dividend-amount': precisionError });
             return;
         }
         // Stop a payout the balance cannot cover here, not three screens
         // later. This check runs when both projected total and balance are
         // known; holder completeness is gated separately below.
         if (balanceError) {
-            setFormError(balanceError);
+            formErrors.validate({ 'dividend-amount': balanceError });
             return;
         }
         if (memo && /[|;]/.test(memo)) {
@@ -653,7 +704,11 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         }
         const memoError = memoLengthError(memo.trim());
         if (memoError) { setFormError(memoError); return; }
-        if (!holders.rows || !preview || holderReviewPendingRef.current) return;
+        if (!holders.rows || !preview) {
+            formErrors.fail(holders.error || 'Wait for the wallet to finish loading the holder list.');
+            return;
+        }
+        if (holderReviewPendingRef.current) return;
 
         // Refresh at the review boundary so a holder change cannot leave the
         // displayed payout behind the set used by the network. A changed set
@@ -834,18 +889,20 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
 
     function handleBuildAnother() {
         setResult(null);
+        setAttempted(false); // a fresh form opens with no G22 marks
         setSubmitError(null);
         setStage('form');
     }
         const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={stage === 'review'
                 ? () => { setSubmitError(null); setStage('form'); }
                 : onBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                    ? 'Review dividend'
-                    : `Pay dividend`}
+                    ? 'Review Dividend'
+                    : `Pay Dividend`}
         />
     );
     const wrap = (children) => (
@@ -896,7 +953,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             <FormPage
                 as="div"
                 label="Dividend result"
-                actions={<Button variant="primary" onClick={onBack}>Done</Button>}
+                actions={<Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>}
             >
                 <h2 className={styles.successTitle}>Dividend sent</h2>
                 {txid ? (
@@ -912,135 +969,79 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
     }
 
     if (stage === 'review' || stage === 'submitting') {
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review dividend"
-                onSubmit={handleSubmit}
-                status={(isWatcherMode || isHwSource) && submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
-                ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        loading={stage === 'submitting'}
-                        disabled={
-                            isWatcherMode
-                                ? false
-                                : isHwSource
-                                    ? hwStatus !== 'available'
-                                    : (!signerReady && password.length === 0)
-                        }
-                    >
-                        {isWatcherMode
-                            ? 'Create unsigned transaction: pay dividend'
-                            : isHwSource
-                                ? `Sign on ${fromAddress.source === 'trezor' ? 'Trezor' : 'Ledger'}: pay dividend`
-                                : 'Sign: pay dividend'}
-                    </Button>
-                )}
-            >
-                <p className={styles.summary}>{decoded?.summary}</p>
-                <dl className={styles.detailsList}>
-                    {descriptor ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Network</dt>
-                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" /></dd>
-                        </>
-                    ) : null}
-                    <dt className={styles.detailsLabel}>From</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {(decoded?.details || []).map((d) => (
-                        <DetailRow
-                            key={d.label}
-                            label={d.label}
-                            value={d.label === 'Per-unit amount'
-                                ? `${d.value} ${dividendTick.trim()}`
-                                : d.value}
-                        />
-                    ))}
-                    {preview ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Eligible holders</dt>
-                            <dd className={styles.detailsValue}>
-                                {preview.eligibleCount}
-                                {preview.sourceExcluded ? ' (source excluded)' : ''}
-                            </dd>
-                            {preview.total !== null ? (
-                                <>
-                                    <dt className={styles.detailsLabel}>Total distribution</dt>
-                                    <dd className={styles.detailsValue}>
-                                        ~{formatWithThousands(preview.total)} {dividendTick.trim()}
-                                    </dd>
-                                </>
-                            ) : null}
-                        </>
-                    ) : null}
-                    {totalCostText ? (
-                        <>
-                            <dt className={styles.detailsLabel}>Total token cost</dt>
-                            <dd className={styles.detailsValue} data-testid="dividend-review-total-cost">
-                                {totalCostText}
-                            </dd>
-                        </>
-                    ) : null}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                    <DetailRow
-                        label="Dividend protocol fee"
-                        value={protocolFeeText || 'Calculated from the final holder count when the dividend executes'}
-                    />
-                </dl>
-                {decoded && decoded.warnings.length > 0 ? (
-                    <FormNotice variant="warning" role="alert" lines={decoded.warnings} />
-                ) : null}
-                <p className={styles.hint} data-testid="dividend-review-fee-hint">
-                    Paying a dividend has a protocol fee that grows with the number
-                    of holders paid, charged separately from the payout. Make sure
-                    this address holds enough {dividendTick.trim() || 'of the token you are paying out'}
-                    {' '}to cover the full payout.
-                </p>
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={chainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                        signerInfo={hwSignerInfo}
-                    />
-                )}
-            </FormPage>,
+        const payTick = String(actionParams.DIVIDEND_TICK || '').toUpperCase();
+        const holderTick = String(actionParams.TICK || '').toUpperCase();
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setStage('form'); }}
+                decoded={decoded}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentials={<p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>}
+                credentialsReady
+                summary={{
+                    verb: t('components.confirmSummary.verbPayDividend'),
+                    ...(payTick ? { ticker: payTick } : {}),
+                    ...(payTick && preview?.total != null ? { amount: String(preview.total) } : {}),
+                    ...(holderTick ? { target: t('components.confirmSummary.holdersTarget', { tick: holderTick }) } : {}),
+                    direction: 'out',
+                    chainId,
+                    address: fromAddress?.address,
+                    facts: preview ? [{
+                        label: 'Eligible holders',
+                        value: `${formatWithThousands(preview.eligibleCount)}${preview.sourceExcluded ? ' (source excluded)' : ''}`,
+                    }] : [],
+                    ...(!nativeFee.payFeeInNativeCoin && protocolFee
+                        ? { protocolFee: { amount: String(protocolFee), ticker: protocolFeeTick } }
+                        : {}),
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
     // confirm page, rendered in place of the form (the overlay modal
     // didn't fit small/mobile viewports); form state stays intact behind it.
     if (actionConfirm.open) {
+        // The payout leaves in the dividend token, to the holders of the
+        // other; its total shows when the holder preview knows it.
+        const payTick = String(actionParams.DIVIDEND_TICK || '').toUpperCase();
+        const holderTick = String(actionParams.TICK || '').toUpperCase();
+        const dividendSummary = {
+            verb: t('components.confirmSummary.verbPayDividend'),
+            ...(payTick ? { ticker: payTick } : {}),
+            ...(payTick && preview?.total != null ? { amount: String(preview.total) } : {}),
+            ...(holderTick ? { target: t('components.confirmSummary.holdersTarget', { tick: holderTick }) } : {}),
+            direction: 'out',
+            chainId,
+            address: fromAddress?.address,
+            // The XCHAIN lane's quoted protocol fee, so the confirm Total
+            // counts it when the pre-flight report carries no figure; a
+            // native-coin fee is a composed output the screen reads itself.
+            ...(!nativeFee.payFeeInNativeCoin && protocolFee
+                ? { protocolFee: { amount: String(protocolFee), ticker: protocolFeeTick } }
+                : {}),
+        };
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={dividendSummary}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
+                feeEstimate={feeEstimate}
                 feeText={feeEstimate?.coinAmount
                     ? `Network fee: ${feeEstimate.coinAmount} ${coinTicker}`.trim()
                     : undefined}
@@ -1065,7 +1066,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={setChainId}
@@ -1083,7 +1084,10 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             <TokenPicker
                 purpose="receive"
                 walletId={walletId}
-                title="Select token"
+                // Holders are counted from the token ledger, which never holds the network coin.
+                kindFilter="tokens"
+                kindLocked
+                title="Select Token"
                 networkFilter={coinFromChainId(chainId)}
                 onSelect={(sel) => {
                     setTick(String(sel.tick || ''));
@@ -1099,7 +1103,10 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Select dividend token"
+                // DIVIDEND_TICK must be a known token, so a dividend is never paid in the network coin.
+                kindFilter="tokens"
+                kindLocked
+                title="Select Dividend Token"
                 networkFilter={coinFromChainId(chainId)}
                 onSelect={(sel) => {
                     setDividendTick(String(sel.tick || ''));
@@ -1110,69 +1117,130 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
         );
     }
 
+    // Which standard section the current error belongs to, and the
+    // closed sections' one-line summaries.
+    const errorSection = (() => {
+        if (!formError) return null;
+        if (/source address/i.test(formError)) return 'from';
+        // A custom fee refusal (the review's fee stop) belongs to Network fee.
+        const feeStopNow = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStopNow && feeStopNow.formError === formError) return 'fee';
+        if (/memo/i.test(formError)) return 'memo';
+        return 'dividend';
+    })();
+    // G22 marks: shown once Pay Dividend was pressed, cleared as soon as filled.
+    const holderTokenMark = attempted && !tick.trim() ? 'Holder-of token is required.' : undefined;
+    const dividendTokenMark = attempted && !dividendTick.trim() ? 'Dividend token is required.' : undefined;
+    const amountMark = attempted && !String(amount).trim() ? 'Per-unit amount is required.' : undefined;
+    const sectionErrorKey = (id) => (
+        errorSection === id || (id === 'dividend' && (holderTokenMark || dividendTokenMark || amountMark))
+            ? reviewAttempt + 1 : 0
+    );
+    const dividendSummary = joinSummary(
+        amount && dividendTick.trim()
+            ? `${formatWithThousands(amount)} ${dividendTick.trim().toUpperCase()} per unit`
+            : (dividendTick.trim() ? dividendTick.trim().toUpperCase() : null),
+        tick.trim() ? `to ${tick.trim().toUpperCase()} holders` : null,
+    ) || null;
+    // No source to default to: no funding address on the network (the default
+    // skips dispenser-delegated ones) and none picked by hand.
+    const sourceMissing = Boolean(addressesByChain) && !fromAddress
+        && (addressesByChain[chainId] || []).filter((a) => a.role !== 'dispenser').length === 0;
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Pay dividend"
             onSubmit={handleReview}
-            status={(formError || balanceError) ? (
-                <StatusMessage variant="error">{formError || balanceError}</StatusMessage>
+            errors={formErrors}
+            // G120: the balance refusal shows when Review is pressed (the
+            // submit sets formError), never live, so flipping the pay-in-coin
+            // switch, which moves the fee off the XCHAIN balance, shows or
+            // hides no notice.
+            status={formError ? (
+                <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="primary"
+            action={(
+                <FormAction
+                    icon={<Icon.CoinsIcon />}
                     loading={actionConfirm.composing || holderReviewPending}
-                    disabled={!fromAddress || !tick || !dividendTick || !amount || actionConfirm.composing
-                        || holderReviewPending || !holders.rows || !preview
-                        || tickIsNativeCoin || tickCheck.verdict === 'missing'
-                        || dividendTickCheck.verdict === 'missing'
-                        || !!amountPrecisionError}
+                    // Invalid values answer the tap through the form summary.
                 >
-                    Pay dividend
-                </Button>
+                    Pay Dividend
+                </FormAction>
+            )}
+            from={(
+                // Network and From live in the closed From section.
+                // Both token pickers list only this network's tokens, so
+                // Network stays selectable (it is never locked by a token).
+                <FromSection
+                    {...formSections.bind('from')}
+                    revealKey={sectionErrorKey('from')}
+                    chainId={chainId}
+                    chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])}
+                    chainRegistry={chainRegistry}
+                    onNetworkChange={setChainId}
+                    networkHelp="The chain the dividend is recorded on. The holder token, dividend token, From address, and fees are on this network."
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp="The address that pays the dividend. It must hold the dividend token and pays the network fee."
+                    missing={sourceMissing ? (
+                        <FormNotice variant="error">
+                            {t('send.source.noAddress')}
+                        </FormNotice>
+                    ) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    revealKey={sectionErrorKey('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    fees={{
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        nativeFeeProps: { ...nativeFee.toggleProps, coinTicker, fee: protocolFeeQuote },
+                    }}
+                />
             )}
         >
-            {lockedToken && chainId ? (
-                <LockedTokenContext chainId={chainId} tick={tick} label="Holder-of token" />
-            ) : (
-                <NetworkField label="Network" help="The chain the dividend is recorded on. The holder token, dividend token, From address, and fees are on this network." value={chainId} onChange={setChainId} chainIds={chainsWithAddresses.length ? chainsWithAddresses : (chainId ? [chainId] : [])} chainRegistry={chainRegistry} />
-            )}
-
-            {fromAddress ? (
-                <AddressField
-                    label="From"
-                    help="The address that pays the dividend. It must hold the dividend token and pays the network fee."
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                />
-            ) : (
-                <FormNotice variant="error">
-                    {t('send.source.noAddress')}
-                </FormNotice>
-            )}
-
-            {lockedToken ? null : (
+            <FormSection
+                id="dividend"
+                title="Dividend"
+                icon={Icon.CoinsIcon}
+                {...formSections.bind('dividend')}
+                revealKey={sectionErrorKey('dividend')}
+                summary={dividendSummary}
+            >
+            {/* Always the standard Token fields, even when the token
+                arrives already chosen; the preset token simply fills the
+                Holder-of token field. */}
+            {(
                 <TokenField
+                    id="dividend-holder-token"
                     label="Holder-of token"
                     help="The token whose holders receive this dividend. Each holder is paid according to their balance."
                     value={tick && chainId ? { chainId, tick } : null}
                     onOpenPicker={() => setTokenPickerOpen(true)}
-                    error={tickFieldError}
+                    error={tickFieldError || holderTokenMark}
                 />
             )}
             <TokenField
+                id="dividend-token"
                 label="Dividend token"
                 help="The token distributed to holders. Your From address must have enough to fund the dividend."
                 value={dividendTick && chainId ? { chainId, tick: dividendTick } : null}
                 onOpenPicker={() => setDividendPickerOpen(true)}
-                error={dividendTickFieldError}
+                error={dividendTickFieldError || dividendTokenMark}
             />
             <AmountField
+                id="dividend-amount"
+                error={amountMark}
                 label="Per-unit amount"
                 help="Amount of dividend ticker per 1 unit of holder-of token."
                 amount={amount}
@@ -1191,15 +1259,7 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                         maxPayable ? ` · up to ${formatWithThousands(maxPerUnit)} per unit` : ''}`
                     : null}
             />
-            <Input
-                label="Memo"
-                optional
-                maxLength={MAX_MEMO_LENGTH}
-                help={MEMO_HINT}
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-                autoComplete="off"
-            />
+            {/* Memo lives in its own optional section below. */}
             {gatedDividendNotice.gated ? (
                 <FormNotice variant="warning" role="alert">
                     {gatedTickWarningCopy(dividendTick, 'dividend recipients')}
@@ -1236,36 +1296,21 @@ export function DividendForm({ walletId, onBack, initialChainId, initialTick, in
                         ? ` · includes ${protocolFeeText} protocol fee` : ''}
                 </p>
             ) : null}
+            </FormSection>
 
-            <FeesCard
-                chainId={chainId}
-                quote={protocolFeeQuote}
-                pending={protocolFeePending}
-                feeSelector={feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label="Network fee"
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
-                ) : null}
-            >
-                <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={coinTicker} fee={protocolFeeQuote} />
-            </FeesCard>
-
-        </FormPage>,
-    );
-}
-
-function DetailRow({ label, value }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>{value}</dd>
-        </>
+            {/* Memo holds only the memo: the section title names the field
+                and carries its count. */}
+            <MemoSection
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey('memo')}
+                aria-required="false"
+                maxLength={MAX_MEMO_LENGTH}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+            />
+            {/* The FeesCard (network fee selector, protocol fee and the
+                pay-in-native switch) opens from the one Network fee section. */}
+        </FormFrame>,
     );
 }
 

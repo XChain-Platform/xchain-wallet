@@ -8,20 +8,22 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The wizard between Review and Approve: a background worker that goes away
-// mid-issue, supply values at their bounds, a ticker lookup that answers for a
-// name the user has already changed, double taps, and a parent token that
-// changes hands after Details.
+// The Issue Token form between submit and Approve: a background worker that
+// goes away mid-issue, supply values at their bounds, a ticker lookup that
+// answers for a name the user has already changed, double taps, and a parent
+// token that changes hands between two submits.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
+import { ownedTokensFor, pickParentToken } from '../../helpers/issueParentPicker.js';
 
 const CHAIN = 'bitcoin-regtest';
 const WALLET = 'w-wizard-worker';
-const KEY = `xc:formdraft:token-wizard:${WALLET}`;
+const KEY = `xc:formdraft:issue-token:${WALLET}`;
 const OWNER = 'bcrt1qexampleexampleexampleexampleexample0';
 const STRANGER = 'bcrt1qstrangerstrangerstrangerstrangerstr';
 const ADDRESSES = {
@@ -64,21 +66,34 @@ function mountWizard(overrides = {}) {
     return messaging;
 }
 
-async function reachDetails(template = 'Utility token') {
-    fireEvent.click(await screen.findByText(template));
-    await screen.findByLabelText('Fee paid by');
-    fireEvent.submit(screen.getByRole('form', { name: 'Choose token network' }));
-    await screen.findByText('Step 3 of 4: Details');
+async function reachForm(template = 'Utility token') {
+    await screen.findByLabelText('Ticker');
+    fireEvent.click(screen.getByRole('button', { name: /^Select template/ }));
+    fireEvent.click(screen.getByRole('option', { name: new RegExp(template) }));
 }
 
-async function fillUtility({ name = 'BOUND', supply = '100', maxMint } = {}) {
-    await reachDetails('Utility token');
-    fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: name } });
-    fireEvent.change(screen.getByLabelText('Supply'), { target: { value: supply } });
+const nameField = () => screen.getByRole('textbox', { name: /^(Ticker|Subtoken name)$/ });
+const supplyField = () => screen.getByRole('textbox', { name: 'Max supply' });
+const issueForm = () => screen.getByRole('form', { name: 'Issue Token' });
+
+// Utility template, then submit. `indivisible` turns Divisible off first.
+async function fillUtility({ name = 'BOUND', supply = '100', maxMint, indivisible = false } = {}) {
+    await reachForm('Utility token');
+    if (indivisible) fireEvent.click(screen.getByRole('switch', { name: /Divisible/ }));
+    fireEvent.change(nameField(), { target: { value: name } });
+    fireEvent.change(supplyField(), { target: { value: supply } });
     if (maxMint !== undefined) {
-        fireEvent.change(screen.getByLabelText(/Max mint per transaction/, { selector: 'input' }), { target: { value: maxMint } });
+        fireEvent.change(screen.getByLabelText('Max per transaction'), { target: { value: maxMint } });
     }
-    fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+    fireEvent.submit(issueForm());
+}
+
+// The refusal, whether the error summary or an amount field's own error
+// states it.
+async function refusal(pattern) {
+    await waitFor(() => {
+        expect(screen.getAllByRole('alert').some((alert) => pattern.test(alert.textContent))).toBe(true);
+    });
 }
 
 function deferred() {
@@ -98,21 +113,18 @@ afterEach(() => {
     localStorage.clear();
 });
 
-describe('TokenWizard worker loss between compose and confirm', () => {
+describe('Issue Token worker loss between compose and confirm', () => {
     it('keeps Approve unreachable and the draft saved when compose loses the worker', async () => {
         const messaging = mountWizard({
             composeForConfirm: vi.fn().mockRejectedValue(new Error(DISCONNECT)),
         });
         await fillUtility({ name: 'GONE', supply: '50' });
-        await screen.findByText('Step 4 of 4: Review');
-        await waitFor(() => expect(storedDraft()?.values.name).toBe('GONE'));
-        fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(screen.getByRole('button', { name: /Issue token/ })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Issue Token' })).toBeEnabled());
         expect(screen.queryByTestId('confirm-approve')).toBeNull();
         expect(messaging.issueToken).not.toHaveBeenCalled();
-        expect(screen.getByText('Step 4 of 4: Review')).toBeTruthy();
-        expect(storedDraft()?.values.name).toBe('GONE');
+        expect(issueForm()).toBeTruthy();
+        expect(storedDraft()?.values.ticker).toBe('GONE');
         expect(storedDraft()?.values.supply).toBe('50');
     });
 
@@ -121,45 +133,51 @@ describe('TokenWizard worker loss between compose and confirm', () => {
             issueToken: vi.fn().mockRejectedValue(new Error(DISCONNECT)),
         });
         await fillUtility({ name: 'DROP', supply: '70' });
-        await screen.findByText('Step 4 of 4: Review');
-        await waitFor(() => expect(storedDraft()?.values.name).toBe('DROP'));
-        fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
         const approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);
         await waitFor(() => expect(messaging.issueToken).toHaveBeenCalledTimes(1));
         await new Promise((r) => { setTimeout(r, 50); });
         expect(screen.queryByText('cd'.repeat(32))).toBeNull();
-        expect(storedDraft()?.values.name).toBe('DROP');
+        expect(storedDraft()?.values.ticker).toBe('DROP');
         expect(storedDraft()?.values.supply).toBe('70');
     });
 });
 
-describe('TokenWizard supply bounds', () => {
+describe('Issue Token supply bounds', () => {
+    // An amount field can refuse a keystroke itself ('Enter a valid ...'),
+    // or the summary names the rule; either way nothing composes.
     const refused = [
-        ['0', /Supply must be a positive number/],
-        ['1000000000000000000001', /Supply cannot be more than/],
-        ['1e5', /Supply must be a positive number/],
-        ['-1', /Supply must be a positive number/],
-        ['10.5', /whole number for an indivisible token/],
+        ['1000000000000000000001', {}, /Max supply cannot be more than/],
+        ['1e5', {}, /Max supply must be zero or a positive number|Enter a valid/],
+        ['-1', {}, /Max supply must be zero or a positive number|Enter a valid/],
+        ['10.5', { indivisible: true }, /whole number for an indivisible token|decimal places|whole number/i],
     ];
-    for (const [value, message] of refused) {
+    for (const [value, options, message] of refused) {
         it(`refuses supply ${value} before compose`, async () => {
             const messaging = mountWizard();
-            await fillUtility({ supply: value });
-            expect(await screen.findByText(message)).toBeTruthy();
-            expect(screen.queryByText('Step 4 of 4: Review')).toBeNull();
+            await fillUtility({ supply: value, ...options });
+            await refusal(message);
             expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         });
     }
+
+    it('composes a 0 max supply as an uncapped token with nothing minted', async () => {
+        // The wizard refused 0; on the form 0 is the indexer's uncapped
+        // sentinel, so it omits MAX_SUPPLY and mints nothing.
+        const messaging = mountWizard();
+        await fillUtility({ supply: '0' });
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        const params = messaging.composeForConfirm.mock.calls[0][0].actionData.params;
+        expect(params.MAX_SUPPLY).toBeUndefined();
+        expect(params.MINT_SUPPLY).toBeUndefined();
+    });
 
     const accepted = ['1', '1000000000000000000000', '9007199254740993'];
     for (const value of accepted) {
         it(`composes supply ${value} exactly as entered`, async () => {
             const messaging = mountWizard();
             await fillUtility({ supply: value });
-            await screen.findByText('Step 4 of 4: Review');
-            fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
             const approve = await screen.findByTestId('confirm-approve');
             await waitFor(() => expect(approve).toBeEnabled());
             const params = messaging.composeForConfirm.mock.calls[0][0].actionData.params;
@@ -173,58 +191,63 @@ describe('TokenWizard supply bounds', () => {
     it('reports what a supply with leading zeros composes', async () => {
         const messaging = mountWizard();
         await fillUtility({ supply: '0007' });
-        const review = await screen.findByText('Step 4 of 4: Review').catch(() => null);
-        if (!review) {
+        const approve = await screen.findByTestId('confirm-approve').catch(() => null);
+        if (!approve) {
             expect(messaging.composeForConfirm).not.toHaveBeenCalled();
             return;
         }
-        fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
-        await screen.findByTestId('confirm-approve');
         const params = messaging.composeForConfirm.mock.calls[0][0].actionData.params;
         expect(['0007', '7']).toContain(params.MAX_SUPPLY);
     });
 
-    it('composes a max mint above the supply exactly as entered', async () => {
+    it('refuses a max mint above the protocol ceiling before compose', async () => {
+        // The wizard composed this and left the refusal to the chain; the
+        // form names the ceiling on the field instead.
         const messaging = mountWizard();
         await fillUtility({ supply: '100', maxMint: '1000000000000000000001' });
-        await screen.findByText('Step 4 of 4: Review');
-        fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
+        await refusal(/Max mint per transaction cannot be more than/);
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('composes a max mint above the supply exactly as entered', async () => {
+        const messaging = mountWizard();
+        await fillUtility({ supply: '100', maxMint: '1000' });
         await screen.findByTestId('confirm-approve');
         const params = messaging.composeForConfirm.mock.calls[0][0].actionData.params;
-        expect(params.MAX_MINT).toBe('1000000000000000000001');
+        expect(params.MAX_MINT).toBe('1000');
     });
 });
 
-describe('TokenWizard stale ticker answers', () => {
+describe('Issue Token stale ticker answers', () => {
     it('does not let a late free answer for an earlier name pass the current one', async () => {
         const early = deferred();
         const later = deferred();
         const getTokenInfo = vi.fn(({ tick }) => (tick === 'EARLY' ? early.promise : later.promise));
         const messaging = mountWizard({ getTokenInfo });
-        await reachDetails('Meme token');
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: 'EARLY' } });
+        await reachForm('Meme token');
+        fireEvent.change(nameField(), { target: { value: 'EARLY' } });
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith({ chainId: CHAIN, tick: 'EARLY' }));
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), { target: { value: 'LATER' } });
+        fireEvent.change(nameField(), { target: { value: 'LATER' } });
         await waitFor(() => expect(getTokenInfo).toHaveBeenCalledWith({ chainId: CHAIN, tick: 'LATER' }));
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
+        fireEvent.change(supplyField(), { target: { value: '100' } });
         await act(async () => { early.resolve(EMPTY); });
-        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
+        fireEvent.submit(issueForm());
         await new Promise((r) => { setTimeout(r, 30); });
-        expect(screen.queryByText('Step 4 of 4: Review')).toBeNull();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         await act(async () => { later.resolve(FOUND); });
         expect((await screen.findAllByText(/already exists on this network/)).length).toBeGreaterThan(0);
-        expect(screen.queryByText('Step 4 of 4: Review')).toBeNull();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 });
 
-describe('TokenWizard double taps', () => {
-    it('composes once and signs once for double taps on Continue and Approve', async () => {
+describe('Issue Token double taps', () => {
+    it('composes once and signs once for double taps on Issue Token and Approve', async () => {
         const gate = deferred();
         const messaging = mountWizard({ composeForConfirm: vi.fn(() => gate.promise) });
-        await fillUtility({ name: 'TAPS', supply: '10' });
-        await screen.findByText('Step 4 of 4: Review');
-        const go = screen.getByRole('button', { name: /Issue token/ });
+        await reachForm('Utility token');
+        fireEvent.change(nameField(), { target: { value: 'TAPS' } });
+        fireEvent.change(supplyField(), { target: { value: '10' } });
+        const go = screen.getByRole('button', { name: 'Issue Token' });
         fireEvent.click(go);
         fireEvent.click(go);
         await act(async () => { gate.resolve(COMPOSED); });
@@ -238,37 +261,44 @@ describe('TokenWizard double taps', () => {
     });
 });
 
-describe('TokenWizard parent ownership between steps', () => {
-    it('refuses confirm with a plain notice when the parent changes hands after Details', async () => {
+describe('Issue Token parent ownership between submits', () => {
+    it('refuses the next submit with a plain notice when the parent changes hands', async () => {
         let parentOwner = OWNER;
         const getTokenInfo = vi.fn(({ tick }) => Promise.resolve(
             tick === 'PARENT' ? { creator: parentOwner, totalSupply: '1', canonicalTick: 'PARENT' } : EMPTY,
         ));
+        // The first compose loses the worker, so the form stays for a retry.
         const messaging = mountWizard({
             getTokenInfo,
+            getOwnedTokens: ownedTokensFor(vi.fn, OWNER, ['PARENT']),
+            composeForConfirm: vi.fn().mockRejectedValue(new Error(DISCONNECT)),
             buildActionPsbtRequest: vi.fn().mockResolvedValue({ psbt: 'aa00' }),
         });
-        await reachDetails('Subtoken');
-        fireEvent.change(screen.getByLabelText('Parent ticker'), { target: { value: 'PARENT' } });
-        fireEvent.change(screen.getByLabelText('Subtoken name'), { target: { value: 'CHILD' } });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '100' } });
-        fireEvent.submit(screen.getByRole('form', { name: 'Token details' }));
-        await screen.findByText('Step 4 of 4: Review');
-        const lookupsAtReview = getTokenInfo.mock.calls.filter(([q]) => q.tick === 'PARENT').length;
-        expect(lookupsAtReview).toBeGreaterThan(0);
+        await reachForm('Subtoken');
+        await pickParentToken('PARENT');
+        fireEvent.change(nameField(), { target: { value: 'CHILD' } });
+        fireEvent.change(supplyField(), { target: { value: '100' } });
+        fireEvent.submit(issueForm());
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+        const lookupsAtFirstSubmit = getTokenInfo.mock.calls.filter(([q]) => q.tick === 'PARENT').length;
+        expect(lookupsAtFirstSubmit).toBeGreaterThan(0);
+
+        // The parent changes hands; the retry looks it up again and refuses.
         parentOwner = STRANGER;
-        fireEvent.submit(screen.getByRole('form', { name: 'Review token issuance' }));
-        expect(await screen.findByText(/This wallet does not own PARENT/)).toBeTruthy();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Issue Token' })).toBeEnabled());
+        fireEvent.submit(issueForm());
+        await waitFor(() => {
+            expect(screen.getAllByRole('alert').some((a) => /This wallet does not own PARENT/.test(a.textContent)))
+                .toBe(true);
+        });
         expect(getTokenInfo.mock.calls.filter(([q]) => q.tick === 'PARENT').length)
-            .toBeGreaterThan(lookupsAtReview);
+            .toBeGreaterThan(lookupsAtFirstSubmit);
         await new Promise((r) => { setTimeout(r, 50); });
-        // Confirm composes through actionConfirm.run, so an untouched compose
-        // means the confirm flow never starts.
-        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+        // The refusal never reaches the confirm flow.
+        expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1);
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
         expect(messaging.issueToken).not.toHaveBeenCalled();
         expect(screen.queryByTestId('confirm-approve')).toBeNull();
-        expect(screen.getByText('Step 4 of 4: Review')).toBeTruthy();
-        expect(screen.getByRole('button', { name: /Issue token/ })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Issue Token' })).toBeEnabled();
     });
 });

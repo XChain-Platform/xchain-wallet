@@ -62,20 +62,20 @@ test.describe('ADDRESS v0 preferences on regtest', () => {
                 name: 'On-chain preferences',
             }))
                 .toBeVisible({ timeout: 30_000 });
-            await main.getByRole('radio', { name: 'Destroy the fee (reduces supply)' }).check();
-            await main.getByRole('checkbox', {
-                name: 'Require a memo on any send to this address',
-            }).check();
-            await main.getByRole('radio', {
-                name: 'Anyone may open a dispenser funded by this address',
-            }).check();
+            // Each preference is the themed dropdown (G119): open it, pick the option.
+            await main.getByRole('button', { name: /^How the protocol fee is handled: / }).click();
+            await main.getByRole('option', { name: 'Destroy (reduces supply)' }).click();
+            await main.getByRole('button', { name: /^Require memo on incoming sends: / }).click();
+            await main.getByRole('option', { name: 'Yes' }).click();
+            await main.getByRole('button', { name: /^Who may open dispensers: / }).click();
+            await main.getByRole('option', { name: 'Anyone' }).click();
             await main.getByLabel('Memo', { exact: true }).fill(MEMO);
             await main.getByRole('button', { name: 'Update preferences', exact: true }).click();
 
             await expect(main).toContainText('Destroy the fee (reduces supply) - CHANGED');
             await expect(main).toContainText('Memo required on incoming sends - CHANGED');
             await expect(main).toContainText('Anyone may open a dispenser here - CHANGED');
-            await main.getByRole('button', { name: 'Continue to confirmation', exact: true }).click();
+            await main.getByRole('button', { name: 'Continue to Confirmation', exact: true }).click();
             await expectConfirmModal(page, 'address preferences');
             const password = page.getByLabel('Password', { exact: true });
             if (await password.count() > 0 && await password.isVisible().catch(() => false)) {

@@ -27,7 +27,9 @@ const componentSizes = {
     ListPage: FIXED_SIZE,
     EmptyState: FIXED_SIZE,
     SectionHeader: FIXED_SIZE,
+    Notice: FIXED_SIZE,
     StatusMessage: FIXED_SIZE,
+    StatusMessageGroup: FIXED_SIZE,
     Button: ALL_SIZES,
     Spinner: ALL_SIZES,
     Checkbox: FIXED_SIZE,
@@ -131,8 +133,16 @@ function ComponentPreview({ name, size, state }) {
         return <UI.EmptyState title="No activity" body="New activity appears here." actionLabel="Refresh" onAction={noop} />;
     case 'SectionHeader':
         return <UI.SectionHeader title="Accounts" description="Three available" trailing={<UI.Button size="sm">Add</UI.Button>} />;
+    case 'Notice':
+        return (
+            <UI.Notice tone={state === 'error' ? 'danger' : 'info'} title={state === 'error' ? 'Check this value' : 'Wallet is ready'} onDismiss={disabled ? undefined : noop}>
+                {state === 'error' ? 'The amount is more than this address holds.' : 'Tokens you receive show here after one confirmation.'}
+            </UI.Notice>
+        );
     case 'StatusMessage':
         return <UI.StatusMessage variant={statusVariant}>{state === 'error' ? error : 'Wallet is ready'}</UI.StatusMessage>;
+    case 'StatusMessageGroup':
+        return <UI.StatusMessageGroup entries={[{ key: 'preview', variant: statusVariant, children: state === 'error' ? error : 'Wallet is ready' }]} />;
     case 'Button':
         return <UI.Button size={nativeSize} variant={state === 'error' ? 'danger' : 'primary'} disabled={disabled}>Continue</UI.Button>;
     case 'Spinner':
@@ -154,16 +164,17 @@ function ComponentPreview({ name, size, state }) {
     case 'Textarea':
         return <UI.Textarea label="Message" size={nativeSize} defaultValue="Hello" rows={2} disabled={disabled} error={error} fieldAction={<UI.FieldIconButton icon={<UI.Icon.ScanIcon />} label="Scan message" disabled={disabled} />} />;
     case 'RadioGroup':
+        // No radio buttons (G119): RadioGroup's matrix shows the single-choice
+        // dropdown that replaces it, an icon per option.
         return (
-            <UI.RadioGroup
-                legend="Preference"
+            <UI.IconSelect
+                label="Preference"
                 value="first"
                 onChange={noop}
                 disabled={disabled}
-                error={error}
                 options={[
-                    { value: 'first', label: 'First choice' },
-                    { value: 'second', label: 'Second choice' },
+                    { value: 'first', label: 'First choice', icon: <UI.Icon.CheckIcon /> },
+                    { value: 'second', label: 'Second choice', icon: <UI.Icon.ListIcon /> },
                 ]}
             />
         );

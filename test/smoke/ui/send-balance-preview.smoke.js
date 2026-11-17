@@ -8,13 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §21: Step 3: Send.jsx wires <BalanceChanges> on review.
+// Smoke for §21: Step 3: Send.jsx checks balances before approval.
 //
-// Source-level checks that the review stage now:
-//   - imports BalanceChanges + uses simulateAction + balancesFromSdk
-//   - fetches address balances on entering review and not before
-//   - renders the section between the headline and the details list
-//   - degrades gracefully on fetch error (preview still renders muted)
+// Source-level checks that the form and Confirm Standard review now:
+//   - fetch source balances for form and review stages
+//   - use those balances for Available, Max, and overspend refusal
+//   - show Total, facts, and warnings without the retired balance-change card
 // Plus that the per-shell messaging modules expose getAddressBalances.
 
 import { strict as assert } from 'node:assert';
@@ -94,8 +93,7 @@ for (const path of [popupMsg, webMsg]) {
 
 const sendSrc = readFileSync(sendPath, 'utf8');
 
-assert.match(sendSrc, /import \{ BalanceChanges \}/, 'imports BalanceChanges');
-assert.match(sendSrc, /decoderLib\.simulateAction/, 'calls simulateAction');
+assert.doesNotMatch(sendSrc, /\n\s*<BalanceChanges|import \{ BalanceChanges \}/, 'G127 retires the balance-change card');
 assert.match(sendSrc, /decoderLib\.balancesFromSdk/, 'feeds balances through balancesFromSdk');
 assert.match(
     sendSrc,
@@ -107,34 +105,41 @@ assert.match(
 assert.match(sendSrc, /loading:\s*false[^,]*,\s*error:\s*null[^,]*,\s*sdkShape:\s*null/);
 assert.match(sendSrc, /loading:\s*true[^,]*,\s*error:\s*null/);
 
-// Effect runs in form + review stages (Step 4 added the form-stage
-// fetch so Max + the Available hint can reference balance before
-// review). Skips on submitting / done.
+// Effect runs in form + review stages so Max, Available, and the safety
+// checks all use a current source balance. Skips on submitting / done.
 assert.match(
     sendSrc,
     /if \(stage !== 'review' && stage !== 'form'\) return undefined;|if \(\(stage !== 'review' && stage !== 'form'\) \|\| !chainId \|\| !fromAddress\) \{[\s\S]{0,160}?return undefined;/,
 );
 
-// Renders between the summary line and the details list. The JSX
-// element starts with `<BalanceChanges\n` (a tag, not the inline
-// comment that mentions <BalanceChanges>); search after the summary
-// to skip over earlier mentions in JSDoc / comments.
-const summaryIdx = sendSrc.indexOf('className={styles.summary}');
-const balanceJsxIdx = sendSrc.indexOf('<BalanceChanges\n', summaryIdx);
-const detailsIdx = sendSrc.indexOf('className={styles.detailsList}');
-assert.ok(summaryIdx > 0 && balanceJsxIdx > 0 && detailsIdx > 0, 'all three blocks present');
-assert.ok(
-    summaryIdx < balanceJsxIdx && balanceJsxIdx < detailsIdx,
-    'BalanceChanges sits between summary and details list',
+assert.match(
+    sendSrc,
+    /const sourceBalance = useMemo\([\s\S]{0,500}?decoderLib\.balancesFromSdk\(previewBalances\.sdkShape\)/,
+    'source balance is derived from the fetched SDK shape',
 );
-
-// Loading + error props plumbed through (graceful degradation).
-assert.match(sendSrc, /loading=\{previewBalances\.loading\}/);
-assert.match(sendSrc, /error=\{previewBalances\.error\}/);
-
-// Fee feeds in from the placeholder estimator (Step 4); the real
-// §44.2 selector swaps the source later.
-assert.match(sendSrc, /feeEstimate:\s*feeStr/);
-assert.match(sendSrc, /feeEstimate\?\.coinAmount/, 'fee comes from estimateNativeSendFee');
+assert.match(sendSrc, /Amount exceeds the available balance\./, 'single send refuses an overspend');
+assert.match(sendSrc, /total .* across all recipients exceeds the available balance\./, 'multi-send total refuses an overspend');
+assert.match(
+    sendSrc,
+    /balanceText=\{[\s\S]{0,700}?send\.balance\.available[\s\S]{0,180}?formatWithThousands\(sourceBalance\.amount\)/,
+    'form shows the grouped Available balance before review',
+);
+const reviewStandardStart = sendSrc.indexOf('<ConfirmStandard', sendSrc.indexOf("stage === 'review'"));
+const reviewStandardEnd = sendSrc.indexOf('</ConfirmStandard>', reviewStandardStart);
+assert.ok(reviewStandardStart > 0 && reviewStandardEnd > reviewStandardStart, 'review mounts Confirm Standard');
+const reviewStandard = sendSrc.slice(reviewStandardStart, reviewStandardEnd);
+// No Total block (G127 revised 2026-11-16): the fee is a facts card row.
+assert.doesNotMatch(reviewStandard, /total=\{/);
+assert.match(reviewStandard, /facts=\{reviewFacts\}/);
+assert.match(
+    reviewStandard,
+    /warning=\{reviewWarning\}/,
+    'review warning is the short warning after the details',
+);
+assert.match(
+    sendSrc,
+    /const reviewFeeAmount = feeEstimate\?\.coinAmount[\s\S]{0,4000}?\.\.\.feeFacts\(reviewFees\)/,
+    'known network fee is a row in the review facts card',
+);
 
 console.log('send-balance-preview smoke OK');

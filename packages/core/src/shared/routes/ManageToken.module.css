@@ -1,9 +1,26 @@
-.approvedBody {
-    gap: var(--xc-space-3);
+/* The token page's former look, kept for the pages that still borrow it:
+   the co-signer account pages and View Address (the token page itself is
+   TokenDetail now, G12). 8px between every block on the page. */
+.approvedBody.approvedBody {
+    gap: var(--xc-space-2);
 }
 
+/* An outlined card with no blue fill, the token's icon centred and
+   larger, its name and description centred under it. */
 .approvedHero {
-    composes: balanceHero from './TokenDetail.module.css';
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-2);
+    color: var(--xc-text);
+    text-align: center;
+}
+
+.approvedHeroIcon {
+    --xc-avatar-size-list: 64px;
+    --xc-avatar-initials-list: var(--xc-text-xl, 24px);
+    display: inline-flex;
 }
 
 .approvedHeroText {
@@ -11,50 +28,16 @@
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
+    align-items: center;
     gap: var(--xc-space-1);
 }
 
 .approvedHeroName {
     margin: 0;
-    color: var(--xc-on-accent);
+    color: var(--xc-text);
     font-size: var(--xc-text-lg);
     font-weight: 800;
     overflow-wrap: anywhere;
-}
-
-.approvedHeroDescription {
-    margin: 0;
-    color: var(--xc-on-accent);
-    font-size: var(--xc-text-sm);
-    line-height: 1.4;
-    overflow-wrap: anywhere;
-}
-
-.approvedTabPanel {
-    min-width: 0;
-}
-
-.approvedActionGrid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--xc-space-2);
-}
-
-.approvedActionTile {
-    min-width: 0;
-    min-height: calc(var(--xc-control-h-lg) + var(--xc-space-6) + var(--xc-space-3));
-    padding: var(--xc-space-2);
-    flex-direction: column;
-    justify-content: center;
-    gap: var(--xc-space-2);
-    white-space: normal;
-    text-align: center;
-    line-height: 1.2;
-}
-
-.approvedActionTile svg {
-    width: var(--xc-icon-md);
-    height: var(--xc-icon-md);
 }
 
 .approvedDetailsCard {
@@ -69,8 +52,10 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
     align-items: center;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-3) 0;
+    /* Rows sit 8px apart (card inset plus row padding); a label that stacks over
+       its value keeps a small 4px gap. */
+    gap: var(--xc-space-1) var(--xc-space-3);
+    padding: var(--xc-space-2) 0;
     border-bottom: 1px solid var(--xc-border);
 }
 
@@ -97,36 +82,8 @@
     overflow-wrap: anywhere;
 }
 
+/* Used by CoSignerAccountDetail only; the token Details tab uses the normal UI font. */
 .approvedMono {
     font-family: var(--xc-font-mono);
     font-variant-numeric: tabular-nums;
-}
-
-.approvedAddressValue,
-.approvedLocked,
-.approvedEditable {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--xc-space-1);
-    min-width: 0;
-}
-
-.approvedLocked,
-.approvedEditable {
-    font-weight: 600;
-}
-
-.approvedLocked {
-    color: var(--xc-warning-text);
-}
-
-.approvedEditable {
-    color: var(--xc-success);
-}
-
-.approvedLocked svg,
-.approvedEditable svg {
-    width: var(--xc-icon-sm);
-    height: var(--xc-icon-sm);
 }

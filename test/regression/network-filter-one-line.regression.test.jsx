@@ -29,14 +29,12 @@ const filterCss = readFileSync(resolve(
     'packages/core/src/shared/components/NetworkFilter.module.css',
 ), 'utf8');
 
+// Dispensers keeps its network filter inside the title bar's filter panel, so
+// no network text sits in a toolbar to wrap or clip.
 const surfaces = [
     {
         name: 'Contacts',
         source: 'packages/core/src/shared/routes/ContactsList.jsx',
-    },
-    {
-        name: 'Dispensers',
-        source: 'packages/core/src/shared/routes/DispensersList.jsx',
     },
 ];
 
@@ -47,6 +45,18 @@ afterEach(() => {
 });
 
 describe('regression/network-filter-one-line', () => {
+    it('[REGRESSION P1] keeps the Dispensers network filter in the filter panel, not in a toolbar', () => {
+        const routeSource = readFileSync(resolve(
+            process.cwd(),
+            'packages/core/src/shared/routes/DispensersList.jsx',
+        ), 'utf8');
+
+        expect(routeSource).toMatch(
+            /<ListFilterMenu\b[^>]*\bnetworkFilter=\{network\}[^>]*\bonNetworkFilterChange=\{setNetwork\}/,
+        );
+        expect(routeSource).not.toMatch(/<NetworkFilterDropdown\b/);
+    });
+
     it.each(surfaces)(
         '[REGRESSION P1] keeps the $name network filter to one line at 411px',
         ({ name, source }) => {

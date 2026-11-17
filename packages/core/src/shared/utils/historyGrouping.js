@@ -48,7 +48,7 @@
 
 import { getFormatLocale, t } from '../../i18n/index.js';
 import '../../i18n/locales/en/history.js';
-import { entryTimeMs } from './pendingHistory.js';
+import { entryOrderTimeMs, isInFlightEntry } from './pendingHistory.js';
 
 /**
  * @typedef {{
@@ -279,15 +279,20 @@ export function groupHistoryEntries(entries, mode = 'grouped') {
 /**
  * Partition rendered History items by the viewer's local calendar day.
  *
- * Pending items stay above dated chain history even when their clocks are
- * absent or skewed. Confirmed items without a usable time remain visible in
- * a final fallback section rather than borrowing today's date.
+ * In-flight items stay above dated chain history even when their clocks are
+ * absent or skewed. A row goes in the section its status pill names: a
+ * blockless row the wallet proved into a block (Confirmed) or gave up on
+ * (Failed) is settled, so it sits in its day like an indexed row, a rejected
+ * action included. Confirmed items without a usable time remain visible in a
+ * final fallback section rather than borrowing today's date.
  *
  * @param {GroupedItem[]} items
- * @param {number} [nowMs]
+ * @param {number} [nowMs]        the day-label clock
+ * @param {number} [statusNowMs]  the clock a dropped send is judged against;
+ *        the current time, not the day-label clock, which moves only at midnight
  * @returns {Array<{ key: string, label: string, items: GroupedItem[] }>}
  */
-export function groupHistoryItemsByLocalDay(items, nowMs = Date.now()) {
+export function groupHistoryItemsByLocalDay(items, nowMs = Date.now(), statusNowMs = Date.now()) {
     if (!Array.isArray(items) || items.length === 0) return [];
     const pending = [];
     const undated = [];
@@ -295,15 +300,15 @@ export function groupHistoryItemsByLocalDay(items, nowMs = Date.now()) {
 
     for (const item of items) {
         const entries = itemEntries(item);
-        // Keep blockless activity in the feed's first section regardless of
+        // Keep in-flight activity in the feed's first section regardless of
         // whether its source supplied a timestamp that is missing or ahead.
-        if (entries.some((entry) => Number(entry?.blockIndex ?? 0) <= 0)) {
+        if (entries.some((entry) => isInFlightEntry(entry, statusNowMs))) {
             pending.push(item);
             continue;
         }
         let newestMs = null;
         for (const entry of entries) {
-            const time = entryTimeMs(entry);
+            const time = entryOrderTimeMs(entry);
             if (time != null && (newestMs == null || time > newestMs)) newestMs = time;
         }
         if (newestMs == null) {
@@ -322,12 +327,21 @@ export function groupHistoryItemsByLocalDay(items, nowMs = Date.now()) {
             };
             dated.set(key, group);
         }
-        group.items.push(item);
+        group.items.push({ item, newestMs });
     }
 
+    // Newest first inside each day. The input is already in that order except
+    // for a row that settled (dropped past its grace) after the list was last
+    // sorted, which still sits where the in-flight rows sorted; the sort is
+    // stable, so rows with equal times keep their block and action order.
     const groups = [...dated.values()]
         .sort((a, b) => b.ordinal - a.ordinal)
-        .map(({ ordinal: _ordinal, ...group }) => group);
+        .map(({ ordinal: _ordinal, items: dayItems, ...group }) => ({
+            ...group,
+            items: dayItems
+                .sort((a, b) => b.newestMs - a.newestMs)
+                .map((dayItem) => dayItem.item),
+        }));
     if (pending.length > 0) groups.unshift({ key: 'pending', label: t('history.group.pending'), items: pending });
     if (undated.length > 0) groups.push({ key: 'undated', label: t('history.group.undated'), items: undated });
     return groups;

@@ -77,7 +77,7 @@ export function addDecimalStrings(a, b) {
 
 export class WindowStateCorruptError extends Error {
     constructor(message) {
-        super(`co-signer window state is unreadable (${message}); inspect/remove it deliberately to reset the spending window`);
+        super(`cosigner window state is unreadable (${message}); inspect/remove it deliberately to reset the spending window`);
         this.name = 'WindowStateCorruptError';
         this.code = 'WINDOW_STATE_CORRUPT';
     }

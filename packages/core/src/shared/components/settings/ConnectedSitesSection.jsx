@@ -8,71 +8,121 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// ConnectedSitesSection: §35.1 + §43.5 Connected Sites panel.
+// ConnectedSitesSection: §35.1 + §43.5 Connected Sites page.
 //
-// Lists ConnectedSite records sorted by lastUsedAt desc. Each row:
-//   - origin / appName / lastUsedAt
-//   - expandable permissions summary (chains, accounts, sign-message,
-//     per-action signAction map)
-//   - Disconnect button that confirms revocation, then deletes the record
-//   - Block button that adds the origin to the blocklist (§12 / G009)
-//     and evicts the record so any in-flight session stops signing.
+// The page owns its screen and header, because the header carries the
+// list filter and the plus (G95) and the title follows the drill-in:
+//   - header: filter (search inside the panel) and block (block a site)
+//   - toggle: Allowed | Blocked | Options
+//   - Allowed: one list card, a row per connected site, each opening the
+//     site detail (identity card, permissions, connection facts, and the
+//     Disconnect and Block Site actions)
+//   - Blocked: one list card, a row per blocked origin or wildcard, each
+//     opening its entry detail with Unblock
+//   - Options: the sign-request throttle (SignThrottlePanel): its status
+//     card, inline limit rows that apply at once, and the sites using it
+// Drill-ins are in-route state, as Contacts does, so Settings and the
+// standalone route mount this one component. The blocklist audit log is
+// still recorded by the host but is not shown here.
 //
-// A "Blocked origins" subsection at the bottom lists user-blocked
-// origins with Unblock buttons, plus an inline form to manually
-// block an origin without it being connected first.
-//
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     EmptyState,
-    FormErrorSummary,
     FormPage,
-    FormSection,
     Icon,
     Input,
+    ListPage,
+    ListRow,
+    PageHeader,
     PageNotice as Status,
+    Screen,
+    SectionHeader,
+    SegmentedControl,
+    useFormErrors,
 } from '@xchain-wallet/core/ui';
 import { useMessaging } from '../../useMessaging.js';
-import { useSettings } from '../../hooks/useSettings.js';
 import { useConfirmModal } from '../../hooks/useConfirmModal.js';
+import { useBackHandler } from '../../../ui/backStack.js';
 import { ConfirmModal } from '../ConfirmModal.jsx';
 import { useToast } from '../ToastHost.jsx';
-import { ROW_HINT, STACK, SettingsInlineForm } from './_settingsPrimitives.jsx';
-import cardStyles from '../../../ui/Card.module.css';
+import { ListFilterMenu } from '../ListFilterMenu.jsx';
+import { SiteIcon } from '../SiteIcon.jsx';
+import { ActionList, ActionListItem } from '../ActionList.jsx';
 import { actionDisplayLabel } from '../../utils/actionDisplayLabel.js';
-import {
-    SIGN_THROTTLE_BURST_MIN,
-    SIGN_THROTTLE_BURST_MAX,
-    SIGN_THROTTLE_WINDOW_MS_MIN,
-    SIGN_THROTTLE_WINDOW_MS_MAX,
-} from '../../../schemas/settings.js';
-import {
-    SIGN_THROTTLE_DEFAULT_BURST,
-    SIGN_THROTTLE_DEFAULT_WINDOW_MS,
-} from '../../../flows/signThrottle.js';
+import { titleCase } from '../../utils/titleCase.js';
+import { normalizeBlocklistEntry, parseWildcardPattern } from '../../../flows/blocklist.js';
+import { SignThrottlePanel } from './SignThrottlePanel.jsx';
 import local from './ConnectedSitesSection.module.css';
-import { blurNumberInputOnWheel } from '../../utils/formInput.js';
 import { neutralizeControlText } from '../../utils/textHardening.js';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/accountPicker.js';
 import '../../../i18n/locales/en/extension.js';
 import '../../../i18n/locales/en/send.js';
 import '../../../i18n/locales/en/settings.js';
+import '../../../i18n/locales/en/ui.js';
+import '../../../i18n/locales/en/firstPaint.js';
 
 // A connected site names itself, so its name and origin are hostile input:
 // bidi overrides would reorder the name, and a 240-character host would run
 // past the card edge where the user cannot read the whole origin.
 const siteName = (site) => neutralizeControlText(site.appName || site.origin, { maxLength: 120 });
 const siteOrigin = (site) => neutralizeControlText(site.origin, { maxLength: 2048 });
-const SITE_ORIGIN_STYLE = { display: 'block', overflowWrap: 'anywhere', unicodeBidi: 'isolate' };
+const SITE_ORIGIN_STYLE = { overflowWrap: 'anywhere', unicodeBidi: 'isolate' };
+const blockedEntryText = (entry) => neutralizeControlText(entry, { maxLength: 2048 });
 
-// Each part of the page is one shared card, like the rows on every other Settings page.
-function SettingsCard({ children }) {
-    return <div className={cardStyles.card}>{children}</div>;
+const VIEWS = ['allowed', 'blocked', 'options'];
+
+// A Settings search lands on the part of the page that holds its match:
+// the throttle rows on Options, the blocked-site rows on Blocked. Only
+// those row titles (Settings' search rows) move the view, so a typed site
+// name that merely contains the word block still opens on Allowed.
+const SEARCH_TARGET_VIEWS = new Map([
+    ['sign-request throttle', 'options'],
+    ['requests per site', 'options'],
+    ['window', 'options'],
+    ['blocked sites', 'blocked'],
+]);
+function viewForSearchTarget(target) {
+    return SEARCH_TARGET_VIEWS.get(String(target || '').trim().toLowerCase()) || 'allowed';
 }
 
-export function ConnectedSitesSection() {
+// A site's own icon (ConnectedSite.icon, a checked PNG data URL) or its
+// initials, through the shared SiteIcon, which never fetches and never
+// reads the legacy appIcon field.
+function SiteAvatar({ site, context = 'list' }) {
+    return (
+        <SiteIcon
+            origin={site.origin || ''}
+            name={site.appName ? siteName(site) : ''}
+            icon={site.icon ?? null}
+            context={context}
+        />
+    );
+}
+
+// A blocked entry has no record behind it, so it shows initials taken from
+// its host; a wildcard reads as the domain it covers.
+function BlockedAvatar({ entry, context = 'list' }) {
+    const wildcardDomain = parseWildcardPattern(entry);
+    return <SiteIcon origin={wildcardDomain ? `https://${wildcardDomain}` : String(entry)} context={context} />;
+}
+
+/**
+ * @param {object} [props]
+ * @param {() => void} [props.onBack]        leaves the page (Settings or the shell route)
+ * @param {string} [props.backLabel]         the back control's name on the list view
+ * @param {boolean} [props.nested]           the list view is itself a sub-screen (Settings)
+ * @param {'small' | 'full'} [props.variant] the shell's screen variant
+ * @param {string | null} [props.searchTarget] a Settings search match, which picks the opening view
+ */
+export function ConnectedSitesSection({
+    onBack,
+    backLabel,
+    nested = false,
+    variant = 'full',
+    searchTarget = null,
+} = {}) {
     const { messaging } = useMessaging();
     const { showToast } = useToast();
     const confirmDialog = useConfirmModal();
@@ -80,8 +130,13 @@ export function ConnectedSitesSection() {
     const [blocked, setBlocked] = useState(/** @type {string[]} */ ([]));
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [expanded, setExpanded] = useState(/** @type {Set<string>} */ (new Set()));
+    const [view, setView] = useState(() => viewForSearchTarget(searchTarget));
+    // The drill-in shown over the list: a site, a blocked entry, or the
+    // Block Site form. Null is the list itself.
+    const [page, setPage] = useState(/** @type {{ kind: 'site', id: string } | { kind: 'blocked', entry: string } | { kind: 'block' } | null} */ (null));
+    const [query, setQuery] = useState('');
     const [manualBlock, setManualBlock] = useState('');
+    const blockFormErrors = useFormErrors();
     const [pendingAction, setPendingAction] = useState(/** @type {string | null} */ (null));
     const loadSequence = useRef(0);
     const loadedFrom = useRef(null);
@@ -198,111 +253,174 @@ export function ConnectedSitesSection() {
         }
     };
 
+    // The Block Site form checks the entry with the same normalizer the
+    // host applies, so a malformed origin is refused at the field and never
+    // reaches the confirm dialog or the blocklist write.
     const onManualBlockSubmit = async (e) => {
         e.preventDefault();
+        if (pendingAction) return;
         const trimmed = manualBlock.trim();
-        if (!trimmed || pendingAction) return;
+        const validationMessage = !trimmed
+            ? t('settings.connectedSites.enterOriginToBlock')
+            : !normalizeBlocklistEntry(trimmed)
+                ? t('settings.connectedSites.invalidBlockEntry')
+                : null;
+        if (!blockFormErrors.validate({ 'block-site-origin': validationMessage })) return;
         const blockedOrigin = await onBlock(trimmed, 'block:manual');
         if (blockedOrigin) {
             setManualBlock('');
+            blockFormErrors.reset();
+            setPage(null);
+            setView('blocked');
         }
     };
 
-    if (loading || loadedFrom.current !== messaging) return <Status text={t('common.loading')} />;
-    if (error) return <Status text={t('settings.connectedSites.connectedSitesUnavailable', { error })} tone="error" />;
+    const ready = !loading && loadedFrom.current === messaging && !error;
+    const openSite = page?.kind === 'site' && sites ? sites.find((s) => s.id === page.id) || null : null;
+    const openEntry = page?.kind === 'blocked' && blocked.includes(page.entry) ? page.entry : null;
 
-    return (
-        <div role="group" aria-label={t('settings.connectedSites.connectedSitesAndDappPermissions')} style={STACK}>
-            <FormSection
-                title={t('settings.connectedSites.allowedSites')}
-                description={t('settings.page.reviewDappConnectionsAndControl')}
-            >
-                {(!sites || sites.length === 0) ? (
-                    <EmptyState
-                        title={t('settings.connectedSites.noSitesConnectedYet')}
-                        body={t('settings.connectedSites.whenAWebsiteAsksTo')}
-                        titleAs="p"
+    // A drill-in whose record went away (disconnected, blocked, unblocked,
+    // or removed by another window) returns to the list.
+    useEffect(() => {
+        if (!ready || !page) return;
+        if (page.kind === 'site' && !openSite) setPage(null);
+        if (page.kind === 'blocked' && !openEntry) setPage(null);
+    }, [ready, page, openSite, openEntry]);
+
+    // System Back and Escape close a drill-in before they leave the page.
+    useBackHandler(page ? () => setPage(null) : undefined, pendingAction !== null, 'screen');
+
+    const filterText = query.trim().toLowerCase();
+    const shownSites = useMemo(() => (sites || []).filter((site) => !filterText
+        || String(site.appName || '').toLowerCase().includes(filterText)
+        || String(site.origin || '').toLowerCase().includes(filterText)), [sites, filterText]);
+    const shownBlocked = useMemo(() => blocked.filter((entry) => !filterText
+        || String(entry).toLowerCase().includes(filterText)), [blocked, filterText]);
+
+    const title = openSite
+        ? titleCase(t('settings.connectedSites.siteIdentity'))
+        : openEntry
+            ? titleCase(t('settings.connectedSites.blockedEntry'))
+            : page?.kind === 'block'
+                ? t('settings.connectedSites.blockSiteAction')
+                : t('settings.connectedSites.pageTitle');
+
+    const header = (
+        <PageHeader
+            nested={page ? true : nested}
+            onBack={page ? () => setPage(null) : onBack}
+            backLabel={page ? undefined : backLabel}
+            backDisabled={Boolean(page) && pendingAction !== null}
+            title={title}
+            trailing={!page && ready ? (
+                <>
+                    <ListFilterMenu
+                        query={query}
+                        onQueryChange={setQuery}
+                        label={t('settings.connectedSites.filterSites')}
+                        searchPlaceholder={t('routes.addressList.search')}
+                        searchLabel={t('settings.connectedSites.searchSites')}
                     />
-                ) : (
-                    <SettingsCard>{sites.map((site) => {
-                        const isOpen = expanded.has(site.id);
-                        return (
-                            <FormSection
-                                key={site.id}
-                                headingLevel="h3"
-                                title={siteName(site)}
-                                description={(
-                                    <>
-                                        {/* A site with no app name is titled by its
-                                            origin, so the origin line would repeat it. */}
-                                        {site.appName && site.appName !== site.origin ? (
-                                            <span dir="ltr" style={SITE_ORIGIN_STYLE}>{siteOrigin(site)}</span>
-                                        ) : null}
-                                        <span style={ROW_HINT}>
-                                            {t('settings.connectedSites.lastUsed')} {formatLastUsed(site.lastUsedAt)} {t('settings.connectedSites.connected')} {formatLastUsed(site.connectedAt)}
-                                        </span>
-                                    </>
-                                )}
-                            >
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-1)' }}>
-                                    <Button
-                                        type="button"
-                                        aria-expanded={isOpen}
-                                        onClick={() => setExpanded((prev) => {
-                                            const next = new Set(prev);
-                                            if (next.has(site.id)) next.delete(site.id); else next.add(site.id);
-                                            return next;
-                                        })}
-                                        size="sm"
-                                        variant="secondary"
-                                        icon={isOpen ? <Icon.EyeOffIcon /> : <Icon.EyeIcon />}
-                                    >
-                                        {isOpen ? t('settings.developer.hide') : t('settings.connectedSites.permissions')}
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="danger"
-                                        icon={<Icon.UnlinkIcon />}
-                                        onClick={() => onDisconnect(site.id)}
-                                        loading={pendingAction === `disconnect:${site.id}`}
-                                        disabled={pendingAction !== null}
-                                    >
-                                        {t('settings.connectedSites.disconnect')}
-                                    </Button>
-                                    {blocklistWired ? (
-                                        <Button
-                                            size="sm"
-                                            variant="danger"
-                                            icon={<Icon.LockIcon />}
-                                            onClick={() => onBlock(site.origin)}
-                                            loading={pendingAction === `block:${site.origin}`}
-                                            disabled={pendingAction !== null}
-                                        >
-                                            {t('settings.connectedSites.block')}
-                                        </Button>
-                                    ) : null}
-                                </div>
-                                {isOpen ? <PermissionsSummary permissions={site.permissions} /> : null}
-                            </FormSection>
-                        );
-                    })}</SettingsCard>
-                )}
-            </FormSection>
-            {blocklistWired ? (
-                <BlockedOriginsPanel
-                    blocked={blocked}
-                    manualBlock={manualBlock}
-                    setManualBlock={setManualBlock}
-                    onSubmit={onManualBlockSubmit}
-                    onUnblock={onUnblock}
-                    pendingAction={pendingAction}
-                />
+                    {blocklistWired ? (
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            icon={<Icon.PlusIcon />}
+                            aria-label={t('settings.connectedSites.blockASite')}
+                            title={t('settings.connectedSites.blockASite')}
+                            onClick={() => {
+                                setManualBlock('');
+                                blockFormErrors.reset();
+                                setPage({ kind: 'block' });
+                            }}
+                        >
+                            {null}
+                        </Button>
+                    ) : null}
+                </>
             ) : null}
-            {blocklistWired
-                && typeof messaging?.listBlocklistAuditLog === 'function' ? (
-                    <BlocklistAuditPanel confirm={confirmDialog.confirm} />
+        />
+    );
+
+    let body;
+    if (loading || loadedFrom.current !== messaging) {
+        body = <Status text={t('common.loading')} />;
+    } else if (error) {
+        body = <Status text={t('settings.connectedSites.connectedSitesUnavailable', { error })} tone="error" />;
+    } else if (openSite) {
+        body = (
+            <SiteDetail
+                site={openSite}
+                blocklistWired={blocklistWired}
+                pendingAction={pendingAction}
+                onDisconnect={() => onDisconnect(openSite.id)}
+                onBlock={() => onBlock(openSite.origin)}
+            />
+        );
+    } else if (openEntry) {
+        body = (
+            <BlockedEntryDetail
+                entry={openEntry}
+                pendingAction={pendingAction}
+                onUnblock={() => onUnblock(openEntry)}
+            />
+        );
+    } else if (page?.kind === 'block') {
+        body = (
+            <BlockSiteForm
+                value={manualBlock}
+                errors={blockFormErrors}
+                onChange={setManualBlock}
+                onSubmit={onManualBlockSubmit}
+                pendingAction={pendingAction}
+            />
+        );
+    } else {
+        const views = VIEWS.filter((id) => id !== 'blocked' || blocklistWired);
+        const shownView = views.includes(view) ? view : 'allowed';
+        body = (
+            <ListPage role="group" aria-label={t('settings.connectedSites.connectedSitesAndDappPermissions')}>
+                <SegmentedControl
+                    aria-label={t('settings.connectedSites.viewToggle')}
+                    value={shownView}
+                    onChange={setView}
+                    items={[
+                        { id: 'allowed', label: <><Icon.LinkIcon aria-hidden="true" /><span>{t('send.advanced.allowed')}</span></> },
+                        ...(blocklistWired
+                            ? [{ id: 'blocked', label: <><Icon.LockIcon aria-hidden="true" /><span>{t('settings.connectedSites.viewBlocked')}</span></> }]
+                            : []),
+                        { id: 'options', label: <><Icon.GearIcon aria-hidden="true" /><span>{t('ui.iconSelect.options')}</span></> },
+                    ]}
+                />
+                {shownView === 'allowed' ? (
+                    <AllowedList
+                        sites={sites || []}
+                        shown={shownSites}
+                        onOpen={(id) => setPage({ kind: 'site', id })}
+                    />
                 ) : null}
-            <SignThrottlePanel />
+                {shownView === 'blocked' ? (
+                    <BlockedList
+                        blocked={blocked}
+                        shown={shownBlocked}
+                        onOpen={(entry) => setPage({ kind: 'blocked', entry })}
+                    />
+                ) : null}
+                {shownView === 'options' ? <SignThrottlePanel /> : null}
+            </ListPage>
+        );
+    }
+
+    // Each view keeps its own scroll offset: the short detail would
+    // otherwise clamp the list's offset, and Back would land at the top.
+    return (
+        <Screen
+            variant={variant}
+            header={header}
+            scrollKey={page ? page.kind : `list-${view}`}
+            restoreScroll={!page}
+        >
+            {body}
             {confirmDialog.request ? (
                 <ConfirmModal
                     {...confirmDialog.request}
@@ -310,408 +428,246 @@ export function ConnectedSitesSection() {
                     onCancel={confirmDialog.onCancel}
                 />
             ) : null}
-        </div>
+        </Screen>
     );
 }
 
-// Cluster S FOLLOWUP 4: Blocklist audit-log panel.
-// Reads the persisted ring-buffer via messaging.listBlocklistAuditLog,
-// renders newest-first, and exposes a clear-history button.
-function BlocklistAuditPanel({ confirm }) {
-    const { messaging } = useMessaging();
-    const [entries, setEntries] = useState(/** @type {any[] | null} */ (null));
-    const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [clearing, setClearing] = useState(false);
-    const reloadRequestRef = useRef(0);
-
-    const reload = useCallback(async () => {
-        const request = ++reloadRequestRef.current;
-        try {
-            const list = await messaging.listBlocklistAuditLog();
-            if (request !== reloadRequestRef.current) return;
-            setEntries(Array.isArray(list) ? list : []);
-            setError(null);
-        } catch (err) {
-            if (request !== reloadRequestRef.current) return;
-            setError(err instanceof Error ? err.message : String(err));
-        }
-    }, [messaging]);
-
-    useEffect(() => {
-        reload();
-        return () => { reloadRequestRef.current += 1; };
-    }, [reload]);
-
-    const onClear = async () => {
-        if (clearing) return;
-        const confirmed = await confirm({
-            title: t('settings.connectedSites.clearHistoryTitle'),
-            message: t('settings.connectedSites.clearHistoryMessage'),
-            confirmLabel: t('settings.connectedSites.clearHistory'),
-            danger: true,
-        });
-        if (!confirmed) return;
-        setClearing(true);
-        try {
-            await messaging.clearBlocklistAuditLog();
-            await reload();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
-        } finally {
-            setClearing(false);
-        }
-    };
-
-    if (entries === null) return null;
+// The Allowed card: a row per connected site with its icon or initials,
+// its name (or origin), and "origin · last used", each opening the detail.
+function AllowedList({ sites, shown, onOpen }) {
+    if (sites.length === 0) {
+        return (
+            <EmptyState
+                title={t('settings.connectedSites.noSitesConnectedYet')}
+                body={t('settings.connectedSites.whenAWebsiteAsksTo')}
+                titleAs="p"
+            />
+        );
+    }
+    if (shown.length === 0) {
+        return (
+            <EmptyState
+                title={t('settings.connectedSites.noMatchingSites')}
+                body={t('settings.connectedSites.noMatchingSitesBody')}
+                titleAs="p"
+            />
+        );
+    }
     return (
-        <SettingsInlineForm>
-            <Status text={error} tone="error" />
-            <FormSection
-                headingLevel="h3"
-                title={t('settings.connectedSites.siteBlockHistory')}
-                description={t('settings.connectedSites.showsThe50MostRecent')}
-            >
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                    type="button"
-                    onClick={onClear}
-                    icon={<Icon.TrashIcon />}
-                    disabled={clearing || entries.length === 0}
-                    size="sm"
-                    variant="danger"
-                >
-                    {clearing ? t('settings.connectedSites.clearing') : t('settings.connectedSites.clearHistory')}
-                </Button>
-            </div>
-            {entries.length === 0 ? (
+        <ul className={local.list} aria-label={t('settings.connectedSites.allowedSites')}>
+            {shown.map((site) => (
+                <li key={site.id}>
+                    <ListRow
+                        type="button"
+                        onClick={() => onOpen(site.id)}
+                        chevron
+                        leading={<SiteAvatar site={site} />}
+                        title={siteName(site)}
+                        subtitle={(
+                            <>
+                                {/* A site with no app name is titled by its
+                                    origin, so the origin is not repeated. */}
+                                {site.appName && site.appName !== site.origin ? (
+                                    <>
+                                        <span dir="ltr" style={SITE_ORIGIN_STYLE}>{siteOrigin(site)}</span>
+                                        {' · '}
+                                    </>
+                                ) : null}
+                                {formatLastUsed(site.lastUsedAt)}
+                            </>
+                        )}
+                    />
+                </li>
+            ))}
+        </ul>
+    );
+}
+
+function blockedEntryType(entry) {
+    return parseWildcardPattern(entry)
+        ? t('settings.connectedSites.wildcardAllSubdomains')
+        : t('settings.connectedSites.singleOrigin');
+}
+
+// The Blocked card: a row per blocked origin or wildcard. The blocklist
+// stores only the entry itself, so the row says the entry and its kind.
+function BlockedList({ blocked, shown, onOpen }) {
+    if (blocked.length === 0) {
+        return (
+            <EmptyState
+                title={t('settings.connectedSites.noBlockedSites')}
+                body={t('settings.connectedSites.sitesYouBlockAppearHere')}
+                titleAs="p"
+            />
+        );
+    }
+    if (shown.length === 0) {
+        return (
+            <EmptyState
+                title={t('settings.connectedSites.noMatchingSites')}
+                body={t('settings.connectedSites.noMatchingSitesBody')}
+                titleAs="p"
+            />
+        );
+    }
+    return (
+        <ul className={local.list} aria-label={t('settings.connectedSites.blockedSites')}>
+            {shown.map((entry) => (
+                <li key={entry}>
+                    <ListRow
+                        type="button"
+                        onClick={() => onOpen(entry)}
+                        chevron
+                        leading={<BlockedAvatar entry={entry} />}
+                        title={<span dir="ltr" style={SITE_ORIGIN_STYLE}>{blockedEntryText(entry)}</span>}
+                        subtitle={blockedEntryType(entry)}
+                    />
+                </li>
+            ))}
+        </ul>
+    );
+}
+
+/** One label-left, value-right fact in a detail card. */
+function FactRow({ label, children }) {
+    return (
+        <li>
+            <ListRow title={label} trailing={<span className={local.factValue}>{children}</span>} />
+        </li>
+    );
+}
+
+// A connected site: identity card, the permissions its record holds (the
+// wallet has no call that edits them, so they read only), when it
+// connected and was last used, and Disconnect and Block Site.
+function SiteDetail({ site, blocklistWired, pendingAction, onDisconnect, onBlock }) {
+    const permissions = site.permissions || null;
+    const chains = permissions?.chains || [];
+    const accounts = permissions?.accounts || [];
+    const actions = permissions?.canSignAction || {};
+    const none = t('send.advanced.none');
+    return (
+        <ListPage>
+            <section className={local.identityCard} aria-label={t('settings.connectedSites.siteIdentity')}>
+                <SiteAvatar site={site} context="hero" />
+                <h2 className={local.identityName}>{siteName(site)}</h2>
+                <p className={local.identityLine}>
+                    <span dir="ltr" style={SITE_ORIGIN_STYLE}>{siteOrigin(site)}</span>
+                </p>
+            </section>
+            <SectionHeader as="h3" title={t('settings.connectedSites.permissions')} />
+            {permissions ? (
+                <ul className={local.list} aria-label={t('settings.connectedSites.permissions')}>
+                    <FactRow label={t('extension.connect.chains')}>{chains.length ? chains.join(', ') : none}</FactRow>
+                    <FactRow label={t('accountPicker.title')}>{accounts.length ? accounts.join(', ') : none}</FactRow>
+                    <FactRow label={t('settings.connectedSites.signMessages')}>
+                        {permissions.canSignMessage ? t('settings.connectedSites.alwaysAllow') : t('settings.connectedSites.askEveryTime')}
+                    </FactRow>
+                    {Object.keys(actions).length === 0 ? (
+                        <FactRow label={t('settings.connectedSites.signActions')}>{t('settings.connectedSites.askEveryTime')}</FactRow>
+                    ) : Object.entries(actions).map(([action, perm]) => (
+                        <FactRow key={action} label={actionDisplayLabel(action)}>
+                            <span style={{ color: permColor(perm) }}>{permissionLabel(perm)}</span>
+                        </FactRow>
+                    ))}
+                </ul>
+            ) : (
                 <EmptyState
-                    title={t('settings.connectedSites.noSiteBlockHistory')}
-                    body={t('settings.connectedSites.sitesYouBlockOrUnblock')}
+                    title={t('settings.connectedSites.noPermissionRecord')}
+                    body={t('settings.connectedSites.noPermissionRecordBody')}
                     titleAs="p"
                 />
-            ) : (
-                <SettingsCard>{/* The style guide has no compact audit-list primitive, so this remains a semantic list. */}
-                <ul
-                    style={{
-                        margin: 0,
-                        padding: 0,
-                        listStyle: 'none',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 'var(--xc-space-1)',
-                    }}
-                >
-                    {[...entries].reverse().map((entry, idx) => (
-                        <li
-                            key={`${entry.at}:${idx}`}
-                            style={{
-                                display: 'flex',
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 'var(--xc-space-2)',
-                                fontSize: 'var(--xc-text-xs)',
-                            }}
-                        >
-                            {/* Native list items preserve audit-log list semantics because the kit has no list primitive. */}
-                            <span style={{ color: 'var(--xc-text-muted)', minWidth: '6.5rem' }}>
-                                {formatLastUsed(new Date(entry.at).toISOString())}
-                            </span>
-                            <span style={{ color: entry.action === 'add' ? 'var(--xc-danger-fg)' : 'var(--xc-text)' }}>
-                                {entry.action === 'add' ? t('settings.connectedSites.blocked') : t('settings.connectedSites.unblocked')}
-                            </span>
-                            <span style={{ color: 'var(--xc-text)', flex: 1, wordBreak: 'break-all', textAlign: 'right' }}>
-                                {entry.entry}
-                                {Array.isArray(entry.evictedSiteIds) && entry.evictedSiteIds.length > 0 ? (
-                                    <span style={{ color: 'var(--xc-text-muted)', marginLeft: 4 }}>
-                                        {t('settings.connectedSites.evictedCount', { count: entry.evictedSiteIds.length })}
-                                    </span>
-                                ) : null}
-                            </span>
-                        </li>
-                    ))}
-                </ul></SettingsCard>
             )}
-            </FormSection>
-        </SettingsInlineForm>
+            <ul className={local.list} aria-label={t('settings.connectedSites.connection')}>
+                <FactRow label={t('settings.connectedSites.connectedSince')}>{formatDate(site.connectedAt)}</FactRow>
+                <FactRow label={t('settings.connectedSites.lastUsed')}>{formatLastUsed(site.lastUsedAt)}</FactRow>
+            </ul>
+            <ActionList label={t('settings.connectedSites.siteActions')}>
+                <ActionListItem
+                    icon={<Icon.UnlinkIcon />}
+                    title={t('settings.connectedSites.disconnect')}
+                    description={t('settings.connectedSites.disconnectMessage', { origin: siteOrigin(site) })}
+                    aria-label={t('settings.connectedSites.disconnect')}
+                    onClick={onDisconnect}
+                    disabled={pendingAction !== null}
+                    disabledReason={pendingAction !== null ? t('common.loading') : undefined}
+                />
+                {blocklistWired ? (
+                    <ActionListItem
+                        icon={<Icon.LockIcon />}
+                        title={t('settings.connectedSites.blockSite')}
+                        description={t('settings.connectedSites.blockMessage')}
+                        aria-label={t('settings.connectedSites.blockSiteAction')}
+                        onClick={onBlock}
+                        disabled={pendingAction !== null}
+                        disabledReason={pendingAction !== null ? t('common.loading') : undefined}
+                    />
+                ) : null}
+            </ActionList>
+        </ListPage>
     );
 }
 
-// Cluster S FOLLOWUP 1: Sign-request throttle limits panel.
-// Reads / edits `settings.signThrottle.{burst, windowMs}`. Empty values
-// write the documented defaults because the settings patcher deep-merges
-// nested objects and cannot remove an existing nested key.
-function SignThrottlePanel() {
-    const { settings, update } = useSettings({ reportsOwnError: true });
-    const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState(/** @type {string | null} */ (null));
-    const [validationAttempt, setValidationAttempt] = useState(0);
-
-    const currentBurst = settings?.signThrottle?.burst;
-    const currentWindowMs = settings?.signThrottle?.windowMs;
-
-    const [burstInput, setBurstInput] = useState(
-        typeof currentBurst === 'number' ? String(currentBurst) : '',
-    );
-    const [windowSecondsInput, setWindowSecondsInput] = useState(
-        typeof currentWindowMs === 'number' ? formatWindowSeconds(currentWindowMs) : '',
-    );
-
-    useEffect(() => {
-        setBurstInput(typeof currentBurst === 'number' ? String(currentBurst) : '');
-        setWindowSecondsInput(
-            typeof currentWindowMs === 'number' ? formatWindowSeconds(currentWindowMs) : '',
-        );
-    }, [currentBurst, currentWindowMs]);
-
-    const onApply = async (e) => {
-        e.preventDefault();
-        setValidationAttempt((attempt) => attempt + 1);
-        if (submitting) return;
-        setError(null);
-        const patch = {};
-        if (burstInput.trim() === '') {
-            patch.burst = SIGN_THROTTLE_DEFAULT_BURST;
-        } else {
-            const burstN = Number(burstInput);
-            if (!/^\d+$/.test(burstInput.trim())
-                || !Number.isFinite(burstN)
-                || burstN < SIGN_THROTTLE_BURST_MIN
-                || burstN > SIGN_THROTTLE_BURST_MAX) {
-                setError(`Burst must be an integer between ${SIGN_THROTTLE_BURST_MIN} and ${SIGN_THROTTLE_BURST_MAX}.`);
-                return;
-            }
-            patch.burst = burstN;
-        }
-        if (windowSecondsInput.trim() === '') {
-            patch.windowMs = SIGN_THROTTLE_DEFAULT_WINDOW_MS;
-        } else {
-            const ms = parseWindowSeconds(windowSecondsInput);
-            if (ms === null
-                || ms < SIGN_THROTTLE_WINDOW_MS_MIN
-                || ms > SIGN_THROTTLE_WINDOW_MS_MAX) {
-                const minS = SIGN_THROTTLE_WINDOW_MS_MIN / 1000;
-                const maxS = SIGN_THROTTLE_WINDOW_MS_MAX / 1000;
-                setError(`Window must be between ${minS} and ${maxS} seconds with at most three decimal places.`);
-                return;
-            }
-            patch.windowMs = ms;
-        }
-        try {
-            setSubmitting(true);
-            await update({ signThrottle: patch });
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    const effectiveBurst = typeof currentBurst === 'number' ? currentBurst : SIGN_THROTTLE_DEFAULT_BURST;
-    const effectiveWindowSec = typeof currentWindowMs === 'number'
-        ? formatWindowSeconds(currentWindowMs)
-        : SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000;
-
-    const throttleErrorTarget = /^Burst /i.test(error || '')
-        ? { id: 'sign-throttle-burst', label: 'Burst' }
-        : /^Window /i.test(error || '')
-            ? { id: 'sign-throttle-window', label: 'Window' }
-            : undefined;
-    const throttleErrors = error ? [{ ...throttleErrorTarget, message: error }] : [];
+// A blocked origin or wildcard: what it is, and the green Unblock.
+function BlockedEntryDetail({ entry, pendingAction, onUnblock }) {
     return (
-        <SettingsInlineForm>
-            <FormPage
-                onSubmit={onApply}
-                status={error ? <FormErrorSummary errors={throttleErrors} focusKey={validationAttempt} /> : null}
-                sectioned
-                submitFromAnyField
-                label={t('settings.connectedSites.signRequestThrottleControls')}
-            >
-            <FormSection
-                headingLevel="h3"
-                title={t('settings.connectedSites.signRequestThrottle')}
-                description={t('settings.connectedSites.limitsHowManySigningRequests', { SIGN_THROTTLE_DEFAULT_BURST, value: SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000 })}
-            >
-            <p style={ROW_HINT}>
-                {t('settings.connectedSites.currentlyInEffect')} <strong>{effectiveBurst}</strong> {t('settings.connectedSites.per')}{' '}
-                <strong>{effectiveWindowSec} s</strong>.
-            </p>
-            <div className={local.controlRow}>
-                <Input
-                    id="sign-throttle-burst"
-                    size="md"
-                    label={t('settings.connectedSites.burst')}
-                    help={t('settings.connectedSites.burstHelp')}
-                    type="number"
-                    inputMode="numeric"
-                    enterKeyHint="next"
-                    autoComplete="off"
-                    min={SIGN_THROTTLE_BURST_MIN}
-                    max={SIGN_THROTTLE_BURST_MAX}
-                    step={1}
-                    value={burstInput}
-                    onChange={(e) => {
-                        setBurstInput(e.target.value);
-                        if (error) setError(null);
-                    }}
-                    onWheel={blurNumberInputOnWheel}
-                    placeholder={String(SIGN_THROTTLE_DEFAULT_BURST)}
-                    aria-label={t('settings.connectedSites.signThrottleBurstMaxRequests')}
-                    style={{ width: '5rem' }}
+        <ListPage>
+            <section className={local.identityCard} aria-label={t('settings.connectedSites.blockedEntry')}>
+                <BlockedAvatar entry={entry} context="hero" />
+                <h2 className={local.identityName}>
+                    <span dir="ltr" style={SITE_ORIGIN_STYLE}>{blockedEntryText(entry)}</span>
+                </h2>
+                <p className={local.identityLine}>{blockedEntryType(entry)}</p>
+            </section>
+            <ActionList label={t('settings.connectedSites.siteActions')}>
+                <ActionListItem
+                    icon={<Icon.UnlockIcon />}
+                    title={t('settings.connectedSites.unblock')}
+                    onClick={onUnblock}
+                    disabled={pendingAction !== null}
+                    disabledReason={pendingAction !== null ? t('common.loading') : undefined}
                 />
-                <Input
-                    id="sign-throttle-window"
-                    size="md"
-                    label={t('settings.connectedSites.windowSeconds')}
-                    help={t('settings.connectedSites.windowSecondsHelp')}
-                    type="number"
-                    inputMode="decimal"
-                    enterKeyHint="go"
-                    autoComplete="off"
-                    min={SIGN_THROTTLE_WINDOW_MS_MIN / 1000}
-                    max={SIGN_THROTTLE_WINDOW_MS_MAX / 1000}
-                    step={0.001}
-                    value={windowSecondsInput}
-                    onChange={(e) => {
-                        setWindowSecondsInput(e.target.value);
-                        if (error) setError(null);
-                    }}
-                    onWheel={blurNumberInputOnWheel}
-                    placeholder={String(SIGN_THROTTLE_DEFAULT_WINDOW_MS / 1000)}
-                    aria-label={t('settings.connectedSites.signThrottleWindowInSeconds')}
-                    style={{ width: '5rem' }}
-                />
+            </ActionList>
+        </ListPage>
+    );
+}
+
+// The plus's Block Site form: one origin-or-wildcard field whose help
+// gives the wildcard syntax, and the green Block Site.
+function BlockSiteForm({ value, errors, onChange, onSubmit, pendingAction }) {
+    return (
+        <FormPage
+            onSubmit={onSubmit}
+            submitFromAnyField
+            label={t('settings.connectedSites.blockSite')}
+            errors={errors}
+            actions={(
                 <Button
                     type="submit"
-                    disabled={submitting}
-                    size="md"
                     variant="success"
-                    icon={<Icon.CheckIcon />}
+                    icon={<Icon.LockIcon />}
+                    loading={pendingAction === 'block:manual'}
+                    disabled={pendingAction !== null}
                 >
-                    {submitting ? t('settings.connectedSites.applying') : t('settings.connectedSites.applyThrottle')}
+                    {t('settings.connectedSites.blockSiteAction')}
                 </Button>
-            </div>
-            </FormSection>
-            </FormPage>
-        </SettingsInlineForm>
-    );
-}
-
-function BlockedOriginsPanel({ blocked, manualBlock, setManualBlock, onSubmit, onUnblock, pendingAction }) {
-    return (
-        <FormSection
-            headingLevel="h3"
-            title={t('settings.connectedSites.blockedSites')}
-        >
-                {blocked.length === 0 ? (
-                    <EmptyState
-                        title={t('settings.connectedSites.noBlockedSites')}
-                        body={t('settings.connectedSites.sitesYouBlockAppearHere')}
-                        titleAs="p"
-                    />
-                ) : (
-                    <SettingsCard>{/* The style guide has no compact origin-list primitive, so this remains a semantic list. */}
-                    <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)' }}>
-                        {blocked.map((origin) => (
-                            <li
-                                key={origin}
-                                style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--xc-space-2)' }}
-                            >
-                                {/* Native list items preserve blocked-origin list semantics because the kit has no list primitive. */}
-                                <span dir="ltr" style={{ color: 'var(--xc-text)', overflowWrap: 'anywhere', unicodeBidi: 'isolate' }}>{neutralizeControlText(origin, { maxLength: 2048 })}</span>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="secondary"
-                                    icon={<Icon.UnlockIcon />}
-                                    onClick={() => onUnblock(origin)}
-                                    loading={pendingAction === `unblock:${origin}`}
-                                    disabled={pendingAction !== null}
-                                >
-                                    {t('settings.connectedSites.unblock')}
-                                </Button>
-                            </li>
-                        ))}
-                    </ul></SettingsCard>
-                )}
-                <FormPage
-                    onSubmit={onSubmit}
-                    submitFromAnyField
-                    label={t('settings.connectedSites.blockSite')}
-                >
-                    <div className={`${local.controlRow} ${local.blockRow}`}>
-                    <Input
-                        type="text"
-                        size="md"
-                        enterKeyHint="go"
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        label={t('settings.connectedSites.originOrWildcardToBlock')}
-                        help={t('settings.connectedSites.siteToBlockHelp')}
-                        value={manualBlock}
-                        onChange={(e) => setManualBlock(e.target.value)}
-                        placeholder={t('settings.connectedSites.httpsExampleComOrExample')}
-                    />
-                    <Button
-                        type="submit"
-                        size="md"
-                        variant="success"
-                        icon={<Icon.LockIcon />}
-                        loading={pendingAction === 'block:manual'}
-                        disabled={!manualBlock.trim() || pendingAction !== null}
-                    >
-                        {t('settings.connectedSites.blockOrigin')}
-                    </Button>
-                    </div>
-                </FormPage>
-        </FormSection>
-    );
-}
-
-function PermissionsSummary({ permissions }) {
-    if (!permissions) {
-        return <div style={ROW_HINT}>{t('settings.connectedSites.noPermissionRecord')}</div>;
-    }
-    const chains = permissions.chains || [];
-    const accounts = permissions.accounts || [];
-    const actions = permissions.canSignAction || {};
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-1)', fontSize: 'var(--xc-text-xs)' }}>
-            <PermRow label={t('extension.connect.chains')} text={chains.length === 0 ? t('send.advanced.none') : chains.join(', ')} />
-            <PermRow label={t('accountPicker.title')} text={accounts.length === 0 ? t('send.advanced.none') : accounts.join(', ')} />
-            <PermRow
-                label={t('settings.connectedSites.signMessages')}
-                text={permissions.canSignMessage ? t('settings.connectedSites.alwaysAllow') : t('settings.connectedSites.askEveryTime')}
-            />
-            {Object.keys(actions).length === 0 ? (
-                <PermRow label={t('settings.connectedSites.signActions')} text={t('settings.connectedSites.askEveryTime')} />
-            ) : (
-                <div>
-                    <div style={{ color: 'var(--xc-text-muted)' }}>{t('settings.connectedSites.signActions')}</div>
-                    {/* The style guide has no compact permission-list primitive, so this remains a semantic list. */}
-                    <ul style={{ margin: 0, paddingLeft: 'var(--xc-space-3)', listStyle: 'disc' }}>
-                        {Object.entries(actions).map(([action, perm]) => (
-                            <li key={action} style={{ color: 'var(--xc-text)' }}>
-                                {/* Native list items preserve permission-list semantics because the kit has no list primitive. */}
-                                {actionDisplayLabel(action)}
-                                {': '}
-                                <span style={{ color: permColor(perm) }}>{permissionLabel(perm)}</span>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
             )}
-        </div>
-    );
-}
-
-function PermRow({ label, text }) {
-    return (
-        <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--xc-text-muted)' }}>{label}</span>
-            <span style={{ color: 'var(--xc-text)', wordBreak: 'break-all' }}>{text}</span>
-        </div>
+        >
+            <Input
+                id="block-site-origin"
+                type="text"
+                enterKeyHint="go"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                autoComplete="off"
+                label={t('settings.connectedSites.originOrWildcardToBlock')}
+                help={t('settings.connectedSites.siteToBlockHelp')}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={t('settings.connectedSites.httpsExampleComOrExample')}
+            />
+        </FormPage>
     );
 }
 
@@ -725,18 +681,6 @@ function permissionLabel(perm) {
     if (perm === 'always') return t('settings.connectedSites.alwaysAllow');
     if (perm === 'never') return t('settings.connectedSites.permNever');
     return t('settings.connectedSites.askEveryTime');
-}
-
-function formatWindowSeconds(windowMs) {
-    return String(windowMs / 1000);
-}
-
-function parseWindowSeconds(value) {
-    const match = /^(\d+)(?:\.(\d{1,3}))?$/.exec(value.trim());
-    if (!match) return null;
-    const wholeMs = Number(match[1]) * 1000;
-    const fractionalMs = Number((match[2] || '').padEnd(3, '0'));
-    return wholeMs + fractionalMs;
 }
 
 function formatLastUsed(iso) {
@@ -753,4 +697,11 @@ function formatLastUsed(iso) {
     } catch {
         return iso;
     }
+}
+
+// The calendar day a site connected, as the list's older dates read.
+function formatDate(iso) {
+    if (!iso) return t('send.advanced.none');
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? String(iso) : d.toISOString().slice(0, 10);
 }

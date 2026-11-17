@@ -8,7 +8,7 @@
 // native select option.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BatchComposerForm } from '../../../packages/core/src/shared/routes/BatchComposerForm.jsx';
@@ -44,7 +44,6 @@ function mount(Form) {
 afterEach(() => cleanup());
 
 describe.each([
-    ['BatchComposerForm', BatchComposerForm],
     ['ParallelComposer', ParallelComposer],
 ])('%s source control', (_name, Form) => {
     it('shows the complete source in a read-only address field', async () => {
@@ -52,6 +51,17 @@ describe.each([
         const field = await screen.findByLabelText(/^From(?: address)?$/, { selector: 'input' });
         expect(field).toHaveValue(ADDRESS);
         expect(field).toHaveAttribute('readonly');
+        expect(screen.queryByRole('combobox', { name: /^From(?: address)?$/ })).toBeNull();
+    });
+});
+
+// Batch (layout 1) has no page From field: each transaction's Network and
+// From row names the complete source and opens the own-address picker.
+describe('BatchComposerForm source control', () => {
+    it('names the complete source on the transaction From row, never as a select option', async () => {
+        mount(BatchComposerForm);
+        const row = await screen.findByRole('button', { name: 'Change the network and From address of transaction 1' });
+        expect(within(row).getByLabelText(ADDRESS)).toBeTruthy();
         expect(screen.queryByRole('combobox', { name: /^From(?: address)?$/ })).toBeNull();
     });
 });

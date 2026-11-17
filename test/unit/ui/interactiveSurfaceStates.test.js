@@ -25,29 +25,34 @@ const surfaces = [
         hoverSelectors: ['.toggle:hover'],
         hoverBackground: 'var(--xc-control-bg-hover)',
         selectedSelector: '.pressed',
+        selectedToken: '--xc-toggle-selected-bg',
     },
     {
-        // Tabs mark hover, press and selection with text colour and the
-        // bottom underline only, so their hover and pressed rules paint no fill.
-        file: 'packages/core/src/ui/Tabs.module.css',
-        base: '.tab',
-        hoverSelectors: ['.tab:hover'],
+        // Every view toggle (Tabs and SegmentedControl) shares one sheet: a
+        // hovered or pressed item only darkens its label and paints no fill,
+        // and the active item takes the shared selected fill.
+        file: 'packages/core/src/ui/SegmentedControl.module.css',
+        base: '.segment',
+        hoverSelectors: ['.segment:hover'],
         underlineOnly: true,
         selectedSelector: "[aria-selected='true']",
+        selectedToken: '--xc-toggle-selected',
     },
     {
         file: 'packages/core/src/ui/ListRow.module.css',
         base: '.interactive',
         hoverSelectors: ['.interactive:hover'],
-        hoverBackground: 'var(--xc-control-bg-hover)',
-        selectedSelector: "[aria-current='page']",
+        hoverBackground: 'var(--xc-row-hover-bg)',
+        selectedSelector: '[aria-current]',
+        selectedToken: '--xc-row-active-bg',
     },
     {
         file: 'packages/core/src/shared/routes/ActionsMenu.module.css',
         base: '.entry',
         hoverSelectors: ['.entry:hover'],
-        hoverBackground: 'var(--xc-control-bg-hover)',
+        hoverBackground: 'var(--xc-row-hover-bg)',
         selectedSelector: "[aria-current='page']",
+        selectedToken: '--xc-row-active-bg',
     },
     {
         file: 'packages/core/src/shared/components/CollectiblesView.module.css',
@@ -121,8 +126,9 @@ function inspectSurface(source, surface) {
         (selector) => selector.includes(surface.selectedSelector),
     ));
     const selectedDeclarations = selectedRules.flatMap((rule) => Object.values(declarations(rule)));
-    if (!selectedDeclarations.some((value) => value.includes('--xc-control-selected'))) {
-        failures.push('selected state needs the shared selected token');
+    const selectedToken = surface.selectedToken || '--xc-control-selected';
+    if (!selectedDeclarations.some((value) => value.includes(selectedToken))) {
+        failures.push('selected state needs the assigned selected token');
     }
     return failures;
 }
@@ -152,7 +158,7 @@ describe('desktop interactive surface states', () => {
             'interactive surface needs pointer cursor',
             'hover must require a fine pointer',
             'pressed state needs a background',
-            'selected state needs the shared selected token',
+            'selected state needs the assigned selected token',
         ]);
     });
 

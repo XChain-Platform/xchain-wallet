@@ -20,6 +20,7 @@ const ORIGIN_LABEL_KEYS = {
     'imported-wif': 'walletDetails.originLabel.importedWif',
     'imported-xchain-backup': 'walletDetails.originLabel.importedBackup',
     'imported-freewallet': 'walletDetails.originLabel.importedFreewallet',
+    'connected-hardware': 'walletDetails.originLabel.connectedHardware',
     unknown: 'walletDetails.originLabel.unknown',
 };
 

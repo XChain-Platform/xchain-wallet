@@ -8,8 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// A look at the order book, trades or history keeps the order typed on the
-// Place tab, and a book row picked again after an edit still fills its price.
+// Buy and Sell open the Trade page in place. An order typed there survives a
+// switch between its Swap and Market forms, and a book row picked again after
+// an edit still fills its price.
 
 import React from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -68,24 +69,31 @@ function mount() {
     return render(<MarketView walletId="wallet-1" chainId="bitcoin-mainnet" tick1="XCP" tick2="BTC" onBack={() => {}} />);
 }
 
-const tab = (name) => screen.getByRole('tab', { name });
+// The old Swap | Market tab row is gone: one Swap | Limit | Market order-type
+// toggle inside Trade Details switches the mode.
+const orderType = (name) => screen.getByRole('radio', { name });
+const priceField = () => screen.getByRole('textbox', { name: 'Price' });
+// The Amount label names its unit, e.g. "Amount (XCP)".
+const amountField = () => screen.getByRole('textbox', { name: /^Amount\b/ });
 
-describe('MarketView Place tab draft', () => {
-    it('keeps the typed price and size across a look at the book', async () => {
+describe('MarketView Trade page draft', () => {
+    it('keeps the typed price and amount across a switch to Swap and back', async () => {
         messaging = freshMessaging();
         mount();
         await settle();
-        fireEvent.click(tab('Place'));
+        // Buy opens the Trade page in place; its Limit mode has the Price and Amount fields.
+        fireEvent.click(screen.getByRole('button', { name: 'Buy' }));
         await settle();
-        fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '0.00015' } });
-        fireEvent.change(screen.getByLabelText('Size (XCP)'), { target: { value: '4' } });
-        fireEvent.click(tab('Book'));
+        fireEvent.click(orderType('Limit'));
+        fireEvent.change(priceField(), { target: { value: '0.00015' } });
+        fireEvent.change(amountField(), { target: { value: '4' } });
+        fireEvent.click(orderType('Swap'));
         await settle();
-        fireEvent.click(tab('Place'));
+        fireEvent.click(orderType('Limit'));
         await settle();
 
-        expect(screen.getByLabelText('Price (BTC)')).toHaveValue('0.00015');
-        expect(screen.getByLabelText('Size (XCP)')).toHaveValue('4');
+        expect(priceField()).toHaveValue('0.00015');
+        expect(amountField()).toHaveValue('4');
     });
 
     it('fills the price again when the same book row is picked after an edit', async () => {
@@ -94,14 +102,14 @@ describe('MarketView Place tab draft', () => {
         await settle();
         fireEvent.click(await screen.findByRole('button', { name: /^Pick sell ask price 0\.0002/ }));
         await settle();
-        expect(screen.getByLabelText('Price (BTC)')).toHaveValue('0.0002');
-        fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '0.5' } });
-        fireEvent.click(tab('Book'));
+        expect(priceField()).toHaveValue('0.0002');
+        fireEvent.change(priceField(), { target: { value: '0.5' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         await settle();
         fireEvent.click(await screen.findByRole('button', { name: /^Pick sell ask price 0\.0002/ }));
         await settle();
 
-        expect(screen.getByLabelText('Price (BTC)')).toHaveValue('0.0002');
+        expect(priceField()).toHaveValue('0.0002');
     });
 
     it('shows a fresh Place form for the reversed pair when the pair flips on the Place tab', async () => {
@@ -121,17 +129,27 @@ describe('MarketView Place tab draft', () => {
         }
         render(<Harness />);
         await settle();
-        fireEvent.click(tab('Place'));
+        fireEvent.click(screen.getByRole('button', { name: 'Buy' }));
         await settle();
-        fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '0.00015' } });
+        fireEvent.click(orderType('Limit'));
+        fireEvent.change(priceField(), { target: { value: '0.00015' } });
+        // The pair flips on the market page, so leave the Trade page first.
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        await settle();
         fireEvent.click(screen.getByRole('button', { name: /^Reverse/ }));
         await settle();
+        fireEvent.click(screen.getByRole('button', { name: 'Buy' }));
+        await settle();
+        fireEvent.click(orderType('Limit'));
 
-        expect(screen.getByLabelText('Price (XCP)')).toHaveValue('');
-        expect(screen.getByLabelText('Size (BTC)')).toBeVisible();
+        // A fresh form for the reversed pair: no price carried over, and the
+        // units are the reversed pair's (price in XCP, amount in BTC).
+        expect(priceField()).toHaveValue('');
+        expect(priceField().closest('div').parentElement).toHaveTextContent('XCP');
+        expect(amountField().closest('div').parentElement).toHaveTextContent('BTC');
     });
 
-    it('does not read wallet balances before the Place tab opens', async () => {
+    it('does not read wallet balances before a Trade page opens', async () => {
         messaging = freshMessaging();
         mount();
         await settle();

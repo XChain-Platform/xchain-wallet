@@ -53,6 +53,21 @@
     outline-offset: -2px;
 }
 
+/* A balance item has an outer list row because pin and hide are sibling
+   controls beside the main ListRow. That outer row owns every pointer fill so
+   the inset ListRow never stacks a second rounded fill on top of it. This rule
+   is intentionally width-independent: fine-pointer phone and popup windows
+   get the same hover feedback as the wide split view. */
+@media (hover: hover) and (pointer: fine) {
+    .row.row[data-xc-row-state]:hover {
+        background: var(--xc-row-hover-bg);
+    }
+}
+
+.row.row[data-xc-row-state]:active {
+    background: var(--xc-row-hover-bg);
+}
+
 .iconWrap {
     position: relative;
     flex: 0 0 auto;
@@ -244,4 +259,53 @@
 .hiddenToggle:hover {
     color: var(--xc-text);
     background: var(--xc-bg-muted);
+}
+
+/* The row's forward chevron matches the Back chevron's size (a 32px icon box). The glyph
+   fills only the middle third, so the box gives back its empty sides and the amounts keep their room. */
+.rowChevron {
+    --xc-icon-size: 32px;
+    display: inline-flex;
+    justify-content: center;
+    /* Only the middle third of the box holds the glyph and its stroke; the
+       rest is clipped so the box adds no width and never overhangs the row. */
+    width: calc(var(--xc-icon-size) / 3);
+    overflow: hidden;
+}
+
+.rowChevron svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
+}
+
+/* Marketplace's wide picker uses edge-to-edge row fills inside its list card.
+   Wide Home keeps its separately ruled balance-row treatment. */
+.row[data-xc-split-row] {
+    position: relative;
+    width: 100%;
+    margin-inline: 0;
+    border-top-color: transparent;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.row[data-xc-split-row] + .row[data-xc-split-row]::before {
+    content: '';
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 0;
+    border-top: 1px solid var(--xc-border);
+}
+
+.row.row > .rowContent.rowContent:is(
+    :hover,
+    :active,
+    [aria-current]:not([aria-current='false']),
+    [aria-selected='true'],
+    [aria-pressed='true']
+) {
+    background: transparent;
+    box-shadow: none;
 }

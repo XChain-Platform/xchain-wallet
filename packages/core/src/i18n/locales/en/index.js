@@ -55,19 +55,24 @@
 import accountPicker from './accountPicker.js';
 import actionDetail from './actionDetail.js';
 import actionsMenu from './actionsMenu.js';
+import actionWarnings from './actionWarnings.js';
 import addressDiscovery from './addressDiscovery.js';
 import addressList from './addressList.js';
+import addressPreferences from './addressPreferences.js';
 import adsNotice from './adsNotice.js';
+import airdrop from './airdrop.js';
 import alerts from './alerts.js';
 import backupReminder from './backupReminder.js';
 import balanceList from './balanceList.js';
 import balances from './balances.js';
+import batch from './batch.js';
 import betCreate from './betCreate.js';
 import bridgeOrigin from './bridgeOrigin.js';
 import commandPalette from './commandPalette.js';
 import common from './common.js';
 import components from './components.js';
 import composeMessage from './composeMessage.js';
+import confirmStandard from './confirmStandard.js';
 import coSigner from './coSigner.js';
 import createOrder from './createOrder.js';
 import createWallet from './createWallet.js';
@@ -84,6 +89,9 @@ import firstPaint from './firstPaint.js';
 import flows from './flows.js';
 import gatedPublish from './gatedPublish.js';
 import governance from './governance.js';
+import hardwareConnect from './hardwareConnect.js';
+import hardwareManage from './hardwareManage.js';
+import hardwareSign from './hardwareSign.js';
 import history from './history.js';
 import home from './home.js';
 import importWallet from './importWallet.js';
@@ -93,11 +101,14 @@ import locked from './locked.js';
 import manageToken from './manageToken.js';
 import market from './market.js';
 import multisig from './multisig.js';
+import mySwaps from './mySwaps.js';
 import onboarding from './onboarding.js';
 import palette from './palette.js';
 import panic from './panic.js';
 import parallelComposer from './parallelComposer.js';
 import pending from './pending.js';
+import projectRoster from './projectRoster.js';
+import publishFile from './publishFile.js';
 import receive from './receive.js';
 import renameAccount from './renameAccount.js';
 import renameWallet from './renameWallet.js';
@@ -108,9 +119,12 @@ import settings from './settings.js';
 import shell from './shell.js';
 import signerSelect from './signerSelect.js';
 import stakeNew from './stakeNew.js';
+import tokenDetail from './tokenDetail.js';
+import tokenMarket from './tokenMarket.js';
 import transactionStatus from './transactionStatus.js';
 import txTimeline from './txTimeline.js';
 import ui from './ui.js';
+import unbindForm from './unbindForm.js';
 import undoSend from './undoSend.js';
 import uploadMethod from './uploadMethod.js';
 import verifySignature from './verifySignature.js';
@@ -122,19 +136,24 @@ export const en = {
     ...accountPicker,
     ...actionDetail,
     ...actionsMenu,
+    ...actionWarnings,
     ...addressDiscovery,
     ...addressList,
+    ...addressPreferences,
     ...adsNotice,
+    ...airdrop,
     ...alerts,
     ...backupReminder,
     ...balanceList,
     ...balances,
+    ...batch,
     ...betCreate,
     ...bridgeOrigin,
     ...commandPalette,
     ...common,
     ...components,
     ...composeMessage,
+    ...confirmStandard,
     ...coSigner,
     ...createOrder,
     ...createWallet,
@@ -151,6 +170,9 @@ export const en = {
     ...flows,
     ...gatedPublish,
     ...governance,
+    ...hardwareConnect,
+    ...hardwareManage,
+    ...hardwareSign,
     ...history,
     ...home,
     ...importWallet,
@@ -160,11 +182,14 @@ export const en = {
     ...manageToken,
     ...market,
     ...multisig,
+    ...mySwaps,
     ...onboarding,
     ...palette,
     ...panic,
     ...parallelComposer,
     ...pending,
+    ...projectRoster,
+    ...publishFile,
     ...receive,
     ...renameAccount,
     ...renameWallet,
@@ -175,9 +200,12 @@ export const en = {
     ...shell,
     ...signerSelect,
     ...stakeNew,
+    ...tokenDetail,
+    ...tokenMarket,
     ...transactionStatus,
     ...txTimeline,
     ...ui,
+    ...unbindForm,
     ...undoSend,
     ...uploadMethod,
     ...verifySignature,

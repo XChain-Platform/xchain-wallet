@@ -94,15 +94,18 @@ describe('BackupSection encrypted export', () => {
         expect(screen.getByText(/configured download location, usually the Downloads folder/i)).toBeTruthy();
         fillPasswords('short', 'short');
         expect(screen.getByText('Backup password must be at least 8 characters.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Export backup' })).toBeDisabled();
+        // G130: Export Backup stays enabled; a press is refused with the reason.
+        expect(screen.getByRole('button', { name: 'Export Backup' })).toBeEnabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Export Backup' }));
+        expect(screen.getByRole('alert', { name: /form errors/i })).toBeTruthy();
 
         fillPasswords('long-enough', 'long-enougH');
-        expect(screen.getByText('Backup passwords don\'t match.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Export backup' })).toBeDisabled();
+        expect(screen.getAllByText('Backup passwords don\'t match.').length).toBeGreaterThan(0);
+        fireEvent.click(screen.getByRole('button', { name: 'Export Backup' }));
         expect(messaging.exportBackupFile).not.toHaveBeenCalled();
 
         fillPasswords('long-enough');
-        expect(screen.getByRole('button', { name: 'Export backup' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Export Backup' })).toBeEnabled();
     });
 
     it('locks the prompt while saving and downloads the returned JSON under a safe descriptive name', async () => {
@@ -111,7 +114,7 @@ describe('BackupSection encrypted export', () => {
         mount(exportBackupFile);
         fillPasswords('backup-secret');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Export backup' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export Backup' }));
 
         expect(screen.getByLabelText('Backup password')).toBeDisabled();
         expect(screen.getByLabelText('Confirm backup password')).toBeDisabled();
@@ -122,7 +125,7 @@ describe('BackupSection encrypted export', () => {
         finish({ fileContent: CONTENT });
         expect(await screen.findByText('Confirm the backup file')).toBeTruthy();
         expect(clickedDownload).toBe('Cold-Vault-backup-2026-10-13.xchain-wallet');
-        fireEvent.click(screen.getByRole('button', { name: 'I saved the file' }));
+        fireEvent.click(screen.getByRole('button', { name: 'I Saved the File' }));
         expect(await screen.findByText('Backup file saved')).toBeTruthy();
         expect(screen.getByText(/configured download location, usually the Downloads folder/i)).toBeTruthy();
         expect(downloadedBlob).toBeInstanceOf(Blob);
@@ -136,7 +139,7 @@ describe('BackupSection encrypted export', () => {
         fillPasswords('backup-secret');
         vi.useFakeTimers();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Export backup' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export Backup' }));
         act(() => vi.advanceTimersByTime(3_000));
         expect(screen.getByText('Encrypting for 3 seconds…')).toBeTruthy();
         act(() => vi.advanceTimersByTime(27_000));
@@ -151,20 +154,20 @@ describe('BackupSection encrypted export', () => {
     it('creates an HTTPS backup pointer QR without putting the file or password in it', async () => {
         mount();
         fillPasswords('backup-secret');
-        fireEvent.click(screen.getByRole('button', { name: 'Export backup' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'I saved the file' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export Backup' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'I Saved the File' }));
         await screen.findByText('Optional backup pointer QR');
 
         fireEvent.change(screen.getByLabelText('Backup file HTTPS address'), {
             target: { value: 'http://backups.example/cold.xchain-wallet' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Create pointer QR' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Pointer QR' }));
         expect(screen.getByText('The backup location must use HTTPS.')).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Backup file HTTPS address'), {
             target: { value: 'https://backups.example/cold.xchain-wallet' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Create pointer QR' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Pointer QR' }));
 
         expect(await screen.findByRole('img', { name: 'Backup pointer QR' })).toBeTruthy();
         const pointer = screen.getByText(/^xchain-backup:/).textContent;
@@ -177,17 +180,17 @@ describe('BackupSection encrypted export', () => {
     it('refuses a malformed response instead of saving a corrupt backup file', async () => {
         mount(vi.fn(async () => ({ fileContent: '{"not":"a backup"}' })));
         fillPasswords('backup-secret');
-        fireEvent.click(screen.getByRole('button', { name: 'Export backup' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export Backup' }));
 
         expect(await screen.findByText('Backup export returned an invalid file.')).toBeTruthy();
         expect(URL.createObjectURL).not.toHaveBeenCalled();
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Export backup' })).toBeEnabled());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Export Backup' })).toBeEnabled());
     });
 });
 
 function exportWithPassword() {
     fillPasswords('backup-secret');
-    fireEvent.click(screen.getByRole('button', { name: 'Export backup' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export Backup' }));
 }
 
 function abortError() {
@@ -214,7 +217,7 @@ describe('BackupSection marks a backup done only on a real save signal', () => {
         expect(screen.queryByText('Backup file saved')).toBeNull();
         expect(getBackupVerifiedAt('wallet-1')).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'I saved the file' }));
+        fireEvent.click(screen.getByRole('button', { name: 'I Saved the File' }));
         expect(await screen.findByText('Backup file saved')).toBeTruthy();
         expect(getBackupVerifiedAt('wallet-1')).toBeTypeOf('string');
     });
@@ -241,7 +244,7 @@ describe('BackupSection marks a backup done only on a real save signal', () => {
         expect(messaging.exportBackupFile).not.toHaveBeenCalled();
         expect(URL.createObjectURL).not.toHaveBeenCalled();
         expect(getBackupVerifiedAt('wallet-1')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Export backup' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Export Backup' })).toBeEnabled();
     });
 
     it('picker: marks the backup done once the file write completes', async () => {

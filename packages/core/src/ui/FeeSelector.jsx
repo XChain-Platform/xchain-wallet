@@ -50,9 +50,6 @@ const speedLabel = (speed) => ({
 // One glyph per stop: hourglass-like clock for Slow, a check for Normal, forward for Fast, pencil for Custom.
 const SPEED_ICON = { low: ClockIcon, normal: CheckIcon, fast: ForwardIcon, custom: PencilIcon };
 const HIGH_FEE_MULTIPLIER = 10;
-// ETA-pill tint per priority: slower = warmer/riskier. Maps to the
-// per-tone classes in the stylesheet (red / orange / green / white).
-const ETA_TONE = { low: 'etaLow', normal: 'etaNormal', fast: 'etaFast', custom: 'etaCustom' };
 // The tier stops and the click-to-edit figures are native buttons on the shared
 // Button base (one variant, one size); FeeSelector.module.css keeps their tick
 // and readout geometry and their transparent resting look.
@@ -66,17 +63,18 @@ const BUTTON_BASE = `${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.sm
  *
  * The slider has four discrete stops (low / normal / fast / custom).
  * For the three tier stops the active rate + ETA + fee amount are
- * shown under the track. When the user lands on Custom, a sat/vB (or
- * equivalent) input appears in place of the readout so the rate can
- * be edited directly.
+ * shown under the track.
  *
- * Both readout figures are click-to-edit (when `allowCustom`): clicking
- * the rate turns it into the Custom rate input, and clicking the fee
- * amount turns it into an exact-fee input. An exact fee is converted to
- * the equivalent rate (fee / vsize) before being emitted, so the
- * onChange contract stays `{ mode: 'custom', customRate }` and callers
- * recompute the estimate through the same custom-rate path. Either edit
- * snaps the slider to the Custom stop.
+ * There is one custom fee editor (G113): the fee amount on the readout.
+ * Selecting the amount (when `allowCustom`) turns it into an exact-fee
+ * input in place, and landing on the Custom stop opens that same input;
+ * no second rate box ever appears. An exact fee is converted to the
+ * equivalent rate (fee / vsize) before being emitted, so the onChange
+ * contract stays `{ mode: 'custom', customRate }` and callers recompute
+ * the estimate through the same custom-rate path. Typing a fee snaps the
+ * slider to the Custom stop. Only a chain with no estimate at all (no
+ * slider, no size to divide by) edits the rate itself, in that same
+ * place on the readout.
  *
  * Callers fetch tiers via `estimateNativeSendFeeTiers` and pass them in;
  * the selected tier (or custom rate) flows back via
@@ -98,6 +96,11 @@ const BUTTON_BASE = `${buttonStyles.btn} ${buttonStyles.ghost} ${buttonStyles.sm
  *   - fiat       optional formatters already resolved by a parent FeesCard
  *   - error      a refusal about the fee (for example the node's relay
  *               minimum); renders in the selector's feedback slot
+ *   - lineLabel  the Fees section's "Network fee" label (with its help tip).
+ *               When set, the readout becomes that section's Network fee
+ *               line, 8px under the slider: the label on the left, the fee
+ *               (still click-to-edit, and the one custom fee editor) and its
+ *               fiat on the right, and no rate figure.
  *
  * @typedef {object} FeeSelectorValue
  * @property {'low' | 'normal' | 'fast' | 'custom'} mode
@@ -139,29 +142,34 @@ function FeeSelectorContent({
     disabled = false,
     allowCustom = true,
     label = null,
+    lineLabel = null,
     coinTicker = '',
     error = null,
 }) {
     const customInputId = useId();
     const feeInputId = useId();
     const customFeedbackId = useId();
-    // Exact-fee edit buffer. While non-null the fee readout renders as a
-    // text input echoing exactly what the user typed (so "0.0" doesn't
-    // get reformatted mid-keystroke); the derived rate flows out through
-    // onChange on every change. Cleared on blur/Enter or when the user
-    // moves the slider back to a preset tier.
+    // The one custom fee editor (G113): while `feeEditing` the fee amount
+    // renders as a text input. Landing on Custom, selecting the amount or
+    // selecting the rate opens it; blur or Enter closes it unless what was
+    // typed is refused, and a preset tier closes it. `feeDraft` echoes
+    // exactly what the user typed (so "0.0" doesn't get reformatted
+    // mid-keystroke); before the first keystroke the input shows the live
+    // fee, so a custom estimate that lands a render later still reads true.
+    // The derived rate flows out through onChange on every change.
+    const [feeEditing, setFeeEditing] = useState(false);
     const [feeDraft, setFeeDraft] = useState(null);
+    // Only a chain with no estimate edits the rate itself (there is no size
+    // to turn a fee into a rate); this is that input's typed text.
     const [customRateDraft, setCustomRateDraft] = useState(null);
     const SPEEDS = allowCustom ? SPEEDS_WITH_CUSTOM : TIER_SPEEDS;
     const MAX_INDEX = SPEEDS.length - 1;
 
-    // Header row: field label + contextual help on the left, the ETA
-    // for the active tier on the right. Rendered above both the empty
-    // state and the slider so the "what does this mean" affordance is
-    // always next to the control (§37 / G122 InfoTip integration). ETA
-    // sits up here rather than in the readout so the lower line is free
-    // to show the fee amount + coin + fiat.
-    const headerRow = (etaMinutes, speed) => (label || Number.isFinite(etaMinutes)) ? (
+    // Header row: field label + contextual help. Rendered above both the
+    // empty state and the slider so the "what does this mean" affordance is
+    // always next to the control (§37 / G122 InfoTip integration). The ETA
+    // shows only under the Slow, Normal and Fast stops, never up here.
+    const headerRow = () => label ? (
         <div className={styles.header}>
             {label ? (
                 <span className={styles.label}>
@@ -172,11 +180,6 @@ function FeeSelectorContent({
                     />
                 </span>
             ) : <span />}
-            {Number.isFinite(etaMinutes) ? (
-                <span className={`${styles.headerEta} ${styles[ETA_TONE[speed]] || ''}`.trim()}>
-                    ~{etaMinutes} {t('ui.feeSelector.min')}
-                </span>
-            ) : null}
         </div>
     ) : null;
 
@@ -201,6 +204,16 @@ function FeeSelectorContent({
         }
     }, [opensOnCustom, onChange, value?.customRate, value?.mode]);
 
+    // The form moving the pick to a preset (a network change resets the fee)
+    // closes the editor; opening it on a preset's amount changes no mode.
+    const pickedMode = value?.mode;
+    useEffect(() => {
+        if (pickedMode !== 'custom') {
+            setFeeEditing(false);
+            setFeeDraft(null);
+        }
+    }, [pickedMode]);
+
     if (noEstimate && !chainId) {
         return <div className={styles.wrap}>{headerRow()}</div>;
     }
@@ -210,6 +223,10 @@ function FeeSelectorContent({
     const sliderSpeed = SPEEDS.includes(mode) ? mode : 'normal';
     const sliderIndex = SPEEDS.indexOf(sliderSpeed);
     const activeEstimate = isCustom ? customEstimate : effectiveTiers[sliderSpeed];
+    // With no estimate there is no size to turn a fee into a rate, so the
+    // line's one editor edits the rate there, always open.
+    const rateOnly = noEstimate;
+    const editingFee = !rateOnly && feeEditing;
 
     const seedCustomRate = () => (
         value?.customRate
@@ -219,12 +236,23 @@ function FeeSelectorContent({
         ?? 0
     );
 
+    const openFeeEditor = () => {
+        setFeeDraft(null);
+        setFeeEditing(true);
+    };
+    const closeFeeEditor = () => {
+        setFeeDraft(null);
+        setFeeEditing(false);
+    };
+
+    // Custom opens the Network fee line's own editor, never a second box.
     const pickSpeed = (speed) => {
         setCustomRateDraft(null);
         if (speed === 'custom') {
             onChange({ mode: 'custom', customRate: seedCustomRate() });
+            openFeeEditor();
         } else {
-            setFeeDraft(null);
+            closeFeeEditor();
             onChange({ mode: speed });
         }
     };
@@ -251,7 +279,7 @@ function FeeSelectorContent({
 
     const beginFeeEdit = () => {
         if (disabled || !allowCustom) return;
-        setFeeDraft(formatWithThousands(activeEstimate?.coinAmount ?? ''));
+        openFeeEditor();
     };
 
     const onFeeDraftChange = (raw) => {
@@ -267,7 +295,7 @@ function FeeSelectorContent({
     };
 
     // Click the tier rate readout to jump straight into Custom, seeded
-    // with the tier's own rate so the input opens ready to tweak.
+    // with the tier's own rate, with the fee editor open ready to tweak.
     const beginRateEdit = () => {
         if (disabled || !allowCustom) return;
         setCustomRateDraft(null);
@@ -275,6 +303,7 @@ function FeeSelectorContent({
             mode: 'custom',
             customRate: activeEstimate?.rateValue ?? seedCustomRate(),
         });
+        openFeeEditor();
     };
 
     const onSliderChange = (raw) => {
@@ -325,7 +354,10 @@ function FeeSelectorContent({
     const rangeError = isCustom ? customFeeRateBoundsError({ rate: customRateNumber, tiers: effectiveTiers }) : null;
     let customFeedback = null;
     let customFeedbackTone = null;
-    if (feeDraft !== null && (!Number.isFinite(feeDraftNumber) || feeDraftNumber < 0)) {
+    if (feeDraft !== null && feeDraft.trim() === '') {
+        customFeedback = 'Enter a custom network fee.';
+        customFeedbackTone = 'error';
+    } else if (feeDraft !== null && (!Number.isFinite(feeDraftNumber) || feeDraftNumber < 0)) {
         customFeedback = 'Enter a valid non-negative network fee amount.';
         customFeedbackTone = 'error';
     } else if (isCustom && customRateRaw.trim() === '') {
@@ -345,6 +377,10 @@ function FeeSelectorContent({
         customFeedback = 'This rate is more than 10 times the Fast rate. Check it carefully before sending.';
         customFeedbackTone = 'warning';
     }
+    // A refused entry keeps the editor open on blur, so the value stays on
+    // screen beside its message; a refusal from outside (the node's relay
+    // minimum) does not hold it.
+    const entryRefused = customFeedbackTone === 'error';
 
     if (error) {
         customFeedback = error;
@@ -353,7 +389,7 @@ function FeeSelectorContent({
 
     return (
         <div className={styles.wrap}>
-            {headerRow(activeEstimate?.etaMinutes, isCustom ? 'custom' : sliderSpeed)}
+            {headerRow()}
             <div className={styles.sliderBlock} data-active-speed={sliderSpeed}>
                 {!noEstimate ? (
                     <>
@@ -408,16 +444,60 @@ function FeeSelectorContent({
                 </div>
                     </>
                 ) : null}
-                {(isCustom || activeEstimate || feeDraft !== null) ? (() => {
+                {(isCustom || activeEstimate || editingFee) ? (() => {
                     const fiatStr = activeEstimate && typeof fiat?.formatNativeFee === 'function'
                         ? fiat.formatNativeFee(activeEstimate.coinAmount)
                         : null;
-                    const editingFee = feeDraft !== null;
                     return (
                         <>
-                            <div className={styles.sliderReadout} role="status" aria-live="polite">
-                            <span className={styles.sliderReadoutPrimary}>
-                                {editingFee ? (
+                            {/* As the Fees section's Network fee line, only the
+                                figures are live: the label holds a help button. */}
+                            <div
+                                className={`${styles.sliderReadout} ${lineLabel ? styles.feeLine : ''}`.trim()}
+                                role={lineLabel ? undefined : 'status'}
+                                aria-live={lineLabel ? undefined : 'polite'}
+                                data-fees-row={lineLabel ? 'network' : undefined}
+                            >
+                            {lineLabel ? <span className={styles.feeLineLabel}>{lineLabel}</span> : null}
+                            <span
+                                className={styles.sliderReadoutPrimary}
+                                role={lineLabel ? 'status' : undefined}
+                                aria-live={lineLabel ? 'polite' : undefined}
+                            >
+                                {rateOnly ? (
+                                    <>
+                                        <span className={styles.customRow}>
+                                            <input
+                                                id={customInputId}
+                                                type="text"
+                                                inputMode="decimal"
+                                                enterKeyHint="done"
+                                                autoComplete="off"
+                                                min={0.00000001}
+                                                step="any"
+                                                className={styles.customInput}
+                                                ref={(el) => el?.setCustomValidity(rangeError || '')}
+                                                value={customRateRaw}
+                                                onChange={(e) => onCustomRateChange(e.target.value)}
+                                                onBlur={() => {
+                                                    if (!entryRefused) setCustomRateDraft(null);
+                                                }}
+                                                aria-invalid={customFeedbackTone === 'error' ? 'true' : undefined}
+                                                aria-describedby={customFeedback ? customFeedbackId : undefined}
+                                                aria-label={t('ui.feeSelector.customFeeRate', { unit: effectiveTiers.unit })}
+                                                disabled={disabled}
+                                                autoFocus
+                                            />
+                                            <span className={styles.customUnit}>{effectiveTiers.unit}</span>
+                                        </span>
+                                        {activeEstimate ? (
+                                            <span className={styles.sliderReadoutFiat}>
+                                                {[`${formatWithThousands(activeEstimate.coinAmount)} ${coinTicker}`.trim(), fiatStr]
+                                                    .filter(Boolean).join(' ')}
+                                            </span>
+                                        ) : null}
+                                    </>
+                                ) : editingFee ? (
                                     <span className={styles.customRow}>
                                         <input
                                             id={feeInputId}
@@ -429,9 +509,9 @@ function FeeSelectorContent({
                                             step="any"
                                             className={`${styles.customInput} ${styles.feeInput}`}
                                             ref={(el) => el?.setCustomValidity(rangeError || '')}
-                                            value={feeDraft}
+                                            value={feeDraft ?? formatWithThousands(activeEstimate?.coinAmount ?? '')}
                                             onChange={(e) => onFeeDraftChange(e.target.value)}
-                                            onBlur={() => setFeeDraft(null)}
+                                            onBlur={() => { if (!entryRefused) closeFeeEditor(); }}
                                             onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                                             aria-invalid={customFeedbackTone === 'error' ? 'true' : undefined}
                                             aria-describedby={customFeedback ? customFeedbackId : undefined}
@@ -465,34 +545,29 @@ function FeeSelectorContent({
                                             <span className={styles.sliderReadoutFiat}>{fiatStr}</span>
                                         ) : null}
                                     </>
+                                ) : isCustom && allowCustom ? (
+                                    // A custom rate with no fee figure yet still
+                                    // offers its one way back into the editor.
+                                    <button
+                                        type="button"
+                                        className={`${BUTTON_BASE} ${styles.readoutEdit}`}
+                                        onClick={beginFeeEdit}
+                                        disabled={disabled}
+                                        aria-label={t('ui.feeSelector.editExactFeeAmount')}
+                                        title={t('ui.feeSelector.selectToEditTheExact')}
+                                    >
+                                        <PencilIcon />
+                                    </button>
                                 ) : null}
                             </span>
-                            {isCustom ? (
-                                <span className={styles.customRow}>
-                                    <input
-                                        id={customInputId}
-                                        type="text"
-                                        inputMode="decimal"
-                                        enterKeyHint="done"
-                                        autoComplete="off"
-                                        min={0.00000001}
-                                        step="any"
-                                        className={styles.customInput}
-                                        ref={(el) => el?.setCustomValidity(rangeError || '')}
-                                        value={customRateRaw}
-                                        onChange={(e) => onCustomRateChange(e.target.value)}
-                                        onBlur={() => {
-                                            if (customFeedbackTone !== 'error') setCustomRateDraft(null);
-                                        }}
-                                        aria-invalid={customFeedbackTone === 'error' ? 'true' : undefined}
-                                        aria-describedby={customFeedback ? customFeedbackId : undefined}
-                                        aria-label={t('ui.feeSelector.customFeeRate', { unit: effectiveTiers.unit })}
-                                        disabled={disabled}
-                                        autoFocus={!editingFee}
-                                    />
-                                    <span className={styles.customUnit}>{effectiveTiers.unit}</span>
+                            {/* The rate figure stands beside a bare readout only;
+                                on Custom it is read-only, since the fee amount is
+                                the one editor. */}
+                            {(rateOnly || lineLabel || !activeEstimate) ? null : isCustom ? (
+                                <span className={styles.sliderReadoutRate}>
+                                    {formatWithThousands(activeEstimate.rateValue)} {effectiveTiers.unit}
                                 </span>
-                            ) : !activeEstimate ? null : allowCustom ? (
+                            ) : allowCustom ? (
                                 <button
                                     type="button"
                                     className={`${BUTTON_BASE} ${styles.readoutEdit} ${styles.sliderReadoutRate}`}

@@ -77,7 +77,7 @@ describe('the shell reachability notice on Settings', () => {
         const shown = notices(container);
         expect(container.querySelector('[data-settings-page-template="subpage"]')).not.toBeNull();
         expect(shown).toHaveLength(1);
-        expect(shown[0]).toHaveTextContent('Try again');
+        expect(shown[0]).toHaveTextContent('Try Again');
         const main = container.querySelector('main');
         expect(main.firstElementChild.contains(shown[0])).toBe(true);
     });

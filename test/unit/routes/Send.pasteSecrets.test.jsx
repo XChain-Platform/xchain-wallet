@@ -71,7 +71,7 @@ async function pasteIntoTo(text) {
         </MessagingProvider>,
     );
     const to = await screen.findByLabelText(/^To$/);
-    await waitFor(() => expect(screen.getByLabelText(/^From$/)).toHaveValue(SOURCE.address));
+    await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(SOURCE.address));
     fireEvent.paste(to, { clipboardData: { getData: () => text } });
     await new Promise((resolve) => setTimeout(resolve, 100));
     return to;

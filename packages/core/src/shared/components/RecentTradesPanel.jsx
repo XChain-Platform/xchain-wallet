@@ -24,11 +24,15 @@ import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { useReportLoadFailure } from './pageLoadFailures.jsx';
 import {
     compareDecimalStrings,
+    formatWithThousands,
     roundDecimalString,
+    trimAmountTail,
 } from '../utils/amountFormat.js';
 import tableStyles from './DataTable.module.css';
+import { rowMatchesQuery } from '../utils/marketRowSearch.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/market.js';
 
 const MAX_ROWS = 30;
 
@@ -39,8 +43,11 @@ const MAX_ROWS = 30;
  * @param {string} props.tick2
  * @param {boolean} [props.demo]   demo wallet; render sample trades when there's no live history
  * @param {(txid: string) => void} [props.onOpenTx]   navigate to the tx detail (future)
+ * @param {boolean} [props.bare]   the Market page's Trades tab: the column header row and the trade
+ *   rows only, with no "Recent trades" heading and no error of its own (operator 2026-11-13, G91)
+ * @param {string} [props.query]   the Market page's search, narrowing trades by price, amount or transaction
  */
-export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenTx }) {
+export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenTx, bare = false, query = '' }) {
     const { messaging } = useMessaging();
     const [rows, setRows] = useState(/** @type {any[]} */ ([]));
     const [loading, setLoading] = useState(true);
@@ -81,9 +88,19 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
         return () => { cancelled = true; };
     }, [messaging, chainId, tick1, tick2, demo, retryKey]);
 
-    const summaries = rows
+    const allSummaries = rows
         .map((row) => ({ row, summary: summarizeRow(row, tick1, tick2) }))
         .filter(({ summary }) => Boolean(summary));
+    const summaries = allSummaries.filter(({ row, summary }) => rowMatchesQuery(query, [
+        summary.price,
+        summary.size,
+        summary.rawPrice,
+        summary.rawSize,
+        summary.txHash,
+        row.tx_hash,
+        row.txid,
+        row.tx_index,
+    ]));
 
     return (
         <section
@@ -97,8 +114,13 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
             }}
         >
             <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
-                <table className={`${tableStyles.table} ${tableStyles.keepColumns}`}>
-                    <caption className={tableStyles.caption}>{t('components.recentTradesPanel.recentTrades')}</caption>
+                <table
+                    className={`${tableStyles.table} ${tableStyles.keepColumns}`}
+                    aria-label={bare ? t('components.recentTradesPanel.recentTrades') : undefined}
+                >
+                    {bare ? null : (
+                        <caption className={tableStyles.caption}>{t('components.recentTradesPanel.recentTrades')}</caption>
+                    )}
                     <thead>
                         <tr>
                             <th className={`${tableStyles.headerCell} ${tableStyles.numeric}`} scope="col">{t('components.tradeHistoryPanel.time')}</th>
@@ -147,7 +169,7 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
             {loading ? (
                 <StatusMessage variant="status">{t('components.recentTradesPanel.loadingRecentTrades')}</StatusMessage>
             ) : null}
-            {loadError && !pageShowsError ? (
+            {loadError && !pageShowsError && !bare ? (
                 <StatusMessage
                     variant="error"
                     recovery={{
@@ -158,9 +180,14 @@ export function RecentTradesPanel({ chainId, tick1, tick2, demo = false, onOpenT
                     {loadError}
                 </StatusMessage>
             ) : null}
-            {!loadError && !loading && summaries.length === 0 ? (
+            {!loadError && !loading && allSummaries.length === 0 ? (
                 <p style={{ margin: '0.25rem 0.25rem 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
                     {t('components.recentTradesPanel.noTradesYet')}
+                </p>
+            ) : null}
+            {allSummaries.length > 0 && summaries.length === 0 ? (
+                <p style={{ margin: '0.25rem 0.25rem 0', color: 'var(--xc-fg-muted)', fontSize: '0.75rem' }}>
+                    {t('market.filter.noMatches')}
                 </p>
             ) : null}
         </section>
@@ -173,25 +200,30 @@ function summarizeRow(row, tick1, tick2) {
     return {
         price: formatPrice(parsed.price),
         size: formatSize(parsed.amount),
+        rawPrice: parsed.price,
+        rawSize: parsed.amount,
+        txHash: parsed.txHash ?? null,
         side: parsed.side,
         timeLabel: formatTime(parsed.timestamp),
         counterparty: row.destination || row.give_address || row.get_address || null,
     };
 }
 
+// A price is a ratio, so it keeps the places the market page shows; its whole
+// part groups ("12,500.0000").
 function formatPrice(n) {
     if (compareDecimalStrings(n, '0') === null) return 'N/A';
     if (compareDecimalStrings(n, '0') === 0) return '0';
-    if (compareDecimalStrings(n, '1') >= 0) return roundDecimalString(n, 4);
-    if (compareDecimalStrings(n, '0.01') >= 0) return roundDecimalString(n, 6);
-    return roundDecimalString(n, 8);
+    if (compareDecimalStrings(n, '1') >= 0) return formatWithThousands(roundDecimalString(n, 4));
+    if (compareDecimalStrings(n, '0.01') >= 0) return formatWithThousands(roundDecimalString(n, 6));
+    return formatWithThousands(roundDecimalString(n, 8));
 }
 
+// A traded size is an amount: every place kept, zero tail trimmed, grouped
+// ("1,250,000.12345678"), never rounded for display.
 function formatSize(n) {
     if (compareDecimalStrings(n, '0') === null) return 'N/A';
-    if (!String(n).includes('.')) return String(n);
-    if (compareDecimalStrings(n, '1') >= 0) return roundDecimalString(n, 2);
-    return roundDecimalString(n, 4);
+    return formatWithThousands(trimAmountTail(String(n))) || String(n);
 }
 
 function formatTime(unixSeconds) {

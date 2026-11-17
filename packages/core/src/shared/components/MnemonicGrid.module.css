@@ -38,14 +38,14 @@
 }
 
 .concealedGrid {
-    opacity: 0.45;
+    opacity: 0.85;
 }
 
-.concealedCell {
-    min-width: 0;
-    min-height: calc(var(--xc-text-sm) * 1.4 + 2 * var(--xc-space-1));
-    border-radius: var(--xc-radius-sm);
-    background: var(--xc-surface);
+.concealedTappable {
+    /* The whole hidden grid is the tap target; its rows make it far taller,
+       and this keeps the WCAG 2.5.8 floor stated on the target itself. */
+    min-height: var(--xc-tap-min);
+    cursor: pointer;
 }
 
 @media (min-width: 480px) {
@@ -85,6 +85,16 @@
     font-weight: 500;
     white-space: nowrap;
     word-break: keep-all;
+}
+
+/* Concealed, the cells keep their shape and the placeholder words and numbers
+   blur past reading, so the box reads as "your words go here, hidden". The
+   words are filler, never the phrase. The blur token is static, unlike
+   --xc-privacy-filter, which reduced motion and low power turn off. */
+.concealedGrid .index,
+.concealedGrid .word {
+    filter: var(--xc-secret-placeholder-filter);
+    user-select: none;
 }
 
 @media not all and (min-width: 360px) {

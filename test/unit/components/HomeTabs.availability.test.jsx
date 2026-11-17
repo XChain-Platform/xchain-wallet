@@ -108,28 +108,28 @@ describe('HomeTabs empty states', () => {
     it('wires the selected wallet tab to the only visible panel', () => {
         mount('real-wallet');
 
-        const coins = screen.getByRole('tab', { name: 'Coins' });
+        const balances = screen.getByRole('tab', { name: 'Balances' });
         const nfts = screen.getByRole('tab', { name: 'NFTs' });
-        const panel = screen.getByRole('tabpanel', { name: 'Coins' });
-        expect(coins).toHaveAttribute('aria-selected', 'true');
-        expect(coins).toHaveAttribute('tabindex', '0');
-        expect(coins).toHaveAttribute('aria-controls', panel.id);
-        expect(panel).toHaveAttribute('aria-labelledby', coins.id);
+        const defi = screen.getByRole('tab', { name: 'DeFi' });
+        const panel = screen.getByRole('tabpanel', { name: 'Balances' });
+        expect(balances).toHaveAttribute('aria-selected', 'true');
+        expect(balances).toHaveAttribute('tabindex', '0');
+        expect(balances).toHaveAttribute('aria-controls', panel.id);
+        expect(panel).toHaveAttribute('aria-labelledby', balances.id);
         expect(nfts).toHaveAttribute('tabindex', '-1');
 
-        coins.focus();
-        fireEvent.keyDown(coins, { key: 'ArrowRight' });
-        const tokens = screen.getByRole('tab', { name: 'Tokens' });
-        expect(document.activeElement).toBe(tokens);
-        expect(tokens).toHaveAttribute('aria-selected', 'true');
-        expect(screen.getByRole('tabpanel', { name: 'Tokens' })).toBe(panel);
-
-        fireEvent.click(nfts);
-
+        balances.focus();
+        fireEvent.keyDown(balances, { key: 'ArrowRight' });
+        expect(document.activeElement).toBe(nfts);
+        expect(nfts).toHaveAttribute('aria-selected', 'true');
         expect(screen.getByRole('tabpanel', { name: 'NFTs' })).toBe(panel);
-        expect(panel).toHaveAttribute('aria-labelledby', nfts.id);
-        expect(nfts).toHaveAttribute('tabindex', '0');
-        expect(coins).toHaveAttribute('tabindex', '-1');
+
+        fireEvent.click(defi);
+
+        expect(screen.getByRole('tabpanel', { name: 'DeFi' })).toBe(panel);
+        expect(panel).toHaveAttribute('aria-labelledby', defi.id);
+        expect(defi).toHaveAttribute('tabindex', '0');
+        expect(balances).toHaveAttribute('tabindex', '-1');
         expect(screen.queryByText('Fund your wallet')).toBeNull();
     });
 
@@ -142,7 +142,7 @@ describe('HomeTabs empty states', () => {
         expect(screen.getByText(/Receive coins from another wallet or buy coins/)).toBeTruthy();
         expect(screen.queryByText('No coins yet')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Receive' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Buy coins' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Buy Coins' }));
         expect(onReceive).toHaveBeenCalledTimes(1);
         expect(onBuy).toHaveBeenCalledTimes(1);
     });
@@ -153,7 +153,7 @@ describe('HomeTabs empty states', () => {
 
         expect(screen.getAllByText('Fund your wallet')).toHaveLength(1);
         expect(screen.queryByText('No coins yet')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Generate an address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Generate an Address' }));
         expect(onAddAddress).toHaveBeenCalledTimes(1);
     });
 
@@ -213,9 +213,8 @@ describe('HomeTabs empty states', () => {
     });
 
     it.each([
-        ['Coins', 'Fund your wallet'],
+        ['Balances', 'Fund your wallet'],
         ['DeFi', 'No DeFi positions yet'],
-        ['Activity', 'No activity yet'],
     ])('draws the %s empty state with the shared empty state', (tab, heading) => {
         mount('real-wallet', { onHistory: vi.fn(), recentActivity: [] });
         fireEvent.click(screen.getByRole('tab', { name: tab }));
@@ -223,6 +222,11 @@ describe('HomeTabs empty states', () => {
         const state = screen.getByRole('status');
         expect(within(state).getByRole('heading', { level: 2, name: heading })).toBeTruthy();
         expect(state.closest('[role="tabpanel"]')).not.toBeNull();
+    });
+
+    it('has no Activity tab, because History holds the same list', () => {
+        mount('real-wallet', { onHistory: vi.fn(), recentActivity: [] });
+        expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
     });
 
     it('keeps tab empty states free of hand-made placeholder rules', () => {
@@ -251,7 +255,7 @@ describe('HomeTabs empty states', () => {
         fireEvent.click(screen.getByRole('tab', { name: 'NFTs' }));
 
         expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t load this section.');
-        expect(screen.getByRole('tab', { name: 'Coins' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Balances' })).toBeInTheDocument();
 
         widgetFailure.current = null;
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));

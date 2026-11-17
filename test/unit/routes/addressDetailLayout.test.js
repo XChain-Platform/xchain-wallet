@@ -3,44 +3,58 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Layout guards for the View address screen. jsdom lays nothing out, so these
-// read the stylesheet rules that a 360 px screenshot showed going wrong.
+// Layout guards for the View Address screen (AddressDetail, approved Layout 1).
+// jsdom lays nothing out, so these read the stylesheet rules the layout rests on.
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const read = (path) => readFileSync(join(process.cwd(), path), 'utf8');
-const css = read('packages/core/src/shared/routes/AddressList.module.css');
+const css = read('packages/core/src/shared/routes/AddressDetail.module.css');
+const listCss = read('packages/core/src/shared/routes/AddressList.module.css');
 
-function rule(selector) {
+function rule(selector, source = css) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`).exec(css)?.[1] || '';
+    return new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`).exec(source)?.[1] || '';
 }
 
-describe('View address label editor', () => {
-    it('lets the Save button grow to its label instead of breaking it per letter', () => {
-        const save = rule('.labelRow > :last-child');
-        // A fixed quarter-width basis was narrower than icon plus "Save" on a
-        // phone, and the kit's overflow-wrap broke the word one letter a line.
-        expect(save).toMatch(/flex:\s*0 0 auto/);
-        expect(save).toMatch(/min-width:\s*calc\(/);
-        expect(rule('.labelRow > :last-child > span')).toMatch(/white-space:\s*nowrap/);
+describe('View Address identity card', () => {
+    it('centres the network icon and the QR as a pair, 8px apart, in fixed boxes', () => {
+        const pair = rule('.pair');
+        expect(pair).toMatch(/display:\s*flex/);
+        expect(pair).toMatch(/justify-content:\s*center/);
+        expect(pair).toMatch(/gap:\s*var\(--xc-space-2\)/);
+        expect(rule('.qr')).toMatch(/flex:\s*0 0 auto/);
+        expect(rule('.qr')).toMatch(/block-size:/);
+        expect(rule('.networkIcon')).toMatch(/flex:\s*0 0 auto/);
     });
-});
 
-describe('View address copy row', () => {
-    it('keeps a gap between the address and its Copy button', () => {
-        const row = rule('.detailAddr');
+    it('gives the address row the card width, so the fit cut measures the room beside the copy icon', () => {
+        const row = rule('.addressRow');
         expect(row).toMatch(/display:\s*flex/);
-        expect(row).toMatch(/flex-wrap:\s*wrap/);
+        expect(row).toMatch(/justify-content:\s*center/);
+        expect(row).toMatch(/inline-size:\s*100%/);
         expect(row).toMatch(/gap:\s*var\(--xc-space-2\)/);
-        expect(rule('.detailAddr > :first-child')).toMatch(/min-width:\s*0/);
+        expect(row).not.toMatch(/flex-wrap:\s*wrap/);
+        expect(rule('.addressText')).toMatch(/min-inline-size:\s*0/);
+        expect(rule('.copy')).toMatch(/flex:\s*0 0 auto/);
+        expect(rule('.card.card')).toMatch(/align-items:\s*stretch/);
+    });
+
+    it('leaves the panel spacing to the shared Actions | Details toggle (G102)', () => {
+        const jsx = read('packages/core/src/shared/routes/AddressDetail.jsx');
+        const toggleCss = read('packages/core/src/shared/components/ActionsDetailsToggle.module.css');
+        expect(jsx).toMatch(/<ActionsDetailsToggle\b/);
+        expect(rule('.panel')).toBe('');
+        expect(rule('.panel', toggleCss)).toMatch(/gap:\s*var\(--xc-space-2\)/);
     });
 });
 
-describe('View address quick actions', () => {
-    it('keeps up to five tiles on one row at a 360 px phone', () => {
-        expect(rule('.quickActions')).toMatch(/grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(56px,\s*1fr\)\)/);
+describe('Old View Address pieces are gone', () => {
+    it('drops the inline label editor, copy row and small quick actions from the list sheet', () => {
+        for (const selector of ['.labelRow', '.detailAddr', '.quickActions', '.quickAction', '.tabPanel', '.detailTop']) {
+            expect(rule(selector, listCss)).toBe('');
+        }
     });
 });

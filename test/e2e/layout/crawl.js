@@ -174,9 +174,17 @@ function planFill([formIndex, address, mode]) {
     const form = forms[formIndex] || document.querySelectorAll('form')[formIndex];
     if (!form) return [];
     const plan = [];
-    const fields = [...form.querySelectorAll('input, textarea, select')];
+    const fields = [...form.querySelectorAll('input, textarea, select, [data-xc-select]')];
     fields.forEach((el, i) => {
         if (el.disabled || el.readOnly || el.getClientRects().length === 0) return;
+        // The themed dropdown (ruling G96) lists its options only while open,
+        // so the step picks the second option in the page when it runs.
+        if (el.hasAttribute('data-xc-select')) {
+            const labelText = [el.labels?.[0]?.innerText, el.getAttribute('aria-label'), el.id]
+                .filter(Boolean).join(' ').toLowerCase();
+            plan.push({ i, kind: 'xc-select', value: 1, label: labelText });
+            return;
+        }
         const type = (el.getAttribute('type') || el.tagName).toLowerCase();
         if (['checkbox', 'radio', 'hidden', 'file', 'submit', 'button', 'range', 'color'].includes(type)) return;
         const labelText = [
@@ -215,7 +223,7 @@ function planFill([formIndex, address, mode]) {
 function fieldAt([formIndex, i]) {
     const forms = [...document.querySelectorAll('main form')];
     const form = forms[formIndex] || document.querySelectorAll('form')[formIndex];
-    return form ? form.querySelectorAll('input, textarea, select')[i] : null;
+    return form ? form.querySelectorAll('input, textarea, select, [data-xc-select]')[i] : null;
 }
 
 /** Runs in the page: the form's submit control and its label. */
@@ -457,9 +465,10 @@ export function createCrawl(page, {
         // Through a nav, openSettings returns on the click; the section list
         // renders a beat later, and reading it at once found no sections at
         // all on phone widths, so every Settings screen went uncrawled.
-        // Every shell's Settings list shows a Developer mode row (openSettings
-        // waits on it too), so it marks the list as rendered in each venue.
-        await page.locator('main button:visible:not([disabled])').filter({ hasText: /^Developer mode/ }).first()
+        // Every shell's Settings index shows an Advanced group row (the
+        // Developer mode row moved onto that group's page), so it marks the
+        // list as rendered in each venue.
+        await page.locator('main button:visible:not([disabled])').filter({ hasText: /^Advanced/ }).first()
             .waitFor({ timeout: 15_000 });
         const sections = await page.locator('main button:visible:not([disabled])').evaluateAll((els) => els
             .map((e) => (e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].trim()));
@@ -644,7 +653,16 @@ export function createCrawl(page, {
                         const field = (await page.evaluateHandle(fieldAt, [f, step.i])).asElement();
                         if (!field) continue;
                         if (step.kind === 'select') await field.selectOption(step.value).catch(() => {});
-                        else await field.fill(step.value, { timeout: 2_000 }).catch(() => {});
+                        else if (step.kind === 'xc-select') {
+                            await field.evaluate(async (el, index) => {
+                                el.click();
+                                await new Promise((resolve) => { setTimeout(resolve, 0); });
+                                const listbox = document.getElementById(el.getAttribute('aria-controls') || '');
+                                const options = [...(listbox?.querySelectorAll('[role="option"]') || [])]
+                                    .filter((o) => o.getAttribute('aria-disabled') !== 'true' && o.getAttribute('data-value') !== '');
+                                (options[index] || options[0] || el).click();
+                            }, step.value).catch(() => {});
+                        } else await field.fill(step.value, { timeout: 2_000 }).catch(() => {});
                     }
                     await page.waitForTimeout(300);
                     const submit = await page.evaluate(submitOf, f);

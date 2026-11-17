@@ -8,66 +8,38 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useContext } from 'react';
 import * as branding from '../../branding/branding.js';
 import { Button, Icon } from '../../ui/index.js';
 import { HeaderActionMenu } from './HeaderActionMenu.jsx';
-import { WatchOnlyBadge } from './WatchOnlyBadge.jsx';
-import { NavSurfaceContext } from './navSurface.js';
-import { isNativeShell } from '../nativeShell.js';
 import styles from './AppHeader.module.css';
 import { t } from '../../i18n/index.js';
 
-function supportsPopOut() {
-    if (typeof window === 'undefined' || isNativeShell() || globalThis.xchainWalletWindow) return false;
-    const protocol = window.location?.protocol;
-    return protocol === 'http:'
-        || protocol === 'https:'
-        || (protocol === 'chrome-extension:' && Number(window.innerWidth) <= 600);
-}
-
-function automaticPopOut() {
-    const protocol = window.location?.protocol;
-    if (protocol === 'chrome-extension:' && Number(window.innerWidth) <= 600) {
-        const createTab = globalThis.chrome?.tabs?.create;
-        if (typeof createTab !== 'function') return null;
-        return async () => {
-            try {
-                await createTab({ url: window.location.href });
-                window.close?.();
-            } catch {
-                // The popup stays open when the browser rejects tab creation.
-            }
-        };
-    }
-    if (protocol !== 'http:' && protocol !== 'https:') return null;
-    return () => window.open(window.location.href, '_blank', 'noopener,noreferrer');
-}
+// The app bar holds only the logo, the bell and the menu.
 
 /**
  * @param {object} props
  * @param {() => void} [props.onMenuToggle]
  * @param {boolean} [props.menuOpen]
- * @param {() => void} [props.onLock]
- * @param {boolean} [props.locking]
- * @param {boolean} [props.isWatcherMode]
- * @param {{ id: string, name: string } | null} [props.activeWallet]
- * @param {() => void} [props.onPopOut]
+ * @param {() => void} [props.onNotifications]  renders the Notifications bell
+ * @param {number} [props.notificationsUnread]  unread count the bell's badge shows
+ * @param {number} [props.notificationsActionRequired]  how many of the unread items need the user to act (turns the bell red)
+ * @param {boolean} [props.showMenu]  false hides the menu button on a boot-state page, where the wallet menu needs a vault that is not open
  */
 export function AppHeader({
     onMenuToggle,
     menuOpen = false,
-    onLock,
-    locking,
-    isWatcherMode = false,
-    activeWallet = null,
-    onPopOut,
+    onNotifications,
+    notificationsUnread = 0,
+    notificationsActionRequired = 0,
+    showMenu = true,
 }) {
-    const navSurface = useContext(NavSurfaceContext);
-    const showLock = Boolean(onLock) && navSurface !== 'sidebar';
-    const popOut = supportsPopOut()
-        ? (typeof onPopOut === 'function' ? onPopOut : automaticPopOut())
-        : null;
+    const unread = Math.max(0, Number(notificationsUnread) || 0);
+    const action = Math.min(unread, Math.max(0, Number(notificationsActionRequired) || 0));
+    // The button itself never changes colour; only the count bubble does:
+    // blue while the unread items are ordinary, red once one needs the user to act.
+    let bellLabel = t('shell.header.notifications');
+    if (action > 0) bellLabel = t('shell.header.notificationsAction', { count: unread, action });
+    else if (unread > 0) bellLabel = t('shell.header.notificationsUnread', { count: unread });
 
     return (
         <div
@@ -81,37 +53,29 @@ export function AppHeader({
                     alt={branding.PRODUCT_NAME}
                     className={styles.logo}
                 />
-                {activeWallet ? (
-                    <span className={styles.walletName} title={activeWallet.name}>
-                        {activeWallet.name}
-                    </span>
-                ) : null}
-                <WatchOnlyBadge visible={isWatcherMode} />
             </div>
             <div className={styles.right}>
-                {showLock ? (
-                    <Button
-                        variant="secondary"
-                        icon={<Icon.LockIcon />}
-                        onClick={onLock}
-                        disabled={locking}
-                        aria-label={t('home.lockWallet')}
-                        title={t('home.lockWallet')}
-                        data-header-control
-                    />
+                {typeof onNotifications === 'function' ? (
+                    <span className={styles.bellWrap}>
+                        <Button
+                            variant="secondary"
+                            icon={<Icon.BellIcon />}
+                            onClick={onNotifications}
+                            aria-label={bellLabel}
+                            title={bellLabel}
+                            data-header-control
+                            data-unread={unread > 0 ? String(unread) : undefined}
+                            data-bell-tone={unread > 0 ? (action > 0 ? 'action' : 'info') : 'none'}
+                        />
+                        {unread > 0 ? (
+                            <span
+                                className={action > 0 ? `${styles.bellBadge} ${styles.bellBadgeAction}` : styles.bellBadge}
+                                aria-hidden="true"
+                            >{unread > 99 ? '99+' : unread}</span>
+                        ) : null}
+                    </span>
                 ) : null}
-                {popOut ? (
-                    <Button
-                        className={styles.popOut}
-                        variant="secondary"
-                        icon={<Icon.ExternalLinkIcon />}
-                        onClick={popOut}
-                        aria-label={t('history.detail.openNewWindow')}
-                        title={t('history.detail.openNewWindow')}
-                        data-header-control
-                    />
-                ) : null}
-                <HeaderActionMenu onMenuToggle={onMenuToggle} menuOpen={menuOpen} />
+                {showMenu ? <HeaderActionMenu onMenuToggle={onMenuToggle} menuOpen={menuOpen} /> : null}
             </div>
         </div>
     );

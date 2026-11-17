@@ -19,6 +19,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import {
     AddressList,
@@ -63,7 +64,7 @@ async function openImportForm(messaging) {
     );
     fireEvent.click(await screen.findByRole('button', { name: /Add or import address/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Import address/i }));
-    await screen.findByLabelText(/WIF private key/i);
+    await screen.findByLabelText(/WIF private key/i, { selector: 'input' });
 }
 
 function typeSelect() {
@@ -73,7 +74,7 @@ function typeSelect() {
 }
 
 async function submitWif(value = 'not a real key') {
-    fireEvent.change(screen.getByLabelText(/WIF private key/i), { target: { value } });
+    fireEvent.change(screen.getByLabelText(/WIF private key/i, { selector: 'input' }), { target: { value } });
     const pw = screen.queryByLabelText(/Wallet password/i, { selector: 'input' });
     if (pw) fireEvent.change(pw, { target: { value: 'correct horse' } });
     fireEvent.click(screen.getByRole('checkbox'));
@@ -116,7 +117,7 @@ describe('D-64: address type follows the wallet, not just the chain', () => {
         await openImportForm(messaging);
         await waitFor(() => expect(typeSelect().value).toBe('p2pkh'));
 
-        fireEvent.change(typeSelect(), { target: { value: 'p2wpkh' } });
+        selectOption(typeSelect(), 'p2wpkh');
         await submitWif('cSV3exampleRegtestWifValue');
         await waitFor(() => expect(messaging.importWifRequest).toHaveBeenCalledTimes(1));
         expect(messaging.importWifRequest.mock.calls[0][0].addressType).toBe('p2wpkh');
@@ -182,7 +183,7 @@ describe('D-64: a rejected import reads as copy, not as a stack trace', () => {
 describe('D-64: the WIF placeholder matches the chain', () => {
     it('does not show a mainnet example on a regtest chain', async () => {
         await openImportForm(messagingFor('bip39'));
-        const field = await screen.findByLabelText(/WIF private key/i);
+        const field = await screen.findByLabelText(/WIF private key/i, { selector: 'input' });
         expect(field.getAttribute('placeholder')).not.toMatch(/L1aW/);
         // Regtest and testnet keys are 0xef-versioned: c... or 9...
         expect(field.getAttribute('placeholder')).toMatch(/c or 9/);

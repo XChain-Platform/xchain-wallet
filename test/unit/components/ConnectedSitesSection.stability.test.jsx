@@ -6,10 +6,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
-import {
-    SIGN_THROTTLE_DEFAULT_BURST,
-    SIGN_THROTTLE_DEFAULT_WINDOW_MS,
-} from '../../../packages/core/src/flows/signThrottle.js';
+import { selectOption } from '../../helpers/selectOption.js';
 
 let messaging;
 let settings;
@@ -69,67 +66,50 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
-// Both control rows take the shared row class from the section stylesheet: each field carries a
-// label line, so the row aligns its submit to the inputs at the bottom.
-const controlRowCss = readFileSync(
-    'packages/core/src/shared/components/settings/ConnectedSitesSection.module.css',
-    'utf8',
-).match(/\.controlRow\s*\{[^}]*\}/s)?.[0] || '';
+// The page opens on Allowed; Options and Blocked are the other two
+// segments of the toggle, and a site's actions live on its detail.
+async function showView(name) {
+    fireEvent.click(await screen.findByRole('radio', { name }));
+}
+async function openSite(name) {
+    fireEvent.click((await screen.findByText(name)).closest('button'));
+}
+async function openBlockForm() {
+    fireEvent.click(await screen.findByRole('button', { name: 'Block a site' }));
+}
 
 describe('ConnectedSitesSection settings controls', () => {
-    it('aligns the md throttle controls along their inputs', async () => {
-        render(<ConnectedSitesSection />);
-        const burstField = (await screen.findByRole('spinbutton', {
-            name: 'Sign-throttle burst (max requests per window)',
-        })).parentElement.parentElement;
-        const throttleForm = screen.getByRole('form', { name: 'Sign-request throttle controls' });
-
-        expect(burstField.className).toMatch(/(?:^|\s)_?md_/);
-        expect(throttleForm.className).toMatch(/form/);
-        expect(burstField.parentElement.className).toMatch(/controlRow/);
-        expect(controlRowCss).toMatch(/align-items:\s*flex-end/);
-        expect(screen.getByRole('button', { name: 'Apply throttle' }).className).toMatch(/(?:^|\s)_?md_/);
-    });
-
-    it('aligns the md manual block action beside its md field', async () => {
-        render(<ConnectedSitesSection />);
-        const origin = await screen.findByRole('textbox', { name: 'Origin or wildcard to block' });
-        const originField = origin.parentElement.parentElement;
-        const blockForm = origin.closest('form');
-
-        expect(originField.className).toMatch(/(?:^|\s)_?md_/);
-        expect(blockForm.className).toMatch(/form/);
-        expect(originField.parentElement.className).toMatch(/controlRow/);
-        expect(controlRowCss).toMatch(/align-items:\s*flex-end/);
-        expect(screen.getByRole('button', { name: 'Block origin' }).className).toMatch(/(?:^|\s)_?md_/);
+    it('uses the standard plus action in the list header', () => {
+        const source = readFileSync('packages/core/src/shared/components/settings/ConnectedSitesSection.jsx', 'utf8');
+        expect(source).toMatch(/icon=\{<Icon\.PlusIcon \/>\}[\s\S]*blockASite/);
+        expect(source).not.toMatch(/icon=\{<Icon\.BanIcon \/>\}[\s\S]*blockASite/);
     });
 
     it('makes each form submit a named green action with an icon and tips every field', async () => {
-        messaging.listConnectedSites.mockResolvedValue([{
-            id: 'site-1', origin: 'https://dapp.example', appName: 'Example dApp', permissions: {},
-        }]);
-        messaging.listBlockedOrigins.mockResolvedValue(['https://old.example']);
-        messaging.deleteConnectedSite = vi.fn();
         render(<ConnectedSitesSection />);
 
-        const blockOrigin = await screen.findByRole('button', { name: 'Block origin' });
-        const apply = screen.getByRole('button', { name: 'Apply throttle' });
-        for (const submit of [blockOrigin, apply]) {
-            expect(submit.className).toMatch(/success/);
-            expect(submit.querySelector('svg')).not.toBeNull();
-        }
-        // Every other button on the page carries an icon too, and none is green.
-        const buttons = screen.getAllByRole('button').filter((b) => !/^About /.test(b.getAttribute('aria-label') || ''));
-        for (const button of buttons) {
-            expect(button.querySelector('svg'), button.textContent).not.toBeNull();
-            if (button !== blockOrigin && button !== apply) expect(button.className).not.toMatch(/success/);
-        }
-        // Burst, Window and the origin field each carry their own '?' tip.
-        expect(screen.getAllByRole('button', { name: /^About / })).toHaveLength(3);
+        await showView('Options');
+        // The throttle rows apply at once, so Options has no submit button.
+        await screen.findByTestId('throttle-select-burst');
+        expect(screen.queryByRole('button', { name: /apply|save/i })).toBeNull();
+        // Requests per site and Window each carry their own '?' tip, and the
+        // Custom window field (open, since 120 s is not a preset) carries one too.
+        expect(screen.getAllByRole('button', { name: /^About / }).map((b) => b.getAttribute('aria-label') || b.textContent))
+            .toHaveLength(3);
+        expect(screen.getByRole('button', { name: /^About Requests per site/ })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^About Window/ })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /^About Custom window/ })).toBeTruthy();
+
+        await openBlockForm();
+        const blockSite = await screen.findByRole('button', { name: 'Block Site' });
+        expect(blockSite.className).toMatch(/success/);
+        expect(blockSite.querySelector('svg')).not.toBeNull();
+        expect(screen.getAllByRole('button', { name: /^About / })).toHaveLength(1);
     });
 
     it('names the manual block form apart from its origin field', async () => {
         render(<ConnectedSitesSection />);
+        await openBlockForm();
         const origin = await screen.findByRole('textbox', { name: 'Origin or wildcard to block' });
 
         // One label, one control: the form carries its own name, so a label
@@ -138,15 +118,11 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(screen.getByRole('form', { name: 'Block site' })).toBe(origin.closest('form'));
     });
 
-    it('keeps section descriptions compact and non-repetitive', async () => {
+    it('keeps the throttle description compact', async () => {
         render(<ConnectedSitesSection />);
+        await showView('Options');
 
-        expect(await screen.findByText('Latest 50 changes, newest last.')).toBeTruthy();
-        expect(screen.getByText('Rejects excess requests until reset.')).toBeTruthy();
-        // The pattern hint lives in the origin field's help tip, not as a loose line.
-        expect(screen.getByRole('heading', { name: 'Blocked sites' }).closest('section')).not.toHaveTextContent(
-            'Use *.example.com with example.com.',
-        );
+        expect(await screen.findByText(/Requests past the limit are rejected/)).toBeTruthy();
         expect(screen.queryByText(/Blocked sites cannot connect/)).toBeNull();
     });
 
@@ -194,40 +170,26 @@ describe('ConnectedSitesSection settings controls', () => {
         expect(screen.getAllByText('https://bare.example')).toHaveLength(1);
     });
 
-    it('ignores an audit-log load from a replaced messaging source', async () => {
-        let resolveOldAudit;
-        const oldMessaging = {
-            ...messaging,
-            listBlocklistAuditLog: vi.fn(() => new Promise((resolve) => { resolveOldAudit = resolve; })),
-        };
-        messaging = oldMessaging;
-        const { rerender } = render(<ConnectedSitesSection />);
-        await screen.findByText('No sites connected yet');
-
-        messaging = {
-            ...oldMessaging,
-            listBlocklistAuditLog: vi.fn(async () => [{
-                at: Date.now(),
-                action: 'add',
-                entry: 'https://new-block.example',
-            }]),
-        };
-        rerender(<ConnectedSitesSection />);
-
-        expect(await screen.findByText('https://new-block.example')).toBeTruthy();
-        resolveOldAudit([{
-            at: Date.now() - 1,
+    it('shows no block history and never reads the audit log', async () => {
+        messaging.listBlocklistAuditLog = vi.fn(async () => [{
+            at: Date.now(),
             action: 'add',
-            entry: 'https://old-block.example',
+            entry: 'https://history.example',
         }]);
-        await Promise.resolve();
-        await Promise.resolve();
+        messaging.clearBlocklistAuditLog = vi.fn();
+        render(<ConnectedSitesSection />);
 
-        expect(screen.getByText('https://new-block.example')).toBeTruthy();
-        expect(screen.queryByText('https://old-block.example')).toBeNull();
+        for (const view of ['Allowed', 'Blocked', 'Options']) {
+            await showView(view);
+            expect(screen.queryByText(/block history/i)).toBeNull();
+            expect(screen.queryByRole('button', { name: 'Clear History' })).toBeNull();
+            expect(screen.queryByText('https://history.example')).toBeNull();
+        }
+        expect(messaging.listBlocklistAuditLog).not.toHaveBeenCalled();
+        expect(messaging.clearBlocklistAuditLog).not.toHaveBeenCalled();
     });
 
-    it('marks destructive site actions as danger and disables repeat disconnects', async () => {
+    it('uses standard action rows and disables repeat disconnects', async () => {
         let finishDelete;
         messaging.listConnectedSites.mockResolvedValue([{
             id: 'site-1',
@@ -239,10 +201,14 @@ describe('ConnectedSitesSection settings controls', () => {
         messaging.restoreConnectedSite = vi.fn();
 
         render(<ConnectedSitesSection />);
+        await openSite('Wallet example');
         const disconnect = await screen.findByRole('button', { name: 'Disconnect' });
-        const block = screen.getAllByRole('button', { name: 'Block' }).find((button) => !button.disabled);
-        expect(disconnect.className).toMatch(/danger/);
-        expect(block.className).toMatch(/danger/);
+        const block = screen.getByRole('button', { name: 'Block Site' });
+        const actions = screen.getByRole('list', { name: 'Site actions' });
+        expect(actions).toContainElement(disconnect);
+        expect(actions).toContainElement(block);
+        expect(disconnect).toHaveAttribute('data-tone', 'default');
+        expect(block).toHaveAttribute('data-tone', 'default');
 
         fireEvent.click(disconnect);
         fireEvent.click(screen.getByRole('button', { name: 'Disconnect site' }));
@@ -250,7 +216,7 @@ describe('ConnectedSitesSection settings controls', () => {
         fireEvent.click(disconnect);
 
         expect(messaging.deleteConnectedSite).toHaveBeenCalledTimes(1);
-        expect(disconnect).toBeDisabled();
+        expect(disconnect).toHaveAttribute('aria-disabled', 'true');
         finishDelete();
         await waitFor(() => expect(messaging.listConnectedSites).toHaveBeenCalledTimes(2));
     });
@@ -260,20 +226,18 @@ describe('ConnectedSitesSection settings controls', () => {
 
         expect(await screen.findByText('No sites connected yet')).toBeTruthy();
         expect(screen.getByRole('group', { name: 'Connected sites and dApp permissions' })).toBeTruthy();
-        // The page header already reads Connected sites, so the list's own heading names what it holds.
-        expect(screen.getByRole('region', { name: 'Allowed sites' })).toBeTruthy();
+        // The page header reads Connected Sites; the empty list adds no heading of its own.
+        expect(screen.getByRole('heading', { name: 'Connected Sites' })).toBeTruthy();
         expect(screen.queryByRole('heading', { name: 'Connected sites' })).toBeNull();
         expect(screen.getByText(/When a website asks to connect/)).toBeTruthy();
     });
 
-    it('renders all connected-site empty lines with the plain EmptyState surface', async () => {
+    it('renders all connected-site empty lines as plain text', async () => {
         render(<ConnectedSitesSection />);
 
-        const emptyLines = await Promise.all([
-            screen.findByText('No sites connected yet'),
-            screen.findByText('No blocked sites'),
-            screen.findByText('No site block history'),
-        ]);
+        const emptyLines = [await screen.findByText('No sites connected yet')];
+        await showView('Blocked');
+        emptyLines.push(await screen.findByText('No blocked sites'));
         for (const line of emptyLines) {
             expect(line.closest('[role="status"]')).toBeTruthy();
             expect(line.closest('[class*="card"]')).toBeNull();
@@ -314,10 +278,15 @@ describe('ConnectedSitesSection settings controls', () => {
         }]);
         render(<ConnectedSitesSection />);
 
-        const permissionsButton = await screen.findByRole('button', { name: 'Permissions' });
-        expect(permissionsButton.getAttribute('aria-expanded')).toBe('false');
-        fireEvent.click(permissionsButton);
-        expect(screen.getByRole('button', { name: 'Hide' }).getAttribute('aria-expanded')).toBe('true');
+        await openSite('Example dApp');
+        const permissions = await screen.findByRole('list', { name: 'Permissions' });
+        // Label-left rows: each fact's label leads its row.
+        expect(permissions).toHaveTextContent('Networks');
+        expect(permissions).toHaveTextContent('Accounts');
+        expect(permissions).toHaveTextContent('Sign messages');
+        // The wallet has no call that edits a site's permissions, so the
+        // rows read only: no toggle or dropdown is offered.
+        expect(permissions.querySelector('input, select, [role="switch"], [role="combobox"]')).toBeNull();
         expect(screen.getByText('bitcoin, litecoin')).toBeTruthy();
         expect(screen.getByText('account-1')).toBeTruthy();
         expect(screen.getByText('Ask every time')).toBeTruthy();
@@ -360,7 +329,8 @@ describe('ConnectedSitesSection settings controls', () => {
         });
 
         expect(screen.queryByText('Obsolete site')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+        await openSite('Current site');
+        fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }));
         fireEvent.click(screen.getByRole('button', { name: 'Disconnect site' }));
 
         await waitFor(() => expect(currentMessaging.deleteConnectedSite).toHaveBeenCalledWith({
@@ -388,6 +358,7 @@ describe('ConnectedSitesSection settings controls', () => {
         });
         render(<ConnectedSitesSection />);
 
+        await openSite('Example dApp');
         fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }));
         expect(messaging.deleteConnectedSite).not.toHaveBeenCalled();
         const dialog = screen.getByRole('dialog', { name: 'Disconnect Example dApp?' });
@@ -413,8 +384,9 @@ describe('ConnectedSitesSection settings controls', () => {
         }]);
         render(<ConnectedSitesSection />);
 
-        const block = (await screen.findAllByRole('button', { name: 'Block' }))[0];
-        expect(block.className).toMatch(/danger/);
+        await openSite('Example dApp');
+        const block = await screen.findByRole('button', { name: 'Block Site' });
+        expect(block).toHaveAttribute('data-tone', 'default');
         fireEvent.click(block);
 
         expect(messaging.blockOrigin).not.toHaveBeenCalled();
@@ -429,80 +401,50 @@ describe('ConnectedSitesSection settings controls', () => {
         }));
     });
 
-    it('uses a confirmed danger action to clear the blocklist audit log', async () => {
-        messaging.listBlocklistAuditLog = vi.fn(async () => ([{
-            at: Date.now(),
-            action: 'add',
-            entry: 'https://blocked.example',
-        }]));
-        messaging.clearBlocklistAuditLog = vi.fn(async () => {});
+    it('writes a preset choice at once with the other field kept', async () => {
         render(<ConnectedSitesSection />);
-
-        const clear = await screen.findByRole('button', { name: 'Clear history' });
-        expect(clear.className).toMatch(/danger/);
-        fireEvent.click(clear);
-
-        expect(messaging.clearBlocklistAuditLog).not.toHaveBeenCalled();
-        expect(screen.getByRole('dialog', { name: 'Clear site block history?' })).toBeTruthy();
-        fireEvent.click(screen.getAllByRole('button', { name: 'Clear history' }).at(-1));
-
-        await waitFor(() => expect(messaging.clearBlocklistAuditLog).toHaveBeenCalledTimes(1));
-    });
-
-    it('writes effective defaults when both throttle fields are cleared', async () => {
-        render(<ConnectedSitesSection />);
-        const burst = await screen.findByRole('spinbutton', { name: 'Sign-throttle burst (max requests per window)' });
-        const windowSeconds = screen.getByRole('spinbutton', { name: 'Sign-throttle window in seconds' });
-        expect(burst.className).toMatch(/input/);
-        fireEvent.change(burst, { target: { value: '' } });
-        fireEvent.change(windowSeconds, { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Apply throttle' }));
+        await showView('Options');
+        selectOption(await screen.findByTestId('throttle-select-burst'), '5');
 
         await waitFor(() => expect(update).toHaveBeenCalledWith({
-            signThrottle: {
-                burst: SIGN_THROTTLE_DEFAULT_BURST,
-                windowMs: SIGN_THROTTLE_DEFAULT_WINDOW_MS,
-            },
+            signThrottle: { burst: 5, windowMs: 120000 },
         }));
     });
 
-    it('rejects fractional throttle values instead of rounding them', async () => {
+    it('rejects fractional throttle requests instead of rounding them', async () => {
         render(<ConnectedSitesSection />);
-        const burst = await screen.findByRole('spinbutton', { name: 'Sign-throttle burst (max requests per window)' });
+        await showView('Options');
+        selectOption(await screen.findByTestId('throttle-select-burst'), 'custom');
+        const burst = await screen.findByTestId('throttle-custom-burst');
         fireEvent.change(burst, { target: { value: '2.5' } });
-        fireEvent.submit(screen.getByRole('form', { name: 'Sign-request throttle controls' }));
+        fireEvent.blur(burst);
 
         expect(update).not.toHaveBeenCalled();
-        expect(screen.getByText(/Burst must be an integer/)).toBeTruthy();
+        expect(await screen.findByText('Enter a whole number from 1 to 1,000.')).toBeTruthy();
     });
 
     it('preserves millisecond throttle windows represented as fractional seconds', async () => {
         settings.signThrottle.windowMs = 1001;
         render(<ConnectedSitesSection />);
+        await showView('Options');
 
-        const windowSeconds = await screen.findByRole('spinbutton', { name: 'Sign-throttle window in seconds' });
+        const windowSeconds = await screen.findByTestId('throttle-custom-windowMs');
         expect(windowSeconds.value).toBe('1.001');
-        fireEvent.submit(screen.getByRole('form', { name: 'Sign-request throttle controls' }));
+        fireEvent.change(windowSeconds, { target: { value: '1.002' } });
+        fireEvent.blur(windowSeconds);
 
         await waitFor(() => expect(update).toHaveBeenCalledWith({
-            signThrottle: {
-                burst: 20,
-                windowMs: 1001,
-            },
+            signThrottle: { burst: 20, windowMs: 1002 },
         }));
     });
 
-    it('lets the page own scrolling for the audit log', async () => {
-        messaging.listBlocklistAuditLog = vi.fn(async () => ([{
-            at: Date.now(),
-            action: 'add',
-            entry: 'https://blocked.example',
-        }]));
-        messaging.clearBlocklistAuditLog = vi.fn();
+    it('lets the page own scrolling for the blocked list', async () => {
+        messaging.listBlockedOrigins.mockResolvedValue(['https://blocked.example']);
         render(<ConnectedSitesSection />);
+        await showView('Blocked');
 
         const entry = await screen.findByText('https://blocked.example');
-        const list = screen.getByRole('list');
+        const list = screen.getByRole('list', { name: 'Blocked sites' });
         expect(list).toContainElement(entry);
         expect(list.style.overflowY).toBe('');
         expect(list.style.maxHeight).toBe('');

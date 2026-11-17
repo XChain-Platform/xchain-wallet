@@ -40,7 +40,7 @@ describe('signerSubject', () => {
         ['ledger', 'A Ledger'],
         ['TREZOR', 'A Trezor'],
         ['Multisig', 'A multisig signer'],
-        ['AIRGAP', 'An air-gapped signer'],
+        ['AIRGAP', 'A wallet that signs on another phone'],
     ])('names the %s signer in user-facing terms', (kind, expected) => {
         expect(signerSubject(kind)).toBe(expected);
     });

@@ -57,6 +57,10 @@ const STANDARD_HOOKS = new Set([
     'useId', 'useImperativeHandle', 'useInsertionEffect', 'useLayoutEffect',
     'useMemo', 'useReducer', 'useRef', 'useState', 'useSyncExternalStore',
     'useTransition',
+    // The form error standard's state hook: like useState, each call is its
+    // own error map, so a form with two steps may keep two (Create Wallet's
+    // password step and its recovery phrase quiz).
+    'useFormErrors',
 ]);
 
 function scan(code) {

@@ -3,7 +3,8 @@
     display: flex;
     flex-direction: column;
     gap: var(--xc-space-1);
-    margin: 0 0 var(--xc-space-3);
+    /* 8px to the next block (G80). */
+    margin: 0 0 var(--xc-space-2);
 }
 
 .embedded {
@@ -13,22 +14,35 @@
     background: transparent;
 }
 
+/* Facts read label left, value right, in sentence case: no uppercase
+   label stacked over its value. */
 .heading,
 .lineLabel {
     margin: 0;
     color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-text-sm);
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
 }
 
+.lineLabel {
+    flex: 0 0 auto;
+}
+
+/* The value keeps every character: it wraps anywhere, never truncates, so
+   a long origin is read in full. */
 .line {
     display: flex;
-    flex-direction: column;
-    /* The tight label-to-value gap has no spacing-token equivalent. */
-    gap: 2px;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
     min-width: 0;
+}
+
+.line > code {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: end;
 }
 
 .registrableDomain,
@@ -52,7 +66,8 @@
     font-weight: 700;
 }
 
+/* No confirm text under 13px (G127). */
 .fullOrigin {
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-text-sm);
 }
 

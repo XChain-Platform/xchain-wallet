@@ -15,13 +15,16 @@
 import { addEnglish } from '../../store.js';
 
 const messages = {
-    'parallelComposer.title': 'Action queue',
+    'parallelComposer.title': 'Action Queue',
     'parallelComposer.summary':
         '{actions, plural, one {# action} other {# actions}} across {networks, plural, one {# network} other {# networks}}',
     'parallelComposer.noRollback':
         "Actions on different networks aren't settled as one unit; only an individual swap completes together.",
+    'parallelComposer.confirmNotice':
+        'Each action in the queue signs and broadcasts on its own: if a later action fails, the actions already sent stay sent.',
     'parallelComposer.statusPrefix': 'Status',
     'parallelComposer.rowStatusPrefix': 'Row {row} status',
+    'parallelComposer.rowEmpty': 'No action yet',
 };
 
 addEnglish(messages);

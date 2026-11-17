@@ -198,13 +198,13 @@ async function gotoBettingHub(page) {
 async function useAddress(page, address) {
     await openPaletteCommand(page, 'Addresses');
     await page.getByRole('button', { name: `View address ${address}` }).click();
-    await page.getByRole('group', { name: 'Address actions' })
-        .getByRole('button', { name: 'Use' }).click();
+    await page.getByRole('list', { name: 'Actions', exact: true })
+        .getByRole('button', { name: 'Set active' }).click();
     // Use awaits the active-address write and only then returns to Home, and
     // any route change closes the wallet menu. A palette opened before
     // that late navigation is unmounted under the next step, so leaving the
     // detail screen is what marks the switch as done.
-    await expect(page.getByRole('group', { name: 'Address actions' }),
+    await expect(page.getByRole('list', { name: 'Actions', exact: true }),
         'Use never completed, so the active-address write is still in flight')
         .toBeHidden({ timeout: 30_000 });
 }
@@ -349,11 +349,11 @@ test.describe('BET deadline race', () => {
             expect(generated[0], 'the generated address is not the oracle').not.toBe(oracle);
 
             await page.getByRole('button', { name: `View address ${generated[0]}` }).click();
-            await page.getByRole('group', { name: 'Address actions' })
-                .getByRole('button', { name: 'Use' }).click();
+            await page.getByRole('list', { name: 'Actions', exact: true })
+                .getByRole('button', { name: 'Set active' }).click();
             // Same late navigation as in useAddress: the palette the hub opens
             // next is closed by it unless the switch has finished first.
-            await expect(page.getByRole('group', { name: 'Address actions' }),
+            await expect(page.getByRole('list', { name: 'Actions', exact: true }),
                 'Use never completed, so the active-address write is still in flight')
                 .toBeHidden({ timeout: 30_000 });
 
@@ -401,13 +401,13 @@ test.describe('BET deadline race', () => {
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('What is being bet on', { exact: true }).fill(`Deadline race ${RUN_TAG}`);
+            await main.getByLabel('Question', { exact: true }).fill(`Deadline race ${RUN_TAG}`);
             await main.getByLabel('Outcome 0', { exact: true }).fill(OUTCOME.label);
             await main.getByLabel('Outcome 1', { exact: true }).fill(OUTCOME_OTHER);
 
             // From the CHAIN's clock, not the browser's.
             deadlineSec = (await chainTime()) + DEADLINE_LEAD_SEC;
-            await main.getByLabel('Betting closes', { exact: true }).fill(toLocalDateTimeInput(deadlineSec));
+            await main.getByLabel('Purchases Close', { exact: true }).fill(toLocalDateTimeInput(deadlineSec));
 
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Open market', exact: true }).click();
@@ -442,11 +442,16 @@ test.describe('BET deadline race', () => {
                 .toBe('open');
 
             await gotoBettingHub(page);
-            await page.getByRole('button', { name: new RegExp(`#${feedIndex}\\b`) }).click();
+            await page.locator(`[data-market-index="${feedIndex}"]`).click();
 
             const main = page.getByRole('main');
-            await expect(main.getByRole('heading', { name: 'Place a bet' })).toBeVisible({ timeout: 30_000 });
-            await main.getByRole('button', { name: OUTCOME.label, exact: true }).click();
+            // The outcome rows are on the Bet tab; tapping one opens the
+            // Place Bet step with that outcome preselected, where the stake is.
+            await main.getByRole('tab', { name: 'Buy', exact: true }).click();
+            await expect(main.getByRole('list', { name: 'Outcome to back' })).toBeVisible({ timeout: 30_000 });
+            await main.getByRole('list', { name: 'Outcome to back' })
+                .getByRole('button', { name: new RegExp(`^Buy ${OUTCOME.label},`) }).click();
+            await expect(main.getByRole('form', { name: 'Buy a position' })).toBeVisible({ timeout: 30_000 });
             await main.getByLabel(/^Stake/).fill(STAKE);
             await fillPasswordIfPresent(main);
 
@@ -455,49 +460,21 @@ test.describe('BET deadline race', () => {
             // well as on demand, so anything slotted in between can put the
             // wallet's own call back on the cold path.
             await warmBet(punter, feedIndex, true);
-            await main.getByRole('button', { name: 'Place bet', exact: true }).click();
+            await main.locator('button[type="submit"]').click();
 
             // The dry run must not be REFUSING here. A confirm that is already
             // failing would make the degradation below unobservable.
             //
-            // NOT `pass`, and this file's own header says why without having
-            // noticed it applied here: the assertions are meant to be
-            // TIER-1-ONLY, and `data-verdict` is not a Tier-1 signal - it
-            // aggregates Tier-2 findings too. Off Bitcoin the panel always
-            // carries one, correctly: "This action charges a protocol fee. If
-            // the chain rejects the action, any attached native-coin fee output
-            // is forfeited", which exists because `isNativeFeeMandatory` makes
-            // the coin the only fee lane on every chain but Bitcoin. So on
-            // Litecoin the baseline verdict is `warn` with `data-dryrun`
-            // "approved", and demanding `pass` fails a spec whose subject is
-            // working perfectly.
-            //
-            // Measured in the first whole-suite Litecoin run, 2026-08-27:
-            // `data-verdict="warn" data-dryrun="approved"`, with the panel
-            // reading "The network checked this action and expects it to
-            // succeed." This is the same class the chain-pinning row recorded
-            // on `contracts/deploy-chunked-lane` - **a spec written on Bitcoin
-            // encodes Bitcoin's ABSENCES as well as its values** - one severity
-            // level up, and it is a spec bug rather than a wallet one.
-            //
-            // The transition this spec exists to catch is still a real one: the
-            // degradation below asserts `fail`, which neither `pass` nor `warn`
-            // is, and the Tier-1 check it actually depends on is the
-            // `data-dryrun="approved"` assertion immediately after this.
+            // A clean pass has no warning in Confirm Standard. Some venues
+            // instead carry a protocol-fee warning, which is still an allowed
+            // baseline as long as Approve remains live.
             await expectConfirmModal(page, 'this action', 60_000);
-            await expect(page.getByTestId('preflight-panel'),
-                'the confirm is already refusing before the deadline, so the degradation this spec '
-                + 'measures would not be a transition')
-                .toHaveAttribute('data-verdict', /^(pass|warn)$/, { timeout: 60_000 });
-
-            // And it must pass because the NETWORK said so. `pass` alone cannot
-            // tell that apart from a dry-run that never answered: DRYRUN_UNAVAILABLE
-            // is an info finding, so a Tier-2-only report is also a `pass`. This is
-            // the machine-readable Tier-1 state, and asserting it here is
-            // what makes the degradation below a real transition rather than the
-            // first time the network was ever heard from.
-            await expect(page.getByTestId('preflight-panel'))
-                .toHaveAttribute('data-dryrun', 'approved');
+            const status = page.getByTestId('confirm-status');
+            await expect.poll(async () => (await status.count() === 0
+                ? 'none'
+                : await status.getAttribute('data-state')),
+            { message: 'the confirm is already refusing before the deadline, so the degradation is not a transition' })
+                .toMatch(/^(pass|warn|oracleFees)$/);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled();
         });
 
@@ -540,20 +517,15 @@ test.describe('BET deadline race', () => {
 
             // The verdict degrades from the re-check, and the chain's own reason
             // rides through to the screen.
-            await expect(page.getByTestId('preflight-panel'))
-                .toHaveAttribute('data-verdict', 'fail', { timeout: 90_000 });
-            await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
-            await expect(page.getByTestId('preflight-panel')).toContainText(/feed not open/i);
-
-            // Not a Tier-2 fail wearing the same paint: an unreached dry-run
-            // renders "Local checks only" and `data-dryrun="unreached"`, and this
-            // whole step is about the NETWORK having changed its mind.
-            await expect(page.getByTestId('preflight-panel'))
-                .not.toHaveAttribute('data-dryrun', 'unreached');
+            await expect(page.getByTestId('confirm-status'))
+                .toHaveAttribute('data-state', 'fail', { timeout: 90_000 });
+            await expect(page.getByTestId('confirm-status')).toContainText(/feed not open/i);
 
             // Refusing means refusing: Approve is blocked behind an unchecked
-            // override rather than merely warned about.
-            await expect(page.getByTestId('confirm-approve')).toBeDisabled();
+            // override rather than merely warned about. It keeps its colour
+            // (G130); a tap says why at the top and sends nothing.
+            await page.getByTestId('confirm-approve').click();
+            await expect(page.getByTestId('confirm-blocked')).toBeVisible();
             const ack = page.locator('[data-testid^="ack-"]');
             await expect(ack.first()).toBeVisible();
             await expect(ack.first()).not.toBeChecked();

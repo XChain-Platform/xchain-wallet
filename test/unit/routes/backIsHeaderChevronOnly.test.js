@@ -38,9 +38,12 @@ describe('Back is only the header chevron', () => {
         expect(source).not.toMatch(/\{t\('common\.back'\)\}/);
     });
 
-    it('renders no in-page Back button in the onboarding carousel', () => {
+    // The one exception: the intro carousel steps between its own slides with
+    // Back, Skip and Next in one row (operator ruling 2026-11-14, screen 2,
+    // layout 1); there is no page to go back to before it.
+    it('steps the onboarding carousel with the ruled Back, Skip and Next row', () => {
         const source = read('shared/routes/OnboardingCarousel.jsx');
-        expect(source).not.toMatch(/\{t\('common\.back'\)\}/);
-        expect(source).not.toMatch(/Icon\.BackIcon/);
+        expect(source).toMatch(/\{t\('common\.back'\)\}[\s\S]*?\{t\('onboarding\.carousel\.skip'\)\}/);
+        expect(source).toMatch(/onClick=\{\(\) => goTo\(index - 1\)\}/);
     });
 });

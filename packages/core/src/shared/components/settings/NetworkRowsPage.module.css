@@ -1,0 +1,38 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-3);
+}
+
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+}
+
+/* The uppercase label over a card, as on the Settings group pages. */
+.groupLabel {
+    margin-block: var(--xc-space-2) 0;
+    margin-inline: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* One flush list card with divider lines (G08 rows). Its border is set
+   inline in NetworkRowsPage.jsx, as Settings' group lists do, because the flat
+   page surface is still a card and the shared nested-card rule strips it. */
+.card {
+    composes: flush from '../../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin: 0;
+    list-style: none;
+}
+
+.card > li + li {
+    border-block-start: 1px solid var(--xc-border);
+}

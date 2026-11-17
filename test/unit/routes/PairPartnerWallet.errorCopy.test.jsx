@@ -25,7 +25,7 @@ function fill(label, value) {
 describe('PairPartnerWallet error copy', () => {
     it('hides pairing-code builder details', async () => {
         const messaging = {
-            importMnemonic: vi.fn(async () => ({ wallet: { id: 'wallet-1' } })),
+            addImportedWallet: vi.fn(async () => ({ wallet: { id: 'wallet-1' } })),
             pairingPayloadRequest: vi.fn(async () => {
                 throw new Error(
                     'pairPartner: collectPairingKeys: none of the requested chains resolved a derivation path',
@@ -38,10 +38,9 @@ describe('PairPartnerWallet error copy', () => {
             </MessagingProvider>,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^Sign on another phone/ }));
         fill(/Shared recovery phrase/i, PHRASE);
-        fill(/^Password for this device$/i, PASSWORD);
-        fill(/Confirm password/i, PASSWORD);
+        fill(/^Wallet password$/i, PASSWORD);
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
         });

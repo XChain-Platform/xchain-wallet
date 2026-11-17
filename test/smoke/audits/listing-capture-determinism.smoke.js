@@ -191,7 +191,7 @@ assert.match(read('packages', 'core', 'src', 'flows', 'demoFixtures.js'),
     /getNativePricesRequest: async \(\{ chainIds \} = \{\}\) => \(\{\s*\n\s*prices: synthesizeDemoNativePrices\(/,
     'the demo source must answer the price read from the demo fixtures, never the live oracle');
 assert.match(read('packages', 'core', 'src', 'shared', 'components', 'HomeTabs.jsx'),
-    /<TotalBalanceHero\s*\n\s*rows=\{portfolioRows\}\s*\n\s*walletId=\{walletId\}/,
+    /<TotalBalanceHero\s*\n(?:\s*[A-Za-z]+=\{[^\n]*\}\s*\n)*?\s*walletId=\{walletId\}/,
     'HomeTabs must pass walletId to the hero, or the hero cannot tell a demo wallet apart '
     + 'and the demo-price branch above is dead code');
 

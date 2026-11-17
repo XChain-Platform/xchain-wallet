@@ -7,14 +7,14 @@
 // any review is prepared, and a network change starts the chain-scoped terms
 // over so a token, amount or list picked on one chain never reaches another.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, revealChainPicker, test } from '../../fixtures/wallet.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
 
 const BTC = { chainId: 'bitcoin-mainnet', chainLabel: 'Bitcoin' };
 
 async function pickNetwork(main, name, ticker) {
     const trigger = main.getByRole('button', { name: /^Network:/ });
-    await expect(trigger).toBeVisible({ timeout: 30_000 });
+    await revealChainPicker(main, trigger, 'Network');
     if (await trigger.getAttribute('aria-label') === `Network: ${name}`) return;
     await trigger.click();
     await trigger.page().getByRole('dialog', { name: 'Network' })
@@ -33,9 +33,9 @@ test('refuses the same token on both sides and clears terms on a network change'
     await main.getByRole('textbox', { name: /^Give amount/ }).fill('1');
     await main.getByRole('textbox', { name: /^Get amount/ }).fill('2');
     await expect(main.getByText('Give and get tickers must differ.')).toBeVisible();
-    await main.getByRole('button', { name: 'Create swap', exact: true }).click();
-    await expect(page.getByTestId('action-intent')).toHaveCount(0);
-    await expect(main.getByRole('button', { name: 'Create swap', exact: true })).toBeEnabled();
+    await main.getByRole('button', { name: 'Create Swap', exact: true }).click();
+    await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
+    await expect(main.getByRole('button', { name: 'Create Swap', exact: true })).toBeEnabled();
 
     await selectNamedToken(page, 'Get token', { ...BTC, tick: 'XCP' });
     await expect(main.getByText('Give and get tickers must differ.')).toHaveCount(0);

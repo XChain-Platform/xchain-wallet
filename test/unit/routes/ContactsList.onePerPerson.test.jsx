@@ -16,6 +16,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContactsList } from '../../../packages/core/src/shared/routes/ContactsList.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 import {
     duplicateNameGroups,
     findContactByName,
@@ -100,7 +101,9 @@ describe('ContactsList for one person with many addresses', () => {
             contact('3', 'bob', '2026-01-02T00:00:00.000Z', [DOGE]),
         ]));
         await waitFor(() => expect(rowNames()).toEqual(['Alice', 'bob', 'zed']));
-        fireEvent.change(screen.getByLabelText('Sort contacts'), { target: { value: 'newest' } });
+        // Sort lives in the title bar filter panel.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter contacts' }));
+        selectOption(screen.getByLabelText('Sort contacts'), 'newest');
         expect(rowNames()).toEqual(['zed', 'bob', 'Alice']);
     });
 
@@ -110,7 +113,7 @@ describe('ContactsList for one person with many addresses', () => {
             scanPrefill: { address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', chainId: 'bitcoin-mainnet' },
             onScanPrefillConsumed: () => {},
         });
-        await waitFor(() => expect(screen.getByText('New contact')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('New Contact')).toBeTruthy());
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'jdog' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));
         expect(await screen.findByText('A contact named "JDog" already exists.')).toBeTruthy();
@@ -124,7 +127,7 @@ describe('ContactsList for one person with many addresses', () => {
             scanPrefill: { address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', chainId: 'bitcoin-mainnet' },
             onScanPrefillConsumed: () => {},
         });
-        await waitFor(() => expect(screen.getByText('New contact')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('New Contact')).toBeTruthy());
         fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Alice\u202Eevil\u2066x' } });
         expect(screen.getByLabelText('Name').value).toBe('Aliceevilx');
         fireEvent.click(screen.getByRole('button', { name: 'Create contact' }));

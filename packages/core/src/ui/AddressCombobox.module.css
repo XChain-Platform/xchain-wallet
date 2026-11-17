@@ -58,9 +58,14 @@
     line-height: 1.3;
 }
 
-.option:hover,
+@media (hover: hover) and (pointer: fine) {
+    .option:hover {
+        background: var(--xc-row-hover-bg);
+    }
+}
+
 .option[aria-selected="true"] {
-    background: var(--xc-bg-muted);
+    background: var(--xc-row-active-bg);
 }
 
 .label {
@@ -83,6 +88,11 @@
     letter-spacing: 0.04em;
     background: var(--xc-bg-muted);
     color: var(--xc-text);
+}
+
+/* A recent destination's badge leads its line: no name before it. */
+.badgeOnly {
+    margin-inline-start: 0;
 }
 
 .empty {

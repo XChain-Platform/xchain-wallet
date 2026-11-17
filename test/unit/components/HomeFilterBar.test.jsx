@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { HomeFilterBar } from '../../../packages/core/src/shared/components/HomeFilterBar.jsx';
 import chipStyles from '../../../packages/core/src/ui/Chip.module.css';
+import networkFilterStyles from '../../../packages/core/src/shared/components/NetworkFilter.module.css';
 
 const descriptors = {
     bitcoin: { id: 'bitcoin-mainnet', displayName: 'Bitcoin' },
@@ -68,6 +69,16 @@ describe('HomeFilterBar', () => {
         expect(button).toHaveAttribute('aria-pressed', 'true');
     });
 
+    // G96: inside the filter panel every dropdown is the white field, so a
+    // chosen network never paints the pressed (blue) fill.
+    it('keeps the panel network dropdown unfilled while a network is chosen', () => {
+        mount({ variant: 'menu', networkFilter: 'litecoin' });
+        const button = screen.getByRole('button', { name: /^Filter by network/ });
+        expect(button).toHaveTextContent('Litecoin');
+        expect(button).toHaveClass(networkFilterStyles.fieldLook);
+        expect(button).toHaveClass(networkFilterStyles.idle);
+    });
+
     it('falls back to the coin code without a descriptor', () => {
         mount({ coinFamilies: ['unknown'], networkFilter: 'unknown' });
         const button = screen.getByRole('button', { name: /^Filter by network/ });
@@ -81,21 +92,20 @@ describe('HomeFilterBar', () => {
         expect(button).toHaveAttribute('aria-expanded', 'false');
         fireEvent.click(button);
         expect(button).toHaveAttribute('aria-expanded', 'true');
-        const listbox = screen.getByRole('listbox', { name: 'Networks' });
-        expect(within(listbox).getByRole('option', { name: 'Bitcoin' })).toHaveTextContent('Bitcoin');
+        // The full-screen network list (operator ruling 2026-11-13), not a listbox.
+        const list = screen.getByRole('dialog', { name: 'Network' });
+        expect(within(list).getByRole('button', { name: 'Select Bitcoin' })).toHaveTextContent('Bitcoin');
     });
 
-    it('closes the network list on Escape and an outside mousedown', () => {
+    it('closes the network list on Escape and returns focus to the filter', () => {
         mount();
         const button = screen.getByRole('button', { name: /^Filter by network/ });
 
         fireEvent.click(button);
+        expect(screen.getByRole('dialog', { name: 'Network' })).toBeInTheDocument();
         fireEvent.keyDown(window, { key: 'Escape' });
-        expect(screen.queryByRole('listbox', { name: 'Networks' })).toBeNull();
-
-        fireEvent.click(button);
-        fireEvent.mouseDown(document.body);
-        expect(screen.queryByRole('listbox', { name: 'Networks' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
+        expect(button).toHaveFocus();
     });
 
     it('reports the picked option and closes the network list', () => {
@@ -103,9 +113,9 @@ describe('HomeFilterBar', () => {
         mount({ onNetworkFilterChange });
         fireEvent.click(screen.getByRole('button', { name: /^Filter by network/ }));
 
-        const listbox = screen.getByRole('listbox', { name: 'Networks' });
-        fireEvent.click(within(listbox).getByRole('option', { name: 'Litecoin' }));
+        const list = screen.getByRole('dialog', { name: 'Network' });
+        fireEvent.click(within(list).getByRole('button', { name: 'Select Litecoin' }));
         expect(onNetworkFilterChange).toHaveBeenCalledWith('litecoin');
-        expect(screen.queryByRole('listbox', { name: 'Networks' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
     });
 });

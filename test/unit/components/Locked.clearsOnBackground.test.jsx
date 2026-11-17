@@ -48,7 +48,8 @@ describe('Locked password field on a native background', () => {
         act(() => { document.dispatchEvent(new Event('pause')); });
 
         expect(screen.getByLabelText('Password')).toHaveValue('');
-        expect(screen.getByRole('button', { name: /unlock wallet/i })).toBeDisabled();
+        // G130: Unlock stays enabled; an empty password is answered by the tap.
+        expect(screen.getByRole('button', { name: /unlock wallet/i })).toBeEnabled();
     });
 
     it('keeps the typed password when the page only loses focus', () => {

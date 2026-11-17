@@ -8,43 +8,42 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// AboutSection (§35.1 "About" + §51.3 release info). Read-only.
-// Surfaces wallet version, update channel, license, reproducible-build
-// link, release-signatures link, and the SECURITY.md disclosure link.
-// Items whose underlying artifact isn't yet published render with a
-// muted "not yet published" hint instead of an inert link.
+// AboutSection (§35.1 "About" + §51.3 release info), Titled Sections layout
+// (operator pick 4, 2026-11-15): the logo and intro, then Version and build,
+// License, Verification and Support under small section titles. Surfaces wallet
+// version, update channel, license, reproducible-build link, release-signatures
+// link, and the SECURITY.md disclosure link. Every document opens externally.
 
 import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import { useEffect, useRef, useState } from 'react';
-import { Button, Icon, StatusMessage } from '@xchain-wallet/core/ui';
+import { Icon, ListPage, ListRow, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { ActionList, ActionListItem } from '../ActionList.jsx';
+import {
+    WALLET_RELEASE_FEED_URL,
+    WEB_WALLET_URL,
+    logoUrl,
+} from '../../../branding/branding.js';
 import { useMessaging } from '../../useMessaging.js';
 import { copyText } from '../../clipboard.js';
 import { nativePlatformName } from '../../nativeShell.js';
 import {
     LICENSE_FILE,
     NOTICE_FILE,
+    REPO_FILE_BASE,
     RELEASE_SIGNATURES_DOC,
-    RELEASE_SIGNATURES_PUBLISHED,
     REPRODUCIBLE_BUILD_DOC,
     VERIFY_RELEASE_DOC,
     SECURITY_FILE,
-    SECURITY_PUBLISHED,
     UPDATE_CHANNEL,
     WALLET_VERSION,
 } from '../../../buildInfo.js';
-import { LICENSE_TEXT, LICENSE_SUMMARY } from '../../../license.js';
 import {
     hasDirectUpdateLane,
     isUpdateNoticeEnabled,
     setUpdateNoticeEnabled,
 } from '../../../flows/directUpdate.js';
-import {
-    ROW,
-    ROW_LABEL,
-    ROW_VALUE,
-    STACK,
-    ToggleRow,
-} from './_settingsPrimitives.jsx';
+import { ToggleRow, formatByteSize } from './_settingsPrimitives.jsx';
+import styles from './AboutSection.module.css';
 import { useHapticFeedback } from '../../hooks/useHaptic.js';
 import {
     redactDiagnosticText,
@@ -55,39 +54,78 @@ import { formatRelativeTime } from '../../utils/dateTime.js';
 import '../../../i18n/locales/en/history.js';
 import '../../../i18n/locales/en/settings.js';
 
-const ROW_VALUE_MUTED = { color: 'var(--xc-text-muted)', fontStyle: 'italic' };
-const PARAGRAPHS = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--xc-space-3)',
-};
-const PARAGRAPH = { margin: 0 };
 const PROBLEM_REPORT_URL = 'https://github.com/XChain-Platform/xchain-wallet/issues/new';
+const UPDATE_FEED_MAX_BYTES = 4096;
+const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const UPDATE_CHANNELS = Object.freeze([
+    'web',
+    'chrome',
+    'firefox',
+    'edge',
+    'ios',
+    'macos-appstore',
+    'android-play',
+    'android-direct',
+    'windows-store',
+    'desktop-direct',
+    'snap',
+]);
+const STORE_NAMES = Object.freeze({
+    chrome: 'Chrome Web Store',
+    firefox: 'Firefox Add-ons',
+    edge: 'Microsoft Edge Add-ons',
+    ios: 'App Store',
+    'macos-appstore': 'Mac App Store',
+    'android-play': 'Google Play',
+    'windows-store': 'Microsoft Store',
+    snap: 'Snap Store',
+});
+const UPDATE_HOSTS = Object.freeze({
+    web: ['wallet.xchain.io'],
+    chrome: ['chromewebstore.google.com'],
+    firefox: ['addons.mozilla.org'],
+    edge: ['microsoftedge.microsoft.com'],
+    ios: ['apps.apple.com'],
+    'macos-appstore': ['apps.apple.com'],
+    'android-play': ['play.google.com'],
+    'android-direct': ['downloads.xchain.io'],
+    'windows-store': ['apps.microsoft.com', 'www.microsoft.com'],
+    'desktop-direct': ['downloads.xchain.io'],
+    snap: ['snapcraft.io'],
+});
+
+const LIST_SURFACE = { border: '1px solid var(--xc-border)', borderRadius: 'var(--xc-radius-md)', background: 'var(--xc-surface)' };
 
 /**
  * @param {object} [props]
  * @param {number | null} [props.balancesFetchedAt]  Unix ms of the last successful balance fetch;
  *   Home's balance box no longer shows it (U72), so About does.
+ * @param {() => Promise<{ status: 'latest' | 'available' | 'pending', version?: string, storeName?: string, getUpdate?: () => void | Promise<void> }>} [props.checkForUpdates]
+ *   Test seam and shell override. The normal path uses the wallet's existing
+ *   desktop updater, published-version feed, or browser-store update lane.
  */
-export function AboutSection({ balancesFetchedAt = null } = {}) {
+export function AboutSection({
+    balancesFetchedAt = null,
+    checkForUpdates,
+} = {}) {
     const { shell, messaging } = useMessaging();
     const haptic = useHapticFeedback();
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState(/** @type {string | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
+    // The prepared diagnostics, read once so Copy has them at hand.
     const [preview, setPreview] = useState(/** @type {string | null} */ (null));
-    const [previewOpen, setPreviewOpen] = useState(false);
-    const [previewBusy, setPreviewBusy] = useState(false);
-    const [licenseOpen, setLicenseOpen] = useState(false);
     const [diagnosticMeta, setDiagnosticMeta] = useState(null);
     const copyResetRef = useRef(null);
+    const updateBusyRef = useRef(false);
+    const [updateBusy, setUpdateBusy] = useState(false);
+    const [updateResult, setUpdateResult] = useState(null);
     // Read once at mount: the provider is installed at shell boot, before any
     // settings route can render, so this cannot go stale within a session.
     const [updateLane] = useState(() => hasDirectUpdateLane());
     const [updateCheck, setUpdateCheck] = useState(() => isUpdateNoticeEnabled());
-    // Both diagnostic paths (copy + preview) are retryable by
-    // re-running the same fetch, so the error surface offers a one-click
-    // "Try again" against whichever action last failed.
+    // A failed copy is retryable by re-running the same fetch, so the error
+    // surface offers a one-click "Try again".
     const retryRef = useRef(/** @type {null | (() => void)} */ (null));
 
     useEffect(() => () => clearTimeout(copyResetRef.current), []);
@@ -129,9 +167,9 @@ export function AboutSection({ balancesFetchedAt = null } = {}) {
             if (preview === null) setPreview(text);
             const { ok } = await copyText(text);
             if (!ok) {
-                throw new Error('Copy is not available here. Select the diagnostics preview and copy it manually.');
+                throw new Error('Copy is not available here. Use Report a Problem to describe what happened.');
             }
-            setStatus(t('settings.about.copiedBytes', { bytes: text.length }));
+            setStatus(t('settings.about.copiedBytes', { size: formatByteSize(text.length) }));
             copyResetRef.current = setTimeout(() => setStatus(null), 1500);
             haptic.tap();
         } catch (err) {
@@ -140,30 +178,6 @@ export function AboutSection({ balancesFetchedAt = null } = {}) {
             haptic.error();
         } finally {
             setBusy(false);
-        }
-    }
-
-    async function handleTogglePreview() {
-        if (previewOpen) {
-            setPreviewOpen(false);
-            return;
-        }
-        setError(null);
-        retryRef.current = null;
-        if (preview !== null) {
-            setPreviewOpen(true);
-            return;
-        }
-        setPreviewBusy(true);
-        try {
-            const text = await fetchDump();
-            setPreview(text);
-            setPreviewOpen(true);
-        } catch (err) {
-            retryRef.current = handleTogglePreview;
-            setError(userFacingMessage(err, 'Could not load diagnostics preview.'));
-        } finally {
-            setPreviewBusy(false);
         }
     }
 
@@ -179,180 +193,171 @@ export function AboutSection({ balancesFetchedAt = null } = {}) {
         }
     }
 
+    async function handleUpdateCheck() {
+        if (updateBusyRef.current) return;
+        updateBusyRef.current = true;
+        setUpdateBusy(true);
+        setUpdateResult(null);
+        try {
+            const result = await (checkForUpdates || (() => checkShellForUpdates(shell)))();
+            if (
+                !result
+                || !['latest', 'available', 'pending'].includes(result.status)
+                || (result.status === 'available' && typeof result.getUpdate !== 'function')
+                || (result.status === 'pending' && (
+                    typeof result.getUpdate !== 'function' || typeof result.storeName !== 'string'
+                ))
+            ) {
+                throw new Error('invalid update result');
+            }
+            setUpdateResult(result);
+            haptic.tap();
+        } catch (_err) {
+            setUpdateResult({ status: 'error' });
+            haptic.error();
+        } finally {
+            updateBusyRef.current = false;
+            setUpdateBusy(false);
+        }
+    }
+
     return (
-        <div style={STACK}>
-            <p style={{ ...PARAGRAPH, color: 'var(--xc-text-muted)', lineHeight: 1.5 }}>
-                {t('settings.about.aSelfCustodialWalletFor')}
-                {' '}{t('settings.about.bitcoinLitecoinAndDogecoin')}
-            </p>
-            <Row label={t('settings.about.version')}>
-                <span style={ROW_VALUE}>{WALLET_VERSION}</span>
-            </Row>
-            <Row label={t('settings.about.balancesUpdated')}>
-                <span style={balancesFetchedAt ? ROW_VALUE : ROW_VALUE_MUTED}>
-                    {balancesFetchedAt
-                        ? formatRelativeTime(balancesFetchedAt)
-                        : t('settings.about.balancesNotUpdated')}
-                </span>
-            </Row>
-            <Row label={t('settings.about.buildIdentifier')}>
-                <span style={diagnosticMeta?.buildHash ? ROW_VALUE : ROW_VALUE_MUTED}>
-                    {diagnosticMeta?.buildHash || t('settings.about.notAvailable')}
-                </span>
-            </Row>
-            <Row label={t('settings.about.platform')}>
-                <span style={ROW_VALUE}>
-                    {diagnosticMeta?.platform || platformLabel(shell)}
-                </span>
-            </Row>
-            <Row label={t('settings.about.updateChannel')}>
-                <span style={ROW_VALUE}>{UPDATE_CHANNEL}</span>
-            </Row>
-            {/* §6 / D4: only a directly-installed build has to look
-                after its own updates, and only there is there a switch to
-                show. Every other shell is updated by a store, the browser or
-                electron-updater, and `hasDirectUpdateLane()` is false, so
-                this row does not exist rather than existing greyed out. */}
-            {updateLane ? (
-                <ToggleRow
-                    label={t('settings.about.checkForNewVersions')}
-                    hint={
-                        'Checks our download site once a day and alerts you to new versions.'
-                        + ' It does not download or install them or send wallet data.'
-                    }
-                    checked={updateCheck}
-                    onChange={(next) => {
-                        setUpdateNoticeEnabled(next);
-                        setUpdateCheck(isUpdateNoticeEnabled());
-                    }}
+        <ListPage>
+            <div className={styles.brandTop}>
+                <img
+                    src={logoUrl()}
+                    alt={t('settings.about.logoAlt')}
+                    width={170}
+                    className={styles.logo}
+                    data-testid="about-logo"
                 />
-            ) : null}
-            <Row label={t('settings.about.license')}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--xc-space-2)', maxWidth: '36rem' }}>
-                    {/* Plain-language summary shown by default for the wallet's
-                        non-technical audience; the full AGPL text is one tap away. */}
-                    <LicenseParagraphs
-                        text={LICENSE_SUMMARY}
-                        style={{
-                            ...PARAGRAPHS,
-                            margin: 0,
-                            fontSize: 'var(--xc-text-xs)',
-                            color: 'var(--xc-text-muted, var(--xc-text))',
-                            lineHeight: 1.5,
-                            textAlign: 'start',
-                        }}
+                <p className={styles.intro} data-testid="about-intro">
+                    {t('settings.about.aSelfCustodialWalletFor')}
+                </p>
+            </div>
+            <Section title={t('settings.about.sectionVersionBuild')}>
+                <Card label={t('settings.about.sectionVersionBuild')}>
+                    <Fact label={t('settings.about.version')}>{WALLET_VERSION}</Fact>
+                    <Fact label={t('settings.about.buildIdentifier')}>
+                        {diagnosticMeta?.buildHash
+                            ? <code className={styles.code}>{diagnosticMeta.buildHash}</code>
+                            : <span className={styles.mutedValue}>{t('settings.about.notAvailable')}</span>}
+                    </Fact>
+                    <Fact label={t('settings.about.platform')}>
+                        {diagnosticMeta?.platform || platformLabel(shell)}
+                    </Fact>
+                    <Fact label={t('settings.about.updateChannel')}>{UPDATE_CHANNEL}</Fact>
+                    <Fact label={t('settings.about.balancesUpdated')}>
+                        {balancesFetchedAt
+                            ? formatRelativeTime(balancesFetchedAt)
+                            : <span className={styles.mutedValue}>{t('settings.about.balancesNotUpdated')}</span>}
+                    </Fact>
+                    {/* §6 / D4: only a directly-installed build has to look
+                        after its own updates, and only there is there a switch to
+                        show. Every other shell is updated by a store, the browser or
+                        electron-updater, and `hasDirectUpdateLane()` is false, so
+                        this row does not exist rather than existing greyed out. */}
+                    {updateLane ? (
+                        <li className={styles.toggleItem}>
+                            <ToggleRow
+                                embedded
+                                label={t('settings.about.checkForNewVersions')}
+                                help={
+                                    'Checks our download site once a day and alerts you to new versions.'
+                                    + ' Downloading and installing stay up to you, and the check sends no wallet data.'
+                                }
+                                checked={updateCheck}
+                                onChange={(next) => {
+                                    setUpdateNoticeEnabled(next);
+                                    setUpdateCheck(isUpdateNoticeEnabled());
+                                }}
+                            />
+                        </li>
+                    ) : null}
+                    <ActionListItem
+                        icon={updateResult?.status === 'error'
+                            ? <Icon.AlertCircleIcon />
+                            : (
+                                <span className={updateBusy ? styles.updateIconSpinning : undefined}>
+                                    <Icon.RefreshIcon />
+                                </span>
+                            )}
+                        iconLabel={updateResult?.status === 'error' ? t('settings.about.updateCheckFailed') : undefined}
+                        title={t('settings.page.checkForUpdates')}
+                        description={t('settings.about.checkForUpdatesDescription')}
+                        onClick={handleUpdateCheck}
+                        aria-busy={updateBusy || undefined}
                     />
-                    <div style={{ display: 'flex', gap: 'var(--xc-space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <DocLink path={LICENSE_FILE} label={t('settings.about.licenseFile')} />
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => setLicenseOpen((open) => !open)}
-                            aria-expanded={licenseOpen}
-                            aria-controls="full-license-text"
-                        >
-                            {licenseOpen ? t('settings.about.hideFullText') : t('settings.about.showFullText')}
-                        </Button>
-                    </div>
-                </div>
-            </Row>
-            {licenseOpen ? (
-                <LicenseParagraphs
-                    id="full-license-text"
-                    text={LICENSE_TEXT}
-                    style={{
-                        ...PARAGRAPHS,
-                        margin: 0,
-                        padding: 'var(--xc-space-3)',
-                        background: 'var(--xc-surface-sunken, var(--xc-surface-raised))',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        fontSize: 'var(--xc-text-xs)',
-                        fontFamily: 'var(--xc-font-mono, monospace)',
-                        color: 'var(--xc-text)',
-                        wordBreak: 'break-word',
-                    }}
-                />
-            ) : null}
-            <Row label={t('settings.about.notice')}>
-                <DocLink path={NOTICE_FILE} label={NOTICE_FILE} />
-            </Row>
-            <Row label={t('settings.about.reproducibleBuild')}>
-                <DocLink path={REPRODUCIBLE_BUILD_DOC} label={t('settings.about.verificationProcedure')} />
-            </Row>
-            <Row label={t('settings.about.verifyARelease')}>
-                {/* Cluster T FOLLOWUP 2: end-user verification recipe (key import ->
-                    manifest download -> GPG verify -> artifact hash check). */}
-                <DocLink path={VERIFY_RELEASE_DOC} label={t('settings.about.verificationRecipe')} />
-            </Row>
-            <Row label={t('settings.about.releaseSignatures')}>
-                {RELEASE_SIGNATURES_PUBLISHED ? (
-                    <DocLink path={RELEASE_SIGNATURES_DOC} label={t('settings.about.gpgFingerprint')} />
-                ) : (
-                    <span style={ROW_VALUE_MUTED}>{t('settings.about.notYetPublished')}</span>
-                )}
-            </Row>
-            <Row label={t('settings.about.disclosurePolicy')}>
-                {SECURITY_PUBLISHED ? (
-                    <DocLink path={SECURITY_FILE} label={SECURITY_FILE} />
-                ) : (
-                    <span style={ROW_VALUE_MUTED}>{t('settings.about.notYetPublished')}</span>
-                )}
-            </Row>
-            <Row label={t('settings.about.diagnostics')}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--xc-space-2)', alignItems: 'center', justifyContent: 'flex-end' }}>
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={handleTogglePreview}
-                        loading={previewBusy}
-                        disabled={previewBusy}
-                        aria-expanded={previewOpen}
-                        aria-controls="diagnostic-dump-preview"
-                    >
-                        {previewOpen ? t('settings.about.hidePreview') : t('settings.about.showPreview')}
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={handleCopyDiagnostics}
-                        loading={busy}
-                        disabled={busy}
+                </Card>
+                <UpdateCheckNotice result={updateResult} />
+            </Section>
+            <Section title={t('settings.about.license')}>
+                {/* Every tappable item is one action-list row (icon, title, description,
+                    chevron), the same row Support uses (operator ruling 2026-11-15). */}
+                <ActionList label={t('settings.about.license')} style={LIST_SURFACE}>
+                    <ActionListItem
+                        icon={<Icon.BookIcon />}
+                        title={t('settings.about.license')}
+                        description={t('settings.about.licenseRowHint')}
+                        {...docLinkProps(LICENSE_FILE)}
+                    />
+                    <ActionListItem
+                        icon={<Icon.DocumentIcon />}
+                        title={t('settings.about.notice')}
+                        description={withoutFileName(t('settings.about.noticeDesc', { file: NOTICE_FILE }))}
+                        {...docLinkProps(NOTICE_FILE)}
+                    />
+                </ActionList>
+            </Section>
+            <Section title={t('settings.about.sectionVerification')}>
+                <ActionList label={t('settings.about.sectionVerification')} style={LIST_SURFACE}>
+                    <ActionListItem
+                        icon={<Icon.VerifyIcon />}
+                        title={t('settings.about.reproducibleBuild')}
+                        description={t('settings.about.reproducibleBuildDesc')}
+                        {...docLinkProps(REPRODUCIBLE_BUILD_DOC)}
+                    />
+                    {/* Cluster T FOLLOWUP 2: end-user verification recipe (key import ->
+                        manifest download -> GPG verify -> artifact hash check). */}
+                    <ActionListItem
+                        icon={<Icon.CircleCheckIcon />}
+                        title={t('settings.about.verifyARelease')}
+                        description={t('settings.about.verifyARecipeDesc')}
+                        {...docLinkProps(VERIFY_RELEASE_DOC)}
+                    />
+                    <ActionListItem
+                        icon={<Icon.KeyIcon />}
+                        title={t('settings.about.releaseSignatures')}
+                        description={t('settings.about.gpgFingerprint')}
+                        {...docLinkProps(RELEASE_SIGNATURES_DOC)}
+                    />
+                    <ActionListItem
+                        icon={<Icon.LockIcon />}
+                        title={t('settings.about.disclosurePolicy')}
+                        description={withoutFileName(t('settings.about.disclosurePolicyDesc', { file: SECURITY_FILE }))}
+                        {...docLinkProps(SECURITY_FILE)}
+                    />
+                </ActionList>
+            </Section>
+            <Section title={t('settings.about.sectionSupport')}>
+                {/* The page's two actions, one action list (G101). Copy only: an
+                    expanding preview is not shown on an info page. */}
+                <ActionList label={t('settings.about.sectionSupport')} style={LIST_SURFACE}>
+                    <ActionListItem
                         icon={status ? <Icon.CheckIcon /> : <Icon.CopyIcon />}
-                    >
-                        {status ? t('history.copy.copied') : t('settings.about.copyDiagnostics')}
-                    </Button>
-                </div>
-            </Row>
-            <Row label={t('settings.about.feedback')}>
-                <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleReportProblem}
-                    icon={<Icon.ExternalLinkIcon />}
-                >
-                    {t('settings.about.reportAProblem')}
-                </Button>
-            </Row>
-            {previewOpen && preview !== null ? (
-                <pre
-                    id="diagnostic-dump-preview"
-                    style={{
-                        margin: 0,
-                        padding: 'var(--xc-space-3)',
-                        background: 'var(--xc-surface-sunken, var(--xc-surface-raised))',
-                        border: '1px solid var(--xc-border)',
-                        borderRadius: 'var(--xc-radius-md)',
-                        fontSize: 'var(--xc-text-xs)',
-                        fontFamily: 'var(--xc-font-mono, monospace)',
-                        color: 'var(--xc-text-muted)',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-all',
-                    }}
-                >
-                    {preview}
-                </pre>
-            ) : null}
+                        title={status ? t('history.copy.copied') : t('settings.about.copyDiagnosticsTitle')}
+                        description={t('settings.about.copyDiagnosticsDesc')}
+                        onClick={handleCopyDiagnostics}
+                        chevron={false}
+                    />
+                    <ActionListItem
+                        icon={<Icon.MessageIcon />}
+                        title={t('settings.about.reportAProblemTitle')}
+                        description={t('settings.about.reportAProblemDesc')}
+                        onClick={handleReportProblem}
+                    />
+                </ActionList>
+            </Section>
             {status ? <StatusMessage variant="success">{status}</StatusMessage> : null}
             {error ? (
                 <StatusMessage
@@ -362,70 +367,238 @@ export function AboutSection({ balancesFetchedAt = null } = {}) {
                     {error}
                 </StatusMessage>
             ) : null}
-        </div>
+        </ListPage>
     );
 }
 
-// When a narrow row wraps its value under the label, the value keeps to the
-// row end, where every other Settings control sits.
-const ROW_END = {
-    display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 'var(--xc-space-2)',
-    marginInlineStart: 'auto',
-    minWidth: 0,
-    maxWidth: '100%',
-    textAlign: 'end',
-};
+function UpdateCheckNotice({ result }) {
+    if (!result) return null;
+    if (result.status === 'latest') {
+        return (
+            <StatusMessage variant="success" title={t('settings.about.upToDate')}>
+                {t('settings.about.latestVersion', { version: cleanVersion(result.version || WALLET_VERSION) })}
+            </StatusMessage>
+        );
+    }
+    if (result.status === 'available') {
+        return (
+            <StatusMessage
+                variant="info"
+                title={t('settings.about.updateAvailable')}
+                action={{ label: t('settings.about.updateAction'), onAction: result.getUpdate }}
+            >
+                {t('settings.about.updateAvailableVersion', { version: cleanVersion(result.version) })}
+            </StatusMessage>
+        );
+    }
+    if (result.status === 'pending') {
+        return (
+            <StatusMessage
+                variant="info"
+                title={t('settings.about.waitingForStoreReview')}
+                action={{ label: t('settings.about.openWebWallet'), onAction: result.getUpdate }}
+            >
+                {t('settings.about.pendingStoreReview', {
+                    version: cleanVersion(result.version),
+                    storeName: result.storeName,
+                })}
+            </StatusMessage>
+        );
+    }
+    return null;
+}
 
-function Row({ label, children }) {
+export async function checkShellForUpdates(shell, env = globalThis) {
+    const [feed, channel] = await Promise.all([
+        fetchReleaseFeed(env),
+        detectRunningChannel(shell, env),
+    ]);
+    const current = cleanVersion(WALLET_VERSION);
+
+    if (channel === 'web') {
+        if (!isNewerVersion(feed.latest, current)) return { status: 'latest', version: current };
+        return {
+            status: 'available',
+            version: feed.latest,
+            getUpdate: () => env.location?.reload?.(),
+        };
+    }
+
+    const release = feed.channels[channel];
+    if (!release) {
+        if (!isNewerVersion(feed.latest, current)) return { status: 'latest', version: current };
+        return {
+            status: 'available',
+            version: feed.latest,
+            getUpdate: () => openExternal(WEB_WALLET_URL, env),
+        };
+    }
+
+    if (isNewerVersion(release.version, current)) {
+        return {
+            status: 'available',
+            version: release.version,
+            getUpdate: updateActionFor(channel, release.url, env),
+        };
+    }
+
+    if (isNewerVersion(feed.latest, current) && STORE_NAMES[channel]) {
+        return {
+            status: 'pending',
+            version: feed.latest,
+            storeName: STORE_NAMES[channel],
+            getUpdate: () => openExternal(WEB_WALLET_URL, env),
+        };
+    }
+    return { status: 'latest', version: current };
+}
+
+export async function detectRunningChannel(shell, env = globalThis) {
+    const nativePlatform = nativePlatformName(env);
+    if (nativePlatform === 'ios') return 'ios';
+    if (nativePlatform === 'android') {
+        const plugin = env.Capacitor?.Plugins?.XChainVault;
+        if (typeof plugin?.getInstallOrigin !== 'function') return 'unknown';
+        try {
+            const result = await plugin.getInstallOrigin({});
+            if (result?.channel === 'store') return 'android-play';
+            if (result?.channel === 'direct') return 'android-direct';
+        } catch (_error) {
+            return 'unknown';
+        }
+        return 'unknown';
+    }
+    if (shell === 'desktop') {
+        const channel = await env.xchainWalletUpdater?.getChannel?.();
+        return UPDATE_CHANNELS.includes(channel) ? channel : 'unknown';
+    }
+    if (shell === 'popup' || shell === 'extension') {
+        const agent = String(env.navigator?.userAgent || '');
+        if (/Firefox\//i.test(agent)) return 'firefox';
+        if (/Edg\//i.test(agent)) return 'edge';
+        if (/(?:Chrome|Chromium)\//i.test(agent)) return 'chrome';
+        return 'unknown';
+    }
+    return 'web';
+}
+
+async function fetchReleaseFeed(env) {
+    if (typeof env.fetch !== 'function') throw new Error('update feed unavailable');
+    const response = await env.fetch(WALLET_RELEASE_FEED_URL, {
+        method: 'GET',
+        cache: 'no-store',
+        redirect: 'error',
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+    });
+    if (!response?.ok) throw new Error('update feed unavailable');
+    const text = await response.text();
+    if (typeof text !== 'string' || text.length > UPDATE_FEED_MAX_BYTES) {
+        throw new Error('invalid update feed');
+    }
+    return parseReleaseFeed(JSON.parse(text));
+}
+
+export function parseReleaseFeed(body) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        throw new Error('invalid update feed');
+    }
+    const latest = cleanVersion(body.latest);
+    if (!SEMVER.test(latest) || !body.channels || typeof body.channels !== 'object' || Array.isArray(body.channels)) {
+        throw new Error('invalid update feed');
+    }
+    const channels = {};
+    for (const channel of UPDATE_CHANNELS) {
+        if (!Object.hasOwn(body.channels, channel)) continue;
+        const entry = body.channels[channel];
+        const version = cleanVersion(entry?.version);
+        if (!SEMVER.test(version) || isNewerVersion(version, latest)) {
+            throw new Error('invalid update channel');
+        }
+        const url = validUpdateUrl(channel, entry?.url);
+        if (!url) throw new Error('invalid update target');
+        channels[channel] = { version, url };
+    }
+    return { latest, channels };
+}
+
+function validUpdateUrl(channel, value) {
+    try {
+        const url = new URL(value);
+        if (url.protocol !== 'https:' || !UPDATE_HOSTS[channel]?.includes(url.hostname)) return null;
+        return url.href;
+    } catch (_error) {
+        return null;
+    }
+}
+
+function updateActionFor(channel, url, env) {
+    if (channel === 'desktop-direct') {
+        return () => {
+            if (typeof env.xchainWalletUpdater?.install !== 'function') {
+                throw new Error('desktop updater unavailable');
+            }
+            return env.xchainWalletUpdater.install('download');
+        };
+    }
+    return () => openExternal(url, env);
+}
+
+function openExternal(url, env) {
+    return env.open?.(url, '_blank', 'noopener,noreferrer');
+}
+
+function cleanVersion(version) {
+    return String(version ?? '').replace(/^v/, '');
+}
+
+function isNewerVersion(candidate, current) {
+    const next = SEMVER.exec(cleanVersion(candidate));
+    const installed = SEMVER.exec(cleanVersion(current));
+    if (!next || !installed) return false;
+    for (let index = 1; index <= 3; index += 1) {
+        const difference = Number(next[index]) - Number(installed[index]);
+        if (difference !== 0) return difference > 0;
+    }
+    return false;
+}
+
+/** One titled group of facts: a small section title over its card or list (G08). */
+function Section({ title, children }) {
     return (
-        <div style={ROW}>
-            <span style={ROW_LABEL}>{label}</span>
-            <div style={ROW_END}>{children}</div>
-        </div>
+        <section className={styles.section}>
+            <SectionHeader title={title} as="h3" />
+            {children}
+        </section>
     );
 }
 
-function LicenseParagraphs({ text, ...props }) {
+function Card({ label, children }) {
+    return <ul className={styles.card} style={LIST_SURFACE} aria-label={label}>{children}</ul>;
+}
+
+/** One label-left, value-right fact, the Details card's row (G14). */
+function Fact({ label, children }) {
     return (
-        <div {...props}>
-            {text.trim().split('\n\n').map((paragraph, index) => (
-                <p key={index} style={PARAGRAPH}>{paragraph}</p>
-            ))}
-        </div>
+        <li>
+            <ListRow title={label} trailing={<span className={styles.value}>{children}</span>} />
+        </li>
     );
 }
 
-function DocLink({ path, label }) {
+/** Props that make an action row an external link to a repo doc or an absolute URL. */
+function docLinkProps(path) {
     const isUrl = typeof path === 'string' && /^https?:\/\//.test(path);
-    const href = isUrl
-        ? path
-        : `https://github.com/XChain-Platform/xchain-wallet/blob/main/${path}`;
-    // A plain link in the body font: it wraps inside its own box, left-aligned,
-    // with the arrow set off from the last word by a real space (a flex box
-    // would drop that space and glue the arrow on).
-    const style = {
-        color: 'var(--xc-accent, var(--xc-text))',
-        display: 'inline-block',
-        maxWidth: '100%',
-        textAlign: 'start',
-        overflowWrap: 'anywhere',
-        minHeight: 'var(--xc-tap-min)',
-        fontSize: 'var(--xc-text-xs)',
+    return {
+        href: isUrl ? path : `${REPO_FILE_BASE}${path}`,
+        target: '_blank',
+        rel: 'noreferrer noopener',
     };
-    return (
-        <a
-            href={href}
-            target="_blank"
-            rel="noreferrer noopener"
-            style={style}
-        >
-            {label}{' '}<span aria-hidden="true">↗</span>
-        </a>
-    );
+}
+
+/** Removes a parenthesized file name from a translated document subtitle. */
+function withoutFileName(description) {
+    return description.replace(/\s*\([^)]*\.[^)]+\)\s*$/, '');
 }
 
 /** Shell name for display; a Capacitor build reports its OS, not the "web" shell it wraps. */

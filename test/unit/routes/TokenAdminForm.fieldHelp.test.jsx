@@ -69,8 +69,9 @@ describe('TokenAdminForm field help', () => {
     it('moves both bridge explanations into Destination networks help', async () => {
         mountAdmin('bridge-settings');
 
-        const group = await screen.findByRole('group', { name: 'Destination networks' });
-        expect(group).toHaveAccessibleName('Destination networks');
+        // G117: one picker field, named by its label and what it holds.
+        const field = await screen.findByRole('button', { name: /^Destination networks: / });
+        expect(field).toBeInTheDocument();
 
         const help = screen.getByRole('button', { name: 'About Destination networks' });
         const tooltip = tooltipFor(help);
@@ -78,7 +79,7 @@ describe('TokenAdminForm field help', () => {
             'Bridging lets holders lock this token here and receive a copy of it on another chain.',
         );
         expect(tooltip).toHaveTextContent(
-            'Unchecking every chain closes the door to NEW transfers.',
+            'Turning every network off closes the door to NEW transfers.',
         );
     });
 
@@ -95,6 +96,6 @@ describe('TokenAdminForm field help', () => {
             'Stored on-chain and replaces the current description. Up to 249 characters.',
         );
         expect(screen.queryByText('Up to 249 characters.')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Update description' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Update Description' })).toBeInTheDocument();
     });
 });

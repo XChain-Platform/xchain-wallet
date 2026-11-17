@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AdvancedActionsForm } from '../../../packages/core/src/shared/routes/AdvancedActionsForm.jsx';
+import { selectOption, selectOptionLabels } from '../../helpers/selectOption.js';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 
 const BTC = 'bitcoin-mainnet';
@@ -65,19 +66,21 @@ describe('Advanced action operator rulings', () => {
     it('explains the source, purpose, format, and each raw SDK field on its label line', async () => {
         mount();
 
-        const picker = await screen.findByLabelText('Action', { selector: 'select' });
-        await screen.findByRole('option', { name: /BROADCAST/ });
-        await screen.findByRole('button', { name: 'About From' });
+        const picker = await screen.findByLabelText('Action', { selector: '[role="combobox"]' });
+        await waitFor(() => expect(selectOptionLabels(picker).some((l) => /BROADCAST/.test(l))).toBe(true));
+        // From is a closed section; open it to reach the From address field and its help.
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
+        await screen.findByRole('button', { name: 'About From address' });
         expectHelp(
-            'From',
+            'From address',
             'The address that signs and pays for this action. Tap the icon to pick another of your addresses.',
         );
         expectHelp(
             'Action',
-            'Pick any XChain action to compose it from its raw fields. Actions marked (dedicated form available) also have a guided form, which is easier to use.',
+            'Pick any XChain action to compose it from its raw fields.',
         );
 
-        fireEvent.change(picker, { target: { value: 'BROADCAST' } });
+        selectOption(picker, 'BROADCAST');
         await screen.findByLabelText('MESSAGE');
 
         expectHelp(
@@ -92,11 +95,11 @@ describe('Advanced action operator rulings', () => {
         expect(screen.queryByText(/one per line or comma-separated/)).toBeNull();
     });
 
-    it('uses an icon-bearing green Sign action control', async () => {
+    it('uses an icon-bearing green Sign Action control', async () => {
         mount();
 
-        await screen.findByLabelText('Action', { selector: 'select' });
-        const submit = screen.getByRole('button', { name: 'Sign action' });
+        await screen.findByLabelText('Action', { selector: '[role="combobox"]' });
+        const submit = screen.getByRole('button', { name: 'Sign Action' });
         expect(submit).toHaveClass(buttonStyles.success);
         expect(submit.querySelector('svg')).toBeTruthy();
     });
@@ -104,16 +107,18 @@ describe('Advanced action operator rulings', () => {
     it('shows only Network fee for a free action and the Fees card for a fee-path action', async () => {
         mount();
 
-        const picker = await screen.findByLabelText('Action', { selector: 'select' });
-        await screen.findByRole('option', { name: /BROADCAST/ });
-        fireEvent.change(picker, { target: { value: 'BROADCAST' } });
+        const picker = await screen.findByLabelText('Action', { selector: '[role="combobox"]' });
+        await waitFor(() => expect(selectOptionLabels(picker).some((l) => /BROADCAST/.test(l))).toBe(true));
+        selectOption(picker, 'BROADCAST');
         await screen.findByLabelText('MESSAGE');
+        // The fee controls live in the closed Fees section.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/, expanded: false }));
         expect(screen.getByRole('slider', { name: 'Network fee' })).toBeInTheDocument();
-        expect(document.querySelector('[data-fees-card]')).toBeNull();
+        expect(document.querySelector('[data-fees-row="protocol"]')).toBeNull();
         expect(screen.queryByText('Protocol fee')).toBeNull();
 
-        fireEvent.change(picker, { target: { value: 'BATCH' } });
-        await waitFor(() => expect(document.querySelector('[data-fees-card]')).toBeTruthy());
+        selectOption(picker, 'BATCH');
+        await waitFor(() => expect(document.querySelector('[data-fees-row="protocol"]')).toBeTruthy());
         expect(screen.getByRole('slider', { name: 'Network fee' })).toBeInTheDocument();
         expect(screen.getByText('Protocol fee')).toBeInTheDocument();
     });
@@ -125,7 +130,9 @@ describe('Advanced action operator rulings', () => {
         ), 'utf8');
 
         expect(source).toMatch(/variant="success" icon=\{<Icon\.CheckIcon \/>\} onClick=\{onBack\}>Done/);
-        expect(source).toMatch(/variant="success"\s+icon=\{isWatcherMode \? <Icon\.DownloadIcon \/> : <Icon\.KeyIcon \/>\}/);
-        expect(source).toMatch(/variant="success"\s+icon=\{singleEncode \? <Icon\.KeyIcon \/> : <Icon\.ForwardIcon \/>\}/);
+        expect(source).toMatch(/<ConfirmActionModal/);
+        expect(source).toMatch(/credentialsReady=\{typedConfirmOk\}/);
+        // The form's own Sign Action button is the standard FormAction, which renders the success variant.
+        expect(source).toMatch(/<FormAction\s+icon=\{singleEncode \? <Icon\.KeyIcon \/> : <Icon\.ForwardIcon \/>\}/);
     });
 });

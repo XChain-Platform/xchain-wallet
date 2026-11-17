@@ -12,9 +12,11 @@ import {
     createWallet,
     expect,
     gotoSection,
+    openIssueSection,
     openSettings,
     test,
 } from '../../fixtures/wallet.js';
+import { dropdownValue, expectDropdownValue } from '../../fixtures/pickOption.js';
 
 const VIEWPORT = { width: 1280, height: 800 };
 const INTERACTIVE_SELECTOR = [
@@ -216,7 +218,7 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             // A new wallet has no contacts; save one so the recipient field
             // has a suggestion to offer.
             await gotoSection(page, 'Contacts');
-            await page.getByRole('button', { name: 'Create first contact' }).click();
+            await page.getByRole('button', { name: 'Add contact', exact: true }).click();
             await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Erin');
             await page.getByRole('textbox', { name: 'Address', exact: true })
                 .fill('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4');
@@ -256,11 +258,11 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
 
             // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
             const addressType = form.getByLabel('Address type', { exact: true });
-            const originalType = await addressType.inputValue();
+            const originalType = await dropdownValue(addressType);
             await addressType.focus();
             await page.keyboard.press('Alt+ArrowDown');
             await page.keyboard.press('Escape');
-            await expect(addressType).toHaveValue(originalType);
+            await expectDropdownValue(addressType, originalType);
             await expect(form).toBeVisible();
 
             await expectEnterSubmissionBoundaries(page, {
@@ -273,10 +275,8 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
 
         await test.step('Create token', async () => {
             await gotoSection(page, 'Home');
-            // Home has no action grid at 834px and wider (ruling U45), and the
-            // All actions has no wizard entry (its "Issue
-            // token" row opens the plain issue form). The guided Create token
-            // wizard is reached through the wallet menu at this width.
+            // Home has no action grid at 834px and wider (ruling U45), so the
+            // Create token form is reached through the wallet menu at this width.
             await page.keyboard.press('ControlOrMeta+k');
             const palette = page.getByRole('dialog', { name: 'Wallet menu' });
             await expect(palette).toBeVisible();
@@ -287,51 +287,49 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             await expect(createToken).toBeVisible();
             await createToken.click();
             await expect(palette).toBeHidden();
-            // Custom opens the full Issue form (ruling U79), so the wizard's
-            // network step is reached through the Utility template.
-            const template = page.getByRole('button', { name: /^Utility token\b/ });
-            await expect(template).toBeVisible();
-            await template.click();
-
-            const chainForm = page.getByRole('form', { name: 'Choose token network' });
-            await expect(chainForm).toBeVisible();
-            const network = chainForm.getByRole('button', { name: /^Network:/ });
+            // Issue Token is one form; its network sits in the From section,
+            // which starts closed.
+            const form = page.getByRole('form', { name: 'Issue Token' });
+            await expect(form).toBeVisible();
+            await openIssueSection(page.getByRole('main'), 'From');
+            const network = form.getByRole('button', { name: /^Network:/ });
             await expect(network).toBeVisible();
             // The Network field opens the full network-picker screen (ruling
-            // U59); Escape closes it and returns to the step it came from.
+            // U59); Escape closes it and returns to the form it came from.
             await network.click();
             const picker = page.getByRole('dialog', { name: 'Network' });
             await expect(picker).toBeVisible();
             await page.keyboard.press('Escape');
             await expect(picker).toHaveCount(0);
-            await expect(chainForm).toBeVisible();
-            const next = chainForm.getByRole('button', { name: 'Next' });
-            await expect(next).toBeEnabled();
-            await next.click();
-
-            const form = page.getByRole('form', { name: 'Token details' });
             await expect(form).toBeVisible();
+
             await expectVisualTabOrderAndFocusRings(page, form, 'Create token');
+            // The Issue Token button stays off until a ticker is typed, and a
+            // disabled default button blocks Enter submission, so the two
+            // fields are filled before the Enter boundaries are walked.
+            await form.getByRole('textbox', { name: 'Ticker', exact: true }).fill('TABORDER');
+            await form.getByRole('textbox', { name: /^Max supply/ }).fill('1000');
             await expectEnterSubmissionBoundaries(page, {
                 form,
-                firstField: form.getByRole('textbox', { name: 'Token name (ticker)' }),
-                lastField: form.getByRole('textbox').last(),
-                submitButton: form.getByRole('button', { name: 'Review token' }),
+                firstField: form.getByRole('textbox', { name: 'Ticker', exact: true }),
+                lastField: form.getByRole('textbox', { name: /^Max supply/ }),
+                submitButton: form.getByRole('button', { name: 'Issue Token', exact: true }),
                 label: 'Create token',
             });
         });
 
         await test.step('Settings password security', async () => {
             await openSettings(page);
-            const walletRow = page.getByRole('main').getByRole('button', { name: /^This wallet/ });
-            await expect(walletRow).toBeVisible();
-            await walletRow.click();
-            const changePassword = page.getByRole('main').getByRole('button', { name: 'Change…' });
-            await expect(changePassword).toBeVisible();
-            await changePassword.click();
+            const securityRow = page.getByRole('main').getByRole('button', { name: /^Security/ }).first();
+            await expect(securityRow).toBeVisible();
+            await securityRow.click();
+            // The Wallet password page opens straight on its form.
+            const passwordRow = page.getByRole('main').getByRole('button', { name: /^Wallet password\b/ }).first();
+            await expect(passwordRow).toBeVisible();
+            await passwordRow.click();
 
-            const heading = page.getByRole('heading', { name: 'Change wallet password' });
-            const form = heading.locator('xpath=ancestor::form');
+            // The direct page has no section heading, so the form is found by its label.
+            const form = page.getByRole('form', { name: 'Change wallet password' });
             await expect(form).toBeVisible();
             await expectVisualTabOrderAndFocusRings(page, form, 'Settings password security');
             await expectHeaderMenuEscapeKeepsForm(page, form, 'Settings password security');

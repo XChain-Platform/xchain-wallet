@@ -134,7 +134,7 @@ assert.ok(!TAB_BAR_DESTINATIONS.includes('more'), 'More is not a tab bar destina
 assert.ok(!/SHEET_PRIMARY|More/.test(tabBarSrc.replace(/\/\*[\s\S]*?\*\//g, '')),
     'the tab bar has no More sheet');
 
-// --- 3. LeftNav adds Scan ---------------------------------------------
+// --- 3. Scan stays in the complete wallet menu ------------------------
 
 const leftNavSrc = readFileSync(
     join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'LeftNav.jsx'),
@@ -142,8 +142,8 @@ const leftNavSrc = readFileSync(
 );
 assert.deepEqual(ROUTE_NAV_GROUPS.scan, ['scan', 'sign-psbt'],
     'LeftNav scan group covers the scanner and its PSBT drilldown');
-assert.ok(SIDEBAR_PRIMARY_DESTINATIONS.includes('scan'),
-    'LeftNav primary list renders a Scan row');
+assert.ok(!SIDEBAR_PRIMARY_DESTINATIONS.includes('scan'),
+    'LeftNav leaves Scan to the complete wallet menu');
 assert.ok(/id: 'scan', labelKey: 'walletMenu\.row\.scan', icon: 'ScanIcon'/.test(
     readFileSync(join(wsRoot, 'packages', 'core', 'src', 'shared', 'walletMenu.js'), 'utf8')),
     'the Scan row carries ScanIcon in the wallet menu catalogue');
@@ -209,5 +209,5 @@ assert.ok(['wif', 'unknown', 'address'].includes(wif.type),
     'wif test string classifies into one of the documented branches');
 
 console.log(
-    'OK: scan-route smoke (ScanRoute mounts QrScanner + paste fallback over the existing detectQrContent classifier; BottomTabBar uses five catalogue destinations with labels resolved at render and no More or Scan tab; LeftNav includes Scan; web/desktop/popup App.jsx route send/receive/psbt outcomes; secret material is not auto-imported)',
+    'OK: scan-route smoke (ScanRoute mounts QrScanner + paste fallback over the existing detectQrContent classifier; BottomTabBar uses five catalogue destinations with labels resolved at render and no More or Scan tab; Scan stays in the wallet menu; web/desktop/popup App.jsx route send/receive/psbt outcomes; secret material is not auto-imported)',
 );

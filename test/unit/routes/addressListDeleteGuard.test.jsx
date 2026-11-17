@@ -110,9 +110,12 @@ async function openDeleteDialog(address, messaging = messagingWith(), balanceTex
         </MessagingProvider>,
     );
     fireEvent.click(await screen.findByRole('button', { name: `View address ${address}` }));
+    // Balance is a Details row; Delete is an Actions tile.
+    fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
     await vi.waitFor(() => {
         expect(screen.getByTestId('address-detail-balance').textContent).toMatch(balanceText);
     });
+    fireEvent.click(screen.getByRole('tab', { name: 'Actions' }));
     fireEvent.click(screen.getByRole('button', { name: /Delete/ }));
     return screen.findByRole('dialog', { name: /Delete this address\?/ });
 }
@@ -189,10 +192,12 @@ describe('deleteAddressMessage', () => {
             record: { source: 'trezor', derivationPath: "m/84'/0'/0'/0/3", role: 'receive' },
         });
         expect(hw).toMatch(/re-derives the lowest missing address/);
+        expect(hw).toMatch(/key stays on your hardware wallet/);
+        expect(hw).not.toMatch(/recovery phrase/);
         const wo = deleteAddressMessage({
             record: { source: 'watch-only', derivationPath: null, role: 'receive' },
         });
-        expect(wo).toMatch(/watch-only address can be added again/);
+        expect(wo).toMatch(/Another phone holds its key, so this address can be added again/);
         expect(wo).not.toMatch(/re-derives/);
     });
 });
@@ -205,6 +210,7 @@ describe('Address details name the format in plain words', () => {
             </MessagingProvider>,
         );
         fireEvent.click(await screen.findByRole('button', { name: `View address ${address}` }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
         return (await screen.findByTestId('address-detail-address-format')).textContent;
     }
 

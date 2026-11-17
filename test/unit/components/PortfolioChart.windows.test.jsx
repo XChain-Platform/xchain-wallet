@@ -232,10 +232,10 @@ describe('lazy daily history in price charts', () => {
                 <TokenDetail walletId="real-wallet" chainId={CHAIN_ID} tick="BTC" kind="native" quantity="1" divisibility={8} onBack={() => {}} />
             </MessagingProvider>,
         );
-        await screen.findByLabelText('1W price chart');
+        await screen.findByRole('img', { name: /Range 1W\./ });
         fireEvent.click(screen.getByRole('tab', { name: '1Y' }));
 
-        expect(await screen.findByLabelText('1Y price chart')).toBeInTheDocument();
+        expect(await screen.findByRole('img', { name: /Range 1Y\./ })).toBeInTheDocument();
         expect(messaging.getNativePricesRequest).toHaveBeenCalledWith({
             chainIds: [CHAIN_ID], includeSparkline: false, includeHistory: true, fiatCurrency: 'USD',
         });
@@ -255,7 +255,11 @@ describe('lazy daily history in price charts', () => {
                 <TokenDetail walletId="real-wallet" chainId={CHAIN_ID} tick="XCP" kind="token" quantity="1" onBack={() => {}} />
             </MessagingProvider>,
         );
-        expect(await screen.findByText('No price history yet')).toBeInTheDocument();
+        await screen.findByRole('region', { name: 'XCP' });
+        await vi.waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalled());
+        // The chart slot stays empty: no line, no status text.
+        expect(screen.queryByRole('img', { name: /Price trend/ })).toBeNull();
+        expect(screen.queryByText(/No price history/)).toBeNull();
         expect(messaging.getNativePricesRequest).not.toHaveBeenCalled();
     });
 });

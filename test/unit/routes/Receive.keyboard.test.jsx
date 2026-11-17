@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { userEvent } from '../../helpers/userEvent.js';
 
@@ -98,36 +98,73 @@ afterEach(() => {
 });
 
 describe('Receive keyboard operation', () => {
+    it('marks the asset already shown on Receive when its picker opens', async () => {
+        renderReceive({
+            getWalletBalances: vi.fn().mockResolvedValue({
+                'bitcoin-regtest': [{
+                    address: ADDRESS.address,
+                    balances: { native: { tick: 'BTC', quantity: '1', divisibility: 8 }, tokens: [] },
+                }],
+            }),
+        });
+
+        fireEvent.click(await screen.findByRole('button', { name: /^Asset: BTC on / }));
+        expect(await screen.findByRole('button', { name: /^Select Bitcoin/ }))
+            .toHaveAttribute('aria-current', 'true');
+    });
+
+    it('marks the address already shown on Receive when its picker opens', async () => {
+        renderReceive({
+            listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'Wallet' }]),
+            listAccounts: vi.fn().mockResolvedValue([{ id: 'account-1', walletId: 'wallet-1', index: 0 }]),
+            getWalletBalances: vi.fn().mockResolvedValue({}),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            listMultisigReceiveAddresses: vi.fn().mockResolvedValue([]),
+        });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Choose receive address' }));
+        expect(await screen.findByRole('button', { name: `View address ${ADDRESS.address}` }))
+            .toHaveAttribute('aria-current', 'true');
+    });
+
     it('selects a chain and token without leaving the keyboard', async () => {
         const user = userEvent.setup();
         const onSelect = vi.fn();
         renderReceivePicker(onSelect);
 
-        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
         await screen.findByRole('button', { name: /^Select Bitcoin\b/ });
+        // The search, the network and the asset kind sit behind the filter
+        // button on the title bar; opening it puts the cursor in the search.
+        const filter = screen.getByRole('button', { name: 'Filter coins and tokens' });
+        filter.focus();
+        await user.keyboard('{Enter}');
+        const search = screen.getByRole('searchbox', { name: 'Search coins or tokens' });
         expect(document.activeElement).toBe(search);
 
         await user.tab();
-        const chainPicker = screen.getByRole('button', { name: /All networks/ });
+        const chainPicker = screen.getByRole('button', { name: /Filter by network/ });
         expect(document.activeElement).toBe(chainPicker);
         await user.keyboard('{Enter}');
-        // Opening the list moves focus to the selected option.
-        expect(document.activeElement).toBe(screen.getByRole('option', { name: /^All networks/ }));
-        // The open list is a listbox: arrow keys move between options and Tab leaves it.
+        // The network filter opens the full-screen network list (operator
+        // ruling 2026-11-13) with focus on the current row.
+        const networkList = screen.getByRole('dialog', { name: 'Network' });
+        await waitFor(() => expect(document.activeElement)
+            .toBe(within(networkList).getByRole('button', { name: 'Select All networks' })));
+        // The arrow keys move between rows and Enter picks one.
         await user.keyboard('{ArrowDown}');
-        expect(document.activeElement).toBe(screen.getByRole('option', { name: /^Bitcoin/ }));
+        expect(document.activeElement).toBe(within(networkList).getByRole('button', { name: 'Select Bitcoin' }));
         await user.keyboard('{ArrowDown}');
-        const litecoin = screen.getByRole('option', { name: /^Litecoin/ });
+        const litecoin = within(networkList).getByRole('button', { name: 'Select Litecoin' });
         expect(document.activeElement).toBe(litecoin);
         await user.keyboard('{Enter}');
+        expect(screen.queryByRole('dialog', { name: 'Network' })).toBeNull();
 
         expect(document.activeElement).toBe(chainPicker);
-        // Kind tabs use a roving tabindex: only the selected tab is a tab stop.
-        const kindTabs = screen.getAllByRole('tab').filter((tab) => tab.getAttribute('tabindex') !== '-1');
-        for (const tab of kindTabs) {
-            await user.tab();
-            expect(document.activeElement).toBe(tab);
-        }
+        // Receive locks the asset kind, so the network is the panel's last
+        // control. Escape closes the panel and returns to its filter button;
+        // the next stop is the first asset in the list.
+        await user.keyboard('{Escape}');
+        expect(document.activeElement).toBe(filter);
         await user.tab();
         const token = screen.getByRole('button', { name: /^Select Litecoin\b/ });
         expect(document.activeElement).toBe(token);
@@ -144,22 +181,28 @@ describe('Receive keyboard operation', () => {
         const user = userEvent.setup();
         renderReceive();
 
-        const addressType = await screen.findByRole('combobox', { name: 'Address type' });
-        addressType.focus();
+        // There is no Address type select or label editor on Receive. The
+        // address field is labelled plain Address rather than with the
+        // address's own name, and its '?' help sits on the label row above it
+        // (ruling 2026-11-13), so the order runs from the address field on.
+        const first = await screen.findByRole('textbox', { name: 'Address' });
+        expect(screen.queryByRole('combobox', { name: 'Address type' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^About Deposits$/ })).toBeNull();
+        expect(screen.getByRole('button', { name: /^About Address$/ })).toBeInTheDocument();
+        expect(screen.queryByRole('textbox', { name: 'Deposits' })).toBeNull();
+        first.focus();
         // The address picker sits inside the address field after its value.
         const expected = [
-            screen.getByRole('button', { name: 'About Deposits' }),
-            screen.getByRole('textbox', { name: 'Deposits' }),
             screen.getByRole('button', { name: 'Choose receive address' }),
-            screen.getByRole('button', { name: 'Copy payment link' }),
-            screen.getByRole('button', { name: 'Share QR payment link' }),
-            screen.getByRole('link', { name: 'View address in block explorer' }),
-            screen.getByRole('button', { name: 'Generate new address' }),
-            screen.getByRole('button', { name: 'About Address label' }),
-            screen.getByRole('textbox', { name: 'Address label' }),
-            screen.getByRole('button', { name: /^Change asset/ }),
+            screen.getByRole('button', { name: /^About Asset$/ }),
+            screen.getByRole('button', { name: /^Asset: / }),
             screen.getByRole('button', { name: /^About Amount/ }),
             screen.getByRole('textbox', { name: 'Amount (BTC)' }),
+            screen.getByRole('button', { name: 'Switch input to USD' }),
+            screen.getByRole('button', { name: /^Copy payment link/ }),
+            screen.getByRole('button', { name: /^Share QR payment link/ }),
+            screen.getByRole('link', { name: /^View address in block explorer/ }),
+            screen.getByRole('button', { name: /^Generate new address/ }),
         ];
 
         for (const control of expected) {
@@ -176,23 +219,21 @@ describe('Receive keyboard operation', () => {
         try {
             renderReceive();
 
-            const addressType = await screen.findByRole('combobox', { name: 'Address type' });
-            const copy = await screen.findByRole('button', { name: 'Copy payment link' });
-            await waitFor(() => expect(copy).not.toBeDisabled());
-            addressType.focus();
+            const first = await screen.findByRole('textbox', { name: 'Address' });
+            const copy = await screen.findByRole('button', { name: /^Copy payment link/ });
+            await waitFor(() => expect(copy).not.toHaveAttribute('aria-disabled'));
+            first.focus();
             const expected = [
-                screen.getByRole('button', { name: 'About Deposits' }),
-                screen.getByRole('textbox', { name: 'Deposits' }),
                 screen.getByRole('button', { name: 'Choose receive address' }),
-                copy,
-                screen.getByRole('button', { name: 'Share QR payment link' }),
-                screen.getByRole('link', { name: 'View address in block explorer' }),
-                screen.getByRole('button', { name: 'Generate new address' }),
-                screen.getByRole('button', { name: 'About Address label' }),
-                screen.getByRole('textbox', { name: 'Address label' }),
-                screen.getByRole('button', { name: /^Change asset/ }),
+                screen.getByRole('button', { name: /^About Asset$/ }),
+                screen.getByRole('button', { name: /^Asset: / }),
                 screen.getByRole('button', { name: /^About Amount/ }),
                 screen.getByRole('textbox', { name: 'Amount (BTC)' }),
+                screen.getByRole('button', { name: 'Switch input to USD' }),
+                copy,
+                screen.getByRole('button', { name: /^Share QR payment link/ }),
+                screen.getByRole('link', { name: /^View address in block explorer/ }),
+                screen.getByRole('button', { name: /^Generate new address/ }),
             ];
 
             for (const control of expected) {
@@ -222,8 +263,9 @@ describe('Receive keyboard operation', () => {
         renderReceive();
 
         const amount = await screen.findByRole('textbox', { name: 'Amount (BTC)' });
-        const copy = await screen.findByRole('button', { name: 'Copy QR code' });
-        await waitFor(() => expect(copy).not.toBeDisabled());
+        const copy = await screen.findByRole('button', { name: /^Copy QR code/ });
+        // An ActionList row waits with aria-disabled, never the native attribute.
+        await waitFor(() => expect(copy).not.toHaveAttribute('aria-disabled'));
         fireEvent.change(amount, { target: { value: '1.25' } });
         amount.focus();
         await user.keyboard('{Enter}');
@@ -243,7 +285,7 @@ describe('Receive keyboard operation', () => {
         await waitFor(() => expect(write).toHaveBeenCalledOnce());
         expect(writeText).not.toHaveBeenCalled();
         await user.tab();
-        const shareButton = screen.getByRole('button', { name: 'Share QR payment link' });
+        const shareButton = screen.getByRole('button', { name: /^Share QR payment link/ });
         expect(document.activeElement).toBe(shareButton);
         await user.keyboard('{Enter}');
         await waitFor(() => expect(share).toHaveBeenCalledWith(expect.objectContaining({
@@ -306,24 +348,18 @@ describe('Receive keyboard operation', () => {
         expect(amount).toHaveValue('0.5');
     });
 
-    it('saves a label with Enter and cancels a later draft with Escape', async () => {
+    it('has no label editor to save or cancel on Receive', async () => {
+        // Labels are not edited on Receive: Enter and Escape on the page
+        // never write one.
         const user = userEvent.setup();
         const setAddressLabel = vi.fn().mockResolvedValue({ ok: true });
         renderReceive({ setAddressLabel });
 
-        const label = await screen.findByRole('textbox', { name: 'Address label' });
-        label.focus();
-        fireEvent.change(label, { target: { value: 'Client invoices' } });
+        const address = await screen.findByRole('textbox', { name: 'Address' });
+        expect(screen.queryByRole('textbox', { name: 'Address label' })).toBeNull();
+        address.focus();
         await user.keyboard('{Enter}');
-        await waitFor(() => expect(setAddressLabel).toHaveBeenCalledWith(
-            ADDRESS.id,
-            'Client invoices',
-        ));
-        expect(label).toHaveValue('Client invoices');
-
-        fireEvent.change(label, { target: { value: 'Discard this draft' } });
         await user.keyboard('{Escape}');
-        expect(label).toHaveValue('Client invoices');
-        expect(setAddressLabel).toHaveBeenCalledTimes(1);
+        expect(setAddressLabel).not.toHaveBeenCalled();
     });
 });

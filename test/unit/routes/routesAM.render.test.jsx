@@ -8,7 +8,6 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CoSignerAccountList } from '../../../packages/core/src/shared/routes/CoSignerAccountList.jsx';
 import { CoSignerProvision } from '../../../packages/core/src/shared/routes/CoSignerProvision.jsx';
-import { CrossChainTemplates } from '../../../packages/core/src/shared/routes/CrossChainTemplates.jsx';
 
 function deferred() {
     let resolve;
@@ -40,7 +39,7 @@ describe('A through M route render coverage', () => {
             { listCoSignerAccounts: vi.fn().mockResolvedValue([]) },
         );
 
-        expect(screen.getByRole('heading', { level: 1, name: 'Agent accounts' })).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 1, name: 'My Agents' })).toBeTruthy();
         expect(await screen.findByRole('heading', { name: 'No agent accounts yet' })).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'New agent account' }));
@@ -54,7 +53,7 @@ describe('A through M route render coverage', () => {
             { getAddressesByChain: vi.fn(() => addresses.promise) },
         );
 
-        expect(screen.getByRole('heading', { level: 1, name: 'New agent account' })).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 1, name: 'New Agent Account' })).toBeTruthy();
         expect(screen.getByText('Loading wallet…')).toBeTruthy();
 
         addresses.resolve({
@@ -66,21 +65,7 @@ describe('A through M route render coverage', () => {
             }],
         });
 
-        expect(await screen.findByRole('button', { name: 'Create agent account' })).toBeDisabled();
+        expect(await screen.findByRole('button', { name: 'Create Agent Account' })).toBeEnabled();
     });
 
-    it('renders the template heading, primary actions, and empty state', async () => {
-        const addresses = deferred();
-        renderRoute(
-            <CrossChainTemplates walletId="wallet-1" onBack={() => {}} onLaunch={() => {}} />,
-            { getAddressesByChain: vi.fn(() => addresses.promise) },
-        );
-
-        expect(screen.getByRole('heading', { level: 1, name: 'Cross-chain templates' })).toBeTruthy();
-        expect(screen.getByText('Loading templates…')).toBeTruthy();
-
-        addresses.resolve({});
-
-        expect(await screen.findByText('Two networks required')).toBeTruthy();
-    });
 });

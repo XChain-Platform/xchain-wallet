@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -86,7 +87,7 @@ async function fillDispenserAndReject(page, label) {
     await expectNoHorizontalOverflow(page, `${label} create dispenser`);
 
     // The main action names what it does (U63).
-    await main.getByRole('button', { name: 'Create dispenser', exact: true }).click();
+    await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 30_000 });
 
@@ -111,7 +112,9 @@ async function exerciseOwnedDispensers(page, label) {
     await expect(search).toBeVisible({ timeout: 30_000 });
     await search.fill('PEPECASH');
     await network.click();
-    await page.getByRole('option', { name: 'Bitcoin', exact: true }).click();
+    // The filter opens the full-screen network list.
+    await page.getByRole('dialog', { name: 'Network' })
+        .getByRole('button', { name: 'Select Bitcoin', exact: true }).click();
 
     await expectControlRowAligned([search, network], `${label} owned dispenser filters`);
     await expectNoHorizontalOverflow(page, `${label} owned dispensers`);
@@ -132,7 +135,7 @@ async function exerciseDispenserExplorer(page, label) {
     await byToken.check();
 
     const chain = page.getByLabel('Network', { exact: true });
-    await chain.selectOption({ index: 1 });
+    await pickOption(chain, { index: 1 });
     // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
     await page.getByLabel('Token ticker', { exact: true }).fill('PEPECASH');
     await expectControlRowAligned([byToken, byAddress], `${label} explorer search modes`);

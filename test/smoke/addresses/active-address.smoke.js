@@ -27,8 +27,13 @@ assert.ok(/const isActiveRow =/.test(al), 'AddressList computes isActiveRow');
 assert.ok(/local\.addrActive/.test(al), 'AddressList renders the green Active bubble');
 assert.ok(/messaging\.getActiveAddresses\(walletId, accountId\)/.test(al),
     'AddressList fetches the resolved active map');
-assert.ok(/onClick=\{setAsActive\}/.test(al) && /messaging\.setActiveAddress\(accountId, selected\.chainId, selected\.record\.id\)/.test(al),
-    'the detail "Use" action makes the address active via messaging.setActiveAddress');
+// View Address (AddressDetail.jsx) draws the Set active tile; AddressList
+// hands it setAsActive only while the address is not the active one.
+const detail = read('packages/core/src/shared/routes/AddressDetail.jsx');
+assert.ok(/onSetActive=\{hasRecord && !isActiveRow\(selected\) \? setAsActive : undefined\}/.test(al)
+    && /onClick=\{onSetActive\}/.test(detail)
+    && /messaging\.setActiveAddress\(accountId, selected\.chainId, selected\.record\.id\)/.test(al),
+    'the detail "Set active" action makes the address active via messaging.setActiveAddress');
 
 // --- Home / BalanceList: balance scoped to the active address ------------
 const balanceList = read('packages/core/src/shared/components/BalanceList.jsx');

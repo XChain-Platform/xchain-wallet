@@ -73,14 +73,14 @@ describe('shared/actionDisplayLabel', () => {
 
     it('maps indexer lifecycle verbs, not the recased opcode', () => {
         expect(actionDisplayLabel('COINPAY_EXPIRE')).toBe('Coin payment expired');
-        expect(actionDisplayLabel('BET_EXPIRE')).toBe('Bet expired');
+        expect(actionDisplayLabel('BET_EXPIRE')).toBe('Prediction refunded');
         expect(actionDisplayLabel('DISPENSER_CLOSE')).toBe('Dispenser closed');
         expect(actionDisplayLabel('DISPENSER_EXPIRE')).toBe('Dispenser expired');
         expect(actionDisplayLabel('ORDER_EXPIRE')).toBe('Order expired');
         expect(actionDisplayLabel('ORDER_MATCH')).toBe('Order matched');
         expect(actionDisplayLabel('SWAP_EXPIRE')).toBe('Swap expired');
         expect(actionDisplayLabel('SWAP_MATCH')).toBe('Swap matched');
-        expect(actionDisplayLabel('BET')).toBe('Bet');
+        expect(actionDisplayLabel('BET')).toBe('Buy prediction');
         // A History row must not read "Coinpay expire" beside "Coin payment".
         expect(actionDisplayLabel('COINPAY_EXPIRE')).not.toBe('Coinpay expire');
     });

@@ -40,10 +40,23 @@ const fallbackTiers = {
 
 afterEach(cleanup);
 
-function ControlledSelector({ initialValue = { mode: 'normal' }, ...props }) {
+function ControlledSelector({ initialValue = { mode: 'normal' }, onPick, ...props }) {
     const [value, setValue] = useState(initialValue);
-    return <FeeSelector tiers={tiers} value={value} onChange={setValue} {...props} />;
+    const onChange = (next) => {
+        onPick?.(next);
+        setValue(next);
+    };
+    return <FeeSelector tiers={tiers} value={value} onChange={onChange} {...props} />;
 }
+
+// The one custom fee editor (G113) is the fee amount; the fixtures price a
+// rate at 250 vB, so these fees stand for the rates the cases name.
+const feeAt = (rate) => String(Number((rate * 250 / 1e8).toFixed(8)));
+const feeEditor = () => screen.getByRole('textbox', { name: /^Network fee amount/ });
+const openFeeEditor = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Edit exact fee amount' }));
+    return feeEditor();
+};
 
 describe('FeeSelector', () => {
     it('selects every tier and supports the range keyboard contract', () => {
@@ -60,7 +73,10 @@ describe('FeeSelector', () => {
 
         fireEvent.keyDown(slider, { key: 'End' });
         expect(slider.value).toBe('3');
-        expect(screen.getByLabelText('Custom fee rate (sat/vB)').value).toBe('6');
+        expect(slider.getAttribute('aria-valuetext')).toBe('Custom: 6 sat/vB');
+        // Custom opens the fee amount's own editor and no rate box.
+        expect(feeEditor()).toBeTruthy();
+        expect(screen.queryByLabelText(/Custom fee rate/)).toBeNull();
 
         fireEvent.keyDown(slider, { key: 'Home' });
         expect(slider.value).toBe('0');
@@ -79,54 +95,44 @@ describe('FeeSelector', () => {
         ]);
     });
 
-    it('keeps empty input editable and rejects empty and zero rates visibly', () => {
+    it('keeps an emptied fee editor open and rejects empty and zero fees visibly', () => {
         const onChange = vi.fn();
-        render(
-            <FeeSelector
-                tiers={tiers}
-                value={{ mode: 'custom', customRate: 6 }}
-                onChange={onChange}
-            />,
-        );
-        const input = screen.getByLabelText('Custom fee rate (sat/vB)');
+        render(<ControlledSelector initialValue={{ mode: 'custom', customRate: 6 }} onPick={onChange} />);
+        const input = openFeeEditor();
 
+        fireEvent.change(input, { target: { value: feeAt(6) } });
         fireEvent.change(input, { target: { value: '' } });
         fireEvent.blur(input);
-        expect(input.value).toBe('');
-        expect(input.getAttribute('aria-invalid')).toBe('true');
-        expect(screen.getByRole('alert').textContent).toMatch(/Enter a custom fee rate/);
+        // A refused entry holds the editor open beside its message.
+        expect(feeEditor().value).toBe('');
+        expect(feeEditor().getAttribute('aria-invalid')).toBe('true');
+        expect(screen.getByRole('alert').textContent).toMatch(/Enter a custom network fee/);
         expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 0 });
 
-        fireEvent.change(input, { target: { value: '0' } });
+        fireEvent.change(feeEditor(), { target: { value: '0' } });
         expect(screen.getByRole('alert').textContent).toMatch(/greater than zero/);
         expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 0 });
     });
 
     it('warns outside the safe rate range without changing the chosen rate', () => {
         const onChange = vi.fn();
-        render(
-            <FeeSelector
-                tiers={tiers}
-                value={{ mode: 'custom', customRate: 6 }}
-                onChange={onChange}
-            />,
-        );
-        const input = screen.getByLabelText('Custom fee rate (sat/vB)');
+        render(<ControlledSelector initialValue={{ mode: 'custom', customRate: 6 }} onPick={onChange} />);
+        const input = openFeeEditor();
 
-        fireEvent.change(input, { target: { value: '0.5' } });
+        fireEvent.change(input, { target: { value: feeAt(0.5) } });
         expect(input.getAttribute('aria-invalid')).toBe('true');
         expect(screen.getByRole('alert').textContent).toBe('Enter a rate of at least 1 sat/vB.');
         expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 0.5 });
 
-        fireEvent.change(input, { target: { value: '2.75' } });
+        fireEvent.change(input, { target: { value: feeAt(2.8) } });
         expect(input.getAttribute('aria-invalid')).toBeNull();
         expect(screen.queryByRole('alert')).toBeNull();
-        expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 2.75 });
+        expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 2.8 });
 
-        fireEvent.change(input, { target: { value: '120' } });
+        fireEvent.change(input, { target: { value: feeAt(120) } });
         expect(screen.queryByRole('alert')).toBeNull();
 
-        fireEvent.change(input, { target: { value: '121' } });
+        fireEvent.change(input, { target: { value: feeAt(121) } });
         expect(input.getAttribute('aria-invalid')).toBeNull();
         expect(screen.getByRole('alert').textContent).toMatch(/more than 10 times the Fast rate/);
         expect(onChange).toHaveBeenLastCalledWith({ mode: 'custom', customRate: 121 });
@@ -145,9 +151,9 @@ describe('FeeSelector', () => {
                 <button type="submit">Review</button>
             </form>,
         );
-        const input = screen.getByLabelText('Custom fee rate (sat/vB)');
-        expect(input.getAttribute('aria-invalid')).toBe('true');
         expect(screen.getByRole('alert').textContent).toBe('Enter a rate no higher than 1,000 sat/vB.');
+        const input = openFeeEditor();
+        expect(input.getAttribute('aria-invalid')).toBe('true');
         expect(input.validationMessage).toBe('Enter a rate no higher than 1,000 sat/vB.');
         container.querySelector('form').requestSubmit();
         expect(onSubmit).not.toHaveBeenCalled();
@@ -166,7 +172,7 @@ describe('FeeSelector', () => {
                 <button type="submit">Review</button>
             </form>,
         );
-        const input = screen.getByLabelText('Custom fee rate (sat/vB)');
+        const input = openFeeEditor();
         expect(input.validationMessage).toBe('');
         expect(screen.getByRole('alert').textContent).toMatch(/more than 10 times the Fast rate/);
         container.querySelector('form').requestSubmit();
@@ -183,8 +189,9 @@ describe('FeeSelector', () => {
             />,
         );
 
-        expect(screen.getByLabelText('Custom fee rate (DOGE/kB)').value).toBe('0.5');
-        expect(screen.getByText('DOGE/kB')).toBeTruthy();
+        expect(screen.queryByLabelText(/Custom fee rate/)).toBeNull();
+        expect(screen.getByRole('slider', { name: 'Network fee' }).getAttribute('aria-valuetext'))
+            .toBe('Custom: 0.5 DOGE/kB');
         expect(screen.getByRole('alert').textContent).toMatch(/1 DOGE\/kB/);
     });
 
@@ -223,10 +230,10 @@ describe('FeeSelector', () => {
         expect(screen.queryByText(/Using safe default rates/)).toBeNull();
         fireEvent.keyDown(screen.getByRole('slider', { name: 'Network fee' }), { key: 'End' });
 
-        const customInput = screen.getByLabelText('Custom fee rate (sat/vB)');
+        const customInput = feeEditor();
         expect(customInput.disabled).toBe(false);
-        fireEvent.change(customInput, { target: { value: '7.5' } });
-        expect(customInput.value).toBe('7.5');
+        fireEvent.change(customInput, { target: { value: feeAt(7.5) } });
+        expect(customInput.value).toBe(feeAt(7.5));
         expect(screen.queryByText(/Custom fees remain available/)).toBeNull();
     });
 

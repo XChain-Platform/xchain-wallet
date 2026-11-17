@@ -52,9 +52,9 @@ describe('controller bind form double submit', () => {
             ),
         );
         const guard = await screen.findByLabelText('Guard contract');
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Bind address' }).disabled).toBe(false));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Bind Address' }).disabled).toBe(false));
         fireEvent.change(guard, { target: { value: '5' } });
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Bind address' })).toBeTruthy());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Bind Address' })).toBeTruthy());
         const form = guard.closest('form');
         fireEvent.submit(form);
         fireEvent.submit(form);

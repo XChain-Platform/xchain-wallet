@@ -18,11 +18,11 @@ function rule(css, selector) {
 
 const surfaces = [
     ['command palette', 'packages/core/src/shared/commandPalette/CommandPalette.module.css', '.list'],
-    ['alerts drawer', 'packages/core/src/shared/components/AlertsOverlay.module.css', '.body'],
     // The More sheet renders through the shared OverlaySurface.
     ['bottom sheet', 'packages/core/src/shared/components/OverlaySurface.module.css', '.body'],
     ['file viewer', 'packages/core/src/shared/components/GatedFileViewer.module.css', '.body'],
-    ['network picker', 'packages/core/src/shared/components/NetworkFilter.module.css', '.list'],
+    // The network filter's bounded dropdown is gone: it opens the full-screen
+    // NetworkPicker, which scrolls as a page (operator ruling 2026-11-13).
     ['shortcut help', 'packages/core/src/shared/keyboard/ShortcutHelp.module.css', '.body'],
 ];
 
@@ -75,7 +75,6 @@ describe('Chrome 102 scroll surfaces', () => {
 
     it.each([
         ['command palette', 'packages/core/src/shared/commandPalette/CommandPalette.module.css', '.panel'],
-        ['alerts drawer', 'packages/core/src/shared/components/AlertsOverlay.module.css', '.panel'],
         ['bottom sheet', 'packages/core/src/shared/components/OverlaySurface.module.css', '.surface'],
         ['file viewer', 'packages/core/src/shared/components/GatedFileViewer.module.css', '.panel'],
         ['shortcut help', 'packages/core/src/shared/keyboard/ShortcutHelp.module.css', '.panel'],

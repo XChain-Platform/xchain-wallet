@@ -36,7 +36,7 @@ import {
     AUTOLOCK_MINUTES_MAX,
     AUTOLOCK_MINUTES_MIN,
     AUTOLOCK_NEVER,
-} from '../../schemas/settings.js';
+} from '../../schemas/settingsStartup.js';
 
 // Shells with a foreground event loop the hook can watch. Listed rather
 // than inferred so a future shell has to opt in deliberately.

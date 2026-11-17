@@ -38,7 +38,7 @@ afterEach(() => cleanup());
 describe('ThisWalletSection button icons and main actions', () => {
     it('gives every row button an icon', () => {
         mount();
-        for (const name of ['Switch / rename…', 'Export…', 'Change…', 'Remove…']) {
+        for (const name of ['Switch / Rename…', 'Export…', 'Change…', 'Remove…']) {
             expect(hasIcon(screen.getByRole('button', { name }))).toBe(true);
         }
     });
@@ -46,7 +46,7 @@ describe('ThisWalletSection button icons and main actions', () => {
     it('makes Export keys the green main action with icons on Cancel and the submit', () => {
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
-        const submit = screen.getByRole('button', { name: 'Export keys' });
+        const submit = screen.getByRole('button', { name: 'Export Keys' });
         expect(submit).toHaveClass(buttonStyles.success);
         expect(hasIcon(submit)).toBe(true);
         expect(hasIcon(screen.getByRole('button', { name: 'Cancel' }))).toBe(true);
@@ -56,7 +56,7 @@ describe('ThisWalletSection button icons and main actions', () => {
     it('makes Change password the green main action with a help tip on each password field', () => {
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Change…' }));
-        const submit = screen.getByRole('button', { name: 'Change password' });
+        const submit = screen.getByRole('button', { name: 'Change Password' });
         expect(submit).toHaveClass(buttonStyles.success);
         expect(hasIcon(submit)).toBe(true);
         expect(hasIcon(screen.getByRole('button', { name: 'Cancel' }))).toBe(true);
@@ -68,7 +68,7 @@ describe('ThisWalletSection button icons and main actions', () => {
     it('keeps the remove confirm as danger and gives it a trash icon', () => {
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Remove…' }));
-        const confirm = screen.getByRole('button', { name: 'Remove wallet' });
+        const confirm = screen.getByRole('button', { name: 'Remove Wallet' });
         expect(confirm).toHaveClass(buttonStyles.danger);
         expect(hasIcon(confirm)).toBe(true);
         expect(hasIcon(screen.getByRole('button', { name: 'Cancel' }))).toBe(true);

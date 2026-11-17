@@ -34,7 +34,17 @@ import { annotateEncoderFeeRequirement } from '../sdk/encoderErrors.js';
 import { assertCompleteEnvelope, isEnvelopePair } from '../sdk/submitWithSigner.js';
 import { nativeFeeOutputOf, isChunkEncoding, withoutCustomOutput } from './nativeFeeLane.js';
 import { applyOracleFeePreflight } from '../sdk/oracleFeePreflight.js';
-import { applyAdsPlanToEncoderOpts } from './ads.js';
+import {
+    adsOutputOf,
+    adsReservationOf,
+    createTxWithAdsFallback,
+    newAdsReservationId,
+    reconcileAdsReservation,
+    releaseAdsReservation,
+    reserveAdsPayout,
+    resolveAdsPayout,
+    withoutAdsPayout,
+} from './ads.js';
 import { buildExpectedOutputs } from './confirmChecks.js';
 import { MAX_COMPILED_ACTION_BYTES } from './fileSizeLimits.js';
 import { isBareNativePayment, withNativePaymentOutput } from './nativePayment.js';
@@ -124,9 +134,9 @@ function carriedPayloadOf(composedActionString, suppliedRawData, compression) {
  * @property {string|null} revealPsbt          TAPROOT envelope reveal PSBT built against `psbt`; NULL off the envelope lane
  * @property {{ commitTxid: string, commitVout: number, commitValue: number|string, commitAddress: string, internalPubkey?: string, tapleafHash: string }|null} envelope  TAPROOT recovery record; NULL off the envelope lane
  * @property {object|null} oracleFeeQuote      Mode B dispenser oracle usage fee quote, when one was priced
- * @property {object} adsPlan                  resolved ADS plan (donationAmount / canSubmit / ...)
+ * @property {object} adsPlan                  resolved ADS plan (donationAmount / canSubmit / ...); `reservationId` names the review claim when these bytes carry the donation
  * @property {ReturnType<typeof buildExpectedOutputs>} expectedOutputs
- * @property {(() => Promise<any>)|undefined} releaseEncoderInputs  releases the encoder's held inputs when this compose is abandoned; a function, so MessageHost swaps it for a releaseEncoderInputsToken before the result crosses sendMessage or IPC
+ * @property {(() => Promise<any>)|undefined} releaseEncoderInputs  releases the encoder's held inputs, and the review claim on the donation queue, when this compose is abandoned; a function, so MessageHost swaps it for a releaseEncoderInputsToken before the result crosses sendMessage or IPC
  * @property {object} encoderOpts              the FINAL encoderOpts used to build the PSBT (fee + ADS folded in)
  * @property {{ compressed: boolean, data?: string, rawData?: string }|null} compression  the encoder's transparent-compression report for these bytes; NULL when it did not compress
  */
@@ -143,10 +153,13 @@ function carriedPayloadOf(composedActionString, suppliedRawData, compression) {
  * @param {{ source?: string }|null} [args.signer]  the spending Address record; decides whether an
  *   oversized payload may ask for the Taproot envelope
  * @param {AbortSignal} [args.signal]
+ * @param {boolean} [args.claimAds]            default true. False for a probe that is never
+ *   shown or signed (maxSendable): it plans the donation without claiming the queue
  * @returns {Promise<ComposedAction>}
  */
 export async function composeForConfirm({
     sdkRegistry, chainRegistry, vault, chainId, actionData, encoderOpts: callerEncoderOpts, source, signal, signer = null,
+    claimAds = true,
 }) {
     assertSafeActionText(actionData);
     const descriptor = chainRegistry.get(chainId);
@@ -213,12 +226,58 @@ export async function composeForConfirm({
         sdk, actionData, encoderOpts: feePreflight.encoderOpts, signal,
     });
 
-    // 3. ADS plan resolution, side-effect-free: fold the donation output
-    // into customOutputs now (pre-modal) so it is inside the previewed and
-    // signed PSBT. The accumulator advances only on broadcast success.
-    const settingsSnapshot = await vault.settings.get();
-    const { encoderOpts: encoderOptsWithAds, adsPlan } = applyAdsPlanToEncoderOpts(
-        settingsSnapshot, chainId, chainRegistry, oraclePreflight.encoderOpts);
+    // 3. Automatic donation, side-effect-free: when the wallet-wide queue is
+    // due, the build below tries the transaction WITH the donation output so
+    // it is inside the previewed and signed PSBT, and without it when the
+    // address cannot cover it. The queue moves only on broadcast success. Only
+    // a mainnet send on the mainnet network carries it, and none while another
+    // pending send holds the claim on the queue (a claim whose owner is gone
+    // is judged against its PendingTx first, so it never holds it for good).
+    let settingsSnapshot = null;
+    try { settingsSnapshot = await vault.settings.get(); } catch { settingsSnapshot = null; }
+    if (adsReservationOf(settingsSnapshot)) {
+        try { settingsSnapshot = (await reconcileAdsReservation({ vault })) ?? settingsSnapshot; } catch { /* the snapshot stands */ }
+    }
+    let plannedAds = await resolveAdsPayout({ settings: settingsSnapshot, chainId, chainRegistry, sdk, signal });
+
+    // 3a. Bytes built with the donation cannot drop it later, so the queue is
+    // claimed now, before the build, as a review claim: a second confirm
+    // composed meanwhile (another coin, another window) plans without it. A
+    // claim that cannot be taken (held elsewhere, the queue paid, a refused
+    // write) means this review carries no donation. The claim goes back on
+    // every exit that leaves these bytes without it (a failed or aborted
+    // build, the unaffordable rebuild, a refusal below) and through the
+    // returned release when the review is abandoned; Approve takes it over.
+    let adsClaimId = null;
+    if (plannedAds?.canSubmit && claimAds) {
+        const claimId = newAdsReservationId('ads-review');
+        let claimed = false;
+        try {
+            claimed = await reserveAdsPayout({
+                vault,
+                id: claimId,
+                fiat: plannedAds.donationFiat,
+                currency: plannedAds.currency,
+                chainId,
+                review: true,
+            });
+        } catch {
+            claimed = false;
+        }
+        if (claimed) {
+            adsClaimId = claimId;
+            plannedAds = { ...plannedAds, reservationId: claimId };
+        } else {
+            plannedAds = withoutAdsPayout(plannedAds, 'reserved');
+        }
+    }
+    // Never fails the compose: a claim left by a refused write lapses on its own.
+    const releaseAdsClaim = async () => {
+        if (!adsClaimId) return;
+        const reservationId = adsClaimId;
+        adsClaimId = null;
+        try { await releaseAdsReservation({ vault, reservationId }); } catch { /* it lapses after its grace */ }
+    };
 
     // 3b. The protocol fee must ride the transaction that carries the
     // ACTION, which on the two-phase lane is the phase-2 REVEAL, not the
@@ -240,7 +299,6 @@ export async function composeForConfirm({
     // does not carry the output. Which transaction pays it is decided after the
     // build from the encoding the encoder chose, so no prediction can be wrong.
     const feeOutput = nativeFeeOutputOf(feePreflight.quote);
-    const finalEncoderOpts = encoderOptsWithAds;
 
     // 4. Encode to the ONE PSBT the modal previews and the signer signs.
     // D-7: give the encoder the spender address so it can build the tx:
@@ -257,19 +315,36 @@ export async function composeForConfirm({
     // form's message can say the amount.
     // Named rather than inlined so `revealOpts` below can state the change
     // address the encoder was ACTUALLY given, defaults included.
-    const builtEncoderOpts = {
+    //
+    // Affordability of a due donation is the encoder's answer, not a guess:
+    // the first build carries it, and any refusal rebuilds without it, so the
+    // send's own error (if any) is what the user sees. Everything below reads
+    // the options and plan of the build that succeeded.
+    const withSourceDefaults = (opts) => ({
         ...(source ? { sourceAddress: source, change: source } : {}),
-        ...finalEncoderOpts,
-    };
+        ...opts,
+    });
     let encoded;
+    let finalEncoderOpts;
+    let adsPlan;
     try {
-        encoded = await sdk.encoder.createTx({
-            ...(bareNativePayment ? {} : { data: createResult.actionString }),
-            ...builtEncoderOpts,
-        });
+        ({ encoded, encoderOpts: finalEncoderOpts, plan: adsPlan } = await createTxWithAdsFallback({
+            plan: plannedAds,
+            encoderOpts: oraclePreflight.encoderOpts,
+            signal,
+            build: (opts) => sdk.encoder.createTx({
+                ...(bareNativePayment ? {} : { data: createResult.actionString }),
+                ...withSourceDefaults(opts),
+            }),
+        }));
     } catch (err) {
+        await releaseAdsClaim();
         throw annotateEncoderFeeRequirement(err, feePreflight.quote);
     }
+    // Rebuilt without the donation (the address could not cover it): these
+    // bytes do not pay it, so the next review may.
+    if (!adsPlan?.canSubmit) await releaseAdsClaim();
+    const builtEncoderOpts = withSourceDefaults(finalEncoderOpts);
 
     // From here the encoder holds this build's inputs for its reservation window.
     // A refusal below (an incomplete envelope, a compression report that does not
@@ -279,6 +354,7 @@ export async function composeForConfirm({
     // inputs are reserved" for five minutes.
     const heldReservationId = encoded?.reservation?.id;
     const refuseAfterBuild = async (err) => {
+        await releaseAdsClaim();
         if (heldReservationId && typeof sdk.encoder.releaseInputs === 'function') {
             try { await sdk.encoder.releaseInputs(heldReservationId); } catch { /* the reservation lapses on its own */ }
         }
@@ -354,9 +430,7 @@ export async function composeForConfirm({
         }
         : null;
 
-    const adsOutput = adsPlan.canSubmit
-        ? { address: adsPlan.donationAddress, value: adsPlan.donationAmount }
-        : null;
+    const adsOutput = adsOutputOf(adsPlan);
     // A bare payment expects NO carrier leg. The encoder still reports
     // 'OP_RETURN' as its encoding (every downstream single-tx branch keys off
     // that), so the encoding is deliberately not taken from the response here:
@@ -432,9 +506,20 @@ export async function composeForConfirm({
                 encoded.compression),
     });
     const encoderReservationId = encoded.reservation?.id;
-    const releaseEncoderInputs = encoderReservationId
+    const releaseInputs = encoderReservationId
         && typeof sdk.encoder.releaseInputs === 'function'
         ? sdk.encoder.releaseInputs.bind(sdk.encoder, encoderReservationId)
+        : undefined;
+    // One release for an abandoned review: the donation claim (which never
+    // throws, so a refused settings write cannot turn Reject into an error) and
+    // the encoder's held inputs. Present whenever either is held. After Approve
+    // took the claim over it no longer names the held claim, so a late call
+    // leaves the send's claim alone.
+    const releaseEncoderInputs = adsClaimId || releaseInputs
+        ? async () => {
+            await releaseAdsClaim();
+            return releaseInputs ? releaseInputs() : undefined;
+        }
         : undefined;
 
     return {

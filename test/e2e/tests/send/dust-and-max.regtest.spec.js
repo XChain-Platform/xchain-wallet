@@ -120,7 +120,7 @@ function amountField(page) {
 
 /** The exact network fee the composed PSBT pays, off the confirm screen. */
 async function screenNetworkFeeSats(page) {
-    const text = await page.getByTestId('confirm-fee').innerText();
+    const text = await page.getByTestId('confirm-fee-network').innerText();
     const coin = Number(text.match(new RegExp(`([\\d.]+)\\s*${COIN}`))?.[1]);
     expect(Number.isFinite(coin), `unparseable network fee line: ${text}`).toBe(true);
     return Math.round(coin * 1e8);

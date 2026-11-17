@@ -18,7 +18,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
+// The staking-unstake and staking-claim routes: the one Staking form on the network.
+import { NetworkPositionRoute as StakingActionForm } from '../../helpers/stakingFormRoutes.jsx';
 
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
 const ADDRESSES = {
@@ -62,7 +63,7 @@ describe('StakingActionForm while the total is loading', () => {
         const amount = await screen.findByLabelText(/^Amount/);
         await screen.findByText('Loading…');
         fireEvent.change(amount, { target: { value: '1' } });
-        const button = screen.getByRole('button', { name: 'Claim rewards' });
+        const button = screen.getByRole('button', { name: /^Claim Rewards$/ });
         expect(button).toBeDisabled();
         fireEvent.submit(button.closest('form'));
         expect(await screen.findByText(/pending reward total is still loading/)).toBeInTheDocument();
@@ -88,7 +89,7 @@ describe('StakingActionForm encodes the amount that was typed', () => {
         const messaging = mountForm();
         await screen.findByText('130 XCHAIN available');
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '1' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Claim Rewards$/ }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
         const { action, params } = messaging.composeForConfirm.mock.calls[0][0].actionData;
         expect(action).toBe('COLLECT');
@@ -110,7 +111,7 @@ describe('StakingActionForm encodes the amount that was typed', () => {
         const messaging = mountForm();
         await screen.findByText('130 XCHAIN available');
         fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '1.123456789' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Claim Rewards$/ }));
         expect(await screen.findByText(/at most 8 decimal places/)).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });

@@ -22,7 +22,7 @@ function fill(label, value) {
 
 async function submitPhrase(candidate) {
     const messaging = {
-        importMnemonic: vi.fn(async () => ({ wallet: { id: 'wallet-1' } })),
+        addImportedWallet: vi.fn(async () => ({ wallet: { id: 'wallet-1' } })),
         pairingPayloadRequest: vi.fn(async () => ({
             encoded: 'XCW-PAIR:ZmFrZQ', payload: { keys: [] },
         })),
@@ -32,10 +32,9 @@ async function submitPhrase(candidate) {
             <PairPartnerWallet />
         </MessagingProvider>,
     );
-    fireEvent.click(screen.getByRole('button', { name: /pair a signer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Sign on another phone/ }));
     fill(/Shared recovery phrase/i, candidate);
-    fill(/^Password for this device$/i, PASSWORD);
-    fill(/Confirm password/i, PASSWORD);
+    fill(/^Wallet password$/i, PASSWORD);
     await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /Continue/i }));
     });
@@ -50,7 +49,7 @@ describe('PairPartnerWallet recovery phrase normalization', () => {
     ])('imports a BIP39 phrase containing %s in canonical form', async (_name, candidate) => {
         const messaging = await submitPhrase(candidate);
 
-        expect(messaging.importMnemonic).toHaveBeenCalledWith(expect.objectContaining({
+        expect(messaging.addImportedWallet).toHaveBeenCalledWith(expect.objectContaining({
             mnemonic: PHRASE,
             format: 'bip39',
         }));

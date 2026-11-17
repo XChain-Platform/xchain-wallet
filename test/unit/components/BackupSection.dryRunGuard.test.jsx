@@ -91,7 +91,7 @@ describe('BackupSection Test backup: screen guard', () => {
         fireEvent.change(screen.getByLabelText('Recovery phrase to test'), {
             target: { value: 'explode gaze wolf admit nice charm except three any guitar into color' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Run test' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Run Test' }));
 
         expect(messaging.dryRunRestoreRequest).toHaveBeenCalledWith(expect.objectContaining({
             bip39Passphrase: '',

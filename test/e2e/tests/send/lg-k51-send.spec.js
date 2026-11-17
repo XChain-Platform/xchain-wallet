@@ -51,11 +51,10 @@ async function expectFitsWithReachableAction(page, label, action) {
 async function expectReviewAndReject(page, expectedAmount, expectedFee, label) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible();
-    await expect(page.getByTestId('confirm-chain-badge')).toHaveText('Bitcoin');
-
-    const fee = page.getByTestId('confirm-fee');
+    const fee = page.getByTestId('confirm-fee-network');
     // The dev SDK quotes a rate-table fee, which review labels as an estimate.
-    await expect(fee).toHaveText(`Network fee: ${expectedFee} BTC (estimate)`);
+    await expect(page.getByText('Network fee (estimate)', { exact: true })).toBeVisible();
+    await expect(fee).toHaveText(`${expectedFee} BTC`);
     const feeAmount = Number((await fee.innerText()).match(/[\d.]+/)?.[0]);
     expect(feeAmount, `${label}: review shows no positive network fee`).toBeGreaterThan(0);
 
@@ -98,8 +97,8 @@ test.describe('LG K51 send review', { tag: '@lg-k51' }, () => {
         await createWallet(page);
 
         await gotoSection(page, 'Contacts');
-        // A fresh wallet has no contacts, so the empty list offers the create action.
-        await page.getByRole('button', { name: 'Create first contact' }).click();
+        // Add contact is the title bar plus (G95); the empty list is text only.
+        await page.getByRole('button', { name: 'Add contact', exact: true }).click();
         await page.getByRole('textbox', { name: 'Name', exact: true }).fill(CONTACT_NAME);
         await page.getByRole('textbox', { name: 'Address', exact: true }).fill(CONTACT_ADDRESS);
         await page.getByRole('button', { name: 'Create contact', exact: true }).click();

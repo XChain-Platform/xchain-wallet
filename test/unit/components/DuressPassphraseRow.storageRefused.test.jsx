@@ -39,7 +39,7 @@ function setThroughRow() {
     fireEvent.change(screen.getByLabelText('Current wallet password'), { target: { value: 'fixture wallet pw' } });
     fireEvent.change(screen.getByLabelText('Duress passphrase'), { target: { value: PHRASE } });
     fireEvent.change(screen.getByLabelText('Confirm duress passphrase'), { target: { value: PHRASE } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save passphrase' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Passphrase' }));
 }
 
 beforeEach(() => {
@@ -66,7 +66,7 @@ describe('duress passphrase under storage refusal', () => {
         expect(duress.getDuressSaveStatus()).toBe('unsaved');
 
         setItem.mockRestore();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(screen.queryByText(/did not save the duress passphrase/)).toBeNull();
         expect(screen.getByText(/Configured\. Entering this passphrase/)).toBeTruthy();
 
@@ -88,7 +88,7 @@ describe('duress passphrase under storage refusal', () => {
         expect(localStorage.getItem(duress.DURESS_STORAGE_KEY)).not.toBeNull();
 
         removeItem.mockRestore();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(duress.isDuressConfigured()).toBe(false);
         expect(screen.getByRole('button', { name: 'Set' })).toBeTruthy();
         restart();
@@ -99,7 +99,7 @@ describe('duress passphrase under storage refusal', () => {
         render(<DuressPassphraseRow />);
         setThroughRow();
         expect(await screen.findByText(/Configured\. Entering this passphrase/)).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull();
         expect(duress.getDuressSaveStatus()).toBe('saved');
     });
 });

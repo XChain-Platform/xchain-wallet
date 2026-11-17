@@ -1,0 +1,122 @@
+/* Settings > Appearance > Hide Small Balances: the switch card, the Options |
+   Hidden balances toggle, the amount card and the balance preview. */
+
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+/* One card, as every Settings page draws its rows. */
+.card {
+    composes: flush from '../../../ui/Card.module.css';
+    overflow: visible;
+}
+
+.rowIcon {
+    --xc-icon-size: var(--xc-icon-xl);
+    width: 24px;
+    height: 24px;
+    align-items: center;
+    justify-content: center;
+}
+
+/* The chosen tab's panel, 8px under the toggle. */
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+}
+
+/* The amount card: the display currency beside the amount field. */
+/* The amount card: its label, then the currency beside the field box, with
+   the field's hint and any error under the field. */
+.amountCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-1);
+    padding: var(--xc-space-3);
+}
+
+.amountLabel {
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.amountRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+}
+
+.amountField {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* The currency the amount is in, a fixed label (the Fiat currency page picks it). */
+.currency {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    height: var(--xc-control-h-md);
+    padding: 0 var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-md);
+    background: var(--xc-surface-raised);
+    color: var(--xc-text);
+    font-weight: 600;
+    font-size: var(--xc-text-sm);
+    --xc-icon-size: var(--xc-icon-sm);
+}
+
+.previewHeading {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+/* A balance under the amount reads greyed: its mark faded and its name, line
+   and amount in the muted text colour. The tag stays at full strength. */
+.dimmedMark {
+    display: inline-flex;
+    opacity: 0.55;
+}
+
+.dimmedText > span,
+.amount.dimmedAmount {
+    color: var(--xc-text-muted);
+}
+
+.trailing {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--xc-space-1);
+}
+
+.amount {
+    color: var(--xc-text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    /* On a phone the page clamp wraps the row and puts the amount under the
+       name; a long amount then wraps at its ticker instead of running off the
+       start edge (2026-11-15, 360px check). */
+    max-inline-size: 100%;
+    overflow-wrap: anywhere;
+    text-align: end;
+}
+
+.tag {
+    display: inline-flex;
+    padding: 0 var(--xc-space-1);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-radius-sm);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+}

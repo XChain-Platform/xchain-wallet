@@ -37,6 +37,7 @@ import {
     result,
 } from './validate.js';
 import { randomUUID } from '../util/uuid.js';
+import { normalizeAllowedTicks, normalizeTickIds } from './policyTicks.js';
 
 export const CURRENT_VERSION = 1;
 
@@ -106,6 +107,23 @@ function validatePolicy(errors, policy) {
         policy.confirmAbove === null || policy.confirmAbove === undefined || isPlainObject(policy.confirmAbove),
         'must be null or an object',
     );
+    check(
+        errors,
+        'policy.allowedTicks',
+        policy.allowedTicks === null
+            || policy.allowedTicks === undefined
+            || (isArray(policy.allowedTicks) && policy.allowedTicks.every(isNonEmptyString)),
+        'must be null or an array of token tickers',
+    );
+    // The saved ticker -> token number map; stored only in its normalized form.
+    check(
+        errors,
+        'policy.tickIds',
+        policy.tickIds === undefined
+            || (isPlainObject(policy.tickIds)
+                && JSON.stringify(normalizeTickIds(policy.tickIds)) === JSON.stringify(policy.tickIds)),
+        'must be an object mapping each token ticker to its own token number',
+    );
 }
 
 function isAllowedOutput(o) {
@@ -122,6 +140,8 @@ function isAllowedOutput(o) {
  * @property {Object|null} [maxPerAction]               { ACTION: { TICK|'*': capString } }
  * @property {{ hours: number, maxActions?: number, perTick?: Object }|null} [maxPerWindow]
  * @property {{ perTick: Object }|null} [confirmAbove]
+ * @property {string[]|null} [allowedTicks]             null any token, [] none, else only these
+ * @property {Record<string, number>} [tickIds]         { TICK: token number } read when the rules were saved
  */
 
 /**
@@ -220,6 +240,10 @@ export function createCoSignerAccount(input) {
 // Store the policy in the shape the SDK evaluator consumes (uppercase action
 // names; arrays not Sets, since the record is serialized to the vault blob).
 export function normalizeStoredPolicy(policy) {
+    const allowedTicks = normalizeAllowedTicks(policy.allowedTicks);
+    // Token numbers read when the rules were saved; absent on records saved
+    // before, which then match their tokens by ticker only.
+    const tickIds = normalizeTickIds(policy.tickIds);
     return {
         allowedActions: policy.allowedActions.map((a) => String(a).toUpperCase()),
         allowedDestinations: policy.allowedDestinations == null
@@ -228,6 +252,10 @@ export function normalizeStoredPolicy(policy) {
         maxPerAction: policy.maxPerAction ?? null,
         maxPerWindow: policy.maxPerWindow ?? null,
         confirmAbove: policy.confirmAbove ?? null,
+        // Allowed tokens: absent is any token (as on records made before the
+        // rule), [] is none, a list is only those.
+        ...(allowedTicks === null ? {} : { allowedTicks }),
+        ...(tickIds === null ? {} : { tickIds }),
     };
 }
 

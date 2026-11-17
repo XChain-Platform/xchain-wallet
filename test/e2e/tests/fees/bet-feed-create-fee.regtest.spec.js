@@ -141,17 +141,17 @@ async function actionFee(actionIndex) {
 }
 
 async function screenNetworkFeeSats(page) {
-    const text = await page.getByTestId('confirm-fee').innerText();
+    const text = await page.getByTestId('confirm-fee-network').innerText();
     const coin = Number(text.match(new RegExp(`([\\d.]+)\\s*${COIN}`))?.[1]);
     expect(Number.isFinite(coin), `unparseable network fee line: ${text}`).toBe(true);
     return Math.round(coin * 1e8);
 }
 
 async function projectedProtocolFeeSats(page) {
-    const deltas = page.getByTestId('action-intent-deltas');
-    if (await deltas.count() === 0) return null;
-    const text = await deltas.innerText();
-    const coin = text.match(new RegExp(`Protocol fee\\s*${COIN}\\s*([\\d.]+)`))?.[1];
+    const fee = page.getByTestId('confirm-fee-protocol');
+    if (await fee.count() === 0) return null;
+    const text = await fee.innerText();
+    const coin = text.match(new RegExp(`([\\d.,]+)\\s*${COIN}`))?.[1]?.replace(/,/g, '');
     return coin === undefined ? null : Math.round(Number(coin) * 1e8);
 }
 
@@ -186,12 +186,12 @@ async function composeMarket(page, { label, daysOut }) {
     await tokenField.click();
     await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-    await main.getByLabel('What is being bet on', { exact: true }).fill(label);
+    await main.getByLabel('Question', { exact: true }).fill(label);
     await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
     await main.getByLabel('Outcome 1', { exact: true }).fill('No');
 
     const now = await chainTime();
-    await main.getByLabel('Betting closes', { exact: true }).fill(toLocalDateTimeInput(now + daysOut * 86_400));
+    await main.getByLabel('Purchases Close', { exact: true }).fill(toLocalDateTimeInput(now + daysOut * 86_400));
 
     // The form's OWN projection, the first of the three numbers. Read before
     // submitting, because it is a property of the form rather than of the
@@ -286,7 +286,7 @@ test.describe(`what opening a market costs on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'with the 90-free-days rule')
                 .toMatch(/Opening this market is free/);
 
-            await expect(page.getByTestId('confirm-protocol-fee'),
+            await expect(page.getByTestId('confirm-fee-protocol'),
                 'the confirm screen states a protocol fee for a market that costs nothing')
                 .toHaveCount(0);
             expect(await projectedProtocolFeeSats(page),
@@ -326,7 +326,7 @@ test.describe(`what opening a market costs on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // NUMBER 2, the coin fee the confirm screen projects, which is what
             // the composed transaction actually carries.
-            await expect(page.getByTestId('confirm-protocol-fee'),
+            await expect(page.getByTestId('confirm-fee-protocol'),
                 'the coin-fee lane also states an XCHAIN protocol fee, which reads as a second charge')
                 .toHaveCount(0);
             const minerSats = await screenNetworkFeeSats(page);

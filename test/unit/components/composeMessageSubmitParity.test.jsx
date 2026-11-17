@@ -12,7 +12,7 @@
 // the same failure for the same error, driven through the real component.
 //
 // The confirm path is the one every real send takes. The legacy review stage
-// (Confirm send) keeps its own handler; a demo id is cleared between the
+// (its Approve) keeps its own handler; a demo id is cleared between the
 // review screen and the press so that handler runs its host call, which is the
 // only way a render test can reach it without a locked wallet holding a
 // password. Each assertion reads what reached the host or the alert, so a
@@ -24,7 +24,7 @@ import React from 'react';
 
 // The legacy review stage is only entered for a wallet the form treats as a
 // demo wallet at render time. The flag lets a test turn that off again before
-// Confirm send, so the handler's host call runs; the demo guard reads the real
+// Approve, so the handler's host call runs; the demo guard reads the real
 // module and stays off.
 const demoFlag = { on: false };
 vi.mock('@xchain-wallet/core', async (importOriginal) => {
@@ -157,12 +157,12 @@ function alertText(utils) {
         .join(' | ');
 }
 
-/** Opens the review screen, then turns the demo flag off so Confirm send runs the host call. */
+/** Opens the review screen, then turns the demo flag off so Approve runs the host call. */
 async function openLegacyReview(messaging) {
     demoFlag.on = true;
     const utils = await openFilledForm(messaging);
     await click(utils, /Send message/i);
-    expect(utils.getByRole('button', { name: /Confirm send/i }), 'the review stage never opened').toBeTruthy();
+    expect(utils.getByRole('button', { name: /^Approve$/ }), 'the review stage never opened').toBeTruthy();
     expect(messaging.composeMessageForConfirm, 'the confirm path ran instead of the review stage').not.toHaveBeenCalled();
     demoFlag.on = false;
     return utils;
@@ -178,7 +178,7 @@ describe('the confirm path and the legacy review path share one request and one 
 
         const legacy = stubMessaging({ messageAction: vi.fn(() => Promise.reject(new Error('stop'))) });
         const legacyUtils = await openLegacyReview(legacy);
-        await click(legacyUtils, /Confirm send/i);
+        await click(legacyUtils, /^Approve$/);
         const { password, ...submitted } = legacy.messageAction.mock.calls[0][0];
 
         expect(composed).toMatchObject(EXPECTED_BASE);
@@ -203,10 +203,10 @@ describe('the confirm path and the legacy review path share one request and one 
         it(`shows the same wording for ${label} on the legacy review path`, async () => {
             const messaging = stubMessaging({ messageAction: vi.fn(() => Promise.reject(error)) });
             const utils = await openLegacyReview(messaging);
-            await click(utils, /Confirm send/i);
+            await click(utils, /^Approve$/);
             expect(messaging.messageAction).toHaveBeenCalledTimes(1);
             expect(alertText(utils)).toMatch(wording);
-            expect(utils.getByRole('button', { name: /Confirm send/i }), 'the review stage was left after a failure')
+            expect(utils.getByRole('button', { name: /^Approve$/ }), 'the review stage was left after a failure')
                 .toBeTruthy();
         });
     }
@@ -214,9 +214,9 @@ describe('the confirm path and the legacy review path share one request and one 
     it('hands the legacy path result to the caller', async () => {
         const messaging = stubMessaging({ messageAction: vi.fn(() => Promise.resolve({ txid: 'tx-legacy' })) });
         const utils = await openLegacyReview(messaging);
-        await click(utils, /Confirm send/i);
+        await click(utils, /^Approve$/);
         expect(messaging.messageAction).toHaveBeenCalledTimes(1);
         expect(alertText(utils)).toBe('');
-        expect(utils.queryByRole('button', { name: /Confirm send/i })).toBeNull();
+        expect(utils.queryByRole('button', { name: /^Approve$/ })).toBeNull();
     });
 });

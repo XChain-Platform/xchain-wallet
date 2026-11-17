@@ -25,6 +25,7 @@ import {
     getTokenFiatRate,
     refreshFiatRates,
     refreshTokenFiatRate,
+    refreshTokenFiatRates,
     subscribeFiatRates,
 } from '../../flows/priceLookup.js';
 import { defaultRegistry } from '../../registry/index.js';
@@ -246,10 +247,11 @@ export function useNativeFiatRates({
  * Live fiat rates for token rows, keyed by coin family and tick.
  *
  * Home cannot call `useTickFiatRate` once per row because its token set changes
- * between balance polls. This hook subscribes once, refreshes each requested
- * token through the same per-tick lookup, and returns only rates that actually
- * exist. Missing token markets therefore remain missing instead of inheriting
- * the chain coin's rate.
+ * between balance polls. This hook subscribes once, refreshes every requested
+ * token in one batch whose reads follow the chains, not the tokens
+ * (`refreshTokenFiatRates`: one oracle snapshot and one markets read per coin
+ * family), and returns only rates that actually exist. Missing token markets
+ * therefore remain missing instead of inheriting the chain coin's rate.
  *
  * @param {object} opts
  * @param {Array<{chainCoin: string, tick: string, nativeTicker: string}>} opts.tokens
@@ -295,12 +297,12 @@ export function useTokenFiatRates({
     useEffect(() => {
         if (wanted.length === 0 || !refreshEnabled) return;
         const controller = new AbortController();
-        Promise.all(wanted.map((t) => refreshTokenFiatRate({
-            ...t,
+        refreshTokenFiatRates({
+            tokens: wanted,
             fiatCurrency,
             allowCoingeckoFallback,
             signal: controller.signal,
-        }))).catch(() => { /* individual misses leave their rows unpriced */ });
+        }).catch(() => { /* misses leave their rows unpriced */ });
         return () => controller.abort();
     }, [tokenKey, fiatCurrency, allowCoingeckoFallback, refreshEnabled, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -10,7 +10,9 @@
 
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, Button, ChainBadge, Checkbox, EmptyState, FeeSelector, FieldNote, FormPage, Input, ListPage, ListRow, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+// Network, From and the fee selector render inside the standard FromSection
+// and FeeSection.
+import { Button, ChainBadge, FieldNote, FormPage, IconSelect, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -26,6 +28,7 @@ import {
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { formatBytes } from '../utils/formatBytes.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js';
@@ -33,11 +36,9 @@ import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
-import { TickerIcon } from '../components/TickerIcon.jsx';
 import { TokenField } from '../components/TokenField.jsx';
-import { CheckIcon, PlusIcon, UploadIcon } from '../../ui/icons/index.jsx';
-import styles from './IssueTokenForm.module.css';
-import publishStyles from './GatedPublishForm.module.css';
+import { TokenPicker } from './TokenPicker.jsx';
+import { FileField } from '../components/FileField.jsx';
 import { UploadMethodField, useUploadMethod } from '../components/UploadMethodField.jsx';
 import {
     gatedFileCompiledBytes,
@@ -54,14 +55,29 @@ import { maxUploadBytesFor } from '../../flows/multipartSupport.js';
 import { multipartResumeRequestBuilder } from '../../flows/multipartResumeRequest.js';
 import { gatedMultipartStartFields } from '../../flows/gatedMultipartStartFields.js';
 import { gatedPublishMultipartStart } from '../../flows/gatedPublishAction.js';
+import { CheckIcon, DocumentIcon, GearIcon, KeyIcon, PlusIcon, UploadIcon } from '../../ui/icons/index.jsx';
+// Gated content is laid out on the Wallet Form Standard frame.
+import {
+    FeeSection,
+    FormAction,
+    FormFrame,
+    FormSection,
+    FromSection,
+    joinSummary,
+    MemoSection,
+    useFormSections,
+} from '../components/formStandard/index.js';
+import { withAdvancedOptions } from '../components/formStandard/advancedOptions.js';
+import styles from './IssueTokenForm.module.css';
 import { t } from '../../i18n/index.js';
+import { titleCase } from '../utils/titleCase.js';
 import '../../i18n/locales/en/gatedPublish.js';
 import '../../i18n/locales/en/palette.js';
 import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
-/** The compiled BATCH-plus-ciphertext push of a gated publish, for the Upload method fees. */
+/** The gated BATCH payload the upload method fee estimate prices. */
 function gatedUploadBytes(file, meta) {
     return gatedFileCompiledBytes({ ...meta, name: file.name, type: file.type }, file.bytes.length);
 }
@@ -109,18 +125,37 @@ function completedMultipart(reply) {
  * Only unlock/scan are software-signer-only, and they live in the
  * separate unlock surface, not here.
  *
+ * Publish file's Encrypted mode renders this form as its own page body
+ * (`shared`), so the file, title, memo and fee the user already set carry
+ * across the mode switch and one Publish File press reaches the confirm
+ * screen. There the gate token starts unpicked and Publish marks the Token
+ * field until one is chosen.
+ *
  * @param {object} props
  * @param {string} props.walletId
  * @param {string} props.chainId
- * @param {string} props.tick               gate ticker (canonical uppercase)
+ * @param {string | null} props.tick         gate ticker (canonical uppercase); null only inside Publish file
  * @param {string | null} [props.issuerAddress]  the token's current owner; publishing from any other address is indexer-rejected
  * @param {() => void} props.onBack
- * @param {string | null} [props.uploadPick]  the explicit Upload method pick, controlled by Publish file (null: the default)
- * @param {(method: string | null) => void} [props.onUploadPick]  with uploadPick, shares the pick with Publish file
+ * @param {GatedPublishShared | null} [props.shared]
+ *
+ * @typedef {object} GatedPublishShared
+ * @property {{ name: string, type: string, bytes: Uint8Array } | null} fileMeta
+ * @property {(next: { name: string, type: string, bytes: Uint8Array } | null) => void} setFileMeta
+ * @property {string} title
+ * @property {(next: string) => void} setTitle
+ * @property {string} memo
+ * @property {(next: string) => void} setMemo
+ * @property {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} feePick
+ * @property {(next: any) => void} setFeePick
+ * @property {string | null} [uploadPick]            the explicit Upload method pick (null: the default)
+ * @property {(next: string | null) => void} [setUploadPick]
+ * @property {import('react').ReactNode} modeControl  the Publish as choice, first in the File section
+ * @property {string[]} chainIds                     networks offered before a token is picked
+ * @property {string} pageTitle
+ * @property {string} formLabel
  */
-export function GatedPublishForm({
-    walletId, chainId, tick, issuerAddress = null, onBack, uploadPick = null, onUploadPick,
-}) {
+export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null, onBack, shared = null }) {
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId, { onBack });
     const signerReady = useSignerReady(walletId);
@@ -146,11 +181,21 @@ export function GatedPublishForm({
         /** @type {Record<string, any[]> | null} */ (null),
     );
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
-    const [fileMeta, setFileMeta] = useState(
+    // Inside Publish file the draft belongs to that page, so it survives a
+    // switch back to Public; standalone the form holds its own.
+    const [ownFileMeta, setOwnFileMeta] = useState(
         /** @type {{ name: string, type: string, bytes: Uint8Array } | null} */ (null),
     );
-    const [title, setTitle] = useState('');
-    const [memo, setMemo] = useState('');
+    const [ownTitle, setOwnTitle] = useState('');
+    const [ownMemo, setOwnMemo] = useState('');
+    const fileMeta = shared ? shared.fileMeta : ownFileMeta;
+    const setFileMeta = shared ? shared.setFileMeta : setOwnFileMeta;
+    const title = shared ? shared.title : ownTitle;
+    const setTitle = shared ? shared.setTitle : setOwnTitle;
+    const memo = shared ? shared.memo : ownMemo;
+    const setMemo = shared ? shared.setMemo : setOwnMemo;
+    // Set when Publish is pressed before a gate token is picked.
+    const [tokenMissing, setTokenMissing] = useState(false);
     const [packs, setPacks] = useState(/** @type {any[] | null} */ (null));
     const [packsError, setPacksError] = useState(/** @type {string | null} */ (null));
     const [packChoice, setPackChoice] = useState('new');
@@ -179,8 +224,18 @@ export function GatedPublishForm({
             .catch(() => { /* stays inactive; the flow gate is authoritative */ });
         return () => { cancelled = true; };
     }, [selectedChainId, thresholdScheduledHeight, messaging]);
-    const [ackForever, setAckForever] = useState(false);
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    // The standard section a refusal belongs to, and a counter bumped
+    // on every Publish attempt, so that section reopens on each attempt.
+    const [formErrorSection, setFormErrorSection] = useState(/** @type {string | null} */ (null));
+    const [reviewAttempt, setReviewAttempt] = useState(0);
+    // Open state held above the picker early returns. From starts
+    // closed, File open, the rest closed.
+    const formSections = useFormSections({ from: false, file: true, memo: false, access: false, fee: false });
+    const failIn = (section, message) => {
+        setFormError(message);
+        setFormErrorSection(section);
+    };
     const [stage, setStage] = useState(
         /** @type {'form' | 'submitting' | 'done'} */ ('form'),
     );
@@ -199,12 +254,15 @@ export function GatedPublishForm({
 
     useEffect(() => {
         if (!addressesByChain) return undefined;
+        // The launching token is always offered; Publish file opens with none.
+        const launchRows = tick ? [{ chainId, tick, ownerAddress: issuerAddress }] : [];
         if (demoGuard.blocked) {
-            setOwnedTokens([{ chainId, tick, ownerAddress: issuerAddress }]);
+            setOwnedTokens(launchRows);
             return undefined;
         }
         if (typeof messaging.getOwnedTokens !== 'function') {
-            setOwnedTokens([{ chainId, tick, ownerAddress: issuerAddress }]);
+            setOwnedTokens(launchRows);
+            if (!tick) setOwnedTokensError(t('gatedPublish.tokens.lookupUnavailable'));
             return undefined;
         }
         let cancelled = false;
@@ -230,10 +288,9 @@ export function GatedPublishForm({
         }
         Promise.all(calls).then((results) => {
             if (cancelled) return;
-            const initial = { chainId, tick, ownerAddress: issuerAddress };
             const seen = new Set();
             const merged = [];
-            for (const row of [...results.flatMap((result) => result.rows), initial]) {
+            for (const row of [...results.flatMap((result) => result.rows), ...launchRows]) {
                 const key = `${row.chainId}:${row.tick}`;
                 if (seen.has(key)) continue;
                 seen.add(key);
@@ -244,7 +301,7 @@ export function GatedPublishForm({
             if (results.some((result) => result.failed)) {
                 setOwnedTokensError(
                     results.every((result) => result.failed)
-                        ? t('gatedPublish.tokens.lookupFailed')
+                        ? t(tick ? 'gatedPublish.tokens.lookupFailed' : 'gatedPublish.tokens.lookupFailedNoToken')
                         : t('gatedPublish.tokens.lookupPartial'),
                 );
             }
@@ -265,11 +322,18 @@ export function GatedPublishForm({
         setPackChoice('new');
         setGateMinAmount('');
         setFormError(null);
+        setTokenMissing(false);
     }
 
+    // With no gate token yet the network is free to move; once one is
+    // picked, the token decides it.
     function handleNetworkChange(nextChainId) {
         const tokenOnChain = (ownedTokens || []).find((token) => token.chainId === nextChainId);
-        if (tokenOnChain) selectGateToken(tokenOnChain);
+        if (tokenOnChain && gateTick) selectGateToken(tokenOnChain);
+        else if (!gateTick) {
+            setSelectedChainId(nextChainId);
+            setFromOverrideId(null);
+        }
     }
 
     // Reusable packs = pack keys this wallet's vault holds for this tick.
@@ -277,7 +341,7 @@ export function GatedPublishForm({
     useEffect(() => {
         setPacks(null);
         setPacksError(null);
-        if (typeof messaging.listGatedKeys !== 'function') { setPacks([]); return undefined; }
+        if (!gateTick || typeof messaging.listGatedKeys !== 'function') { setPacks([]); return undefined; }
         let cancelled = false;
         messaging.listGatedKeys({ walletId, chainId: selectedChainId, gateTicker: gateTick })
             .then((rows) => { if (!cancelled) setPacks(Array.isArray(rows) ? rows : []); })
@@ -301,13 +365,17 @@ export function GatedPublishForm({
         if (gateOwnerAddress) return onChain.find((a) => a.address === gateOwnerAddress) || null;
         return onChain[0] || null;
     }, [addressesByChain, selectedChainId, fromOverrideId, gateOwnerAddress]);
-    const issuerEligibility = tokenIssuerEligibility({
-        tokenInfo: { creator: gateOwnerAddress },
-        addressesByChain,
-        chainId: selectedChainId,
-        tick: gateTick,
-        sourceAddress: fromAddress?.address,
-    });
+    // Ownership is judged once a gate token is picked; before that the
+    // missing token is the refusal, not an unknown owner.
+    const issuerEligibility = gateTick
+        ? tokenIssuerEligibility({
+            tokenInfo: { creator: gateOwnerAddress },
+            addressesByChain,
+            chainId: selectedChainId,
+            tick: gateTick,
+            sourceAddress: fromAddress?.address,
+        })
+        : { pending: false, error: null, issuerAddress: null };
     const ownerMissing = !!issuerEligibility.error;
     const hw = isHwSource(fromAddress);
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
@@ -323,9 +391,11 @@ export function GatedPublishForm({
     });
 
     // Network fee: same Low/Normal/Fast/Custom row as AttachContentForm.
-    const [feePick, setFeePick] = useState(
+    const [ownFeePick, setOwnFeePick] = useState(
         /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
     );
+    const feePick = shared ? shared.feePick : ownFeePick;
+    const setFeePick = shared ? shared.setFeePick : setOwnFeePick;
     const feeTiers = useMemo(
         () => estimateNativeSendFeeTiers({ chainId: selectedChainId, chainRegistry }),
         [selectedChainId],
@@ -414,7 +484,9 @@ export function GatedPublishForm({
         compiledBytesFor: gatedUploadBytes,
         standardCap,
         multipart,
-        ...(typeof onUploadPick === 'function' ? { picked: uploadPick, onPick: onUploadPick } : {}),
+        ...(shared && typeof shared.setUploadPick === 'function'
+            ? { picked: shared.uploadPick ?? null, onPick: shared.setUploadPick }
+            : {}),
     });
 
     // Encoding-aware ceiling for the CURRENT metadata and the picked upload
@@ -467,8 +539,8 @@ export function GatedPublishForm({
         setStage('done');
     }, [multipartUpload.result]);
 
-    function handlePickFile(event) {
-        const file = event.target.files && event.target.files[0];
+    // The File arrives from the file field's dialog or a drop on it.
+    function handlePickFile(file) {
         setFormError(null);
         if (!file) return;
         const readId = ++fileReadIdRef.current;
@@ -484,7 +556,7 @@ export function GatedPublishForm({
         }
         if (file.size > cap) {
             setFileMeta(null);
-            setFormError(`That file is ${file.size.toLocaleString()} bytes; this publish lane supports up to ${cap.toLocaleString()}.`);
+            setFormError(`That file is ${formatBytes(file.size)}; this publish lane supports up to ${formatBytes(cap, { limit: true })}.`);
             return;
         }
         const reader = new FileReader();
@@ -497,7 +569,7 @@ export function GatedPublishForm({
             const bytes = new Uint8Array(reader.result);
             if (bytes.length === 0) { setFormError('That file is empty.'); return; }
             if (bytes.length > cap) {
-                setFormError(`That file is ${bytes.length.toLocaleString()} bytes; this publish lane supports up to ${cap.toLocaleString()}.`);
+                setFormError(`That file is ${formatBytes(bytes.length)}; this publish lane supports up to ${formatBytes(cap, { limit: true })}.`);
                 return;
             }
             setFileMeta({
@@ -512,53 +584,80 @@ export function GatedPublishForm({
         reader.readAsArrayBuffer(file);
     }
 
+    function handleClearFile() {
+        fileReadIdRef.current += 1;
+        setFileMeta(null);
+        setFormError(null);
+    }
+
+    // A file carried over from Public mode was checked against the larger
+    // public ceiling, so it is held to the gated one as soon as it arrives
+    // here, not only when Publish is pressed.
+    const carriedCap = fileMeta && fromAddress ? plainCapFor(fileMeta.name, fileMeta.type) : null;
+    const carriedTooLarge = Boolean(shared && fileMeta && carriedCap !== null && fileMeta.bytes.length > carriedCap);
+    useEffect(() => {
+        if (!carriedTooLarge) return;
+        setFormError(t('gatedPublish.carriedTooLarge', {
+            bytes: formatBytes(fileMeta.bytes.length),
+            max: formatBytes(carriedCap, { limit: true }),
+        }));
+        setFormErrorSection('file');
+        // Keyed on the file and the ceiling, so a new pick or a shorter
+        // title re-judges it.
+    }, [carriedTooLarge, fileMeta, carriedCap]);
+
     async function handleReview(event) {
         event.preventDefault();
+        // Each attempt may reopen the section holding the refusal;
+        // failIn names that section (From, File, Memo, Access or the fee).
+        setReviewAttempt((n) => n + 1);
+        if (!gateTick) {
+            setTokenMissing(true);
+            setFormErrorSection('file');
+            return;
+        }
         if (issuerEligibility.pending) {
-            setFormError(`Wait for the wallet to verify the current owner of ${gateTick}.`);
+            failIn('from', `Wait for the wallet to verify the current owner of ${gateTick}.`);
             return;
         }
         if (issuerEligibility.error) {
-            setFormError(issuerEligibility.error);
+            failIn('from', issuerEligibility.error);
             return;
         }
-        if (!fileMeta) { setFormError('Pick a file first.'); return; }
+        if (!fileMeta) { failIn('file', 'Pick a file first.'); return; }
         if (!fromAddress) {
-            setFormError(ownerMissing
+            failIn('from', ownerMissing
                 ? `This wallet does not hold the owner address for ${gateTick}; only the token owner can publish gated files.`
                 : 'No signing address available on this network.');
             return;
         }
         if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
-            setFormError('File name, title, and memo cannot contain | or ; characters.');
+            failIn(memo && /[|;]/.test(memo) ? 'memo' : 'file', 'File name, title, and memo cannot contain | or ; characters.');
             return;
         }
         const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
             || actionTextSafetyError(title, 'Title');
-        if (unsafeMetadata) { setFormError(unsafeMetadata); return; }
+        if (unsafeMetadata) { failIn('file', unsafeMetadata); return; }
         const memoError = memoLengthError(memo.trim());
-        if (memoError) { setFormError(memoError); return; }
+        if (memoError) { failIn('memo', memoError); return; }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { failIn('fee', feeStop.formError); return; }
         const thresholdValue = thresholdActive ? gateMinAmount.trim() : '';
         const thresholdError = thresholdValue
             ? flowsLib.gateMinAmountValidationError(thresholdValue)
             : null;
         if (thresholdError) {
-            setFormError(thresholdError);
+            failIn('access', thresholdError);
             return;
         }
         const singleCap = plainCapFor(fileMeta.name, fileMeta.type);
         const reviewCap = uploadCapFor(fileMeta.name, fileMeta.type);
         if (fileMeta.bytes.length > reviewCap) {
-            setFormError(
-                `This publish lane supports up to ${reviewCap.toLocaleString()} bytes `
-                + `and the file is ${fileMeta.bytes.length.toLocaleString()} bytes.`,
+            failIn(
+                'file',
+                `This publish lane supports up to ${formatBytes(reviewCap, { limit: true })} `
+                + `and the file is ${formatBytes(fileMeta.bytes.length)}.`,
             );
-            return;
-        }
-        if (!ackForever) {
-            setFormError('Confirm you understand the publish is permanent.');
             return;
         }
         let tokenInfo = null;
@@ -566,15 +665,15 @@ export function GatedPublishForm({
             try {
                 tokenInfo = await messaging.getTokenInfo({ chainId: selectedChainId, tick: gateTick });
             } catch {
-                setFormError('Could not refresh token ownership. Check your connection and try again.');
+                failIn('from', 'Could not refresh token ownership. Check your connection and try again.');
                 return;
             }
             if (!tokenInfo?.creator) {
-                setFormError(`Could not verify that ${gateTick} still exists. Reopen this screen and try again.`);
+                failIn('file', `Could not verify that ${gateTick} still exists. Reopen this screen and try again.`);
                 return;
             }
             if (tokenInfo.creator !== fromAddress.address) {
-                setFormError(`This wallet no longer owns ${gateTick}. Reopen this screen to refresh your tokens.`);
+                failIn('from', `This wallet no longer owns ${gateTick}. Reopen this screen to refresh your tokens.`);
                 return;
             }
         }
@@ -587,24 +686,25 @@ export function GatedPublishForm({
                 thresholdValue,
                 maxDecimals,
             );
-            if (divisibilityError) { setFormError(divisibilityError); return; }
+            if (divisibilityError) { failIn('access', divisibilityError); return; }
             if (typeof messaging.getIndexerWatermark !== 'function') {
-                setFormError('Could not verify that unlock thresholds are active. Try again later.');
+                failIn('access', 'Could not verify that unlock thresholds are active. Try again later.');
                 return;
             }
             try {
                 const current = await messaging.getIndexerWatermark({ chainId: selectedChainId });
                 const height = Number(current?.watermark);
                 if (!Number.isFinite(height) || height < thresholdScheduledHeight) {
-                    setFormError('Unlock thresholds are not active on this network right now. Remove the threshold to continue.');
+                    failIn('access', 'Unlock thresholds are not active on this network right now. Remove the threshold to continue.');
                     return;
                 }
             } catch {
-                setFormError('Could not verify that unlock thresholds are active. Try again later.');
+                failIn('access', 'Could not verify that unlock thresholds are active. Try again later.');
                 return;
             }
         }
         setFormError(null);
+        setFormErrorSection(null);
         await publishSelected(singleCap);
     }
 
@@ -716,7 +816,7 @@ export function GatedPublishForm({
                 r = await actionConfirm.run({
                     chainId: selectedChainId,
                     from: base.from,
-                    compose: () => messaging.composeGatedPublishForConfirm(base),
+                    compose: () => messaging.composeGatedPublishForConfirm(withAdvancedOptions(base)),
                     onApprove: (prebuiltPsbt, composed) => submitConfirmed({
                         ...base,
                         prebuiltPsbt,
@@ -740,8 +840,9 @@ export function GatedPublishForm({
         }
     }
 
+    const pageTitle = shared ? shared.pageTitle : t('gatedPublish.title', { tick: gateTick });
     const header = (
-        <PageHeader onBack={onBack} title={t('gatedPublish.title', { tick: gateTick })} />
+        <PageHeader onBack={onBack} title={pageTitle} />
     );
     const wrap = (children) => (
         <Screen variant={variant} header={header}>{children}</Screen>
@@ -752,60 +853,31 @@ export function GatedPublishForm({
     if (loadError) {
         return wrap(
             <FormPage
-                label={t('gatedPublish.title', { tick: gateTick })}
+                label={pageTitle}
                 status={<StatusMessage variant="error">{loadError}</StatusMessage>}
             />,
         );
     }
 
+    // The standard picker, limited to the tokens this wallet owns on any of
+    // its networks; the picked token decides the network.
     if (gateTokenPickerOpen) {
-        const rows = ownedTokens || [];
         return (
-            <Screen
-                variant={variant}
-                header={(
-                    <PageHeader
-                        onBack={() => setGateTokenPickerOpen(false)}
-                        title={t('gatedPublish.tokens.choose')}
-                    />
-                )}
-            >
-                <ListPage>
-                    {rows.length === 0 ? (
-                        <EmptyState
-                            title={t('gatedPublish.tokens.noneTitle')}
-                            titleAs="h3"
-                            body={t('gatedPublish.tokens.noneBody')}
-                        />
-                    ) : (
-                        <div className={publishStyles.tokenPickerCard} role="list">
-                            {rows.map((token) => {
-                                const tokenDescriptor = chainRegistry.get(token.chainId);
-                                return (
-                                    <ListRow
-                                        role="listitem"
-                                        key={`${token.chainId}:${token.tick}`}
-                                        leading={(
-                                            <TickerIcon
-                                                tick={token.tick}
-                                                chainId={token.chainId}
-                                                size={28}
-                                            />
-                                        )}
-                                        title={token.tick}
-                                        subtitle={tokenDescriptor?.displayName || token.chainId}
-                                        chevron
-                                        onClick={() => {
-                                            selectGateToken(token);
-                                            setGateTokenPickerOpen(false);
-                                        }}
-                                    />
-                                );
-                            })}
-                        </div>
-                    )}
-                </ListPage>
-            </Screen>
+            <TokenPicker
+                purpose="send"
+                walletId={walletId}
+                kindFilter="tokens"
+                kindLocked
+                rows={ownedTokens === null ? null : ownedTokens.map((token) => ({ chainId: token.chainId, tick: token.tick }))}
+                emptyTitle={t('gatedPublish.tokens.noneTitle')}
+                emptyBody={t('gatedPublish.tokens.noneBody')}
+                onSelect={(sel) => {
+                    const token = ownedTokens?.find((row) => row.chainId === sel.chainId && row.tick === sel.tick);
+                    if (token) selectGateToken(token);
+                    setGateTokenPickerOpen(false);
+                }}
+                onBack={() => setGateTokenPickerOpen(false)}
+            />
         );
     }
 
@@ -830,17 +902,26 @@ export function GatedPublishForm({
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                // The upload method and the permanence fact, as one plain line
+                // on the confirm screen under the cost card's fee.
+                summary={{
+                    verb: 'Publish',
+                    chainId: selectedChainId,
+                    direction: 'none',
+                    address: fromAddress?.address,
+                    notice: `${upload.confirmLine} ${t('gatedPublish.confirmNotice', { tick: gateTick })}`,
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor ? <ChainBadge descriptor={descriptor} size="sm" /> : null}
                 // The picked method's estimate for this file, shown only until
                 // the composed transactions state their exact fee.
+                feeEstimate={upload.fee?.coinAmount ? upload.fee : feeEstimate}
                 feeText={(upload.fee?.coinAmount || feeEstimate?.coinAmount)
                     ? t('send.networkFeeValue', {
                         amount: upload.fee?.coinAmount || feeEstimate.coinAmount,
                         ticker: coinTicker,
                     }).trim()
                     : undefined}
-                extraCredentials={<p className={styles.hint} data-testid="confirm-upload-method">{upload.confirmLine}</p>}
                 coinTicker={coinTicker}
                 signerReady={signerReady}
                 password={password}
@@ -904,64 +985,111 @@ export function GatedPublishForm({
 
     // Form stage.
     const previewUrl = imagePreviewDataUrl(fileMeta?.bytes);
+    // Closed-section summaries and reveal keys of the standard frame.
+    const sectionErrorKey = (section) => (formError && formErrorSection === section && reviewAttempt > 0 ? reviewAttempt : 0);
+    const tokenMissingError = tokenMissing && !gateTick ? t('gatedPublish.tokens.pickToken') : undefined;
+    const fileSummary = joinSummary(gateTick || t('gatedPublish.tokens.noneSummary'), fileMeta ? fileMeta.name : 'no file yet');
+    const packSummary = packChoice === 'new' ? 'New pack' : `Pack ${String(packChoice).slice(0, 8)}...`;
+    const accessSummary = joinSummary(
+        thresholdActive ? (gateMinAmount.trim() ? `At least ${gateMinAmount.trim()} ${gateTick}` : t('gatedPublish.noThreshold')) : null,
+        (packs || []).length > 0 ? packSummary : null,
+    );
+    // The Access section shows only when it has something to hold.
+    const showAccess = thresholdActive || (packs || []).length > 0 || packs === null || Boolean(packsError);
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
-            label={t('gatedPublish.gatedContent')}
+            label={shared ? shared.formLabel : t('gatedPublish.gatedContent')}
             onSubmit={handleReview}
             noValidate
             status={[
-                formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null,
+                formError ? <StatusMessage key="form" variant="error">{formError}</StatusMessage> : null,
                 ownerMissing ? (
-                    <StatusMessage variant="error">
+                    <StatusMessage key="owner" variant="error">
                         {issuerEligibility.error}
                     </StatusMessage>
                 ) : null,
             ]}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={isWatcherMode ? <PlusIcon /> : <UploadIcon />}
                     loading={stage === 'submitting' || multipartUpload.running}
                     disabled={issuerEligibility.pending || !!issuerEligibility.error
                         || multipartUpload.running}
                 >
-                    {isWatcherMode ? t('send.review.createUnsigned') : t('palette.createPublishFile.title')}
-                </Button>
+                    {/* Title Case action label; the palette keeps its own
+                        sentence-case string, so the button recases it. */}
+                    {titleCase(isWatcherMode ? t('send.review.createUnsigned') : t('palette.createPublishFile.title'))}
+                </FormAction>
+            )}
+            from={(
+                /* A picked gate token decides the network, so the Network
+                   field locks once there is one; picking a token (or an own
+                   address on another network in the From picker) moves it. */
+                <FromSection
+                    {...formSections.bind('from')}
+                    chainId={selectedChainId}
+                    chainIds={gateTick ? tokenChainIds : (shared?.chainIds || tokenChainIds)}
+                    chainRegistry={chainRegistry}
+                    lockNetwork={Boolean(gateTick)}
+                    onNetworkChange={handleNetworkChange}
+                    networkHelp={t('gatedPublish.networkHelp')}
+                    address={fromAddress?.address || null}
+                    addressLabel={t('send.fields.from')}
+                    addressHelp={t('gatedPublish.fromHelp')}
+                    onOpenPicker={() => setFromPickerOpen(true)}
+                    pickerLabel={t('send.fromAddress')}
+                    revealKey={sectionErrorKey('from')}
+                    missing={addressesByChain ? (
+                        <FieldNote variant="error">{t('gatedPublish.noAddress', { tick: gateTick })}</FieldNote>
+                    ) : null}
+                />
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    // The fee follows the network the gate token is on.
+                    chainId={selectedChainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={sectionErrorKey('fee')}
+                />
             )}
         >
-            <NetworkField
-                label={t('send.fields.chain')}
-                value={selectedChainId}
-                onChange={handleNetworkChange}
-                chainIds={tokenChainIds}
-                chainRegistry={chainRegistry}
-            />
-
-            <AddressField
-                label={t('send.fields.from')}
-                icon="addresses"
-                help={t('gatedPublish.fromHelp')}
-                value={fromAddress?.address || ''}
-                readOnly
-                onChange={() => {}}
-                onIconClick={() => setFromPickerOpen(true)}
-                iconLabel={t('send.fromAddress')}
-            />
-
+            {/* The main section holds the gate token, title and file. */}
+            <FormSection
+                id="file"
+                title={t('gatedPublish.sectionFile')}
+                icon={DocumentIcon}
+                {...formSections.bind('file')}
+                revealKey={sectionErrorKey('file') || (tokenMissingError ? `gate-token-${reviewAttempt}` : 0)}
+                summary={fileSummary}
+            >
+            {shared ? shared.modeControl : null}
             <TokenField
                 label={t('send.fields.token')}
-                value={{ chainId: selectedChainId, tick: gateTick }}
+                help={t('gatedPublish.tokenHelp')}
+                error={tokenMissingError}
+                value={gateTick ? { chainId: selectedChainId, tick: gateTick } : null}
                 onOpenPicker={() => setGateTokenPickerOpen(true)}
                 disabled={ownedTokens === null}
             />
+            {ownedTokens === null && !gateTick ? (
+                <p className={styles.hint}>{t('gatedPublish.tokens.lookingUp')}</p>
+            ) : null}
             {ownedTokensError ? (
                 <FieldNote variant="error">{ownedTokensError}</FieldNote>
+            ) : ownedTokens !== null && ownedTokens.length === 0 && !gateTick ? (
+                // Only an owner can gate a file, so a wallet with no tokens
+                // learns why the list is empty instead of meeting a blank picker.
+                <FieldNote variant="info">{t('gatedPublish.tokens.noneToGate')}</FieldNote>
             ) : null}
 
-            {/* How the bytes ride the chain, before the file: the pick sets the
-                ceiling the file field names. */}
+            {/* How the ciphertext rides the chain; the pick sets the ceiling
+                the file field names. */}
             <UploadMethodField upload={upload} disabled={ownerMissing} />
             <MultipartUploadSection
                 {...multipartUpload}
@@ -970,23 +1098,47 @@ export function GatedPublishForm({
                 listError={formError || ownerMissing ? null : multipartUpload.listError}
                 fallbackMessage="Could not continue the multipart upload."
             />
+
+            {/* Title comes before the file, as on Attach artwork. */}
             <Input
-                type="file"
+                type="text"
+                label={t('gatedPublish.titleField')}
+                help={t('gatedPublish.titleHelp')}
+                optional
+                enterKeyHint="next"
+                aria-label={t('gatedPublish.titleField')}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={120}
+                disabled={ownerMissing}
+            />
+
+            {/* The standard file field; the label names the gated ceiling. */}
+            <FileField
                 label={t('gatedPublish.fileLimit', {
-                    bytes: fileFieldCapFor(
-                        fileMeta?.name || `file${'.bin'}`,
-                        fileMeta?.type || 'application/octet-stream',
-                    ).toLocaleString(),
+                    bytes: formatBytes(
+                        fileFieldCapFor(
+                            fileMeta?.name || `file${'.bin'}`,
+                            fileMeta?.type || 'application/octet-stream',
+                        ),
+                        { limit: true },
+                    ),
                 })}
                 help={(
                     <>
-                        {t('gatedPublish.formHint.beforeToken')} <strong>{gateTick}</strong>{' '}
-                        {t('gatedPublish.formHint.afterToken')}{' '}
+                        {gateTick ? (
+                            <>
+                                {t('gatedPublish.formHint.beforeToken')} <strong>{gateTick}</strong>{' '}
+                                {t('gatedPublish.formHint.afterToken')}{' '}
+                            </>
+                        ) : `${t('gatedPublish.formHint.noToken')} `}
                         {t('gatedPublish.permanentHint')}
                     </>
                 )}
-                aria-label={t('gatedPublish.fileToPublish')}
-                onChange={handlePickFile}
+                inputLabel={t('gatedPublish.fileToPublish')}
+                fileName={fileMeta?.name || ''}
+                onFile={handlePickFile}
+                onClear={handleClearFile}
                 disabled={ownerMissing || multipartUpload.running}
             />
             {fileMeta ? (
@@ -1005,45 +1157,51 @@ export function GatedPublishForm({
                     <p className={styles.hint}>
                         {t('gatedPublish.fileMetadata', {
                             name: fileMeta.name,
-                            bytes: fileMeta.bytes.length.toLocaleString(),
+                            bytes: formatBytes(fileMeta.bytes.length),
                             type: fileMeta.type,
                         })}
                     </p>
                 </>
             ) : null}
+            {isWatcherMode ? (
+                <p className={styles.hint}>
+                    {t('gatedPublish.watcherHint')}
+                </p>
+            ) : null}
+            </FormSection>
 
-            <Input
+            {/* Memo is its own optional closed section holding only the memo:
+                the section title names the field and carries its count. */}
+            <MemoSection
+                {...formSections.bind('memo')}
+                revealKey={sectionErrorKey('memo')}
                 type="text"
-                label={t('gatedPublish.titleField')}
-                help={t('gatedPublish.titleHelp')}
-                optional
-                enterKeyHint="next"
-                aria-label={t('gatedPublish.titleField')}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                maxLength={120}
-                disabled={ownerMissing}
-            />
-            <Input
-                type="text"
-                label={t('send.memo')}
-                help={t('gatedPublish.memoHelp')}
-                optional
                 enterKeyHint={thresholdActive ? 'next' : 'go'}
-                aria-label={t('send.memo')}
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 maxLength={MAX_MEMO_LENGTH}
                 disabled={ownerMissing}
             />
 
+            {/* The unlock threshold and the pack choice share one
+                optional closed Access section; it shows only when either applies. */}
+            {showAccess ? (
+            <FormSection
+                id="access"
+                title={t('gatedPublish.sectionAccess')}
+                icon={GearIcon}
+                optional
+                {...formSections.bind('access')}
+                // A pack lookup failure opens Access so its note shows.
+                revealKey={sectionErrorKey('access') || (packsError ? 'packs' : 0)}
+                summary={packs === null ? t('gatedPublish.pack.loading') : (accessSummary || null)}
+            >
             {thresholdActive ? (
                 <>
                     <Input
                         type="text"
                         label={t('gatedPublish.unlockThreshold')}
                         help={t('gatedPublish.thresholdHint', { tick: gateTick })}
-                        optional
                         inputMode="decimal"
                         enterKeyHint="go"
                         aria-label={t('gatedPublish.unlockThreshold')}
@@ -1055,56 +1213,35 @@ export function GatedPublishForm({
                 </>
             ) : null}
 
-            <RadioGroup
-                legend={t('gatedPublish.pack')}
+            {/* With no existing pack the only choice is a new one, so
+                the Pack question shows only when there is a pack to add to. */}
+            {(packs || []).length > 0 ? (
+            // The themed dropdown with an icon per option, never radios (G119).
+            // Labels stay plain text, since the trigger's name reads the label.
+            <IconSelect
+                label={t('gatedPublish.pack')}
                 help={t('gatedPublish.pack.empty')}
-                name="pack"
                 value={packChoice}
                 onChange={(nextValue) => setPackChoice(nextValue)}
                 disabled={ownerMissing}
                 options={[
-                    { value: 'new', label: t('gatedPublish.pack.new') },
+                    { value: 'new', label: t('gatedPublish.pack.new'), icon: <PlusIcon /> },
                     ...(packs || []).map((p) => ({
                         value: p.keyHash,
-                        label: (
-                            <>
-                                {t('gatedPublish.pack.add')} <code>{String(p.keyHash).slice(0, 12)}…</code>
-                                {' '}{t('gatedPublish.pack.unlockTogether')}
-                            </>
-                        ),
+                        label: `${t('gatedPublish.pack.add')} ${String(p.keyHash).slice(0, 12)}…`,
+                        sub: t('gatedPublish.pack.unlockTogether'),
+                        icon: <KeyIcon />,
                     })),
                 ]}
             />
+            ) : null}
             {packs === null ? (
                 <p className={styles.hint}>{t('gatedPublish.pack.loading')}</p>
             ) : packsError ? (
                 <FieldNote variant="error">{packsError}</FieldNote>
             ) : null}
-
-            {feeTiers ? (
-                <FeeSelector
-                    chainId={chainId}
-                    label={t('send.networkFee')}
-                    coinTicker={coinTicker}
-                    tiers={feeTiers}
-                    value={feePick}
-                    onChange={setFeePick}
-                    customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                />
+            </FormSection>
             ) : null}
-
-            {isWatcherMode ? (
-                <p className={styles.hint}>
-                    {t('gatedPublish.watcherHint')}
-                </p>
-            ) : null}
-            <Checkbox
-                label={t('gatedPublish.ackForever')}
-                checked={ackForever}
-                onChange={(e) => setAckForever(e.target.checked)}
-                disabled={ownerMissing}
-            />
-
-        </FormPage>,
+        </FormFrame>,
     );
 }

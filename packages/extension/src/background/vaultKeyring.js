@@ -28,6 +28,7 @@ import { clearSigningSecret, saveSigningSecret } from './signingSecretSession.js
 
 /**
  * @typedef {Object} VaultKeyring
+ * @property {{ load: () => Promise<any>, save: (meta: any) => Promise<void> } | null} metaBackend   the meta slot when writable, else null
  * @property {() => Promise<object | null>} kdfParams   the params the vault key is derived under
  * @property {(next: { masterKey: Uint8Array, password: string, previousKey: Uint8Array }) => Promise<boolean>} commit
  *   called once the vault blob is sealed under the new key; caches it and the new password,
@@ -46,7 +47,7 @@ function sameKeyBytes(a, b) {
 
 /**
  * @param {Object} backends
- * @param {{ load: () => Promise<any> }} backends.metaBackend
+ * @param {{ load: () => Promise<any>, save?: (meta: any) => Promise<void> }} backends.metaBackend
  * @param {{ load: () => Promise<Uint8Array | null>, save: (key: Uint8Array, options?: { expected?: Uint8Array | null }) => Promise<void>, clear: () => Promise<void> } | null} [backends.sessionBackend]
  * @param {{ save: (blob: Uint8Array) => Promise<void>, clear: () => Promise<void> } | null} [backends.signingSecretBackend]
  * @returns {VaultKeyring}
@@ -56,6 +57,9 @@ export function createVaultKeyring({ metaBackend, sessionBackend = null, signing
         throw new Error('createVaultKeyring: metaBackend is required');
     }
     return {
+        // The meta slot itself, when it can be written: the recovery-phrase
+        // reset record lives beside the kdfParams (flows/phraseRecovery.js).
+        metaBackend: typeof metaBackend.save === 'function' ? metaBackend : null,
         async kdfParams() {
             const meta = /** @type {any} */ (await metaBackend.load());
             return meta?.kdfParams ?? null;

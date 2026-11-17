@@ -89,6 +89,12 @@
     cursor: pointer;
 }
 
+@media (hover: hover) and (pointer: fine) {
+    .cellButton:hover {
+        background: var(--xc-row-hover-bg);
+    }
+}
+
 .cellButton:focus-visible {
     border-radius: var(--xc-radius-xs);
     outline: 2px solid var(--xc-focus-ring);

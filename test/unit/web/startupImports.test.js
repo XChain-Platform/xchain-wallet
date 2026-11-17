@@ -38,6 +38,22 @@ const styleGuideMainSource = readFileSync(
     resolve(process.cwd(), 'packages/web/src/style-guide/main.jsx'),
     'utf8',
 );
+const lockedSource = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/shared/routes/Locked.jsx'),
+    'utf8',
+);
+const autoLockPolicySource = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/shared/hooks/useAutoLockPolicy.js'),
+    'utf8',
+);
+const effectiveNetworkSource = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/flows/effectiveNetwork.js'),
+    'utf8',
+);
+const clipboardSource = readFileSync(
+    resolve(process.cwd(), 'packages/core/src/shared/clipboard.js'),
+    'utf8',
+);
 
 const deferredRoutes = [
     'Home',
@@ -49,7 +65,8 @@ const deferredRoutes = [
     'AirdropForm',
     'TokenAdminForm',
     'AddressList',
-    'ManageToken',
+    // ManageToken is gone from the shell: the manage-token route draws the
+    // lazy TokenDetail (G12), asserted below.
     'PsbtSignForm',
     'MessagingInbox',
     'AddAccountForm',
@@ -62,7 +79,8 @@ const deferredRoutes = [
     'ScanRoute',
     'ContractsList',
     'ContractDetail',
-    'ContractStakeForm',
+    // The one Staking form (contract and validator staking routes).
+    'StakingForm',
     'DeployContractForm',
     'ExecuteContractForm',
     'ContractFundsForm',
@@ -82,6 +100,13 @@ describe('web startup imports', () => {
         expect(appSource).not.toContain('MenuRoute');
     });
 
+    it('draws the token page through the lazy TokenDetail and never imports ManageToken', () => {
+        expect(appSource).toContain(
+            "const TokenDetail = lazyRoute(() => import('@xchain-wallet/core/shared/routes/TokenDetail.jsx'), 'TokenDetail');",
+        );
+        expect(appSource).not.toContain('shared/routes/ManageToken.jsx');
+    });
+
     it.each(['CreateWallet', 'ImportWallet', 'PairPartnerWallet'])(
         'defers the secondary onboarding screen %s',
         (routeName) => {
@@ -94,12 +119,30 @@ describe('web startup imports', () => {
         },
     );
 
-    it('keeps the first onboarding and lock screens synchronous', () => {
-        for (const routeName of ['Onboarding', 'Locked']) {
-            expect(appSource).toContain(
-                `import { ${routeName} } from '@xchain-wallet/core/shared/routes/${routeName}.jsx';`,
-            );
-            expect(appSource).not.toContain(`const ${routeName} = lazyRoute(`);
+    it('defers onboarding while keeping the returning-user lock screen synchronous', () => {
+        expect(appSource).toContain(
+            "const Onboarding = lazyRoute(() => import('@xchain-wallet/core/shared/routes/Onboarding.jsx'), 'Onboarding');",
+        );
+        expect(appSource).toMatch(
+            /<Suspense fallback=\{<Loading \/>\}>[\s\S]*?<Onboarding\b/,
+        );
+        expect(appSource).toContain(
+            "import { Locked } from '@xchain-wallet/core/shared/routes/Locked.jsx';",
+        );
+        expect(appSource).not.toContain('const Locked = lazyRoute(');
+    });
+
+    it('defers Forgot Password without adding a loading flash to the lock screen', () => {
+        expect(lockedSource).toContain("() => import('./ForgotPassword.jsx')");
+        expect(lockedSource).not.toContain("import { ForgotPassword } from './ForgotPassword.jsx';");
+        expect(lockedSource).toContain('useIdlePreload(DemoExitConfirm, ForgotPassword);');
+        expect(lockedSource).toContain('openWhenLoaded(ForgotPassword, () => setForgotOpen(true))');
+    });
+
+    it('keeps the persisted-settings validator out of first-paint helpers', () => {
+        for (const source of [autoLockPolicySource, effectiveNetworkSource, clipboardSource]) {
+            expect(source).toContain('schemas/settingsStartup.js');
+            expect(source).not.toMatch(/schemas\/settings\.js/);
         }
     });
 
@@ -207,20 +250,20 @@ describe('web startup imports', () => {
         expect(appSource).not.toContain('resetNetworkFilterWallets');
 
         expect(appSource.match(/onSelect=\{handleMenuSelect\}/g)).toHaveLength(2);
-        expect(appSource).toContain("if (view === unlockedView) {");
+        expect(appSource).toContain("if (view === unlockedView && !nav.canGoBack) {");
         expect(appSource).toContain('if (main) main.scrollTop = 0;');
-        expect(appSource).toContain("const returnView = ROUTE_NAV_SECTIONS[unlockedView] === view ? 'home' : unlockedView;");
+        // Every menu, sidebar and tab row opens its page as a root (G06): the
+        // history starts over on it, so it shows no Back.
+        expect(appSource).not.toContain('TAB_BAR_DESTINATIONS.includes');
+        expect(appSource).toMatch(/opens its page as a root[\s\S]{0,120}?palette\.navigate\(view\);/);
+        expect(appSource).not.toContain('ROUTE_NAV_SECTIONS');
 
         expect(appSource).toContain('setSendPrefill(null);');
         expect(appSource).toContain('setReceivePrefill(null);');
         expect(appSource).toContain("setHistoryInitialQuery('');");
         expect(appSource).toContain('setHistoryInitialFocus(null);');
-        expect(appSource).toContain('setDispensersBackTo(returnView);');
-        expect(appSource).toContain("if (view === 'contacts' || view === 'lists') {");
-        expect(appSource).toContain('setDirectoryReturnView(returnView);');
-        expect(appSource).not.toContain("if (view === 'contacts') setFormReturnView");
-        expect(appSource).toContain('setAlertsReturnView(returnView);');
-        expect(appSource).toContain('setUnlockedView(alertsReturnView);');
+        expect(appSource).not.toMatch(/ReturnView|BackTo\b|ReturnTo\b/);
+        expect(appSource).toMatch(/<AlertsRoute[\s\S]*?onBack=\{goBack\}/);
     });
 
     it('loads the action catalogue together with the Actions menu', () => {

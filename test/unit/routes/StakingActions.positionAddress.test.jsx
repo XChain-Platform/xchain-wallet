@@ -9,8 +9,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
-import { DelegationActionForm } from '../../../packages/core/src/shared/routes/DelegationActionForm.jsx';
+// The staking position routes: the one Staking form on the network.
+import {
+    NetworkDelegationRoute as DelegationActionForm,
+    NetworkPositionRoute as StakingActionForm,
+} from '../../helpers/stakingFormRoutes.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 const ACTIVE = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
@@ -54,7 +57,7 @@ describe('validator actions opened from a stake detail', () => {
         expect(await screen.findByText('9 XCHAIN available')).toBeInTheDocument();
         await waitFor(() => expect(screen.getByLabelText('Amount (XCHAIN)')).toHaveValue('9'));
         expect(messaging.getRewardsForAddress).toHaveBeenCalledWith({ chainId: CHAIN, address: OWNER });
-        fireEvent.click(screen.getByRole('button', { name: 'Claim rewards' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Claim Rewards$/ }));
         await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalled());
         expect(messaging.composeForConfirm.mock.calls[0][0].from.address).toBe(OWNER);
     });

@@ -127,7 +127,8 @@ describe('StakingList owner line', () => {
         );
 
         await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
-        expect(screen.queryAllByText('bc1qpa…paid')).toHaveLength(0);
-        expect(screen.getAllByText('bc1qid…idle')).toHaveLength(1);
+        // The owner line is the address in full when it fits (G99), labelled with it.
+        expect(screen.queryAllByLabelText(PAID)).toHaveLength(0);
+        expect(screen.getAllByLabelText(IDLE)).toHaveLength(1);
     });
 });

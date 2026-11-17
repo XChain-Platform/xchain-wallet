@@ -15,23 +15,22 @@ import {
     Chip,
     EmptyState,
     Icon,
+    IconSelect,
+    InfoTip,
     Input,
     ListPage,
     PageHeader,
-    RadioGroup,
     Screen,
     SegmentedControl,
     SectionHeader,
     Skeleton,
     StatusMessage,
 } from '@xchain-wallet/core/ui';
-import * as branding from '@xchain-wallet/core/branding/branding.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useWalletSource } from '../hooks/useDemoGuard.jsx';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useSettings } from '../hooks/useSettings.js';
-import { useActionProofVerification } from '../hooks/useProofVerification.js';
 import { useToast } from '../components/ToastHost.jsx';
 import { tickerForDescriptor } from '../../registry/coinTicker.js';
 import { groupHistoryEntries, groupHistoryItemsByLocalDay } from '../utils/historyGrouping.js';
@@ -46,11 +45,11 @@ import {
 import { getFormatLocale, t } from '../../i18n/index.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
-import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { ActivityRow, actionIconForAction } from '../components/ActivityRow.jsx';
 import { flows as flowsLib } from '@xchain-wallet/core';
-import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/actionsMenu.js';
+import '../../i18n/locales/en/ui.js';
 import {
     applyHistoryFilters,
     classifyEntryStatus,
@@ -66,8 +65,16 @@ import { useResponsivePlaceholder } from '../../ui/Input.jsx';
 import { useReachability } from '../hooks/useReachability.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
+// The standard list filter, on the title line.
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
+import {
+    LIST_DETAIL_MIN_WIDTH,
+    ListDetailSplit,
+    listDetailStyles,
+    useWideContent,
+} from '../components/PanelSplit.jsx';
 import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.js';
-import { BalancesUncheckedState, useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
+import { useBalancesUnchecked } from '../components/BalancesUncheckedState.jsx';
 import { useLongOperationStatus } from '../hooks/useLongOperationStatus.js';
 import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import { readHistoryCache, writeHistoryCache } from '../utils/historyCache.js';
@@ -77,7 +84,10 @@ import { Settings } from './Settings.jsx';
 import { hasAvailableChain, NO_CHAINS_BODY, NO_CHAINS_TITLE } from '../utils/chainAvailability.js';
 import styles from './History.module.css';
 import { chainRegistry, peerCacheKey, OFFLINE_ACTION_REASON, DoubleChevron, coinOfChainId, formatTimestamp } from './HistoryShared.jsx';
+// History's filter controls sized for the title-line filter panel.
+import filterPanel from './HistoryFilterPanel.module.css';
 import { EntryRow } from './HistoryEntryRow.jsx';
+import { ActionDetail } from './ActionDetail.jsx';
 
 export { DetailCard, detailTransferDirection, detailActionLabel } from './HistoryDetailCard.jsx';
 export { isGeneratedAddressLabel, EntryRow } from './HistoryEntryRow.jsx';
@@ -295,10 +305,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const { messaging } = source;
     const variant = screenVariantFor(shell);
     const isFull = variant === 'full';
+    const [layoutRef, wideContent] = useWideContent(LIST_DETAIL_MIN_WIDTH, true);
     const { showToast } = useToast();
     const { overall: reachabilityOverall } = useReachability({});
     const networkOffline = reachabilityOverall === 'offline';
-    const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
+    const { recheck: recheckBalances } = useBalancesUnchecked();
     const { offline: offlineVerdict } = useNetworkOffline({ walletId });
     // Offline is the device report or the probe's verdict that no service
     // answers; either way the reads cannot finish, so the page shows its saved
@@ -334,7 +345,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // Cluster G FOLLOWUP 5: Unix ms of the last successful per-chain
     // history+links fan-out completion. Surfaces as a "Last synced …"
     // hint in the filter bar so the user can spot stale views.
-    const [historyFetchedAt, setHistoryFetchedAt] = useState(
+    // Still recorded on each load; the page no longer shows an "Updated" line (operator 2026-11-13).
+    const [, setHistoryFetchedAt] = useState(
         /** @type {number | null} */ (null),
     );
     const [loadingChains, setLoadingChains] = useState(/** @type {Set<string>} */ (new Set()));
@@ -373,8 +385,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     const [dateFrom, setDateFrom] = useState(() => rememberedView?.dateFrom ?? isoDateDaysAgo(29));
     const [dateTo, setDateTo] = useState(() => rememberedView?.dateTo ?? isoDateDaysAgo(0));
     const [dateError, setDateError] = useState('');
-    const [phoneFiltersOpen, setPhoneFiltersOpen] = useState(false);
-    const [moreFiltersOpen, setMoreFiltersOpen] = useState(Boolean(rememberedView?.moreFiltersOpen));
+    // The filter panel no longer has a More filters toggle; the remembered
+    // value is carried through so a saved view keeps it.
+    const moreFiltersOpen = Boolean(rememberedView?.moreFiltersOpen);
     useEffect(() => {
         writeHistoryViewState(walletId, accountId, {
             initialSearchQuery,
@@ -394,6 +407,23 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // The export modal controls only the file representation. Row selection
     // remains owned by the History filters so the file matches the list.
     const [exportModalOpen, setExportModalOpen] = useState(false);
+    // The header's ⋯ menu: Export history and Refresh (operator 2026-11-13).
+    const [moreOpen, setMoreOpen] = useState(false);
+    const moreRef = useRef(null);
+    // The ⋯ button: the export dialog hands focus back here, since the menu
+    // item that opened it is gone by the time it closes.
+    const moreButtonRef = useRef(null);
+    useEffect(() => {
+        if (!moreOpen) return undefined;
+        const onDown = (e) => { if (!moreRef.current?.contains(e.target)) setMoreOpen(false); };
+        const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
+        window.addEventListener('mousedown', onDown);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousedown', onDown);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [moreOpen]);
     const [exportFormat, setExportFormat] = useState(/** @type {'csv' | 'json'} */ ('csv'));
     const [exportColumns, setExportColumns] = useState(
         /** @type {Set<string>} */ (new Set(flowsLib.EXPORT_COLUMNS)),
@@ -423,16 +453,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // route resolves, ref-flag this so we don't re-select on every
     // re-render or after the user manually navigates away from the row.
     const initialFocusFiredRef = useRef(false);
-    const searchInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+    // Holds the title-line filter so the '/' shortcut can reach it.
+    const filterMenuRef = useRef(/** @type {HTMLSpanElement | null} */ (null));
     const timelineRef = useRef(/** @type {HTMLUListElement | null} */ (null));
     const fullSearchPlaceholder = t('history.filters.searchPlaceholder');
     const searchPlaceholder = useResponsivePlaceholder(
         fullSearchPlaceholder,
         t('history.filters.searchLabel'),
     );
-    const searchDescriptionId = searchPlaceholder !== fullSearchPlaceholder
-        ? 'history-search-description'
-        : undefined;
 
     const closeSelectedRow = useCallback(() => {
         if (!selectedKey) return;
@@ -446,7 +474,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             item?.querySelector('button[data-history-row]')?.focus();
         });
     }, [selectedKey]);
-    useBackHandler(selectedKey ? closeSelectedRow : undefined, false, 'screen');
+    useBackHandler(!wideContent && typeof onSelectEntry !== 'function' && selectedKey
+        ? closeSelectedRow
+        : undefined, false, 'screen');
 
     useEffect(() => {
         if (typeof messaging.listContacts !== 'function') return undefined;
@@ -939,7 +969,8 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             for (const key of [...rememberedMempoolRef.current.keys()]) {
                 if (!liveKeys.has(key)) rememberedMempoolRef.current.delete(key);
             }
-            merged.entries.sort(compareMergedEntries);
+            const sortedAtMs = Date.now();
+            merged.entries.sort((a, b) => compareMergedEntries(a, b, sortedAtMs));
             const fetchedAt = Date.now();
             setEntries(merged.entries);
             setLoadingChains(new Set());
@@ -1100,14 +1131,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         walletAddressSet, contactNamesByAddress,
     ]);
 
-    // §7/§8: SPV action verification. Verify only visible, confirmed
-    // entries that carry a numeric action index (an unconfirmed action has
-    // no checkpointable block yet). Off for sample data and when the user
-    // opts out via `verifyProofs` (default on). The map is keyed by
-    // entry.key; EntryRow badges from it.
     const [fiatToggleBusy, setFiatToggleBusy] = useState(false);
-    const verifyProofsEnabled = proofSettings.settings?.verifyProofs !== false
-        && source.live;
     // History-local fiat toggle, persisted on the Settings record
     // (same nested-patch pattern as the other §35 settings writes) so the
     // choice survives navigation and syncs across shells.
@@ -1117,7 +1141,14 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // button must not have a keyboard path that opens the same action.
     useScreenShortcuts({
         keys: {
-            '/': () => { searchInputRef.current?.focus(); },
+            // The search box lives in the title-line filter, so
+            // '/' focuses it there, opening the filter first when it is shut.
+            '/': () => {
+                const holder = filterMenuRef.current;
+                const input = holder?.querySelector('input[type="search"]');
+                if (input) input.focus();
+                else holder?.querySelector('button[aria-haspopup="dialog"]')?.click();
+            },
             e: () => {
                 if (visibleEntries.length > 0) setExportModalOpen(true);
             },
@@ -1184,6 +1215,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         multisigOnly,
     ].filter(Boolean).length;
     const filtersActive = activeFilterCount > 0;
+    // The title-bar filter lights only while something differs from the
+    // default (G04, G95); the opening last-30-days window is the default, so
+    // it does not light the button. filtersActive still counts it, since
+    // Clear filters (All dates) would change it.
+    const isDefaultDateWindow = (!dateFrom && !dateTo)
+        || (dateTo === isoDateDaysAgo(0) && dateFrom === isoDateDaysAgo(29));
+    const filterButtonActive = [
+        Boolean(searchQuery),
+        actionTypeFilter.size > 0,
+        statusFilter.size > 0,
+        !isDefaultDateWindow,
+        chainFilterActive,
+        crossChainOnly,
+        multisigOnly,
+    ].some(Boolean);
 
     const toggleSetMember = (setter) => (id) => {
         setter((prev) => {
@@ -1364,36 +1410,30 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         : HISTORY_PAGE_SIZE;
     const renderedItems = groupedItems.slice(0, visibleItemCount);
     const renderedTimelineItems = useMemo(
-        () => groupHistoryItemsByLocalDay(renderedItems, dayGroupingNowMs)
-            .flatMap((dayGroup) => [
-                { kind: 'day', key: `day-heading:${dayGroup.key}`, label: dayGroup.label },
-                ...dayGroup.items,
-            ]),
+        // Sections follow each row's status as of now; the day clock only
+        // moves at midnight, and a send can drop at any time.
+        // History is one plain list, no day headings (operator 2026-11-13);
+        // the grouping still orders the rows by day and status.
+        () => groupHistoryItemsByLocalDay(renderedItems, dayGroupingNowMs, Date.now())
+            .flatMap((dayGroup) => dayGroup.items),
         [renderedItems, dayGroupingNowMs],
     );
 
-    // Each proof check is two explorer reads, so only the rows the screen can
-    // show are checked: the rendered window, plus the members of an expanded
-    // group card. Checking every filtered row would fan out one check per row
-    // on every open, against the explorer's per-minute limits.
-    const verifyItems = useMemo(() => {
-        const shown = [];
-        for (const item of renderedItems) {
-            if (item.kind !== 'group') {
-                shown.push(item.entry);
-            } else if (expandedGroups.has(item.key)) {
-                shown.push(...item.members.slice(0, groupMemberLimits[item.key] || HISTORY_PAGE_SIZE));
-            }
-        }
-        return shown
-            .filter((e) => Number(e.blockIndex) > 0 && e.actionIndex != null && e.actionIndex !== '')
-            .map((e) => ({ key: e.key, chainId: e.chainId, actionIndex: e.actionIndex }));
-    }, [renderedItems, expandedGroups, groupMemberLimits]);
-    const actionVerifyMap = useActionProofVerification({
-        messaging,
-        items: verifyItems,
-        enabled: verifyProofsEnabled && browserOnline,
-    });
+    // Wide History always has a detail. Keep an existing selection even when a
+    // filter temporarily hides its row, and otherwise pick the first filtered
+    // entry after the bulk list read completes.
+    useEffect(() => {
+        if (!wideContent || !historyLoaded || entries.length === 0) return;
+        if (selectedKeyRef.current && entries.some((entry) => entry.key === selectedKeyRef.current)) return;
+        const first = visibleEntries[0];
+        if (!first) return;
+        selectedKeyRef.current = first.key;
+        selectedTxRef.current = rememberedSelection(first);
+        setSelectedKey(first.key);
+    }, [wideContent, historyLoaded, entries, visibleEntries]);
+
+    // The list rows carry no proof verdict (action, details, time and status
+    // only); the action's detail page runs and shows its own proof check.
 
     useEffect(() => {
         setListWindow({ scope: listScope, count: HISTORY_PAGE_SIZE });
@@ -1533,10 +1573,16 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         setRefreshTick((n) => n + 1);
     }, [messaging]);
 
-    // Every shell routes a row to the standalone detail page; only a host
-    // that wires no handler falls back to the inline expand.
-    const opensDetail = typeof onSelectEntry === 'function';
+    // Wide content owns the selection and swaps the embedded detail without
+    // navigation. Narrow content keeps the standalone route behavior.
+    const opensDetail = wideContent || typeof onSelectEntry === 'function';
     const onRowClick = useCallback((entry) => {
+        if (wideContent) {
+            selectedKeyRef.current = entry.key;
+            selectedTxRef.current = rememberedSelection(entry);
+            setSelectedKey(entry.key);
+            return;
+        }
         // When the parent shell wired the navigation callback, send the
         // selected entry up so it can route to the standalone ActionDetail
         // page. Falls back to the legacy inline expand for builds /
@@ -1608,7 +1654,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     });
             }
         }
-    }, [browserOnline, messaging, onSelectEntry]);
+    }, [browserOnline, messaging, onSelectEntry, wideContent]);
 
     const onTimelineKeyDown = (event) => {
         if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -1629,226 +1675,93 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         rows[next]?.focus();
     };
 
-    const header = (
-        <PageHeader
-            onBack={onBack}
-            backLabel={t('common.backToHome')}
-            title={t('history.title')}
-        />
-    );
-    // The page header holds only the title and Back, so Refresh sits in the
-    // content's actions row. It shows whether or not there is any history
-    // yet: an empty list is where a refresh matters most. Export joins it
-    // once there is history to export, outside the collapsible filter card
-    // so it stays reachable while the filters are folded away.
-    const actions = (
-        <>
-            <Button
-                variant="secondary"
-                icon={(
-                    <span className={refreshing ? styles.refreshing : undefined}>
-                        <Icon.RefreshIcon />
-                    </span>
-                )}
-                title={networkOffline ? t('history.offline.refreshTitle') : undefined}
-                disabled={networkOffline || refreshing || !historyLoaded}
-                onClick={() => {
-                    const throttle = pollThrottleRef.current;
-                    if (throttle.isInFlight()) return;
-                    throttle.reset();
-                    throttle.start();
-                    setRefreshing(true);
-                    setRefreshTick((n) => n + 1);
-                }}
+    // Home's network filter over History's per-chain set. The set
+    // stays the source of truth (remembered across visits, reset by Clear
+    // filters, restored by Undo); a family reads back when the set is exactly
+    // that family's chains, and any other subset reads "All" with the
+    // filter button still showing that a filter is on.
+    const coinOfActiveChain = (cid) => chainRegistry.get(cid)?.coin || coinOfChainId(cid);
+    const historyCoinFamilies = [...new Set(activeChainIds.map(coinOfActiveChain).filter(Boolean))];
+    let historyNetworkFilter = 'all';
+    if (chainFilterActive && enabledChains.size > 0) {
+        const fams = new Set([...enabledChains].map(coinOfActiveChain));
+        if (fams.size === 1) {
+            const [fam] = fams;
+            const famChains = activeChainIds.filter((cid) => coinOfActiveChain(cid) === fam);
+            if (famChains.length === enabledChains.size && famChains.every((cid) => enabledChains.has(cid))) {
+                historyNetworkFilter = fam;
+            }
+        }
+    }
+    const setHistoryNetworkFilter = (fam) => {
+        const next = fam === 'all'
+            ? new Set(activeChainIds)
+            : new Set(activeChainIds.filter((cid) => coinOfActiveChain(cid) === fam));
+        setEnabledChains(next);
+        writeChainSet(historyChainFilterKey(walletId), fam === 'all' ? null : next);
+    };
+    // The standard filter on the title line (search, network, then History's
+    // type, status, date filters and view options), so the page body starts
+    // with the list or the empty state.
+    const filterMenu = (
+        <span ref={filterMenuRef} className={filterPanel.holder}>
+            <ListFilterMenu
+                query={searchQuery}
+                onQueryChange={setSearchQuery}
+                // Lit only while a filter is off its default (the opening
+                // last-30-days window is the default).
+                active={filterButtonActive}
+                label={t('history.filters.label')}
+                searchPlaceholder={searchPlaceholder}
+                searchLabel={t('history.filters.searchLabel')}
+                chainRegistry={activeChainIds.length > 0 ? chainRegistry : null}
+                coinFamilies={historyCoinFamilies}
+                networkFilter={historyNetworkFilter}
+                onNetworkFilterChange={setHistoryNetworkFilter}
             >
-                {refreshing ? t('history.refreshing') : t('history.refresh')}
-            </Button>
-            {entries.length > 0 ? (
-                <>
-                    <Button
-                        className={`${styles.toolbarControl} ${styles.exportButton}`}
-                        variant="secondary"
-                        icon={<Icon.DownloadIcon />}
-                        aria-haspopup="dialog"
-                        aria-expanded={exportModalOpen}
-                        aria-describedby={visibleEntries.length === 0 ? 'history-export-disabled-reason' : undefined}
-                        onClick={() => setExportModalOpen(true)}
-                        disabled={visibleEntries.length === 0}
-                    >
-                        {t('history.export.open')}
-                    </Button>
-                    {visibleEntries.length === 0 ? (
-                        <span
-                            id="history-export-disabled-reason"
-                            className={styles.visuallyHidden}
-                        >
-                            {t('history.export.noMatchingRows')}
-                        </span>
-                    ) : null}
-                </>
-            ) : null}
-        </>
-    );
-    const wrap = (children) => (
-        <Screen variant={variant} header={header}>
-            {children}
-        </Screen>
-    );
-
-    if (networkSettingsOpen) {
-        return (
-            <Settings
-                onBack={() => setNetworkSettingsOpen(false)}
-                activeWallet={{ id: walletId }}
-                initialSubpageId="network"
-            />
-        );
-    }
-    if (!hasAvailableChain(proofSettings, chainRegistry)) {
-        return wrap(
-            <ListPage>
-                <EmptyState
-                    title={NO_CHAINS_TITLE}
-                    body={NO_CHAINS_BODY}
-                    actionLabel={t('common.openNetworkSettings')}
-                    onAction={() => setNetworkSettingsOpen(true)}
-                    actionIcon={<Icon.GearIcon />}
+                <CheckboxPicker
+                    options={ACTION_TYPE_OPTIONS}
+                    selected={actionTypeFilter}
+                    onToggle={toggleSetMember(setActionTypeFilter)}
+                    allLabel={t('history.filters.allActionTypes')}
+                    summaryNoun={t('history.filters.actionType')}
+                    iconForId={actionTypeIcon}
+                    menuHeader={t('history.filters.actionTypes')}
                 />
-            </ListPage>,
-        );
-    }
-
-    if (loadError) {
-        return wrap(
-            <ListPage>
-                <StatusMessage
-                    variant="error"
-                    recovery={{
-                        label: t('common.tryAgain'),
-                        onAction: () => {
-                            setLoadError(null);
-                            setAddressesByChain(null);
-                            setHistoryLoaded(false);
-                            setAddressesReload((value) => value + 1);
-                        },
+                <CheckboxPicker
+                    options={STATUS_OPTIONS}
+                    selected={statusFilter}
+                    onToggle={toggleSetMember(setStatusFilter)}
+                    allLabel={t('history.filters.allStatuses')}
+                    summaryNoun={t('history.filters.status')}
+                    menuHeader={t('history.filters.statusHeader')}
+                />
+                <CheckboxPicker
+                    options={[
+                        { id: 'crosschain', label: 'Cross-chain only' },
+                    ]}
+                    selected={new Set([
+                        ...(crossChainOnly ? ['crosschain'] : []),
+                    ])}
+                    onToggle={(id) => {
+                        if (id === 'crosschain') setCrossChainOnly((v) => !v);
                     }}
-                >
-                    {loadError}
-                </StatusMessage>
-            </ListPage>,
-        );
-    }
-    if (!addressesByChain) {
-        return wrap(
-            <ListPage actions={actions}>
-                <div role="status" aria-label={t('history.loading')} aria-busy="true">
-                    <Skeleton.List rows={5} rowHeight={88} avatar={false} />
-                </div>
-            </ListPage>,
-        );
-    }
-    if (activeChainIds.length === 0) {
-        return wrap(
-            <ListPage>
-                <EmptyState
-                    title={t('history.empty.noAddressesTitle')}
-                    body={t('history.empty.noAddressesBody')}
-                    actionLabel={onReceive ? t('home.receive') : undefined}
-                    onAction={onReceive}
-                    actionIcon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+                    allLabel={t('history.filters.noSpecialFilters')}
+                    summaryNoun={t('history.filters.filter')}
+                    iconForId={specialFilterIcon}
+                    menuHeader={t('history.filters.special')}
                 />
-            </ListPage>,
-        );
-    }
-
-    // Offline with no saved history, the empty state below says so, and the
-    // page notice stays out of its way so one state shows one message.
-    const offlineWithoutHistory = offlineVerdict && historyLoaded && loadingChains.size === 0
-        && entries.length === 0 && visibleEntries.length === 0;
-    const balancesUnavailableEmpty = balancesUnchecked && !offlineVerdict && !crossChainOnly
-        && historyLoaded && loadingChains.size === 0
-        && entries.length === 0 && visibleEntries.length === 0;
-
-    return wrap(
-        <ListPage
-            notices={(!browserOnline || showingCachedHistory) && !offlineWithoutHistory ? (
-                <StatusMessage
-                    variant="warning"
-                    id="history-offline-action-reason"
-                >
-                    {!browserOnline
-                        ? t('history.offline.cached')
-                        : t('history.offline.refreshFailed')}
-                </StatusMessage>
-            ) : unreadChainIds.length > 0 && entries.length > 0 ? (
-                <StatusMessage variant="warning" id="history-unread-chains">
-                    {t('history.unreadChains', {
-                        chains: unreadChainIds.map((cid) => chainRegistry.get(cid)?.displayName || cid).join(', '),
-                    })}
-                </StatusMessage>
-            ) : null}
-            actions={balancesUnavailableEmpty ? null : actions}
-            toolbar={entries.length > 0 ? (
-            <>
-                <div className={styles.toolbarTop}>
-                    <div className={styles.phoneFilterToggle}>
-                        <Button
-                            className={styles.toolbarControl}
-                            variant="secondary"
-                            block
-                            icon={<Icon.FilterIcon />}
-                            aria-expanded={phoneFiltersOpen}
-                            aria-controls="history-filter-panel"
-                            onClick={() => setPhoneFiltersOpen((open) => !open)}
-                        >
-                            {t('history.filters.toggle', { count: activeFilterCount })}
-                        </Button>
-                    </div>
-                </div>
-                <div
-                    id="history-filter-panel"
-                    className={`${styles.filterCard} ${phoneFiltersOpen ? styles.filterCardOpen : ''}`}
-                    role="group"
-                    aria-label={t('history.filters.label')}
-                >
-                <div className={styles.searchRow}>
-                    <Input
-                        ref={searchInputRef}
-                        type="search"
-                        enterKeyHint="search"
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        className={styles.searchInput}
-                        placeholder={searchPlaceholder}
-                        aria-label={t('history.filters.searchLabel')}
-                        aria-describedby={searchDescriptionId}
-                        value={searchQuery}
-                        onChange={(ev) => setSearchQuery(ev.target.value)}
-                        autoComplete="off"
-                    />
-                    {searchDescriptionId ? (
-                        <span id={searchDescriptionId} className="sr-only">
-                            {fullSearchPlaceholder}
-                        </span>
-                    ) : null}
-                    {searchQuery ? (
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            icon={<Icon.XIcon />}
-                            aria-label={t('history.filters.clearSearch')}
-                            onClick={() => {
-                                setSearchQuery('');
-                                searchInputRef.current?.focus();
-                            }}
-                        >
-                            {t('common.clear')}
-                        </Button>
-                    ) : null}
-                </div>
-
+                {multisigAddress ? (
+                    <Button
+                        variant={multisigOnly ? 'primary' : 'ghost'}
+                        size="sm"
+                        icon={<Icon.MultisigIcon />}
+                        aria-pressed={multisigOnly}
+                        onClick={() => setMultisigOnly((v) => !v)}
+                    >
+                        {t('history.filters.multisigOnly')}
+                    </Button>
+                ) : null}
                 <div className={styles.dateRow}>
                     <Input
                         type="date"
@@ -1902,20 +1815,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         </Button>
                     </div>
                 ) : null}
-
-                <div className={styles.filterFooter}>
-                    <Chip
-                        className={styles.toolbarControl}
-                        pressed={moreFiltersOpen}
-                        onPressedChange={() => setMoreFiltersOpen((v) => !v)}
-                        aria-expanded={moreFiltersOpen}
-                        aria-controls="history-more-filters"
-                    >
-                        <span>{t('history.filters.additionalDetails')}</span>
-                        {moreFiltersOpen
-                            ? <DoubleChevron direction="up" />
-                            : <DoubleChevron direction="down" />}
-                    </Chip>
+                <div className={`${styles.filterFooter} ${filterPanel.viewOptions}`}>
                     <Chip
                         className={styles.toolbarControl}
                         pressed={showFiatInHistory}
@@ -1937,85 +1837,233 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         value={groupingMode}
                         onChange={setGroupingMode}
                         items={[
-                            { id: 'grouped', label: t('history.filters.grouped') },
-                            { id: 'flat', label: t('history.filters.flat') },
+                            { id: 'grouped', label: <><Icon.GridIcon aria-hidden="true" /><span>{t('history.filters.grouped')}</span></> },
+                            { id: 'flat', label: <><Icon.TokenListIcon aria-hidden="true" /><span>{t('history.filters.flat')}</span></> },
                         ]}
                     />
                 </div>
-
-                {moreFiltersOpen ? (
-                    <div
-                        id="history-more-filters"
-                        className={styles.morePanel}
-                        role="group"
-                        aria-label={t('history.filters.advanced')}
-                    >
-                        <ChainPicker
-                            activeChainIds={activeChainIds}
-                            chainRegistry={chainRegistry}
-                            enabledChains={enabledChains}
-                            onChange={(next) => {
-                                setEnabledChains(next);
-                                writeChainSet(historyChainFilterKey(walletId), next);
-                            }}
-                        />
-
-                        <CheckboxPicker
-                            options={ACTION_TYPE_OPTIONS}
-                            selected={actionTypeFilter}
-                            onToggle={toggleSetMember(setActionTypeFilter)}
-                            allLabel={t('history.filters.allActionTypes')}
-                            summaryNoun={t('history.filters.actionType')}
-                            iconForId={actionTypeIcon}
-                            menuHeader={t('history.filters.actionTypes')}
-                        />
-
-                        <CheckboxPicker
-                            options={STATUS_OPTIONS}
-                            selected={statusFilter}
-                            onToggle={toggleSetMember(setStatusFilter)}
-                            allLabel={t('history.filters.allStatuses')}
-                            summaryNoun={t('history.filters.status')}
-                            menuHeader={t('history.filters.statusHeader')}
-                        />
-
-                        <CheckboxPicker
-                            options={[
-                                { id: 'crosschain', label: 'Cross-chain only' },
-                            ]}
-                            selected={new Set([
-                                ...(crossChainOnly ? ['crosschain'] : []),
-                            ])}
-                            onToggle={(id) => {
-                                if (id === 'crosschain') setCrossChainOnly((v) => !v);
-                            }}
-                            allLabel={t('history.filters.noSpecialFilters')}
-                            summaryNoun={t('history.filters.filter')}
-                            iconForId={specialFilterIcon}
-                            menuHeader={t('history.filters.special')}
-                        />
-
-                        {multisigAddress ? (
+            </ListFilterMenu>
+        </span>
+    );
+    // The title line holds the filter and one ⋯ menu with Export history and
+    // Refresh (operator 2026-11-13). The menu shows before any history loads:
+    // an empty list is where a refresh matters most.
+    const refreshLabel = refreshing ? t('history.refreshing') : t('history.refresh');
+    const refreshDisabled = networkOffline || refreshing || !historyLoaded;
+    const exportDisabled = visibleEntries.length === 0;
+    const runRefresh = () => {
+        const throttle = pollThrottleRef.current;
+        if (throttle.isInFlight()) return;
+        throttle.reset();
+        throttle.start();
+        setRefreshing(true);
+        setRefreshTick((n) => n + 1);
+    };
+    const moreMenu = (
+        <div className={styles.headerMoreWrap} ref={moreRef}>
+            <Button
+                type="button"
+                size="md"
+                variant="secondary"
+                className={styles.headerIconButton}
+                ref={moreButtonRef}
+                icon={<Icon.MoreIcon />}
+                onClick={() => setMoreOpen((o) => !o)}
+                aria-haspopup="menu"
+                aria-expanded={moreOpen}
+                aria-label={t('actionsMenu.more')}
+                title={t('actionsMenu.more')}
+                data-history-more=""
+            >
+                {null}
+            </Button>
+            {moreOpen ? (
+                /* The kit has no menu-list container, so native list semantics group its menu items. */
+                <ul className={styles.headerMore} role="menu">
+                    {entries.length > 0 ? (
+                        <li role="none">
                             <Button
-                                variant={multisigOnly ? 'primary' : 'ghost'}
-                                size="sm"
-                                icon={<Icon.MultisigIcon />}
-                                aria-pressed={multisigOnly}
-                                onClick={() => setMultisigOnly((v) => !v)}
+                                type="button"
+                                role="menuitem"
+                                className={styles.headerMoreItem}
+                                disabled={exportDisabled}
+                                aria-haspopup="dialog"
+                                aria-describedby={exportDisabled ? 'history-export-disabled-reason' : undefined}
+                                title={exportDisabled ? t('history.export.noMatchingRows') : undefined}
+                                onClick={() => { setMoreOpen(false); setExportModalOpen(true); }}
                             >
-                                {t('history.filters.multisigOnly')}
+                                <span className={styles.headerMoreIcon} aria-hidden="true"><Icon.DownloadIcon /></span>
+                                {t('history.export.open')}
                             </Button>
-                        ) : null}
+                            {exportDisabled ? (
+                                <span id="history-export-disabled-reason" className={styles.visuallyHidden}>
+                                    {t('history.export.noMatchingRows')}
+                                </span>
+                            ) : null}
+                        </li>
+                    ) : null}
+                    <li role="none">
+                        <Button
+                            type="button"
+                            role="menuitem"
+                            className={styles.headerMoreItem}
+                            disabled={refreshDisabled}
+                            aria-busy={refreshing}
+                            title={networkOffline ? t('history.offline.refreshTitle') : undefined}
+                            onClick={() => { setMoreOpen(false); runRefresh(); }}
+                        >
+                            <span className={`${styles.headerMoreIcon} ${refreshing ? styles.refreshing : ''}`} aria-hidden="true"><Icon.RefreshIcon /></span>
+                            {refreshLabel}
+                        </Button>
+                    </li>
+                </ul>
+            ) : null}
+        </div>
+    );
+    const headerTools = (withFilter) => (
+        <span className={styles.headerActions} data-history-header-actions="">
+            {withFilter ? filterMenu : null}
+            {moreMenu}
+        </span>
+    );
+    // Back returns to whichever page opened History (G06), so it names no page.
+    const header = (
+        <PageHeader
+            onBack={onBack}
+            title={t('history.title')}
+        />
+    );
+    // While the addresses load, Refresh already shows (disabled) so the
+    // title line does not jump when the list arrives.
+    const loadingHeader = (
+        <PageHeader
+            onBack={onBack}
+            title={t('history.title')}
+            trailing={headerTools(false)}
+        />
+    );
+    const filteredHeader = (
+        <PageHeader
+            onBack={onBack}
+            title={t('history.title')}
+            trailing={headerTools(true)}
+        />
+    );
+    const splitHeader = (
+        <PageHeader
+            onBack={onBack}
+            title={t('history.title')}
+            trailing={headerTools(true)}
+        />
+    );
+    // Only the loaded page (wrap(..., true)) carries the filter; the loading
+    // page (wrap(..., 'loading')) carries Refresh alone.
+    const wrap = (children, withFilter = false) => (
+        <Screen
+            variant={variant}
+            header={withFilter === 'loading' ? loadingHeader : withFilter ? filteredHeader : header}
+        >
+            <div ref={layoutRef} className={listDetailStyles.layoutRoot} data-list-detail="list">
+                {children}
+            </div>
+        </Screen>
+    );
 
-                    </div>
-                ) : null}
+    if (networkSettingsOpen) {
+        return (
+            <Settings
+                onBack={() => setNetworkSettingsOpen(false)}
+                activeWallet={{ id: walletId }}
+                initialSubpageId="network"
+            />
+        );
+    }
+    if (!hasAvailableChain(proofSettings, chainRegistry)) {
+        return wrap(
+            <ListPage>
+                <EmptyState
+                    title={NO_CHAINS_TITLE}
+                    body={NO_CHAINS_BODY}
+                    actionLabel={t('common.openNetworkSettings')}
+                    onAction={() => setNetworkSettingsOpen(true)}
+                    actionIcon={<Icon.GearIcon />}
+                />
+            </ListPage>,
+        );
+    }
+
+    if (loadError) {
+        return wrap(
+            <ListPage>
+                <StatusMessage
+                    variant="error"
+                    recovery={{
+                        label: t('common.tryAgain'),
+                        onAction: () => {
+                            setLoadError(null);
+                            setAddressesByChain(null);
+                            setHistoryLoaded(false);
+                            setAddressesReload((value) => value + 1);
+                        },
+                    }}
+                >
+                    {loadError}
+                </StatusMessage>
+            </ListPage>,
+        );
+    }
+    if (!addressesByChain) {
+        return wrap(
+            <ListPage>
+                <div role="status" aria-label={t('history.loading')} aria-busy="true">
+                    <Skeleton.List rows={5} rowHeight={88} avatar={false} />
                 </div>
-            </>
-        ) : null}
+            </ListPage>,
+            'loading',
+        );
+    }
+    if (activeChainIds.length === 0) {
+        return wrap(
+            <ListPage>
+                <EmptyState
+                    title={t('history.empty.noAddressesTitle')}
+                    body={t('history.empty.noAddressesBody')}
+                    actionLabel={onReceive ? t('home.receive') : undefined}
+                    onAction={onReceive}
+                    actionIcon={onReceive ? <Icon.ReceiveIcon /> : undefined}
+                />
+            </ListPage>,
+        );
+    }
+
+    // Offline with no saved history, the empty state below says so, and the
+    // page notice stays out of its way so one state shows one message.
+    const offlineWithoutHistory = offlineVerdict && historyLoaded && loadingChains.size === 0
+        && entries.length === 0 && visibleEntries.length === 0;
+
+    const listPage = (
+        <ListPage
+            notices={(!browserOnline || showingCachedHistory) && !offlineWithoutHistory ? (
+                <StatusMessage
+                    variant="warning"
+                    id="history-offline-action-reason"
+                >
+                    {!browserOnline
+                        ? t('history.offline.cached')
+                        : t('history.offline.refreshFailed')}
+                </StatusMessage>
+            ) : unreadChainIds.length > 0 && entries.length > 0 ? (
+                <StatusMessage variant="warning" id="history-unread-chains">
+                    {t('history.unreadChains', {
+                        chains: unreadChainIds.map((cid) => chainRegistry.get(cid)?.displayName || cid).join(', '),
+                    })}
+                </StatusMessage>
+            ) : null}
         >
 
             {exportModalOpen ? (
                 <ExportModal
+                    restoreFocusRef={moreButtonRef}
                     onClose={closeExport}
                     format={exportFormat}
                     setFormat={setExportFormat}
@@ -2057,19 +2105,13 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             setRefreshTick((n) => n + 1);
                         }}
                     />
-                ) : balancesUnchecked && !crossChainOnly && entries.length === 0 ? (
-                    // An empty read while balances could not be checked proves
-                    // nothing, so the page says that once instead of "No
-                    // activity yet", and names no stale balance: the line is
-                    // about activity, which shows once the network answers.
-                    <BalancesUncheckedState
-                        body={t('balances.unchecked.historyBody')}
-                        onRetry={() => {
-                            recheckBalances();
-                            setRefreshTick((n) => n + 1);
-                        }}
-                    />
                 ) : (
+                    // No per-page network error here, degraded services
+                    // included: an empty History reads "No activity yet" and
+                    // the shell's reachability banner reports network trouble.
+                    // The plain empty state is only "No activity yet" with a short
+                    // body and no Start receiving button; the cross-chain-only
+                    // state never has a button either.
                     <EmptyState
                         title={crossChainOnly
                             ? t('history.empty.noCrossChainTitle')
@@ -2077,24 +2119,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         body={crossChainOnly
                             ? t('history.empty.noCrossChainBody')
                             : t('history.empty.noActivityBody')}
-                        actionLabel={!crossChainOnly && onReceive
-                            ? t('history.empty.startReceiving')
-                            : undefined}
-                        onAction={!crossChainOnly ? onReceive : undefined}
-                        actionIcon={!crossChainOnly && onReceive ? <Icon.ReceiveIcon /> : undefined}
                     />
                 )
             ) : null}
 
-            {historyFetchedAt && entries.length > 0 ? (
-                <div className={styles.resultsHeader}>
-                    {/* Offline, the page notice already says the rows are saved, so the
-                        freshness line stays out and one state shows one message. */}
-                    {historyFetchedAt && loadingChains.size === 0 && browserOnline ? (
-                        <StalenessLabel lastSyncedAt={historyFetchedAt} />
-                    ) : <span />}
-                </div>
-            ) : null}
+            {/* No "Updated ..." line: History is just the list (operator 2026-11-13). */}
 
             <ul
                 ref={timelineRef}
@@ -2103,11 +2132,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                 onKeyDown={onTimelineKeyDown}
             >
                 {timelineRuns(renderedTimelineItems).map((run) => (run.kind === 'day' ? (
-                    <li key={run.key}><SectionHeader as="h2" title={run.label} /></li>
+                    wideContent ? null : <li key={run.key}><SectionHeader as="h2" title={run.label} /></li>
                 ) : (
                     // The rows under one heading are one flush card with dividers.
                     <li key={run.key}>
-                        <ul className={styles.rowList}>
+                        <ul className={styles.rowList} data-xc-split-list={wideContent ? '' : undefined}>
                 {run.items.map((item) => {
                     if (item.kind === 'group') {
                         const expanded = expandedGroups.has(item.key);
@@ -2119,7 +2148,12 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                     <GroupCard
                                         item={item}
                                         expanded={expanded}
-                                        onToggle={() => toggleGroupExpanded(item.key)}
+                                        selected={wideContent && selectedKey === item.leader.key}
+                                        splitRow={wideContent}
+                                        onToggle={() => {
+                                            toggleGroupExpanded(item.key);
+                                            if (wideContent) onRowClick(item.leader);
+                                        }}
                                     />
                                     {expanded ? (
                                         <ul className={styles.groupMembers}>
@@ -2128,6 +2162,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     key={entry.key}
                                                     entry={entry}
                                                     selected={selectedKey === entry.key}
+                                                    splitRow={wideContent}
                                                     opensDetail={opensDetail}
                                                     showConnector={
                                                         item.subkind === 'link-pair'
@@ -2140,7 +2175,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                                                     chainTip={chainTipByChainId[entry.chainId]}
                                                     indexerWatermark={indexerWatermarkByChainId[entry.chainId]}
                                                     walletId={walletId}
-                                                    verify={actionVerifyMap[entry.key]}
                                                     showFiatInHistory={showFiatInHistory}
                                                     fiatCurrency={fiatCurrency}
                                                     walletAddresses={walletAddressSet}
@@ -2179,6 +2213,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             key={entry.key}
                             entry={entry}
                             selected={selectedKey === entry.key}
+                            splitRow={wideContent}
                             opensDetail={opensDetail}
                             showConnector={connectorByKey.has(entry.key)}
                             onClick={onRowClick}
@@ -2187,7 +2222,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                             chainTip={chainTipByChainId[entry.chainId]}
                             indexerWatermark={indexerWatermarkByChainId[entry.chainId]}
                             walletId={walletId}
-                            verify={actionVerifyMap[entry.key]}
                             showFiatInHistory={showFiatInHistory}
                             fiatCurrency={fiatCurrency}
                             walletAddresses={walletAddressSet}
@@ -2218,7 +2252,43 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                     </Button>
                 </div>
             ) : null}
-        </ListPage>,
+        </ListPage>
+    );
+    const panelEntry = wideContent
+        ? (entries.find((entry) => entry.key === selectedKey) || visibleEntries[0] || null)
+        : null;
+    if (!wideContent || !panelEntry) return wrap(listPage, true);
+    const detailEntry = {
+        ...panelEntry,
+        detailContext: {
+            chainTip: chainTipByChainId[panelEntry.chainId] ?? null,
+            indexerWatermark: indexerWatermarkByChainId[panelEntry.chainId] ?? null,
+            walletAddresses: [...walletAddressSet],
+        },
+    };
+    return (
+        <Screen variant={variant} header={splitHeader} bodyClassName={listDetailStyles.twoPanelBody}>
+            <ListDetailSplit
+                measureRef={layoutRef}
+                storageKey="history"
+                resizeLabel="Resize the history list"
+                resizeHint="Drag to resize the history list, or press Enter to reset."
+                layoutName="two-panel"
+                list={listPage}
+                listLabel="History entries"
+                detail={(
+                    <ActionDetail
+                        key={detailEntry.key}
+                        entry={detailEntry}
+                        walletId={walletId}
+                        onBack={onBack}
+                        onDismissFailed={dismissFailedPending}
+                        embedded
+                    />
+                )}
+                detailLabel="Action details"
+            />
+        </Screen>
     );
 }
 
@@ -2226,7 +2296,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
  * Collapsed group card (§28.2). Renders a single summary row that
  * expands to reveal its member entries when clicked.
  */
-function GroupCard({ item, expanded, onToggle }) {
+function GroupCard({ item, expanded, selected = false, splitRow = false, onToggle }) {
     const [balancesHidden] = useBalancesHidden();
     const d = chainRegistry.get(item.leader.chainId);
     const isLinkPair = item.subkind === 'link-pair';
@@ -2245,6 +2315,8 @@ function GroupCard({ item, expanded, onToggle }) {
             onClick={onToggle}
             data-history-row
             className={`${styles.row} ${styles.groupCard} ${expanded ? styles.groupCardExpanded : ''}`}
+            data-xc-split-row={splitRow ? '' : undefined}
+            aria-current={splitRow && selected ? 'true' : undefined}
             aria-expanded={expanded}
             chainId={item.leader.chainId}
             tick={tick}
@@ -2260,7 +2332,7 @@ function GroupCard({ item, expanded, onToggle }) {
                 pending: t('history.status.pending'),
             }}
             timestamp={newest?.timestamp}
-            selected={expanded}
+            selected={selected || expanded}
             aria-description={newest?.timestamp
                 ? t('history.group.latest', { when: formatTimestamp(newest.timestamp) })
                 : undefined}
@@ -2477,7 +2549,9 @@ function CheckboxPicker({ options, selected, onToggle, allLabel, summaryNoun, ic
             : `${selected.size} ${summaryNoun}s`;
 
     return (
-        <div ref={wrapRef} className={styles.chainPickerWrap}>
+        // In the title-line filter panel each picker spans the panel
+        // at control height, like the network picker above it.
+        <div ref={wrapRef} className={`${styles.chainPickerWrap} ${filterPanel.picker}`}>
             <div ref={triggerRef}>
                 <Chip
                     pressed={!isAll}
@@ -2605,137 +2679,6 @@ function chainScopeLabel(enabledChains, activeChainIds) {
     const total = activeChainIds.length;
     if (enabledChains.size === 0 || enabledChains.size === total) return 'all';
     return Array.from(enabledChains).sort().join('+');
-}
-
-/**
- * Custom chain picker: full-width button that opens a popover with
- * each option rendered as its chain logo + display name. Used instead
- * of a native <select> because browsers don't render HTML / images
- * inside <option> elements.
- */
-function ChainPicker({ activeChainIds, chainRegistry, enabledChains, onChange }) {
-    const [open, setOpen] = useState(false);
-    const wrapRef = useRef(null);
-    const triggerRef = useRef(null);
-    const menuRef = useRef(null);
-
-    const close = () => {
-        setOpen(false);
-        triggerRef.current?.focus();
-    };
-
-    useEffect(() => {
-        if (!open) return undefined;
-        const onClick = (e) => {
-            if (wrapRef.current?.contains(e.target)) return;
-            setOpen(false);
-        };
-        const onKey = (e) => {
-            if (e.key !== 'Escape') return;
-            setOpen(false);
-            triggerRef.current?.focus();
-        };
-        window.addEventListener('mousedown', onClick);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousedown', onClick);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
-
-    const isAll = enabledChains.size === activeChainIds.length || enabledChains.size === 0;
-    const selectedId = isAll ? null : Array.from(enabledChains)[0];
-    const selectedDesc = selectedId ? chainRegistry.get(selectedId) : null;
-
-    const choose = (id) => {
-        const next = id === 'all'
-            ? new Set(activeChainIds)
-            : new Set([id]);
-        onChange(next);
-        close();
-    };
-
-    return (
-        <div ref={wrapRef} className={styles.chainPickerWrap}>
-            {/* A native trigger retains the ref-driven focus handoff for this rich custom listbox. */}
-            <button
-                ref={triggerRef}
-                type="button"
-                className={styles.chainPickerBtn}
-                aria-label={selectedDesc ? selectedDesc.displayName : t('common.allNetworks')}
-                title={selectedDesc ? selectedDesc.displayName : t('common.allNetworks')}
-                aria-haspopup="listbox"
-                aria-expanded={open}
-                onClick={() => setOpen((v) => !v)}
-                onKeyDown={(event) => {
-                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-                    event.preventDefault();
-                    if (!open) setOpen(true);
-                    focusListboxOption(menuRef, event.key === 'ArrowUp' ? 'last' : 'selected');
-                }}
-            >
-                <span className={styles.chainPickerLeft}>
-                    {selectedDesc ? (
-                        <img
-                            src={branding.chainIconSmallUrl(selectedDesc.id)}
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.chainPickerIcon}
-                        />
-                    ) : (
-                        <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
-                    )}
-                </span>
-                <SingleChevron direction="down" />
-            </button>
-            {open ? (
-                <ul
-                    ref={menuRef}
-                    className={styles.chainPickerMenu}
-                    role="listbox"
-                    onKeyDown={(event) => handleListboxKeyDown(event, menuRef, close)}
-                >
-                    <li>
-                        {/* Native options preserve the rich listbox keyboard model. */}
-                        <button
-                            type="button"
-                            role="option"
-                            aria-selected={isAll}
-                            className={`${styles.chainPickerOption} ${isAll ? styles.chainPickerOptionActive : ''}`}
-                            onClick={() => choose('all')}
-                        >
-                            <span className={styles.chainPickerAllIcon} aria-hidden="true">⛓</span>
-                            <span>{t('common.allNetworks')}</span>
-                        </button>
-                    </li>
-                    {activeChainIds.map((cid) => {
-                        const d = chainRegistry.get(cid);
-                        const isSel = selectedId === cid;
-                        return (
-                            <li key={cid}>
-                                {/* Native options preserve the rich listbox keyboard model. */}
-                                <button
-                                    type="button"
-                                    role="option"
-                                    aria-selected={isSel}
-                                    className={`${styles.chainPickerOption} ${isSel ? styles.chainPickerOptionActive : ''}`}
-                                    onClick={() => choose(cid)}
-                                >
-                                    <img
-                                        src={branding.chainIconSmallUrl(cid)}
-                                        alt=""
-                                        aria-hidden="true"
-                                        className={styles.chainPickerIcon}
-                                    />
-                                    <span>{d?.displayName || cid}</span>
-                                </button>
-                            </li>
-                        );
-                    })}
-                </ul>
-            ) : null}
-        </div>
-    );
 }
 
 const EXPORT_CHUNK_SIZE = 250;
@@ -2875,6 +2818,7 @@ const EXPORT_DIALOG_COLUMN_LABELS = Object.freeze({
 });
 
 function ExportModal({
+    restoreFocusRef,
     onClose,
     format, setFormat,
     columns, setColumns,
@@ -2889,7 +2833,7 @@ function ExportModal({
     // Opened by the 'e' key or its button: focus moves in, Tab stays in, and
     // closing hands focus back to the opener.
     const dialogRef = useRef(null);
-    useFocusTrap(dialogRef, { active: true });
+    useFocusTrap(dialogRef, { active: true, restoreFocusRef });
     useBackHandler(onClose);
     useEffect(() => {
         function onKey(e) { if (e.key === 'Escape') onClose(); }
@@ -2921,21 +2865,27 @@ function ExportModal({
                 <SectionHeader id="xc-history-export-title" title={t('history.export.title')} />
 
                 <div style={MODAL_BODY}>
-                    <RadioGroup
-                        style={MODAL_FIELDSET}
-                        legend={t('history.export.format')}
-                        name="export-format"
+                    {/* The themed dropdown with an icon per option, never radios (G119). */}
+                    <IconSelect
+                        label={t('history.export.format')}
+                        help={t('history.export.formatHelp')}
                         value={format}
                         onChange={setFormat}
                         disabled={exporting}
                         options={[
-                            { value: 'csv', label: t('history.export.csv') },
-                            { value: 'json', label: t('history.export.json') },
+                            { value: 'csv', label: t('history.export.csv'), icon: <Icon.GridIcon /> },
+                            { value: 'json', label: t('history.export.json'), icon: <Icon.DocumentIcon /> },
                         ]}
                     />
 
                     <fieldset style={MODAL_FIELDSET}>
-                        <legend style={MODAL_LEGEND}>{t('history.export.columns')}</legend>
+                        <legend style={MODAL_LEGEND}>
+                            {t('history.export.columns')}{' '}
+                            <InfoTip
+                                label={t('history.export.columnsHelp')}
+                                aria={t('ui.field.about', { label: t('history.export.columns') })}
+                            />
+                        </legend>
                         {flowsLib.EXPORT_COLUMNS.map((col) => {
                             const detail = flowsLib.EXPORT_COLUMN_DETAILS[col];
                             const dialogLabel = EXPORT_DIALOG_COLUMN_LABELS[col] || detail.label;

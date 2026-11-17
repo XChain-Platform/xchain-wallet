@@ -15,14 +15,14 @@ describe('shared inline link styles', () => {
         const body = /:where\(a\[href\]\)\s*\{([^}]*)\}/.exec(css)?.[1];
 
         expect(body).toBeTruthy();
-        expect(body).toMatch(/color:\s*var\(--xc-accent-text\)/);
+        expect(body).toMatch(/color:\s*var\(--xc-link\)/);
         expect(body).toMatch(/text-decoration:\s*underline/);
         expect(body).toMatch(/text-underline-offset:\s*0\.15em/);
     });
 
     it('keeps visited links recognizable and keyboard focus visible', () => {
         expect(css).toMatch(
-            /:where\(a\[href\]:visited\)\s*\{[^}]*color:\s*var\(--xc-accent-text\)/s,
+            /:where\(a\[href\]:visited\)\s*\{[^}]*color:\s*var\(--xc-link\)/s,
         );
         expect(css).toMatch(
             /:where\([\s\S]*?a\[href\][\s\S]*?\):focus-visible\s*\{[^}]*outline:\s*2px solid var\(--xc-focus-ring\) !important/s,

@@ -24,6 +24,8 @@ import {
     explorerJson,
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     mintXchain,
     nudgeChain,
     readReceiveAddress,
@@ -142,11 +144,8 @@ test.describe(`token ownership transfer on ${REGTEST_CHAIN_LABEL}`, () => {
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            expect(await main.getByLabel('From').inputValue()).toBe(owner);
-            await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(String(SUPPLY));
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            expect(await readIssueSource(main)).toBe(owner);
+            await issuePlainToken(main, { ticker: TICK, supply: SUPPLY });
 
             await expectConfirmModal(page, 'the ISSUE');
             const action = await waitForValidAction(await approveAndGetTxid(page));
@@ -166,10 +165,10 @@ test.describe(`token ownership transfer on ${REGTEST_CHAIN_LABEL}`, () => {
             const destination = main.getByLabel('New owner address');
             await expect(destination).toBeVisible({ timeout: 30_000 });
             await destination.fill(newOwner);
-            await main.getByRole('button', { name: 'Transfer ownership', exact: true }).click();
+            await main.getByRole('button', { name: 'Transfer Ownership', exact: true }).click();
 
             await expectConfirmModal(page, 'the ownership transfer');
-            await expect(page.getByTestId('action-intent'))
+            await expect(page.getByTestId('confirm-sentence'))
                 .toContainText(`Transfer ownership of ${TICK}`);
             const txid = await approveAndGetTxid(page);
             const action = await waitForValidAction(txid);

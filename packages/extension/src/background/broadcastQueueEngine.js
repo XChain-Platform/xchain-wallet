@@ -55,14 +55,28 @@ function queuedRevealFields(source) {
     };
 }
 
-function normalizedAdsCommit(verdict) {
+/**
+ * The donation verdict a queued entry carries, reduced to its known fields, or
+ * null when it is malformed. The fiat amount and currency are what the booking
+ * takes off the donation queue; an entry from an older build has neither and
+ * only accrues. `mainnet` says whether the send accrues at all (false for a
+ * testnet or regtest send), and `reservationId` names the claim on the queue
+ * these bytes hold, which their broadcast settles and their discard releases.
+ *
+ * @param {unknown} verdict
+ * @returns {{ chainId: string, donationIncluded: boolean, donatedFiat?: string, currency?: string, mainnet?: boolean, reservationId?: string } | null}
+ */
+export function cleanAdsCommit(verdict) {
     if (!verdict || typeof verdict !== 'object') return null;
-    if (typeof verdict.chainId !== 'string' || typeof verdict.donationIncluded !== 'boolean') return null;
-    const donationAmount = verdict.donationAmount;
+    const v = /** @type {any} */ (verdict);
+    if (typeof v.chainId !== 'string' || typeof v.donationIncluded !== 'boolean') return null;
     return {
-        chainId: verdict.chainId,
-        donationIncluded: verdict.donationIncluded,
-        ...(Number.isSafeInteger(donationAmount) && donationAmount > 0 ? { donationAmount } : {}),
+        chainId: v.chainId,
+        donationIncluded: v.donationIncluded,
+        ...(typeof v.donatedFiat === 'string' && /^\d+(\.\d+)?$/.test(v.donatedFiat) ? { donatedFiat: v.donatedFiat } : {}),
+        ...(typeof v.currency === 'string' && v.currency ? { currency: v.currency } : {}),
+        ...(typeof v.mainnet === 'boolean' ? { mainnet: v.mainnet } : {}),
+        ...(typeof v.reservationId === 'string' && v.reservationId ? { reservationId: v.reservationId } : {}),
     };
 }
 
@@ -164,18 +178,20 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         }
         const link = persisted.rbfReplacesPendingTxId;
         if (!live.rbfReplacesPendingTxId && typeof link === 'string' && link) live.rbfReplacesPendingTxId = link;
-        const normalized = normalizedAdsCommit(persisted.adsCommit);
-        if (!normalized) return;
+        const verdict = cleanAdsCommit(persisted.adsCommit);
+        if (!verdict) return;
         if (!live.adsCommit) {
-            live.adsCommit = normalized;
+            live.adsCommit = verdict;
             return;
         }
-        const amount = normalized.donationAmount;
-        if (!Number.isSafeInteger(live.adsCommit.donationAmount)
-            && Number.isSafeInteger(amount)
-            && live.adsCommit.chainId === normalized.chainId
-            && live.adsCommit.donationIncluded === normalized.donationIncluded) {
-            live.adsCommit = { ...live.adsCommit, donationAmount: amount };
+        if (live.adsCommit.donatedFiat === undefined && verdict.donatedFiat !== undefined
+            && live.adsCommit.chainId === verdict.chainId
+            && live.adsCommit.donationIncluded === verdict.donationIncluded) {
+            live.adsCommit = {
+                ...live.adsCommit,
+                donatedFiat: verdict.donatedFiat,
+                ...(verdict.currency ? { currency: verdict.currency } : {}),
+            };
         }
     }
     async function ensureQueueLoaded() {
@@ -967,7 +983,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
      * `revealTxHex` is the signed reveal of a two-phase action whose commit is
      * `signedTxHex`: the broadcast route sends the commit and then the reveal.
      *
-     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, siblingPendingTxIds?: string[], soldNames?: string[], resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string, adsCommit?: { chainId: string, donationIncluded: boolean, donationAmount?: number } | null }} entry
+     * @param {{ chainId: string, signedTxHex: string, summary?: string, signedAt?: number, txid?: string, pendingTxId?: string | null, siblingPendingTxIds?: string[], soldNames?: string[], resumedClaim?: boolean, rbfReplacesPendingTxId?: string, commitLanded?: true, commitTxid?: string | null, revealTxHex?: string, revealTxid?: string, adsCommit?: { chainId: string, donationIncluded: boolean, donatedFiat?: string, currency?: string, mainnet?: boolean, reservationId?: string } | null }} entry
      * @returns {import('./broadcastQueueStorage.js').QueueEntry}
      */
     function pushQueueEntry(walletId, entry) {
@@ -981,7 +997,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             return sameTx;
         }
         const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const adsCommit = normalizedAdsCommit(entry.adsCommit);
+        const adsCommit = cleanAdsCommit(entry.adsCommit);
         const stored = {
             id,
             chainId: entry.chainId,

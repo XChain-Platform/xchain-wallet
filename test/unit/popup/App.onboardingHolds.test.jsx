@@ -130,7 +130,7 @@ function boot({ announce = 'before-reply' } = {}) {
 const count = (sent, type) => sent.filter((entry) => entry === type).length;
 
 async function openCreateToPhrase() {
-    fireEvent.click(await screen.findByRole('button', { name: 'Create new wallet' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create New Wallet' }));
     fireEvent.change(await screen.findByLabelText('Password'), { target: { value: PASSWORD } });
     fireEvent.change(screen.getByLabelText(/^Confirm( password)?$/), { target: { value: PASSWORD } });
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
@@ -139,28 +139,29 @@ async function openCreateToPhrase() {
 
 async function createThroughVerify() {
     await openCreateToPhrase();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
     fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
     const words = CREATED_PHRASE.split(' ');
     for (const input of await screen.findAllByLabelText(/^Word \d+$/)) {
         const position = Number(input.labels[0].textContent.match(/\d+/)[0]);
         fireEvent.change(input, { target: { value: words[position - 1] } });
     }
-    fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 }
 
 describe('popup onboarding holds share one session refresh', () => {
     it('keeps an import lane on its donation notice through its own write', async () => {
         const { sent } = boot();
         render(<App />);
-        fireEvent.click(await screen.findByRole('button', { name: 'Import wallet' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Import Wallet' }));
         fireEvent.change(await screen.findByLabelText('Recovery phrase'), { target: { value: IMPORTED_PHRASE } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText(/^Confirm( password)?$/), { target: { value: PASSWORD } });
         const sessionReads = count(sent, 'session.status');
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
-        expect(await screen.findByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Automatic Donations' })).toBeInTheDocument();
         expect(count(sent, 'session.status')).toBe(sessionReads);
     });
 
@@ -184,7 +185,7 @@ describe('popup onboarding holds share one session refresh', () => {
         await createThroughVerify();
         const sessionReads = count(sent, 'session.status');
 
-        expect(await screen.findByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Automatic Donations' })).toBeInTheDocument();
         expect(screen.queryByText(STALE_NOTICE)).toBeNull();
         expect(count(sent, 'session.status')).toBe(sessionReads);
     });
@@ -195,30 +196,30 @@ describe('popup onboarding holds share one session refresh', () => {
         await createThroughVerify();
         const sessionReads = count(sent, 'session.status');
 
-        expect(await screen.findByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Automatic Donations' })).toBeInTheDocument();
         await settle(80);
 
-        expect(screen.getByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Automatic Donations' })).toBeInTheDocument();
         expect(count(sent, 'session.status')).toBe(sessionReads);
 
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         await waitFor(() => expect(count(sent, 'session.status')).toBeGreaterThan(sessionReads));
-        await waitFor(() => expect(screen.queryByRole('heading', { name: 'Automatic Donation System' })).toBeNull());
+        await waitFor(() => expect(screen.queryByRole('heading', { name: 'Automatic Donations' })).toBeNull());
     });
 
     it('releases the import hold when the lane is left, so a create screen elsewhere decides alone', async () => {
         const { state, sent, emit } = boot();
         render(<App />);
-        fireEvent.click(await screen.findByRole('button', { name: 'Import wallet' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Import Wallet' }));
         await screen.findByLabelText('Recovery phrase');
         fireEvent.click(screen.getByRole('button', { name: /back/i }));
-        await screen.findByRole('button', { name: 'Create new wallet' });
+        await screen.findByRole('button', { name: 'Create New Wallet' });
         const sessionReads = count(sent, 'session.status');
 
         state.session = 'locked';
         await emit('session', { state: 'locked' });
 
         await waitFor(() => expect(count(sent, 'session.status')).toBeGreaterThan(sessionReads));
-        await waitFor(() => expect(screen.queryByRole('button', { name: 'Create new wallet' })).toBeNull());
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Create New Wallet' })).toBeNull());
     });
 });

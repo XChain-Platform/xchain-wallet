@@ -47,15 +47,19 @@ function renderReceive(messaging, props = {}) {
 }
 
 describe('Receive Change asset control', () => {
-    it('is the shared Button with one variant, one size and the asset card class', async () => {
+    // The Change asset card is retired: Receive's Asset field is the shared
+    // TokenField, a Button-based control that names its current selection.
+    it('is the shared Asset field, a Button-based control naming its selection', async () => {
         renderReceive(baseMessaging());
 
-        const control = await screen.findByRole('button', { name: /^Change asset \(currently BTC on / });
+        const control = await screen.findByRole('button', { name: /^Asset: BTC on / });
         const classes = control.className.split(/\s+/);
 
         expect(classes).toContain(buttonStyles.btn);
-        expect(classes).toContain(styles.assetCard);
-        expect(VARIANTS.filter((variant) => classes.includes(buttonStyles[variant]))).toHaveLength(1);
-        expect(SIZES.filter((size) => classes.includes(buttonStyles[size]))).toHaveLength(1);
+        expect(classes).not.toContain(styles.assetCard);
+        // TokenField draws its own control, so no kit variant or size class rides on it.
+        expect(VARIANTS.filter((variant) => classes.includes(buttonStyles[variant]))).toHaveLength(0);
+        expect(SIZES.filter((size) => classes.includes(buttonStyles[size]))).toHaveLength(0);
+        expect(screen.queryByRole('button', { name: /^Change asset/ })).toBeNull();
     });
 });

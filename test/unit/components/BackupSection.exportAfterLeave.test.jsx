@@ -60,7 +60,7 @@ describe('BackupSection export that outlives its screen', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
         fireEvent.change(screen.getByLabelText('Backup password'), { target: { value: 'backup-secret' } });
         fireEvent.change(screen.getByLabelText('Confirm backup password'), { target: { value: 'backup-secret' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Export backup' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export Backup' }));
         expect(messaging.exportBackupFile).toHaveBeenCalledTimes(1);
 
         view.unmount();

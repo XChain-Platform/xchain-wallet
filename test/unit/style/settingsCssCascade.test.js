@@ -7,10 +7,11 @@ import { describe, expect, it } from 'vitest';
 const css = readFileSync('packages/core/src/shared/routes/Settings.module.css', 'utf8');
 
 describe('Settings CSS cascade safeguards', () => {
-    it('keeps field label rows out of the phone-wide wrapping fallback', () => {
+    it('keeps field label rows and dropdown popovers out of the phone-wide wrapping fallback', () => {
         expect(css).toMatch(
-            /\.page div:not\(\[class\*=['"]labelRow['"]\]\)\s*\{[^}]*flex-wrap:\s*wrap !important;/s,
+            /\.page div:not\(\[class\*=['"]labelRow['"]\]\):not\(\[class\*=['"]popover['"]\]\)\s*\{[^}]*flex-wrap:\s*wrap !important;/s,
         );
+        expect(css).not.toMatch(/\.page div:not\(\[class\*=['"]labelRow['"]\]\)\s*\{/);
         expect(css).not.toMatch(/\.page div\s*\{[^}]*flex-wrap:\s*wrap !important;/s);
     });
 

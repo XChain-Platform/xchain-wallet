@@ -8,12 +8,12 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// A token read that failed must not read as "No tokens yet": the Tokens tab
-// says the tokens could not be loaded, and a genuinely empty read still says
-// there are none.
+// A token read that failed must not read as "No tokens yet": the Balances
+// list narrowed to Tokens says the tokens could not be loaded, and a
+// genuinely empty read still says there are none.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 
 vi.mock('../../../packages/core/src/shared/components/TotalBalanceHero.jsx', () => ({
     TotalBalanceHero: () => null,
@@ -43,6 +43,7 @@ const answered = (extra = {}) => ({
 });
 
 function mount(balances, overrides = {}) {
+    globalThis.localStorage.setItem('xc:balances:type:w1', 'tokens');
     render(
         <HomeTabs
             chainRegistry={chainRegistry}
@@ -57,12 +58,14 @@ function mount(balances, overrides = {}) {
             {...overrides}
         />,
     );
-    fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    globalThis.localStorage.removeItem('xc:balances:type:w1');
+});
 
-describe('HomeTabs Tokens tab when the token read failed', () => {
+describe('HomeTabs Tokens type when the token read failed', () => {
     it('says the tokens could not be loaded instead of that there are none', () => {
         mount(answered({ unavailable: ['tokens'], unavailableReason: 'balance read failed' }));
         expect(screen.getByText("Tokens couldn't be loaded")).toBeInTheDocument();

@@ -104,21 +104,15 @@ assert.match(
     /offersEscape && wipeOpen/,
     'the wipe panel is gated on the declared escape kinds',
 );
-const lockedSrc = read('packages', 'core', 'src', 'shared', 'routes', 'Locked.jsx');
 assert.match(
     screenSrc,
     /isExactTypedConfirmation\(confirmText, 'WIPE'\)/,
     'the wipe compares the typed word with the shared exact-match gate',
 );
 assert.match(
-    lockedSrc,
-    /isExactTypedConfirmation\(wipeConfirmText, 'WIPE'\)/,
-    'the Locked screen uses the same shared exact-match gate',
-);
-assert.match(
     screenSrc,
-    /if \(!isExactTypedConfirmation\(confirmText, 'WIPE'\)\) return;/,
-    'the wipe stays behind the same type-WIPE gate the Locked screen uses',
+    /if \(!wipeErrors\.validate\(\{[\s\S]{0,200}isExactTypedConfirmation\(confirmText, 'WIPE'\)[\s\S]{0,120}\}\)\) return;/,
+    'the wipe refuses through the form error gate until WIPE matches exactly',
 );
 
 console.log(

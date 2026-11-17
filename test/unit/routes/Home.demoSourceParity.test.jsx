@@ -59,10 +59,11 @@ async function quickActionLabels(walletId) {
             />
         </MessagingProvider>,
     );
-    const row = await screen.findByRole('group', { name: 'Quick actions' });
-    const labels = within(row).getAllByRole('button').map((button) => button.textContent.trim());
-    fireEvent.click(within(row).getByRole('button', { name: 'Swap' }));
-    expect(onSwap).toHaveBeenCalledTimes(1);
+    await screen.findAllByRole('tablist');
+    expect(screen.queryByRole('group', { name: 'Quick actions' })).toBeNull();
+    const labels = ['Send', 'Receive', 'Exchange', 'More', 'Swap']
+        .filter((name) => screen.queryByRole('button', { name }));
+    expect(onSwap).not.toHaveBeenCalled();
     view.unmount();
     return labels;
 }
@@ -121,7 +122,7 @@ describe('wallet data source', () => {
         expect(result.current).toMatchObject({ live: true, canSpend: true, pricesTestCoins: false });
     });
 
-    it('renders matching quick actions and Swap control for sample and real wallets', async () => {
+    it('renders the same Home with no quick actions for sample and real wallets', async () => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 });
         markDemoWallet(DEMO_WALLET);
         const sampleLabels = await quickActionLabels(DEMO_WALLET);
@@ -129,6 +130,6 @@ describe('wallet data source', () => {
         const realLabels = await quickActionLabels(REAL_WALLET);
 
         expect(sampleLabels).toEqual(realLabels);
-        expect(sampleLabels).toEqual(['Send', 'Receive', 'Swap']);
+        expect(sampleLabels).toEqual([]);
     });
 });

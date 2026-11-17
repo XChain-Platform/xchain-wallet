@@ -74,7 +74,7 @@ describe('ContactsList scan-to-contacts prefill', () => {
         // blank new-contact form.
         await waitFor(() => expect(screen.getByText('View Contact')).toBeTruthy());
         expect(screen.getByText('Satoshi')).toBeTruthy();
-        expect(screen.queryByText('New contact')).toBeNull();
+        expect(screen.queryByText('New Contact')).toBeNull();
     });
 
     it('opens a new-contact edit form when the scanned address is not saved', async () => {
@@ -89,7 +89,7 @@ describe('ContactsList scan-to-contacts prefill', () => {
             </MessagingProvider>,
         );
 
-        await waitFor(() => expect(screen.getByText('New contact')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('New Contact')).toBeTruthy());
         const addressInput = screen.getByLabelText('Address');
         expect(addressInput.value).toBe('bc1qbrandnewaddress');
     });

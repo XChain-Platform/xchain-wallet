@@ -45,6 +45,7 @@
 //       --config=playwright.regtest.config.js tests/oracle/price-deviation-gate.regtest.spec.js
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { pickFiatCurrency, pickToken } from '../../fixtures/pickerFields.js';
 import {
     EXPLORER_URL,
     expectConfirmModal,
@@ -131,12 +132,13 @@ async function stagePublish(page, value) {
     await page.getByRole('button', { name: 'Home', exact: true }).first().click();
     await openPaletteCommand(page, 'Publish oracle price');
     const main = page.getByRole('main');
-    await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
+    await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
     // D-145: this form published on the wallet's first chain until it grew a
     // picker, so on a Litecoin run this is what keeps it off Bitcoin.
     await selectVenueChain(main);
-    await main.getByLabel(/^Token ticker/).fill(TICK);
-    await main.getByLabel('Currency').selectOption(FIAT);
+    // G122: the Token and Fiat currency fields open picker pages.
+    await pickToken(main, TICK);
+    await pickFiatCurrency(main, FIAT);
     await main.getByLabel(/^Price of one/).fill(value);
     await main.getByLabel(/^Usage fee/).fill(USAGE_FEE);
     await main.getByRole('button', { name: 'Publish price' }).click();
@@ -182,7 +184,7 @@ test.describe(`the PRICE v1 deviation gate on ${REGTEST_CHAIN_LABEL}`, () => {
 
                 await openPaletteCommand(page, 'Publish oracle price');
                 const main = page.getByRole('main');
-                await expect(main.getByLabel(/^Token ticker/)).toBeVisible({ timeout: 30_000 });
+                await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(main);
                 oracle = await main.getByRole('textbox', { name: /^Publishing address/ }).inputValue();
                 expect(oracle, `no ${REGTEST_CHAIN_LABEL} address to publish from`)

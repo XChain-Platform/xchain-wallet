@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@xchain-wallet/core/ui', () => ({
     Screen: ({ children }) => <main>{children}</main>,
     ListPage: ({ children }) => <div>{children}</div>,
+    Notice: ({ children }) => <div role="alert">{children}</div>,
+    Skeleton: ({ ariaLabel }) => <div aria-label={ariaLabel} />,
 }));
 vi.mock('@xchain-wallet/core/shared/components/RouteErrorBoundary.jsx', () => ({
     RouteErrorBoundary: ({ children }) => children,

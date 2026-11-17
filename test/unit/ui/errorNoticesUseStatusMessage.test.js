@@ -16,7 +16,8 @@ const shared = join(process.cwd(), 'packages/core/src/shared');
 const FILES = [
     'routes/AddAddressModal',
     'routes/AddressList',
-    'routes/ManageToken',
+    // The asset page, which My Tokens' token page (ManageToken) now renders.
+    'routes/TokenDetail',
     'routes/History',
     'routes/Loading',
     'components/QueuedBroadcastBanner',

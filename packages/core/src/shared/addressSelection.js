@@ -17,21 +17,21 @@
 // address. Owner-gated actions (mint, dividend, transfer-ownership, etc.) do
 // NOT use these: they must source from the token's owner address instead.
 
-export const WATCH_ONLY_SIGNING_MESSAGE = 'This watch-only account cannot sign.';
+export const WATCH_ONLY_SIGNING_MESSAGE = 'This address has no key in this wallet, so it cannot sign.';
 
 /**
  * Remove addresses that cannot authorize a transaction or message.
  * Empty chains are omitted so chain pickers cannot lead to a dead signing form.
  *
- * Watcher-mode wallets are the exception: their addresses are all watch-only
+ * Watch-only wallets are the exception: their addresses are all watch-only
  * and the flows build unsigned transactions, so nothing is removed there.
  *
  * @param {Record<string, any[]> | null | undefined} addressesByChain
- * @param {{ walletMode?: string } | null | undefined} [settings]
+ * @param {string | null | undefined} [walletMode]   the wallet's own mode (useWalletMode)
  * @returns {Record<string, any[]>}
  */
-export function signingAddressesByChain(addressesByChain, settings = null) {
-    if (settings?.walletMode === 'watcher') {
+export function signingAddressesByChain(addressesByChain, walletMode = null) {
+    if (walletMode === 'watcher') {
         return Object.fromEntries(
             Object.entries(addressesByChain || {})
                 .map(([chainId, addresses]) => [chainId, Array.isArray(addresses) ? addresses : []])

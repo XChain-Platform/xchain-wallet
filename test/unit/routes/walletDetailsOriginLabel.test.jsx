@@ -13,7 +13,7 @@
 // network or a coin.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, cleanup, act as domAct } from '@testing-library/react';
+import { render, cleanup, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { WalletDetails } from '../../../packages/core/src/shared/routes/WalletDetails.jsx';
@@ -50,6 +50,11 @@ async function originRowText(origin) {
             ),
         );
         for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    });
+    // The page opens on its Actions tab; the origin row is on the Details tab.
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('tab', { name: 'Details' }));
+        for (let i = 0; i < 4; i += 1) await Promise.resolve();
     });
     const label = [...utils.container.querySelectorAll('dt')].find((dt) => dt.textContent === en['walletDetails.origin']);
     return label?.nextElementSibling?.textContent ?? null;

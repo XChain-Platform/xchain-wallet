@@ -92,6 +92,9 @@ afterEach(cleanup);
 describe('PsbtSignForm own-address picker', () => {
     it('keeps a cross-network signing address and disables an address that cannot sign', async () => {
         const messaging = mount();
+        // The signing address sits in the closed "Signing with"
+        // section (Wallet Form Standard); open it to reach the field and icon.
+        fireEvent.click(await screen.findByRole('button', { name: /^Signing with/, expanded: false }));
         const field = await screen.findByRole('textbox', { name: 'Signing address' });
         expect(field).toHaveAttribute('readonly');
         expect(field).toHaveAttribute('id', 'psbt-sign-address');
@@ -107,7 +110,7 @@ describe('PsbtSignForm own-address picker', () => {
 
         fireEvent.change(screen.getByLabelText('Unsigned transaction code'), { target: { value: PSBT } });
         await screen.findByTestId('psbt-sign-output');
-        fireEvent.click(screen.getByRole('button', { name: 'Sign transaction' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Sign transaction$/i }));
         const approve = await screen.findByTestId('confirm-approve');
         await waitFor(() => expect(approve).toBeEnabled());
         fireEvent.click(approve);

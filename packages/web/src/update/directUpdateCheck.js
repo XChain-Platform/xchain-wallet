@@ -201,6 +201,7 @@ async function requestFeed(fetchImpl) {
         cache: 'no-store',
         redirect: 'error',      // a redirect off our origin is not our feed
         credentials: 'omit',    // nothing about this request identifies anyone
+        referrerPolicy: 'no-referrer',
     });
     if (!response?.ok) return null;
     return response.text();

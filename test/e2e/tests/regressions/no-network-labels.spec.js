@@ -40,11 +40,10 @@ const SETTINGS_SUBPAGES = [
     'Keyboard',
     'Privacy',
     'Safety',
-    'Wallet mode',
     'Backup',
     'Fees',
     'Connected sites',
-    'Automatic donation system',
+    'Automatic Donations',
     'About',
 ];
 

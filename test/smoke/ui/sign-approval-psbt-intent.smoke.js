@@ -10,12 +10,12 @@
 
 // Smoke for §21.2 / §48: signPsbt approval intent cross-check.
 //
-// The dApp-bridge signPsbt approval used to show only a truncated raw hex
-// string (unverifiable), so a compromised dApp could swap in a drain PSBT
-// undetected. The approval now decodes the PSBT (via the psbt.parse host
-// route) into destinations + amounts + fee, marking which outputs return
-// to the user's own addresses. Source-level checks that this wiring is in
-// place and the opaque-hex summary is gone.
+// A signPsbt approval that showed only a truncated raw hex string would be
+// unverifiable, so a compromised dApp could swap in a drain PSBT
+// undetected. The approval decodes the PSBT (via the psbt.parse host
+// route) and feeds the decoded action into Confirm Standard. A bare payment
+// becomes a native send after wallet-owned change is removed. Source-level
+// checks pin that wiring and ensure the raw lists stay gone.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -61,28 +61,33 @@ assert.doesNotMatch(signSrc, /function truncate\(/, 'the now-unused truncate hel
 
 // --- 4. Decoded intent renders, gated on signPsbt ------------------------
 
-// slice 5: the window's local PsbtIntentSummary is DELETED. The
-// approval surface now renders core's <PsbtIntentPanel>, the same component
-// the in-wallet PSBT variant uses, so these properties are asserted where
-// they now live. Two copies of "what does this transaction do to my money"
-// was the drift §5.5 exported the panel separately to prevent.
-assert.match(signSrc, /<PsbtIntentPanel/, 'renders the shared PsbtIntentPanel');
-const psbtGateIdx = signSrc.indexOf("kind === 'signPsbt' ? (");
-assert.ok(psbtGateIdx > 0, 'the panel is gated behind a signPsbt ternary');
+assert.match(
+    signSrc,
+    /const confirmationDecoded = kind === 'signPsbt'[\s\S]{0,300}barePayment\?\.decoded/,
+    'decoded actions and bare payments enter the shared confirm model',
+);
+assert.match(signSrc, /barePsbtSendPresentation/, 'uses the shared bare-payment decoder');
+assert.doesNotMatch(signSrc, /<PsbtIntentPanel/, 'does not render a raw PSBT inventory');
 assert.doesNotMatch(signSrc, /PsbtIntentSummary/, 'the legacy local summary is gone');
 
 const panelSrc = readFileSync(join(wsRoot, 'packages', 'core', 'src', 'shared', 'components', 'PsbtIntentPanel.jsx'), 'utf8');
 
-// Surfaces the security-relevant totals.
-assert.match(panelSrc, /Leaving this wallet/, 'shows how much leaves the wallet');
-assert.match(panelSrc, /Network fee/, 'shows the fee');
-assert.match(panelSrc, /Change \(back to you\)/, 'labels change returning to own addresses');
+assert.match(signSrc, /exactNetworkFeeSats\(psbtIntent\.decomposed\)/,
+    'derives the exact fee from the PSBT that will be signed');
+assert.match(panelSrc, /!own\.has\(output\.address\)/,
+    'leaves wallet-owned change out of a bare payment');
+assert.doesNotMatch(panelSrc, /data-testid="psbt-input"/, 'raw input rows are removed');
+assert.doesNotMatch(panelSrc, /data-testid="psbt-output"/, 'raw output rows are removed');
 
 // --- 5. Fails loud when decode is impossible -----------------------------
 
 // A parse failure must warn (role="alert"), never silently fall back to hex.
 assert.match(panelSrc, /role="alert"/, 'undecodable PSBT renders an alert');
-assert.match(panelSrc, /couldn't be decoded/, 'alert explains the transaction could not be decoded');
+assert.match(
+    panelSrc,
+    /psbtIntentPanel\.thisTransactionCouldNotBe|This transaction couldn't be decoded, so the wallet can't show you what it does/,
+    'alert explains the transaction could not be decoded',
+);
 
 // --- 6. Approval is held until the decode settles (F1) -------------------
 // Approving before the intent renders would be approving un-verified
@@ -92,10 +97,13 @@ assert.match(signSrc, /psbtDecodePending\s*=\s*\n?\s*kind === 'signPsbt' &&[\s\S
     'holds approval while the PSBT decode is still in flight');
 assert.match(signSrc, /psbtApprovalBlocked = psbtDecodeFailed \|\| psbtDecodePending/,
     'combines the failed and pending gates');
-assert.match(signSrc, /if \(busy \|\| password\.length === 0 \|\| !walletId \|\| approvalBlocked\) return/,
-    'the Approve handler refuses while blocked');
-assert.match(signSrc, /disabled=\{password\.length === 0 \|\| !walletId \|\| approvalBlocked\}/,
-    'the Approve button is disabled while blocked');
+// G130: Approve is never disabled; the handler answers a blocked tap with
+// the reason at the top of the window and sends nothing.
+assert.match(signSrc, /if \(psbtApprovalBlocked \|\| coSignApprovalBlocked\) \{[\s\S]{0,300}?return/,
+    'the Approve handler refuses while the decode gate is blocked');
+assert.match(signSrc, /const blocked = approveBlockReason\(\);\s*if \(blocked\) \{[\s\S]{0,500}?return;/,
+    'a blocked tap says why and sends nothing');
+assert.doesNotMatch(signSrc, /approveDisabled=/, 'the Approve button is never disabled (G130)');
 
 // --- 7. Co-sign approvals get the same gate (WYSIWYS parity) -------------
 // A coSign request the wallet already knows is undecodable or out-of-policy
@@ -109,7 +117,7 @@ assert.match(signSrc, /coSignApprovalBlocked[\s\S]*decodeOk/,
     'coSign gate blocks on a failed decode');
 assert.match(signSrc, /coSignApprovalBlocked[\s\S]*policyOk/,
     'coSign gate blocks on an out-of-policy request');
-assert.match(signSrc, /approvalBlocked = psbtApprovalBlocked \|\| coSignApprovalBlocked/,
-    'both kind gates funnel into the shared approvalBlocked flag');
+assert.match(signSrc, /function approveBlockReason\(\) \{[\s\S]{0,900}?if \(psbtApprovalBlocked \|\| coSignApprovalBlocked\)/,
+    'both kind gates funnel into the one Approve block reason (G130)');
 
 console.log('sign-approval-psbt-intent smoke OK');

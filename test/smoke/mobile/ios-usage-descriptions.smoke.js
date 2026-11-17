@@ -23,8 +23,10 @@ const cameraSource = read(
 const biometricSource = read(
     'packages/mobile/ios/App/App/vault/VaultBiometricSidecar.swift',
 );
-// The attachment hint (PNG, JPEG, ...) lives in the English dictionary.
-const attachmentSource = read('packages/core/src/shared/routes/ComposeMessage.jsx') + englishDictionarySource();
+// Image picking is the shared FileField, which AttachContentForm mounts for
+// token artwork (its help text names PNG/JPEG); message attachments retired.
+const attachmentSource = read('packages/core/src/shared/routes/AttachContentForm.jsx')
+    + read('packages/core/src/shared/components/FileField.jsx') + englishDictionarySource();
 const endpointSource = read(
     'packages/core/src/shared/components/settings/NetworkEndpointsSection.jsx',
 ) + englishDictionarySource();
@@ -53,7 +55,7 @@ const usedCapabilities = [
     {
         name: 'photo library image selection',
         key: 'NSPhotoLibraryUsageDescription',
-        used: /type="file"/.test(attachmentSource) && /PNG, JPEG/.test(attachmentSource),
+        used: /type="file"/.test(attachmentSource) && /PNG(?:, |\/)JPEG/.test(attachmentSource),
         purpose: /photo library.*(?:attachment|import)/i,
     },
     {

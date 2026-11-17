@@ -7,6 +7,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
+// The Asset field opens the token picker page; a stub with one button for the
+// token under test keeps these cases about Max.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: 'PEPE' })}>Pick PEPE</button>
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
+
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 
@@ -99,6 +111,8 @@ describe('Send Max', () => {
         await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.99999000'));
         expect(quote).toHaveBeenLastCalledWith(expect.objectContaining({ feePerKb: 6000 }));
 
+        // The Fees section starts closed: open it to reach the slider.
+        fireEvent.click(screen.getByRole('button', { name: /^Speed and Fees/, expanded: false }));
         fireEvent.change(screen.getByRole('slider', { name: 'Network fee' }), {
             target: { value: '2' },
         });
@@ -112,7 +126,8 @@ describe('Send Max', () => {
             nativeQuantity: '2000',
             tokens: [{ tick: 'PEPE', quantity: '123456789', divisibility: 8 }],
         });
-        fireEvent.change(await screen.findByLabelText(/^Token$/), { target: { value: 'PEPE' } });
+        fireEvent.click(await screen.findByRole('button', { name: /^Asset/ }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Pick PEPE' }));
         const max = await screen.findByRole('button', { name: 'Use max available amount' });
         await waitFor(() => expect(max).toBeEnabled());
         fireEvent.click(max);
@@ -139,7 +154,8 @@ describe('Send Max', () => {
 
         await screen.findByText(/held by another send from this wallet that hasn't gone out yet, so Max can't create a payment/);
         expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('');
-        expect(screen.getByRole('button', { name: /^Send$/ })).toBeDisabled();
+        // G130: Send stays enabled; a press answers with the Max note on the amount.
+        expect(screen.getByRole('button', { name: /^Send$/ })).toBeEnabled();
     });
 
     it('says other sends hold every coin when held coins leave the available line at zero', async () => {
@@ -180,11 +196,12 @@ describe('Send Max', () => {
 
         await screen.findByText(/below the 0\.00000546 BTC dust minimum/);
         expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('');
-        expect(screen.getByRole('button', { name: /^Send$/ })).toBeDisabled();
+        // G130: Send stays enabled; a press answers with the Max note on the amount.
+        expect(screen.getByRole('button', { name: /^Send$/ })).toBeEnabled();
         expect(screen.queryByRole('alert')).toBeNull();
     });
 
-    it('clears a stale amount and disables Send when the selected fee consumes the balance', async () => {
+    it('clears a stale amount and refuses Send when the selected fee consumes the balance', async () => {
         mount({
             nativeQuantity: '1000',
             quote: vi.fn().mockResolvedValue({
@@ -201,7 +218,11 @@ describe('Send Max', () => {
 
         await screen.findByText('The selected network fee uses the available balance, so Max cannot create a payment.');
         expect(amount).toHaveValue('');
-        expect(screen.getByRole('button', { name: /^Send$/ })).toBeDisabled();
+        // G130: Send stays enabled; a press answers with the Max note on the amount.
+        expect(screen.getByRole('button', { name: /^Send$/ })).toBeEnabled();
         expect(screen.queryByRole('alert')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        expect(await screen.findByRole('alert', { name: /form errors/i }))
+            .toHaveTextContent('The selected network fee uses the available balance, so Max cannot create a payment.');
     });
 });

@@ -9,6 +9,79 @@
  * contact legal@dankest.llc.
  */
 
+/* The title bar's filter and final action, at the app bar's gap so the two
+   rows line up (G82). */
+.headerActions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+/* A counterparty with no contact: Dispenser explorer's unnamed-seller mark
+   (the person icon on a muted circle at the list avatar size). */
+.unknownAvatar {
+    composes: sellerAvatar from './DispenserExplorer.module.css';
+    flex: 0 0 auto;
+}
+
+/* The thread header draws the tile at the header avatar size. */
+.unknownAvatar.unknownAvatarHeader {
+    width: var(--xc-avatar-size-header);
+    height: var(--xc-avatar-size-header);
+}
+
+.unknownAvatar.unknownAvatarHeader svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Thread header title: the counterparty's tile, then the name or address,
+   which keeps the h1's one-line ellipsis. */
+.threadTitle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-2);
+    max-width: 100%;
+    min-width: 0;
+    vertical-align: middle;
+}
+
+.threadTitleText {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Wide Messaging lets the shared detail panel own the independent scroll. */
+.wideThread {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 100%;
+}
+
+/* In the right panel the reply field stays available at the panel's bottom,
+   matching the dedicated thread screen's docked footer. */
+.wideComposer {
+    /* safe-area-in-container: this sticks inside the detail panel scroller,
+       which is already inset by the shell safe area. */
+    position: sticky;
+    z-index: var(--xc-z-base);
+    bottom: calc(-1 * var(--xc-page-top));
+    margin-top: auto;
+    margin-inline: calc(-1 * var(--xc-space-1));
+    margin-bottom: calc(-1 * var(--xc-page-top));
+    padding: var(--xc-space-2) var(--xc-space-1) var(--xc-page-top);
+    background: var(--xc-surface);
+    border-top: 1px solid var(--xc-border);
+}
+
+.wideComposer .composer {
+    margin-block: 0;
+}
+
 /* Encrypted-session requests: counterparties who published their key to one of
    our addresses. Each row offers a "Share my key" reply (format-1 handshake). */
 .requestSection {
@@ -104,21 +177,6 @@
     overflow-wrap: anywhere;
 }
 
-.attachmentLink {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-1);
-    margin-top: var(--xc-space-2);
-    color: inherit;
-    overflow-wrap: anywhere;
-}
-
-.attachmentLink svg {
-    flex: 0 0 auto;
-    width: var(--xc-icon-sm);
-    height: var(--xc-icon-sm);
-}
-
 .messageMeta {
     display: flex;
     align-items: center;
@@ -129,17 +187,95 @@
     font-size: var(--xc-text-xs);
 }
 
+/* Message bubble wrapper: holds the per-message copy menu (right-click or
+   long-press), so no copy button is drawn on the bubble. */
+.bubbleWrap {
+    position: relative;
+    max-width: 75%;
+    min-width: 0;
+}
+
+.copyMenu {
+    position: absolute;
+    z-index: var(--xc-z-dropdown);
+    inset-block-start: 100%;
+    inset-inline-start: 0;
+    display: flex;
+    flex-direction: column;
+    /* Grows to fit its longest item (every item is one line), capped at the
+       viewport minus the page gutter; only then does an item ellipsize. */
+    min-width: 140px;
+    width: max-content;
+    max-width: calc(100vw - 2 * var(--xc-page-gutter, 8px));
+    padding: var(--xc-space-1);
+    background: var(--xc-surface);
+    border: 1px solid var(--xc-border-strong);
+    border-radius: var(--xc-control-radius);
+    box-shadow: var(--xc-shadow-popover);
+}
+
+/* Menu rows are the shared rowAction Button; the parent selector keeps the
+   left-aligned menu look over the Button's centred defaults. */
+.copyMenu .copyMenuItem {
+    justify-content: flex-start;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    font-family: var(--xc-font-sans);
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text);
+    text-align: start;
+    background: transparent;
+    border: 0;
+    border-radius: var(--xc-control-radius);
+    cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .copyMenu .copyMenuItem:hover {
+        background: var(--xc-row-hover-bg);
+    }
+}
+
+/* A link row (opens a new tab) lays its label and external-link cue in a row. */
+.copyMenu a.copyMenuItem {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    text-decoration: none;
+}
+
+.copyMenuLinkIcon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--xc-text-muted);
+}
+
+.copyMenuLinkIcon svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
+}
+
+/* Header overflow menu of the open thread. */
+.threadMenuWrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.threadMenuPanel {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+}
+
 /* Docked thread composer: lives in the Screen footer, which flex-pins it to
    the bottom of the screen and supplies the top border + raised background.
    A negative block margin trims the footer's space-3 vertical padding to a
    tight space-2; the footer's inline padding is the page gutter, so the bar
-   lines up with the thread above it. The input and the send button are
-   joined into one continuous bar (shared border, radius only on the outer
-   corners); Enter or the button opens the send-confirmation screen. */
+   lines up with the thread above it. The input spans the full width; there
+   is no send button, Enter opens the send-confirmation screen. */
 .composer {
     display: flex;
     flex-direction: row;
-    align-items: stretch;
+    align-items: flex-end;
     margin-block: calc(var(--xc-space-2) - var(--xc-space-3));
 }
 
@@ -153,12 +289,15 @@
 }
 
 .composer > div {
-    flex: 1 1 auto;
+    flex: 1 1 0;
+    width: 100%;
+    min-width: 0;
     margin-bottom: 0;
 }
 
 .composerInput {
     flex: 1 1 auto;
+    width: 100%;
     min-width: 0;
     box-sizing: border-box;
     padding: var(--xc-space-2) var(--xc-space-3);
@@ -167,10 +306,7 @@
     color: var(--xc-text);
     background: var(--xc-surface);
     border: 1px solid var(--xc-border-strong);
-    border-inline-end: none;
-    border-radius: 0;
-    border-start-start-radius: var(--xc-control-radius);
-    border-end-start-radius: var(--xc-control-radius);
+    border-radius: var(--xc-control-radius);
 }
 
 /* Replace the browser focus ring (which outlines only the input half and
@@ -186,9 +322,15 @@
 
 /* The page owns scrolling so the conversation list stays in the same scroll flow. */
 .convList {
+    composes: flush from '../../ui/Card.module.css';
     list-style: none;
-    padding: 0;
     margin: 0;
+    overflow: hidden;
+}
+
+/* Thin dividers between the rows of the one list card. */
+.convList > li + li {
+    border-top: 1px solid var(--xc-border);
 }
 
 /* One chat row: line 1 = name/address + relative time; line 2 = preview. */
@@ -201,9 +343,7 @@
     text-align: start;
     padding: var(--xc-space-3);
     border: none;
-    border-bottom: 1px solid var(--xc-border);
-    /* Square: a row separator, not a button outline. The Button radius bent
-       each separator up at both ends. */
+    /* Square: the list card's overflow clips the outer corners. */
     border-radius: 0;
     background: transparent;
     color: inherit;
@@ -217,74 +357,75 @@
     width: 100%;
 }
 
-.convList li:last-child .convItem {
-    border-bottom: none;
-}
-
 /* The row is a ghost Button, whose hover fill is a dark slate meant for
    white label text. This row keeps theme text, so hover uses the muted
    surface through the Button's own hover tokens. */
 .convList .convItem {
-    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-bg: var(--xc-row-hover-bg);
     --xc-button-hover-border: var(--xc-border);
 }
 
-.convItem:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .convItem:hover {
+        background: var(--xc-row-hover-bg);
+    }
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .convList[data-wide='true'] .convItem:hover {
+        --xc-button-hover-bg: var(--xc-row-hover-bg);
+        --xc-button-hover-border: transparent;
+        background: var(--xc-row-hover-bg);
+        box-shadow: none;
+    }
+}
+
+/* The current wide conversation keeps the active colour but fills the full
+   row width. The list card clips the first and last row corners. */
+.convList[data-wide='true'] .convItem[aria-current='true'] {
+    --xc-button-hover-bg: var(--xc-row-active-bg);
+    --xc-button-hover-border: transparent;
+    width: 100%;
+    margin-inline: 0;
+    background: var(--xc-row-active-bg);
+    border-radius: 0;
+    box-shadow: none;
+    font-weight: inherit;
 }
 
 /* Line 1: name/address at the start + relative timestamp at the end. */
 .convTop {
     display: flex;
-    flex-wrap: wrap;
+    /* One line: the time keeps its width and the name or address yields. */
+    flex-wrap: nowrap;
     align-items: baseline;
     justify-content: space-between;
     gap: var(--xc-space-2);
     min-width: 0;
 }
 
-/* Holds the unread dot + name at the start of line 1, taking the row's free
-   width so the name still ellipsizes and the timestamp keeps its place. */
+/* Holds the name at the start of line 1, taking the row's free width so the
+   name still ellipsizes and the timestamp keeps its place. */
 .convNameWrap {
     display: flex;
     align-items: baseline;
     gap: var(--xc-space-2);
     flex: 1 1 auto;
-    /* Room for the unread dot and the whole first6…last6 address; the
-       timestamp wraps below the name before the address loses its tail. */
-    min-width: min(100%, 10em);
+    /* May shrink to nothing: the address fits itself to what the time leaves. */
+    min-width: 0;
     overflow: hidden;
 }
 
-/* Unread indicator: a small accent dot before a conversation's name,
-   iOS-Messages style. Cleared once the thread is opened. */
-.unreadDot {
-    flex: 0 0 auto;
-    width: var(--xc-space-2);
-    height: var(--xc-space-2);
-    border-radius: 50%;
-    background: var(--xc-accent-primary);
-    /* Nudge onto the text center so it reads as inline with the name. */
-    align-self: center;
-}
-
-/* Bold the name + preview while a conversation has unread messages. */
+/* Match the Notifications unread title weight without changing the preview. */
 .convNameUnread {
     color: var(--xc-text);
     font-weight: 700;
 }
 
-.convPreviewUnread {
-    color: var(--xc-text);
-    font-weight: 600;
-}
-
 .convName {
-    /* Reserve at least half the row for the name/address so the short
-       `first6…last6` form isn't double-truncated by the CSS ellipsis; the
-       timestamp yields width instead. */
+    /* Takes the room the time leaves; AddressText cuts itself to that room. */
     flex: 1 1 auto;
-    min-width: 50%;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -301,6 +442,10 @@
 .convTime {
     flex: 0 0 auto;
     white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--xc-space-1);
     font-size: var(--xc-text-xs);
     color: var(--xc-text-muted);
 }
@@ -324,4 +469,70 @@
         outline: 2px solid Highlight;
         outline-offset: 2px;
     }
+}
+
+/* Keyword hits in the open thread's filtered messages. */
+.messageBubble mark {
+    background: color-mix(in srgb, var(--xc-warning) 45%, transparent);
+    color: inherit;
+    border-radius: 2px;
+}
+
+/* Encryption details sheet of the thread menu. */
+.encryptionBody {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--xc-space-2);
+}
+
+.encryptionBody p {
+    margin: 0;
+}
+
+.encryptionLabel {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+}
+
+.encryptionKey {
+    font-family: var(--xc-font-mono, monospace);
+    overflow-wrap: anywhere;
+}
+
+/* The conversation row: body on the left, the Back-sized forward chevron every
+   tappable list row carries on the right. */
+/* Button wraps its children in a label span, so the row is a grandchild of
+   the button: a child selector never matched and the chevron fell below. */
+.convItem .convRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--xc-space-2);
+    width: 100%;
+    min-width: 0;
+}
+
+.convBody {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--xc-space-1) / 2);
+}
+
+.convItem .rowChevron {
+    --xc-icon-size: 32px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    justify-content: center;
+    width: calc(var(--xc-icon-size) / 3);
+    overflow: hidden;
+    color: var(--xc-text-muted);
+}
+
+.convItem .rowChevron svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
 }

@@ -53,7 +53,6 @@ const GUARDED_SHARED_DIRS = /\/shared\/(components|keyboard|commandPalette)\//;
 
 const localizedComponents = [
     'AdsNotice.jsx',
-    'AlertsOverlay.jsx',
     'BackupReminderCard.jsx',
     'ConfirmModal.jsx',
     'settings/NetworkSection.jsx',
@@ -77,7 +76,7 @@ const localizedComponents = [
     'settings/PrivacySection.jsx',
     'settings/SafetySection.jsx',
     'settings/ThisWalletSection.jsx',
-    'settings/WalletModeSection.jsx',
+    'WalletModeField.jsx',
     'AppHeader.jsx',
     'BalanceList.jsx',
     'HomeFilterBar.jsx',
@@ -98,6 +97,7 @@ const localizedRoutes = [
     'Receive.jsx',
     'Settings.jsx',
     'ActionDetail.jsx',
+    'ActionDetailView.jsx',
     'ActionsMenu.jsx',
     'AlertsRoute.jsx',
     'BridgeOriginBadge.jsx',
@@ -129,8 +129,13 @@ const PARTIAL_COPY_FILES = [
     '/routes/CallbackForm.jsx',
     '/routes/CoinpayForm.jsx',
     '/routes/ContractDetail.jsx',
+    // The agent account screens key their allowed-tokens, balance and account
+    // page copy; the older policy and wizard copy has not migrated yet.
+    '/routes/CoSignerAccountDetail.jsx',
+    '/routes/CoSignerAccountList.jsx',
+    '/routes/CoSignerPolicyEditor.jsx',
+    '/routes/CoSignerProvision.jsx',
     '/routes/ContractFundsForm.jsx',
-    '/routes/ContractStakeForm.jsx',
     '/routes/ControllerBindForm.jsx',
     '/routes/CreateBetFeedForm.jsx',
     '/routes/CreateOrderForm.jsx',
@@ -138,7 +143,6 @@ const PARTIAL_COPY_FILES = [
     '/routes/CrossChainOrderForm.jsx',
     '/routes/CrossChainSwapForm.jsx',
     '/routes/DelegateVoteForm.jsx',
-    '/routes/DelegationActionForm.jsx',
     '/routes/DeployContractForm.jsx',
     '/routes/DestroyForm.jsx',
     '/routes/DispenserDetail.jsx',
@@ -146,8 +150,9 @@ const PARTIAL_COPY_FILES = [
     '/routes/DispenserForm.jsx',
     '/routes/DividendForm.jsx',
     '/routes/LinkForm.jsx',
+    // The one List form; its Edit, Share, Transfer and Fork bodies came from
+    // the four list action forms.
     '/routes/ListCreateForm.jsx',
-    '/routes/ListForkForm.jsx',
     '/routes/MarketsList.jsx',
     '/routes/MintForm.jsx',
     '/routes/MultisigSigningSession.jsx',
@@ -156,13 +161,28 @@ const PARTIAL_COPY_FILES = [
     '/routes/ParallelComposer.jsx',
     '/routes/SellOwnershipForm.jsx',
     '/routes/SleepForm.jsx',
-    '/routes/StakeForm.jsx',
-    '/routes/StakingActionForm.jsx',
+    // The one Staking form (contract and validator staking).
+    '/routes/StakingForm.jsx',
     '/routes/SwapForm.jsx',
     '/routes/SweepForm.jsx',
     '/routes/TokenAdminForm.jsx',
     '/routes/TokenDetail.jsx',
     '/routes/TokenWizard.jsx',
+    // Screens that gained Form Standard wording through t() while their older
+    // review, result and list copy is still inline.
+    '/components/BetMyBetsPanel.jsx',
+    '/routes/AttachContentForm.jsx',
+    '/routes/BetFeedDetail.jsx',
+    '/routes/MessagingInbox.jsx',
+    '/routes/MultisigSendForm.jsx',
+    '/routes/MyOrdersView.jsx',
+    // My Orders' Cancel and Edit form, moved out of MyOrdersView with its copy.
+    '/routes/OrderActionPanel.jsx',
+    '/routes/MySwapsView.jsx',
+    '/routes/OracleConsole.jsx',
+    '/routes/PollDetail.jsx',
+    '/routes/ProjectRosterForm.jsx',
+    '/routes/PsbtSignForm.jsx',
 ];
 
 describe('shipping JSX localization', () => {

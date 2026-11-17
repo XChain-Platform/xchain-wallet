@@ -12,6 +12,7 @@ import { Blob as NodeBlob } from 'node:buffer';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
+import { EXPORT_ITEM, MORE_ACTIONS, chooseHistoryMenuItem, historyMenuItem } from './historyMoreMenu.js';
 
 const CHAIN = 'litecoin-regtest';
 const ADDRESS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -64,10 +65,11 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
+// Export sits in the title line's ⋯ menu.
 async function openExport() {
-    const open = await screen.findByRole('button', { name: 'Export…' });
-    await waitFor(() => expect(open).toBeEnabled());
-    fireEvent.click(open);
+    await screen.findByRole('button', { name: MORE_ACTIONS });
+    await waitFor(() => expect(historyMenuItem(EXPORT_ITEM)).toBeEnabled());
+    chooseHistoryMenuItem(EXPORT_ITEM);
     return screen.findByRole('dialog', { name: 'Export history' });
 }
 

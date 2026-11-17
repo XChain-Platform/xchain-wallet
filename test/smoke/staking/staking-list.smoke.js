@@ -108,14 +108,14 @@ for (const [method, fixture] of [
 // 5. List-pattern chrome: the "New stake" action, search, and rows
 // that hand a { kind, chainId, address, contractActionIndex? } ref up.
 // Operator ruling: the chain filter stays; it names chains, never network kinds.
-assert.ok(/<NetworkFilterDropdown\b/.test(listSrc),
-    'StakingList keeps its chain filter');
-assert.ok(/aria-label="Search staking positions"/.test(listSrc),
+assert.ok(/<ListFilterMenu\b[\s\S]*?networkFilter=\{network\}[\s\S]*?onNetworkFilterChange=\{setNetwork\}/.test(listSrc),
+    'StakingList keeps its chain filter in the title bar filter menu');
+assert.ok(/searchLabel="Search staking positions"/.test(listSrc),
     'StakingList renders the free-text search input');
-assert.ok(/Icon\.PlusIcon/.test(listSrc) && /New stake\s*<\/Button>/.test(listSrc),
-    'StakingList renders the "New stake" button in the content actions row');
-assert.ok(!/trailing=/.test(listSrc),
-    'StakingList keeps its action out of the page header');
+assert.ok(/icon=\{<Icon\.PlusIcon \/>\} aria-label="New Stake" title="New Stake" onClick=\{\(\) => onNewStake\(\)\}/.test(listSrc),
+    'StakingList renders the "New stake" plus button, named for assistive tech');
+assert.ok(/<PageHeader[\s\S]*?trailing=\{[\s\S]*?\{filterMenu\}[\s\S]*?onNewStake \?/.test(listSrc),
+    'StakingList keeps the filter and the New stake plus in the title bar');
 assert.ok(/onNewStake/.test(listSrc), 'StakingList exposes onNewStake');
 assert.ok(/onOpenStake\(row\.ref\)/.test(listSrc),
     'StakingList rows hand their position ref to onOpenStake');
@@ -190,8 +190,13 @@ for (const [shell, msgPath] of [
 // 9. Home + App.jsx wiring + BTC gate. The view id stays
 // 'staking-dashboard' so nav groups, the command palette, and view
 // resume all keep working.
+// Home has no bottom action row; Staking is a wallet menu row gated on a
+// BTC address.
 const homeSrc = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
-assert.ok(/\bonStaking\b/.test(homeSrc), 'Home exposes onStaking prop');
+assert.ok(!/\bonStaking\b/.test(homeSrc), 'Home carries no Staking button of its own');
+assert.ok(/id: 'staking-dashboard', labelKey: 'walletMenu\.row\.staking', icon: 'StakeIcon', gate: 'btc'/.test(
+    readFileSync(join(sharedRoutes, '..', 'walletMenu.js'), 'utf8'),
+), 'the wallet menu Staking row is gated on a BTC address');
 
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],
@@ -211,8 +216,8 @@ for (const [shell, appPath] of [
         `${shell} wires StakingList.onOpenStake → stake-detail with ref`);
     assert.ok(/onNewStake=\{\(\)\s*=>\s*setUnlockedView\('stake-new'\)\}/.test(app),
         `${shell} wires StakingList.onNewStake → stake-new`);
-    assert.ok(/onStaking=\{activeWalletId\s*&&\s*hasBtcAddress\s*\?\s*\(\)\s*=>\s*setUnlockedView\('staking-dashboard'\)\s*:\s*undefined\}/.test(app),
-        `${shell} passes onStaking to Home only when activeWalletId && hasBtcAddress`);
+    assert.ok(!/onStaking=\{/.test(app),
+        `${shell} passes no onStaking to Home`);
 }
 
 // 10. View-resume safety: only the root is resumable; the ref-dependent

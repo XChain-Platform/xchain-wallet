@@ -52,6 +52,10 @@ const formPath = join(sharedRoutes, 'BroadcastForm.jsx');
 assert.ok(existsSync(formPath), 'BroadcastForm.jsx exists');
 
 const src = readFileSync(formPath, 'utf8');
+const confirmModalSrc = readFileSync(
+    join(core, 'src', 'shared', 'components', 'ConfirmActionModal.jsx'),
+    'utf8',
+);
 
 // --- 1. Public surface + CSS reuse ------------------------------------
 
@@ -82,7 +86,11 @@ assert.ok(
     /decoderLib\.decodeAction/.test(src),
     'BroadcastForm invokes decoder.decodeAction',
 );
-assert.ok(src.includes('decoded.warnings'), 'BroadcastForm renders decoder warnings');
+assert.ok(/decoded=\{decoded\}/.test(src), 'BroadcastForm gives decoded warnings to the shared confirm screen');
+assert.ok(
+    /decodedWarnings: variant === 'action'[\s\S]*?formattedDecoded\?\.warnings/.test(confirmModalSrc),
+    'ConfirmActionModal puts decoded action warnings in the Confirm Standard warning slot',
+);
 
 // --- 4. Sign wires through messaging.broadcastAction ------------------
 
@@ -117,7 +125,7 @@ assert.ok(
 );
 assert.ok(!/\.VALUE\s*=|\.FEE\s*=|\.MEMO\s*=|toISOString/.test(src),
     'BroadcastForm does not compose feed, oracle, memo, or timestamp fields');
-assert.ok(/variant="success"[\s\S]*?icon=\{<Icon\.BroadcastIcon \/>\}[\s\S]*?>\s*Announce/.test(src),
+assert.ok(/<FormAction\s+icon=\{<Icon\.BroadcastIcon \/>\}[\s\S]*?>\s*Announce\s*<\/FormAction>/.test(src),
     'BroadcastForm uses the green Announce button and broadcast icon');
 
 // --- 7. Core flow -----------------------------------------------------

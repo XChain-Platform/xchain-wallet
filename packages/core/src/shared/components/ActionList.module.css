@@ -1,0 +1,71 @@
+/* The action list (G101): one flush list card with divider lines, the same
+   card Settings draws its group list in (U41, U58). */
+.list {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.list > li + li {
+    border-top: 1px solid var(--xc-border);
+}
+
+.item {
+    display: block;
+    min-width: 0;
+}
+
+/* The row fills its list item edge to edge; the card owns the corners. */
+.row {
+    border-radius: 0;
+}
+
+/* A disabled row stays focusable (aria-disabled), so it dims itself here
+   rather than through the kit's :disabled state. Only the icon and title dim;
+   the reason line keeps full muted contrast so it stays readable. */
+.row[aria-disabled='true'] {
+    cursor: not-allowed;
+}
+
+.row[aria-disabled='true'] .iconTile,
+.row[aria-disabled='true'] .titleText {
+    opacity: var(--xc-disabled-opacity);
+}
+
+/* The row icon: no wrapper tile, just the glyph in accent text, drawn at a
+   fixed 36px (not a control height, which grows on touch screens) so the row
+   height and text alignment stay where the old tile put them. */
+.iconTile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--xc-space-8) + var(--xc-space-1));
+    height: calc(var(--xc-space-8) + var(--xc-space-1));
+    flex: 0 0 auto;
+    color: var(--xc-accent-text);
+}
+
+.iconTile svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* An explorer row draws that site's own bundled logo (or its initial) at the
+   same icon size as the glyphs. */
+.iconTile img,
+.iconTile > span {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* No danger tone (ruling 2026-11-14): a row that deletes or removes is drawn
+   exactly like every other action row. */
+
+.reason {
+    color: var(--xc-text-muted);
+}

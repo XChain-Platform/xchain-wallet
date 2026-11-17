@@ -4,8 +4,9 @@
     flex-direction: column;
     /* The compact chart-stack gap has no spacing-token equivalent. */
     gap: 2px;
-    /* The halo overlap has no spacing-token equivalent. */
-    margin-top: -6px;
+    /* No overlap: the chart card sits the same 8px below the balance card as
+       every other Home block. */
+    margin-top: 0;
     min-width: 0;
     overflow: hidden;
 }
@@ -160,8 +161,8 @@
 }
 
 .rangeActive {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
+    background: var(--xc-toggle-selected-bg);
+    color: var(--xc-toggle-selected-text);
 }
 
 .rangeSlot.rangeActive {
@@ -182,9 +183,126 @@
     inset: 0;
     z-index: -1;
     border-radius: inherit;
-    background: var(--xc-accent-primary);
+    background: var(--xc-toggle-selected-bg);
 }
 
 .rangeActive:hover {
-    color: var(--xc-on-accent);
+    color: var(--xc-toggle-selected-text);
+}
+
+/* The chart drawn behind the balance card. The plot fills the whole
+   card; only the range buttons take room, along the card's foot. */
+.wrap.behind {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    border-radius: 0;
+    margin: 0;
+    padding: 0 var(--xc-card-pad) var(--xc-space-1);
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow: visible;
+}
+
+.behind > [role='tabpanel'] {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.behind .change,
+.behind .missingNotice {
+    display: none;
+}
+
+.behind .slot,
+.behind .chart {
+    block-size: 100%;
+    min-block-size: 0;
+}
+
+.behind .slot > .slotMessage,
+.behind .placeholder {
+    display: none;
+}
+
+.behind .ranges,
+.behind .foot {
+    position: relative;
+    z-index: 2;
+}
+
+/* The range row and the note that some tokens sit out of the line. The note
+   hangs above the row and takes no room, so the card keeps its height
+   whether it shows or not. */
+.foot {
+    position: relative;
+}
+
+.tokenNote {
+    margin-block-end: var(--xc-space-1);
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    line-height: 1.2;
+    text-align: center;
+}
+
+.behind .tokenNote {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 100%;
+    margin: 0 0 var(--xc-space-1);
+    color: var(--xc-hero-text);
+    opacity: 0.85;
+    pointer-events: none;
+}
+
+.behind .range {
+    color: var(--xc-hero-chip-text);
+}
+
+.behind .range:hover {
+    color: var(--xc-hero-chip-text);
+}
+
+.behind .rangeSlot.rangeActive {
+    color: var(--xc-hero-chip-selected-text);
+}
+
+.behind .rangeSlot.rangeActive .rangeLabel {
+    border-radius: var(--xc-radius-pill);
+}
+
+.behind .rangeSlot.rangeActive .rangeLabel::after {
+    background: var(--xc-hero-chip-selected-bg);
+}
+
+.behind .range:focus-visible {
+    outline-color: var(--xc-hero-text);
+}
+
+/* Every range is a solid pill over the chart. */
+.behind .rangeSlot .rangeLabel {
+    border-radius: var(--xc-radius-pill);
+    border: 1px solid var(--xc-hero-border);
+    background: var(--xc-hero-chip-bg);
+}
+
+.behind .rangeSlot .rangeLabel::after {
+    display: none;
+}
+
+.behind .rangeSlot.rangeActive .rangeLabel,
+.behind .rangeSlot.rangeActive:hover .rangeLabel {
+    border-color: var(--xc-hero-chip-selected-bg);
+    background: var(--xc-hero-chip-selected-bg);
+}
+
+/* Privacy mode (balance hidden) shows no trend: the chart and its ranges
+   vanish but keep their room so the card does not change height. */
+.behindHidden > [role='tabpanel'],
+.behindHidden .ranges {
+    visibility: hidden;
 }

@@ -11,16 +11,17 @@ const route = (name) => readFileSync(resolve(here, '../../../packages/core/src/s
 
 describe('governance and staking screen theme colors', () => {
     it.each([
-        ['GovernancePolls.jsx', 'var(--xc-warning-bg)'],
-        ['BetFeedsList.jsx', 'var(--xc-accent-primary)'],
-        ['MyBets.jsx', 'var(--xc-danger-bg)'],
-        ['ContractStakeForm.jsx', 'var(--xc-danger-text)'],
+        // The poll status pill's colours live in pollDisplay, shared by the list and the poll page.
+        ['pollDisplay.js', 'var(--xc-warning-bg)'],
+        // The card's "You bet" chip and chevron (the status pill is gone, ruling 2026-11-13).
+        ['../components/BetMarketCard.module.css', 'var(--xc-accent-text)'],
+        // The one Staking form: the contract penalty warning and the capability readout.
+        ['StakingForm.jsx', 'var(--xc-danger-text)'],
         ['CoinpayForm.module.css', 'var(--xc-accent-primary)'],
-        ['OperatorDashboard.jsx', 'var(--xc-border)'],
-        ['StakeForm.jsx', 'var(--xc-text-muted)'],
+        ['StakingForm.jsx', 'var(--xc-text-muted)'],
         ['StakingList.module.css', 'var(--xc-on-accent)'],
         ['MyLists.module.css', 'var(--xc-danger-bg)'],
-        ['StakeDetail.module.css', 'var(--xc-warning)'],
+        ['StakeDetail.module.css', 'var(--xc-success)'],
         ['StakingList.module.css', "from '../../ui/Card.module.css'"],
     ])('%s uses a palette token for the audited color', (file, token) => {
         expect(route(file)).toContain(token);
@@ -34,12 +35,13 @@ describe('governance and staking screen theme colors', () => {
 
     it.each([
         ['GovernancePolls.jsx', ["'#1b5e20'", "'#8e1c1c'", "'#8a6d00'", "'#fff'"]],
+        ['pollDisplay.js', ["'#1b5e20'", "'#8e1c1c'", "'#8a6d00'", "'#fff'"]],
         ['BetFeedsList.jsx', ["'#1b5e20'", "'#8e1c1c'", "'#4a4a4a'", "'#0d47a1'", "'#fff'"]],
-        ['MyBets.jsx', ["'#1b5e20'", "'#8e1c1c'", "'#4a4a4a'", "'#0d47a1'", "'#fff'"]],
-        ['StakeForm.jsx', ['var(--border,', 'var(--muted,']],
-        // Its muted explanation paragraphs moved into the Amount help tip (U57);
-        // no hard-coded color may come back in their place.
-        ['StakingActionForm.jsx', ["color: '#", "'#fff'", 'var(--muted,']],
+        ['../components/BetMyBetsPanel.jsx', ["'#1b5e20'", "'#8e1c1c'", "'#4a4a4a'", "'#0d47a1'", "'#fff'"]],
+        // The one Staking form. The unstake and claim explanation paragraphs
+        // moved into the Amount help tip (U57); no hard-coded color may come
+        // back in their place.
+        ['StakingForm.jsx', ['var(--border,', 'var(--muted,', "color: '#", "'#fff'"]],
         ['StakingList.module.css', ['var(--color-border,', 'var(--color-surface-raised,', 'var(--xc-info,', 'background: #FFFFFF']],
         ['MyLists.module.css', ['background: #FFFFFF', 'background: rgba(34', 'background: rgba(220']],
     ])('%s does not retain the dark-mode-breaking value', (file, forbidden) => {
@@ -49,31 +51,36 @@ describe('governance and staking screen theme colors', () => {
 });
 
 describe('governance screen narrow layout', () => {
-    it('MyBets.jsx lays bet rows out through the shared ListRow', () => {
-        const source = route('MyBets.jsx');
-        expect(source).toContain('<ListRow');
-        const rows = source.split('\n').filter((line) => (
-            line.includes("display: 'flex'") && line.includes("justifyContent: 'space-between'")
-        ));
-        expect(rows.every((line) => line.includes("flexWrap: 'wrap'"))).toBe(true);
+    // My bets is the All list narrowed (ruling 2026-11-13): the bets file
+    // holds the loader and the card chip only, and draws no rows of its own.
+    it('the My bets tab draws no rows of its own, only the Prediction markets cards', () => {
+        const source = route('../components/BetMyBetsPanel.jsx');
+        expect(source).not.toContain('<ListRow');
+        expect(source).not.toMatch(/export function BetMyBetsPanel\b/);
+        expect(route('BetFeedsList.jsx')).not.toContain('<BetMyBetsPanel');
     });
 
+    // BetFeedDetail (on the shared outcome page) and OracleRecord lay their
+    // rows out with classes now, so they may hold none of these inline rows;
+    // any they do hold must wrap.
     it.each([
-        'BetFeedDetail.jsx',
-        'OracleRecord.jsx',
-    ])('%s wraps every space-between user-data row', (file) => {
+        ['BetFeedDetail.jsx', false],
+        ['OracleRecord.jsx', false],
+    ])('%s wraps every space-between user-data row', (file, mustHaveRows) => {
         const rows = route(file).split('\n').filter((line) => (
             line.includes("display: 'flex'") && line.includes("justifyContent: 'space-between'")
         ));
-        expect(rows.length).toBeGreaterThan(0);
+        if (mustHaveRows) expect(rows.length).toBeGreaterThan(0);
         expect(rows.every((line) => line.includes("flexWrap: 'wrap'"))).toBe(true);
     });
 
-    it('wraps betting market headers through the shared list row class', () => {
+    it('keeps shared question-card text and footers shrinkable', () => {
         const source = route('BetFeedsList.jsx');
-        const css = route('BetFeedsList.module.css');
-        expect(source).toContain('className={local.marketHeader}');
-        expect(css).toMatch(/\.marketHeader\s*\{[\s\S]*?flex-wrap:\s*wrap/);
+        const card = readFileSync(resolve(here, '../../../packages/core/src/shared/components/BetMarketCard.module.css'), 'utf8');
+        expect(source).toContain('<BetMarketCard');
+        expect(card).toMatch(/\.detail\s*\{[\s\S]*?min-width:\s*0/);
+        expect(card).toMatch(/\.question\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
+        expect(card).toMatch(/\.right \.chip\s*\{[\s\S]*?text-overflow:\s*ellipsis/);
     });
 
     it('wraps Oracle Console market headers through its phone layout styles', () => {
@@ -88,27 +95,33 @@ describe('governance screen narrow layout', () => {
     });
 
     it('keeps contract row text inside a shrinkable column', () => {
+        // Contract rows are shared ListRows; their text column shrinks and wraps.
         const source = route('ContractsList.jsx');
-        expect(source.match(/<span className=\{styles\.entryText\}>/g)).toHaveLength(2);
+        expect(source).toMatch(/<ListRow\s+className=\{contractStyles\.contractRow\}/);
+        expect(route('ContractScreens.module.css')).toMatch(/\.contractRow > span:nth-child\(2\)\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere/);
     });
 
     it('lets the page own vertical scrolling for long list edits', () => {
-        const source = route('ListForkForm.jsx');
+        // The List form's Edit and Fork body holds the long member list.
+        const source = route('ListCreateForm.jsx');
         expect(source).not.toContain("maxHeight: '260px'");
         expect(source).not.toContain("overflowY: 'auto'");
     });
 
     it('keeps governance cards, option rows, and result values shrinkable', () => {
-        const polls = route('GovernancePolls.module.css');
+        const polls = readFileSync(resolve(here, '../../../packages/core/src/shared/components/QuestionList.module.css'), 'utf8');
         const detail = route('PollDetail.module.css');
-        // Poll cards are ListRows, whose content column shrinks beside the status pill.
-        expect(route('GovernancePolls.jsx')).toContain('<ListRow');
-        expect(polls).toMatch(/\.pollText\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
-        expect(detail).toMatch(/\.resultHeader\s*\{[\s\S]*?flex-wrap:\s*wrap/);
-        expect(detail).toMatch(/\.resultOption\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
-        expect(detail).toMatch(/\.resultValues > span\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
-        expect(detail).toMatch(/\.splitOptionInput :global\(label\)\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
-        expect(detail).toMatch(/\.optionLabel\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
-        expect(detail).toMatch(/@media not all and \(min-width:\s*400px\)[\s\S]*?\.resultValues\s*\{[\s\S]*?flex:\s*1 1 100%/);
+        const outcome = readFileSync(resolve(here, '../../../packages/core/src/shared/components/outcomeDetail/OutcomeDetail.module.css'), 'utf8');
+        expect(route('GovernancePolls.jsx')).toContain('<QuestionCard');
+        expect(polls).toMatch(/\.answerLabel\s*\{[\s\S]*?overflow-wrap:\s*break-word/);
+        // The poll page is the shared outcome page: the hero question, each
+        // final result row (name, winner pill, share) and its figures wrap.
+        expect(outcome).toMatch(/\.question\s*\{[\s\S]*?overflow-wrap:\s*break-word/);
+        expect(outcome).toMatch(/\.resultTop\s*\{[\s\S]*?flex-wrap:\s*wrap/);
+        expect(outcome).toMatch(/\.resultName\s*\{[\s\S]*?overflow-wrap:\s*break-word/);
+        expect(outcome).toMatch(/\.resultSub\s*\{[\s\S]*?overflow-wrap:\s*break-word/);
+        expect(outcome).toMatch(/\.pickCheck\s*\{[\s\S]*?overflow-wrap:\s*break-word/);
+        expect(detail).toMatch(/\.splitOptionInput :global\(label\)\s*\{[\s\S]*?overflow-wrap:\s*break-word/);
+        expect(detail).toMatch(/\.optionLabel\s*\{[\s\S]*?overflow-wrap:\s*break-word/);
     });
 });

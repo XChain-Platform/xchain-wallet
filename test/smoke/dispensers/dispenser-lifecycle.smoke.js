@@ -54,8 +54,11 @@ assert.match(dd, /getDispenserLifecycle/, 'DispenserDetail loads the lifecycle e
 // must be loaded alongside 'closes' (the completion written when it ends), or the
 // cancel is invisible on the timeline for the whole hour after it is taken.
 assert.match(dd, /\['edits', 'cancels', 'closes', 'expires'\]/, 'loads refills/edits, the cancel request, closes, and expires');
-assert.match(dd, /lifecycleTimeline/, 'merges events into one timeline');
-assert.match(dd, /setTab\('lifecycle'\)/, 'has a Lifecycle tab');
+assert.match(dd, /activityTimeline/, 'merges events into one timeline');
+// The timeline is the Activity tab's one dated list, the toggle's third tab
+// after Details, with no inner Dispenses | Lifecycle switch.
+assert.match(dd, /<ActionsDetailsToggle\b[\s\S]*?id: 'activity'[\s\S]*?after: true/, 'has an Activity tab after Details');
+assert.doesNotMatch(dd, /id: 'lifecycle'/, 'has no inner Lifecycle tab');
 assert.match(dd, /dispenser_action_index/, 'scopes events to this dispenser by action index');
 
 console.log('dispenser-lifecycle smoke: all assertions passed');

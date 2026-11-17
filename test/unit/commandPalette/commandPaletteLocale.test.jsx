@@ -89,7 +89,7 @@ describe('command palette titles follow the active locale', () => {
         expect(byId(commands, 'create-action-queue').title).toBe('Action queue');
         expect(byId(commands, 'nav-send').keywords).toEqual(['pay', 'transfer', 'spend']);
         render(<CommandPalette open onClose={() => {}} commands={commands} />);
-        expect(screen.getByRole('dialog', { name: 'Wallet menu' })).toBeTruthy();
+        expect(screen.getByRole('dialog', { name: 'Command Palette' })).toBeTruthy();
         fireEvent.change(screen.getByRole('combobox'), { target: { value: 'sen' } });
         expect(screen.getAllByText('Send').length).toBeGreaterThan(0);
     });

@@ -25,6 +25,7 @@
 
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/firstPaint.js';
 import '../../i18n/locales/en/commandPalette.js';
 import '../../i18n/locales/en/governance.js';
 import '../../i18n/locales/en/issue.js';
@@ -36,7 +37,7 @@ import '../../i18n/locales/en/settings.js';
 import '../../i18n/locales/en/ui.js';
 import '../../i18n/locales/en/walletMenu.js';
 import { Icon } from '../../ui/index.js';
-import { visibleWalletMenu, walletMenuFooter } from '../walletMenu.js';
+import { visibleWalletMenu, walletLockAction } from '../walletMenu.js';
 
 // Categories double as the Tab-cycle groups in the palette (§33.4). Order
 // here is the order they render in when the query is empty. 'Suggested' holds
@@ -143,7 +144,6 @@ const CATALOGUE_COMMAND_META = {
     markets: { subtitleKey: 'palette.navMarkets.subtitle', keywords: ['dex', 'market', 'trade', 'exchange', 'orderbook'] },
     'market-activity': { subtitleKey: 'palette.navMarketplace.subtitle', keywords: ['market', 'activity', 'dispenser', 'orders', 'swaps'] },
     'dispensers-list': { subtitleKey: 'palette.navDispensers.subtitle', keywords: ['vending', 'sell'] },
-    'cross-chain-templates': { keywords: ['cross chain', 'templates', 'parallel'] },
     obligations: { subtitleKey: 'palette.navObligations.subtitle', keywords: ['coinpay', 'obligation', 'pay', 'due', 'match', 'deadline'] },
     'contracts-list': { subtitleKey: 'palette.navContracts.subtitle', keywords: ['vm', 'deploy', 'execute'] },
     'staking-dashboard': { subtitleKey: 'palette.navStaking.subtitle', keywords: ['stake', 'validator', 'rewards'] },
@@ -153,12 +153,49 @@ const CATALOGUE_COMMAND_META = {
     messaging: { subtitleKey: 'palette.navMessaging.subtitle', keywords: ['inbox', 'messages', 'chat'] },
     contacts: { subtitleKey: 'palette.navContacts.subtitle', keywords: ['address book', 'people'] },
     alerts: { keywords: ['notifications', 'notify'] },
-    'bet-markets': { subtitleKey: 'palette.navBetting.subtitle', keywords: ['bet', 'market', 'odds', 'wager', 'oracle', 'parimutuel'] },
+    'bet-markets': { subtitleKey: 'palette.navBetting.subtitle', keywords: ['bet', 'betting', 'market', 'odds', 'oracle', 'parimutuel'] },
     wizard: { subtitleKey: 'palette.createToken.subtitle', keywords: ['issue', 'new token', 'mint', 'launch'] },
     'publish-file': { subtitleKey: 'palette.createPublishFile.subtitle', keywords: ['file', 'upload', 'publish', 'gated', 'encrypted', 'content'] },
     'sign-message': { subtitleKey: 'palette.signMessage.subtitle', keywords: ['sign', 'message', 'attest'] },
+    // Rows the grouped full menu added (2026-11-13) keep the subtitle and
+    // keywords of the palette command they replace.
+    'dispenser-explorer': { subtitleKey: 'palette.navBrowseDispensers.subtitle', keywords: ['browse', 'dispenser', 'buy', 'search', 'vending', 'shop'] },
+    broadcast: { subtitleKey: 'palette.createBroadcast.subtitle', keywords: ['broadcast', 'announce'] },
+    'link-form': { keywords: ['link', 'cross chain', 'history'] },
+    'my-orders': { subtitleKey: 'palette.navMyOrders.subtitle', keywords: ['orders', 'open', 'dex', 'cancel', 'edit'] },
+    'my-swaps': { subtitleKey: 'palette.navMySwaps.subtitle', keywords: ['swaps', 'open', 'atomic', 'cancel', 'edit'] },
+    dispenser: { subtitleKey: 'palette.createDispenser.subtitle', keywords: ['dispenser', 'vending', 'sell'] },
+    'contract-deploy': { keywords: ['contract', 'deploy', 'publish', 'vm'] },
+    'governance-polls': { subtitleKey: 'palette.navGovernance.subtitle', keywords: ['vote', 'poll', 'proposal'] },
+    'governance-delegations': { keywords: ['vote', 'delegate', 'delegation', 'governance'] },
+    'multisig-sign': { subtitleKey: 'palette.navMultisigSign.subtitle', keywords: ['multisig', 'cosigner', 'approve', 'psbt'] },
+    'cosigner-accounts': { subtitleKey: 'palette.navCoSignerAccounts.subtitle', keywords: ['agent', 'agent accounts', 'automated', 'cosigner', 'co-sign', 'musig2', 'policy', 'bot'] },
+    'pair-signer': { keywords: ['hardware', 'ledger', 'trezor', 'pair', 'signer'] },
+    'verify-signature': { subtitleKey: 'palette.signVerify.subtitle', keywords: ['verify', 'signature', 'check'] },
+    'sign-psbt': { subtitleKey: 'palette.signPsbt.subtitle', keywords: ['psbt', 'sign', 'watcher', 'air-gapped'] },
+    'wallet-picker': { subtitleKey: 'palette.walletSwitch.subtitle', keywords: ['wallet', 'switch', 'change'] },
+    'account-picker': { keywords: ['account', 'switch', 'change'] },
+    'add-wallet': { keywords: ['wallet', 'new', 'import', 'create'] },
+    'connected-sites': { subtitleKey: 'palette.navConnectedSites.subtitle', keywords: ['dapps', 'permissions', 'connections'] },
+    'parallel-compose': { subtitleKey: 'commandPalette.actionQueue.subtitle', keywords: ['action', 'queue', 'parallel', 'cross chain'] },
+    advanced: { subtitleKey: 'palette.createAdvanced.subtitle', keywords: ['advanced', 'raw', 'expert'] },
+    swap: { subtitleKey: 'palette.tradeSwap.subtitle', keywords: ['swap', 'order', 'exchange'] },
+    'create-order': { subtitleKey: 'palette.tradeOrder.subtitle', keywords: ['order', 'limit', 'dex', 'sell', 'buy', 'native'] },
+    'cross-chain-swap': { subtitleKey: 'palette.tradeXchainSwap.subtitle', keywords: ['cross chain', 'bridge', 'atomic'] },
+    'cross-chain-order': { subtitleKey: 'palette.tradeXchainOrder.subtitle', keywords: ['cross chain', 'order', 'limit', 'federation', 'partial'] },
+    'batch-compose': { keywords: ['batch', 'bundle', 'many'] },
+    coinpay: { subtitleKey: 'palette.tradeCoinpay.subtitle', keywords: ['coinpay', 'pay', 'settle'] },
+    oracle: { subtitleKey: 'palette.createOraclePrice.subtitle', keywords: ['oracle', 'price', 'fiat', 'quote', 'feed'] },
+    'bridge-move': { subtitleKey: 'palette.createBridgeMove.subtitle', keywords: ['bridge', 'cross chain', 'move', 'chain', 'xbridge', 'migrate', 'port'] },
+    'add-account': { keywords: ['account', 'new', 'add'] },
+    settings: { subtitleKey: 'components.totalBalanceHero.openSettings', keywords: ['preferences', 'options', 'config'] },
+    airdrop: { subtitleKey: 'palette.createAirdrop.subtitle', keywords: ['airdrop', 'distribute', 'bulk'] },
+    'governance-create-poll': { keywords: ['poll', 'vote', 'proposal', 'new', 'governance'] },
+    'compose-message': { keywords: ['message', 'write', 'send', 'compose', 'chat'] },
 };
 
+// A menu row takes the id of the palette command it replaces, so search lists
+// that destination once (the dedupe in buildCommands drops the later copy).
 const CATALOGUE_COMMAND_IDS = {
     'market-activity': 'nav-marketplace',
     'dispensers-list': 'nav-dispensers',
@@ -169,6 +206,34 @@ const CATALOGUE_COMMAND_IDS = {
     wizard: 'create-token',
     'publish-file': 'create-publish-file',
     'sign-message': 'sign-message',
+    'dispenser-explorer': 'nav-browse-dispensers',
+    broadcast: 'create-broadcast',
+    'my-orders': 'nav-my-orders',
+    'my-swaps': 'nav-my-swaps',
+    dispenser: 'create-dispenser',
+    'governance-polls': 'nav-governance',
+    'multisig-sign': 'nav-multisig-sign',
+    'cosigner-accounts': 'nav-cosigner-accounts',
+    'verify-signature': 'sign-verify',
+    'sign-psbt': 'sign-psbt',
+    'connected-sites': 'nav-connected-sites',
+    'parallel-compose': 'create-action-queue',
+    advanced: 'create-advanced',
+    swap: 'trade-swap',
+    'create-order': 'trade-order',
+    'cross-chain-swap': 'trade-xchain-swap',
+    'cross-chain-order': 'trade-xchain-order',
+    coinpay: 'trade-coinpay',
+    oracle: 'create-oracle-price',
+    'bridge-move': 'create-bridge-move',
+    airdrop: 'create-airdrop',
+};
+
+const SIDEBAR_SEARCH_TITLE_KEYS = {
+    markets: 'components.leftNav.exchangeDex',
+    'my-tokens': 'components.leftNav.myTokens',
+    'governance-polls': 'components.leftNav.governance',
+    'bet-markets': 'components.leftNav.bettingMarkets',
 };
 
 /**
@@ -232,7 +297,8 @@ export function parseFreeformCommands(rawQuery, ctx) {
  * @property {() => void} [lock]                 lock the wallet
  * @property {() => void} [refresh]              refresh balances / session
  * @property {() => void} [switchWallet]         open the wallet picker
- * @property {boolean} [hasBtcAddress]           gates BTC-only surfaces (staking / multisig); also the Contracts fallback when hasVmAddress is absent
+ * @property {(tab: 'all' | 'bets' | 'markets') => void} [openBetTab]  open Bet Markets on one of its tabs
+ * @property {boolean} [hasBtcAddress]          gates BTC-only surfaces (staking / multisig); also the Contracts fallback when hasVmAddress is absent
  * @property {boolean} [hasVmAddress]            gates Contracts: an address on any chain whose descriptor advertises DEPLOY (BTC / LTC / DOGE today)
  * @property {boolean} [hasGovernanceAddress]    gates governance polls
  * @property {boolean} [hasDexSurface] false only when the build compiled the DEX surface out; its commands then point at views that do not exist
@@ -269,6 +335,9 @@ export function buildCommands(ctx) {
                 searchGroup: 'Menu',
                 searchOnlyTitle: true,
                 title: row.label,
+                ...(SIDEBAR_SEARCH_TITLE_KEYS[row.id]
+                    ? { searchTitle: t(SIDEBAR_SEARCH_TITLE_KEYS[row.id]) }
+                    : {}),
                 ...(meta.subtitleKey ? { subtitle: t(meta.subtitleKey) } : {}),
                 keywords: meta.keywords || [],
                 Icon: Icon[row.icon],
@@ -278,18 +347,6 @@ export function buildCommands(ctx) {
         }
     }
 
-    const settingsRow = walletMenuFooter().find((row) => row.id === 'settings');
-    list.push({
-        id: 'nav-settings',
-        category: 'Navigate',
-        searchGroup: 'Menu',
-        searchOnlyTitle: true,
-        title: settingsRow.label,
-        subtitle: t('components.totalBalanceHero.openSettings'),
-        keywords: ['preferences', 'options', 'config'],
-        Icon: Icon[settingsRow.icon],
-        run: go('settings'),
-    });
 
     list.push(
         ...(hasDex ? [
@@ -307,15 +364,19 @@ export function buildCommands(ctx) {
     if (ctx.hasGovernanceAddress) {
         list.push({ id: 'nav-governance', category: 'Navigate', title: t('governance.title'), subtitle: t('palette.navGovernance.subtitle'), keywords: ['vote', 'poll', 'proposal'], Icon: Icon.HandshakeIcon, run: go('governance-polls') });
     }
-    // Betting, on the DEX pattern: the browse hub plus the two views a user comes
+    // Prediction markets, on the DEX pattern: the browse hub plus the two views a user comes
     // back to rather than browses to. Ungated like the actions-menu entry it
     // mirrors, because the hub itself reports when no chain in this wallet
     // supports BET; gating here would make the destination silently unfindable
-    // instead of explaining itself.
+    // instead of explaining itself. My bets and My markets are Prediction markets tabs,
+    // so a shell without a tab opener lands on the hub.
+    const betTab = (tab) => (typeof ctx.openBetTab === 'function'
+        ? () => ctx.openBetTab(tab)
+        : go('bet-markets'));
     list.push(
-        { id: 'nav-betting', category: 'Navigate', title: t('palette.navBetting.title'), subtitle: t('palette.navBetting.subtitle'), keywords: ['bet', 'market', 'odds', 'wager', 'oracle', 'parimutuel'], Icon: Icon.DollarIcon, run: go('bet-markets') },
-        { id: 'nav-my-bets', category: 'Navigate', title: t('palette.navMyBets.title'), subtitle: t('palette.navMyBets.subtitle'), keywords: ['bet', 'stake', 'wager', 'payout', 'winnings'], Icon: Icon.DollarIcon, run: go('my-bets') },
-        { id: 'nav-bet-oracle-console', category: 'Navigate', title: t('palette.navBetOracleConsole.title'), subtitle: t('palette.navBetOracleConsole.subtitle'), keywords: ['bet', 'oracle', 'resolve', 'market', 'settle', 'publish'], Icon: Icon.DollarIcon, run: go('bet-oracle-console') },
+        { id: 'nav-betting', category: 'Navigate', title: t('palette.navBetting.title'), subtitle: t('palette.navBetting.subtitle'), keywords: ['bet', 'betting', 'market', 'odds', 'oracle', 'parimutuel'], Icon: Icon.DollarIcon, run: go('bet-markets') },
+        { id: 'nav-my-bets', category: 'Navigate', title: t('palette.navMyBets.title'), subtitle: t('palette.navMyBets.subtitle'), keywords: ['bet', 'betting', 'prediction', 'position', 'stake', 'payout', 'winnings'], Icon: Icon.DollarIcon, run: betTab('bets') },
+        { id: 'nav-bet-oracle-console', category: 'Navigate', title: t('palette.navBetOracleConsole.title'), subtitle: t('palette.navBetOracleConsole.subtitle'), keywords: ['bet', 'oracle', 'resolve', 'market', 'settle', 'publish'], Icon: Icon.DollarIcon, run: betTab('markets') },
     );
 
     // ---- Create: authoring forms that open free-entry (no ref needed) ---
@@ -340,6 +401,8 @@ export function buildCommands(ctx) {
         // screen. Titled for the address subject, since the token subject is
         // already reachable from the token it belongs to.
         { id: 'create-controller-bind', category: 'Create', title: t('palette.createControllerBind.title'), subtitle: t('palette.createControllerBind.subtitle'), keywords: ['controller', 'guard', 'bind', 'policy', 'gate', 'compliance', 'royalty'], Icon: Icon.LinkIcon, run: go('controller-bind') },
+        // Unbinding is its own form, so it has its own command beside Bind.
+        { id: 'create-controller-unbind', category: 'Create', title: t('palette.createControllerUnbind.title'), subtitle: t('palette.createControllerUnbind.subtitle'), keywords: ['controller', 'guard', 'unbind', 'remove', 'policy', 'release'], Icon: Icon.UnlinkIcon, run: go('controller-unbind') },
         // The two bridge surfaces. Authoring forms that open free-entry, like
         // their neighbours here: the move form picks its own leg from the
         // chain it is on, and the settings form carries the same token picker
@@ -386,7 +449,7 @@ export function buildCommands(ctx) {
         list.push({ id: 'wallet-switch', category: 'Wallet', title: t('components.bottomTabBar.switchWallet'), subtitle: t('palette.walletSwitch.subtitle'), keywords: ['wallet', 'account', 'change'], Icon: Icon.UsersIcon, run: () => ctx.switchWallet() });
     }
     if (typeof ctx.lock === 'function') {
-        const lockRow = walletMenuFooter().find((row) => row.id === 'lock');
+        const lockRow = walletLockAction();
         list.push({ id: 'wallet-lock', category: 'Wallet', searchGroup: 'Menu', searchOnlyTitle: true, title: lockRow.label, subtitle: t('palette.walletLock.subtitle'), keywords: ['lock', 'logout', 'secure'], Icon: Icon[lockRow.icon], run: () => ctx.lock() });
     }
     if (typeof ctx.openHelp === 'function') {
@@ -527,7 +590,6 @@ const SETTINGS_SECTIONS = /** @type {const} */ ([
     { id: 'language-region', get title() { return t('settings.page.languageRegion'); }, keywords: ['language', 'currency', 'fiat'] },
     { id: 'privacy', get title() { return t('settings.page.privacy'); }, keywords: ['tor', 'rotation', 'blur'] },
     { id: 'safety', get title() { return t('settings.page.safety'); }, keywords: ['autolock', 'panic', 'undo'] },
-    { id: 'wallet-mode', get title() { return t('settings.page.walletMode'); }, keywords: ['watcher', 'signer', 'air-gapped'] },
     { id: 'backup', get title() { return t('settings.page.backup'); }, keywords: ['seed', 'phrase', 'restore', 'export'] },
     { id: 'fees', get title() { return t('settings.page.fees'); }, keywords: ['fee', 'rbf', 'strategy'] },
     { id: 'network', get title() { return t('settings.network.label'); }, keywords: ['mainnet', 'testnet', 'regtest'] },

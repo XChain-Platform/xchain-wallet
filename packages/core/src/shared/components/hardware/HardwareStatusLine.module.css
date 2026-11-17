@@ -1,0 +1,115 @@
+/* One row of equal steps; a line joins each circle to the one before it. */
+.line {
+    --hw-marker: var(--xc-space-6);
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.step {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--xc-space-1);
+    min-width: 0;
+    text-align: center;
+}
+
+/* The joining line runs from the previous circle's centre to this one's. */
+.step + .step::before {
+    content: "";
+    position: absolute;
+    top: calc(var(--hw-marker) / 2);
+    inset-inline-end: 50%;
+    width: 100%;
+    border-top: calc(var(--xc-space-1) / 2) solid var(--xc-border);
+    transform: translateY(-50%);
+}
+
+.step[data-state="done"] + .step::before,
+.step[data-state="done"] + .step[data-state="active"]::before {
+    border-top-color: var(--xc-success-fill);
+}
+
+.marker {
+    position: relative;
+    /* The marker sits over the connector line drawn behind it. */
+    z-index: var(--xc-z-base);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--hw-marker);
+    height: var(--hw-marker);
+    border-radius: var(--xc-radius-pill);
+    border: calc(var(--xc-space-1) / 2) solid var(--xc-border);
+    background: var(--xc-bg);
+    box-sizing: border-box;
+}
+
+.marker svg {
+    width: var(--xc-space-4);
+    height: var(--xc-space-4);
+}
+
+.step[data-state="done"] .marker {
+    background: var(--xc-success-fill);
+    border-color: var(--xc-success-fill);
+    color: var(--xc-on-success);
+}
+
+.step[data-state="failed"] .marker {
+    background: var(--xc-danger);
+    border-color: var(--xc-danger);
+    color: var(--xc-on-danger);
+}
+
+.step[data-state="active"] .marker {
+    border-color: var(--xc-success-fill);
+    animation: hw-status-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .step[data-state="active"] .marker {
+        animation: none;
+    }
+}
+
+@keyframes hw-status-pulse {
+    50% { box-shadow: 0 0 0 var(--xc-space-1) var(--xc-success-bg); }
+}
+
+.label {
+    font-size: var(--xc-text-sm);
+    color: var(--xc-text-muted);
+    overflow-wrap: anywhere;
+}
+
+.step[data-state="done"] .label {
+    color: var(--xc-success);
+    font-weight: 600;
+}
+
+.step[data-state="active"] .label {
+    color: var(--xc-text);
+    font-weight: 600;
+}
+
+.step[data-state="failed"] .label {
+    color: var(--xc-danger);
+    font-weight: 600;
+}
+
+.visuallyHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

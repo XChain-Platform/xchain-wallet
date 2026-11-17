@@ -54,8 +54,11 @@ assert.match(form, /getAddressPreferences\(\{ chainId, address: editedAddress \}
 assert.match(form, /handleReview/, 'form has a review gate');
 assert.match(form, /Could not re-check the current on-chain values/, 'review is blocked without a fresh re-fetch (stale-read rail)');
 assert.match(form, /reviewBaseline/, 'review compares against the re-fetched baseline');
-assert.match(form, /CHANGED/, 'review marks changed rows');
-assert.match(form, /unchanged/, 'review shows unchanged rows being re-written too');
+assert.match(
+    form,
+    /<ConfirmActionModal[\s\S]*?facts: \[[\s\S]*?\.\.\.rows\.map\(\(row\) => \(\{[\s\S]*?row\.changed \? `\$\{row\.value\} - changed` : `\$\{row\.value\} \(unchanged\)`/,
+    'Confirm Standard facts mark changed and unchanged values from the fresh baseline',
+);
 assert.doesNotMatch(form, /NativeFeeToggle/, 'ADDRESS shows no protocol-fee toggle');
 assert.match(form, /nativeFeeForFeelessAction/, 'ADDRESS keeps the chain-required flag');
 assert.match(form, /ResultScreen/, 'watcher encode-only lane');
@@ -79,7 +82,11 @@ assert.match(
 const list = core('shared', 'routes', 'AddressList.jsx');
 assert.match(list, /onEditPreferences/, 'AddressList exposes the edit affordance');
 assert.match(list, /getAddressPreferences/, 'AddressList loads current prefs for the panel');
-assert.match(list, /On-chain preferences/, 'panel rendered in the detail view');
+// View Address (AddressDetail.jsx, rendered by AddressList) draws the rows.
+const detailView = core('shared', 'routes', 'AddressDetail.jsx');
+const detailCopy = core('i18n', 'locales', 'en', 'addressList.js');
+assert.match(detailView, /t\('addressList\.detail\.preferences'\)/, 'panel rendered in the detail view');
+assert.match(detailCopy, /'addressList\.detail\.preferences': 'On-chain preferences'/, 'the panel is titled On-chain preferences');
 for (const shell of [['web', 'src'], ['desktop', 'renderer'], ['extension', 'src', 'popup']]) {
     const app = read('packages', ...shell, 'App.jsx');
     assert.match(app, /AddressPreferencesForm/, `${shell[0]} App mounts the form`);

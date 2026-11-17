@@ -48,7 +48,7 @@ import { app, BrowserWindow, dialog, Menu, ipcMain, powerMonitor, safeStorage, s
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
+import { flows as flowsLib, registry as registryLib, sdk as sdkLib } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import * as sdkModule from 'xchain-sdk';
@@ -88,7 +88,7 @@ import {
 } from './protocol.js';
 import { attachSignerBridgeListener } from './signerBridgeListener.js';
 import { createTrezorBridge } from './trezorBridgeWindow.js';
-import { attachUpdater } from './updater.js';
+import { attachUpdater, desktopInstallChannel } from './updater.js';
 import { applyTorRouting, applyProxyToSession } from './torRouting.js';
 import {
     installProcessErrorHandlers,
@@ -561,7 +561,12 @@ function buildRuntime() {
         },
         // §46: OS-notification adapter (main process owns the `electron`
         // import; the runtime stays Electron-free for unit testing).
-        notify: createOsNotifier({ Notification, reportFailure: reportMainFailure }),
+        notify: createOsNotifier({
+            Notification,
+            reportFailure: reportMainFailure,
+            // The same settings the shared host reads; no new IPC surface.
+            getSettings: () => (runtime?.vault ? flowsLib.getSettings(runtime.vault) : undefined),
+        }),
         // §50 / Cluster L FOLLOWUP 4: desktop diagnostic env + build.
         // Electron version + OS + Chromium UA help support narrow down
         // whether a bug is shell-specific.
@@ -1179,6 +1184,12 @@ void runMainTask(async () => {
         return lastUpdaterEvent;
     });
 
+    ipcMain.handle('xchain:updater-channel', async (event, ...args) => {
+        if (!isTrustedSender(event)) return null;
+        if (!hasNoIpcArguments(args)) return null;
+        return desktopInstallChannel();
+    });
+
     ipcMain.handle('xchain:updater-install', async (event, ...args) => {
         if (!isTrustedSender(event)) {
             return { ok: false, reason: 'desktop: update install rejected from untrusted frame' };
@@ -1486,6 +1497,9 @@ app.on('before-quit', (event) => {
         flushWindowBoundsSync();
         tray?.destroy();
         tray = null;
+        // Quitting ends locked auto pay; its sealed keys are zeroed at once
+        // (the vault close follows when its last cycle settles).
+        if (runtime?.lockedAutopay) void runtime.lockedAutopay.end('quit');
         if (runtime) tearDownHost(runtime);
     }, 'desktop shutdown');
 });

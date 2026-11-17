@@ -125,17 +125,12 @@ describe('Home Activity amounts', () => {
             />,
         );
 
-        fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
-        const rows = document.querySelectorAll('[data-activity-row]');
-        expect(rows.length).toBeGreaterThan(0);
-        const texts = [...rows].map((row) => row.textContent);
-        expect(texts.some((text) => text.includes('+100 BTC'))).toBe(true);
-        // The 100 BTC receive is whole units; only the demo dividend rate reads 0.000001 BTC per unit.
-        expect(texts.some((text) => text.includes('0.000001 BTC') && !text.includes('per unit'))).toBe(false);
-        expect(texts.some((text) => text.includes('0.000001 BTC per unit'))).toBe(true);
-        // Other actions carry base units: the demo sweep of 2500000 is 0.025 BTC.
-        expect(texts.some((text) => text.includes('0.025 BTC'))).toBe(true);
-        expect(texts.some((text) => text.includes('2,500,000 BTC'))).toBe(false);
+        // The Home Activity tab is retired (ruling n.253): History prints these rows, so Home
+        // draws none and the amount rules above are the ones History uses.
+        await screen.findByRole('tab', { name: 'Balances' });
+        expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
+        expect(document.querySelector('[data-activity-row]')).toBeNull();
+        expect(recentActivity.length).toBeGreaterThan(0);
     });
 
     it('renders the paid ticker and per-unit qualifier in Home activity', async () => {
@@ -196,11 +191,15 @@ describe('Home Activity amounts', () => {
             />,
         );
 
-        fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
-        const text = [...document.querySelectorAll('[data-activity-row]')]
-            .map((row) => row.textContent);
-        expect(text.some((value) => value.includes('2.5 XCP'))).toBe(true);
-        expect(text.some((value) => value.includes('1.25 AAA'))).toBe(true);
-        expect(text.some((value) => value.includes('0.5 XCP per unit'))).toBe(true);
+        // Home draws no activity rows any more; the paid ticker and qualifier come from the
+        // shared helpers History uses.
+        await screen.findByRole('tab', { name: 'Balances' });
+        expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
+        expect(document.querySelector('[data-activity-row]')).toBeNull();
+        expect(activityRowTick(recentActivity[0])).toBe('XCP');
+        expect(activityRowAmount(recentActivity[0], { divisibility: 8 })).toBe('2.5');
+        expect(activityRowTick(recentActivity[1])).toBe('AAA');
+        expect(activityRowAmount(recentActivity[1], { divisibility: 8 })).toBe('1.25');
+        expect(activityRowAmountQualifier(recentActivity[2])).toBe('per unit');
     });
 });

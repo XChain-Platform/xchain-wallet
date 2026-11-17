@@ -22,6 +22,8 @@
 //   - §26.5 panic-mode freeze    -> { approved:false, reason:'PANIC_MODE' } when armed in
 //                                   Settings; a duress freeze throws the plain cover error
 //   - corrupt spending-window     -> { approved:false, reason:'WINDOW_STATE_CORRUPT' }
+//   - a token outside policy.allowedTicks -> the wallet's own refusal (the SDK
+//                                   evaluator has no allowed-tokens rule)
 //   - any policy / decode / output-gate denial comes straight from CoSigner.
 //
 // This is the transport-agnostic core (Vitest-testable against a mock SDK).
@@ -36,6 +38,12 @@ import {
     PanicModeActiveError,
 } from './panicMode.js';
 import { logConsole } from '../shared/utils/logConsole.js';
+import {
+    evaluateAllowedTicks,
+    normalizeAllowedTicks,
+    sdkValueUnreadable,
+    TOKEN_UNCHECKABLE,
+} from '../cosigner/allowedTicks.js';
 
 // ── Exclusive bracket (G4) ──────────────────────────────────────────────
 //
@@ -125,6 +133,7 @@ function runExclusive(slot, fn) {
  * @property {boolean} [allowConfirmable]        default false; a daemon denies confirm-required actions
  * @property {PassiveCoSignRequest} request      the inbound co-sign request
  * @property {number} [now]                      injectable clock (ms) for the panic-mode check
+ * @property {string|null} [nativeTick]          the chain's own coin, never limited by policy.allowedTicks
  * @property {string} [lockKey]                  serializes the load/decide/charge/persist bracket
  *           across concurrent requests for the same account (G4); pass the account id. Needs a
  *           store built with { accountLocked: true } inside withAccountLock of that same id; a
@@ -163,6 +172,7 @@ export async function passiveCoSign(opts = {}) {
         request,
         now,
         lockKey,
+        nativeTick,
     } = opts;
 
     if (!sdk || !sdk.coSigner || typeof sdk.coSigner.CoSigner !== 'function') {
@@ -219,6 +229,39 @@ export async function passiveCoSign(opts = {}) {
     // second concurrent request cannot decide against a snapshot that is about
     // to be superseded (see the lock notes at the top of this file).
     return runExclusive(lockSlot(lockKey, windowStore), async () => {
+        // Allowed tokens, checked on the action decoded from the PSBT before
+        // the window loads, so a refused token neither signs nor charges. A
+        // PSBT this decode cannot read is refused while a list is set: an
+        // envelope commit carries its action in a leaf CoSigner reads but
+        // this check cannot, so deferring would sign tokens nobody checked.
+        // A token sent by ^<id> matches only through the policy's own tickIds,
+        // written when the rules were saved; no explorer is asked here.
+        if (normalizeAllowedTicks(policy.allowedTicks) !== null) {
+            if (typeof sdk.coSigner.decodeActionFromPsbt !== 'function') {
+                return { approved: false, reason: 'POLICY_CONFIG_INVALID',
+                         detail: { message: 'this SDK cannot decode the action, so the allowed tokens cannot be checked' } };
+            }
+            let decoded = null;
+            try {
+                decoded = sdk.coSigner.decodeActionFromPsbt(request.psbt, { network: network || undefined });
+            } catch {
+                decoded = null;
+            }
+            if (!decoded || !decoded.ok) {
+                return { approved: false, reason: TOKEN_UNCHECKABLE,
+                         detail: { decodeReason: (decoded && decoded.reason) || 'DECODE_FAILED' } };
+            }
+            const tokenVerdict = evaluateAllowedTicks(
+                policy,
+                { action: decoded.action, version: decoded.version, params: decoded.params },
+                { nativeTick: nativeTick ?? null, valueUnreadable: sdkValueUnreadable(sdk) },
+            );
+            if (!tokenVerdict.ok) {
+                return { approved: false, reason: tokenVerdict.violation.code,
+                         detail: tokenVerdict.violation.details, action: decoded.action };
+            }
+        }
+
         // Load the spending window into memory before the synchronous process()
         // call. Corrupt state fails closed as a refusal (the UI slice surfaces the
         // distinct reason so the user can reset the window deliberately).

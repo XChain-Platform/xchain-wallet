@@ -63,7 +63,7 @@ describe('ListCreateForm validation recovery', () => {
         vi.stubGlobal('FileReader', FailingFileReader);
         mount();
 
-        const input = await screen.findByLabelText('Upload CSV of addresses');
+        const input = await screen.findByLabelText('Upload addresses file');
         fireEvent.change(input, {
             target: { files: [new File(['address\nrow'], 'members.csv', { type: 'text/csv' })] },
         });
@@ -74,7 +74,7 @@ describe('ListCreateForm validation recovery', () => {
     it('clears stale validation when token members are added or removed', async () => {
         mount('1');
         const members = await screen.findByLabelText('Tokens');
-        const publish = screen.getByRole('button', { name: 'Publish list' });
+        const publish = screen.getByRole('button', { name: /^Publish List$/ });
 
         fireEvent.click(publish);
         expect(await screen.findByText('Add at least one token.')).toBeTruthy();

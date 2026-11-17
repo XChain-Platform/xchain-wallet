@@ -11,10 +11,14 @@
       Keystore and cannot be exported. A copy on another device is
       undecryptable, so a "successful" restore would hand the user a wallet
       that opens to nothing and looks like data loss rather than a design.
-    - Settings, contacts and connected sites are NOT encrypted, and they are
-      a map of who the user transacts with. Shipping them to a cloud backup
-      is a privacy leak with no upside, since the vault they belong to
-      cannot come with them.
+    - Settings, contacts and connected sites live inside the encrypted
+      vault, so they are covered by the point above and cannot be restored
+      without the Keystore key either.
+    - WebView localStorage is plaintext and sits outside the vault. It holds
+      the history cache (shared/utils/historyCache.js), message read marks
+      with counterparty addresses (shared/utils/msgReadMemory.js) and UI
+      preferences. That is a map of who the user transacts with, so shipping
+      it to a cloud backup is a privacy leak with no upside.
 
   New-device recovery is seed re-import, stated plainly in the listing and
   the docs. That is the honest self-custody answer, and it is the only one

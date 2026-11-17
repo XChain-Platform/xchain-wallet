@@ -62,25 +62,24 @@ describe('other settings writers share the same queue', () => {
 
     function adsVault() {
         const initial = seedSettingsForChains(createDefaultSettings(), registry, [BTC]);
-        initial.ads.enabled = true;
-        initial.ads.perChain[BTC].accumulatedSats = 25000;
+        initial.ads.perTransaction = '1';
+        initial.ads.queued = '25';
         return slowVault(initial);
     }
 
     it.each([
         ['ADS first', (vault) => [
-            commitAdsStep({ vault, chainId: BTC, donationIncluded: false, chainRegistry: registry }),
+            commitAdsStep({ vault, donationIncluded: false }),
             ensureSettings(vault, registry, [BTC, LTC]),
         ]],
         ['seeding first', (vault) => [
             ensureSettings(vault, registry, [BTC, LTC]),
-            commitAdsStep({ vault, chainId: BTC, donationIncluded: false, chainRegistry: registry }),
+            commitAdsStep({ vault, donationIncluded: false }),
         ]],
     ])('ensureSettings and an ADS step both land when started together: %s', async (_label, operations) => {
         const vault = adsVault();
         await Promise.all(operations(vault));
-        expect(vault.read().ads.perChain[BTC]).toMatchObject({ accumulatedSats: 26000, lifetimeTxCount: 1 });
-        expect(vault.read().ads.perChain[LTC]).toBeDefined();
+        expect(vault.read().ads).toMatchObject({ queued: '26', donationCount: 0 });
         expect(vault.read().fees[LTC]).toBeDefined();
     });
 
@@ -92,26 +91,24 @@ describe('other settings writers share the same queue', () => {
             activateChain({
                 walletId: 'w1', chainId: LTC, signer: {}, vault, chainRegistry: registry, sdkRegistry: {},
             }),
-            commitAdsStep({ vault, chainId: BTC, donationIncluded: false, chainRegistry: registry }),
+            commitAdsStep({ vault, donationIncluded: false }),
         ]);
-        expect(vault.read().ads.perChain[BTC]).toMatchObject({ accumulatedSats: 26000, lifetimeTxCount: 1 });
-        expect(vault.read().ads.perChain[LTC]).toBeDefined();
+        expect(vault.read().ads).toMatchObject({ queued: '26', donationCount: 0 });
         expect(vault.read().fees[LTC]).toBeDefined();
     });
 
     it('wallet setup rollback removes only unchanged entries it seeded', async () => {
         const before = seedSettingsForChains(createDefaultSettings(), registry, [BTC]);
-        before.ads.enabled = true;
+        before.ads.perTransaction = '1';
         const seeded = seedSettingsForChains(before, registry, [BTC, LTC]);
         const current = structuredClone(seeded);
-        current.ads.perChain[BTC].accumulatedSats = 26000;
-        current.ads.perChain[BTC].lifetimeTxCount = 1;
+        current.ads.queued = '26';
         const vault = slowVault(current);
 
         await rollbackSettingsSeed(vault, settingsSeedDelta(before, seeded, [BTC, LTC]));
 
-        expect(vault.read().ads.perChain[BTC]).toMatchObject({ accumulatedSats: 26000, lifetimeTxCount: 1 });
-        expect(vault.read().ads.perChain[LTC]).toBeUndefined();
+        expect(vault.read().ads).toMatchObject({ queued: '26' });
+        expect(vault.read().fees[BTC]).toBeDefined();
         expect(vault.read().fees[LTC]).toBeUndefined();
     });
 

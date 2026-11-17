@@ -71,6 +71,8 @@ function tabStops() {
         'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     )).filter((element) => {
         if (element.hidden || element.closest('[hidden]')) return false;
+        // A themed Select carries a hidden input for FormData; it is never a tab stop.
+        if (element instanceof HTMLInputElement && element.type === 'hidden') return false;
         if (element instanceof HTMLInputElement && element.type === 'radio' && !element.checked) return false;
         return true;
     });
@@ -101,7 +103,7 @@ describe('create onboarding keyboard flow', () => {
         const importMnemonic = vi.fn(() => new Promise((resolve) => { finishImport = resolve; }));
         renderCreate({ importMnemonic });
 
-        const passwordHeading = screen.getByRole('heading', { name: 'Create a new wallet' });
+        const passwordHeading = screen.getByRole('heading', { name: 'Create a New Wallet' });
         // The password stage puts focus on the password field.
         await waitFor(() => expect(screen.getByLabelText('Password')).toHaveFocus());
 
@@ -109,9 +111,9 @@ describe('create onboarding keyboard flow', () => {
             screen.getByRole('button', { name: 'About Confirm password' }),
             screen.getByLabelText('Confirm password'),
             screen.getByRole('button', { name: 'About Recovery phrase length' }),
-            screen.getByRole('radio', { name: /^12 words/ }),
-            screen.getByRole('switch', { name: /Use an extra passphrase/ }),
-            screen.getByRole('button', { name: 'Extra passphrase help' }),
+            screen.getByRole('button', { name: 'Recovery phrase length: 12 words' }),
+            // The extra passphrase is a closed section, so its header is the last stop.
+            screen.getByRole('button', { name: /^Extra Passphrase/ }),
         ];
         for (const control of expectedTabOrder) {
             pressTab();
@@ -124,47 +126,49 @@ describe('create onboarding keyboard flow', () => {
 
         fillCreatePasswords('short', 'short');
         pressEnter(screen.getByLabelText('Confirm password'));
-        expect(screen.getByRole('alert')).toHaveTextContent('at least 8 characters');
+        // The form's error notice (each failing field also shows its own line).
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('at least 8 characters');
         expect(generateBip39Mnemonic).not.toHaveBeenCalled();
 
         fillCreatePasswords(PASSWORD, `${PASSWORD}-different`);
         pressEnter(screen.getByLabelText('Confirm password'));
-        expect(screen.getByRole('alert')).toHaveTextContent('Passwords do not match');
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Passwords do not match');
         expect(generateBip39Mnemonic).not.toHaveBeenCalled();
 
         fillCreatePasswords();
         // The earlier validation errors re-rendered the form, so restart from the last field.
-        screen.getByRole('button', { name: 'Extra passphrase help' }).focus();
+        screen.getByRole('button', { name: /^Extra Passphrase/ }).focus();
         pressTab();
         expect(screen.getByRole('button', { name: 'Next' })).toHaveFocus();
         pressEnter(screen.getByLabelText('Confirm password'));
-        const phraseHeading = await screen.findByRole('heading', { name: 'Write down your recovery phrase' });
+        const phraseHeading = await screen.findByRole('heading', { name: 'Write Down Your Recovery Phrase' });
         expect(phraseHeading).toHaveFocus();
         expect(generateBip39Mnemonic).toHaveBeenCalledOnce();
 
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
         fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
-        const verifyButton = screen.getByRole('button', { name: 'Verify recovery phrase' });
+        const verifyButton = screen.getByRole('button', { name: 'Verify Recovery Phrase' });
         verifyButton.focus();
         fireEvent.keyDown(verifyButton, { key: 'Enter' });
         fireEvent.click(verifyButton);
-        await screen.findByRole('heading', { name: 'Verify your recovery phrase' });
+        await screen.findByRole('heading', { name: 'Verify Your Recovery Phrase' });
         // The verify stage puts focus on the first quiz word.
         await waitFor(() => expect(screen.getAllByLabelText(/^Word \d+$/)[0]).toHaveFocus());
 
         pressEnter(screen.getAllByLabelText(/^Word \d+$/)[0]);
-        expect(screen.getByRole('alert')).toHaveTextContent('Fill in every word');
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Fill in every word');
         expect(importMnemonic).not.toHaveBeenCalled();
 
         for (const input of screen.getAllByLabelText(/^Word \d+$/)) {
             fireEvent.change(input, { target: { value: 'abandon' } });
         }
         pressEnter(screen.getAllByLabelText(/^Word \d+$/)[2]);
-        const progressHeading = await screen.findByRole('heading', { name: 'Creating your wallet' });
+        const progressHeading = await screen.findByRole('heading', { name: 'Creating Your Wallet' });
         expect(progressHeading).toHaveFocus();
         expect(importMnemonic).toHaveBeenCalledOnce();
 
         finishImport({ walletId: 'created-wallet' });
-        const noticeHeading = await screen.findByRole('heading', { name: 'Automatic Donation System' });
+        const noticeHeading = await screen.findByRole('heading', { name: 'Automatic Donations' });
         expect(noticeHeading).toHaveFocus();
     });
 
@@ -173,28 +177,32 @@ describe('create onboarding keyboard flow', () => {
         renderCreate({ onBack });
 
         fireEvent.change(screen.getByLabelText('Wallet name'), { target: { value: 'Travel wallet' } });
-        fireEvent.click(screen.getByRole('radio', { name: /^24 words/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Recovery phrase length: 12 words' }));
+        fireEvent.click(screen.getByRole('option', { name: /^24 words/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Extra Passphrase/ }));
         fireEvent.click(screen.getByRole('switch', { name: /Use an extra passphrase/ }));
         fillCreatePasswords();
         fireEvent.change(screen.getByLabelText('Extra passphrase'), { target: { value: 'hidden phrase' } });
         fireEvent.change(screen.getByLabelText('Confirm passphrase'), { target: { value: 'hidden phrase' } });
         pressEnter(screen.getByLabelText('Confirm password'));
 
-        fireEvent.click(await screen.findByRole('checkbox', { name: /saved my recovery phrase/i }));
-        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reveal Recovery Phrase' }));
+        fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
         fireEvent.change(await screen.findByLabelText('Word 1'), { target: { value: 'typed secret' } });
 
         fireEvent.keyDown(window, { key: 'Escape' });
-        const phraseHeading = await screen.findByRole('heading', { name: 'Write down your recovery phrase' });
+        const phraseHeading = await screen.findByRole('heading', { name: 'Write Down Your Recovery Phrase' });
         expect(phraseHeading).toHaveFocus();
         expect(onBack).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous step' }));
-        await screen.findByRole('heading', { name: 'Create a new wallet' });
+        await screen.findByRole('heading', { name: 'Create a New Wallet' });
         await waitFor(() => expect(screen.getByLabelText('Password')).toHaveFocus());
         expect(screen.getByLabelText('Wallet name')).toHaveValue('Travel wallet');
-        expect(screen.getByRole('radio', { name: /^24 words/ })).toBeChecked();
-        expect(screen.getByRole('switch', { name: /Use an extra passphrase/ })).toBeChecked();
+        expect(screen.getByRole('button', { name: 'Recovery phrase length: 24 words' })).toBeInTheDocument();
+        // The section is closed again after the round trip; the switch inside keeps its state.
+        expect(screen.getByRole('switch', { name: /Use an extra passphrase/, hidden: true })).toBeChecked();
         expect(screen.getByLabelText('Password')).toHaveValue('');
         expect(screen.getByLabelText('Confirm password')).toHaveValue('');
         expect(screen.getByLabelText('Extra passphrase')).toHaveValue('');
@@ -209,11 +217,11 @@ describe('create onboarding keyboard flow', () => {
         const { onBack } = renderCreate();
         fillCreatePasswords();
         pressEnter(screen.getByLabelText('Confirm password'));
-        await screen.findByRole('heading', { name: 'Write down your recovery phrase' });
+        await screen.findByRole('heading', { name: 'Write Down Your Recovery Phrase' });
 
         swipeBackFromIOS();
 
-        await screen.findByRole('heading', { name: 'Create a new wallet' });
+        await screen.findByRole('heading', { name: 'Create a New Wallet' });
         expect(screen.getByLabelText('Password')).toHaveValue('');
         expect(screen.getByLabelText('Confirm password')).toHaveValue('');
         expect(screen.getByLabelText('Password')).not.toHaveFocus();
@@ -224,17 +232,18 @@ describe('create onboarding keyboard flow', () => {
         const { onBack, onCreated } = renderCreate();
         fillCreatePasswords();
         pressEnter(screen.getByLabelText('Confirm password'));
-        fireEvent.click(await screen.findByRole('checkbox', { name: /saved my recovery phrase/i }));
-        fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Reveal Recovery Phrase' }));
+        fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
         for (const input of await screen.findAllByLabelText(/^Word \d+$/)) {
             fireEvent.change(input, { target: { value: 'abandon' } });
         }
         pressEnter(screen.getAllByLabelText(/^Word \d+$/)[2]);
-        await screen.findByRole('heading', { name: 'Automatic Donation System' });
+        await screen.findByRole('heading', { name: 'Automatic Donations' });
 
         swipeBackFromIOS();
 
-        expect(screen.getByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Automatic Donations' })).toBeInTheDocument();
         expect(onBack).not.toHaveBeenCalled();
         expect(onCreated).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
@@ -248,13 +257,15 @@ describe('import onboarding keyboard flow', () => {
         const importMnemonic = vi.fn(() => new Promise((resolve) => { finishImport = resolve; }));
         renderImport({ importMnemonic });
 
-        const heading = screen.getByRole('heading', { name: 'Import an existing wallet' });
+        const heading = screen.getByRole('heading', { name: 'Import Wallet' });
         await waitFor(() => expect(heading).toHaveFocus());
 
         const expectedTabOrder = [
             screen.getByRole('tab', { name: 'Recovery phrase' }),
             screen.getByRole('tab', { name: 'Private key' }),
             screen.getByRole('tab', { name: 'Encrypted backup' }),
+            screen.getByRole('button', { name: 'About Wallet type' }),
+            screen.getByRole('button', { name: 'Wallet type: Standard recovery phrase' }),
             screen.getByRole('button', { name: 'About Recovery phrase' }),
             screen.getByLabelText('Recovery phrase'),
             screen.getByRole('button', { name: 'Scan QR' }),
@@ -264,8 +275,8 @@ describe('import onboarding keyboard flow', () => {
             screen.getByLabelText('Password'),
             screen.getByRole('button', { name: 'About Confirm password' }),
             screen.getByLabelText('Confirm password'),
+            screen.getByRole('button', { name: 'About This wallet uses an extra passphrase' }),
             screen.getByRole('switch', { name: /wallet uses an extra passphrase/ }),
-            screen.getByRole('button', { name: 'Extra passphrase help' }),
         ];
         for (const control of expectedTabOrder) {
             pressTab();
@@ -280,32 +291,34 @@ describe('import onboarding keyboard flow', () => {
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'short' } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'short' } });
         pressEnter(screen.getByLabelText('Confirm password'));
-        expect(screen.getByRole('alert')).toHaveTextContent('at least 8 characters');
+        // The import form is on the form error standard: its notice lists the
+        // problem and the Password field says it under itself too.
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('at least 8 characters');
         expect(importMnemonic).not.toHaveBeenCalled();
 
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
-        screen.getByRole('button', { name: 'Extra passphrase help' }).focus();
+        screen.getByRole('switch', { name: /wallet uses an extra passphrase/ }).focus();
         pressTab();
         expect(screen.getByRole('button', { name: 'Import' })).toHaveFocus();
         pressEnter(screen.getByLabelText('Confirm password'));
         expect(importMnemonic).toHaveBeenCalledOnce();
 
         finishImport({});
-        const noticeHeading = await screen.findByRole('heading', { name: 'Automatic Donation System' });
+        const noticeHeading = await screen.findByRole('heading', { name: 'Automatic Donations' });
         expect(noticeHeading).toHaveFocus();
     });
 
     it('returns with Escape or Back while retaining the name and clearing secret fields', async () => {
         const onBack = vi.fn();
         renderImport({ onBack });
-        await waitFor(() => expect(screen.getByRole('heading', { name: 'Import an existing wallet' })).toHaveFocus());
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'Import Wallet' })).toHaveFocus());
 
         fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
-        const backupHeading = screen.getByRole('heading', { name: 'Restore from encrypted backup' });
+        const backupHeading = screen.getByRole('heading', { name: 'Restore Backup' });
         await waitFor(() => expect(backupHeading).toHaveFocus());
         fireEvent.click(screen.getByRole('tab', { name: 'Recovery phrase' }));
-        await waitFor(() => expect(screen.getByRole('heading', { name: 'Import an existing wallet' })).toHaveFocus());
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'Import Wallet' })).toHaveFocus());
 
         fireEvent.change(screen.getByLabelText('Wallet name'), { target: { value: 'Recovered wallet' } });
         fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: PHRASE } });
@@ -358,11 +371,11 @@ describe('import onboarding keyboard flow', () => {
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
         fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
         fireEvent.click(screen.getByRole('button', { name: 'Import' }));
-        await screen.findByRole('heading', { name: 'Automatic Donation System' });
+        await screen.findByRole('heading', { name: 'Automatic Donations' });
 
         swipeBackFromIOS();
 
-        expect(screen.getByRole('heading', { name: 'Automatic Donation System' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Automatic Donations' })).toBeInTheDocument();
         expect(onBack).not.toHaveBeenCalled();
         expect(onImported).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));

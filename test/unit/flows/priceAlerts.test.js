@@ -240,6 +240,44 @@ describe('flows/priceAlerts', () => {
         await expect(saveAlert({ vault, ...ALERT, tick: 'NOT OK!' })).rejects.toThrow('tick may only contain');
     });
 
+    describe('paused alerts', () => {
+        it('pauses an alert through save with its terms kept, and rearm resumes it', async () => {
+            const saved = await saveAlert({ vault, ...ALERT });
+            const paused = await saveAlert({ vault, ...ALERT, id: saved.id, status: 'paused' });
+            expect(paused).toMatchObject({ id: saved.id, status: 'paused', targetFiat: 70000, triggeredAt: null });
+            expect(await vault.priceAlerts.get(saved.id)).toMatchObject({ status: 'paused' });
+
+            const resumed = await rearmAlert({ vault, id: saved.id, walletId: 'wallet-1' });
+            expect(resumed.status).toBe('armed');
+        });
+
+        it('keeps a paused alert paused when its terms are edited', async () => {
+            const saved = await saveAlert({ vault, ...ALERT });
+            await saveAlert({ vault, ...ALERT, id: saved.id, status: 'paused' });
+            const edited = await saveAlert({ vault, ...ALERT, id: saved.id, targetFiat: 65000 });
+            expect(edited).toMatchObject({ status: 'paused', targetFiat: 65000 });
+        });
+
+        it('resumes a paused alert when the same alert is added again', async () => {
+            const saved = await saveAlert({ vault, ...ALERT });
+            await saveAlert({ vault, ...ALERT, id: saved.id, status: 'paused' });
+            const again = await saveAlert({ vault, ...ALERT });
+            expect(again).toMatchObject({ id: saved.id, status: 'armed' });
+            expect(await vault.priceAlerts.count()).toBe(1);
+        });
+
+        it('keeps a pause that lands while the alert is being delivered', async () => {
+            const saved = await saveAlert({ vault, ...ALERT });
+            await saveAlert({ vault, ...ALERT, id: saved.id, status: 'paused' });
+            expect(await markAlertTriggered({ vault, id: saved.id })).toBeNull();
+            expect(await vault.priceAlerts.get(saved.id)).toMatchObject({ status: 'paused', triggeredAt: null });
+        });
+
+        it('refuses a status other than armed or paused', async () => {
+            await expect(saveAlert({ vault, ...ALERT, status: 'triggered' })).rejects.toThrow('status must be');
+        });
+    });
+
     it('leaves an alert edited since it fired armed when markAlertTriggered carries the fired terms', async () => {
         const saved = await saveAlert({ vault, ...ALERT });
         const firedTerms = 'bitcoin-mainnet::above::70000::usd';

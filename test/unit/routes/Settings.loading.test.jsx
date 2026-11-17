@@ -18,18 +18,19 @@ import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Settings } from '../../../packages/core/src/shared/routes/Settings.jsx';
+import { ThisWalletSection } from '../../../packages/core/src/shared/components/settings/ThisWalletSection.jsx';
 
+// 'this-wallet' is no longer a Settings sub-page: its rows live on Wallet Details and Security.
+// 'connected-sites' draws its own list screen (its header carries the G95
+// filter and plus), so it is checked below rather than through the template.
 const SETTINGS_SUBPAGE_IDS = [
-    'this-wallet',
     'display',
     'keyboard',
     'privacy',
     'safety',
-    'wallet-mode',
     'backup',
     'fees',
     'network-endpoints',
-    'connected-sites',
     'ads',
     'developer',
     'about',
@@ -46,14 +47,16 @@ describe('Settings while settings are loading', () => {
                 <Settings onBack={() => {}} />
             </MessagingProvider>,
         );
-        expect(screen.getByText('Backup')).toBeTruthy();
-        expect(screen.getByText('Keyboard')).toBeTruthy();
-        expect(screen.getByText('Network')).toBeTruthy();
+        // The landing lists the group rows (Account, Preferences and More groups).
+        expect(screen.getByText('Backup and Recovery')).toBeTruthy();
+        expect(screen.getByText('Advanced')).toBeTruthy();
+        expect(screen.getByText('Network and Fees')).toBeTruthy();
         expect(document.body.textContent).not.toContain('raw PSBT inspector');
-        expect(screen.getByRole('searchbox').closest('[data-settings-layout="responsive"]')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Filter settings' })).toBeTruthy();
+        expect(screen.getByText('Advanced').closest('[data-settings-layout="responsive"]')).toBeTruthy();
     });
 
-    it('opens the wallet and account pickers from This wallet', () => {
+    it('opens the wallet and account pickers from the Wallets group', () => {
         const onOpenWalletPicker = vi.fn();
         const onOpenAccountPicker = vi.fn();
         const messaging = {
@@ -71,12 +74,38 @@ describe('Settings while settings are loading', () => {
                 />
             </MessagingProvider>,
         );
-        fireEvent.click(screen.getByRole('button', { name: /This wallet/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Wallets/ }));
         expect(screen.getByText('Savings')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Switch / rename…' }));
+        fireEvent.click(screen.getByRole('button', { name: /^My Wallets/ }));
         expect(onOpenWalletPicker).toHaveBeenCalledOnce();
-        fireEvent.click(screen.getByRole('button', { name: 'Switch account…' }));
+        fireEvent.click(screen.getByRole('button', { name: /^My Accounts/ }));
         expect(onOpenAccountPicker).toHaveBeenCalledOnce();
+    });
+
+    it('lists My Addresses beside My Wallets and My Accounts and opens the address list', () => {
+        const onOpenAddresses = vi.fn();
+        const messaging = {
+            getSettings: () => new Promise(() => {}),
+            listConnectedSites: () => Promise.resolve([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Settings
+                    onBack={() => {}}
+                    activeWallet={{ id: 'wallet-1', name: 'Main wallet' }}
+                    activeAccount={{ id: 'account-2', index: 1, name: 'Savings' }}
+                    onOpenWalletPicker={() => {}}
+                    onOpenAccountPicker={() => {}}
+                    onOpenAddresses={onOpenAddresses}
+                />
+            </MessagingProvider>,
+        );
+        fireEvent.click(screen.getByRole('button', { name: /^Wallets/ }));
+        const labels = ['My Wallets', 'My Accounts', 'My Addresses']
+            .map((n) => screen.getByRole('button', { name: new RegExp(`^${n}`) }));
+        expect(labels).toHaveLength(3);
+        fireEvent.click(labels[2]);
+        expect(onOpenAddresses).toHaveBeenCalledOnce();
     });
 
     it('drops This Wallet confirmation state when the active wallet changes', () => {
@@ -85,13 +114,11 @@ describe('Settings while settings are loading', () => {
             listConnectedSites: () => Promise.resolve([]),
             removeWallet: vi.fn(),
         };
+        // Settings no longer lists This wallet as a page; the section is mounted directly
+        // (Remove Wallet page) as it is from Wallet Details.
         const tree = (wallet) => (
             <MessagingProvider shell="web" messaging={messaging}>
-                <Settings
-                    onBack={() => {}}
-                    activeWallet={wallet}
-                    initialSubpageId="this-wallet"
-                />
+                <ThisWalletSection key={wallet.id} activeWallet={wallet} onWalletRemoved={() => {}} />
             </MessagingProvider>
         );
         const view = render(tree({ id: 'wallet-a', name: 'Alpha' }));
@@ -102,7 +129,32 @@ describe('Settings while settings are loading', () => {
 
         expect(screen.queryByLabelText('Confirm wallet name')).toBeNull();
         expect(screen.getByText('Beta')).toBeTruthy();
-        expect(screen.getByText('Beta').closest('[data-settings-layout="responsive"]')).toBeTruthy();
+    });
+
+    it('does not open This wallet as a Settings sub-page of its own', () => {
+        const messaging = {
+            getSettings: () => new Promise(() => {}),
+            listConnectedSites: () => Promise.resolve([]),
+        };
+        const { container } = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Settings onBack={() => {}} initialSubpageId="this-wallet" />
+            </MessagingProvider>,
+        );
+        expect(container.querySelector('[data-settings-page-template="subpage"]')).toBeNull();
+    });
+
+    it('does not open Wallet Mode as a Settings sub-page: it belongs to each wallet', () => {
+        const messaging = {
+            getSettings: () => new Promise(() => {}),
+            listConnectedSites: () => Promise.resolve([]),
+        };
+        const { container } = render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Settings onBack={() => {}} initialSubpageId="wallet-mode" />
+            </MessagingProvider>,
+        );
+        expect(container.querySelector('[data-settings-page-template="subpage"]')).toBeNull();
     });
 
     it.each(SETTINGS_SUBPAGE_IDS)('renders the %s sub-page through the shared Settings template', (subpageId) => {
@@ -117,5 +169,21 @@ describe('Settings while settings are loading', () => {
         );
 
         expect(container.querySelector('[data-settings-page-template="subpage"]')).toBeTruthy();
+    });
+
+    it('renders the connected-sites page on its own screen while settings load', async () => {
+        const messaging = {
+            getSettings: () => new Promise(() => {}),
+            listConnectedSites: () => Promise.resolve([]),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <Settings onBack={() => {}} initialSubpageId="connected-sites" />
+            </MessagingProvider>,
+        );
+
+        expect(screen.getByRole('heading', { level: 1, name: 'Connected Sites' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Back to settings' })).toBeTruthy();
+        expect(await screen.findByText('No sites connected yet')).toBeTruthy();
     });
 });

@@ -23,6 +23,7 @@
 // action + amount + destinations, and whether it is within policy.
 
 import { buildAccountWindowStore } from '../cosigner/vaultWindowPersistence.js';
+import { evaluateAllowedTicks, nativeTickForChain, sdkValueUnreadable } from '../cosigner/allowedTicks.js';
 import { CoSignerAccountNotFoundError } from './passiveCoSignForAccount.js';
 
 /**
@@ -123,6 +124,31 @@ export async function previewCoSignRequest({ vault, sdkRegistry, accountId, requ
     );
 
     const evalu = verdict.evaluation || {};
+    // The SDK evaluator has no allowed-tokens rule; the wallet applies it next,
+    // so the approval screen refuses what the signing decision would refuse.
+    // Both read a ^<id> only through the policy's saved tickIds; no explorer.
+    const tokenVerdict = verdict.ok === true
+        ? evaluateAllowedTicks(
+            account.policy,
+            { action: decoded.action, version: decoded.version, params: decoded.params },
+            { nativeTick: nativeTickForChain(account.chainId), valueUnreadable: sdkValueUnreadable(sdk) },
+        )
+        : null;
+    if (tokenVerdict && !tokenVerdict.ok) {
+        return {
+            account: accountSummary,
+            decodeOk: true,
+            decodeReason: null,
+            action: decoded.action,
+            params: decoded.params,
+            amount: evalu.amount,
+            tick: tokenVerdict.violation.details.tick ?? evalu.tick,
+            destinations: Array.isArray(evalu.destinations) ? evalu.destinations : [],
+            policyOk: false,
+            policyReason: tokenVerdict.violation.code,
+            needsConfirmation: false,
+        };
+    }
     return {
         account: accountSummary,
         decodeOk: true,

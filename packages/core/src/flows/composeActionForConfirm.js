@@ -37,6 +37,7 @@ import { simulateAction } from '../decoder/txSimulator.js';
 import { balancesFromSdk } from '../decoder/balanceAdapter.js';
 import { withListRemovalDescriptions } from '../decoder/list_removal_description.js';
 import { withContractCallDescriptions } from '../decoder/contract_call_description.js';
+import { actionWarningIds } from './actionWarnings.js';
 import { resolveDustThreshold } from '../sdk/nativeFeePreflight.js';
 
 // The built PSBT is checked after the encoder has reserved its inputs. A check
@@ -135,7 +136,8 @@ function hasOwnChangeOutput(outputs, expectedOutputs, ownAddresses) {
  * @property {boolean} protocolFeeKnownFree  true only when a valid quote positively reported zero
  * @property {{ deltas: object[], sideEffects: object[], notes: string[] }|null} simulation  NULL when uncomputable
  * @property {object|null} decoded           the intent described from the action string; NULL when undescribable
- * @property {true} tamperVerified           reaching the caller at all means the checks passed
+ * @property {string[]} actionWarnings       ids from flows/actionWarnings.js for what the parsed action does that cannot be taken back; empty when none
+ * @property {true} tamperVerified          reaching the caller at all means the checks passed
  */
 
 /**
@@ -496,6 +498,10 @@ export async function composeActionForConfirm({
         // string. Null when it could not be described, in which case the
         // confirm screen shows no intent line (there is no caller fallback).
         decoded,
+        // What the parsed composed action does that cannot be taken back, as
+        // registry ids the confirm screen turns into one notice card. Read
+        // from the same parse as the intent, so the warning names these bytes.
+        actionWarnings: parsed?.ok && !composed.bareNativePayment ? actionWarningIds(parsed) : [],
         tamperVerified: true,
     };
 }

@@ -11,6 +11,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
@@ -118,7 +119,7 @@ describe('ListCreateForm coin-qualified ticker items', () => {
         const coin = await screen.findByLabelText('Coin for PEPE');
         expect(coin).toHaveValue('BTC');
 
-        fireEvent.change(coin, { target: { value: 'DOGE' } });
+        selectOption(coin, 'DOGE');
         expect(textarea).toHaveValue('DOGE:PEPE');
         await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalledWith({
             chainId: DOGE,
@@ -128,11 +129,11 @@ describe('ListCreateForm coin-qualified ticker items', () => {
         expect(await screen.findByText(/Not found on Dogecoin: PEPE\./)).toBeInTheDocument();
 
         await screen.findByLabelText('From');
-        fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish List$/ }));
         await waitFor(() => expect(runConfirm).toHaveBeenCalled());
         expect(runConfirm.mock.calls[0][0].actionData.params.ITEM).toEqual(['DOGE:PEPE']);
 
-        fireEvent.change(screen.getByLabelText('Coin for PEPE'), { target: { value: 'BTC' } });
+        selectOption(screen.getByLabelText('Coin for PEPE'), 'BTC');
         expect(textarea).toHaveValue('PEPE');
     });
 
@@ -141,7 +142,7 @@ describe('ListCreateForm coin-qualified ticker items', () => {
         await screen.findByLabelText('Tokens');
         await waitFor(() => expect(messaging.isListTickCoinActive).toHaveBeenCalledTimes(1));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Add from token picker' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Add from Token Picker' }));
         fireEvent.click(await screen.findByLabelText(/^Select PEPE\b/));
 
         expect(await screen.findByLabelText('Tokens')).toHaveValue('DOGE:PEPE');

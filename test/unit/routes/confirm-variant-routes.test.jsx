@@ -16,6 +16,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { PsbtSignForm } from '../../../packages/core/src/shared/routes/PsbtSignForm.jsx';
 import { SignMessageForm } from '../../../packages/core/src/shared/routes/SignMessageForm.jsx';
 
@@ -44,6 +45,7 @@ const DECOMPOSED = Object.freeze({
 });
 
 beforeEach(() => {
+    resetWalletModes();
     vi.useFakeTimers({
         toFake: [
             'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
@@ -53,13 +55,17 @@ beforeEach(() => {
     });
 });
 
-function recordingMessaging(overrides = {}) {
+// `walletMode` among the overrides is the mode of wallet `w`, published the way
+// the shell does from the wallet list; every other override is a messaging method.
+function recordingMessaging({ walletMode = 'full', ...overrides } = {}) {
     const calls = [];
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [HD_ADDRESS] }),
         getActiveAddresses: () => Promise.resolve({}),
         signerReady: () => Promise.resolve({ ready: false }),
-        getSettings: () => Promise.resolve({ walletMode: 'full' }),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode }]),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
         preflight: (args) => {
             calls.push({ method: 'preflight', args });
@@ -105,7 +111,7 @@ function findButton(utils, re) {
 describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
     it('watcher mode never offers a password or a signing action', async () => {
         const { messaging, calls } = recordingMessaging({
-            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
         });
         let utils;
         await domAct(async () => {
@@ -186,15 +192,10 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
             await drainMicrotasks();
         });
 
-        expect(utils.getAllByTestId('psbt-input').map((row) => row.textContent)).toEqual([
-            `Signs with your key${OWN}0.0015 BTC`,
-            'Unknown input(unknown source script)0.0005 BTC',
-        ]);
-        expect(utils.getAllByTestId('psbt-output').map((row) => row.textContent)).toEqual([
-            `Recipient${recipientA}0.0012 BTC`,
-            `Recipient${recipientB}0.0002 BTC`,
-            `Change (back to you)${OWN}0.00055 BTC`,
-        ]);
+        expect(utils.queryByTestId('psbt-input')).toBeNull();
+        expect(utils.queryByTestId('psbt-output')).toBeNull();
+        expect(utils.getByTestId('confirm-sentence')).toHaveTextContent('Sign this transaction');
+        expect(utils.getByTestId('confirm-network')).toHaveTextContent('Bitcoin');
         expect(calls.some((call) => call.method === 'signPsbtUserInitiated')).toBe(false);
     });
 
@@ -207,7 +208,7 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
 
         expect(utils.getByTestId('confirm-modal')).toBeTruthy();
         expect(utils.getByTestId('psbt-intent-panel')).toBeTruthy();
-        expect(utils.container.textContent).toContain('Signs with your key');
+        expect(utils.getByTestId('psbt-action-intent')).toHaveTextContent('Carries an XChain Send action');
         // Nothing signed yet: opening the page is not authorizing.
         expect(calls.some((c) => c.method === 'signPsbtUserInitiated')).toBe(false);
     });
@@ -269,7 +270,8 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
             actionDecodeReason: 'NO_OP_RETURN',
         });
         expect(utils.queryByTestId('confirm-refusal')).toBe(null);
-        expect(utils.getByTestId('psbt-action-none').textContent).toMatch(/ordinary payment/i);
+        expect(utils.queryByTestId('psbt-action-none')).toBe(null);
+        expect(utils.getByTestId('confirm-sentence')).toHaveTextContent('Sign this transaction');
         await domAct(async () => {
             typeIn(utils, 'Password', 'hunter2');
             await drainMicrotasks();
@@ -289,7 +291,15 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
             actionDecodeReason: 'P2SH_P2WSH_UNSUPPORTED',
         });
         expect(utils.getByTestId('confirm-refusal')).toBeTruthy();
-        expect(utils.getByTestId('confirm-approve').disabled).toBe(true);
+        // G130: Approve keeps its colour; a tap repeats the refusal at the
+        // top of the page and signs nothing.
+        expect(utils.getByTestId('confirm-approve').disabled).toBe(false);
+        await domAct(async () => {
+            fireEvent.click(utils.getByTestId('confirm-approve'));
+            await drainMicrotasks();
+        });
+        expect(utils.getByTestId('confirm-blocked')).toBeTruthy();
+        expect(calls.find((c) => c.method === 'signPsbtUserInitiated')).toBeFalsy();
         // No password field is even offered on a refusal.
         expect(utils.queryByLabelText('Password')).toBe(null);
         // A refusal must not be a dead end: Reject still works.
@@ -305,7 +315,7 @@ describe('§5.5 PsbtSignForm routes through the PSBT confirm variant', () => {
 describe('SignMessageForm signs directly from the wallet form', () => {
     it('watcher mode never offers a password or a signing action', async () => {
         const { messaging, calls } = recordingMessaging({
-            getSettings: () => Promise.resolve({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
         });
         let utils;
         await domAct(async () => {
@@ -365,7 +375,7 @@ describe('SignMessageForm signs directly from the wallet form', () => {
         expect(utils.getByLabelText('Message')).toHaveValue('proof of control');
         expect(utils.container.textContent).toContain('sig-abc');
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Copy signature' }));
+            fireEvent.click(utils.getByRole('button', { name: 'Copy Signature' }));
             await drainMicrotasks();
         });
         expect(writeText).toHaveBeenCalledWith('sig-abc');

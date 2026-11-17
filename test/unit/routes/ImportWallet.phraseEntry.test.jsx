@@ -74,25 +74,34 @@ describe('ImportWallet recovery phrase entry', () => {
         expect(phrase).toHaveAttribute('autocorrect', 'off');
     });
 
-    it('names the next missing field beside the disabled import action', () => {
+    it('keeps Import enabled and names the next missing field when pressed (G22)', () => {
         renderImport();
         const action = screen.getByRole('button', { name: 'Import' });
         const phrase = screen.getByLabelText('Recovery phrase');
 
-        expect(phrase).toHaveAccessibleDescription('0 words entered');
-        expect(action).toBeDisabled();
-        expect(action).toHaveAttribute('aria-describedby', 'import-wallet-disabled-reason');
-        expect(screen.getByRole('status')).toHaveTextContent('Enter a recovery phrase to continue.');
-
-        fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: BIP39_PHRASE } });
-        expect(screen.getByRole('status')).toHaveTextContent('Enter a password to continue.');
-
-        fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
-        expect(screen.getByRole('status')).toHaveTextContent('Confirm your password to continue.');
-
-        fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
+        expect(phrase).toHaveAccessibleDescription('Uses the standard English recovery word list. 0 words entered');
         expect(action).toBeEnabled();
         expect(action).not.toHaveAttribute('aria-describedby');
+        expect(screen.queryByText(/to continue\.$/)).toBeNull();
+
+        fireEvent.click(action);
+        // One press lists every missing field at once.
+        const first = screen.getByRole('alert', { name: 'Form errors' });
+        expect(first).toHaveTextContent('Enter a recovery phrase.');
+        expect(first).toHaveTextContent('Password must be at least 8 characters.');
+        expect(first).toHaveTextContent('Confirm your password.');
+
+        fireEvent.change(screen.getByLabelText('Recovery phrase'), { target: { value: BIP39_PHRASE } });
+        fireEvent.click(action);
+        const second = screen.getByRole('alert', { name: 'Form errors' });
+        expect(second).not.toHaveTextContent('Enter a recovery phrase.');
+        expect(second).toHaveTextContent('Password must be at least 8 characters.');
+
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
+        fireEvent.click(action);
+        const third = screen.getByRole('alert', { name: 'Form errors' });
+        expect(third).not.toHaveTextContent('Password must be at least 8 characters.');
+        expect(third).toHaveTextContent('Confirm your password.');
     });
 
     it('moves static phrase guidance into the help tip and keeps the live count under the field', () => {
@@ -103,7 +112,7 @@ describe('ImportWallet recovery phrase entry', () => {
         const tip = screen.getByRole('button', { name: 'About Recovery phrase' });
         const tipText = document.getElementById(tip.getAttribute('aria-describedby')).textContent;
 
-        expect(description).toBe('0 words entered');
+        expect(description).toBe('Uses the standard English recovery word list. 0 words entered');
         expect(tipText).toContain('Enter a recovery phrase with 12, 15, 18, 21, or 24 words.');
         expect(tipText).toContain('Drop a .txt file with your recovery phrase to load it here.');
         expect(screen.getByText('0 words entered')).toBeTruthy();
@@ -184,8 +193,8 @@ describe('ImportWallet recovery phrase entry', () => {
         const phrase = BIP39_PHRASE.replace(/about$/, 'notaword');
         const importMnemonic = submitPhrase(phrase);
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            'Word 12 ("notaword") is not in the recovery phrase word list. Check its spelling.',
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(
+            'Word 12 ("notaword") is not in the BIP39 word list. Check its spelling.',
         );
         expect(importMnemonic).not.toHaveBeenCalled();
     });
@@ -193,18 +202,18 @@ describe('ImportWallet recovery phrase entry', () => {
     it('distinguishes a bad BIP39 checksum from an unknown word', async () => {
         const importMnemonic = submitPhrase(BIP39_PHRASE.replace(/about$/, 'abandon'));
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(
             'Every word is in the BIP39 list, but the checksum does not match.',
         );
         expect(importMnemonic).not.toHaveBeenCalled();
     });
 
-    it('labels only BIP39 phrases on the regular lane, leaving FreeWallet phrases to From FreeWallet', () => {
+    it('labels only BIP39 phrases while the Standard wallet type is selected', () => {
         renderImport();
         const textarea = screen.getByLabelText('Recovery phrase');
 
         fireEvent.change(textarea, { target: { value: COUNTERWALLET_PHRASE } });
-        expect(screen.queryByText('Counterwallet/FreeWallet recovery phrase detected')).toBeNull();
+        expect(screen.queryByText('FreeWallet / Counterwallet recovery phrase detected')).toBeNull();
         expect(screen.queryByText('Standard recovery phrase detected')).toBeNull();
 
         fireEvent.change(textarea, { target: { value: BIP39_PHRASE } });
@@ -226,25 +235,29 @@ describe('ImportWallet recovery phrase entry', () => {
             expect(box).toContainElement(scan);
             expect(document.querySelector('label[for="xc-mnemonic"]').parentElement).not.toBe(scan.parentElement);
 
-            const status = document.getElementById('xc-mnemonic-status');
-            expect(box.contains(status)).toBe(false);
-            expect(textarea.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-            expect(status).toHaveTextContent(/0 (\/ 12 )?words/);
+            // The live count is in the label row, above the field, not a line under it.
+            const counter = document.getElementById('xc-mnemonic-counter');
+            const labelRow = document.querySelector('label[for="xc-mnemonic"]').parentElement;
+            expect(labelRow).toContainElement(counter);
+            expect(box.contains(counter)).toBe(false);
+            expect(textarea.compareDocumentPosition(counter) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+            expect(counter).toHaveTextContent(/0 (\/ 12 )?words/);
+            expect(document.getElementById('xc-mnemonic-status')).toBeNull();
 
             fireEvent.click(scan);
             expect(screen.getByRole('button', { name: 'Cancel scan', exact: true })).toHaveAttribute('aria-pressed', 'true');
         },
     );
 
-    it('explains FreeWallet format detection and shows its 12-word target', () => {
+    it('names the FreeWallet word list and shows its 12-word target', () => {
         renderFreeWallet();
-        expect(screen.getByText(/detect a standard recovery phrase or the legacy Counterwallet\/FreeWallet format automatically/)).toBeTruthy();
+        expect(screen.getByText('Uses the legacy Counterwallet/FreeWallet word list.')).toBeTruthy();
         expect(screen.getByText('0 / 12 words')).toBeTruthy();
 
         fireEvent.change(screen.getByLabelText('Recovery phrase'), {
             target: { value: COUNTERWALLET_PHRASE },
         });
         expect(screen.getByText('12 / 12 words')).toBeTruthy();
-        expect(screen.getByText('Counterwallet/FreeWallet recovery phrase detected')).toBeTruthy();
+        expect(screen.getByText('FreeWallet / Counterwallet recovery phrase detected')).toBeTruthy();
     });
 });

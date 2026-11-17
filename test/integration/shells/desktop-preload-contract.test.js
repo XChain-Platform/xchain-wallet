@@ -223,7 +223,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
     it('gives the renderer every half of the update path, and only those', () => {
         const pre = runPreload();
         const updater = pre.worlds.get('xchainWalletUpdater');
-        expect(Object.keys(updater).sort()).toEqual(['getState', 'install', 'onEvent']);
+        expect(Object.keys(updater).sort()).toEqual(['getChannel', 'getState', 'install', 'onEvent']);
     });
 
     it('exposes functions only: no ipcRenderer, require, process or module handle crosses over', () => {
@@ -271,6 +271,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         // channel main never registered would put the offer back out of
         // reach in a way that looks wired up from the renderer side.
         await updater.getState();
+        await updater.getChannel();
         // The deep-link claim is walked for the same reason: a take on a
         // channel main never answers would leave every parked link unclaimed.
         await pre.worlds.get('xchainWalletDeepLink').takePending();
@@ -285,7 +286,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         ]);
         // Sanity: the walk above must actually have produced traffic, or the
         // agreement checks below are vacuously true.
-        expect(used.size).toBe(12);
+        expect(used.size).toBe(13);
 
         const registered = mainRegisteredChannels();
         for (const channel of used) {

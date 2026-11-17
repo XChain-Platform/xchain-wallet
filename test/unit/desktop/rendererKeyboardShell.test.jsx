@@ -98,11 +98,20 @@ describe('desktop renderer keyboard shell', () => {
 
         const paletteTrigger = screen.getByRole('button', { name: 'Open the wallet menu' });
         const home = screen.getByRole('button', { name: 'Home' });
+        const send = screen.getByRole('button', { name: 'Send' });
+        const receive = screen.getByRole('button', { name: 'Receive' });
+        const myTokens = screen.getByRole('button', { name: 'My Tokens' });
         const history = screen.getByRole('button', { name: 'History' });
         paletteTrigger.focus();
         fireEvent.keyDown(paletteTrigger, { key: 'ArrowDown' });
         expect(home).toHaveFocus();
         fireEvent.keyDown(home, { key: 'ArrowDown' });
+        expect(send).toHaveFocus();
+        fireEvent.keyDown(send, { key: 'ArrowDown' });
+        expect(receive).toHaveFocus();
+        fireEvent.keyDown(receive, { key: 'ArrowDown' });
+        expect(myTokens).toHaveFocus();
+        fireEvent.keyDown(myTokens, { key: 'ArrowDown' });
         expect(history).toHaveFocus();
         pressEnter(history);
 
@@ -118,7 +127,7 @@ describe('desktop renderer keyboard shell', () => {
         fireEvent.keyDown(home, { key: 'k', ctrlKey: true });
         await flushFocus();
         const search = screen.getByRole('combobox', { name: 'Search commands' });
-        expect(screen.getByRole('dialog', { name: 'Wallet menu' })).toBeTruthy();
+        expect(screen.getByRole('dialog', { name: 'Command Palette' })).toBeTruthy();
         expect(search).toHaveFocus();
 
         fireEvent.keyDown(search, { key: 'Escape' });
@@ -135,14 +144,14 @@ describe('desktop renderer keyboard shell', () => {
         fireEvent.keyDown(history, { key: '?' });
         await flushFocus();
         const close = screen.getByRole('button', { name: 'Close' });
-        expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeTruthy();
+        expect(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeTruthy();
         expect(close).toHaveFocus();
 
         fireEvent.keyDown(close, { key: 'k', ctrlKey: true });
         expect(screen.queryByRole('dialog', { name: 'Wallet menu' })).toBeNull();
         fireEvent.keyDown(close, { key: 'Escape' });
         await flushFocus();
-        expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeNull();
         expect(history).toHaveFocus();
     });
 

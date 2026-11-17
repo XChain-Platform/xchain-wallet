@@ -7,13 +7,9 @@
 .signatureLabelRow {
     display: flex;
     align-items: center;
-    gap: var(--xc-space-2);
+    gap: 0; /* the tip's own start margin (--xc-label-help-gap) spaces it */
     min-width: 0;
     margin-block-end: var(--xc-label-gap);
-}
-
-.signatureHelp {
-    flex: none;
 }
 
 .signatureLabel {

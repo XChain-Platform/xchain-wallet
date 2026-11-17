@@ -34,8 +34,9 @@ import '../../i18n/locales/en/components.js';
  * @param {string} props.value
  * @param {number} [props.size]   pixel width (default 200)
  * @param {string} [props.alt]    accessibility label (default 'QR code')
+ * @param {boolean} [props.bare]  draw the code alone, without the bordered frame
  */
-export function KeyQR({ value, size = 200, alt = t('components.keyQR.qrCode') }) {
+export function KeyQR({ value, size = 200, alt = t('components.keyQR.qrCode'), bare = false }) {
     const [dataUrl, setDataUrl] = useState(/** @type {string | null} */ (null));
 
     useEffect(() => {
@@ -57,6 +58,18 @@ export function KeyQR({ value, size = 200, alt = t('components.keyQR.qrCode') })
     }, [value, size]);
 
     if (!dataUrl) return null;
+    // bare: the image alone at `size`, with no frame border, padding or box.
+    if (bare) {
+        return (
+            <img
+                src={dataUrl}
+                alt={alt}
+                width={size}
+                height={size}
+                style={{ display: 'block', width: size, height: size }}
+            />
+        );
+    }
     return (
         <div
             className={qrStyles.frame}

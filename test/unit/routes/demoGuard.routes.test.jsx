@@ -9,9 +9,9 @@
 // contact legal@dankest.llc.
 
 // A demo wallet cannot move funds. Every route that would compose or
-// broadcast a transaction shows Send's inline demo note in the page content,
-// keeps its form browsable, disables its submit and never asks the encoder
-// (compose, build or broadcast) for anything.
+// broadcast a transaction keeps its form usable with no demo notice on it,
+// refuses the submit when pressed (the refusal is the only demo message), and
+// never asks the encoder (compose, build or broadcast) for anything.
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -27,7 +27,13 @@ import { BroadcastForm } from '../../../packages/core/src/shared/routes/Broadcas
 import { CallbackForm } from '../../../packages/core/src/shared/routes/CallbackForm.jsx';
 import { ComposeMessage } from '../../../packages/core/src/shared/routes/ComposeMessage.jsx';
 import { ContractFundsForm } from '../../../packages/core/src/shared/routes/ContractFundsForm.jsx';
-import { ContractStakeForm } from '../../../packages/core/src/shared/routes/ContractStakeForm.jsx';
+// The staking routes render the one Staking form on their target and action.
+import {
+    ContractStakeRoute as ContractStakeForm,
+    NetworkDelegationRoute as DelegationActionForm,
+    NetworkPositionRoute as StakingActionForm,
+    NetworkStakeRoute as StakeForm,
+} from '../../helpers/stakingFormRoutes.jsx';
 import { ControllerBindForm } from '../../../packages/core/src/shared/routes/ControllerBindForm.jsx';
 import { CreateBetFeedForm } from '../../../packages/core/src/shared/routes/CreateBetFeedForm.jsx';
 import { CreateOrderForm } from '../../../packages/core/src/shared/routes/CreateOrderForm.jsx';
@@ -35,7 +41,6 @@ import { CreatePollForm } from '../../../packages/core/src/shared/routes/CreateP
 import { CrossChainOrderForm } from '../../../packages/core/src/shared/routes/CrossChainOrderForm.jsx';
 import { CrossChainSwapForm } from '../../../packages/core/src/shared/routes/CrossChainSwapForm.jsx';
 import { DelegateVoteForm } from '../../../packages/core/src/shared/routes/DelegateVoteForm.jsx';
-import { DelegationActionForm } from '../../../packages/core/src/shared/routes/DelegationActionForm.jsx';
 import { DeployContractForm } from '../../../packages/core/src/shared/routes/DeployContractForm.jsx';
 import { DestroyForm } from '../../../packages/core/src/shared/routes/DestroyForm.jsx';
 import { DispenserForm } from '../../../packages/core/src/shared/routes/DispenserForm.jsx';
@@ -45,10 +50,12 @@ import { GatedPublishForm } from '../../../packages/core/src/shared/routes/Gated
 import { IssueTokenForm } from '../../../packages/core/src/shared/routes/IssueTokenForm.jsx';
 import { LinkForm } from '../../../packages/core/src/shared/routes/LinkForm.jsx';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
-import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
-import { ListRenameForm } from '../../../packages/core/src/shared/routes/ListRenameForm.jsx';
-import { ListShareForm } from '../../../packages/core/src/shared/routes/ListShareForm.jsx';
-import { ListTransferForm } from '../../../packages/core/src/shared/routes/ListTransferForm.jsx';
+import {
+    ListEditRoute as ListRenameForm,
+    ListForkRoute as ListForkForm,
+    ListShareRoute as ListShareForm,
+    ListTransferRoute as ListTransferForm,
+} from '../../helpers/listFormRoutes.jsx';
 import { MintForm } from '../../../packages/core/src/shared/routes/MintForm.jsx';
 import { OracleForm } from '../../../packages/core/src/shared/routes/OracleForm.jsx';
 import { ParallelComposer } from '../../../packages/core/src/shared/routes/ParallelComposer.jsx';
@@ -56,13 +63,10 @@ import { ProjectRosterForm } from '../../../packages/core/src/shared/routes/Proj
 import { PublishFileForm } from '../../../packages/core/src/shared/routes/PublishFileForm.jsx';
 import { SellOwnershipForm } from '../../../packages/core/src/shared/routes/SellOwnershipForm.jsx';
 import { SleepForm } from '../../../packages/core/src/shared/routes/SleepForm.jsx';
-import { StakeForm } from '../../../packages/core/src/shared/routes/StakeForm.jsx';
-import { StakingActionForm } from '../../../packages/core/src/shared/routes/StakingActionForm.jsx';
 import { SwapForm } from '../../../packages/core/src/shared/routes/SwapForm.jsx';
 import { SweepForm } from '../../../packages/core/src/shared/routes/SweepForm.jsx';
 import { TokenAdminForm } from '../../../packages/core/src/shared/routes/TokenAdminForm.jsx';
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
-import { UnionListForm } from '../../../packages/core/src/shared/routes/UnionListForm.jsx';
 import { PlaceOrderPanel } from '../../../packages/core/src/shared/components/PlaceOrderPanel.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -96,9 +100,8 @@ const base = {
 
 const ROUTES = [
     ['Swap', SwapForm],
-    ['Create token (wizard)', TokenWizard, {}, async () => {
-        fireEvent.click(await screen.findByRole('button', { name: /^Custom/ }));
-    }],
+    // The wizard is one Issue Token form now, so no mode button is clicked first.
+    ['Create token (wizard)', TokenWizard],
     ['Issue token', IssueTokenForm],
     ['Mint', MintForm],
     ['Destroy', DestroyForm],
@@ -113,10 +116,6 @@ const ROUTES = [
     ['Batch composer', BatchComposerForm],
     ['Parallel composer', ParallelComposer],
     ['Place order panel', PlaceOrderPanel, { tick1: 'XCHAIN', tick2: 'BTC' }],
-    ['Stake', StakeForm],
-    ['Staking action', StakingActionForm, { mode: 'unstake' }],
-    ['Contract stake', ContractStakeForm, { chainId: 'bitcoin-regtest', contractActionIndex: '1024' }],
-    ['Delegation action', DelegationActionForm, { mode: 'delegate' }],
     ['Delegate vote', DelegateVoteForm],
     ['Create poll', CreatePollForm],
     ['Compose message', ComposeMessage],
@@ -126,7 +125,7 @@ const ROUTES = [
     ['Rename list', ListRenameForm],
     ['Share list', ListShareForm],
     ['Transfer list', ListTransferForm],
-    ['Union list', UnionListForm],
+    ['Union list', ListCreateForm, { initialType: '3' }],
     ['Deploy contract', DeployContractForm],
     ['Execute contract', ExecuteContractForm],
     ['Contract funds', ContractFundsForm, { mode: 'deposit' }],
@@ -143,6 +142,17 @@ const ROUTES = [
     ['Token admin', TokenAdminForm, { mode: 'transfer' }],
     ['Address preferences', AddressPreferencesForm],
     ['Bridge move', BridgeMoveForm],
+];
+
+// The one Staking form shows no standing demo notice and no demo-only
+// disabled button: pressing its action is what refuses a demo wallet.
+const STAKING_ROUTES = [
+    ['Stake', StakeForm, {}, 'Stake'],
+    ['Unstake', StakingActionForm, { mode: 'unstake' }, 'Unstake'],
+    ['Claim rewards', StakingActionForm, { mode: 'claim-rewards' }, 'Claim Rewards'],
+    ['Delegate', DelegationActionForm, { mode: 'delegate' }, 'Delegate Signing Key'],
+    ['Revoke', DelegationActionForm, { mode: 'revoke' }, 'Revoke Delegation'],
+    ['Contract stake', ContractStakeForm, { chainId: 'bitcoin-regtest', contractActionIndex: '1024' }, 'Stake'],
 ];
 
 function mount(Route, extra = {}) {
@@ -180,29 +190,61 @@ function mount(Route, extra = {}) {
 beforeEach(() => { clearDemoWalletId(); markDemoWallet('demo-w'); });
 afterEach(() => { cleanup(); clearDemoWalletId(); });
 
+// The refusal of a pressed submit, found wherever the form places it.
+function refusalNode(container) {
+    return [...container.querySelectorAll('[data-testid="demo-guard-refusal"]')]
+        .find((node) => DEMO_NOTE.test(node.textContent || '')) || null;
+}
+
 describe('demo wallets cannot move funds from any compose route', () => {
-    it.each(ROUTES)('%s shows the inline note and no enabled submit', async (_name, Route, extra, step) => {
+    it.each(ROUTES)('%s shows no notice beforehand and refuses the submit', async (_name, Route, extra, step) => {
         const { calls, view } = mount(Route, extra);
         if (step) await step();
 
-        const note = await waitFor(() => {
-            const hit = screen.getAllByRole('status').find((node) => DEMO_NOTE.test(node.textContent || ''));
-            expect(hit).toBeTruthy();
-            return hit;
+        // The form is up with no demo warning on it and no demo-only exit.
+        await waitFor(() => {
+            expect(view.container.querySelector('form button[type="submit"]')).toBeTruthy();
         }, { timeout: 4000 });
+        expect(screen.queryByText(DEMO_NOTE)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Create a Real Wallet' })).toBeNull();
 
-        expect(within(note).getByRole('button', { name: 'Create a real wallet' })).toBeInTheDocument();
-        const submits = [...view.container.querySelectorAll('button[type="submit"]')];
-        expect(submits.filter((button) => !button.disabled)).toEqual([]);
-
-        // Enter in a field must not reach a compose either.
-        for (const form of view.container.querySelectorAll('form')) fireEvent.submit(form);
+        // Submitting (a press or Enter in a field) answers with the refusal and
+        // never reaches a compose. Some forms swap their loading frame for the
+        // real one, so the submit repeats until the refusal is attached.
+        await waitFor(() => {
+            for (const form of view.container.querySelectorAll('form')) fireEvent.submit(form);
+            const hit = refusalNode(view.container);
+            expect(hit).toBeTruthy();
+            expect(within(hit).getByRole('button', { name: 'Create a Real Wallet' })).toBeInTheDocument();
+        }, { timeout: 4000 });
         expect(calls).toEqual([]);
     });
 
-    it('opens the exit confirmation from the note', async () => {
-        mount(SwapForm);
-        fireEvent.click(await screen.findByRole('button', { name: 'Create a real wallet' }));
+    it('keeps the submit enabled in a demo wallet and refuses the press', async () => {
+        // Create poll's action is disabled only while composing, so in a demo
+        // wallet it must be enabled: nothing disables it for the demo alone.
+        const { calls, view } = mount(CreatePollForm);
+        const submit = await waitFor(() => {
+            const node = view.container.querySelector('form button[type="submit"]');
+            expect(node).toBeTruthy();
+            return node;
+        }, { timeout: 4000 });
+        expect(submit).toBeEnabled();
+        // A typical form in demo mode carries no demo notice at all.
+        expect(screen.queryByText(DEMO_NOTE)).toBeNull();
+        expect(view.container.textContent).not.toMatch(/demo/i);
+        expect(refusalNode(view.container)).toBeNull();
+        fireEvent.click(submit);
+        await waitFor(() => expect(refusalNode(view.container)).toBeTruthy());
+        expect(calls).toEqual([]);
+    });
+
+    it('opens the exit confirmation from the refusal', async () => {
+        const { view } = mount(SwapForm);
+        await screen.findByRole('form', { name: 'Swap tokens' });
+        expect(screen.queryByRole('button', { name: 'Create a Real Wallet' })).toBeNull();
+        for (const form of view.container.querySelectorAll('form')) fireEvent.submit(form);
+        fireEvent.click(await screen.findByRole('button', { name: 'Create a Real Wallet' }));
         expect(await screen.findByRole('dialog', { name: 'Exit demo and delete its data?' })).toBeInTheDocument();
     });
 
@@ -211,5 +253,20 @@ describe('demo wallets cannot move funds from any compose route', () => {
         mount(SwapForm);
         await screen.findByRole('form', { name: 'Swap tokens' });
         expect(screen.queryByText(DEMO_NOTE)).toBeNull();
+    });
+});
+
+describe('demo wallets cannot stake, and are told only when they press', () => {
+    it.each(STAKING_ROUTES)('%s shows no notice beforehand and refuses the press', async (_name, Route, extra, action) => {
+        const { calls } = mount(Route, extra);
+
+        const submit = await screen.findByRole('button', { name: action }, { timeout: 4000 });
+        expect(submit).toBeEnabled();
+        expect(screen.queryByText(DEMO_NOTE)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Create a Real Wallet' })).toBeNull();
+
+        fireEvent.click(submit);
+        expect(await screen.findByText(DEMO_NOTE)).toBeInTheDocument();
+        expect(calls).toEqual([]);
     });
 });

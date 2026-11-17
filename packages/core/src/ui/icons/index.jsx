@@ -21,10 +21,13 @@
 import {
     ArrowDownLeft as LucideArrowDownLeft,
     QrCode as LucideQrCode,
+    Wallet as LucideWallet,
+    Palette as LucidePalette,
     ScanLine as LucideScanLine,
     Menu as LucideMenu,
     Send as LucideSend,
     DollarSign as LucideDollarSign,
+    Zap as LucideZap,
     MoreHorizontal as LucideMoreHorizontal,
     Filter as LucideFilter,
     BookOpen as LucideBookOpen,
@@ -38,6 +41,20 @@ import {
     ArrowUpToLine as LucideArrowUpToLine,
     Minus as LucideMinus,
     LayoutGrid as LucideLayoutGrid,
+    ArrowRight as LucideArrowRight,
+    List as LucideList,
+    GitFork as LucideGitFork,
+    Share2 as LucideShare2,
+    Ban as LucideBan,
+    Heart as LucideHeart,
+    Landmark as LucideLandmark,
+    Target as LucideTarget,
+    Inbox as LucideInbox,
+    Wine as LucideWine,
+    Music2 as LucideMusic2,
+    Guitar as LucideGuitar,
+    Droplet as LucideDroplet,
+    VolumeX as LucideVolumeX,
 } from 'lucide-react';
 
 // The rendered size comes from the svg[data-xc-icon] rule in tokens.css
@@ -83,6 +100,11 @@ export function PlusIcon() {
             <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
     );
+}
+
+// A circle with a slash: the block or forbid action.
+export function BanIcon() {
+    return <LucideBan {...LUCIDE_PROPS} />;
 }
 
 export function MinusIcon() {
@@ -188,6 +210,11 @@ export function ScanIcon() {
     return <LucideScanLine {...LUCIDE_PROPS} />;
 }
 
+// In-field "scan a QR code" buttons use this so the glyph reads as a QR code, not a scan-line frame.
+export function QrCodeIcon() {
+    return <LucideQrCode {...LUCIDE_PROPS} />;
+}
+
 export function CameraIcon() {
     return (
         <svg {...STROKE_PROPS}>
@@ -215,6 +242,29 @@ export function LockIcon() {
         <svg {...STROKE_PROPS}>
             <rect x="4" y="11" width="16" height="10" rx="2" />
             <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        </svg>
+    );
+}
+
+/** A stack of two coins, for the Home Coins tab. */
+export function CoinsIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <circle cx="8" cy="8" r="6" />
+            <path d="M18.09 10.37A6 6 0 1 1 10.34 18" />
+            <path d="M7 6h1v4" />
+            <path d="m16.71 13.88.7.71-2.82 2.82" />
+        </svg>
+    );
+}
+
+/** A framed picture, for the Home NFTs tab. */
+export function ImageIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <circle cx="9" cy="9" r="2" />
+            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
         </svg>
     );
 }
@@ -258,13 +308,9 @@ export function HistoryIcon() {
     );
 }
 
+// A crypto address is a QR code, never a map pin (operator 2026-11-13).
 export function AddressIcon() {
-    return (
-        <svg {...STROKE_PROPS}>
-            <path d="M12 22s7-6 7-12a7 7 0 1 0-14 0c0 6 7 12 7 12Z" />
-            <circle cx="12" cy="10" r="2.5" />
-        </svg>
-    );
+    return <LucideQrCode {...LUCIDE_PROPS} />;
 }
 
 export function ContractIcon() {
@@ -327,8 +373,31 @@ export function HandshakeIcon() {
     return <LucideHandshake {...LUCIDE_PROPS} />;
 }
 
+// Automatic donations page (§36): the header, the recipient, the send-at
+// threshold and the queued total.
+export function HeartIcon() {
+    return <LucideHeart {...LUCIDE_PROPS} />;
+}
+
+export function LandmarkIcon() {
+    return <LucideLandmark {...LUCIDE_PROPS} />;
+}
+
+export function TargetIcon() {
+    return <LucideTarget {...LUCIDE_PROPS} />;
+}
+
+export function InboxIcon() {
+    return <LucideInbox {...LUCIDE_PROPS} />;
+}
+
 export function VerifyIcon() {
     return <LucideShieldCheck {...LUCIDE_PROPS} />;
+}
+
+// A before -> after change reads in the text direction, so the arrow turns with it.
+export function ArrowRightIcon() {
+    return <LucideArrowRight {...LUCIDE_PROPS} data-xc-directional="" />;
 }
 
 /* ------------------------------------------------------------------ *
@@ -386,7 +455,7 @@ const LABEL_MAP = [
     [/^migrate\b/, MigrateIcon],
     [/^token\b|^dispens|^pay\b|^dividend\b|^airdrop\b/, TokenIcon],
     [/^multisig\b/, MultisigIcon],
-    [/^contacts?\b/, AddressIcon],
+    [/^contacts?\b/, BookIcon],
     [/^advanced\b/, GearIcon],
     [/^parallel\b|^cross-chain\b/, SwapIcon],
     [/^learn more\b|^info\b|^about\b|^help\b|^why\b/, InfoIcon],
@@ -714,6 +783,32 @@ export function InfoIcon() {
     );
 }
 
+/** A circled exclamation mark: the Notice Standard's danger icon (errors and critical cautions). */
+export function AlertCircleIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <circle cx="12" cy="12" r="9" />
+            <line x1="12" y1="7.5" x2="12" y2="13" />
+            <circle cx="12" cy="16.5" r="0.5" fill="currentColor" />
+        </svg>
+    );
+}
+
+/** A circled check: the Notice Standard's success icon. */
+export function CircleCheckIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <circle cx="12" cy="12" r="9" />
+            <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+        </svg>
+    );
+}
+
+/** A lightning bolt, for the coin and token page's Actions tab. */
+export function ZapIcon() {
+    return <LucideZap {...LUCIDE_PROPS} />;
+}
+
 export function DollarIcon() {
     return <LucideDollarSign {...LUCIDE_PROPS} />;
 }
@@ -784,4 +879,60 @@ export function BellIcon() {
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
     );
+}
+
+export function WineGlassIcon() {
+    return <LucideWine {...LUCIDE_PROPS} />;
+}
+
+export function MusicIcon() {
+    return <LucideMusic2 {...LUCIDE_PROPS} />;
+}
+
+export function GuitarIcon() {
+    return <LucideGuitar {...LUCIDE_PROPS} />;
+}
+
+export function DropletIcon() {
+    return <LucideDroplet {...LUCIDE_PROPS} />;
+}
+
+export function MutedSpeakerIcon() {
+    return <LucideVolumeX {...LUCIDE_PROPS} />;
+}
+
+export function GongIcon() {
+    return (
+        <svg {...STROKE_PROPS}>
+            <path d="M5 4h14" />
+            <path d="M8 4v3M16 4v3" />
+            <circle cx="12" cy="13" r="6" />
+            <circle cx="12" cy="13" r="1" />
+        </svg>
+    );
+}
+
+// A wallet, for the Settings Wallets group.
+export function WalletIcon() {
+    return <LucideWallet {...LUCIDE_PROPS} />;
+}
+
+// A palette, for the Settings Appearance group.
+export function PaletteIcon() {
+    return <LucidePalette {...LUCIDE_PROPS} />;
+}
+
+// A plain bulleted list, for a list page's List tab.
+export function ListIcon() {
+    return <LucideList {...LUCIDE_PROPS} />;
+}
+
+// A branch, for Fork on a list.
+export function ForkIcon() {
+    return <LucideGitFork {...LUCIDE_PROPS} />;
+}
+
+// Three joined nodes, for Share on a list.
+export function ShareIcon() {
+    return <LucideShare2 {...LUCIDE_PROPS} />;
 }

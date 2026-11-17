@@ -58,7 +58,6 @@ describe('lockImmediately', () => {
             'setSendPrefill(null)',
             'setScannedPsbt(null)',
             'setExecutePrefill(null)',
-            'setParallelPrefill(null)',
         ];
 
         for (const file of shellFiles) {
@@ -71,7 +70,8 @@ describe('lockImmediately', () => {
             expect(source).toContain('lockImmediately({');
             expect(source).toContain("showLocked: () => setStatus({ state: 'locked' })");
             expect(source).toContain('lock: handleLock');
-            expect(clearState).toContain("setUnlockedView('home')");
+            // A lock starts the navigation history over on Home.
+            expect(clearState).toContain("resetNav('home')");
             for (const setter of transientSetters) expect(clearState).toContain(setter);
             expect(source).toMatch(
                 /if \(status\.state !== 'unlocked'\) \{[\s\S]{0,400}?clearTransientActionState\(\)/,

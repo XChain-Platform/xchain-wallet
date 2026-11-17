@@ -23,7 +23,7 @@ describe('StakeNew when the address read fails', () => {
         expect(alert).toHaveTextContent(/Couldn.t load your staking networks/);
         expect(alert).not.toHaveTextContent(/vault\.js/);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
 
         expect(await screen.findByRole('button', { name: /Validator/ })).toBeEnabled();
         expect(getAddressesByChain).toHaveBeenCalledTimes(2);

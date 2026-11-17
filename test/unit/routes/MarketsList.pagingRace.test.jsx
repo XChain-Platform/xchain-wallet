@@ -11,6 +11,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
+import { selectOption } from '../../helpers/selectOption.js';
 
 afterEach(() => {
     cleanup();
@@ -49,17 +50,19 @@ describe('MarketsList paging', () => {
             </MessagingProvider>,
         );
         await screen.findByText('TOKEN0');
-        fireEvent.click(screen.getByRole('tab', { name: 'All' }));
+        // The Show list sits in the title line's filter; Popular is its default.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter markets' }));
+        selectOption(screen.getByLabelText('Show markets'), 'all');
         expect(screen.getAllByRole('listitem')).toHaveLength(25);
 
         // Expand to the second page, then change the asset. The expanded rows
         // are replaced by the loading state at once, so no Load more click can
         // land between the change and the page reset, and the new asset opens
         // on its first page.
-        fireEvent.click(screen.getByRole('button', { name: 'Load more markets' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Load More Markets' }));
         expect(screen.getAllByRole('listitem')).toHaveLength(50);
         act(() => setChain('bitcoin-testnet'));
-        expect(screen.queryByRole('button', { name: 'Load more markets' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Load More Markets' })).toBeNull();
         expect(screen.getByRole('status', { name: 'Loading markets' })).toBeInTheDocument();
         await screen.findByText('TOKEN0');
         expect(screen.getAllByRole('listitem')).toHaveLength(25);

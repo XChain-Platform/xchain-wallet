@@ -25,9 +25,10 @@ const VIEWPORTS = [
     { width: 1280, height: 800 },
 ];
 
+// The read-only Private key field the simplified View Private Key page shows
+// once the password and I Understand are given.
 const privateKeyCode = (page) => page.getByRole('main')
-    .locator('code')
-    .filter({ hasText: /^[5KLc9]/ });
+    .getByRole('textbox', { name: 'Private key', exact: true });
 
 async function expectScreen(page, title, label, { atTop = false } = {}) {
     await expect(page.getByRole('heading', { name: title, level: 1 }), `${label}: missing heading`)
@@ -191,7 +192,7 @@ for (const viewport of VIEWPORTS) {
                 await page.getByRole('button', { name: 'Switch account…' }).click();
                 await expectScreen(page, 'Accounts', `${size} account picker`, { atTop: true });
                 await expectSameLineHeight([
-                    page.getByRole('button', { name: 'Add account' }),
+                    page.getByRole('button', { name: 'Add Account' }),
                     // The footer action reads "Manage" so the pair stays on one line.
                     page.getByRole('button', { name: 'Manage', exact: true }),
                 ], `${size} account picker footer`);
@@ -224,39 +225,35 @@ for (const viewport of VIEWPORTS) {
 
                 await expectScreen(page, 'View address', `${size} address details`, { atTop: true });
                 await expect(page.getByRole('main')).toContainText(address);
-                const addressActions = page.getByRole('group', { name: 'Address actions' });
+                const addressActions = page.getByRole('list', { name: 'Actions', exact: true });
                 await expectGroupedControlHeights(addressActions, `${size} address actions`);
                 await addressActions.getByRole('button', { name: 'Secret' }).click();
 
                 await expectScreen(page, 'Show private key', `${size} private key warning`, {
                     atTop: true,
                 });
-                await expect(page.getByRole('heading', { name: 'Before you continue' })).toBeVisible();
+                // One form: the address, the never-share notice, the wallet
+                // password and I Understand (operator ruling, simplified page).
+                await expect(page.getByRole('form', { name: 'Before you continue' })).toBeVisible();
+                await expect(page.getByRole('main'), 'the private key page has no never-share notice')
+                    .toContainText(/never share this private key/i);
                 await expect(privateKeyCode(page), 'a private key exists before password confirmation')
                     .toHaveCount(0);
-                await page.getByRole('button', { name: 'I understand, continue' }).click();
 
-                await expectScreen(page, 'Show private key', `${size} private key password`);
                 // The label carries a help tip button named after it (U57), so the
                 // field is found by its textbox role.
                 const passwordField = page.getByRole('textbox', { name: 'Wallet password', exact: true });
                 await expect(passwordField).toBeVisible();
                 await passwordField.fill(password);
-                await page.getByRole('button', { name: 'Confirm password' }).click();
+                await page.getByRole('button', { name: 'I Understand' }).click();
 
-                const reveal = page.getByRole('button', { name: 'Tap to reveal private key' });
-                await expect(reveal).toBeVisible();
-                await expect(privateKeyCode(page), 'password confirmation exposed the key without a reveal tap')
-                    .toHaveCount(0);
-                await expectSameLineHeight([
-                    reveal,
-                    page.getByRole('button', { name: 'Hide', exact: true }),
-                ], `${size} private key reveal row`);
-                await reveal.click();
+                // The key shows at once after the password; there is no
+                // second reveal tap, no Hide and no Done.
                 await expect(privateKeyCode(page), 'the requested private key did not render')
                     .toHaveCount(1);
                 await expectScreen(page, 'Show private key', `${size} revealed private key`);
-                await page.getByRole('button', { name: 'Done' }).click();
+                // The back arrow leaves the page and wipes the key.
+                await page.getByRole('button', { name: 'Back to previous screen' }).click();
 
                 await expectScreen(page, 'Addresses', `${size} addresses after private key leave`, {
                     atTop: true,
@@ -265,12 +262,12 @@ for (const viewport of VIEWPORTS) {
                     .toHaveCount(0);
 
                 await page.getByRole('button', { name: /^View address / }).first().click();
-                await page.getByRole('group', { name: 'Address actions' })
+                await page.getByRole('list', { name: 'Actions', exact: true })
                     .getByRole('button', { name: 'Secret' }).click();
                 await expectScreen(page, 'Show private key', `${size} reopened private key warning`, {
                     atTop: true,
                 });
-                await expect(page.getByRole('heading', { name: 'Before you continue' })).toBeVisible();
+                await expect(page.getByRole('form', { name: 'Before you continue' })).toBeVisible();
                 await expect(privateKeyCode(page), 'private key returns after reopening the screen')
                     .toHaveCount(0);
             });
@@ -297,7 +294,11 @@ for (const viewport of VIEWPORTS) {
                 const confirmName = page.getByLabel('Confirm wallet name', { exact: true });
                 await expect(confirmName).toHaveAttribute('placeholder', RENAMED_WALLET);
                 const remove = page.getByRole('button', { name: 'Remove wallet', exact: true });
-                await expect(remove).toBeDisabled();
+                // G130: enabled before the name is typed; a press is refused
+                // with the reason in the error summary.
+                await expect(remove).toBeEnabled();
+                await remove.click();
+                await expect(page.getByRole('alert', { name: /form errors/i })).toContainText('Type the wallet name');
                 await expectSameLineHeight([
                     page.getByRole('button', { name: 'Cancel', exact: true }),
                     remove,

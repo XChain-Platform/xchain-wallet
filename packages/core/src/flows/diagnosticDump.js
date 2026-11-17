@@ -23,7 +23,7 @@
 //   COUNT ONLY:    wallets, accounts, addresses, contacts,
 //                  connected-sites, pending-txs.
 //   INCLUDE:       non-sensitive settings (theme, autolock, fiat,
-//                  privacy flags, ADS counters), chain descriptor ids
+//                  privacy flags, donation settings), chain descriptor ids
 //                  + kind, default endpoints, signer kinds, recent
 //                  errors (truncated), build metadata.
 //   HASH (Cluster L FOLLOWUP 3): user-supplied free-form text that
@@ -311,18 +311,6 @@ function sanitizeSettings(settings) {
             customSatsPerKb: fs.customSatsPerKb,
         };
     }
-    const adsPerChain = {};
-    for (const [chainId, state] of Object.entries(settings.ads?.perChain ?? {})) {
-        adsPerChain[chainId] = {
-            perTxAmountSats: state.perTxAmountSats,
-            triggerAmountSats: state.triggerAmountSats,
-            lifetimeTxCount: state.lifetimeTxCount,
-            // Intentionally redact `accumulatedSats` and
-            // `lifetimeDonatedSats`. Both are small ints so exposure
-            // is minor, but they're user-visible counters that add
-            // nothing to a bug report and could identify the wallet.
-        };
-    }
     return {
         activeNetwork: ['mainnet', 'testnet', 'regtest'].includes(settings.activeNetwork)
             ? settings.activeNetwork
@@ -338,10 +326,14 @@ function sanitizeSettings(settings) {
             changeAddressRotation: settings.privacy?.changeAddressRotation ?? false,
             hideSmallBalances: settings.privacy?.hideSmallBalances ?? false,
         },
+        // The donation settings only. The queued and donated totals and the
+        // donation count are redacted: they add nothing to a bug report and,
+        // as money the wallet moved, could help identify it.
         ads: {
-            enabled: settings.ads?.enabled ?? false,
-            chainCount: Object.keys(settings.ads?.perChain ?? {}).length,
-            perChain: adsPerChain,
+            perTransaction: settings.ads?.perTransaction ?? null,
+            sendAt: settings.ads?.sendAt ?? null,
+            recipient: settings.ads?.recipient ?? null,
+            currency: settings.ads?.currency ?? null,
         },
         fees,
         notifications: sanitizeNotifications(settings.notifications),
@@ -367,9 +359,12 @@ function sanitizeGrace(grace) {
     return {
         undoSendEnabled: grace.undoSendEnabled === true,
         undoSendSeconds: Number.isFinite(grace.undoSendSeconds) ? grace.undoSendSeconds : null,
-        testSendThresholdSats: Number.isFinite(Number(grace.testSendThresholdSats))
-            ? Number(grace.testSendThresholdSats)
+        // The v5 threshold, in the display currency ('0' is Off).
+        testSendThresholdFiat: typeof grace.testSendThresholdFiat === 'string'
+            && /^\d+(\.\d+)?$/.test(grace.testSendThresholdFiat)
+            ? grace.testSendThresholdFiat
             : null,
+        lookalikeWarnings: grace.lookalikeWarnings !== false,
     };
 }
 

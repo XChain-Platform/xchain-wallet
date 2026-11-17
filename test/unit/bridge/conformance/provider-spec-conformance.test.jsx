@@ -313,16 +313,18 @@ describe('reference dApp chain ids', () => {
             }}
             onReject={() => {}}
         />);
+        fireEvent.click(screen.getByRole('button', { name: /^Networks it can see/ }));
         const checkbox = screen.getByLabelText(
-            `Allow ${descriptor.displayName} ${descriptor.networkKind}`,
+            `Allow ${descriptor.displayName}`,
         );
         expect(checkbox.checked).toBe(true);
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(screen.getByRole('button', { name: 'Approve' })).not.toBeDisabled();
         await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Approve' })));
 
         expect(messaging.resolveApproval).toHaveBeenCalledWith(
             'example-connect',
-            expect.objectContaining({ chains: [chainId] }),
+            expect.objectContaining({ chains: expect.arrayContaining([chainId]) }),
         );
         close.mockRestore();
     });

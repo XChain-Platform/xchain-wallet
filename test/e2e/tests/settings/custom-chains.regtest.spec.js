@@ -22,10 +22,10 @@
 // un-register as well as delete. A spec that only reads the row it just wrote
 // back off the same list would pass against a wallet that registers nothing.
 //
-// So the claim here is REGISTRATION, read somewhere else entirely: the
-// "Regtest networks" block on this same page is built from
-// `chainRegistry.supportedChains()`, not from the custom-chain settings list,
-// so a descriptor that reaches it has genuinely entered the registry the rest
+// So the claim here is REGISTRATION, read somewhere else entirely: a
+// network's own page under Test Networks resolves the network through
+// `chainRegistry.get()`, not from the custom-chain settings list, so a
+// descriptor whose page draws has genuinely entered the registry the rest
 // of the wallet resolves chains through. Checked after a full RELOAD, which is
 // also the only way to prove the boot path re-seeds it: a registry entry that
 // exists only in the tab that created it is not a chain the wallet has.
@@ -90,11 +90,14 @@ const DESCRIPTOR = {
     adsDonationAddress: 'PLACEHOLDER_REPLACE_BEFORE_MAINNET',
 };
 
-/** Opens Settings and walks into the Developer mode page, with the toggle on. */
-async function openDeveloperMode(page) {
+/**
+ * Opens Settings > Advanced with Developer mode on, then Developer options >
+ * Test networks (operator picks 2026-11-14).
+ */
+async function openTestNetworks(page) {
     await openSettings(page);
-    await page.getByRole('button', { name: /^Developer mode\b/ }).click();
-    const devToggle = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
+    await page.getByRole('button', { name: /^Advanced\b/ }).click();
+    const devToggle = page.getByRole('switch', { name: 'Developer mode', exact: true });
     await expect(devToggle).toBeVisible({ timeout: 30_000 });
     if (!(await devToggle.isChecked())) {
         // `.check()` cannot be used: the input is controlled by PERSISTED
@@ -104,11 +107,27 @@ async function openDeveloperMode(page) {
         await devToggle.click();
         await expect(devToggle).toBeChecked();
     }
+    await page.getByRole('button', { name: /^Developer options/ }).click();
+    await page.getByRole('button', { name: /^Test networks/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Test Networks' })).toBeVisible({ timeout: 30_000 });
 }
 
-/** The Regtest-networks entry for `id`, which is REGISTRY-derived. */
-function registryEntry(page, id) {
-    return page.getByText(new RegExp(`^${id} · explorer`));
+/** Test Networks > Add Network > the title bar's Add Custom Network plus, with the Descriptor JSON section open. */
+async function openPasteForm(page) {
+    await page.getByRole('button', { name: /^Add Network/ }).click();
+    await page.getByRole('button', { name: 'Add Custom Network', exact: true }).click();
+    await page.getByRole('button', { name: /^Descriptor JSON/ }).click();
+    return page.getByLabel('Descriptor JSON', { exact: true });
+}
+
+/**
+ * The network's own page, which resolves the network through the
+ * ChainRegistry: a network the registry does not hold reads as no longer
+ * installed even when the settings list still names it.
+ */
+async function openNetworkPage(page) {
+    await page.getByRole('button', { name: new RegExp(`^${CHAIN_NAME}`) }).click();
+    await expect(page.getByRole('heading', { level: 1, name: CHAIN_NAME })).toBeVisible({ timeout: 30_000 });
 }
 
 test.describe('Settings: custom chains', () => {
@@ -117,73 +136,73 @@ test.describe('Settings: custom chains', () => {
     test('a pasted descriptor is validated, registered, survives a reload, and un-registers on remove',
         async ({ page }) => {
             await createWallet(page, { password: PASSWORD });
-            await openDeveloperMode(page);
+            await openTestNetworks(page);
 
             await test.step('it refuses a descriptor that is not valid, naming the field', async () => {
-                await page.getByRole('button', { name: 'Add custom network' }).click();
-                const json = page.getByLabel('Custom network descriptor JSON');
+                const json = await openPasteForm(page);
                 // Valid JSON, invalid DESCRIPTOR: the two failures are handled
                 // by different code and only the second one proves the
                 // validator runs at all.
                 await json.fill(JSON.stringify({ ...DESCRIPTOR, wifVersionByte: 999 }));
-                await page.getByRole('button', { name: 'Add network' }).click();
+                await page.getByRole('button', { name: 'Add Network', exact: true }).click();
 
                 // Anchored on the refusal, not on the word: `wifVersionByte`
-                // alone also matches the form's own field-list label AND the
-                // textarea still holding the pasted JSON, so a bare text match
-                // here is a strict-mode violation rather than an assertion.
+                // alone also matches the textarea still holding the pasted
+                // JSON, so a bare text match here is a strict-mode violation
+                // rather than an assertion.
                 await expect(page.getByText(/can't be added[^]*wifVersionByte/),
                     'a descriptor with an out-of-range WIF version byte was not refused by name, so '
                     + 'the user cannot tell WHICH field of a 16-field blob is wrong')
                     .toBeVisible({ timeout: 30_000 });
-                await expect(registryEntry(page, CHAIN_ID),
-                    'a REFUSED descriptor still reached the chain registry')
-                    .toHaveCount(0);
+                // A refusal keeps the form on screen; nothing went back to the list.
+                await expect(page.getByRole('heading', { level: 1, name: 'Add Custom Network' })).toBeVisible();
             });
 
             await test.step('a valid descriptor is added and enters the live registry', async () => {
-                const json = page.getByLabel('Custom network descriptor JSON');
+                const json = page.getByLabel('Descriptor JSON', { exact: true });
                 await json.fill(JSON.stringify(DESCRIPTOR));
-                await page.getByRole('button', { name: 'Add network' }).click();
+                await page.getByRole('button', { name: 'Add Network', exact: true }).click();
 
-                await expect(page.getByText(`Added "${CHAIN_ID}".`),
-                    'the add never reported a result').toBeVisible({ timeout: 30_000 });
-                await expect(page.getByRole('button', { name: `Remove custom network ${CHAIN_ID}` }),
-                    'the added chain is not listed in Custom chains').toBeVisible({ timeout: 30_000 });
+                // The add returns to Test Networks in one step, the network listed.
+                await expect(page.getByRole('heading', { level: 1, name: 'Test Networks' }),
+                    'the add never returned to the list').toBeVisible({ timeout: 30_000 });
+                await expect(page.getByRole('button', { name: new RegExp(`^${CHAIN_NAME}`) }),
+                    'the added network is not listed on Test Networks').toBeVisible({ timeout: 30_000 });
             });
 
             await test.step('it is REGISTERED, not merely persisted, and boot re-seeds it', async () => {
                 // The reload is the assertion. Before it, a passing read could
                 // be served by the component's own state; after it, the only
-                // thing that can put this row on screen is a ChainRegistry
+                // thing that can draw the network's own page is a ChainRegistry
                 // rebuilt at boot from persisted settings - which is exactly
                 // what D-91 turned out NOT to do for endpoints.
                 await page.reload();
                 await unlockAfterReload(page, PASSWORD);
-                await openDeveloperMode(page);
+                await openTestNetworks(page);
+                await openNetworkPage(page);
 
-                await expect(registryEntry(page, CHAIN_ID),
+                await expect(page.getByText('This network is no longer installed'),
                     'the custom chain persisted but never entered the ChainRegistry, so nothing in '
                     + 'the wallet can resolve it - the D-91 shape: a setting that saves and applies '
                     + 'nothing')
-                    .toBeVisible({ timeout: 30_000 });
+                    .toHaveCount(0);
+                await page.getByRole('tab', { name: /Details/ }).click();
+                await expect(page.getByText(CHAIN_ID, { exact: true })).toBeVisible({ timeout: 30_000 });
+                await page.getByRole('tab', { name: /Actions/ }).click();
             });
 
             await test.step('remove takes it out of the registry too', async () => {
-                await page.getByRole('button', { name: `Remove custom network ${CHAIN_ID}` }).click();
-                await expect(page.getByText(`Removed "${CHAIN_ID}".`),
-                    'the remove never reported a result').toBeVisible({ timeout: 30_000 });
+                await page.getByRole('button', { name: /^Remove network/ }).click();
+                await expect(page.getByRole('heading', { level: 1, name: 'Test Networks' }),
+                    'the remove never returned to the list').toBeVisible({ timeout: 30_000 });
 
                 await page.reload();
                 await unlockAfterReload(page, PASSWORD);
-                await openDeveloperMode(page);
+                await openTestNetworks(page);
 
-                await expect(registryEntry(page, CHAIN_ID),
-                    'a removed custom chain is still in the ChainRegistry after a reload, so the '
-                    + 'wallet still offers a chain the user deleted')
-                    .toHaveCount(0);
-                await expect(page.getByRole('button', { name: `Remove custom network ${CHAIN_ID}` }),
-                    'the removed chain is still listed in Custom chains').toHaveCount(0);
+                await expect(page.getByRole('button', { name: new RegExp(`^${CHAIN_NAME}`) }),
+                    'the removed network is still listed on Test Networks, so the wallet still '
+                    + 'offers a chain the user deleted').toHaveCount(0);
             });
         });
 });

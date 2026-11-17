@@ -36,7 +36,7 @@ function deferred() {
 afterEach(cleanup);
 
 describe('PSBT review while a new parse is pending', () => {
-    it('drops the previous review and keeps signing disabled until the new paste parses', async () => {
+    it('drops the previous review while keeping the Sign action available during parsing', async () => {
         const second = deferred();
         const parsePsbtRequest = vi.fn()
             .mockResolvedValueOnce({ decomposed: decomposedFor('bc1qfirstrecipient'), action: null, actionDecodeReason: 'NO_OP_RETURN' })
@@ -57,22 +57,22 @@ describe('PSBT review while a new parse is pending', () => {
                 <PsbtSignForm walletId="wallet" onBack={() => {}} />
             </MessagingProvider>,
         );
-        await screen.findByRole('button', { name: /Network: Bitcoin/ });
+        await screen.findByRole('button', { name: /Network: Bitcoin/, hidden: true }); // The network picker is in the closed "Signing with" section.
         const box = screen.getByLabelText('Unsigned transaction code');
 
         fireEvent.change(box, { target: { value: PSBT_A } });
         await waitFor(() => expect(screen.getAllByTestId('psbt-sign-output')).toHaveLength(1));
-        expect(screen.getByRole('button', { name: 'Sign transaction' }).disabled).toBe(false);
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(false);
 
         fireEvent.change(box, { target: { value: PSBT_B } });
         await waitFor(() => expect(parsePsbtRequest).toHaveBeenCalledTimes(2));
 
         // The second parse has not answered: no review of the first transaction may stay up.
         expect(screen.queryAllByTestId('psbt-sign-output')).toHaveLength(0);
-        expect(screen.getByRole('button', { name: 'Sign transaction' }).disabled).toBe(true);
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(false);
 
         second.resolve({ decomposed: decomposedFor('bc1qsecondrecipient'), action: null, actionDecodeReason: 'NO_OP_RETURN' });
         await waitFor(() => expect(screen.getAllByTestId('psbt-sign-output')).toHaveLength(1));
-        expect(screen.getByRole('button', { name: 'Sign transaction' }).disabled).toBe(false);
+        expect(screen.getByRole('button', { name: /^Sign transaction$/i }).disabled).toBe(false);
     });
 });

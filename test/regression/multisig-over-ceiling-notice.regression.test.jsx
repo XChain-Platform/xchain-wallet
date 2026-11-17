@@ -72,7 +72,10 @@ async function renderWith(multisigConfig, ui) {
     await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+});
 
 const receive = () => <Receive walletId="w-1" accountId="acc-1" prefill={{ chainId: CHAIN }} onBack={() => {}} />;
 const addressList = () => <AddressList walletId="w-1" accountId="acc-1" onBack={() => {}} />;
@@ -112,10 +115,22 @@ describe('regression/multisig-over-ceiling-notice', () => {
         await act(async () => { fireEvent.click(screen.getByText('Multisig receive')); });
         expect(screen.getByText(NOTICE)).toBeTruthy();
         expect(screen.queryByText(SEGWIT_ADDRESS)).toBeNull();
-        expect(screen.queryByRole('button', { name: /Copy wallet address/i })).toBeNull();
+        expect(screen.queryByLabelText(SEGWIT_ADDRESS)).toBeNull();
+        expect(screen.queryByRole('button', { name: /Copy wallet address|Copy Address/i })).toBeNull();
+        expect(screen.queryByTestId('address-detail-qr')).toBeNull();
+        expect(screen.queryByRole('img', { name: 'QR code for this address' })).toBeNull();
     });
 
     it('[REGRESSION P0] the detail screen of a 16-key SegWit config carries its address and no notice', async () => {
+        // View Address shows the whole address when its row has the room
+        // (AddressText fit); give the row a wide box and the text a width.
+        vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function width() {
+            return this.dataset?.testid === 'address-detail-address' ? 2000 : 0;
+        });
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function bounds() {
+            const w = this.hasAttribute('data-address-measure') ? this.textContent.length * 8 : 0;
+            return { width: w, height: 0, top: 0, right: w, bottom: 0, left: 0, x: 0, y: 0, toJSON() {} };
+        });
         await renderWith(config('p2wsh-multisig', 16), addressList());
         await act(async () => { fireEvent.click(screen.getAllByText('Multisig receive')[0]); });
         expect(screen.queryByText(NOTICE)).toBeNull();

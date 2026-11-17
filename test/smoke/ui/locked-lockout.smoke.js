@@ -62,8 +62,13 @@ assert.match(lockedSrc, /if \(remainingMs <= 0\) return undefined/, 'ticker no-o
 
 assert.match(
     lockedSrc,
-    /if \(unlockInFlightRef\.current \|\| busy \|\| password\.length === 0 \|\| isLockedOut\) return/,
+    /if \(unlockInFlightRef\.current \|\| busy \|\| isLockedOut\) return/,
     'submit aborted while locked out',
+);
+assert.match(
+    lockedSrc,
+    /if \(password\.length === 0\) \{[\s\S]{0,250}unlockErrors\.validate\(\{ \[UNLOCK_PASSWORD_ID\]:/,
+    'an empty submit reports the password field error instead of disabling the action',
 );
 
 // --- success path clears lockout --------------------------------------
@@ -98,8 +103,8 @@ assert.match(
 );
 assert.match(
     lockedSrc,
-    /disabled=\{password\.length === 0 \|\| isLockedOut\}/,
-    'submit button disabled while locked',
+    /disabled=\{busy \|\| isLockedOut\}/,
+    'submit button stays active when empty and is disabled only while busy or locked out',
 );
 assert.doesNotMatch(
     lockedSrc,

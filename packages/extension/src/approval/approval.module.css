@@ -18,7 +18,7 @@
 }
 
 .origin {
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     font-family: var(--xc-font-mono);
 }
@@ -38,6 +38,20 @@
     min-width: 0;
 }
 
+.connectFooter {
+    margin-block: calc(-1 * var(--xc-space-1));
+}
+
+/* FormPage centres approval content in the standard form column from 600px.
+   Keep the docked decisions directly under that column without changing the
+   full-width phone and popup layout. */
+@media (min-width: 600px) {
+    .formFooter {
+        max-width: var(--xc-form-card-max-width);
+        margin-inline: auto;
+    }
+}
+
 .summary {
     min-width: 0;
     border: 0;
@@ -46,7 +60,7 @@
 }
 
 .summaryLabel {
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
     font-weight: 600;
     margin: 0 0 var(--xc-space-1);
@@ -57,10 +71,11 @@
 .summaryValue {
     max-width: 100%;
     font-family: var(--xc-font-mono);
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-text-sm);
     color: var(--xc-text);
     white-space: pre-wrap;
-    word-break: break-all;
+    overflow-wrap: anywhere;
+    word-break: normal;
     margin: 0;
 }
 
@@ -85,6 +100,6 @@
 
 .error {
     color: var(--xc-danger-fg);
-    font-size: var(--xc-text-xs);
+    font-size: var(--xc-text-sm);
     margin: var(--xc-space-2) 0 0;
 }

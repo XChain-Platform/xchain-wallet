@@ -37,7 +37,7 @@
 // by name because the rule is about the difference between them - so it runs
 // under the default XC_REGTEST_COIN.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openPaletteCommand, revealChainPicker, test } from '../../fixtures/wallet.js';
 import { switchToRegtest } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -68,7 +68,7 @@ const STATEMENT_TEXT = /LTC is the only way to pay a protocol fee on this networ
  */
 async function switchFormChain(scope, chainLabel) {
     const trigger = scope.getByRole('button', { name: /^Network:/ }).first();
-    await expect(trigger, 'this form has no "Network" chain picker').toBeVisible({ timeout: 30_000 });
+    await revealChainPicker(scope, trigger, 'Network');
     await trigger.click();
     await trigger.page().getByRole('dialog', { name: 'Network' })
         .getByRole('button', { name: new RegExp(`^Select ${chainLabel}\\b`) }).first().click();

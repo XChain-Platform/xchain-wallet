@@ -34,7 +34,7 @@ import styles from './CommandPalette.module.css';
 import { useBackHandler } from '../../ui/backStack.js';
 import { useFocusTrap } from '../utils/focusTrap.js';
 import { t } from '../../i18n/index.js';
-import { visibleWalletMenu, walletMenuFooter } from '../walletMenu.js';
+import { visibleWalletMenu, walletLockAction } from '../walletMenu.js';
 import { TIER_RAIL_MIN_PX } from '../styles/breakpoints.js';
 import '../../i18n/locales/en/commandPalette.js';
 import '../../i18n/locales/en/walletMenu.js';
@@ -53,8 +53,12 @@ const CATALOGUE_SEARCH_GROUPS = new Set(['Menu', 'In Settings', 'In All actions'
 
 const commandSearchGroup = (command) => command.searchGroup || command.category;
 
-function orderMenuSearchResults(results, commands) {
+function orderMenuSearchResults(results, commands, query = '') {
     const sourceOrder = new Map(commands.map((command, index) => [command.id, index]));
+    // Inside the Menu group a label that starts with the query leads, so
+    // "sign" opens on Sign message rather than an earlier box's Multisig signing.
+    const needle = query.trim().toLowerCase();
+    const leads = (command) => (needle && String(command.searchTitle || command.title || '').toLowerCase().startsWith(needle) ? 0 : 1);
     const groupOrder = new Map(MENU_SEARCH_GROUPS.map((group, index) => [group, index]));
     let nextGroup = groupOrder.size;
     for (const command of results) {
@@ -72,6 +76,8 @@ function orderMenuSearchResults(results, commands) {
             const groupDifference = groupOrder.get(aGroup) - groupOrder.get(bGroup);
             if (groupDifference) return groupDifference;
             if (aGroup === bGroup && CATALOGUE_SEARCH_GROUPS.has(aGroup)) {
+                const leadDifference = aGroup === 'Menu' ? leads(a.command) - leads(b.command) : 0;
+                if (leadDifference) return leadDifference;
                 return (sourceOrder.get(a.command.id) ?? a.rank)
                     - (sourceOrder.get(b.command.id) ?? b.rank);
             }
@@ -103,6 +109,7 @@ export function CommandPalette({
 }) {
     const [query, setQuery] = useState('');
     const [activeIndex, setActiveIndex] = useState(0);
+    const [walletKeyboardFocus, setWalletKeyboardFocus] = useState(false);
     const [recentCommandIds, setRecentCommandIds] = useState(/** @type {string[]} */ ([]));
     // The system Back gesture closes this before it leaves the screen.
     useBackHandler(open ? onClose : undefined);
@@ -114,10 +121,9 @@ export function CommandPalette({
 
     const walletGroups = menu ? visibleWalletMenu(menu.gates) : [];
     const walletRows = walletGroups.flatMap((group) => group.rows);
-    const walletFooterRows = menu
-        ? walletMenuFooter().filter((row) => row.id !== 'lock' || menu.onLock)
-        : [];
-    const walletSelectableRows = [...walletRows, ...walletFooterRows];
+    // Lock wallet is a header button, so arrow keys cover the grid rows only.
+    const walletSelectableRows = walletRows;
+    const lockAction = menu?.onLock ? walletLockAction() : null;
     const trimmedQuery = (query || '').trim();
     const showingWalletMenu = Boolean(menu) && !trimmedQuery;
     const currentWalletIndex = menu
@@ -146,7 +152,7 @@ export function CommandPalette({
         }
         const freeform = typeof parseQuery === 'function' ? (parseQuery(q) || []) : [];
         const combined = freeform.length ? [...freeform, ...base] : base;
-        return menu ? orderMenuSearchResults(combined, commands || []) : combined;
+        return menu ? orderMenuSearchResults(combined, commands || [], q) : combined;
     }, [commands, query, parseQuery, recentCommandIds, menu]);
 
     // Reset before paint so input arriving as the palette appears cannot be
@@ -155,6 +161,7 @@ export function CommandPalette({
         if (!open) return;
         setQuery('');
         setActiveIndex(currentWalletIndexRef.current);
+        setWalletKeyboardFocus(false);
     }, [open]);
 
     useLayoutEffect(() => {
@@ -238,7 +245,6 @@ export function CommandPalette({
         if (!row || !menu) return;
         onClose();
         if (row.id === 'settings') menu.onOpenSettings();
-        else if (row.id === 'lock') menu.onLock?.();
         else menu.onSelect(row.id);
     };
 
@@ -247,18 +253,58 @@ export function CommandPalette({
         else runCommandAt(index);
     };
 
+    // Left/Right step to the nearest row in the adjacent box column, by
+    // rendered position, so any column count (2 to 6) navigates the same way.
+    // Returns null when there is no row that way (or no layout, as in jsdom).
+    const neighbourAcross = (direction) => {
+        const rows = Array.from(listRef.current?.querySelectorAll('[data-index]') || []);
+        const current = rows.find((el) => Number(el.getAttribute('data-index')) === activeIndex);
+        if (!current) return null;
+        const from = current.getBoundingClientRect();
+        let best = null;
+        let bestScore = Infinity;
+        for (const el of rows) {
+            if (el === current) continue;
+            const box = el.getBoundingClientRect();
+            const dx = (box.left - from.left) * direction;
+            if (dx <= 1) continue;
+            const dy = Math.abs(box.top - from.top);
+            const score = dy * 1000 + dx;
+            if (score < bestScore) {
+                bestScore = score;
+                best = Number(el.getAttribute('data-index'));
+            }
+        }
+        return best;
+    };
+
     const onKeyDown = (e) => {
         switch (e.key) {
             case 'ArrowDown':
                 e.preventDefault();
+                setWalletKeyboardFocus(true);
                 setActiveIndex((i) => (selectionCount === 0 ? 0 : (i + 1) % selectionCount));
                 break;
             case 'ArrowUp':
                 e.preventDefault();
+                setWalletKeyboardFocus(true);
                 setActiveIndex((i) => (selectionCount === 0
                     ? 0
                     : (i <= 0 ? selectionCount - 1 : i - 1)));
                 break;
+            case 'ArrowLeft':
+            case 'ArrowRight': {
+                // Only the empty-query menu is two-dimensional; in a text
+                // query the arrows keep moving the caret.
+                if (!showingWalletMenu) break;
+                const next = neighbourAcross(e.key === 'ArrowRight' ? 1 : -1);
+                if (next !== null) {
+                    e.preventDefault();
+                    setWalletKeyboardFocus(true);
+                    setActiveIndex(next);
+                }
+                break;
+            }
             case 'Enter':
                 e.preventDefault();
                 runAt(activeIndex);
@@ -348,6 +394,20 @@ export function CommandPalette({
         </span>
     );
 
+    // Plain icon button left of Close, normal icon colour (not a danger row).
+    const lockButton = lockAction ? (
+        <span className={styles.lock}>
+            <Button
+                variant="secondary"
+                size="md"
+                icon={<Icon.LockIcon />}
+                onClick={() => { onClose(); menu.onLock(); }}
+                aria-label={lockAction.label}
+                data-wallet-menu-lock=""
+            />
+        </span>
+    ) : null;
+
     const walletButtonClass = `${buttonStyles.btn} ${buttonStyles.rowAction} ${buttonStyles.md}`;
 
     return (
@@ -356,7 +416,7 @@ export function CommandPalette({
             className={`${styles.overlay} ${menu ? styles.menuOverlay : ''}`}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="xc-wallet-menu-title"
+            aria-labelledby="xc-command-surface-title"
             data-wallet-menu={menu ? '' : undefined}
             onMouseDown={onClose}
         >
@@ -365,13 +425,18 @@ export function CommandPalette({
                 role="presentation"
                 onMouseDown={(e) => e.stopPropagation()}
             >
-                <h2 id="xc-wallet-menu-title" className={styles.visuallyHidden}>
-                    {t('walletMenu.menu')}
+                <h2 id="xc-command-surface-title" className={styles.visuallyHidden}>
+                    {menu
+                        ? t('walletMenu.menu')
+                        : t('commandPalette.commandPalette.commandPalette')}
                 </h2>
                 {menu ? (
                     <header className={styles.menuHeader}>
                         {searchControl}
-                        {closeButton}
+                        <div className={styles.menuActions}>
+                            {lockButton}
+                            {closeButton}
+                        </div>
                     </header>
                 ) : (
                     <>
@@ -425,18 +490,24 @@ export function CommandPalette({
                                                         tabIndex={-1}
                                                         data-index={index}
                                                         data-wallet-menu-row={row.id}
-                                                        data-wallet-menu-focused={selected ? '' : undefined}
+                                                        data-wallet-menu-keyboard-focused={selected && walletKeyboardFocus ? '' : undefined}
                                                         className={`${walletButtonClass} ${styles.walletRow} ${current ? styles.walletRowActive : ''}`}
                                                         role="option"
                                                         aria-selected={selected}
                                                         aria-current={current ? 'page' : undefined}
-                                                        onMouseMove={() => setActiveIndex(index)}
+                                                        onMouseMove={() => {
+                                                            setWalletKeyboardFocus(false);
+                                                            setActiveIndex(index);
+                                                        }}
                                                         onClick={() => selectWalletRow(row)}
                                                     >
                                                         <span className={styles.walletRowIcon} aria-hidden="true">
                                                             {RowIcon ? <RowIcon /> : null}
                                                         </span>
                                                         <span className={styles.walletRowLabel}>{row.label}</span>
+                                                        <span className={styles.rowChevron} aria-hidden="true">
+                                                            <Icon.ForwardIcon />
+                                                        </span>
                                                     </button>
                                                 </li>
                                             );
@@ -444,34 +515,6 @@ export function CommandPalette({
                                     </ul>
                                 </section>
                             ))}
-                        </div>
-                        <div className={styles.walletFooter}>
-                            {walletFooterRows.map((row) => {
-                                const index = walletSelectableRows.findIndex((item) => item.id === row.id);
-                                const selected = index === activeIndex;
-                                const current = row.id === menu.currentView;
-                                const RowIcon = Icon[row.icon];
-                                return (
-                                    <button
-                                        key={row.id}
-                                        id={`xc-wallet-menu-${row.id}`}
-                                        type="button"
-                                        data-index={index}
-                                        data-wallet-menu-row={row.id}
-                                        data-wallet-menu-focused={selected ? '' : undefined}
-                                        data-destructive={row.id === 'lock' ? 'true' : undefined}
-                                        className={`${walletButtonClass} ${styles.walletFooterRow} ${current ? styles.walletRowActive : ''}`}
-                                        aria-current={current ? 'page' : undefined}
-                                        onMouseMove={() => setActiveIndex(index)}
-                                        onClick={() => selectWalletRow(row)}
-                                    >
-                                        <span className={styles.walletRowIcon} aria-hidden="true">
-                                            {RowIcon ? <RowIcon /> : null}
-                                        </span>
-                                        <span className={styles.walletRowLabel}>{row.label}</span>
-                                    </button>
-                                );
-                            })}
                         </div>
                     </div>
                 ) : (
@@ -519,6 +562,9 @@ export function CommandPalette({
                                                     {command.subtitle ? (
                                                         <span className={styles.rowSubtitle}>{command.subtitle}</span>
                                                     ) : null}
+                                                </span>
+                                                <span className={styles.rowChevron} aria-hidden="true">
+                                                    <Icon.ForwardIcon />
                                                 </span>
                                             </li>
                                         );

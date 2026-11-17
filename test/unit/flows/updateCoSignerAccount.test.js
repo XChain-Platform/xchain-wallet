@@ -88,7 +88,10 @@ describe('updateCoSignerAccount', () => {
     });
 
     it('throws a typed error for an unknown id', async () => {
-        await expect(updateCoSignerAccount({ vault, id: 'missing' }))
+        const update = updateCoSignerAccount({ vault, id: 'missing' });
+        await expect(update)
             .rejects.toBeInstanceOf(CoSignerAccountNotFoundError);
+        await expect(update)
+            .rejects.toThrow('cosigner account not found: missing');
     });
 });

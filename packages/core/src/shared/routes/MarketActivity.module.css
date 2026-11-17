@@ -1,76 +1,184 @@
-/* Tappable market header - shows the selected coin/token and opens the
-   shared picker to switch markets (mirrors the DEX market header). */
-.marketSelector {
-    composes: card from '../../ui/Card.module.css';
-    min-height: var(--xc-tap-min);
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-3);
-    width: 100%;
-    color: var(--xc-text);
-    font-family: inherit;
-    text-align: start;
-    cursor: pointer;
+/* The Marketplace page. The blue card reuses Home's pieces (TotalBalanceHero,
+   HomeTabs heroStack, PortfolioChart's chart-behind); only the token-market
+   parts live here. */
+
+.page.page {
+    gap: var(--xc-space-2);
 }
 
-/* Doubled class: the Button kit's own hover fill (an accent block) has the
-   same specificity as a single class and would otherwise win. */
-.marketSelector.marketSelector:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
-    border-color: var(--xc-accent-primary);
-}
-
-.marketSelectorContent {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--xc-space-3);
-    width: 100%;
-}
-
-.marketSelectorText {
+.layout,
+.column {
     display: flex;
     flex-direction: column;
-    flex: 1 1 auto;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.layout {
+    width: 100%;
+}
+
+/* The card's own order: token, the change pill above the main figure (G10,
+   as on Home), the price, then the holdings line. */
+.hero.hero.hero {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+        'token'
+        'move'
+        'price'
+        'meta';
+    row-gap: var(--xc-space-1);
+}
+
+.move {
+    grid-area: move;
+    display: flex;
+    position: relative;
+}
+
+/* The token and its name are the market picker: a plain block on the card. */
+.tokenButton.tokenButton {
+    grid-area: token;
+    justify-self: start;
+    max-width: 100%;
+    min-height: var(--xc-tap-min);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--xc-hero-text);
+    font-family: inherit;
+    text-align: start;
+    box-shadow: none;
+}
+
+.tokenButton.tokenButton:hover:not(:disabled) {
+    background: transparent;
+    color: var(--xc-hero-text);
+}
+
+.tokenButtonContent,
+.tokenIdentity {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    min-width: 0;
+}
+
+.tokenIdentity {
+    grid-area: token;
+    color: var(--xc-hero-text);
+}
+
+.tokenText {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
     gap: 2px;
 }
 
-.marketSelectorName {
-    font-size: var(--xc-text-md);
-    font-weight: 700;
-}
-
-.marketSelectorSub {
-    font-size: var(--xc-text-xs);
-    color: var(--xc-text-muted);
-}
-
-.marketSelectorChevron {
-    flex: 0 0 auto;
+.tokenName {
     display: inline-flex;
     align-items: center;
-    line-height: 1;
-    color: var(--xc-text-muted);
+    gap: var(--xc-space-1);
+    font-size: var(--xc-text-xl);
+    font-weight: 800;
+    line-height: 1.15;
 }
 
-:global([dir='rtl']) .marketSelectorChevron {
-    transform: scaleX(-1);
+.tokenChevron {
+    display: inline-flex;
+    --xc-icon-size: 18px;
+    color: var(--xc-hero-text-muted);
 }
 
-/* The activity sections stack at the same section gap as the page's own
-   children, since this region sits between them and the page column. */
+.tokenChevron svg {
+    width: 18px;
+    height: 18px;
+}
+
+.tokenSub {
+    font-size: var(--xc-text-sm);
+    font-weight: 500;
+    color: var(--xc-hero-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.price {
+    grid-area: price;
+}
+
+.heroMeta {
+    grid-area: meta;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--xc-space-1);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+/* Text drawn over the plot keeps a soft shadow so it reads on the line and
+   its fill. */
+.price,
+.heroMeta {
+    position: relative;
+    text-shadow: var(--xc-shadow-text-on-brand);
+}
+
+.holdings {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    font-size: var(--xc-text-xs);
+    color: var(--xc-hero-text-muted);
+}
+
+.holdings svg {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+}
+
+.tradeButtons {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+}
+
+.tradeButton.tradeButton {
+    width: 100%;
+    min-width: 0;
+}
+
+/* The three tabs share the row evenly, icon left of the word, on one line
+   down to the 360px popup; at the narrowest widths the side padding gives
+   way first. */
+.panelTabs [role='tab'] {
+    white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+    .panelTabs [role='tab'] {
+        padding-inline: var(--xc-space-1);
+        gap: var(--xc-space-1);
+    }
+}
+
 .activity {
     display: flex;
     flex-direction: column;
     gap: var(--xc-section-gap);
+    min-width: 0;
 }
 
-.count {
-    color: var(--xc-text);
-    font-weight: 700;
-    margin-inline-start: var(--xc-space-1);
+/* One tab's list: a card holding just the rows (no title or count row). */
+.listCard {
+    composes: flush from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .list {
@@ -112,5 +220,94 @@ button.row {
 }
 
 button.row:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
+    background: var(--xc-row-hover-bg);
+}
+
+/* An offer's tag and amount on one line under its price. */
+.offerMeta {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px var(--xc-space-2);
+}
+
+.tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0 var(--xc-space-2);
+    border-radius: 999px;
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
+    line-height: 1.6;
+    white-space: nowrap;
+}
+
+.tag svg {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 auto;
+}
+
+.tagDispenser {
+    background: color-mix(in srgb, var(--xc-accent-primary) 14%, transparent);
+    color: var(--xc-accent-primary);
+}
+
+.tagOrder {
+    background: color-mix(in srgb, var(--xc-brand-purple) 14%, transparent);
+    color: var(--xc-brand-purple);
+}
+
+/* The offer's price keeps its full figure; the kind and amount give way. */
+.rowTrailing.rowTrailing {
+    flex: 0 0 auto;
+    max-width: none;
+}
+
+.offerKind {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.offerKind svg {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+}
+
+/* Right side of an offer row: price in the side colour over the quote coin. */
+.offerPrice {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: end;
+    white-space: nowrap;
+}
+
+.offerPrice[data-side='buy'] {
+    color: var(--xc-success);
+}
+
+.offerPrice[data-side='sell'] {
+    color: var(--xc-danger-fg);
+}
+
+.offerPriceMain {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    font-weight: 700;
+}
+
+.offerPriceMain svg {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 auto;
+}
+
+.offerPriceUnit {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
 }

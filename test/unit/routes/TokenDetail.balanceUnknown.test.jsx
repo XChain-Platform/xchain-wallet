@@ -57,7 +57,7 @@ describe('TokenDetail balance that is not known', () => {
         renderDetail(vi.fn().mockRejectedValue(new Error('offline')));
         expect(await screen.findByText('Balance is unavailable.')).toBeTruthy();
         expect(screen.queryByText('No balance to send.')).toBeNull();
-        expect(screen.getByRole('region', { name: /balance/i }).textContent).not.toMatch(/(^|\D)0(\D|$)/);
+        expect(screen.getByRole('region', { name: 'UNKNOWNBAL' }).textContent).not.toMatch(/(^|\D)0(\D|$)/);
     });
 
     it('says the balance is unavailable when one address on the chain failed to read', async () => {
@@ -71,7 +71,7 @@ describe('TokenDetail balance that is not known', () => {
         }));
         expect(await screen.findByText('Balance is unavailable.')).toBeTruthy();
         expect(screen.queryByText('No balance to send.')).toBeNull();
-        expect(screen.getByRole('region', { name: /balance/i }).textContent).not.toMatch(/(^|\D)0(\D|$)/);
+        expect(screen.getByRole('region', { name: 'UNKNOWNBAL' }).textContent).not.toMatch(/(^|\D)0(\D|$)/);
     });
 
     it('says the balance is loading while the read is pending', async () => {

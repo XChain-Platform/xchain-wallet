@@ -100,7 +100,7 @@ describe('ListCreateForm refuses a list too large to verify, before compose', ()
     it('names the limit, how many addresses fit and how many were pasted', async () => {
         mount();
         await paste(addresses(300));
-        fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish List$/ }));
 
         expect(await screen.findByText(/This list has 300 addresses \(12,912 bytes\), but one action holds 8,192 bytes, which fits 190 of them\. Remove 110 addresses\./)).toBeInTheDocument();
         expect(runConfirm).not.toHaveBeenCalled();
@@ -109,7 +109,7 @@ describe('ListCreateForm refuses a list too large to verify, before compose', ()
     it('composes a list that fits', async () => {
         mount();
         await paste(addresses(190));
-        fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Publish List$/ }));
 
         await waitFor(() => expect(runConfirm).toHaveBeenCalled());
         expect(runConfirm.mock.calls[0][0].actionData.params.ITEM).toHaveLength(190);

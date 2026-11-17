@@ -47,8 +47,8 @@ for (const name of [
 
 // The two call-to-action strings are the user-visible contract of the
 // lane; §20.5 names them, so pin them rather than leaving them free.
-assert.ok(flow.includes("'Pair a signer'"), 'the watcher half offers "Pair a signer"');
-assert.ok(flow.includes("'Pair a watcher'"), 'the signer half offers "Pair a watcher"');
+assert.ok(flow.includes("'Pair a Signer'"), 'the watcher half offers "Pair a Signer"');
+assert.ok(flow.includes("'Pair a Watcher'"), 'the signer half offers "Pair a Watcher"');
 
 // Nothing private may ride the pairing payload.
 assert.ok(
@@ -119,11 +119,12 @@ for (const stage of ['role', 'seed', 'exchange']) {
     assert.ok(route.includes(`stage === '${stage}'`), `the lane renders its ${stage} stage`);
 }
 
+// The two-phone pairing left Welcome for Settings, Advanced ("Use another
+// phone as a signer"), so Onboarding no longer offers it.
 const onboarding = read('packages', 'core', 'src', 'shared', 'routes', 'Onboarding.jsx');
 assert.ok(
-    // The smoke runner swaps t('key') for its English text; a direct run reads the key.
-    /onPairPartner/.test(onboarding) && /Pair an offline signer|pairAnOfflineSigner/.test(onboarding),
-    'Onboarding exposes the pairing lane behind an onPairPartner prop',
+    !/onPairPartner/.test(onboarding) && !/pairAnOfflineSigner|Pair an Offline Signer/.test(onboarding),
+    'Onboarding no longer offers the two-phone pairing lane',
 );
 
 const appShells = [
@@ -138,12 +139,12 @@ for (const [name, rel] of appShells) {
         `${name} shell imports and renders PairPartnerWallet`,
     );
     assert.ok(
-        src.includes("onboardingStep === 'pair-partner'"),
-        `${name} shell routes the pair-partner onboarding step`,
+        src.includes("unlockedView === 'pair-partner'"),
+        `${name} shell routes the pair-partner page inside an open vault`,
     );
     assert.ok(
-        src.includes("onPairPartner={() => setOnboardingStep('pair-partner')}"),
-        `${name} shell wires the Onboarding entry point`,
+        src.includes("onPairAnotherPhone={() => setUnlockedView('pair-partner')}"),
+        `${name} shell wires the Settings, Advanced entry point`,
     );
 }
 

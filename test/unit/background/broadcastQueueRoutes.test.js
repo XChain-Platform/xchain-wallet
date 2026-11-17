@@ -44,6 +44,8 @@ import { networks } from 'bitcoinjs-lib';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
 import { createBroadcastQueueStorage } from '../../../packages/extension/src/background/broadcastQueueStorage.js';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
+import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+import { MAINNET_LAUNCH_EPOCH } from '../../../packages/core/src/flows/mainnetPrelaunch.js';
 import { legNotIndexedError, legMayBeOnChain } from '../../../packages/core/src/flows/deployLegWait.js';
 import { SIGNATURE_MISMATCH_MESSAGE } from '../../../packages/core/src/signers/verifyInputSignatures.js';
 import { signedTxFor, trackerFor } from '../../helpers/signedTx.js';
@@ -73,20 +75,21 @@ function memCollection() {
     };
 }
 
+// The wallet-wide donation queue (ruling 2026-11-14), past its send-at total.
 function adsSettings() {
-    return {
-        schemaVersion: 2,
-        ads: {
-            enabled: true,
-            perChain: {
-                [CHAIN]: {
-                    accumulatedSats: 5000, triggerAmountSats: 1000, perTxAmountSats: 100,
-                    lifetimeTxCount: 0, lifetimeDonatedSats: 0,
-                },
-            },
-        },
-    };
+    const s = createDefaultSettings();
+    return { ...s, ads: { ...s.ads, queued: '30', sendAt: '25', perTransaction: '0.05' } };
 }
+// Only mainnet sends count for automatic donations, so the ADS cases queue
+// mainnet entries; the double registry below answers either network.
+const MAIN = 'bitcoin-mainnet';
+// The verdict a queued entry carries for bytes that paid the $25 donation.
+const PAID = { chainId: MAIN, donationIncluded: true, donatedFiat: '25', currency: 'USD' };
+// An XChain action on a mainnet chain waits for launch; these cases run a day past it.
+const afterLaunch = () => vi.spyOn(Date, 'now').mockReturnValue((MAINNET_LAUNCH_EPOCH + 86_400) * 1000);
+const descriptorFor = (id) => (typeof id === 'string' && id.endsWith('-mainnet')
+    ? { id: MAIN, coin: 'bitcoin', networkKind: 'mainnet', adsDonationAddress: 'bc1qdonate' }
+    : { id: CHAIN, coin: 'bitcoin', networkKind: 'regtest', adsDonationAddress: 'bcrt1qdonate' });
 
 function deferred() {
     let resolve; let reject;
@@ -141,9 +144,13 @@ function makeHost({
     const host = createBackgroundHost({
         vault,
         chainRegistry: {
-            get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest' }),
+            get: (id) => descriptorFor(id),
             list: () => [],
-            chainIdFor: (coin, network) => (coin === 'bitcoin' && network === 'regtest' ? CHAIN : null),
+            chainIdFor: (coin, network) => {
+                if (coin !== 'bitcoin') return null;
+                if (network === 'regtest') return CHAIN;
+                return network === 'mainnet' ? MAIN : null;
+            },
         },
         sdkRegistry: { get: () => sdk, for: () => sdk },
         signerPool: { get: () => null, has: () => false },
@@ -156,7 +163,7 @@ function makeHost({
     });
     const call = async (type, request) => host.handle({ type, request });
     const list = async () => (await call('broadcast.queue.list', { walletId: W })).result;
-    return { host, vault, call, list, saved, ads: () => current.ads.perChain[CHAIN] };
+    return { host, vault, call, list, saved, ads: () => current.ads };
 }
 
 const entry = (id, extra = {}) => ({ id, chainId: CHAIN, signedTxHex: TX_HEX, summary: id, signedAt: 1, ...extra });
@@ -321,35 +328,65 @@ describe('broadcast.queue.broadcast removes by identity after the network await'
 });
 
 describe('broadcast.queue.broadcast books the ADS verdict the entry carries', () => {
-    it('donationIncluded=true credits the prior accumulator once the bytes land', async () => {
+    const mainEntry = (id, extra = {}) => entry(id, { chainId: MAIN, ...extra });
+
+    it('donationIncluded=true takes the donated amount off the queue once the bytes land', async () => {
         const h = makeHost({
-            entries: [entry('A', { adsCommit: { chainId: CHAIN, donationIncluded: true } })],
+            entries: [mainEntry('A', { adsCommit: PAID })],
             broadcastTx: vi.fn(async () => ({ txid: 'tx-A' })),
         });
         const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
         expect(res.ok, JSON.stringify(res.error ?? {})).toBe(true);
         expect(h.vault.settings.put).toHaveBeenCalledTimes(1);
-        expect(h.ads()).toMatchObject({ lifetimeDonatedSats: 5000, accumulatedSats: 100, lifetimeTxCount: 1 });
+        expect(h.ads()).toMatchObject({ donated: '25', queued: '5.05', donationCount: 1 });
     });
 
-    it('donationIncluded=false advances the accumulator and the tx count only', async () => {
+    it('donationIncluded=false only accrues this send', async () => {
         const h = makeHost({
-            entries: [entry('A', { adsCommit: { chainId: CHAIN, donationIncluded: false } })],
+            entries: [mainEntry('A', { adsCommit: { chainId: MAIN, donationIncluded: false } })],
             broadcastTx: vi.fn(async () => 'tx-A'),
         });
         await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
-        expect(h.ads()).toMatchObject({ lifetimeDonatedSats: 0, accumulatedSats: 5100, lifetimeTxCount: 1 });
+        expect(h.ads()).toMatchObject({ donated: '0', queued: '30.05', donationCount: 0 });
+    });
+
+    it('an entry from an older build that carried no amount only accrues', async () => {
+        const h = makeHost({
+            entries: [mainEntry('A', { adsCommit: { chainId: MAIN, donationIncluded: true } })],
+            broadcastTx: vi.fn(async () => 'tx-A'),
+        });
+        await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+        expect(h.ads()).toMatchObject({ donated: '0', queued: '30.05', donationCount: 0 });
+    });
+
+    it('a regtest entry neither accrues nor takes anything off the queue', async () => {
+        const h = makeHost({
+            entries: [entry('A', { adsCommit: { ...PAID, chainId: CHAIN } })],
+            broadcastTx: vi.fn(async () => 'tx-A'),
+        });
+        expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
+        expect(h.vault.settings.put).not.toHaveBeenCalled();
+        expect(h.ads()).toMatchObject({ donated: '0', queued: '30', donationCount: 0 });
+    });
+
+    it('an entry whose verdict says it was not a mainnet send does not accrue', async () => {
+        const h = makeHost({
+            entries: [mainEntry('A', { adsCommit: { chainId: MAIN, donationIncluded: false, mainnet: false } })],
+            broadcastTx: vi.fn(async () => 'tx-A'),
+        });
+        await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
+        expect(h.vault.settings.put).not.toHaveBeenCalled();
     });
 
     it('an entry with no verdict books nothing', async () => {
-        const h = makeHost({ entries: [entry('A')], broadcastTx: vi.fn(async () => 'tx-A') });
+        const h = makeHost({ entries: [mainEntry('A')], broadcastTx: vi.fn(async () => 'tx-A') });
         await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
         expect(h.vault.settings.put).not.toHaveBeenCalled();
     });
 
     it('a failed broadcast books nothing and still surfaces the error', async () => {
         const h = makeHost({
-            entries: [entry('A', { adsCommit: { chainId: CHAIN, donationIncluded: true } })],
+            entries: [mainEntry('A', { adsCommit: { chainId: MAIN, donationIncluded: true } })],
             broadcastTx: vi.fn(async () => { throw new Error('ECONNREFUSED'); }),
         });
         const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
@@ -360,39 +397,37 @@ describe('broadcast.queue.broadcast books the ADS verdict the entry carries', ()
 
     it('books the verdict once when the node answers the retry as already known', async () => {
         const h = makeHost({
-            entries: [entry('A', { adsCommit: { chainId: CHAIN, donationIncluded: true } })],
+            entries: [mainEntry('A', { adsCommit: PAID })],
             broadcastTx: vi.fn(async () => { throw new Error('txn-already-known'); }),
         });
         const res = await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' });
         expect(res.ok, JSON.stringify(res.error ?? {})).toBe(true);
         expect(h.vault.settings.put).toHaveBeenCalledTimes(1);
-        expect(h.ads()).toMatchObject({ lifetimeDonatedSats: 5000, lifetimeTxCount: 1 });
+        expect(h.ads()).toMatchObject({ donated: '25', donationCount: 1 });
     });
 
-    it('books nothing for a resumed claim the node already knows', async () => {
+    it('books a resumed claim the node already knows once', async () => {
         const h = makeHost({
-            entries: [entry('A', { resumedClaim: true, adsCommit: { chainId: CHAIN, donationIncluded: true } })],
+            entries: [mainEntry('A', { resumedClaim: true, adsCommit: { chainId: MAIN, donationIncluded: true } })],
             broadcastTx: vi.fn(async () => { throw new Error('txn-already-known'); }),
         });
         expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
         // The interrupted attempt died inside the network call, before any booking,
         // so the already-known answer is the only exit that can book this verdict.
+        // It carried no amount, so it only accrues.
         expect(h.vault.settings.put).toHaveBeenCalledTimes(1);
-        expect(h.ads()).toMatchObject({ lifetimeDonatedSats: 5000, lifetimeTxCount: 1 });
+        expect(h.ads()).toMatchObject({ donated: '0', queued: '30.05', donationCount: 0 });
     });
 
     it('a resumed claim the node already knows is booked once and a second press finds no entry', async () => {
         const h = makeHost({
-            entries: [entry('A', {
-                resumedClaim: true,
-                adsCommit: { chainId: CHAIN, donationIncluded: true, donationAmount: 2500 },
-            })],
+            entries: [mainEntry('A', { resumedClaim: true, adsCommit: PAID })],
             broadcastTx: vi.fn(async () => { throw new Error('txn-already-known'); }),
         });
         expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
         expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(false);
         expect(h.vault.settings.put).toHaveBeenCalledTimes(1);
-        expect(h.ads()).toMatchObject({ lifetimeDonatedSats: 2500, accumulatedSats: 2600, lifetimeTxCount: 1 });
+        expect(h.ads()).toMatchObject({ donated: '25', queued: '5.05', donationCount: 1 });
     });
 
     it('a resumed claim without a verdict books nothing when the node already knows it', async () => {
@@ -406,20 +441,17 @@ describe('broadcast.queue.broadcast books the ADS verdict the entry carries', ()
 
     it('a resumed claim whose retry lands books its carried amount once', async () => {
         const h = makeHost({
-            entries: [entry('A', {
-                resumedClaim: true,
-                adsCommit: { chainId: CHAIN, donationIncluded: true, donationAmount: 2500 },
-            })],
+            entries: [mainEntry('A', { resumedClaim: true, adsCommit: PAID })],
             broadcastTx: vi.fn(async () => ({ txid: 'tx-A' })),
         });
         expect((await h.call('broadcast.queue.broadcast', { walletId: W, id: 'A' })).ok).toBe(true);
         expect(h.vault.settings.put).toHaveBeenCalledTimes(1);
-        expect(h.ads()).toMatchObject({ lifetimeDonatedSats: 2500, accumulatedSats: 2600, lifetimeTxCount: 1 });
+        expect(h.ads()).toMatchObject({ donated: '25', queued: '5.05', donationCount: 1 });
     });
 
     it('a settings write failure never turns a landed broadcast into an error', async () => {
         const h = makeHost({
-            entries: [entry('A', { adsCommit: { chainId: CHAIN, donationIncluded: true } })],
+            entries: [mainEntry('A', { adsCommit: { chainId: MAIN, donationIncluded: true } })],
             broadcastTx: vi.fn(async () => 'tx-A'),
         });
         h.vault.settings.put.mockImplementation(async () => { throw new Error('vault locked'); });
@@ -880,32 +912,41 @@ describe('submitAction hands the queue what it needs to settle both halves', () 
             signPsbt: vi.fn(async ({ psbtHex }) => ({ txHex: `TX(${psbtHex})`, txid: 'txid-1' })),
         };
         const onBroadcastFailure = vi.fn(async () => {});
-        await expect(submitAction({
-            vault,
-            walletId: W,
-            chainRegistry: { get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest', adsDonationAddress: 'bcrt1qdonate' }) },
-            sdkRegistry: { get: () => sdk },
-            chainId: CHAIN,
-            actionData: { action: 'ISSUE', params: { TICK: 'JDOG' } },
-            encoderOpts: { pubkey: 'pub' },
-            prebuiltPsbt: {
-                psbtHex: 'PSBT', encoding: 'OP_RETURN', actionString: 'ISSUE|0|JDOG', version: 0,
-                deferredFeeOutput: null, deferredOutputs: [], adsDonation: { included: true, donationAmount: 5000 },
-            },
-            pendingTxMeta: { fromAddress: 'from', toAddress: 'to', actionSummary: 'Issue JDOG' },
-            signer,
-            signingPaths: [{ inputIndex: 0, path: 'm/0' }],
-            onBroadcastFailure,
-        })).rejects.toThrow();
+        afterLaunch();
+        try {
+            await expect(submitAction({
+                vault,
+                walletId: W,
+                chainRegistry: { get: () => descriptorFor(MAIN) },
+                sdkRegistry: { get: () => sdk },
+                chainId: MAIN,
+                actionData: { action: 'ISSUE', params: { TICK: 'JDOG' } },
+                encoderOpts: { pubkey: 'pub' },
+                prebuiltPsbt: {
+                    psbtHex: 'PSBT', encoding: 'OP_RETURN', actionString: 'ISSUE|0|JDOG', version: 0,
+                    deferredFeeOutput: null, deferredOutputs: [],
+                    adsDonation: { included: true, fiat: '25', currency: 'USD' },
+                },
+                pendingTxMeta: { fromAddress: 'from', toAddress: 'to', actionSummary: 'Issue JDOG' },
+                signer,
+                signingPaths: [{ inputIndex: 0, path: 'm/0' }],
+                onBroadcastFailure,
+            })).rejects.toThrow();
+        } finally {
+            vi.restoreAllMocks();
+        }
 
         expect(onBroadcastFailure).toHaveBeenCalledTimes(1);
         const payload = onBroadcastFailure.mock.calls[0][0];
         const [record] = await vault.pendingTxs.list();
         expect(record.status).toBe('queued');
         expect(payload.pendingTxId).toBe(record.id);
-        expect(payload.adsCommit).toEqual({ chainId: CHAIN, donationIncluded: true, donationAmount: 5000 });
-        // Nothing books on the failed attempt: the queued tx is what donates.
-        expect(vault.settings.put).not.toHaveBeenCalled();
+        // The verdict names the claim these bytes hold, so the queue settles it.
+        expect(payload.adsCommit).toEqual({ ...PAID, mainnet: true, reservationId: record.id });
+        // Nothing books on the failed attempt (the queued tx is what donates),
+        // but the claim stays held while the bytes wait in the queue.
+        expect(settings.ads).toMatchObject({ queued: '30', donated: '0', donationCount: 0 });
+        expect(settings.ads.reserved).toMatchObject({ id: record.id, fiat: '25', currency: 'USD', pendingTxId: record.id });
     });
 
     /**
@@ -989,6 +1030,7 @@ describe('submitAction never retires a transaction the network already holds as 
     // `answers` scripts broadcastTx per call; `phase1Sign` / `phase2Sign` replace the signer per PSBT.
     function landedSubmit({
         encoding = 'OP_RETURN', answers = [], spendP2sh, phase1Sign, phase2Sign, waitForTxid, putFails = () => false,
+        chainId = CHAIN,
     } = {}) {
         const puts = [];
         const pendingTxs = memCollection();
@@ -1029,9 +1071,9 @@ describe('submitAction never retires a transaction the network already holds as 
         const run = () => submitAction({
             vault,
             walletId: W,
-            chainRegistry: { get: () => ({ id: CHAIN, coin: 'bitcoin', networkKind: 'regtest', adsDonationAddress: 'bcrt1qdonate' }) },
+            chainRegistry: { get: () => descriptorFor(chainId) },
             sdkRegistry: { get: () => sdk },
-            chainId: CHAIN,
+            chainId,
             actionData: { action: 'ISSUE', params: { TICK: 'JDOG' } },
             encoderOpts: { pubkey: 'pub' },
             prebuiltPsbt: {
@@ -1048,14 +1090,25 @@ describe('submitAction never retires a transaction the network already holds as 
     }
 
     it('settles a first broadcast the node already holds as broadcast and books ADS once', async () => {
+        afterLaunch();
+        try {
+            const h = landedSubmit({ chainId: MAIN, answers: [new Error('Encoder RPC error: txn-already-in-mempool')] });
+            const result = await h.run();
+            expect(result.txid).toBe('txid-PHASE1');
+            expect(h.puts.some((p) => p.status === 'failed')).toBe(false);
+            expect(h.last()).toMatchObject({ status: 'broadcast', txid: 'txid-PHASE1' });
+            expect(h.last().broadcastAt).toBeTruthy();
+            expect(h.onBroadcastFailure).not.toHaveBeenCalled();
+            expect(h.vault.settings.put).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.restoreAllMocks();
+        }
+    });
+
+    it('books no ADS for a regtest send the node already holds', async () => {
         const h = landedSubmit({ answers: [new Error('Encoder RPC error: txn-already-in-mempool')] });
-        const result = await h.run();
-        expect(result.txid).toBe('txid-PHASE1');
-        expect(h.puts.some((p) => p.status === 'failed')).toBe(false);
-        expect(h.last()).toMatchObject({ status: 'broadcast', txid: 'txid-PHASE1' });
-        expect(h.last().broadcastAt).toBeTruthy();
-        expect(h.onBroadcastFailure).not.toHaveBeenCalled();
-        expect(h.vault.settings.put).toHaveBeenCalledTimes(1);
+        await h.run();
+        expect(h.vault.settings.put).not.toHaveBeenCalled();
     });
 
     it('keeps a broadcast record live when the indexer wait gives up, and rethrows the wait error untouched', async () => {

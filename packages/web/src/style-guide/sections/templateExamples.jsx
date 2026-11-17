@@ -13,7 +13,7 @@
 
 import { useState } from 'react';
 import {
-    Button, EmptyState, FormPage, FormSection, Icon, Input, ListPage, PageHeader,
+    Button, EmptyState, FormPage, FormSection, Icon, Input, ListPage, OptionSwitch, OptionSwitchList, PageHeader,
     Screen, SectionHeader, StatusMessage, Textarea,
 } from '@xchain-wallet/core/ui';
 import styles from './templateExamples.module.css';
@@ -38,7 +38,7 @@ function PageGutterGuide() {
 export function ExampleFormScreen({ withError = false }) {
     const [address, setAddress] = useState('');
     return (
-        <Screen variant="full" header={<PageHeader onBack={noop} title="Verify signature" />}>
+        <Screen variant="full" header={<PageHeader onBack={noop} title="Verify Signature" />}>
             <PageGutterGuide />
             <FormPage
                 label="Verify signature"
@@ -48,7 +48,7 @@ export function ExampleFormScreen({ withError = false }) {
                 actions={(
                     <>
                         <Button variant="ghost" onClick={noop}>Cancel</Button>
-                        <Button type="submit" variant="primary">Verify signature</Button>
+                        <Button type="submit" variant="primary">Verify Signature</Button>
                     </>
                 )}
             >
@@ -68,8 +68,10 @@ export function ExampleFormScreen({ withError = false }) {
 
 /** A long form split into titled sections: Issue token. */
 export function ExampleSectionedFormScreen() {
+    const [divisible, setDivisible] = useState(true);
+    const [lockSupply, setLockSupply] = useState(false);
     return (
-        <Screen variant="full" header={<PageHeader onBack={noop} title="Issue token" />}>
+        <Screen variant="full" header={<PageHeader onBack={noop} title="Issue Token" />}>
             <PageGutterGuide />
             <FormPage
                 sectioned
@@ -77,8 +79,8 @@ export function ExampleSectionedFormScreen() {
                 onSubmit={(e) => e.preventDefault()}
                 actions={(
                     <>
-                        <Button variant="ghost" onClick={noop}>Save draft</Button>
-                        <Button type="submit" variant="primary">Review</Button>
+                        <Button variant="ghost" onClick={noop}>Save Draft</Button>
+                        <Button type="submit" variant="primary" icon={<Icon.CheckIcon />}>Review</Button>
                     </>
                 )}
             >
@@ -87,12 +89,22 @@ export function ExampleSectionedFormScreen() {
                     <Input label="Supply" inputMode="decimal" placeholder="1000000" />
                 </FormSection>
                 <FormSection title="Settings">
-                    <label className={styles.check}>
-                        <input type="checkbox" defaultChecked /> Divisible (8 decimal places)
-                    </label>
-                    <label className={styles.check}>
-                        <input type="checkbox" /> Lock supply after issuance
-                    </label>
+                    <OptionSwitchList>
+                        <OptionSwitch
+                            icon={<Icon.CoinsIcon />}
+                            label="Divisible"
+                            description="Split into 8 decimal places"
+                            checked={divisible}
+                            onChange={(e) => setDivisible(e.target.checked)}
+                        />
+                        <OptionSwitch
+                            icon={<Icon.LockIcon />}
+                            label="Lock supply"
+                            description="No more can be issued after this"
+                            checked={lockSupply}
+                            onChange={(e) => setLockSupply(e.target.checked)}
+                        />
+                    </OptionSwitchList>
                 </FormSection>
                 <FormSection title="Description">
                     <Textarea label="Description" optional rows={2} placeholder="Shown on explorers" />
@@ -111,7 +123,7 @@ const ROWS = [
 /** A list with a toolbar and a titled group: Payments due. */
 export function ExampleListScreen() {
     return (
-        <Screen variant="full" header={<PageHeader onBack={noop} title="Payments due" />}>
+        <Screen variant="full" header={<PageHeader onBack={noop} title="Payments Due" />}>
             <PageGutterGuide />
             <ListPage
                 intro="Coin payments your matched DEX orders are waiting on."
@@ -162,7 +174,7 @@ export function ExampleEmptyScreen() {
                     icon={<Icon.HandshakeIcon />}
                     title="No polls yet"
                     body="Create the first poll on this network."
-                    actionLabel="Create poll"
+                    actionLabel="Create Poll"
                     onAction={noop}
                 />
             </ListPage>

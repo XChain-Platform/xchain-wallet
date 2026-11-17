@@ -208,18 +208,14 @@ for (const [name, src] of [['popup', popupShim], ['web', webShim]]) {
 
 // ─── 7. UI panel ───────────────────────────────────────────────────────
 
-assert.match(sectionSrc, /<BlocklistAuditPanel/,
-    'BlocklistAuditPanel mounted in the section');
-assert.match(sectionSrc, /function BlocklistAuditPanel\(\{ confirm \}\)/,
-    'BlocklistAuditPanel receives the shared confirmation action');
-assert.match(sectionSrc, /messaging\.listBlocklistAuditLog\(\)/,
-    'panel reads from listBlocklistAuditLog');
-assert.match(sectionSrc, /messaging\.clearBlocklistAuditLog\(\)/,
-    'Clear log button calls clearBlocklistAuditLog');
-assert.match(
-    sectionSrc,
-    /typeof messaging\?\.listBlocklistAuditLog === 'function'/,
-    'BlocklistAuditPanel mount is gated on messaging shim availability',
-);
+// Operator ruling 2026-11-13 (Connected Sites Layout 1): the page shows no
+// block history. The log is still recorded and its API stays wired (the
+// pins above); only the panel and Clear History left the page.
+assert.doesNotMatch(sectionSrc, /BlocklistAuditPanel/,
+    'Connected Sites mounts no block-history panel');
+assert.doesNotMatch(sectionSrc, /messaging\.listBlocklistAuditLog\(\)/,
+    'Connected Sites does not read the audit log');
+assert.doesNotMatch(sectionSrc, /messaging\.clearBlocklistAuditLog\(\)/,
+    'Connected Sites offers no Clear History');
 
 console.log('blocklist-audit-log smoke OK');

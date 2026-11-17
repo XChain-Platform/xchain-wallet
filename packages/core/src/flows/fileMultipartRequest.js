@@ -74,16 +74,33 @@ function validateInputs(args) {
 }
 
 let extensionBlobStorePromise = null;
+let shellBlobStoreFactory = null;
+
+/**
+ * Install the shell's pending-file blob store factory. The extension popup calls
+ * this at boot with its IndexedDB store, since core may not import a shell. Null
+ * clears it (used by tests); with none installed a file travels inline.
+ *
+ * @param {(() => any) | null} factory
+ */
+export function setFileBlobStoreFactory(factory) {
+    if (factory !== null && typeof factory !== 'function') {
+        throw new TypeError('setFileBlobStoreFactory needs a function or null');
+    }
+    shellBlobStoreFactory = factory;
+    extensionBlobStorePromise = null;
+}
 
 function extensionRuntime() {
     return globalThis.chrome?.runtime?.id && typeof globalThis.chrome.runtime.sendMessage === 'function';
 }
 
 async function defaultExtensionBlobStore() {
-    if (!extensionRuntime()) return null;
+    if (!extensionRuntime() || !shellBlobStoreFactory) return null;
     if (!extensionBlobStorePromise) {
-        extensionBlobStorePromise = import('../../../extension/src/storage/pendingFileBlobs.js')
-            .then(({ createPendingFileBlobs }) => createPendingFileBlobs())
+        const factory = shellBlobStoreFactory;
+        extensionBlobStorePromise = Promise.resolve()
+            .then(() => factory())
             .catch((error) => {
                 extensionBlobStorePromise = null;
                 throw error;

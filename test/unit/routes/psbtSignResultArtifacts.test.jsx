@@ -120,10 +120,10 @@ async function driveToResult({ source, result }) {
         fireEvent.change(utils.getByLabelText('Unsigned transaction code'), { target: { value: PSBT_HEX } });
         await drainMicrotasks();
     });
-    // The hardware branch relabels its own submit ("Sign on Ledger"), so match
-    // either. A missing button would silently skip the signing step, so fail
-    // loudly instead of asserting against a screen that never advanced.
-    const submitBtn = findButton(utils, /Sign transaction|Sign on (Ledger|Trezor)/i);
+    // Both signing paths show the same label. A missing button would silently
+    // skip the signing step, so fail loudly instead of asserting against a
+    // screen that never advanced.
+    const submitBtn = findButton(utils, /^Sign Transaction$/);
     expect(submitBtn, 'submit button present and enabled').toBeTruthy();
     expect(submitBtn.disabled).toBe(false);
     await domAct(async () => {

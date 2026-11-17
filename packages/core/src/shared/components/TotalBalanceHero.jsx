@@ -9,15 +9,15 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useState } from 'react';
-import { Icon } from '@xchain-wallet/core/ui';
+import { Button, Icon } from '@xchain-wallet/core/ui';
 import { BalanceHeroMenu } from './BalanceHeroMenu.jsx';
 import { sumFiatValue } from './BalanceList.jsx';
-import { StalenessLabel } from './StalenessLabel.jsx';
+import { IdentityAvatar } from './WalletIdentity.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { useBalanceUnit } from '../hooks/useBalanceUnit.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
 import { useWalletSource } from '../hooks/useDemoGuard.jsx';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.js';
 import styles from './TotalBalanceHero.module.css';
 import {
     formatFiatAmount as formatFiatValue,
@@ -25,6 +25,7 @@ import {
 } from '../utils/fiatAmountFormat.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { isMainnetChainId } from '../utils/mainnetChain.js';
+import { readWalletTile, tileRadius, WALLET_TILE_EVENT, walletTileText } from '../utils/walletTile.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/components.js';
@@ -43,15 +44,14 @@ import '../../i18n/locales/en/components.js';
  * @param {Array<any>} props.rows                rows from `buildBalanceRows`, already filtered
  * @param {string | null} [props.walletId]       the wallet whose data source supplies prices
  * @param {'all' | string} props.networkFilter
- * @param {number | null} [props.lastSyncedAt]   Unix ms of the last successful balance fetch. Dates saved data while offline.
- * @param {number | null} [props.pricesFetchedAt] Unix ms of the oldest live price used by the total.
  * @param {() => void} [props.onRefresh]          refreshes balances and any expired prices.
  * @param {boolean} [props.refreshing]            whether a manual refresh is running.
  * @param {() => void} [props.onCommandPalette]  when provided, adds a search row that opens the §33 command palette. The extension popup passes it (no AppHeader/LeftNav to host a trigger there); web + desktop leave it unset.
  * @param {() => void} [props.onLockWallet]      when provided, adds a lock row. Same reason: the popup and side panel have no header, so without it the only ways to lock were a shortcut and the palette.
  */
-export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, pricesFetchedAt, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap }) {
+export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, walletId, networkFilter, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap, onUnitChange }) {
     const labelId = useId();
+    const [, setWalletTileVersion] = useState(0);
     const source = useWalletSource(walletId);
     const { messaging } = source;
     const rowsWithChain = (rows || []).filter((row) => typeof row?.chainId === 'string' && row.chainId);
@@ -65,8 +65,17 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const fiatLocale = settings?.language || 'en-US';
     const [hidden, toggleHidden] = useBalancesHidden();
     const [chartVisible, toggleChartVisible] = usePortfolioChartVisible();
-    const [coinPrimary, setCoinPrimary] = useState(false);
-    const online = useOnlineStatus();
+    const [coinPrimary, toggleCoinPrimary] = useBalanceUnit('home');
+    useEffect(() => {
+        const handleWalletTile = (event) => {
+            if (!event.detail?.walletId || event.detail.walletId === walletId) {
+                setWalletTileVersion((version) => version + 1);
+            }
+        };
+        window.addEventListener(WALLET_TILE_EVENT, handleWalletTile);
+        return () => window.removeEventListener(WALLET_TILE_EVENT, handleWalletTile);
+    }, [walletId]);
+    const walletTile = readWalletTile(walletId);
 
     // Fetch 24h change for every native chain that has a row in the
     // balance list. Tokens without a published 24h delta are treated as
@@ -130,21 +139,6 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
         return { delta, pct };
     }, [rows, effectivePriceMap, total]);
 
-    const filterLabel = networkFilter === 'all' ? null : networkFilter.toUpperCase();
-    const stalePriceAsOf = oldestStalePriceTimestamp(rows);
-    // A failed price refresh keeps the last 24h move on screen, so its age
-    // joins the one freshness line instead of reading as current.
-    const staleChangeAsOf = oldestStaleChangeTimestamp(rows, effectivePriceMap);
-    // Test networks show no fiat, but a saved balance still says how old it is.
-    const portfolioUpdatedAt = testCoinsOnly
-        ? oldestFreshnessTimestamp(lastSyncedAt)
-        : oldestFreshnessTimestamp(
-            lastSyncedAt,
-            pricesFetchedAt,
-            stalePriceAsOf,
-            staleChangeAsOf,
-        );
-    const hasUpdate = portfolioUpdatedAt !== null;
     const hasChange = !hidden
         && change24h
         && Number.isFinite(change24h.delta)
@@ -152,7 +146,10 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const changeDisplay = hasChange ? percentChangeDisplay(change24h.pct) : null;
     // A holding without a price adds nothing to the total and no status
     // text: a price simply shows when one exists.
-    const showMeta = !hidden && (hasChange || (!online && hasUpdate));
+    // The summary row stays while the balance is hidden (its figures masked),
+    // so hiding the balance never changes the card's height. The card carries
+    // no last-updated time; Settings, About shows when balances last loaded.
+    const showMeta = hidden || Boolean(rangeChange) || hasChange;
     // A row whose balance read failed carries no number, so the headline
     // cannot sum it as zero: with nothing else priced the total is unknown,
     // and beside priced rows it is a floor, the way the row itself says.
@@ -169,6 +166,13 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     const canShowInCoin = !testCoinsOnly && !balanceUnread
         && Boolean(unitTick) && Number.isFinite(unitPrice) && unitPrice > 0;
     const showInCoin = coinPrimary && canShowInCoin;
+    // The chart behind the card draws in the same unit (each point divided by
+    // the coin's price at that point), so the card says which unit it shows.
+    const unitChainId = showInCoin ? unitRow.chainId : '';
+    useEffect(() => {
+        if (typeof onUnitChange !== 'function') return;
+        onUnitChange(unitChainId ? { tick: unitTick, chainId: unitChainId, price: unitPrice } : null);
+    }, [onUnitChange, unitChainId, unitTick, unitPrice]);
     const coinAmount = showInCoin
         ? new Intl.NumberFormat(fiatLocale, { maximumFractionDigits: 8 }).format(Number(total) / unitPrice)
         : null;
@@ -190,19 +194,19 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
     // The hero's own toggles, the same rows a token's balance hero offers;
     // a checked row means the chart or the balance is on screen.
     const heroMenuItems = [
-        !testCoinsOnly ? {
-            id: 'swap',
-            label: t('components.totalBalanceHero.showIn', { unit: showInCoin ? fiatCurrency : (unitTick || 'BTC') }),
-            Icon: Icon.SwapIcon,
-            onSelect: () => setCoinPrimary((value) => !value),
-            disabled: !canShowInCoin,
-        } : null,
-        !testCoinsOnly ? {
-            id: 'chart', label: chartVisible ? t('components.totalBalanceHero.hideChart') : t('components.totalBalanceHero.showChart'), Icon: Icon.LineChartIcon, onSelect: toggleChartVisible, checked: chartVisible,
-        } : null,
+        // Privacy first, the unit swap last, the same order on every hero.
         {
             id: 'privacy', label: hidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'), Icon: hidden ? Icon.EyeOffIcon : Icon.EyeIcon, onSelect: toggleHidden, checked: !hidden,
         },
+        !testCoinsOnly ? {
+            id: 'swap',
+            label: showInCoin
+                ? t('components.totalBalanceHero.showWalletValue', { unit: fiatCurrency })
+                : t('components.totalBalanceHero.showWalletBalance', { unit: unitTick || 'BTC' }),
+            Icon: Icon.SwapIcon,
+            onSelect: toggleCoinPrimary,
+            disabled: !canShowInCoin,
+        } : null,
     ].filter(Boolean);
     // Home-only rows. A shell with no header or nav passes the settings,
     // search and lock handlers, so the menu is where those live there.
@@ -232,12 +236,37 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
         // addresses went uncounted (xchain-wallet#57). The label says what the
         // figure is.
         <section className={styles.hero} aria-labelledby={labelId}>
-            <div className={styles.row}>
-                <span id={labelId} className={styles.label}>
-                    {t('components.totalBalanceHero.activeAddressBalance')}
-                    {filterLabel ? (
-                        <span className={styles.scope}>· {filterLabel}</span>
-                    ) : null}
+            <div className={`${styles.row} ${styles.rowWithActions}`}>
+                {/* A network filter never adds the network's name here (U12);
+                    the filter button's dot says a filter is on. */}
+                <span id={walletName ? undefined : labelId} className={walletName ? `${styles.label} ${styles.walletLabel}` : styles.label}>
+                    {walletName ? (
+                        <>
+                            <span
+                                className={styles.walletLabelIcon}
+                                aria-hidden="true"
+                                style={{ '--xc-avatar-shape': tileRadius(walletTile.shape) }}
+                            >
+                                <IdentityAvatar
+                                    name={walletName}
+                                    text={walletTileText(walletName)}
+                                    seed={walletId}
+                                    context="header"
+                                    variant="asset"
+                                    tone={walletTile.colour}
+                                    src={walletTile.image || null}
+                                />
+                            </span>
+                            <span className={styles.walletLabelCopy}>
+                                <span id={labelId} className={styles.walletLabelText}>{walletName}</span>
+                                <span className={styles.modeCaption}>
+                                    {showInCoin
+                                        ? t('components.totalBalanceHero.walletBalance')
+                                        : t('components.totalBalanceHero.walletValue')}
+                                </span>
+                            </span>
+                        </>
+                    ) : t('components.totalBalanceHero.activeAddressBalance')}
                 </span>
                 <div
                     className={`${styles.amount} ${balanceIsMessage ? styles.amountMessage : ''}`}
@@ -254,16 +283,37 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                         </>
                     )}
                 </div>
-                <BalanceHeroMenu
-                    className={styles.actions}
-                    items={heroMenuItems}
-                    extraItems={homeMenuItems}
-                />
+                {/* The hero toggles (show in BTC, chart, balance) sit in the card
+                    as buttons; the rest stay in the actions menu. */}
+                <div className={`${styles.actions} ${styles.inlineActions}`}>
+                    {heroMenuItems.map(({ id, label: itemLabel, Icon: ItemIcon, onSelect, disabled, checked, className: itemClass }) => (
+                        <Button
+                            key={id}
+                            type="button"
+                            className={`${styles.eye} ${itemClass || ''}`}
+                            onClick={onSelect}
+                            disabled={disabled}
+                            aria-label={itemLabel}
+                            aria-pressed={typeof checked === 'boolean' ? (checked ? 'true' : 'false') : undefined}
+                            title={itemLabel}
+                            icon={<ItemIcon />}
+                        >
+                            {null}
+                        </Button>
+                    ))}
+                    {homeMenuItems.some((item) => item.id !== 'refresh') ? <BalanceHeroMenu items={[]} extraItems={homeMenuItems.filter((item) => item.id !== 'refresh')} /> : null}
+                </div>
             </div>
             {showMeta ? (
-                <div className={styles.meta} aria-label={t('components.totalBalanceHero.balanceSummary')}>
+                <div className={styles.meta} role="group" aria-label={t('components.totalBalanceHero.balanceSummary')}>
                     <span className={styles.metaLeft}>
-                        {hasChange && !testCoinsOnly ? (
+                        {!hidden && rangeChange ? (
+                            <span className={rangeChange.direction === 'positive' ? styles.changePositive : rangeChange.direction === 'negative' ? styles.changeNegative : styles.changeNeutral}>
+                                {rangeChangeText(rangeChange, { showInCoin, unitPrice, unitTick, locale: fiatLocale })}
+                            </span>
+                        ) : hidden && !testCoinsOnly ? (
+                            <span className={`${styles.hidden} ${styles.hiddenChange}`} aria-label={t('balances.balanceHidden')}>••••</span>
+                        ) : hasChange && !testCoinsOnly ? (
                             <span
                                 className={
                                     changeDisplay.direction === 'positive' ? styles.changePositive
@@ -278,48 +328,27 @@ export function TotalBalanceHero({ rows, walletId, networkFilter, lastSyncedAt, 
                             </span>
                         ) : null}
                     </span>
-                    {!online && hasUpdate ? (
-                        <StalenessLabel
-                            lastSyncedAt={portfolioUpdatedAt}
-                            warnAfterMs={5 * 60_000}
-                            className={styles.metaRight}
-                        />
-                    ) : null}
                 </div>
             ) : null}
         </section>
     );
 }
 
-function oldestFreshnessTimestamp(...timestamps) {
-    const valid = timestamps.filter((timestamp) => (
-        typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0
-    ));
-    return valid.length > 0 ? Math.min(...valid) : null;
-}
-
-function oldestStaleChangeTimestamp(rows, priceMap) {
-    let oldest = null;
-    for (const row of rows || []) {
-        if (row?.kind !== 'native' || !row.chainId || fiatValueOf(row) == null) continue;
-        const entry = priceMap?.[row.chainId];
-        if (entry?.stale !== true || !Number.isFinite(entry.change24hPct)) continue;
-        const timestamp = Number(entry.fetchedAt);
-        if (!Number.isFinite(timestamp) || timestamp <= 0) continue;
-        if (oldest === null || timestamp < oldest) oldest = timestamp;
-    }
-    return oldest;
-}
-
-function oldestStalePriceTimestamp(rows) {
-    let oldest = null;
-    for (const row of rows || []) {
-        if (row?.fiatRateStale !== true || typeof row.fiatRate !== 'number') continue;
-        const timestamp = Date.parse(row.fiatRateFetchedAt);
-        if (!Number.isFinite(timestamp)) continue;
-        if (oldest === null || timestamp < oldest) oldest = timestamp;
-    }
-    return oldest;
+/**
+ * The balance card's change pill text. The chart reports the
+ * selected range's change in fiat; with a coin as the card's unit, the
+ * amount is that fiat change at the coin's current price. Home's card and
+ * the coin and token card both print it through here.
+ *
+ * @param {{ text: string | null, delta: number | null, arrow: string, pctText: string }} rangeChange
+ * @param {{ showInCoin: boolean, unitPrice: number, unitTick: string, locale: string }} unit
+ */
+export function rangeChangeText(rangeChange, { showInCoin, unitPrice, unitTick, locale }) {
+    // A chart drawn in the coin already measured its change in it.
+    if (rangeChange.inCoin) return rangeChange.text || '…';
+    return rangeChange.text && showInCoin && Number.isFinite(rangeChange.delta)
+        ? `${rangeChange.arrow} ${new Intl.NumberFormat(locale, { maximumFractionDigits: 8 }).format(rangeChange.delta / unitPrice)} ${unitTick}${rangeChange.pctText ? ` (${rangeChange.pctText})` : ''}`
+        : (rangeChange.text || '…');
 }
 
 // Per-row fiat value used by the 24h-change accumulator. Mirrors the

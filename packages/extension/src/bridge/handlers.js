@@ -226,6 +226,13 @@ export function registerBridgeHandlers(host, opts = {}) {
             );
         }
         const { origin, appName = origin, appIcon } = req;
+        // The site's own icon, rasterized to PNG by the content script inside
+        // the requesting page (contentScript.js captureSiteIcon). It is page
+        // data, so anything but a small PNG data URL is dropped here; the
+        // wallet never fetches an icon itself. `origin` was bound to the
+        // sending tab by ChromeRuntimeAdapter, so a site can only ever
+        // set the icon on its own record.
+        const icon = schemas.sanitizeSiteIcon(req.siteIcon);
 
         const settings = await deps.vault.settings.get().catch(() => null);
         const autoConnect = shouldAutoApproveConnect({ origin, settings });
@@ -305,6 +312,7 @@ export function registerBridgeHandlers(host, opts = {}) {
                     origin,
                     appName,
                     appIcon,
+                    icon,
                     requestedChains,
                     accountOptions,
                     ...approvalRequester(req),
@@ -361,8 +369,10 @@ export function registerBridgeHandlers(host, opts = {}) {
                     stored.permissions,
                 );
             }
+            // A fresh approval stores the icon captured with this connect, so
+            // a disconnect and reconnect refreshes it.
             const site = schemas.createConnectedSite({
-                origin, appName, appIcon,
+                origin, appName, appIcon, icon,
                 permissions,
                 autoApproved,
             });
@@ -1142,6 +1152,11 @@ async function executeSignAction(req, deps, ctx) {
     // bytes, carrier scripts) against the values approved, and a mismatch is
     // refused unsigned with the same plain message the in-app confirm shows.
     //
+    // adsPayout: false is trusted too. This approval window is shown before the
+    // build and cannot name an automatic donation, so a bridge send only adds
+    // to the donation queue and never carries the queued donation unseen
+    // (§36, ruling 2026-11-14: nothing hidden).
+    //
     // The published param vocabulary is not the flow's. bridge-spec's
     // SendActionParams / SweepActionParams carry fromAddress / toAddress /
     // asset / amountRaw as plain strings, while sendToken and sweepToken take
@@ -1176,6 +1191,7 @@ async function executeSignAction(req, deps, ctx) {
             trackPendingTx: true,
             verifyBuiltTx: true,
             beforeBroadcast: () => assertChainOnActiveNetwork(deps, req.chainId),
+            adsPayout: false,
         });
         return finish(submitted);
     }
@@ -1193,6 +1209,7 @@ async function executeSignAction(req, deps, ctx) {
             sdkRegistry: deps.sdkRegistry,
             trackPendingTx: true,
             verifyBuiltTx: true,
+            adsPayout: false,
             chainId: req.chainId,
             beforeBroadcast: () => assertChainOnActiveNetwork(deps, req.chainId),
         });

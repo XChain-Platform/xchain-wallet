@@ -30,23 +30,24 @@ describe('CreateWallet wallet name', () => {
     it('refuses a name that draws no mark', () => {
         submitWithName('​​​');
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Wallet name must include a visible character.');
-        expect(screen.queryByRole('button', { name: 'Reveal recovery phrase' })).toBeNull();
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Wallet name must include a visible character.');
+        expect(screen.getByLabelText('Wallet name')).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.queryByRole('button', { name: 'Reveal Recovery Phrase' })).toBeNull();
     });
 
     it('refuses a name past the shared length cap', () => {
         submitWithName('N'.repeat(65));
 
-        expect(screen.getByRole('alert')).toHaveTextContent('Wallet name must be 64 characters or fewer.');
-        expect(screen.queryByRole('button', { name: 'Reveal recovery phrase' })).toBeNull();
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent('Wallet name must be 64 characters or fewer.');
+        expect(screen.queryByRole('button', { name: 'Reveal Recovery Phrase' })).toBeNull();
     });
 
     it('accepts a name of exactly the cap and a blank name that takes the default', () => {
         submitWithName('N'.repeat(64));
-        expect(screen.getByRole('button', { name: 'Reveal recovery phrase' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Reveal Recovery Phrase' })).toBeTruthy();
         cleanup();
 
         submitWithName('   ');
-        expect(screen.getByRole('button', { name: 'Reveal recovery phrase' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Reveal Recovery Phrase' })).toBeTruthy();
     });
 });

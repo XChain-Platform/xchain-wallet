@@ -51,7 +51,7 @@ describe('Backup prompts submit on Enter', () => {
         mount({ revealMnemonicRequest });
         fireEvent.click(screen.getByRole('button', { name: 'Show…' }));
         const field = screen.getByLabelText('Wallet password');
-        expectEnterSubmits(field, 'Reveal phrase');
+        expectEnterSubmits(field, 'Reveal Phrase');
 
         fireEvent.submit(field.form);
         expect(revealMnemonicRequest).not.toHaveBeenCalled();
@@ -67,7 +67,7 @@ describe('Backup prompts submit on Enter', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
         const first = screen.getByLabelText('Backup password');
         const confirm = screen.getByLabelText('Confirm backup password');
-        expectEnterSubmits(confirm, 'Export backup');
+        expectEnterSubmits(confirm, 'Export Backup');
 
         fireEvent.change(first, { target: { value: 'backup-secret' } });
         fireEvent.change(confirm, { target: { value: 'backup-secreT' } });
@@ -96,7 +96,7 @@ describe('Backup prompts submit on Enter', () => {
         mount({ dryRunRestoreRequest });
         fireEvent.click(screen.getByRole('button', { name: 'Test…' }));
         const phrase = screen.getByLabelText('Recovery phrase to test');
-        expectEnterSubmits(screen.getByLabelText('Extra passphrase'), 'Run test');
+        expectEnterSubmits(screen.getByLabelText('Extra passphrase'), 'Run Test');
 
         fireEvent.change(phrase, { target: { value: 'abandon ability able' } });
         fireEvent.submit(phrase.form);

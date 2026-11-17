@@ -223,7 +223,7 @@ async function main() {
         await popup.goto(`chrome-extension://${extensionId}/popup.html`);
 
         await dismissIntroCarousel(popup);
-        await popup.getByRole('button', { name: 'Try in demo mode' }).click();
+        await popup.getByRole('button', { name: 'Try Demo' }).click();
         await unlockedShell(popup).waitFor({ state: 'visible', timeout: 90_000 });
         log('demo wallet created and unlocked (popup)');
 
@@ -418,7 +418,7 @@ async function captureSignApproval(context, popup) {
         { address },
     );
     const signApproval = await waitForApprovalPage(context, { timeout: 30_000, pending: requesting });
-    await signApproval.getByText('Sign message').first().waitFor({ state: 'visible', timeout: 20_000 });
+    await signApproval.getByText('Sign Message').first().waitFor({ state: 'visible', timeout: 20_000 });
     // Let the layout settle (password field focus, chain badge) before the shot.
     await signApproval.waitForTimeout(500);
     await signApproval.setViewportSize({ width: 400, height: 700 });

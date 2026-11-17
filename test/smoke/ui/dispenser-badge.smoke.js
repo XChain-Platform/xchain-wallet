@@ -14,8 +14,9 @@
 //   1. DispenserBadge.jsx exists with named export + reuses
 //      messaging.getDispensersForToken + session cache.
 //   2. Renders null when count is 0 or still loading (returns early).
-//   3. MarketsList.jsx imports DispenserBadge and renders one badge
-//      per ticker in each market row.
+//   3. MarketsList.jsx renders no DispenserBadge: the badge reads the
+//      explorer once per token, so the market rows (whose reads may not
+//      grow with the rows) left it out with the 2026-11 row redesign.
 //   4. __clearDispenserBadgeCache test helper exported so downstream
 //      unit-test runners can reset the module-level cache.
 
@@ -58,13 +59,8 @@ assert.ok(/if\s*\(\s*count\s*===\s*null\s*\|\|\s*count\s*===\s*0\s*\)\s*return\s
 
 const listPath = join(core, 'src', 'shared', 'routes', 'MarketsList.jsx');
 const listSrc = readFileSync(listPath, 'utf8');
-assert.ok(/import\s*\{\s*DispenserBadge\s*\}/.test(listSrc),
-    'MarketsList imports DispenserBadge');
-const badgeMatches = listSrc.match(/<DispenserBadge\b/g) || [];
-assert.ok(badgeMatches.length >= 1,
-    'MarketsList renders a DispenserBadge per market row (selected-asset-relative)');
-assert.ok(/tick=\{otherTick\}/.test(listSrc),
-    'MarketsList passes the relative otherTick to DispenserBadge');
+assert.ok(!/<DispenserBadge\b/.test(listSrc),
+    'MarketsList rows make no per-token dispenser read');
 
 // --- 4. Test hook ------------------------------------------------------
 
@@ -72,5 +68,5 @@ assert.ok(/export function __clearDispenserBadgeCache\b/.test(src),
     'DispenserBadge exports __clearDispenserBadgeCache for downstream tests');
 
 console.log(
-    'OK: dispenser-badge smoke (§41.6 DispenserBadge with session cache + MarketsList row wiring for tick1 + tick2; renders nothing when no open dispensers or still loading; reuses messaging.getDispensersForToken)',
+    'OK: dispenser-badge smoke (§41.6 DispenserBadge with session cache, kept out of the MarketsList rows; renders nothing when no open dispensers or still loading; reuses messaging.getDispensersForToken)',
 );

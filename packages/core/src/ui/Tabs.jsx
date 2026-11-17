@@ -9,11 +9,14 @@
 // contact legal@dankest.llc.
 
 import { useId, useRef } from 'react';
+import toggle from './SegmentedControl.module.css';
 import styles from './Tabs.module.css';
 
 /**
  * @param {object} props
- * @param {Array<{ id: string, label: import('react').ReactNode, count?: number, controls?: string }>} props.items
+ * @param {Array<{ id: string, label: import('react').ReactNode, icon?: import('react').ReactNode, count?: number, controls?: string }>} props.items
+ *   `icon` draws before the label, hidden from assistive tech; a label may
+ *   instead carry its own icon.
  * @param {string} props.value
  * @param {(value: string) => void} props.onChange
  * @param {string} [props.id]
@@ -73,7 +76,8 @@ export function Tabs({
         selectAt(nextIndex);
     };
 
-    const rootClassName = [styles.tabs, className].filter(Boolean).join(' ');
+    // Tabs draw the one view-toggle look the SegmentedControl draws.
+    const rootClassName = [toggle.segmented, className].filter(Boolean).join(' ');
 
     return (
         <div
@@ -101,9 +105,12 @@ export function Tabs({
                         aria-selected={selected}
                         aria-controls={controls}
                         tabIndex={selected ? 0 : -1}
-                        className={styles.tab}
+                        className={`${toggle.segment} ${styles.tab}`}
                         onClick={() => onChange(item.id)}
                     >
+                        {item.icon ? (
+                            <span className={styles.icon} aria-hidden="true">{item.icon}</span>
+                        ) : null}
                         <span className={styles.label}>{item.label}</span>
                         {typeof item.count === 'number' ? (
                             <span className={styles.count}>{item.count}</span>

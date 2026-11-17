@@ -36,6 +36,16 @@ const { webSend, desktopSend, popupSend, webLocals } = vi.hoisted(() => {
         createWalletLocal: vi.fn(),
         importMnemonicLocal: vi.fn(),
         importBackupLocal: vi.fn(),
+        // PC-16 Phase B: the Locked screen's auto pay status and Stop.
+        getLockedAutopayStatus: vi.fn(),
+        stopLockedAutopay: vi.fn(),
+        // A first hardware wallet: created, and its balances read, before any host exists.
+        createHardwareWalletLocal: vi.fn(),
+        hardwareBalancesLocal: vi.fn(),
+        // Forgot Password (operator ruling 2026-11-16), with the vault closed.
+        recoveryStatusLocal: vi.fn(),
+        resetPasswordWithPhraseLocal: vi.fn(),
+        verifyBackupForRestoreLocal: vi.fn(),
     };
     return {
         webSend: vi.fn(),
@@ -79,6 +89,10 @@ const TRANSPORT_RE_EXPORTS = new Set(['sendMessage', 'getSessionStatus']);
 // message name to compare against the other shells.
 const WEB_LOCAL_HELPERS = new Set([
     'unlockWallet', 'lockWallet', 'createWallet', 'importMnemonic', 'importBackupFresh',
+    'lockedAutopayStatus', 'stopLockedAutopay',
+    'createHardwareWallet', 'hardwareBalances',
+    // Forgot Password (operator ruling 2026-11-16): pre-host on the other shells.
+    'recoveryStatus', 'resetPasswordWithPhrase', 'verifyBackupForRestore',
 ]);
 
 // One argument fixture, passed to every helper in every position. Carrying
@@ -264,10 +278,22 @@ describe('messaging barrels: the shells agree on the wire', () => {
         expect(drift).toEqual([]);
     });
 
+    // Fields only the extension popup adds, by design: its background host
+    // uses the surface id to tell the originating popup from every other open
+    // surface when it broadcasts the change, and the web and desktop hosts
+    // have a single surface so they send nothing.
+    const EXTENSION_ONLY_FIELDS = { removeWallet: ['surfaceId'] };
+    const withoutSurfaceFields = (fnName, shellName, payload) => {
+        const extra = EXTENSION_ONLY_FIELDS[fnName];
+        if (!extra || shellName !== 'extension popup' || !payload || typeof payload !== 'object') return payload;
+        return Object.fromEntries(Object.entries(payload).filter(([key]) => !extra.includes(key)));
+    };
+
     it('builds the same payload from the same arguments in every shell', () => {
         const drift = [];
         for (const [fnName, byShell] of shared) {
-            const payloads = Object.entries(byShell).map(([s, [, payload]]) => [s, payload]);
+            const payloads = Object.entries(byShell)
+                .map(([s, [, payload]]) => [s, withoutSurfaceFields(fnName, s, payload)]);
             const first = JSON.stringify(payloads[0][1] ?? null);
             if (payloads.some(([, p]) => JSON.stringify(p ?? null) !== first)) {
                 drift.push(`${fnName}: ${payloads.map(([s, p]) => `${s}=${JSON.stringify(p ?? null)}`).join(', ')}`);

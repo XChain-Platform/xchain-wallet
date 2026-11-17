@@ -37,6 +37,7 @@ import {
     resolveBindings,
 } from '../../keyboard/shortcuts.js';
 import { ROW, ROW_LABEL, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
+import { WarningCard, WarningLine } from '../WarningCard.jsx';
 import { t } from '../../../i18n/index.js';
 import '../../../i18n/locales/en/settings.js';
 
@@ -45,7 +46,6 @@ import '../../../i18n/locales/en/settings.js';
 // The title sits the section header gap above its rows; inside the Settings
 // card the row gap is 0 (divider rows), so the rows stack in their own column.
 const GROUP = { ...STACK, gap: 'var(--xc-section-header-gap)', marginTop: 'var(--xc-space-3)' };
-const INTRO = { ...ROW_LABEL, color: 'var(--xc-text-muted)', margin: 0 };
 const SHORTCUT_ROW = {
     ...ROW,
     boxSizing: 'border-box',
@@ -200,9 +200,10 @@ export function KeyboardSection() {
 
     return (
         <div style={STACK}>
-            <p style={INTRO}>
-                {t('settings.keyboard.selectRebindThenPressThe')}
-            </p>
+            {/* A note lives in the shared notice card, never as a loose paragraph. */}
+            <WarningCard>
+                <WarningLine>{t('settings.keyboard.selectRebindThenPressThe')}</WarningLine>
+            </WarningCard>
             {status ? <Status text={status.text} tone={status.kind === 'error' ? 'error' : 'muted'} /> : null}
             {SHORTCUT_GROUPS.map((group, index) => (
                 <section key={group} style={GROUP} aria-labelledby={`${labelPrefix}-group-${index}`}>
@@ -211,9 +212,9 @@ export function KeyboardSection() {
                     {shortcuts.filter((s) => s.group === group).map((s) => {
                         const capturing = capturingId === s.id;
                         const availability = s.id === 'balances-pin' && settings.showPinAffordance !== true
-                            ? 'Requires “Show pin button on rows” in Display.'
+                            ? 'Requires “Show pin button on rows” in Appearance.'
                             : s.id === 'balances-hide' && settings.showHideAffordance !== true
-                                ? 'Requires “Show hide button on rows” in Display.'
+                                ? 'Requires “Show hide button on rows” in Appearance.'
                                 : null;
                         return (
                             <div key={s.id} style={SHORTCUT_ROW}>
@@ -223,7 +224,7 @@ export function KeyboardSection() {
                                 </span>
                                 <span style={ACTIONS}>
                                     {s.overridden ? (
-                                        <Button size="sm" variant="ghost" icon={<Icon.RefreshIcon />} onClick={() => resetOne(s.id)} aria-describedby={`${labelPrefix}-${s.id}`}>
+                                        <Button size="sm" variant="secondary" icon={<Icon.RefreshIcon />} onClick={() => resetOne(s.id)} aria-describedby={`${labelPrefix}-${s.id}`}>
                                             {t('settings.keyboard.reset')}
                                         </Button>
                                     ) : null}

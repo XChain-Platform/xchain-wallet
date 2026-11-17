@@ -61,10 +61,10 @@ describe('MarketView load failures', () => {
         const shown = errors(container);
         expect(shown).toHaveLength(1);
         expect(shown[0]).toHaveTextContent("Couldn't load market details, prices and order book.");
-        expect(screen.getAllByRole('button', { name: 'Try again' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'Try Again' })).toHaveLength(1);
 
         const before = [messaging.getMarket, messaging.getMarketHistory, messaging.getOrderbook].map((fn) => fn.mock.calls.length);
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await settle();
         const after = [messaging.getMarket, messaging.getMarketHistory, messaging.getOrderbook].map((fn) => fn.mock.calls.length);
         after.forEach((count, i) => expect(count).toBeGreaterThan(before[i]));

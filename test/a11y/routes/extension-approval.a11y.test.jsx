@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/index.js';
 import { expectNoSeriousAxeViolations } from '../helpers/axe.js';
 
@@ -58,8 +58,16 @@ describe('extension approval accessibility', () => {
             />,
         );
 
-        await screen.findByLabelText(`Allow ${CHAIN.displayName} ${CHAIN.networkKind}`);
         await screen.findByRole('button', { name: 'Approve' });
+        await expectNoSeriousAxeViolations(container);
+
+        fireEvent.click(screen.getByRole('button', { name: /^Networks it can see/ }));
+        await screen.findByLabelText(`Allow ${CHAIN.displayName}`);
+        await expectNoSeriousAxeViolations(container);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
+        fireEvent.click(screen.getByRole('button', { name: /^Accounts it can see/ }));
+        await screen.findByLabelText('Share Savings account');
         await expectNoSeriousAxeViolations(container);
     });
 });

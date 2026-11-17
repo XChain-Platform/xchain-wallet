@@ -50,7 +50,7 @@ assert.match(sectionSrc, /mnemonicHidden/, 'tap-to-reveal toggle state');
 assert.match(sectionSrc, /filter: hidden \? 'blur\(8px\)'/, 'CSS blur when hidden');
 assert.match(sectionSrc, /Tap to reveal/, 'reveal hint copy');
 assert.match(sectionSrc, /Tap to hide again/, 'hide hint copy');
-assert.match(sectionSrc, /Print recovery sheet/, 'print action is present');
+assert.match(sectionSrc, /Print Recovery Sheet/, 'print action is present');
 assert.match(sectionSrc, /window\.print\(\)/, 'print action opens the platform print dialog');
 assert.match(printStylesSrc, /@media print/, 'recovery sheet has print styles');
 assert.match(

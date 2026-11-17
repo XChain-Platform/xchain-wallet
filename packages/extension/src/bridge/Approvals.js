@@ -33,7 +33,8 @@
  * @typedef {Object} ConnectApprovalRequest
  * @property {string} origin
  * @property {string} appName
- * @property {string} [appIcon]
+ * @property {string} [appIcon]         the page's raw declared string; never rendered
+ * @property {string | null} [icon]     the site's icon as a validated PNG data URL (schemas/siteIcon.js), or null
  * @property {string[]} [requestedChains]
  * @property {Array<{ id: string, name: string }>} [accountOptions]  the wallet's accounts, primary first; never page input
  */

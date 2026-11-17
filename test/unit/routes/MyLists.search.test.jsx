@@ -38,7 +38,11 @@ async function renderRows() {
     await waitFor(() => expect(screen.getByRole('button', { name: /Road trip/ })).toBeTruthy());
 }
 
+// The search sits in the title bar filter panel (G95).
 function search(text) {
+    if (!screen.queryByLabelText('Search lists')) {
+        fireEvent.click(screen.getByRole('button', { name: 'Filter lists' }));
+    }
     fireEvent.change(screen.getByLabelText('Search lists'), { target: { value: text } });
 }
 

@@ -16,31 +16,31 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // --- contract execution --------------------------------------
-    'execute.review.title': 'Review contract call',
+    'execute.review.title': 'Review Contract Call',
     'execute.loadingAddresses': 'Loading addresses…',
     'execute.success': 'Method call broadcast.',
-    'execute.review.summary.deposit':
-        'Deposit {quantity} {tick}, then call {method}{args} on contract #{contract}.',
-    'execute.review.summary.call': 'Call {method}{args} on contract #{contract}.',
-    'execute.review.args': '{count, plural, one { with # argument} other { with # arguments}}',
     'execute.contract': 'Contract',
+    // The form's fixed title; the contract shows as the main section's first field.
+    'execute.title': 'Execute Contract',
+    'execute.contractHelp': 'The contract whose method this calls. Use the list icon to pick another contract.',
+    'execute.pickContract': 'Choose another contract',
     'execute.deposit': 'Deposit',
+    'execute.tokenLabel': 'Token',
     'execute.method': 'Method',
     'execute.params': 'Arguments',
     'execute.protocolFee': 'Protocol fee',
-    'execute.protocolFee.native': 'Paid in {coin}',
-    'execute.protocolFee.xchain': 'Paid from your XCHAIN balance',
-    'execute.nativeCoin': 'the native coin',
-    'execute.tokenToDeposit': 'Token to deposit',
-    'execute.callContract': 'Call contract',
+    'execute.tokenToDeposit': 'Token to Deposit',
+    'execute.callContract': 'Call Contract',
     'execute.caller': 'From',
     'execute.callerHelp': 'The address that calls the contract, pays the network and call fees, and signs.',
     'execute.methodHelp': 'The contract method to call, from the methods the contract declares.',
     'execute.paramHelp': 'Argument {name}, of type {type}, passed to the method.',
-    'execute.enterMethodManually': 'Enter method manually',
-    'execute.methodHint': 'Name of the contract method to call.',
-    'execute.paramsHint': 'Separate arguments with |, for example foo|42|bc1q… Leave blank if the method takes no arguments.',
-    'execute.useDeclaredMethods': 'Use declared methods',
+    'execute.methodsLoading': 'Loading the contract’s methods…',
+    'execute.methodsLoadFailed': 'Couldn’t load this contract’s methods. Check your connection and try again.',
+    'execute.noMethods': 'This contract doesn’t declare any methods to call.',
+    'execute.chooseMethod': 'Choose a method.',
+    'execute.linkUnknownMethod': 'This link names the method {method}, but this contract doesn’t declare it. Choose a method from the list.',
+    'execute.linkTooManyArgs': 'This link passes more arguments than {method} takes ({count}). Choose a method from the list.',
     'execute.noDeposit': 'No deposit',
     'execute.depositTokenHelp':
         'An optional token sent into the contract in the same transaction, before the method runs. Leave it empty to call the method without a deposit.',
@@ -48,7 +48,8 @@ const messages = {
     'execute.depositHint':
         'Sent into contract #{contract} in the same transaction, before the call. Only tokens on {chain} can be deposited.',
     'execute.balanceAvailable': '{amount} {tick} available',
-    'execute.removeDeposit': 'Remove deposit',
+    'execute.removeDeposit': 'Remove Deposit',
+    'execute.networkHelp': 'The network the contract runs on, fixed by the contract you are calling.',
 };
 
 addEnglish(messages);

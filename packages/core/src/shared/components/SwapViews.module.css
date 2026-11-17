@@ -1,0 +1,110 @@
+/* The My Swaps row's status chip and the Swap Details body, in the ring
+   layout (wallet-orders-layout-1-ring): the row itself is a ListRow inside
+   the page's one list card, and Details is label-left, value-right fact
+   rows in one card, then the Matches. */
+
+/* The status chip: a compact pill tinted by the theme's state tokens. */
+.chip {
+    display: inline-block;
+    max-width: 100%;
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    font-size: var(--xc-text-xs);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.chipOpen {
+    background: color-mix(in srgb, var(--xc-success) 14%, transparent);
+    color: var(--xc-success);
+}
+
+.chipClosed {
+    background: color-mix(in srgb, var(--xc-danger) 14%, transparent);
+    color: var(--xc-danger-fg);
+}
+
+/* The Swap Details page: the header card, then the Actions | Details
+   toggle; Details stacks the facts card and the Matches. */
+.page,
+.details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.facts {
+    composes: card from '../../ui/Card.module.css';
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+}
+
+.fact {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2);
+    min-width: 0;
+}
+
+.fact + .fact {
+    border-top: var(--xc-table-row-divider);
+}
+
+.fact dt {
+    margin: 0;
+    color: var(--xc-text-muted);
+    flex: 0 0 auto;
+}
+
+.fact dd {
+    margin: 0;
+    min-width: 0;
+    text-align: end;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--xc-space-2);
+    flex: 1 1 auto;
+    overflow-wrap: anywhere;
+}
+
+/* The box AddressText measures, so it shows the full address when it fits (G99). */
+.addressBox {
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.mono {
+    font-family: var(--xc-font-mono);
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+
+/* The transaction's explorer link, an icon beside its copy button. */
+.txLink {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-inline-size: var(--xc-tap-min);
+    min-block-size: var(--xc-tap-min);
+    color: var(--xc-accent-text);
+}
+
+.txLink svg {
+    inline-size: var(--xc-icon-sm);
+    block-size: var(--xc-icon-sm);
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}

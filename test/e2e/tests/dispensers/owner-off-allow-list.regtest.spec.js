@@ -22,7 +22,7 @@
 //
 // WHY IT IS WORTH A RUN OF ITS OWN. It is not a wallet defect and this spec
 // does not claim one; it is a protocol rule with a shape that invites the
-// mistake, and the wallet's create form offers "Set allow-list" with no hint
+// mistake, and the wallet's create form offers "Set Allow-List" with no hint
 // that the owner belongs on it. What a run settles that reading cannot: whether
 // the refusal is attributable (does the chain name GET_ADDRESS, or something
 // vaguer that a seller would blame on the buyer?), and what it COSTS - a
@@ -47,7 +47,7 @@
 //       --config=playwright.regtest.config.js tests/dispensers/owner-off-allow-list.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test, addWallet, switchToWallet } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test, addWallet, switchToWallet } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
@@ -66,6 +66,7 @@ import {
     selectVenueSendAsset,
     selectDispenserOnSource,
     selectPickerAsset,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -231,7 +232,7 @@ async function addWalletAndReadAddress(page, name) {
     const form = page.getByRole('main');
     await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(form);
-    const address = await form.getByLabel('From').inputValue();
+    const address = await (await openFromAddress(form)).inputValue();
     expect(address, `${name} has no ${REGTEST_CHAIN_LABEL} address`).toMatch(REGTEST_ADDRESS_RE);
     return address;
 }
@@ -279,15 +280,17 @@ async function payCoin(page, to, amount) {
 async function publishList(page, members) {
     await openPaletteCommand(page, 'Create a list');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('List type')).toBeVisible({ timeout: 30_000 });
+    await expect(main.getByRole('button', { name: /^List type:/ })).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
 
-    await main.getByLabel('List type').selectOption('2');
+    // List type is the themed dropdown: open it, then pick Addresses.
+    await main.getByRole('button', { name: /^List type:/ }).click();
+    await main.getByRole('option', { name: 'Addresses', exact: true }).click();
     await main.getByLabel('Addresses', { exact: true }).fill(members.join('\n'));
     await expect(main, 'the list form did not accept these addresses for this chain')
         .toContainText(`${members.length} valid address`);
 
-    await main.getByRole('button', { name: 'Publish list', exact: true }).click();
+    await main.getByRole('button', { name: 'Publish List', exact: true }).click();
     await expectConfirmModal(page);
     const published = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(published.action)).toBe('LIST');
@@ -325,14 +328,16 @@ async function openDispenser(page, listIndex, { expectSelfWarning }) {
     await main.getByLabel('Escrow amount').fill(String(ESCROW));
     await main.getByLabel(/Trigger price/).fill(TRIGGER);
 
-    await main.getByRole('button', { name: 'Set allow-list' }).click();
+    // The allow and block lists live in their own closed Lists section.
+    await openFormSection(main, 'Lists');
+    await main.getByRole('button', { name: 'Allow list: None set' }).click();
     const row = page.getByRole('main').getByRole('button')
         .filter({ hasText: `Address list #${listIndex}` });
     await expect(row, `the dispenser's list picker cannot see list #${listIndex}, which this wallet `
         + 'just published from this chain')
         .toBeVisible({ timeout: 60_000 });
     await row.click();
-    await expect(main.getByRole('button', { name: `Allow-list #${listIndex}` }),
+    await expect(main.getByRole('button', { name: new RegExp(`^Allow list: .*#${listIndex}\\b`) }),
         'the picker closed without binding the list')
         .toBeVisible({ timeout: 30_000 });
 
@@ -514,6 +519,9 @@ test.describe(`a dispenser owner off its own allow list, on ${REGTEST_CHAIN_LABE
                         + 'token it sells cannot find it')
                         .toBeVisible({ timeout: 60_000 });
                     await row.click();
+                    // The dispenser page opens on Actions (G102); the buy panel is
+                    // the Buy page a buyer's first action row opens.
+                    await main.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
                     await expect(main, 'no pay-to-buy panel rendered at all')
                         .toContainText('Pay to buy', { timeout: 30_000 });
                     return main;

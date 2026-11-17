@@ -39,9 +39,13 @@ import {
     divideDecimalStrings,
     subtractDecimalStrings,
 } from '../utils/amountFormat.js';
+import { historyTimestamp, normalizeMarketHistoryRowExact } from '../../market/history_rows.js';
+import { rowMatchesQuery } from '../utils/marketRowSearch.js';
+import { useReportLoadFailure } from './pageLoadFailures.jsx';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/actionDetail.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/market.js';
 
 const POLL_INTERVAL_MS = 5000;
 const chainRegistry = registryLib.defaultRegistry();
@@ -59,8 +63,14 @@ const NUMERIC_CELL_STYLE = {
  * @param {string} props.chainId
  * @param {string} props.tick1
  * @param {string} props.tick2
+ * @param {'all' | 'open' | 'filled'} [props.status]   the Market page's My Orders tab (operator
+ *   2026-11-13): one list of the user's open orders and filled trades on this market, newest
+ *   first, narrowed to this status. Bare there: no heading and no error of its own (G91), since
+ *   the page names a failed load once. Left out, the panel lists open orders under its heading.
+ * @param {string} [props.query]   the Market page's search, narrowing by price, amount or transaction
  */
-export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
+export function OpenOrdersPanel({ walletId, chainId, tick1, tick2, status, query = '' }) {
+    const unified = status === 'all' || status === 'open' || status === 'filled';
     const { messaging, shell } = useMessaging();
     const demoGuard = useDemoGuard(walletId);
     const variant = screenVariantFor(shell);
@@ -168,7 +178,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
             await loadAutopay();
         } catch (err) {
             if (mountedRef.current && panelVersion === panelVersionRef.current) {
-                setLoadError(readFailureMessage(err, 'change autopay for this order'));
+                setLoadError(readFailureMessage(err, 'change auto pay for this order'));
             }
         }
     }
@@ -215,9 +225,67 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         return () => { cancelled = true; stopPollInterval(); };
     }, [messaging, chainId, tick1, tick2, addresses, addressesLoading, ordersRetryKey]);
 
-    const rows = useMemo(() => {
+    // The unified list's filled trades: the user's own fills on this market,
+    // read once per address after the addresses load, as the Filled list was.
+    const [fills, setFills] = useState(/** @type {any[]} */ ([]));
+    const [fillsLoading, setFillsLoading] = useState(unified);
+    // Its own error, so the open-order poll's next good read never clears it.
+    const [fillsError, setFillsError] = useState(/** @type {string | null} */ (null));
+    useEffect(() => {
+        setFills([]);
+        setFillsError(null);
+        if (!unified) return undefined;
+        if (addressesLoading) {
+            setFillsLoading(true);
+            return undefined;
+        }
+        if (addresses.length === 0) {
+            setFillsLoading(false);
+            return undefined;
+        }
+        let cancelled = false;
+        setFillsLoading(true);
+        Promise.all(addresses.map((addr) => messaging.getMarketHistory({
+            chainId, tick1, tick2, address: addr.address,
+        }).then((resp) => ({ addr, rows: extractHistoryRows(resp), error: null }))
+            .catch((error) => ({ addr, rows: [], error }))))
+            .then((results) => {
+                if (cancelled) return;
+                const successes = results.filter(({ error }) => !error);
+                if (successes.length === 0) {
+                    setFillsError(readFailureMessage(results[0].error, 'load your orders'));
+                } else {
+                    const flat = [];
+                    for (const { addr, rows: addrRows } of successes) {
+                        for (const row of addrRows) flat.push({ ...row, __owner: addr });
+                    }
+                    setFills(flat);
+                }
+                setFillsLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [unified, messaging, chainId, tick1, tick2, addresses, addressesLoading, ordersRetryKey]);
+
+    const openRows = useMemo(() => {
         return orders.map((o) => summarizeOrder(o, tick1, tick2)).filter(Boolean);
     }, [orders, tick1, tick2]);
+    const allRows = useMemo(() => {
+        if (!unified) return openRows;
+        const filledRows = fills.map((row) => summarizeFill(row, tick1, tick2)).filter(Boolean);
+        // Newest first. An open order with no time of its own is live now.
+        const timeOf = (r) => (r.timestamp == null ? Number.POSITIVE_INFINITY : r.timestamp);
+        return [...openRows, ...filledRows].sort((a, b) => timeOf(b) - timeOf(a));
+    }, [unified, openRows, fills, tick1, tick2]);
+    const rows = useMemo(() => allRows.filter((r) => {
+        if (status === 'open' && r.kind === 'filled') return false;
+        if (status === 'filled' && r.kind !== 'filled') return false;
+        return rowMatchesQuery(query, [r.price, r.size, r.txHash, r.actionIndex]);
+    }), [allRows, status, query]);
+    // On the Market page the page names a failed load once, with one Try Again.
+    const listError = loadError || (unified ? fillsError : null);
+    const pageShowsError = useReportLoadFailure('your orders', unified && Boolean(listError));
+    const showOwnError = Boolean(listError) && !(unified && pageShowsError);
+    const listLoading = addressesLoading || ordersLoading || (unified && fillsLoading);
 
     const confirmOwner = confirmOrder?.__owner || null;
     const signerReady = useSignerReady(walletId);
@@ -234,6 +302,8 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
     async function handleCancel(event) {
         event.preventDefault();
         if (!confirmOrder || submitting || cancelLane.composing) return;
+        // A demo wallet never composes; the press answers with the refusal.
+        if (demoGuard.blocked) { demoGuard.refuse(); return; }
         setSubmitting(true);
         setSubmitError(null);
         const panelVersion = panelVersionRef.current;
@@ -283,6 +353,12 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
         return (
             <ActionConfirmScreen
                 {...cancelLane.confirmProps}
+                summary={{
+                    verb: t('components.openOrdersPanel.cancelOrder2'),
+                    chainId,
+                    direction: 'none',
+                    address: confirmOwner?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || chainId}
                 signerReady={signerReady}
@@ -320,8 +396,8 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
 
     return (
         <section
-            aria-label={t('components.openOrdersPanel.openOrders')}
-            aria-busy={addressesLoading || ordersLoading || undefined}
+            aria-label={unified ? t('market.myOrders') : t('components.openOrdersPanel.openOrders')}
+            aria-busy={listLoading || undefined}
             style={{
                 border: 'var(--xc-card-border)',
                 background: 'var(--xc-card-bg)',
@@ -329,11 +405,13 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                 padding: 'var(--xc-card-pad)',
             }}
         >
-            <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{t('components.openOrdersPanel.openOrders')}</p>
-            {addressesLoading || ordersLoading ? (
+            {unified ? null : (
+                <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{t('components.openOrdersPanel.openOrders')}</p>
+            )}
+            {listLoading ? (
                 <StatusMessage variant="status">{t('components.openOrdersPanel.loadingOpenOrders')}</StatusMessage>
             ) : null}
-            {loadError ? (
+            {showOwnError ? (
                 <StatusMessage
                     variant="error"
                     recovery={{
@@ -347,17 +425,21 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                         },
                     }}
                 >
-                    {loadError}
+                    {listError}
                 </StatusMessage>
             ) : null}
-            {!loadError && !addressesLoading && !ordersLoading && rows.length === 0 ? (
+            {!listError && !listLoading && rows.length === 0 ? (
                 <p style={{
                     margin: 'var(--xc-space-3) 0',
                     color: 'var(--xc-text-muted)',
                     fontSize: 'var(--xc-text-sm)',
                     textAlign: 'center',
                 }}>
-                    {t('components.openOrdersPanel.noOpenOrdersOnThis')}
+                    {!unified ? t('components.openOrdersPanel.noOpenOrdersOnThis')
+                        : allRows.length > 0 && query.trim() ? t('market.filter.noMatches')
+                        : status === 'open' ? t('components.openOrdersPanel.noOpenOrdersOnThis')
+                        : status === 'filled' ? t('components.tradeHistoryPanel.noTradesOnThisMarket')
+                        : t('market.filter.noOrders')}
                 </p>
             ) : null}
             {rows.length > 0 ? (
@@ -374,13 +456,38 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                         <span>{t('components.placeOrderPanel.side')}</span>
                         <span style={NUMERIC_CELL_STYLE}>{t('components.placeOrderPanel.price')}</span>
                         <span style={NUMERIC_CELL_STYLE}>{t('components.openOrdersPanel.size')}{tick1})</span>
-                        <span style={NUMERIC_CELL_STYLE}>{t('components.openOrdersPanel.filled')}</span>
+                        <span style={NUMERIC_CELL_STYLE}>{unified ? t('market.filter.orderStatus') : t('components.openOrdersPanel.filled')}</span>
                         <span style={{ textAlign: 'right' }}>{t('actionDetail.title')}</span>
                     </div>
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, minWidth: '28rem' }}>
-                        {rows.map((r, index) => (
+                        {rows.map((r, index) => (r.kind === 'filled' ? (
+                            <li
+                                key={`fill-${r.key}-${r.raw.__owner?.address ?? 'owner'}-${index}`}
+                                data-order-status="filled"
+                                style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: ORDER_GRID_COLUMNS,
+                                    gap: '0.25rem',
+                                    padding: '0.25rem',
+                                    fontSize: '0.8rem',
+                                    alignItems: 'center',
+                                }}
+                            >
+                                <span style={{
+                                    color: r.side === 'buy' ? 'var(--xc-success)' : 'var(--xc-danger-fg)',
+                                    fontWeight: 600,
+                                }}>
+                                    {r.side === 'buy' ? t('components.placeOrderPanel.buy') : t('components.placeOrderPanel.sell')}
+                                </span>
+                                <span style={NUMERIC_CELL_STYLE}>{balancesHidden ? '•••••' : r.price}</span>
+                                <span style={NUMERIC_CELL_STYLE}>{balancesHidden ? '•••••' : r.size}</span>
+                                <span style={NUMERIC_CELL_STYLE}>{t('components.openOrdersPanel.filled')}</span>
+                                <span />
+                            </li>
+                        ) : (
                             <li
                                 key={`${r.actionIndex}-${r.raw.__owner?.id ?? r.raw.__owner?.address ?? 'owner'}-${index}`}
+                                data-order-status={unified ? 'open' : undefined}
                                 style={{
                                     display: 'grid',
                                     gridTemplateColumns: ORDER_GRID_COLUMNS,
@@ -426,6 +533,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                                         }}>
                                             <Switch
                                                 label={t('components.openOrdersPanel.coinpayAutoPay', { value: on ? 'on' : 'off (notify-only)' })}
+                                                help={t('components.openOrdersPanel.autoPayHelp')}
                                                 checked={on}
                                                 onChange={() => handleAutopayToggle(consent)}
                                             />
@@ -433,7 +541,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                                     );
                                 })()}
                             </li>
-                        ))}
+                        )))}
                     </ul>
                 </div>
             ) : null}
@@ -476,7 +584,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2 }) {
                             variant="danger"
                             size="sm"
                             loading={submitting || cancelLane.composing}
-                            disabled={demoGuard.blocked || submitting || cancelLane.composing}
+                            disabled={submitting || cancelLane.composing}
                         >
                             {t('components.openOrdersPanel.cancelOrder2')}
                         </Button>
@@ -503,6 +611,7 @@ function summarizeOrder(o, tick1, tick2) {
         && compareAmounts(summaryPrice, '0') === 1
         && compareAmounts(summarySize, '0') === 1) {
         return {
+            ...openRowMeta(o),
             actionIndex: String(o.action_index),
             side: summarySide,
             price: summaryPrice,
@@ -534,6 +643,7 @@ function summarizeOrder(o, tick1, tick2) {
         return null;
     }
     return {
+        ...openRowMeta(o),
         actionIndex: String(o.action_index),
         side,
         price,
@@ -543,9 +653,45 @@ function summarizeOrder(o, tick1, tick2) {
     };
 }
 
+// An open order's place in the newest-first list and its transaction id for the search.
+function openRowMeta(o) {
+    const tx = o.tx_hash ?? o.txid ?? o.txHash ?? null;
+    return {
+        kind: 'open',
+        timestamp: historyTimestamp(o),
+        txHash: tx == null ? null : String(tx),
+    };
+}
+
 function extractRows(resp) {
     if (Array.isArray(resp)) return resp;
     if (Array.isArray(resp.data)) return resp.data;
     if (Array.isArray(resp.orders)) return resp.orders;
     throw new Error('getMarketOrders: malformed response');
+}
+
+/** One of the user's fills on this market, as a row of the unified My Orders list. */
+function summarizeFill(row, tick1, tick2) {
+    const parsed = normalizeMarketHistoryRowExact(row, tick1, tick2);
+    if (!parsed) return null;
+    return {
+        kind: 'filled',
+        actionIndex: parsed.actionIndex == null ? null : String(parsed.actionIndex),
+        side: parsed.side,
+        price: String(parsed.price),
+        size: String(parsed.amount),
+        timestamp: Number.isFinite(parsed.timestamp) ? parsed.timestamp : null,
+        txHash: parsed.txHash ? String(parsed.txHash) : null,
+        key: String(parsed.actionIndex ?? parsed.txHash ?? `${parsed.timestamp}-${parsed.price}-${parsed.amount}`),
+        raw: row,
+    };
+}
+
+function extractHistoryRows(resp) {
+    if (!resp) return [];
+    if (Array.isArray(resp)) return resp;
+    if (Array.isArray(resp.data)) return resp.data;
+    if (Array.isArray(resp.rows)) return resp.rows;
+    if (Array.isArray(resp.history)) return resp.history;
+    return [];
 }

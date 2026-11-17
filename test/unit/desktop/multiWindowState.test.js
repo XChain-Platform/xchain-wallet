@@ -30,14 +30,14 @@ afterEach(() => {
 });
 
 describe('desktop multi-window state notifications', () => {
-    it.each(['wallet.unlock', 'wallet.lock', 'wallet.create', 'wallet.import', 'wallet.importBackup.fresh'])(
+    it.each(['wallet.unlock', 'wallet.lock', 'wallet.create', 'wallet.create.hardware', 'wallet.import', 'wallet.importBackup.fresh'])(
         'broadcasts successful %s session changes',
         (type) => {
             expect(stateChangeForMessage({ type }, { ok: true })).toEqual({ kind: 'session' });
         },
     );
 
-    it.each(['wallet.add.import', 'wallet.importBackup', 'wallet.importBackupPointer'])(
+    it.each(['wallet.add.import', 'wallet.hardware.add', 'wallet.importBackup', 'wallet.importBackupPointer'])(
         'tells sibling windows to re-read their wallet list after a successful %s',
         (type) => {
             expect(stateChangeForMessage({ type }, { ok: true })).toEqual({ kind: 'wallets', change: 'added' });

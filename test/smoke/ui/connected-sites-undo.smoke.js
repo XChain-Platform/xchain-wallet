@@ -92,7 +92,7 @@ assert.match(
 );
 assert.match(
     sectionSrc,
-    /showToast\(\{[\s\S]+?actionLabel: 'Undo'/,
+    /showToast\(\{[\s\S]+?actionLabel: (?:t\('settings\.connectedSites\.undo'\)|["'`]Undo["'`])/,
     'showToast carries an Undo action label',
 );
 assert.match(

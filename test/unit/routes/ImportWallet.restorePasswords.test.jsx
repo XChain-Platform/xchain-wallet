@@ -6,153 +6,118 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// The restore screen names WHICH of its three passwords it is asking
-// for, in the fields and in every failure.
+// The restore screen says which password failed.
 //
-// The mechanism shipped (the restore re-keys the wallet onto this
-// device's password). What did not ship was the copy: three password boxes,
-// and a failure that said only "wrong password". A user who typed a perfectly
-// correct password into the wrong box could not tell that from a typo, and two
-// of the three are passwords they still use elsewhere.
+// A restore can need up to three secrets: the one that opens the backup file,
+// the one that opens the wallet sealed inside it, and (adding to an open
+// vault) the one this device unlocks with. The rebuilt tab (restore-v2,
+// 2026-11-14) asks once and tries that password in every role, so what the
+// user reads after a failure has to say which role refused it, and the only
+// extra field it ever shows is the one for that role.
 //
 // Driven through the rendered screen rather than asserted against the source,
 // because the thing under test is what a user reads.
 
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ImportWallet } from '../../../packages/core/src/shared/routes/ImportWallet.jsx';
-import {
-    RESTORE_PASSWORD_INTRO,
-    RESTORE_PASSWORD_LABELS,
-    restoreDeviceLabel,
-} from '../../../packages/core/src/flows/restorePasswordCopy.js';
 import { BackupPasswordError } from '../../../packages/core/src/crypto/backup.js';
 import { BackupSeedPasswordError } from '../../../packages/core/src/flows/backupFile.js';
+import { chooseBackupFile, openBackupTab, typeInto } from '../../helpers/backupFileChoice.js';
 
-const ENVELOPE = '{"magic":"XCHAIN-WALLET-BACKUP","formatVersion":1}';
+afterEach(cleanup);
 
-/** The password this device unlocks with. Typed into the WRONG box below. */
-const DEVICE_PASSWORD = 'this-devices-password';
-const WALLET_PASSWORD = 'the-old-devices-password';
-
-function openRestoreLane(messaging, mode = 'fresh') {
+async function openRestoreLane(messaging, mode = 'fresh') {
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ImportWallet onBack={() => {}} onImported={() => {}} mode={mode} />
         </MessagingProvider>,
     );
-    fireEvent.click(screen.getByRole('tab', { name: 'Encrypted backup' }));
+    openBackupTab();
+    await chooseBackupFile();
 }
 
-function fill(label, value) {
-    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+function submitWith(password) {
+    typeInto('Backup password', password);
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
 }
 
-/** Fills the lane the way the reported user did: device password into the file box. */
-function fillWithTheMixUp(mode = 'fresh') {
-    fireEvent.change(screen.getByPlaceholderText(/argon2id/), { target: { value: ENVELOPE } });
-    fill(RESTORE_PASSWORD_LABELS.file, DEVICE_PASSWORD);
-    fill(RESTORE_PASSWORD_LABELS.wallet, WALLET_PASSWORD);
-    fill(restoreDeviceLabel(mode), DEVICE_PASSWORD);
-}
-
-describe('The restore screen says which password it wants', () => {
-    it('names all three, in the fields and once above them', () => {
-        openRestoreLane({ importBackupFresh: vi.fn() });
-
-        // The framing line. Without it the second and third boxes read as the
-        // app asking for the same thing twice.
-        expect(screen.getByText(RESTORE_PASSWORD_INTRO)).toBeTruthy();
-
-        // Three labelled boxes, three different labels. getByLabelText throws
-        // if a label is renamed or duplicated, which is the point.
-        expect(screen.getByLabelText(RESTORE_PASSWORD_LABELS.file)).toBeTruthy();
-        expect(screen.getByLabelText(RESTORE_PASSWORD_LABELS.wallet)).toBeTruthy();
-        expect(screen.getByLabelText(restoreDeviceLabel('fresh'))).toBeTruthy();
-
-        // Each hint rules the other roles out, which is what makes the label
-        // actionable rather than merely different.
-        expect(screen.getByText(/Not the password of the wallet inside it/i)).toBeTruthy();
-        expect(screen.getByText(/on the device you backed it up from/i)).toBeTruthy();
+describe('The restore screen says which password failed', () => {
+    it('asks for one password, whichever mode is restoring', async () => {
+        await openRestoreLane({ importBackupFresh: vi.fn() });
+        expect(document.querySelectorAll('input[type="password"]')).toHaveLength(1);
+        cleanup();
+        await openRestoreLane({ importBackupRequest: vi.fn() }, 'add');
+        expect(document.querySelectorAll('input[type="password"]')).toHaveLength(1);
+        expect(screen.queryByLabelText('Your password on this device')).toBeNull();
     });
 
-    it('an add-mode restore labels the device box for a vault that already exists', () => {
-        openRestoreLane({ importBackupRequest: vi.fn() }, 'add');
-        expect(screen.getByLabelText(RESTORE_PASSWORD_LABELS.device.add)).toBeTruthy();
-        expect(screen.queryByLabelText(RESTORE_PASSWORD_LABELS.device.fresh)).toBeNull();
+    it('a password that does not open the file is named on the backup password field', async () => {
+        await openRestoreLane({ importBackupFresh: vi.fn().mockRejectedValue(new BackupPasswordError()) });
+        submitWith('this-devices-password');
+        // The field's own line and the notice at the top both carry it.
+        const alert = (await screen.findAllByRole('alert')).find((node) => node.getAttribute('aria-label') !== 'Form errors');
+        expect(alert.textContent).toBe("That password doesn't open this backup.");
+        expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent("That password doesn't open this backup.");
+        expect(screen.getByLabelText('Backup password')).toHaveAttribute('aria-invalid', 'true');
     });
 
-    it('the device password typed into the backup-file box is told which box wants it', async () => {
-        // THE REPORTED FAILURE. The host rejects the envelope; the screen has
-        // to turn that into something that names the field.
-        const importBackupFresh = vi.fn().mockRejectedValue(new BackupPasswordError());
-        openRestoreLane({ importBackupFresh });
-        fillWithTheMixUp();
-        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
-
-        const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toMatch(/did not open the backup file/i);
-        expect(alert.textContent,
-            'the restore failure does not name the field it wants, so a correct password in the '
-            + 'wrong box still reads as a typo')
-            .toContain(RESTORE_PASSWORD_LABELS.file);
-    });
-
-    it('and blames the wallet field when it is the wallet password that is wrong', async () => {
-        const importBackupFresh = vi.fn().mockRejectedValue(new BackupSeedPasswordError('seed'));
-        openRestoreLane({ importBackupFresh });
-        fillWithTheMixUp();
-        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
-
-        const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toContain(RESTORE_PASSWORD_LABELS.wallet);
-        expect(alert.textContent).toMatch(/backup file opened/i);
+    it('a file that opened around a wallet that did not asks for that wallet\'s password, not a retype', async () => {
+        await openRestoreLane({ importBackupFresh: vi.fn().mockRejectedValue(new BackupSeedPasswordError('seed')) });
+        submitWith('file-password');
+        expect(await screen.findByLabelText('Wallet password')).toBeTruthy();
+        expect(screen.getByLabelText('Backup password')).not.toHaveAttribute('aria-invalid', 'true');
     });
 
     it('a bare string across the messaging boundary classifies the same way', async () => {
         // The extension popup never sees the class: the error arrives as a
-        // string. That is the path the copy has to survive.
-        const importBackupFresh = vi.fn().mockRejectedValue(
-            new Error('backup: wrong password or tampered file'),
-        );
-        openRestoreLane({ importBackupFresh });
-        fillWithTheMixUp();
-        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+        // string. That is the path the screen has to survive.
+        await openRestoreLane({
+            importBackupFresh: vi.fn().mockRejectedValue(new Error('backup: wrong password or tampered file')),
+        });
+        submitWith('pw12345678');
+        expect((await screen.findByRole('alert', { name: 'Form errors' })).textContent).toContain("That password doesn't open this backup.");
+    });
 
-        const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toContain(RESTORE_PASSWORD_LABELS.file);
+    it('a shell that still words the wallet role as a parameter reveals the wallet field', async () => {
+        await openRestoreLane({
+            importBackupFresh: vi.fn().mockRejectedValue(
+                new Error("wallet.importBackup.fresh: walletPassword is required (it opens the backed-up wallet's seed)"),
+            ),
+        });
+        submitWith('pw12345678');
+        expect(await screen.findByLabelText('Wallet password')).toBeTruthy();
     });
 
     it('never renders a function name in place of an explanation', async () => {
-        const importBackupFresh = vi.fn().mockRejectedValue(
-            new Error('importBackupFile: something nobody has classified yet'),
-        );
-        openRestoreLane({ importBackupFresh });
-        fillWithTheMixUp();
-        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
-
-        const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toMatch(/nobody has classified yet/);
+        await openRestoreLane({
+            importBackupFresh: vi.fn().mockRejectedValue(
+                new Error('importBackupFile: something nobody has classified yet'),
+            ),
+        });
+        submitWith('pw12345678');
+        const alert = await screen.findByRole('alert', { name: 'Form errors' });
         expect(alert.textContent).not.toMatch(/importBackupFile/);
-        // An unclassified failure cannot name ONE field honestly, so it points
-        // at all three rather than at none.
-        expect(alert.textContent).toMatch(/three passwords above/);
+        expect(alert.textContent).not.toMatch(/three passwords/);
     });
 
-    it('an empty box is reported by the name printed on it', async () => {
-        openRestoreLane({ importBackupFresh: vi.fn() }, 'add');
-        fireEvent.change(screen.getByPlaceholderText(/argon2id/), { target: { value: ENVELOPE } });
-        // Restore stays disabled with a box empty, so the guard is driven the
-        // way a shell without that guard would reach it.
-        fill(RESTORE_PASSWORD_LABELS.file, 'pw12345678');
-        fill(RESTORE_PASSWORD_LABELS.wallet, WALLET_PASSWORD);
-        fill(RESTORE_PASSWORD_LABELS.device.add, DEVICE_PASSWORD);
-        fill(RESTORE_PASSWORD_LABELS.wallet, '');
-        fireEvent.submit(screen.getByRole('button', { name: 'Restore' }).closest('form'));
-
-        const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toContain(RESTORE_PASSWORD_LABELS.wallet);
-        expect(alert.textContent).toMatch(/is required/);
+    it('never echoes a password into the page or the console', async () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        await openRestoreLane({ importBackupFresh: vi.fn().mockRejectedValue(new BackupSeedPasswordError('seed')) });
+        submitWith('Secret-File-Pass-1');
+        await screen.findByLabelText('Wallet password');
+        typeInto('Wallet password', 'Secret-Wallet-Pass-2');
+        fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+        await screen.findByRole('alert', { name: 'Form errors' });
+        const text = document.body.textContent;
+        expect(text).not.toContain('Secret-File-Pass-1');
+        expect(text).not.toContain('Secret-Wallet-Pass-2');
+        const logged = [...log.mock.calls, ...warn.mock.calls].flat().map(String).join(' ');
+        expect(logged).not.toContain('Secret-File-Pass-1');
+        expect(logged).not.toContain('Secret-Wallet-Pass-2');
+        log.mockRestore();
+        warn.mockRestore();
     });
 });

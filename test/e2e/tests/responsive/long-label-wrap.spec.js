@@ -234,7 +234,7 @@ test.describe('long labels at 360px', () => {
         const words = await readRecoveryPhrase(page);
         expect(words).toHaveLength(12);
         await expectLongLabelsFit(page, 'onboarding recovery phrase');
-        await page.getByLabel(/written down|saved my recovery phrase/i).check();
+        await page.getByRole('checkbox', { name: /written down|saved my recovery phrase/i }).check();
         await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
         await expect(page.getByRole('button', { name: 'Create wallet' })).toBeVisible();
         await expectLongLabelsFit(page, 'onboarding phrase verification');
@@ -248,7 +248,7 @@ test.describe('long labels at 360px', () => {
         await expectLongLabelsFit(page, 'onboarding encrypted backup import');
 
         await returnToWelcome(page);
-        await page.getByRole('button', { name: 'From FreeWallet' }).click();
+        await page.getByRole('button', { name: 'Import FreeWallet' }).click();
         await expect(page.getByRole('button', { name: 'Import', exact: true })).toBeVisible();
         await expectLongLabelsFit(page, 'onboarding FreeWallet import');
     });

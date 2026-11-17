@@ -9,7 +9,6 @@ import { describe, expect, it } from 'vitest';
 const routeFiles = [
     'Onboarding.module.css',
     'OnboardingCarousel.module.css',
-    'OperatorDashboard.module.css',
     'OracleConsole.module.css',
     'PairSignerForm.module.css',
 ];

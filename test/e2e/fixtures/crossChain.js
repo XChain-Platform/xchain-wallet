@@ -34,6 +34,7 @@
  */
 
 import { expect } from '@playwright/test';
+import { revealChainPicker } from './wallet.js';
 
 /**
  * Picks a named chain in a `NetworkField`, on a named network, and proves the
@@ -62,8 +63,7 @@ import { expect } from '@playwright/test';
  */
 export async function selectNamedChain(scope, field, chainLabel, networkKind = 'regtest') {
     const trigger = scope.getByRole('button', { name: new RegExp(`^${field}:`) }).first();
-    await expect(trigger, `no "${field}" chain picker on this screen`)
-        .toBeVisible({ timeout: 30_000 });
+    await revealChainPicker(scope, trigger, field);
 
     // Pickers name the chain without its network kind (operator ruling); the
     // active Settings network already scopes the options to one network.

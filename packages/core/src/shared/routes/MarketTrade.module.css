@@ -1,0 +1,7 @@
+/* The Trade page (MarketTrade.jsx). The page is the order form alone (Form
+   Standard: From, Trade Details, Fees, the action); FormPage draws the wide
+   card itself, so the page adds only the gap under a load-failure notice. */
+
+.page.page {
+    gap: var(--xc-space-2);
+}

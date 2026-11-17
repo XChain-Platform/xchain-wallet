@@ -47,7 +47,9 @@ vi.mock('@xchain-wallet/core/shared/hooks/useAutoLockPolicy.js', () => ({
 }));
 vi.mock('@xchain-wallet/core/shared/hooks/useLastView.js', () => ({ useLastView: () => {} }));
 vi.mock('@xchain-wallet/core/shared/hooks/useWalletMode.js', () => ({
-    useWalletMode: () => ({ walletMode: 'full', isFullMode: true, isWatcherMode: false, isSignerMode: false }),
+    useWalletMode: () => ({ walletMode: 'full', isFullMode: true, isWatcherMode: false, isSignerMode: false, walletModeKnown: true }),
+    useActiveWalletModeSource: () => {},
+    notifyWalletModesChanged: () => {},
 }));
 vi.mock('@xchain-wallet/core/shared/hooks/useMessagingUnread.js', () => ({ useMessagingUnread: () => 0 }));
 vi.mock('@xchain-wallet/core/shared/hooks/useAccountList.js', () => ({
@@ -323,7 +325,10 @@ describe('desktop window names a wallet its list lacks', () => {
         await screen.findByText('Home for wallet-1');
         fireEvent.click(screen.getByRole('button', { name: 'Open wallet picker' }));
         const row = await screen.findByRole('button', { name: /^(?!Wallet details for).*Bravo/ });
+        // A picker row opens that wallet's details; Set as active wallet makes the switch.
         fireEvent.click(row);
+        await settle();
+        fireEvent.click(await screen.findByRole('button', { name: /Set as active wallet/ }));
         await settle();
 
         fireEvent.click(screen.getByRole('button', { name: 'Settings' }));

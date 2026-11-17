@@ -87,8 +87,15 @@ assert.ok(/previewCoSignRequest/.test(bgHost), 'coSign.parse handler calls previ
 
 // 6. Approval UI surfaces a legible co-sign intent (always-prompt safety).
 const approvalUi = read('packages/extension/src/approval/kinds/SignApproval.jsx');
-assert.ok(/coSign:\s*'Co-sign transaction'/.test(approvalUi), 'SignApproval titles the coSign kind');
-assert.ok(/CoSignIntentSummary/.test(approvalUi), 'SignApproval renders CoSignIntentSummary');
+assert.ok(/coSign:\s*'Co-sign transaction'/i.test(approvalUi), 'SignApproval titles the coSign kind');
+assert.ok(
+    /kind === 'coSign'[\s\S]*?coSignPreview\.preview\?\.action/.test(approvalUi)
+        && /key: 'agent-account'/.test(approvalUi)
+        && /coSignWarningLines\(coSignPreview\)/.test(approvalUi)
+        && /<ConfirmStandard[\s\S]*?facts=\{confirmationFacts\}/.test(approvalUi),
+    'SignApproval puts the decoded co-sign intent, account and safety warnings into Confirm Standard',
+);
+assert.ok(/coSignApprovalBlocked/.test(approvalUi), 'SignApproval remains fail-closed on an unsafe co-sign preview');
 assert.ok(/parseCoSign/.test(approvalUi), 'SignApproval decodes the request via parseCoSign');
 const approvalMsg = read('packages/extension/src/approval/messaging.js');
 assert.ok(/parseCoSign/.test(approvalMsg) && /coSign\.parse/.test(approvalMsg), 'approval messaging exposes parseCoSign -> coSign.parse');

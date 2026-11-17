@@ -8,34 +8,31 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Dispenser detail's Actions grid used auto-fit columns with a 64px floor,
-// so a 360px phone fit four tiles and left "More" alone on a second row.
-// The grid now lays every action in one row of equal columns, whatever the
-// width or the number of actions. jsdom has no layout, so this pins the rule.
+// Dispenser detail's actions were a row of tiles, then owner buttons under
+// the card and a pill row of copy buttons. Ruling G101 (2026-11-13) draws
+// every one of them as a row of the shared action list in the Actions tab,
+// so the page's stylesheet paints no tile, owner-button or pill row of its
+// own. jsdom has no layout, so this pins the source.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-function readCss(path) {
-    return readFileSync(join(process.cwd(), path), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+function read(path) {
+    return readFileSync(join(process.cwd(), path), 'utf8');
 }
 
-function ruleBody(text, selector) {
-    const escaped = selector.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
-    const match = new RegExp(`(^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`).exec(text);
-    return match ? match[2] : '';
-}
+describe('Dispenser detail actions', () => {
+    it('paints no tile grid, owner button row or pill row of its own', () => {
+        const css = read('packages/core/src/shared/routes/DispenserDetail.module.css').replace(/\/\*[\s\S]*?\*\//g, '');
+        for (const selector of ['.quickActions', '.quickActionLink', '.quickActionIcon', '.quickActionLogo', '.ownerActions', '.closeButton', '.linkRow']) {
+            expect(css, selector).not.toContain(selector);
+        }
+    });
 
-describe('Dispenser detail Actions grid', () => {
-    it('keeps every action tile in one row of equal columns', () => {
-        const css = readCss('packages/core/src/shared/routes/DispenserDetail.module.css');
-        const body = ruleBody(css, '.quickActions');
-        expect(body).toMatch(/display:\s*grid/);
-        expect(body).toMatch(/grid-auto-flow:\s*column/);
-        expect(body).toMatch(/grid-auto-columns:\s*minmax\(0,\s*1fr\)/);
-        // A width-driven column count is what stranded a tile on its own row.
-        expect(body).not.toMatch(/auto-fit|auto-fill/);
-        expect(css).not.toMatch(/\.quickActions\s*\{[^}]*grid-template-columns/);
+    it('draws the actions through the shared action list', () => {
+        const source = read('packages/core/src/shared/routes/DispenserDetail.jsx');
+        expect(source).toMatch(/<ActionList label="Dispenser actions">/);
+        expect(source).not.toMatch(/role="group" aria-label="Dispenser (actions|links)"/);
     });
 });

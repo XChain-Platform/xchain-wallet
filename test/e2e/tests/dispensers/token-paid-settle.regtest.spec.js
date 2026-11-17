@@ -35,6 +35,8 @@ import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     minerRpc,
     mintXchain,
     REGTEST_ADDRESS_RE,
@@ -177,10 +179,8 @@ async function issueToken(page, tick, supply) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-    await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Supply', { exact: true }).fill(String(supply));
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await readIssueSource(main);
+    await issuePlainToken(main, { ticker: tick, supply });
     await expectConfirmModal(page);
     const issued = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(issued.status),
@@ -213,8 +213,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            buyer = await main.getByLabel('From').inputValue();
+            buyer = await readIssueSource(main);
             expect(buyer, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -324,6 +323,9 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'searching the token it sells')
                 .toBeVisible({ timeout: 60_000 });
             await row.click();
+            // The dispenser page opens on Actions (G102); the buy panel is the
+            // Buy page a buyer's first action row opens.
+            await page.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
 
             const buySection = page.getByRole('main');
             await expect(buySection.getByLabel('Fills', { exact: true }),
@@ -355,7 +357,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByTestId('confirm-modal'),
                 'the Confirm screen does not say this payment buys from the dispenser')
                 .toContainText(`This pays dispenser #${dispenserIndex}:`);
-            const feeLine = page.getByTestId('confirm-protocol-fee');
+            const feeLine = page.getByTestId('confirm-fee-protocol');
             if (await feeLine.count() > 0) {
                 const said = await feeLine.innerText();
                 buyFeeXchain = Number(said.match(/([\d.]+)\s*XCHAIN\b/)?.[1]);

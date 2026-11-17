@@ -62,21 +62,29 @@ assert.ok(/setPasted\(''\); setError\(null\);[\s\S]{0,80}Clear/.test(psbtSrc),
 assert.ok(/setPasted\(''\)/.test(psbtSrc),
     'PsbtSignForm Clear recovery wipes the textarea');
 
-// 4. ImportWallet backup lane offers a "Browse" recovery when the
-//    user submits without picking a file.
+// 4. ImportWallet backup lane: a submit without a file names it under the
+//    drop area, whose own Choose File button is the way on, and takes focus.
 assert.ok(/StatusMessage/.test(importSrc),
     'ImportWallet imports StatusMessage');
-assert.ok(/label: 'Browse'[\s\S]*backupDrop\.openFilePicker/.test(importSrc),
-    'ImportWallet wires Browse recovery via the dropzone openFilePicker');
+assert.ok(/refuseBackupField\('file', 'Choose a backup file\.'\)/.test(importSrc),
+    'ImportWallet names a missing backup file on the drop area');
+assert.ok(/error=\{backupErrorFor\('file'\)\}/.test(importSrc),
+    'ImportWallet shows the file refusal under the drop area, beside its Choose File button');
 
-// 5. PairSignerForm offers a "Try again" recovery on transient
-//    pairing errors (gated to skip the WebHID-not-supported case
-//    where retry is pointless).
+// 5. PairSignerForm (Hardware Wallet connect): a connection failure is an
+//    error notice with no button of its own, because the Try again row
+//    under the statuses retries; an account read failure offers Try again
+//    as the notice's recovery.
 assert.ok(/StatusMessage/.test(pairSrc),
     'PairSignerForm imports StatusMessage');
-assert.ok(/label: 'Try again'[\s\S]*handlePickVendor\(vendor\)/.test(pairSrc),
-    'PairSignerForm Try-again recovery re-runs handlePickVendor');
-assert.ok(/!\/WebHID\|not supported\|not available\/i\.test\(error\)/.test(pairSrc),
-    'PairSignerForm Try-again recovery is suppressed for WebHID-unsupported errors');
+assert.ok(/<StatusMessage key="connection-error" variant="error">\{failedMessage\}<\/StatusMessage>/.test(pairSrc),
+    'PairSignerForm shows the connection failure as a plain error notice');
+assert.ok(/title=\{t\('hardwareConnect\.connect\.tryAgain'\)\}[\s\S]{0,200}onClick=\{\(\) => runPairing\(vendor\)\}/.test(pairSrc),
+    'PairSignerForm Try again row runs the pairing again');
+// Try again reads every network again at every account number asked for.
+// The smoke runner's English-source loader (_english-source.mjs) shows the
+// label as its English text; a bare node run shows the t() call.
+assert.ok(/recovery=\{\{\s*label: (?:t\('common\.tryAgain'\)|'Try Again'),\s*onAction: handleRetryAll,/.test(pairSrc),
+    'PairSignerForm account read failure offers Try again');
 
 console.log('OK: StatusMessage.recovery + Send / PsbtSignForm / ImportWallet / PairSignerForm wiring smoke');

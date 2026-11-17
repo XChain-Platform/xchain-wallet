@@ -28,54 +28,33 @@ const messages = {
     'extension.approval.reject': 'Reject',
     'extension.approval.requestingSite': 'Requesting site',
 
-    'extension.connect.title': 'Connect to XChain Wallet?',
+    'extension.approval.title': 'Approval Request',
+    'extension.connect.title': 'Connect Wallet',
     'extension.connect.approve': 'Approve',
-    'extension.connect.declaredName': 'Site-provided name',
-    'extension.connect.permissions': 'Requested permissions',
-    'extension.connect.permission.accounts':
-        'View the accounts you select, including their addresses and balances',
-    'extension.connect.permission.chains': 'Use only the networks you select below',
-    'extension.connect.permission.signing':
-        'Ask separately before signing any message or transaction',
-    'extension.connect.permission.remember':
-        'Remember a later signing approval only if you choose. Revoke it anytime in Connected sites.',
+    'extension.connect.aboutField': 'About {label}',
+    'extension.connect.allowCoin': 'Allow {coin}',
     'extension.connect.chains': 'Networks',
-    'extension.connect.chains.requestedHint':
-        'Choose from the networks this site requested. You can change this later.',
-    'extension.connect.chains.hint':
-        'Pick which networks this site can see. You can change this later.',
-    'extension.connect.chains.allow': 'Allow {chain} {network}',
-    'extension.connect.accounts.hint': 'Pick which accounts this site can see.',
     'extension.connect.accounts.share': 'Share {name}',
-    'extension.connect.accounts.primary':
-        'This site can see your primary account.',
 
-    'extension.sign.source': 'Source',
     'extension.sign.declaredName': 'Site-provided name: {name}',
     'extension.sign.signInAs': 'Sign in as',
     'extension.sign.noSignInAddress': 'This site has no address it may sign in with.',
-    'extension.sign.checkingWalletMode': 'Checking wallet mode…',
     'extension.sign.passwordHint': 'Required to sign. Your password stays in this window.',
     'extension.sign.feeSetBySite': 'Set by the site{rate}',
     'extension.sign.alwaysAllow':
         'Always allow this site. You can revoke this in Connected sites.',
     'extension.sign.warningNoun.message': 'message',
     'extension.sign.signingPaths': 'Signing paths',
-    'extension.sign.action.reading': 'Reading this action…',
     'extension.sign.psbtMissing': 'This request is missing the transaction to sign',
-    'extension.sign.action.unavailable':
-        "This action couldn't be described. Approve only if you know exactly what it does.",
     'extension.sign.signInTo': 'Sign in to',
     'extension.sign.warningNoun.signIn': 'sign-in',
     'extension.sign.oneTimeCode': 'One-time code',
     'extension.sign.controlCharacters':
         'Control characters are displayed safely. The original {noun} text is what you will sign.',
-    'extension.sign.coSignRequest': 'Co-sign request',
-    'extension.sign.decodingRequest': 'Decoding request…',
     'extension.sign.trustSource': 'Only approve it if you trust the source.',
     'extension.sign.agentAccount': 'Agent account',
-    'extension.sign.coSignerAccount': 'Co-signer account',
-    'extension.sign.policyRefusal': 'The co-signer will refuse it even if you approve.',
+    'extension.sign.coSignerAccount': 'Cosigner account',
+    'extension.sign.policyRefusal': 'The cosigner will refuse it even if you approve.',
     'extension.sign.confirmThreshold':
         'Above the policy confirm-threshold: review carefully before approving.',
     'extension.sign.clockWarning':

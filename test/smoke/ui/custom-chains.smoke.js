@@ -24,8 +24,8 @@
 //      settings.get via seedCustomChainsFromVault().
 //   4. Three messaging shells (popup / web / desktop) export the three
 //      shims with the canonical naming.
-//   5. DeveloperModeSection mounts CustomChainsRow + the Add /
-//      Remove UI.
+//   5. The Test Networks pages carry the list, Add Custom Network and
+//      Remove network UI.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -192,7 +192,7 @@ const VALID_DESCRIPTOR = {
 // ─── 3. Settings schema accepts customChains ────────────────────────────
 
 const baseSettings = {
-    schemaVersion: 3,
+    schemaVersion: 5,
     theme: 'system',
     reducedMotion: 'auto',
     autolockMinutes: 15,
@@ -207,7 +207,7 @@ const baseSettings = {
         blurOnBlur: false,
         labelsSurviveRestore: false,
     },
-    ads: { enabled: true, perChain: {} },
+    ads: { perTransaction: '0.05', sendAt: '5', recipient: 'protocol', currency: 'USD', queued: '0', donated: '0', donationCount: 0 },
     notifications: {
         txConfirmations: true,
         incomingReceipts: true,
@@ -284,16 +284,19 @@ for (const field of ['descriptor', '\\[restored\\]', '\\[replaced\\]']) {
     assert.match(flowSrc, new RegExp(`@property \\{[^}]+\\} ${field}\\s`), `AddCustomChainResult declares ${field}`);
 }
 
-// ─── 6. DeveloperModeSection wiring ─────────────────────────────────────
+// ─── 6. Test Networks wiring ────────────────────────────────────────────
+// Custom networks live on the Test Networks pages (operator picks
+// 2026-11-14): the list, Add Custom Network and a network's own page.
 
 const sectionSrc = readFileSync(
-    join(wsRoot, 'packages/core/src/shared/components/settings/DeveloperModeSection.jsx'),
+    join(wsRoot, 'packages/core/src/shared/components/settings/TestNetworksPages.jsx'),
     'utf8',
 );
-assert.match(sectionSrc, /CustomChainsRow/, 'DeveloperModeSection mounts CustomChainsRow');
-assert.match(sectionSrc, /messaging\.listCustomChains/, 'CustomChainsRow calls messaging.listCustomChains');
-assert.match(sectionSrc, /messaging\.addCustomChain/, 'CustomChainsRow calls messaging.addCustomChain');
-assert.match(sectionSrc, /messaging\.removeCustomChain/, 'CustomChainsRow calls messaging.removeCustomChain');
+assert.match(sectionSrc, /export function TestNetworksPage\(/, 'TestNetworksPages exports the Test Networks list');
+assert.match(sectionSrc, /export function CustomNetworkFormPage\(/, 'TestNetworksPages exports Add Custom Network');
+assert.match(sectionSrc, /messaging\.listCustomChains/, 'the list calls messaging.listCustomChains');
+assert.match(sectionSrc, /messaging\.addCustomChain/, 'Add Custom Network calls messaging.addCustomChain');
+assert.match(sectionSrc, /messaging\.removeCustomChain/, 'Remove network calls messaging.removeCustomChain');
 
 // ─── 7. Every UI realm hydrates its OWN registry from settings ──────────
 //
@@ -346,9 +349,9 @@ assert.match(connectApprovalSrc, /useSupportedChains\(chainRegistry\)/,
     'ConnectApproval reads the chain list from the live registry');
 
 // Same-session add / remove mirrors into the calling realm's registry.
-assert.match(sectionSrc, /chainRegistry\.addCustom\(accepted\)/,
-    'CustomChainsRow installs an accepted descriptor into the local registry');
-assert.match(sectionSrc, /chainRegistry\.removeCustom\(chainId\)/,
-    'CustomChainsRow mirrors a removal into the local registry');
+assert.match(sectionSrc, /chainRegistry\(\)\.addCustom\(accepted\)/,
+    'Add Custom Network installs an accepted descriptor into the local registry');
+assert.match(sectionSrc, /chainRegistry\(\)\.removeCustom\((?:chainId|descriptor\.id)\)/,
+    'Remove network mirrors a removal into the local registry');
 
 console.log('OK: custom chain registry flow + schema + host + shells + UI + per-realm hydration');

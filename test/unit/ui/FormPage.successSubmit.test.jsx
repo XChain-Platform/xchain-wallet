@@ -34,15 +34,15 @@ describe('FormPage submit action treatment', () => {
         expect(screen.getByRole('button', { name: 'Import' })).toHaveClass(buttonStyles.success);
     });
 
-    it('keeps a demo-guarded submit disabled and successful', () => {
+    it('keeps a demo-guarded submit enabled and successful', () => {
         renderActions(
             <Button type="submit">Broadcast</Button>,
-            { blocked: true, note: null, dialog: null },
+            { blocked: true, note: null, dialog: null, refuse() {} },
         );
 
         const submit = screen.getByRole('button', { name: 'Broadcast' });
         expect(submit).toHaveClass(buttonStyles.success);
-        expect(submit).toBeDisabled();
+        expect(submit).toBeEnabled();
     });
 
     it('reaches submits nested in fragments and wrappers', () => {

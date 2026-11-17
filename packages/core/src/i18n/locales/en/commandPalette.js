@@ -16,7 +16,7 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // Copy moved out of JSX literals by the i18n sweep.
-    'commandPalette.commandPalette.commandPalette': 'Command palette',
+    'commandPalette.commandPalette.commandPalette': 'Command Palette',
     'commandPalette.commandPalette.closeCommandPalette': 'Close command palette',
     'commandPalette.commandPalette.searchActionsTokensContacts': 'Search actions, tokens, contacts…',
     'commandPalette.commandPalette.searchCommands': 'Search commands',

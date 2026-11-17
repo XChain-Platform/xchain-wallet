@@ -39,10 +39,11 @@ describe('the balance hero menu trigger', () => {
         return rule[1];
     };
 
-    it('keeps the translucent hero fill on the accent card, never the near-white disabled tile', () => {
+    it('uses the solid Hero 2 control tokens, never the disabled tile', () => {
         const body = triggerRule();
-        expect(body).toContain('background: color-mix(in srgb, var(--xc-on-accent) 15%, transparent)');
-        expect(body).toContain('color: var(--xc-on-accent)');
+        expect(body).toContain('background: var(--xc-hero-chip-bg)');
+        expect(body).toContain('border: 1px solid var(--xc-hero-border)');
+        expect(body).toContain('color: var(--xc-hero-chip-text)');
         expect(body).not.toMatch(/--xc-control-disabled-bg/);
     });
 
@@ -54,6 +55,9 @@ describe('the balance hero menu trigger', () => {
 
     it('leaves the token hero with no loose swap or eye controls of its own', () => {
         expect(tokenCss).not.toMatch(/\.balanceHero(?:Swap|Eye|Controls)\b/);
-        expect(tokenCss).toMatch(/\.balanceHeroMenu\s*\{[^}]*grid-area:\s*controls/);
+        // The token hero draws its swap and eye with the shared balance card's own
+        // classes, so TokenDetail's stylesheet carries no hero menu of its own.
+        expect(tokenCss).not.toMatch(/\.balanceHeroMenu\b/);
+        expect(heroCss).toMatch(/\.inlineActions\b/);
     });
 });

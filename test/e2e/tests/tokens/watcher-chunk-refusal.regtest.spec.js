@@ -63,7 +63,8 @@ import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/w
 import {
     REGTEST_ADDRESS_RE,
     fundAddress,
-    selectVenueChain,
+    issuePlainToken,
+    readIssueSource,
     switchToRegtest,
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
@@ -92,26 +93,6 @@ const RUN = String(Date.now()).slice(-6);
 const TICK_SHORT = `WCS${RUN}`;
 const TICK_LONG = `WCL${RUN}`;
 
-/**
- * Puts the wallet into watcher mode and waits for the write to land.
- *
- * A mode change stays pending behind a confirmation dialog, and the radio
- * shows the pending choice while it is open, so a checked radio alone does not
- * prove the write landed: the dialog closing does.
- */
-async function setWalletMode(page, mode) {
-    const label = mode === 'watcher' ? /^Watcher/ : /^Normal/;
-    await openPaletteCommand(page, 'Settings');
-    await page.getByRole('button', { name: /^Wallet mode\b/ }).click();
-    const radio = page.getByRole('radio', { name: label });
-    await expect(radio).toBeVisible({ timeout: 30_000 });
-    await radio.click();
-    const ask = page.getByRole('dialog', { name: /^Switch to .* mode\?$/ });
-    await ask.getByRole('button', { name: 'Confirm mode change', exact: true }).click();
-    await expect(ask, `the ${mode} mode change never saved`).toBeHidden({ timeout: 30_000 });
-    await expect(radio, `the wallet did not switch to ${mode} mode`).toBeChecked({ timeout: 30_000 });
-}
-
 /** Fills the issue form and leaves it at the review stage, ready to build. */
 async function stageIssue(page, tick, description) {
     await openPaletteCommand(page, 'Issue token');
@@ -120,14 +101,11 @@ async function stageIssue(page, tick, description) {
     // §3.5: every form carries its own chain picker and the wallet defaults to
     // Bitcoin. Skipping this composes on the contended chain instead of the one
     // the run was pointed at, which is a silently wrong-venue pass.
-    await selectVenueChain(main, 'Network');
-    await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
-    await main.getByLabel('Description', { exact: true }).fill(description);
+    await readIssueSource(main);
     // Watcher mode is the branch that gets a review stage at all: full mode
     // composes straight onto the confirm screen (single-encode).
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
-    await expect(main.getByRole('button', { name: 'Create transaction for signing', exact: true }),
+    await issuePlainToken(main, { ticker: tick, supply: SUPPLY, description });
+    await expect(main.getByRole('button', { name: 'Create Transaction for Signing', exact: true }),
         'the form did not reach the watcher review stage')
         .toBeVisible({ timeout: 30_000 });
     return main;
@@ -143,14 +121,16 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
         let source;
 
         await test.step('onboard, fund, and go watch-only', async () => {
-            await createWallet(page, { password: PASSWORD, name: 'Watcher Chunk Wallet' });
+            // The mode is chosen when the wallet is created and stays fixed.
+            await createWallet(page, {
+                password: PASSWORD, name: 'Watcher Chunk Wallet', walletMode: 'watcher',
+            });
             await switchToRegtest(page, PASSWORD);
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main, 'Network');
-            source = await main.getByLabel('From').inputValue();
+            source = await readIssueSource(main);
             expect(source, 'this wallet has no address on the venue chain').toMatch(REGTEST_ADDRESS_RE);
 
             // Funding is not incidental: the encoder selects real UTXOs, and an
@@ -162,13 +142,11 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
             await fundAddress(source, FUNDING);
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
-
-            await setWalletMode(page, 'watcher');
         });
 
         await test.step('CONTROL: a short payload still exports an unsigned transaction', async () => {
             const main = await stageIssue(page, TICK_SHORT, SHORT_DESCRIPTION);
-            await main.getByRole('button', { name: 'Create transaction for signing', exact: true }).click();
+            await main.getByRole('button', { name: 'Create Transaction for Signing', exact: true }).click();
 
             const hex = hexBox(page);
             await expect(hex, 'the watcher lane produced no unsigned transaction for a payload that '
@@ -189,9 +167,9 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
             // Back via the panel's own control: re-selecting "Issue token" while
             // the route is already mounted changes no state, so the form would
             // stay on its result screen (D-117's shape).
-            await page.getByRole('button', { name: 'Build another', exact: true }).click();
+            await page.getByRole('button', { name: 'Build Another', exact: true }).click();
             const main = await stageIssue(page, TICK_LONG, LONG_DESCRIPTION);
-            await main.getByRole('button', { name: 'Create transaction for signing', exact: true }).click();
+            await main.getByRole('button', { name: 'Create Transaction for Signing', exact: true }).click();
 
             const alert = page.getByRole('main').getByRole('alert')
                 .filter({ hasText: /too large for one transaction/i }).first();

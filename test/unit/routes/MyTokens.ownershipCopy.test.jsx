@@ -182,34 +182,46 @@ describe('My tokens controls and supply status', () => {
 
         await screen.findByRole('button', { name: 'Open LOCKED token details' });
         expect(screen.queryByRole('button', { name: 'Issue new token' })).toBeNull();
-        const create = screen.getByRole('button', { name: 'Create token' });
-        expect(create).toHaveAttribute('title', 'Create token');
+        const create = screen.getByRole('button', { name: 'Create Token' });
+        expect(create).toHaveAttribute('title', 'Create Token');
         fireEvent.click(create);
         expect(onIssue).toHaveBeenCalledOnce();
 
-        const type = screen.getByRole('combobox', { name: 'Filter tokens by type' });
-        expect(type).toHaveValue('all');
+        // The type picker is an icon dropdown inside the title-bar filter panel.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter tokens' }));
+        // IconSelect names its trigger by the field label plus the current pick
+        // and takes no aria-label, so the trigger is found by its listbox popup;
+        // Home's network picker comes before it (G04), so Type is the last one.
+        const typeButton = () => [...screen.getByRole('dialog', { name: 'Filter tokens' })
+            .querySelectorAll('button[aria-haspopup="listbox"]')].at(-1);
+        expect(typeButton()).toHaveTextContent('All tokens');
+        fireEvent.click(typeButton());
         expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
-            'All', 'Holding', 'Locked', 'Unlocked',
+            'All tokens', 'Holding', 'Locked', 'Unlocked',
         ]);
+        fireEvent.click(screen.getByRole('option', { name: 'All tokens' }));
         expect(screen.getAllByRole('img', { name: 'Supply locked' })).toHaveLength(2);
         expect(screen.getByRole('img', { name: 'Supply unlocked' })).toBeInTheDocument();
+        const pickType = (label) => {
+            fireEvent.click(typeButton());
+            fireEvent.click(screen.getByRole('option', { name: label }));
+        };
 
-        fireEvent.change(type, { target: { value: 'locked' } });
+        pickType('Locked');
         expect(screen.getByRole('button', { name: 'Open LOCKED token details' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Open HELDLOCK token details' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Open OPEN token details' })).toBeNull();
 
-        fireEvent.change(type, { target: { value: 'unlocked' } });
+        pickType('Unlocked');
         expect(screen.getByRole('button', { name: 'Open OPEN token details' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Open LOCKED token details' })).toBeNull();
 
-        fireEvent.change(type, { target: { value: 'holding' } });
+        pickType('Holding');
         expect(screen.queryByRole('button', { name: 'Open LOCKED token details' })).toBeNull();
         expect(screen.getByRole('button', { name: 'Open OPEN token details' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Open HELDLOCK token details' })).toBeInTheDocument();
 
-        fireEvent.change(type, { target: { value: 'all' } });
+        pickType('All tokens');
         fireEvent.change(screen.getByRole('searchbox', {
             name: 'Search your tokens by ticker or description',
         }), { target: { value: 'open' } });

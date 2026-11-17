@@ -8,8 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { AddressText, Button, CopyButton, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage } from '@xchain-wallet/core/ui';
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { copyText } from '../clipboard.js';
+import { AddressText, Button, EmptyState, FormPage, Icon, Input, ListPage, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
 import { flows as flowsLib, registry as registryLib } from '@xchain-wallet/core';
 import { tickerForDescriptor } from '../../registry/coinTicker.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -21,11 +22,18 @@ import { submitFailureMessage, SIGNED_NOT_BROADCAST_MESSAGE } from '../utils/sub
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
-import { ListToolbar } from '../components/ListToolbar.jsx';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { NetworkFilterDropdown } from '../components/NetworkFilterDropdown.jsx';
+import { LIST_DETAIL_MIN_WIDTH, ListDetailSplit, listDetailStyles, useWideContent } from '../components/PanelSplit.jsx';
 import { OfflineEmptyState } from '../components/OfflineEmptyState.jsx';
+import { OverlaySurface } from '../components/OverlaySurface.jsx';
+import { useBackHandler } from '../../ui/backStack.js';
+import { useFocusTrap } from '../utils/focusTrap.js';
+import { explorerPageUrl } from '../utils/explorerLinks.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
 import { RelativeTime } from '../components/RelativeTime.jsx';
+// The contact's tile, as View Contact shows it (its saved look included).
+import { ContactAvatar } from '../components/WalletIdentity.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import {
     readMsgRead,
@@ -39,6 +47,9 @@ import { neutralizeControlText } from '../utils/textHardening.js';
 import { messageTextForDisplay } from '../utils/messageTextSafety.js';
 import styles from './IssueTokenForm.module.css';
 import local from './MessagingInbox.module.css';
+import notificationStyles from './AlertsRoute.module.css';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
@@ -69,14 +80,19 @@ const chainRegistry = registryLib.defaultRegistry();
  * @param {() => void} props.onBack
  * @param {string} [props.initialCounterparty]  open this conversation thread
  *   directly (e.g. returning from a compose form launched from that thread)
+ * @param {(target: { address: string, chainId?: string, edit: boolean }) => void} [props.onContact]
+ *   the thread menu's "Add to contacts" / "Edit contact": the shell opens
+ *   the Contacts route on that address and returns to this thread on Back
  */
-export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, initialCounterparty }) {
+export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, initialCounterparty, onContact }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const { offline, recheck } = useNetworkOffline({ walletId });
     const scope = `${walletId}:${activeAccountId || 'default'}`;
     // Track signer readiness so confirmation asks for a password only when needed.
     const signerReady = useSignerReady(walletId);
+    const [layoutRef, wideContent] = useWideContent(LIST_DETAIL_MIN_WIDTH, true);
+    const twoPanel = wideContent;
 
     const [addressesByChain, setAddressesByChain] = useState(
         /** @type {Record<string, any[]> | null} */ (null),
@@ -85,6 +101,8 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     const [addressesReload, setAddressesReload] = useState(0);
     const [password, setPassword] = useState('');
     const [unlockError, setUnlockError] = useState(/** @type {string | null} */ (null));
+    const passwordErrors = useFormErrors();
+    const passwordFieldId = 'messaging-inbox-password';
     const [inboxWarning, setInboxWarning] = useState(/** @type {string | null} */ (null));
     const [stage, setStage] = useState(
         /** @type {'pick' | 'password' | 'submitting' | 'inbox'} */ ('pick'),
@@ -95,6 +113,11 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     );
     const [contactsByAddress, setContactsByAddress] = useState(
         /** @type {Record<string, string>} */ ({}),
+    );
+    // The same lookup with the whole contact, for its avatar (name, seed and
+    // the look Edit Contact saved).
+    const [contactRecordsByAddress, setContactRecordsByAddress] = useState(
+        /** @type {Record<string, any>} */ ({}),
     );
     // Per-conversation read state (counterparty -> seen incoming txids), loaded
     // from localStorage. Drives the unread dot in the list. `unreadFrom` captures
@@ -113,6 +136,9 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // + network dropdown, mirroring the addresses page toolbar.
     const [query, setQuery] = useState('');
     const [network, setNetwork] = useState('all');
+    // Narrow thread pages keep their own keyword filter. Wide two-panel pages
+    // use the inbox query for both columns instead.
+    const [threadQuery, setThreadQuery] = useState('');
     // Docked-composer draft. Pressing Enter hands the trimmed text to
     // onCompose, which opens the standard New-message form pre-filled with the
     // recipient + body and the encryption locked to the conversation's method;
@@ -137,6 +163,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         setAddressesByChain(null);
         setLoadError(null);
         setPassword('');
+        passwordErrors.reset();
         setUnlockError(null);
         setInboxWarning(null);
         setStage('pick');
@@ -149,7 +176,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         setReadMap(nextReadMap);
         setDeclinedRequestIds(readMsgRequestDeclined(walletId, activeAccountId));
         setStateScope(scope);
-    }, [scope, walletId, activeAccountId, initialCounterparty]);
+    }, [scope, walletId, activeAccountId, initialCounterparty, passwordErrors.reset]);
 
     // Hosts may retarget the open inbox to another thread while preserving the
     // route instance. Draft selection remains keyed by the recipient below.
@@ -159,6 +186,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     }, [initialCounterparty]);
 
     useEffect(() => () => { inboxRequestRef.current += 1; }, []);
+    useEffect(() => { setThreadQuery(''); }, [selectedCounterparty]);
 
     useEffect(() => {
         let cancelled = false;
@@ -193,12 +221,18 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 if (cancelled) return;
                 /** @type {Record<string, string>} */
                 const map = {};
+                /** @type {Record<string, any>} */
+                const records = {};
                 for (const c of rows || []) {
                     for (const e of c.entries || []) {
-                        if (e.address && !map[e.address]) map[e.address] = c.name;
+                        if (e.address && !map[e.address]) {
+                            map[e.address] = c.name;
+                            records[e.address] = c;
+                        }
                     }
                 }
                 setContactsByAddress(map);
+                setContactRecordsByAddress(records);
             })
             .catch(() => {});
         return () => { cancelled = true; };
@@ -299,7 +333,10 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     function handleUnlock(event) {
         event.preventDefault();
-        if (stage === 'submitting' || password.length === 0) return;
+        if (stage === 'submitting') return;
+        if (!passwordErrors.validate({
+            [passwordFieldId]: password.length > 0 ? null : 'Enter your password.',
+        })) return;
         void fetchInbox(password);
     }
 
@@ -473,25 +510,41 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         const unread = Object.values(unreadByCp).filter(Boolean).length;
         writeMsgUnread(walletId, activeAccountId, unread);
     }, [unreadByCp, stage, walletId, activeAccountId, stateScope, scope]);
-    // Apply the toolbar's search + network filters. Search matches the
-    // counterparty address or its contact name; the network filter keeps a
-    // conversation when any of its messages live on the selected coin.
+    // Apply the toolbar's search + network filters. At wide two-panel widths,
+    // the one shared query also matches readable message text in every thread.
+    // Narrow widths retain the existing contact/address search and network
+    // picker exactly as before.
     const visibleConversations = useMemo(() => {
         const q = String(query || '').trim().toLowerCase();
         return conversations.filter((c) => {
-            if (network !== 'all' && !c.coins.has(network)) return false;
+            if (!twoPanel && network !== 'all' && !c.coins.has(network)) return false;
             if (!q) return true;
             const name = contactsByAddress[c.counterparty] || '';
             return c.counterparty.toLowerCase().includes(q)
-                || name.toLowerCase().includes(q);
+                || name.toLowerCase().includes(q)
+                || (twoPanel && conversableMessages.some((message) => (
+                    counterpartyOf(message, ownerSet) === c.counterparty
+                    && messageMatches(message, q)
+                )));
         });
-    }, [conversations, query, network, contactsByAddress]);
+    }, [conversations, query, network, contactsByAddress, twoPanel, conversableMessages, ownerSet]);
+    // Wide pages always show a detail. A deep-linked or clicked conversation
+    // wins while it still exists; otherwise the first inbox row is selected.
+    // Search never swaps the detail under the user, so the fallback comes from
+    // the complete conversation list rather than its filtered subset.
+    const activeCounterparty = useMemo(() => {
+        if (selectedCounterparty
+            && conversations.some((c) => c.counterparty === selectedCounterparty)) {
+            return selectedCounterparty;
+        }
+        return twoPanel ? conversations[0]?.counterparty || null : selectedCounterparty;
+    }, [selectedCounterparty, conversations, twoPanel]);
     const thread = useMemo(() => {
-        if (!selectedCounterparty) return [];
+        if (!activeCounterparty) return [];
         return conversableMessages
-            .filter((m) => counterpartyOf(m, ownerSet) === selectedCounterparty)
+            .filter((m) => counterpartyOf(m, ownerSet) === activeCounterparty)
             .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-    }, [conversableMessages, selectedCounterparty, ownerSet]);
+    }, [conversableMessages, activeCounterparty, ownerSet]);
 
     // Reply context: derive the from-address + chain from the owner side of
     // the selected thread's most recent message, so a reply originates from the
@@ -523,7 +576,28 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // Interleave iMessage-style day separators: a single centered date header
     // before the first message of each calendar day, repeated only when the day
     // changes. A run of messages on the same day shows the header once.
-    const threadItems = useMemo(() => buildThreadItems(thread), [thread]);
+    // A set keyword narrows the thread to the messages whose readable text
+    // holds it; a locked or undecryptable body has no text and never matches.
+    const threadNeedle = (twoPanel ? query : threadQuery).trim().toLowerCase();
+    const threadIdentityMatches = threadNeedle
+        ? activeCounterparty?.toLowerCase().includes(threadNeedle)
+            || String(contactsByAddress[activeCounterparty] || '').toLowerCase().includes(threadNeedle)
+        : false;
+    const shownThread = useMemo(() => {
+        if (!threadNeedle || threadIdentityMatches) return thread;
+        return thread.filter((m) => messageMatches(m, threadNeedle));
+    }, [thread, threadNeedle, threadIdentityMatches]);
+    const threadItems = useMemo(() => buildThreadItems(shownThread), [shownThread]);
+    // Chain the conversation ran on, for the explorer link and key lookup.
+    const threadChainId = useMemo(
+        () => thread.find((m) => m.chainId)?.chainId || replyContext?.chainId || null,
+        [thread, replyContext],
+    );
+    const latestThreadMessage = thread[thread.length - 1] || null;
+    const lastCopyableMessage = latestThreadMessage?.text === null
+        || latestThreadMessage?.text === undefined
+        ? null
+        : messageTextForDisplay(parseMessageContent(latestThreadMessage.text).text);
 
     // The first incoming message not in the seen-set captured when the thread
     // was opened: the boundary between already-seen messages and the new run.
@@ -546,7 +620,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         if (typeof firstUnreadRef.current?.scrollIntoView === 'function') {
             firstUnreadRef.current.scrollIntoView({ block: 'start' });
         }
-    }, [selectedCounterparty, firstUnreadMsg]);
+    }, [activeCounterparty, firstUnreadMsg]);
 
     // Open a conversation: capture the prior seen-set (so the thread can show
     // where unread began), record every currently-shown incoming txid as seen so
@@ -571,28 +645,77 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         setSelectedCounterparty(cp);
     }
 
-    const header = (
+    // The title bar holds, once the inbox list is open, the network filter as
+    // a filter icon, then New message as a plus at the far right, as on Bet
+    // Markets and every other list page. New message is reachable from every
+    // stage, the unlock form included, so the empty states carry text only
+    // and the action is never offered twice.
+    const headerFor = (withFilter, wideThreadOpen = false) => (
         <PageHeader
             onBack={onBack}
             title="Messaging"
+            trailing={onCompose || withFilter ? (
+                <span className={local.headerActions}>
+                    {wideThreadOpen ? (
+                        <ListFilterMenu
+                            query={query}
+                            onQueryChange={setQuery}
+                            label="Filter messaging"
+                            searchPlaceholder="Search"
+                            searchLabel="Search conversations and messages"
+                        >
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                icon={<Icon.XIcon />}
+                                aria-label="Clear Search"
+                                disabled={!query}
+                                onClick={() => setQuery('')}
+                            >
+                                Clear Search
+                            </Button>
+                        </ListFilterMenu>
+                    ) : withFilter ? (
+                        <ListFilterMenu
+                            query={query}
+                            onQueryChange={setQuery}
+                            active={network !== 'all'}
+                            label="Filter conversations"
+                            searchPlaceholder="Search"
+                            searchLabel="Search conversations"
+                        >
+                            <NetworkFilterDropdown size="md" value={network} onChange={setNetwork} iconOnly={false} />
+                        </ListFilterMenu>
+                    ) : null}
+                    {wideThreadOpen ? (
+                        <WideMessagingMenu
+                            address={activeCounterparty}
+                            chainId={latestThreadMessage?.chainId || replyContext?.chainId || null}
+                            txid={latestThreadMessage?.txid || null}
+                            copyValue={lastCopyableMessage}
+                            hasContact={Object.prototype.hasOwnProperty.call(contactsByAddress, activeCounterparty)}
+                            onCompose={onCompose}
+                            onContact={onContact}
+                        />
+                    ) : onCompose ? (
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            icon={<Icon.PlusIcon />}
+                            aria-label="New message"
+                            title="New message"
+                            onClick={() => onCompose()}
+                        />
+                    ) : null}
+                </span>
+            ) : null}
         />
     );
-    // The page header holds only the title and Back, so New conversation
-    // sits in the content's actions row. An empty inbox offers New message
-    // from its EmptyState instead, so the screen never shows the action twice.
-    const actionsFor = (emptyOffersCompose = false) => (onCompose && !emptyOffersCompose ? (
-        <Button
-            type="button"
-            variant="secondary"
-            icon={<Icon.PlusIcon />}
-            onClick={() => onCompose()}
-        >
-            New conversation
-        </Button>
-    ) : null);
 
-    const wrap = (children) => (
-        <Screen variant={variant} header={header}>
+    const wrap = (children, { withFilter = false } = {}) => (
+        <Screen variant={variant} header={headerFor(withFilter)}>
             {children}
         </Screen>
     );
@@ -604,7 +727,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                     <StatusMessage
                         variant="error"
                         recovery={{
-                            label: 'Try again',
+                            label: 'Try Again',
                             onAction: () => {
                                 setLoadError(null);
                                 setAddressesByChain(null);
@@ -615,14 +738,13 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                         {loadError}
                     </StatusMessage>
                 )}
-                actions={actionsFor()}
             />,
         );
     }
 
     if (!addressesByChain) {
         return wrap(
-            <ListPage actions={actionsFor()}>
+            <ListPage>
                 <div role="status" aria-label="Loading messages">
                     <Skeleton.List rows={5} />
                 </div>
@@ -632,7 +754,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     if (sweepAddrs.length === 0) {
         return wrap(
-            <ListPage actions={actionsFor()}>
+            <ListPage>
                 <EmptyState title="No messaging addresses" body="Messaging requires an address that can receive messages." />
             </ListPage>,
         );
@@ -642,7 +764,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // loading a sweep, or asking for a password to unlock one, that cannot run.
     if (offline && (stage === 'pick' || stage === 'submitting' || stage === 'password')) {
         return wrap(
-            <ListPage actions={actionsFor()}>
+            <ListPage>
                 <OfflineEmptyState body="Your messages load when the connection returns." onRetry={recheck} />
             </ListPage>,
         );
@@ -653,7 +775,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
     // moment addresses load, so this is just the brief transitional state.
     if (stage === 'pick') {
         return wrap(
-            <ListPage actions={actionsFor()}>
+            <ListPage>
                 <div role="status" aria-label="Loading messages">
                     <Skeleton.List rows={5} />
                 </div>
@@ -663,7 +785,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     if (stage === 'submitting') {
         return wrap(
-            <ListPage actions={actionsFor()}>
+            <ListPage>
                 <div role="status" aria-label="Loading messages">
                     <Skeleton.List rows={5} />
                 </div>
@@ -673,13 +795,14 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
 
     if (stage === 'password') {
         // A message can be composed without unlocking the inbox (a wallet
-        // with no ready signer is told why on the compose form), so New
-        // conversation stays reachable above the unlock form.
+        // with no ready signer is told why on the compose form), so the
+        // title bar's New message plus stays reachable above the unlock form.
         return wrap(
-            <ListPage actions={actionsFor()}>
+            <ListPage>
                 <FormPage
                     label="Unlock messaging inbox"
                     onSubmit={handleUnlock}
+                    errors={passwordErrors}
                     status={unlockError ? (
                         <StatusMessage id="messaging-unlock-error" variant="error">
                             {unlockError}
@@ -690,13 +813,13 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                             type="submit"
                             variant="primary"
                             loading={stage === 'submitting'}
-                            disabled={password.length === 0}
                         >
-                            Unlock inbox
+                            Unlock Inbox
                         </Button>
                     )}
                 >
                     <Input
+                        id={passwordFieldId}
                         ref={passwordRef}
                         type="password"
                         label="Password"
@@ -721,6 +844,13 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         return (
             <ActionConfirmScreen
                 {...shareLane.confirmProps}
+                summary={{
+                    verb: t('components.confirmSummary.verbShareKey'),
+                    direction: 'none',
+                    chainId: shareTarget.record.chainId,
+                    address: shareTarget.record.address,
+                    ...(shareTarget.request?.from ? { recipient: shareTarget.request.from } : {}),
+                }}
                 screenVariant={variant}
                 chainLabel={descriptor?.displayName || shareTarget.record.chainId}
                 signerReady={signerReady}
@@ -729,142 +859,11 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
         );
     }
 
-    // Thread view: tapping a conversation opens its full back-and-forth on a
-    // dedicated screen. The header's back arrow returns to the list; a composer
-    // docked in the footer sends a reply to the same counterparty.
-    if (selectedCounterparty) {
-        // Both endpoints ours: name the thread rather than showing the user
-        // their own address as if it were someone else's.
-        const cpName = ownerSet.has(selectedCounterparty)
-            ? 'You'
-            : neutralizeControlText(contactsByAddress[selectedCounterparty], { maxLength: 255 });
-        const replyRecord = replyContext ? recordByAddress[replyContext.fromAddress] : null;
-        const threadBody = (
-            thread.length === 0 ? (
-                <EmptyState title="No messages yet" body="Messages in this conversation appear here." />
-            ) : (
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                    {threadItems.map((item) => {
-                        if (item.type === 'sep') {
-                            return (
-                                <li key={item.key} className={local.daySeparator}>
-                                    {item.label}
-                                </li>
-                            );
-                        }
-                        const m = item.m;
-                        const isOutgoing = ownerSet.has(m.from);
-                        const isFirstUnread = m === firstUnreadMsg;
-                        const content = m.text !== null ? parseMessageContent(m.text) : null;
-                        return (
-                            <Fragment key={item.key}>
-                                {isFirstUnread ? (
-                                    <li
-                                        ref={firstUnreadRef}
-                                        className={local.unreadDivider}
-                                    >
-                                        <span>Unread messages</span>
-                                    </li>
-                                ) : null}
-                                <li
-                                    style={{
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: isOutgoing ? 'flex-end' : 'flex-start',
-                                        marginBottom: '0.25rem',
-                                    }}
-                                >
-                                    <div
-                                        className={local.messageBubble}
-                                        style={{
-                                            maxWidth: '75%',
-                                            borderRadius: '1.1rem',
-                                            whiteSpace: 'pre-wrap',
-                                            overflowWrap: 'anywhere',
-                                            wordBreak: 'break-word',
-                                            background: isOutgoing
-                                                ? 'var(--xc-accent-primary)'
-                                                : 'var(--xc-bg-muted)',
-                                            color: isOutgoing ? 'var(--xc-on-accent)' : 'var(--xc-text)',
-                                        }}
-                                    >
-                                        {content ? <MessageContent content={content} /> : encryptedPlaceholder(m.method)}
-                                    </div>
-                                    <div className={local.messageMeta}>
-                                        {m.timestamp ? (
-                                            <span>
-                                                <RelativeTime timestamp={m.timestamp} />
-                                                {m.method ? ` · ${methodLabel(m.method)}` : ''}
-                                            </span>
-                                        ) : null}
-                                        {content ? (
-                                            <CopyButton value={content.text} label="Copy" ariaLabel="Copy message" appearance="outlined" />
-                                        ) : null}
-                                    </div>
-                                </li>
-                            </Fragment>
-                        );
-                    })}
-                </ul>
-            )
-        );
-        // Submitting hands the reply off to the standard New-message form
-        // (via onCompose) pre-filled with this conversation's recipient, the
-        // typed body, and the encryption locked to the thread's method. The
-        // form is where the user reviews and can adjust delivery network + fee.
-        const composer = replyRecord && onCompose ? (
-            <ThreadComposer
-                value={draftsByCounterparty[selectedCounterparty] || ''}
-                onChange={(value) => setDraftsByCounterparty((prev) => ({
-                    ...prev,
-                    [selectedCounterparty]: value,
-                }))}
-                onSubmit={() => {
-                    const t = (draftsByCounterparty[selectedCounterparty] || '').trim();
-                    if (!t) return;
-                    setDraftsByCounterparty((prev) => ({
-                        ...prev,
-                        [selectedCounterparty]: '',
-                    }));
-                    onCompose({
-                        toAddress: selectedCounterparty,
-                        message: t,
-                        fixedEncryption: threadEncryption,
-                        // Lets the host return to this thread (not the list)
-                        // when the user backs out of the compose form.
-                        threadCounterparty: selectedCounterparty,
-                    });
-                }}
-            />
-        ) : null;
-        return (
-            <Screen
-                variant={variant}
-                header={(
-                    <PageHeader
-                        nested
-                        onBack={() => setSelectedCounterparty(null)}
-                        title={cpName || <AddressText address={displayAddress(selectedCounterparty)} />}
-                    />
-                )}
-                footer={composer}
-            >
-                <ListPage>{threadBody}</ListPage>
-            </Screen>
-        );
-    }
-
-    return wrap(
+    const inboxList = (
         <ListPage
             notices={inboxWarning ? (
                 <StatusMessage variant="warning">{inboxWarning}</StatusMessage>
             ) : null}
-            actions={actionsFor(conversations.length === 0)}
-            toolbar={(
-                <ListToolbar query={query} onQueryChange={setQuery} searchLabel="Search conversations">
-                    <NetworkFilterDropdown size="md" value={network} onChange={setNetwork} />
-                </ListToolbar>
-            )}
         >
             {handshakeRequesters.length > 0 ? (
                 <section aria-label="Encrypted-session requests" className={local.requestSection}>
@@ -910,42 +909,45 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                 <EmptyState
                     title="No messages yet"
                     body="Messages sent to or from this account's addresses show up here."
-                    actionLabel={onCompose ? 'New message' : undefined}
-                    onAction={onCompose ? () => onCompose() : undefined}
                 />
             ) : visibleConversations.length === 0 ? (
                 <EmptyState title="No matching conversations" body="Try a different search or network filter." />
             ) : (
-                <ul className={local.convList} aria-label="Conversations">
+                <ul
+                    className={local.convList}
+                    aria-label="Conversations"
+                    data-wide={twoPanel ? 'true' : undefined}
+                >
                     {visibleConversations.map((c) => {
                         const isUnread = Boolean(unreadByCp[c.counterparty]);
+                        const selected = twoPanel && activeCounterparty === c.counterparty;
                         return (
-                            <li key={c.counterparty}>
+                            <li key={c.counterparty} data-selected={selected ? 'true' : undefined}>
                                 <Button
                                     type="button"
                                     variant="ghost"
                                     block
                                     icon={null}
-                                    className={local.convItem}
+                                    className={selected
+                                        ? `${local.convItem} ${listDetailStyles.selectedRow}`
+                                        : local.convItem}
+                                    aria-current={selected ? 'true' : undefined}
                                     onClick={() => openConversation(c)}
                                 >
+                                    <span className={local.convRow}>
+                                      <ConversationAvatar
+                                          contact={ownerSet.has(c.counterparty) ? null : contactRecordsByAddress[c.counterparty] || null}
+                                          context="list"
+                                      />
+                                      <span className={local.convBody}>
                                         <span className={local.convTop}>
                                             <span className={local.convNameWrap}>
-                                                {isUnread ? (
-                                                    <span
-                                                        className={local.unreadDot}
-                                                        aria-label="Unread messages"
-                                                    />
-                                                ) : null}
                                                 <span
                                                     className={isUnread
                                                         ? `${local.convName} ${local.convNameUnread}`
                                                         : local.convName}
                                                 >
                                                     {ownerSet.has(c.counterparty) ? (
-                                                        // A thread with ourselves: keep the address
-                                                        // alongside the label, since an account can
-                                                        // hold more than one such conversation.
                                                         <Fragment>
                                                             You&nbsp;·&nbsp;
                                                             <AddressText address={displayAddress(c.counterparty)} />
@@ -957,31 +959,241 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                                             </span>
                                             <span className={local.convTime}>
                                                 {c.lastTimestamp ? <RelativeTime timestamp={c.lastTimestamp} /> : ''}
+                                                {isUnread ? (
+                                                    <span
+                                                        className={notificationStyles.unreadDot}
+                                                        aria-label="Unread"
+                                                    />
+                                                ) : null}
                                             </span>
                                         </span>
-                                        <span className={isUnread
-                                            ? `${local.convPreview} ${local.convPreviewUnread}`
-                                            : local.convPreview}
-                                        >
+                                        <span className={local.convPreview}>
                                             {previewFor(c.lastText)}
                                         </span>
+                                      </span>
+                                      <span className={local.rowChevron} data-row-chevron aria-hidden="true"><Icon.ForwardIcon /></span>
+                                    </span>
                                 </Button>
                             </li>
                         );
                     })}
                 </ul>
             )}
-        </ListPage>,
+        </ListPage>
+    );
+
+    // Narrow content keeps the dedicated conversation screen. Wide content
+    // uses this same thread in the right panel while the inbox stays mounted.
+    if (activeCounterparty) {
+        // Both endpoints ours: name the thread rather than showing the user
+        // their own address as if it were someone else's.
+        const cpName = ownerSet.has(activeCounterparty)
+            ? 'You'
+            : neutralizeControlText(contactsByAddress[activeCounterparty], { maxLength: 255 });
+        const cpContact = ownerSet.has(activeCounterparty) ? null : contactRecordsByAddress[activeCounterparty] || null;
+        const replyRecord = replyContext ? recordByAddress[replyContext.fromAddress] : null;
+        const threadBody = (
+            thread.length === 0 ? (
+                <EmptyState title="No messages yet" body="Messages in this conversation appear here." />
+            ) : shownThread.length === 0 ? (
+                <EmptyState title="No messages match" body="Matching messages appear here after you change the search." />
+            ) : (
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {threadItems.map((item) => {
+                        if (item.type === 'sep') {
+                            return (
+                                <li key={item.key} className={local.daySeparator}>
+                                    {item.label}
+                                </li>
+                            );
+                        }
+                        const m = item.m;
+                        const isOutgoing = ownerSet.has(m.from);
+                        const isFirstUnread = m === firstUnreadMsg;
+                        const content = m.text !== null ? parseMessageContent(m.text) : null;
+                        return (
+                            <Fragment key={item.key}>
+                                {isFirstUnread ? (
+                                    <li
+                                        ref={firstUnreadRef}
+                                        className={local.unreadDivider}
+                                    >
+                                        <span>Unread messages</span>
+                                    </li>
+                                ) : null}
+                                <li
+                                    style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: isOutgoing ? 'flex-end' : 'flex-start',
+                                        marginBottom: '0.25rem',
+                                    }}
+                                >
+                                    <MessageBubble
+                                        copyValue={content ? content.text : null}
+                                        style={{
+                                            maxWidth: '75%',
+                                            borderRadius: '1.1rem',
+                                            whiteSpace: 'pre-wrap',
+                                            overflowWrap: 'anywhere',
+                                            wordBreak: 'break-word',
+                                            background: isOutgoing
+                                                ? 'var(--xc-accent-primary)'
+                                                : 'var(--xc-bg-muted)',
+                                            color: isOutgoing ? 'var(--xc-on-accent)' : 'var(--xc-text)',
+                                        }}
+                                    >
+                                        {content ? <MessageContent content={content} highlight={threadNeedle} /> : encryptedPlaceholder(m.method)}
+                                    </MessageBubble>
+                                    <div className={local.messageMeta}>
+                                        {m.timestamp ? (
+                                            <span>
+                                                <RelativeTime timestamp={m.timestamp} />
+                                                {m.method ? ` · ${methodLabel(m.method)}` : ''}
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                </li>
+                            </Fragment>
+                        );
+                    })}
+                </ul>
+            )
+        );
+        // Submitting hands the reply off to the standard New-message form
+        // (via onCompose) pre-filled with this conversation's recipient, the
+        // typed body, and the encryption locked to the thread's method. The
+        // form is where the user reviews and can adjust delivery network + fee.
+        const composer = replyRecord && onCompose ? (
+            <ThreadComposer
+                value={draftsByCounterparty[activeCounterparty] || ''}
+                onChange={(value) => setDraftsByCounterparty((prev) => ({
+                    ...prev,
+                    [activeCounterparty]: value,
+                }))}
+                onSubmit={() => {
+                    const t = (draftsByCounterparty[activeCounterparty] || '').trim();
+                    if (!t) return;
+                    setDraftsByCounterparty((prev) => ({
+                        ...prev,
+                        [activeCounterparty]: '',
+                    }));
+                    onCompose({
+                        toAddress: activeCounterparty,
+                        message: t,
+                        fixedEncryption: threadEncryption,
+                        // Lets the host return to this thread (not the list)
+                        // when the user backs out of the compose form.
+                        threadCounterparty: activeCounterparty,
+                    });
+                }}
+            />
+        ) : null;
+        const threadTools = (
+            <span className={local.headerActions}>
+                <ListFilterMenu
+                    query={threadQuery}
+                    onQueryChange={setThreadQuery}
+                    searchPlaceholder="Search"
+                    searchLabel="Search messages"
+                    label="Filter messages"
+                />
+                <ThreadMenu
+                    address={activeCounterparty}
+                    chainId={threadChainId}
+                    hasContact={Object.prototype.hasOwnProperty.call(contactsByAddress, activeCounterparty)}
+                    onContact={onContact}
+                />
+            </span>
+        );
+        const threadTitle = (
+            <span className={local.threadTitle}>
+                <ConversationAvatar contact={cpContact} context="header" />
+                <span className={local.threadTitleText}>
+                    {cpName || <AddressText address={displayAddress(activeCounterparty)} />}
+                </span>
+            </span>
+        );
+        if (!twoPanel) return (
+            <Screen
+                variant={variant}
+                header={(
+                    <PageHeader
+                        nested
+                        onBack={() => setSelectedCounterparty(null)}
+                        // The counterparty's tile beside the name, as a coin
+                        // page puts its icon beside its title (G11).
+                        title={threadTitle}
+                        trailing={threadTools}
+                    />
+                )}
+                footer={composer}
+            >
+                <div ref={layoutRef} className={listDetailStyles.layoutRoot} data-list-detail="list">
+                    <ListPage>{threadBody}</ListPage>
+                </div>
+            </Screen>
+        );
+        return (
+            <Screen variant={variant} header={headerFor(true, true)} bodyClassName={listDetailStyles.twoPanelBody}>
+                <ListDetailSplit
+                    measureRef={layoutRef}
+                    storageKey="messaging"
+                    resizeLabel="Resize the conversation list"
+                    resizeHint="Drag to resize the conversation list, or press Enter to reset."
+                    layoutName="two-panel"
+                    list={inboxList}
+                    listLabel="Conversations"
+                    detailLabel={cpName || 'Conversation'}
+                    detail={(
+                        <div className={local.wideThread}>
+                            <ListPage>{threadBody}</ListPage>
+                            {composer ? <div className={local.wideComposer}>{composer}</div> : null}
+                        </div>
+                    )}
+                />
+            </Screen>
+        );
+    }
+
+    return (
+        <Screen variant={variant} header={headerFor(true)}>
+            <div ref={layoutRef} className={listDetailStyles.layoutRoot} data-list-detail="list">
+                {inboxList}
+            </div>
+        </Screen>
     );
 }
 
 /**
- * Message text keeps line breaks, turns only HTTP(S) URLs into links, and
- * exposes validated attachment envelopes as downloads.
+ * The counterparty's tile at the start of a conversation row and in the
+ * thread header: a saved contact draws its ContactAvatar (initials, colour,
+ * shape or image, as View Contact shows it); an address with no contact
+ * draws the wallet's unknown-person mark, the person icon on a muted circle
+ * that Dispenser explorer gives a seller with no name.
  *
- * @param {{ content: { text: string, attachment: { name: string, type: string, dataUrl: string, size: number } | null } }} props
+ * @param {{ contact: any, context: 'list' | 'header' }} props
  */
-function MessageContent({ content }) {
+function ConversationAvatar({ contact, context }) {
+    if (contact) return <ContactAvatar contact={contact} context={context} />;
+    return (
+        <span
+            className={context === 'header' ? `${local.unknownAvatar} ${local.unknownAvatarHeader}` : local.unknownAvatar}
+            data-unknown-avatar=""
+            aria-hidden="true"
+        >
+            <Icon.UserIcon />
+        </span>
+    );
+}
+
+/**
+ * Message text keeps line breaks and turns only HTTP(S) URLs into links.
+ * Messages have no attachments; a legacy envelope is already stripped.
+ *
+ * @param {{ content: { text: string } }} props
+ */
+function MessageContent({ content, highlight = '' }) {
     const displayText = messageTextForDisplay(content.text);
     const parts = displayText.split(/(https?:\/\/[^\s<>"']+)/gi);
     return (
@@ -996,32 +1208,439 @@ function MessageContent({ content }) {
                             rel="noopener noreferrer"
                             className={local.messageLink}
                         >
-                            {part} <span aria-hidden="true">↗</span>
+                            {highlightMatches(part, highlight)} <span aria-hidden="true">↗</span>
                         </a>
-                    ) : <Fragment key={`${index}-${part}`}>{part}</Fragment>)}
+                    ) : <Fragment key={`${index}-${part}`}>{highlightMatches(part, highlight)}</Fragment>)}
                 </span>
-            ) : null}
-            {content.attachment ? (
-                <a
-                    href={content.attachment.dataUrl}
-                    download={content.attachment.name}
-                    className={local.attachmentLink}
-                >
-                    <Icon.DownloadIcon />
-                    <span>
-                        {messageTextForDisplay(content.attachment.name)} ({content.attachment.size.toLocaleString()} bytes)
-                    </span>
-                </a>
             ) : null}
         </>
     );
 }
 
 /**
- * Docked thread composer: a message input plus a send button in the Screen
- * footer, rendered as one continuous bar. Submitting (Enter or the send
- * button) hands the trimmed draft up to the parent, which opens the standard
- * New-message form pre-filled.
+ * A small popup menu of copy actions. Closes on outside press, Escape, or
+ * after an item is chosen; the item reads "Copied" for a moment first.
+ *
+ * @param {object} props
+ * @param {string} props.label                     accessible name of the menu
+ * @param {Array<{ key: string, label: string, icon?: import('react').ReactNode, value?: string, href?: string, onSelect?: () => void, disabled?: boolean }>} props.items
+ *   a copy item (`value`), an external link (`href`) or an action (`onSelect`);
+ *   labels are Title Case and every button row carries its icon (G50)
+ * @param {() => void} props.onClose
+ * @param {string} [props.className]
+ */
+function CopyMenu({ label, items, onClose, className }) {
+    const ref = useRef(null);
+    const [copiedKey, setCopiedKey] = useState(null);
+    useEffect(() => {
+        const onDown = (event) => {
+            if (!ref.current?.contains(event.target)) onClose();
+        };
+        const onKey = (event) => {
+            if (event.key === 'Escape') onClose();
+        };
+        window.addEventListener('mousedown', onDown);
+        window.addEventListener('touchstart', onDown);
+        window.addEventListener('keydown', onKey);
+        ref.current?.querySelector('[role="menuitem"]')?.focus();
+        return () => {
+            window.removeEventListener('mousedown', onDown);
+            window.removeEventListener('touchstart', onDown);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [onClose]);
+    async function choose(item) {
+        const { ok } = await copyText(item.value);
+        setCopiedKey(ok ? item.key : null);
+        setTimeout(onClose, ok ? 700 : 0);
+    }
+    return (
+        <div ref={ref} className={`${local.copyMenu} ${className || ''}`.trim()} role="menu" aria-label={label}>
+            {items.map((item) => (item.href ? (
+                <a
+                    key={item.key}
+                    role="menuitem"
+                    className={local.copyMenuItem}
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={onClose}
+                >
+                    {/* The external-link cue: this row opens a new tab. */}
+                    <span className={local.copyMenuLinkIcon} aria-hidden="true"><Icon.ExternalLinkIcon /></span>
+                    <span>{item.label}</span>
+                </a>
+            ) : (
+                <Button
+                    key={item.key}
+                    type="button"
+                    variant="rowAction"
+                    size="sm"
+                    icon={item.icon}
+                    role="menuitem"
+                    className={local.copyMenuItem}
+                    disabled={item.disabled}
+                    onClick={item.onSelect
+                        ? () => { onClose(); item.onSelect(); }
+                        : () => choose(item)}
+                >
+                    {copiedKey === item.key ? 'Copied' : item.label}
+                </Button>
+            )))}
+        </div>
+    );
+}
+
+/**
+ * @param {object} props
+ * @param {string} props.address
+ * @param {string | null} props.chainId
+ * @param {string | null} props.txid
+ * @param {string | null} props.copyValue
+ * @param {boolean} props.hasContact
+ * @param {(() => void)} [props.onCompose]
+ * @param {(target: { address: string, chainId?: string, edit: boolean }) => void} [props.onContact]
+ */
+function WideMessagingMenu({ address, chainId, txid, copyValue, hasContact, onCompose, onContact }) {
+    const { messaging } = useMessaging();
+    const [open, setOpen] = useState(false);
+    const [sheetOpen, setSheetOpen] = useState(false);
+    const [settings, setSettings] = useState(/** @type {any} */ (null));
+    useEffect(() => {
+        if (typeof messaging.getSettings !== 'function') return undefined;
+        let cancelled = false;
+        Promise.resolve(messaging.getSettings())
+            .then((value) => { if (!cancelled) setSettings(value || null); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [messaging]);
+    const explorerHref = chainId && txid
+        ? explorerPageUrl({ chainId, kind: 'transaction', value: txid, settings })
+        : null;
+    const closeMenu = useCallback(() => setOpen(false), []);
+    return (
+        <span className={local.threadMenuWrap}>
+            <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                icon={<Icon.MoreIcon />}
+                aria-label="More"
+                aria-haspopup="menu"
+                aria-expanded={open ? 'true' : 'false'}
+                title="More"
+                data-header-control
+                onClick={() => setOpen((value) => !value)}
+            >
+                {null}
+            </Button>
+            {open ? (
+                <CopyMenu
+                    label="Messaging actions"
+                    className={local.threadMenuPanel}
+                    items={[
+                        {
+                            key: 'new-message',
+                            label: 'New Message',
+                            icon: <Icon.MessageIcon />,
+                            disabled: !onCompose,
+                            onSelect: () => onCompose?.(),
+                        },
+                        {
+                            key: 'new-contact',
+                            label: 'New Contact',
+                            icon: <Icon.UserIcon />,
+                            disabled: !onContact,
+                            onSelect: () => onContact?.({ address: '', edit: false }),
+                        },
+                        {
+                            key: 'edit-contact',
+                            label: 'Edit Contact',
+                            icon: <Icon.PencilIcon />,
+                            disabled: !hasContact || !onContact,
+                            onSelect: () => onContact?.({ address, chainId: chainId || undefined, edit: true }),
+                        },
+                        {
+                            key: 'copy-message',
+                            label: 'Copy Message',
+                            icon: <Icon.CopyIcon />,
+                            value: copyValue || undefined,
+                            disabled: copyValue == null,
+                        },
+                        explorerHref
+                            ? { key: 'explorer', label: 'View in Explorer', href: explorerHref }
+                            : { key: 'explorer', label: 'View in Explorer', icon: <Icon.ExternalLinkIcon />, disabled: true, onSelect: () => {} },
+                        {
+                            key: 'encryption',
+                            label: 'Encryption Details',
+                            icon: <Icon.LockIcon />,
+                            onSelect: () => setSheetOpen(true),
+                        },
+                    ]}
+                    onClose={closeMenu}
+                />
+            ) : null}
+            {sheetOpen ? (
+                <EncryptionSheet
+                    address={address}
+                    chainId={chainId}
+                    onClose={() => setSheetOpen(false)}
+                />
+            ) : null}
+        </span>
+    );
+}
+
+/**
+ * Header overflow menu of the open thread: page-level actions live here
+ * rather than as loose buttons in the page. Exactly four items, in order:
+ * add or edit the contact, copy the address, view it in the explorer, and
+ * the encryption details sheet.
+ *
+ * @param {object} props
+ * @param {string} props.address     the counterparty address
+ * @param {string | null} [props.chainId]
+ * @param {boolean} props.hasContact  the address is already a contact
+ * @param {(target: { address: string, chainId?: string, edit: boolean }) => void} [props.onContact]
+ */
+function ThreadMenu({ address, chainId, hasContact, onContact }) {
+    const { messaging } = useMessaging();
+    const [open, setOpen] = useState(false);
+    const [sheetOpen, setSheetOpen] = useState(false);
+    const [settings, setSettings] = useState(/** @type {any} */ (null));
+    // The explorer base can be overridden in Settings; read it once, and a
+    // shell without settings falls back to the chain's default explorer.
+    useEffect(() => {
+        if (typeof messaging.getSettings !== 'function') return undefined;
+        let cancelled = false;
+        Promise.resolve(messaging.getSettings())
+            .then((s) => { if (!cancelled) setSettings(s || null); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [messaging]);
+    const explorerHref = chainId
+        ? explorerPageUrl({ chainId, kind: 'address', value: address, settings })
+        : null;
+    const closeMenu = useCallback(() => setOpen(false), []);
+    return (
+        <span className={local.threadMenuWrap}>
+            <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                icon={<Icon.MoreIcon />}
+                aria-label="Conversation menu"
+                aria-haspopup="menu"
+                aria-expanded={open ? 'true' : 'false'}
+                title="More"
+                data-header-control
+                onClick={() => setOpen((v) => !v)}
+            >
+                {null}
+            </Button>
+            {open ? (
+                <CopyMenu
+                    label="Conversation actions"
+                    className={local.threadMenuPanel}
+                    items={[
+                        {
+                            key: 'contact',
+                            label: hasContact ? 'Edit Contact' : 'Add to Contacts',
+                            icon: hasContact ? <Icon.PencilIcon /> : <Icon.UserIcon />,
+                            disabled: !onContact,
+                            onSelect: () => onContact?.({ address, chainId: chainId || undefined, edit: hasContact }),
+                        },
+                        { key: 'address', label: 'Copy Address', icon: <Icon.CopyIcon />, value: address },
+                        explorerHref
+                            ? { key: 'explorer', label: 'View in Explorer', href: explorerHref }
+                            : { key: 'explorer', label: 'View in Explorer', icon: <Icon.ExternalLinkIcon />, disabled: true, onSelect: () => {} },
+                        { key: 'encryption', label: 'Encryption Details', icon: <Icon.LockIcon />, onSelect: () => setSheetOpen(true) },
+                    ]}
+                    onClose={closeMenu}
+                />
+            ) : null}
+            {sheetOpen ? (
+                <EncryptionSheet
+                    address={address}
+                    chainId={chainId}
+                    onClose={() => setSheetOpen(false)}
+                />
+            ) : null}
+        </span>
+    );
+}
+
+/**
+ * Encryption details of one conversation: end-to-end encrypted (ECIES) with
+ * the counterparty's public key cut in the middle and a Copy button, or
+ * "Not encrypted" when no key is known for the address.
+ *
+ * @param {{ address: string, chainId?: string | null, onClose: () => void }} props
+ */
+function EncryptionSheet({ address, chainId, onClose }) {
+    const { messaging } = useMessaging();
+    const rootRef = useRef(null);
+    const panelRef = useRef(null);
+    const titleId = useId();
+    const [pubkey, setPubkey] = useState(/** @type {string | null} */ (null));
+    const [loading, setLoading] = useState(true);
+    const [copied, setCopied] = useState(false);
+    useFocusTrap(panelRef, { active: true });
+    useBackHandler(onClose);
+    useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onClose]);
+    useEffect(() => {
+        if (!chainId || typeof messaging.getRecipientPubkey !== 'function') {
+            setLoading(false);
+            return undefined;
+        }
+        let cancelled = false;
+        Promise.resolve(messaging.getRecipientPubkey({ chainId, address }))
+            .then((key) => {
+                if (cancelled) return;
+                const value = typeof key === 'string' ? key : (key?.publicKey || key?.pubkey || null);
+                setPubkey(value || null);
+            })
+            .catch(() => {})
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    }, [messaging, chainId, address]);
+    async function handleCopy() {
+        const { ok } = await copyText(pubkey);
+        setCopied(Boolean(ok));
+    }
+    return (
+        <OverlaySurface
+            variant="sheet"
+            rootRef={rootRef}
+            surfaceRef={panelRef}
+            title="Encryption details"
+            titleId={titleId}
+            titleAs="p"
+            aria-labelledby={titleId}
+            onBackdrop={onClose}
+            tabIndex={-1}
+            footer={(
+                <Button variant="primary" block onClick={onClose}>Close</Button>
+            )}
+        >
+            {loading ? (
+                <p role="status">Checking encryption</p>
+            ) : pubkey ? (
+                <div className={local.encryptionBody}>
+                    <p>End-to-end encrypted (ECIES)</p>
+                    <p className={local.encryptionLabel}>Counterparty public key</p>
+                    <p className={local.encryptionKey} title={pubkey}>{cutMiddle(pubkey)}</p>
+                    <Button variant="secondary" size="sm" icon={<Icon.CopyIcon />} onClick={handleCopy}>
+                        {copied ? 'Copied' : 'Copy'}
+                    </Button>
+                </div>
+            ) : (
+                <div className={local.encryptionBody}>
+                    <p>Not encrypted</p>
+                    <p className={local.encryptionLabel}>No public key is known for this address yet.</p>
+                </div>
+            )}
+        </OverlaySurface>
+    );
+}
+
+// A long key as its first and last characters with an ellipsis between.
+function cutMiddle(value, head = 12, tail = 10) {
+    const s = String(value);
+    return s.length <= head + tail + 1 ? s : `${s.slice(0, head)}…${s.slice(-tail)}`;
+}
+
+// Whether a message's readable text holds the (lowercased) keyword. A body that
+// could not be decrypted has no text and never matches.
+function messageMatches(message, needle) {
+    if (message.text === null || message.text === undefined) return false;
+    const content = parseMessageContent(message.text);
+    return messageTextForDisplay(content.text).toLowerCase().includes(needle);
+}
+
+// Wrap each case-insensitive occurrence of the keyword in a <mark>.
+function highlightMatches(text, needle) {
+    if (!needle) return text;
+    const lower = text.toLowerCase();
+    const out = [];
+    let from = 0;
+    let at = lower.indexOf(needle, from);
+    while (at !== -1) {
+        if (at > from) out.push(text.slice(from, at));
+        out.push(<mark key={at}>{text.slice(at, at + needle.length)}</mark>);
+        from = at + needle.length;
+        at = lower.indexOf(needle, from);
+    }
+    if (from < text.length) out.push(text.slice(from));
+    return out;
+}
+
+/**
+ * One message bubble. Copy is a right-click, long-press or keyboard (Shift+F10
+ * or the Menu key) action that opens a "Copy message" menu; no button is
+ * drawn on the bubble.
+ *
+ * @param {object} props
+ * @param {string | null} props.copyValue  text to copy, or null when the body is not readable
+ * @param {object} props.style
+ * @param {import('react').ReactNode} props.children
+ */
+function MessageBubble({ copyValue, style, children }) {
+    const [open, setOpen] = useState(false);
+    const pressRef = useRef(null);
+    const canCopy = copyValue != null;
+    const cancelPress = () => {
+        if (pressRef.current) clearTimeout(pressRef.current);
+        pressRef.current = null;
+    };
+    useEffect(() => cancelPress, []);
+    return (
+        <div className={local.bubbleWrap}>
+            <div
+                className={local.messageBubble}
+                style={{ ...style, maxWidth: '100%' }}
+                onContextMenu={canCopy ? (event) => {
+                    event.preventDefault();
+                    setOpen(true);
+                } : undefined}
+                onKeyDown={canCopy ? (event) => {
+                    if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
+                        event.preventDefault();
+                        setOpen(true);
+                    }
+                } : undefined}
+                onPointerDown={canCopy ? (event) => {
+                    if (event.pointerType === 'mouse') return;
+                    cancelPress();
+                    pressRef.current = setTimeout(() => setOpen(true), 500);
+                } : undefined}
+                onPointerUp={cancelPress}
+                onPointerCancel={cancelPress}
+                onPointerMove={cancelPress}
+            >
+                {children}
+            </div>
+            {open && canCopy ? (
+                <CopyMenu
+                    label="Message actions"
+                    items={[{ key: 'message', label: 'Copy Message', icon: <Icon.CopyIcon />, value: copyValue }]}
+                    onClose={() => setOpen(false)}
+                />
+            ) : null}
+        </div>
+    );
+}
+
+/**
+ * Docked thread composer: a full-width message input in the Screen footer
+ * with no send button (operator ruling 2026-11-13). Submitting the form with
+ * Enter (phone keyboards show a Send key via enterKeyHint) hands the trimmed
+ * draft up to the parent, which opens the standard New-message form
+ * pre-filled.
  * The input is controlled by the parent so drafts reset per conversation.
  *
  * @param {object} props
@@ -1046,7 +1665,7 @@ function ThreadComposer({ value, onChange, onSubmit }) {
         <form className={local.composer} onSubmit={handleSubmit}>
             <Input
                 type="text"
-                enterKeyHint="go"
+                enterKeyHint="send"
                 className={local.composerInput}
                 placeholder="Message"
                 value={value}
@@ -1055,12 +1674,9 @@ function ThreadComposer({ value, onChange, onSubmit }) {
                     onChange(e.target.value);
                 }}
                 autoComplete="off"
-                aria-label="Message"
+                aria-label="Reply, press Enter to send"
                 error={emptyError}
             />
-            <Button type="submit" variant="success" size="sm" icon={null} aria-label="Send message">
-                <Icon.SendIcon />
-            </Button>
         </form>
     );
 }
@@ -1151,8 +1767,9 @@ function SessionRequestRow({
                             Message
                         </Button>
                     ) : null}
-                    <Button variant="success" icon={<Icon.KeyIcon />} onClick={onShare} loading={stage === 'sending'} disabled={demoGuard.blocked || shareBusy}>
-                        Share my key
+                    {/* A demo wallet never signs; the press answers with the refusal. */}
+                    <Button variant="success" icon={<Icon.KeyIcon />} onClick={demoGuard.blocked ? demoGuard.refuse : onShare} loading={stage === 'sending'} disabled={shareBusy}>
+                        Share My Key
                     </Button>
                 </div>
             )}
@@ -1335,7 +1952,6 @@ function previewFor(text) {
     if (typeof text === 'string' && text.trim()) {
         const content = parseMessageContent(text);
         if (content.text.trim()) return messageTextForDisplay(content.text);
-        if (content.attachment) return `Attachment: ${messageTextForDisplay(content.attachment.name)}`;
     }
     return '🔒 Encrypted message';
 }

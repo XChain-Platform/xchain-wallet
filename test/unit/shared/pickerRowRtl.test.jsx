@@ -24,13 +24,18 @@ function renderWith(messaging, node) {
     );
 }
 
-function expectInlineEndRoom(row) {
+// A picker row is one tappable list row ending in the chevron (G07); the
+// separate details button that sat over the row's end is gone, so there is no
+// overlay to keep the inline end clear for, and no physical left/right padding.
+function expectOneRowButton(name) {
+    expect(document.querySelector('[class*="rowWrap"]')).toBeNull();
+    const row = screen.getByRole('button', { name: new RegExp(name) });
     expect(row.style.paddingRight).toBe('');
     expect(row.style.paddingLeft).toBe('');
-    expect(row.style.paddingInlineEnd).toBe('56px');
+    expect(screen.queryByRole('button', { name: /details for/i })).toBeNull();
 }
 
-describe('picker rows keep the inline end clear for their row button', () => {
+describe('picker rows are one row button with no overlay at the inline end', () => {
     it('wallet picker', async () => {
         renderWith({
             listWallets: async () => [{ id: 'w1', name: 'Alpha', format: 'bip39' }],
@@ -44,9 +49,7 @@ describe('picker rows keep the inline end clear for their row button', () => {
             />
         ));
         await screen.findAllByText('Alpha');
-        const wrap = document.querySelector('[class*="rowWrap"]');
-        expect(wrap).not.toBeNull();
-        expectInlineEndRoom(wrap.firstElementChild);
+        expectOneRowButton('Alpha');
     });
 
     it('account picker', async () => {
@@ -63,8 +66,6 @@ describe('picker rows keep the inline end clear for their row button', () => {
             />
         ));
         await screen.findAllByText('Main');
-        const wrap = document.querySelector('[class*="rowWrap"]');
-        expect(wrap).not.toBeNull();
-        expectInlineEndRoom(wrap.firstElementChild);
+        expectOneRowButton('Main');
     });
 });

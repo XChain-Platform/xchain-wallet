@@ -42,18 +42,19 @@ const { Settings } = await import('../../packages/core/src/shared/routes/Setting
 const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
 
 const INTERNAL_SETTINGS_PAGES = [
-    ['this-wallet', 'This wallet'],
-    ['display', 'Display'],
+    ['wallet-remove', 'Remove Wallet'],
+    // The old Display and Safety pages open Appearance and Security (2026-11-13).
+    ['display', 'Appearance'],
     ['keyboard', 'Keyboard'],
-    ['privacy', 'Privacy'],
-    ['safety', 'Safety'],
-    ['wallet-mode', 'Wallet mode'],
+    // The old Privacy page opens Privacy and Sites (2026-11-13).
+    ['privacy', 'Privacy and Sites'],
+    ['safety', 'Security'],
     ['backup', 'Backup'],
     ['fees', 'Fees'],
-    ['network-endpoints', 'Network & endpoints'],
-    ['connected-sites', 'Connected sites'],
-    ['ads', 'Automatic donation system'],
-    ['developer', 'Developer mode'],
+    ['network-endpoints', 'Network & Endpoints'],
+    ['connected-sites', 'Connected Sites'],
+    ['ads', 'Automatic Donations'],
+    ['developer', 'Developer Options'],
     ['about', 'About'],
 ];
 
@@ -130,9 +131,9 @@ describe('regression/desktop-nav-marketplace', () => {
         expect(screen.queryByTestId('bottom-bar')).toBeNull();
         const navigation = screen.getByRole('navigation', { name: 'Primary navigation' });
         const tradingDestinations = within(navigation).getAllByRole('button')
-            .filter((button) => ['DEX', 'Marketplace', 'Dispensers'].includes(button.textContent.trim()))
+            .filter((button) => ['Exchange (DEX)', 'Marketplace', 'Dispensers'].includes(button.textContent.trim()))
             .map((button) => button.textContent.trim());
-        expect(tradingDestinations).toEqual(['DEX', 'Marketplace', 'Dispensers']);
+        expect(tradingDestinations).toEqual(['Exchange (DEX)', 'Marketplace', 'Dispensers']);
 
         fireEvent.click(within(navigation).getByRole('button', { name: 'Marketplace' }));
         expect(onSelect).toHaveBeenCalledWith('market-activity');
@@ -150,6 +151,13 @@ describe('regression/desktop-nav-marketplace', () => {
             expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
         },
     );
+
+    it('[REGRESSION P1] has no wallet-mode Settings sub-page', () => {
+        renderSettingsPage('wallet-mode');
+
+        expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Wallet Mode' })).toBeNull();
+    });
 
     it('[REGRESSION P1] returns from Accounts & addresses with Back to settings', () => {
         const onBack = vi.fn();

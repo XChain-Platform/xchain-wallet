@@ -71,7 +71,7 @@ describe('useLastView network scope', () => {
         pop({ walletId: 'wallet-1', network: 'mainnet', ...TOKEN_ROUTE });
 
         expect(onResumeParams).toHaveBeenCalledWith('token-detail', TOKEN_ROUTE.params);
-        expect(onResume).toHaveBeenCalledWith('token-detail');
+        expect(onResume).toHaveBeenCalledWith('token-detail', { source: 'history' });
     });
 
     it('stamps each history entry with the active network', () => {
@@ -92,6 +92,6 @@ describe('useLastView network scope', () => {
 
         pop({ walletId: 'wallet-1', network: 'mainnet', view: 'history', params: null });
 
-        expect(onResume).toHaveBeenCalledWith('history');
+        expect(onResume).toHaveBeenCalledWith('history', { source: 'history' });
     });
 });

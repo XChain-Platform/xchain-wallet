@@ -37,10 +37,10 @@ describe('Recovery phrase Scan QR field action', () => {
             const label = document.querySelector(`label[for="${textarea.id}"]`);
             const scan = screen.getByRole('button', { name: 'Scan QR', exact: true });
 
-            // Icon only: the scan viewfinder glyph and no visible text.
+            // Icon only: the QR code glyph (so it reads as a QR scan) and no visible text.
             const glyph = scan.querySelector('svg');
             expect(glyph).not.toBeNull();
-            expect(glyph.getAttribute('class') || '').toMatch(/scan-line/);
+            expect(glyph.getAttribute('class') || '').toMatch(/qr-code/);
             expect(scan.textContent.trim()).toBe('');
             expect(scan).toHaveAttribute('aria-label', 'Scan QR');
             expect(scan).toHaveAttribute('aria-pressed', 'false');

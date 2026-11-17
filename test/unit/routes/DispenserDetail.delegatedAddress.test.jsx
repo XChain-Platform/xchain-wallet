@@ -17,7 +17,7 @@
 // `source` and presented the one address that must NOT be paid.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
@@ -70,6 +70,8 @@ afterEach(() => cleanup());
 describe('DispenserDetail with a delegated GET_ADDRESS', () => {
     it('shows the delegated address in the Address row, not the source', async () => {
         mount();
+        // The page opens on Actions (G102); the Address row is on Details.
+        fireEvent.click(await screen.findByRole('tab', { name: /^Details$/ }));
         // The delegated pay-to address must be on the page (Address row and
         // buy panel both read it).
         const delegated = await screen.findAllByLabelText(DELEGATE);

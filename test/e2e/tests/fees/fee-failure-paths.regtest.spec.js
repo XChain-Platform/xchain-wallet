@@ -45,12 +45,13 @@
 // spec is about - which on this spec would be a false PASS, since both lanes
 // assert that something was refused.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openIssueSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
     REGTEST_COIN,
     fundAddress,
+    readIssueSource,
     minerRpc,
     encoderRpc,
     switchToRegtest,
@@ -117,8 +118,10 @@ async function submitIssue(page, tick, { nativeFee }) {
     const main = page.getByRole('main');
     await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
     await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
+    await main.getByLabel('Max supply', { exact: true }).fill(SUPPLY);
 
+    // The fee switch sits in the Fees section, closed until opened.
+    await openIssueSection(main, 'Speed and Fees');
     const toggle = feeToggle(main);
     await expect(toggle, 'Bitcoin does not offer the fee choice this spec is about')
         .toBeVisible({ timeout: 30_000 });
@@ -127,7 +130,7 @@ async function submitIssue(page, tick, { nativeFee }) {
 
     const password = main.getByLabel('Password', { exact: true });
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
     return main;
 }
 
@@ -159,7 +162,7 @@ test.describe('§11.5 fee failure paths: the payer cannot afford the protocol fe
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            source = await main.getByLabel('From').inputValue();
+            source = await readIssueSource(main);
             expect(source, 'the form has no Bitcoin address to sign with').toMatch(REGTEST_ADDRESS_RE);
 
             const q = new URLSearchParams({ action: 'ISSUE', params: `0|${TICK_NATIVE}|${SUPPLY}|0|8` });
@@ -239,15 +242,14 @@ test.describe('§11.5 fee failure paths: the payer cannot afford the protocol fe
             await expect(page.getByTestId('confirm-modal'),
                 'the XCHAIN-lane compose never reached a confirm screen')
                 .toBeVisible({ timeout: 120_000 });
-            const panel = page.getByTestId('preflight-panel');
-            await expect(panel, 'the confirm screen ran no pre-flight at all')
+            const warning = page.getByTestId('confirm-status');
+            await expect(warning, 'the confirm screen ran no pre-flight at all')
                 .toBeVisible({ timeout: 120_000 });
-            await expect(panel,
+            await expect(warning,
                 'the dry run did not report a failure, so the confirm screen is asking about a '
                 + 'different transaction than the one that was built (the D-119 shape)')
-                .toHaveAttribute('data-verdict', 'fail', { timeout: 120_000 });
-            await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
-            await expect(panel,
+                .toHaveAttribute('data-state', 'fail', { timeout: 120_000 });
+            await expect(warning,
                 'the panel does not say WHY, so the user cannot tell a fee shortfall from any other refusal')
                 .toContainText(/insufficient funds \(FEE\)/);
 
@@ -258,9 +260,11 @@ test.describe('§11.5 fee failure paths: the payer cannot afford the protocol fe
             await expect(ack, 'there is no "Sign anyway" override next to the failing finding')
                 .toBeVisible();
             await expect(ack, 'the override is pre-acknowledged').not.toBeChecked();
-            await expect(page.getByTestId('confirm-approve'),
-                'Approve is live on an action the network says will fail')
-                .toBeDisabled();
+            // G130: Approve keeps its colour; a tap says why and sends nothing.
+            await page.getByTestId('confirm-approve').click();
+            await expect(page.getByTestId('confirm-blocked'),
+                'Approve went ahead on an action the network says will fail')
+                .toBeVisible();
 
             await page.getByTestId('confirm-reject').click();
             await expect(page.getByTestId('confirm-modal')).toBeHidden({ timeout: 30_000 });

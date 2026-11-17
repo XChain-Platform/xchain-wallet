@@ -28,7 +28,7 @@
 
 import { test as base, expect } from '@playwright/test';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
-import { visibleWalletMenu, walletMenuFooter } from '../../../packages/core/src/shared/walletMenu.js';
+import { visibleWalletMenu } from '../../../packages/core/src/shared/walletMenu.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
 import { stubPriceFeed } from './priceStub.js';
 import { stubHubRegistry } from './hubStub.js';
@@ -40,6 +40,75 @@ import { guardOutbound, stubOutboundHosts } from './outboundGuard.js';
 // idle, because it is small rather than contended - 90s was not enough.
 // See test/e2e/timeout-budget.js.
 const KDF_STEP_MS = kdfStepTimeout();
+
+/**
+ * The pairing page's role buttons, by wallet mode. Create and import no
+ * longer offer a Wallet mode field (operator ruling 2026-11-15); the only
+ * way a wallet gets the `watcher` or `signer` mode is the two-phone pairing
+ * in Settings, Advanced, "Use another phone as a signer".
+ */
+const PAIR_ROLE_BUTTON = { watcher: 'Sign on Another Phone', signer: 'Make This Phone the Signer' };
+
+/** The name a mode wallet gets when the caller names none. */
+const DEFAULT_MODE_WALLET_NAME = { watcher: 'Signs on Another Phone', signer: 'Signer Phone' };
+
+/**
+ * The name of the Normal wallet a mode wallet is mirrored from when a spec
+ * asks `createWallet` for a mode wallet. It shares no words with any name a
+ * spec passes, so the switch to the mode wallet cannot pick it by mistake.
+ */
+const SHARED_PHRASE_WALLET_NAME = 'Shared Phrase Holder';
+
+/**
+ * Opens the two-phone pairing page from Settings, Advanced, "Use another
+ * phone as a signer", inside an unlocked session, picks the role for
+ * `walletMode`, and fills the phrase step. The caller presses Continue.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {{ words: string[] | string, name: string, password: string, walletMode: 'watcher' | 'signer' }} opts
+ */
+export async function fillPairAnotherPhone(page, { words, name, password, walletMode }) {
+    const role = PAIR_ROLE_BUTTON[walletMode];
+    if (!role) throw new Error(`fillPairAnotherPhone: no pairing role for wallet mode "${walletMode}"`);
+    await openSettings(page);
+    const main = page.getByRole('main');
+    await main.getByRole('button', { name: /^Advanced\b/ }).first().click();
+    await main.getByRole('button', { name: /^Use another phone as a signer\b/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Use Another Phone as a Signer' }),
+        'Settings, Advanced has no "Use another phone as a signer" page')
+        .toBeVisible({ timeout: 30_000 });
+    await page.getByRole('button', { name: role, exact: true }).click();
+    await page.getByLabel('Wallet name', { exact: true }).fill(name);
+    await page.getByRole('textbox', { name: /^Shared recovery phrase/ })
+        .fill(Array.isArray(words) ? words.join(' ') : words);
+    // The vault is open, so this is its own password, not a new one.
+    await page.getByLabel('Wallet password', { exact: true }).fill(password);
+}
+
+/**
+ * Adds `words` as a new wallet in `walletMode` through the two-phone pairing
+ * page (Settings, Advanced, "Use another phone as a signer") inside the
+ * unlocked session, then switches to it.
+ *
+ * The mode is fixed when the page adds the wallet (`addImportedWallet` with
+ * the picked role), before the code exchange, so this leaves once the page
+ * shows this wallet's pairing code; the header Back hands back through the
+ * shell's completion callback. No partner phone is needed for that.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string[]} words
+ * @param {{ name: string, password: string, walletMode: 'watcher' | 'signer' }} opts
+ */
+async function addModeWalletByPairing(page, words, { name, password, walletMode }) {
+    await fillPairAnotherPhone(page, { words, name, password, walletMode });
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    // The wallet exists in its mode once this phone's pairing code is built.
+    await expect(page.getByRole('button', { name: 'Copy Pairing Code' }),
+        `the pairing page did not add "${name}" in ${walletMode} mode`)
+        .toBeVisible({ timeout: KDF_STEP_MS });
+    await page.getByRole('button', { name: 'Back to previous screen' }).first().click();
+    await switchToWallet(page, name);
+}
 
 /** Home's message when it is offline with no balances read yet (home.offline.empty). */
 const OFFLINE_HOME_EMPTY = 'You are offline. Connect to load balances and use network actions.';
@@ -120,7 +189,7 @@ export function nav(page) {
 /**
  * The unlocked shell's signal that onboarding finished, in ANY shell.
  *
- * Anchored on Home's `<section aria-label="Active address balance">` (core's
+ * Anchored on Home's balance hero `<section>` (labelled by the wallet name, or "Active address balance" when unnamed; core's
  * `TotalBalanceHero`, rendered via `HomeTabs` by every shell) rather than on
  * navigation, because the three shells do not agree on navigation at all:
  * web/desktop render the rail or the bottom bar, and the MV3 popup renders
@@ -132,7 +201,15 @@ export function nav(page) {
  * rail is absent and Lock lives inside the closed wallet menu.
  */
 export function unlockedShell(page) {
-    return page.getByRole('region', { name: 'Active address balance' }).first();
+    // The hero is captioned with the wallet name once a wallet is active (G11),
+    // and only falls back to "Active address balance" when it has no name, so
+    // the name cannot be the anchor. The balance-visibility toggle is the
+    // hero card's own control, present under either caption.
+    return page.getByRole('region', { name: 'Active address balance' })
+        .or(page.getByRole('region').filter({
+            has: page.getByRole('button', { name: /^(?:Show|Hide) balance$/ }),
+        }))
+        .first();
 }
 
 /**
@@ -178,7 +255,7 @@ export async function openSettings(page) {
     } else {
         await openPaletteCommand(page, 'Settings');
     }
-    await expect(page.getByRole('button', { name: /^Developer mode/ }))
+    await expect(page.getByRole('button', { name: /^Network and Fees\b/ }))
         .toBeVisible({ timeout: 15_000 });
 }
 
@@ -306,15 +383,49 @@ export async function switchToWallet(page, name, { timeoutMs = 30_000 } = {}) {
  *
  * @returns {Promise<string[]>} the new wallet's recovery phrase
  */
-export async function addWallet(page, { name, password = DEFAULT_PASSWORD, ads = 'off' } = {}) {
+export async function addWallet(page, {
+    name, password = DEFAULT_PASSWORD, ads = 'off', walletMode = 'full',
+} = {}) {
     if (!name) throw new Error('addWallet needs a name, so the switch to it can be confirmed');
     await openWalletPicker(page);
-    await page.getByRole('button', { name: 'Add wallet', exact: true }).click();
+    await page.getByRole('button', { name: 'Add Wallet', exact: true }).click();
     // navigate:false: the add flow starts at the onboarding welcome inside the
     // unlocked shell, and a goto('/') would drop the session.
-    const words = await createWallet(page, { password, name, ads, navigate: false });
+    const words = await createWallet(page, { password, name, ads, navigate: false, walletMode });
     await switchToWallet(page, name);
     return words;
+}
+
+/**
+ * Adds a second wallet from an existing recovery phrase in the given mode,
+ * then switches to it. A wallet's mode is fixed when it is set up, so a spec
+ * that needs the same addresses in the `watcher` (another phone signs) or
+ * `signer` mode adds the phrase again as a new wallet instead of flipping the
+ * first one. Create and import no longer offer a mode, so a `watcher` or
+ * `signer` wallet comes from the two-phone pairing page in Settings,
+ * Advanced, and a `full` one from Import wallet.
+ *
+ * @param {string[]} words the recovery phrase of the wallet to mirror
+ */
+export async function addWalletFromPhrase(page, words, {
+    name, password = DEFAULT_PASSWORD, ads = 'off', walletMode = 'watcher',
+} = {}) {
+    if (!name) throw new Error('addWalletFromPhrase needs a name, so the switch to it can be confirmed');
+    if (walletMode !== 'full') {
+        await addModeWalletByPairing(page, words, { name, password, walletMode });
+        return;
+    }
+    await openWalletPicker(page);
+    await page.getByRole('button', { name: 'Add Wallet', exact: true }).click();
+    await page.getByRole('button', { name: 'Import wallet' }).click();
+    await page.getByRole('textbox', { name: /^Recovery phrase/ }).fill(words.join(' '));
+    await page.getByLabel('Wallet name', { exact: true }).fill(name);
+    await page.getByLabel('Password', { exact: true }).fill(password);
+    await page.getByLabel(/^Confirm( password)?$/).fill(password);
+    await page.getByRole('button', { name: 'Import', exact: true }).click();
+    await acknowledgeImportNotice(page, ads);
+    await expect(createdWalletShell(page, false)).toBeVisible({ timeout: KDF_STEP_MS });
+    await switchToWallet(page, name);
 }
 
 /**
@@ -386,7 +497,7 @@ function walletMenuRowId(name) {
         hasVmAddress: true,
         hasBtcAddress: true,
     });
-    const rows = [...groups.flatMap((group) => group.rows), ...walletMenuFooter()];
+    const rows = groups.flatMap((group) => group.rows);
     return rows.find((row) => row.label === name)?.id;
 }
 
@@ -460,33 +571,23 @@ export function mainButton(page, name) {
 /**
  * Clicks a named Manage Token action after its owner check has settled.
  *
- * Issuer actions are absent while ManageToken resolves the token owner. Once
- * that read completes, an action can render either among the first three page
- * buttons or in the More menu. If More appears first, the second wait still
- * accepts a direct button that arrives when the owner read completes.
+ * The actions are action list rows (G101) in collapsible groups, only Supply
+ * open on arrival. A row's accessible name is its title plus its description
+ * line, so the row is found by its exact title text. A closed group's header
+ * lists its action titles, so the group holding the label is opened first.
+ * An owner row stays aria-disabled until the owner read completes.
  */
 export async function clickManageTokenAction(main, label, { timeout = 30_000 } = {}) {
-    const button = main.getByRole('button', { name: label, exact: true });
-    const more = main.getByRole('button', { name: 'More', exact: true });
-    await expect(button.or(more).first(), `Manage Token offers neither a "${label}" button nor a More menu`)
-        .toBeVisible({ timeout });
-
-    if (await button.first().isVisible().catch(() => false)) {
-        await button.first().click();
-        return;
+    const page = main.page();
+    const row = main.locator('[data-action-id]').filter({ has: page.getByText(label, { exact: true }) });
+    if (!(await row.first().isVisible().catch(() => false))) {
+        const group = main.locator('button[aria-expanded="false"]').filter({ hasText: label });
+        if (await group.first().isVisible().catch(() => false)) await group.first().click();
     }
-
-    await more.click();
-    const item = main.getByRole('menuitem', { name: label, exact: true });
-    await expect(item.or(button).first(), `Manage Token has no "${label}" action after its owner check`)
-        .toBeVisible({ timeout });
-
-    if (await button.first().isVisible().catch(() => false)) {
-        await more.click();
-        await button.first().click();
-        return;
-    }
-    await item.click();
+    await expect(row.first(), `Manage Token has no "${label}" action`).toBeVisible({ timeout });
+    await expect(row.first(), `Manage Token's "${label}" action stays locked after its owner check`)
+        .not.toHaveAttribute('aria-disabled', 'true', { timeout });
+    await row.first().click();
 }
 
 /**
@@ -501,40 +602,136 @@ export async function expectMyTokensRow(main, row, message, { timeout = 60_000 }
     const loadFailed = main.getByRole('alert').filter({ hasText: 'Could not load your owned tokens' });
     await expect(async () => {
         if (await loadFailed.isVisible().catch(() => false)) {
-            await loadFailed.getByRole('button', { name: 'Try again', exact: true }).click();
+            await loadFailed.getByRole('button', { name: 'Try Again', exact: true }).click();
         }
         await expect(row, message).toBeVisible({ timeout: 2_000 });
     }, message).toPass({ timeout, intervals: [3_000, 5_000, 10_000] });
 }
 
 /**
- * Submits the token wizard's Details step and advances through Review when the
- * details are accepted. A refused submission stays on Details with an alert,
- * so callers that exercise a refusal can assert that verdict without waiting
- * for a review-stage button that will never be rendered.
+ * Picks a "Start from" preset on the one Issue Token form (Meme token, Utility
+ * token, Collectible, Limited edition or Subtoken). The picker is a button
+ * named after its placeholder, opening a list of options.
+ *
+ * @param {import('@playwright/test').Locator} main
+ * @param {RegExp} name  the option's accessible name, such as /^Subtoken/
+ */
+export async function pickIssuePreset(main, name) {
+    await main.getByRole('button', { name: /^Select template/ }).click();
+    await main.page().getByRole('option', { name }).click();
+}
+
+/**
+ * Chooses the Subtoken template's Parent token the way a user does: tap the
+ * token selector, then the parent's row on the picker of tokens this wallet
+ * owns. A pick also moves Network and From to the parent's owner, so a spec
+ * that signs from another address chooses it after this.
+ *
+ * @param {import('@playwright/test').Locator} main
+ * @param {string} parent  the owned parent's ticker
+ */
+export async function pickIssueParent(main, parent) {
+    const escaped = String(parent).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const field = main.getByRole('button', { name: /^Parent token:/ });
+    await expect(field).toBeVisible({ timeout: 30_000 });
+    await field.click();
+    // Ownership comes from the explorer, so a just-issued parent can take a
+    // moment to list.
+    const row = main.page().getByRole('button', { name: new RegExp(`^Select ${escaped} on `) });
+    await expect(row, `the Parent token picker does not list ${parent} as owned by this wallet`)
+        .toBeVisible({ timeout: 90_000 });
+    await row.click();
+    await expect(main.page().getByRole('button', { name: new RegExp(`^Parent token: ${escaped} on `) }))
+        .toBeVisible({ timeout: 30_000 });
+}
+
+/**
+ * Opens a collapsed section of any Form Standard form by its title (From,
+ * Fees, Initial mint, Public minting, Locks, Callback, ...) and waits
+ * for it to report open. Sections that are already open are left alone.
+ *
+ * @param {import('@playwright/test').Locator} main
+ * @param {string} title
+ */
+export async function openFormSection(main, title) {
+    const header = main.getByRole('button', { name: new RegExp(`^${title}\\b`) }).first();
+    if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click();
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
+}
+
+/** The Issue Token specs' name for {@link openFormSection}. */
+export const openIssueSection = openFormSection;
+
+/**
+ * Opens a form's source section, the one that holds Network and the From
+ * address. Most forms title it "From"; the signing forms title it "Signing
+ * with".
+ *
+ * @param {import('@playwright/test').Locator} main
+ */
+export async function openFromSection(main) {
+    await openFormSection(main, '(?:From|Signing with)');
+}
+
+/**
+ * The From address field's label. A form names it "From address" (the Form
+ * Standard default) or plain "From"; anchoring the pattern keeps it off the
+ * section header and off labels such as "From (token owner)".
+ */
+export const FROM_ADDRESS_LABEL = /^From(?: address)?$/;
+
+/**
+ * Opens a Form Standard form's From section and returns the From address
+ * field inside it, without waiting for a value.
+ *
+ * @param {import('@playwright/test').Locator | import('@playwright/test').Page} main  the open form
+ * @returns {import('@playwright/test').Locator}
+ */
+export async function openFromAddress(main) {
+    await openFromSection(main);
+    return main.getByLabel(FROM_ADDRESS_LABEL);
+}
+
+/**
+ * Waits for a chain picker and, when it is not showing because a Form
+ * Standard form keeps it inside the closed From section, opens that section.
+ * Screens that carry the picker outside such a section (a modal, a settings
+ * panel) show it at once and are left alone.
+ *
+ * @param {import('@playwright/test').Locator | import('@playwright/test').Page} scope
+ * @param {import('@playwright/test').Locator} trigger  the picker's trigger button
+ * @param {string} field  the picker's visible label, for the failure message
+ */
+export async function revealChainPicker(scope, trigger, field) {
+    const sourceHeader = scope.getByRole('button', { name: /^(?:From|Signing with)\b/ }).first();
+    await expect(trigger.or(sourceHeader).first(), `no "${field}" chain picker on this screen`)
+        .toBeVisible({ timeout: 30_000 });
+    if (!(await trigger.isVisible())) await openFromSection(scope);
+    await expect(trigger, `no "${field}" chain picker on this screen`)
+        .toBeVisible({ timeout: 30_000 });
+}
+
+/**
+ * Submits the Issue Token form with its Issue Token button. A wallet that can
+ * sign goes straight to the shared confirmation screen; a refused submission
+ * stays on the form with an alert, so callers that exercise a refusal can
+ * assert that verdict without waiting for a confirmation that never opens.
  *
  * @param {import('@playwright/test').Page} page
- * @param {{ onReview?: (main: import('@playwright/test').Locator) => Promise<void> }} [options]
- * @returns {Promise<boolean>} true when Review advanced toward confirmation,
- * false when the Details step displayed a refusal
+ * @returns {Promise<boolean>} true when the confirmation screen opened, false
+ * when the form displayed a refusal
  */
-export async function submitTokenWizard(page, { onReview } = {}) {
+export async function submitTokenWizard(page) {
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: 'Review token', exact: true }).click();
+    await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
-    const continueButton = main.getByRole('button', {
-        name: 'Issue token',
-        exact: true,
-    });
+    const confirm = page.getByTestId('confirm-approve');
     const refusal = main.getByRole('alert');
-    await expect(continueButton.or(refusal).first(),
-        'the token wizard neither opened Review nor explained why Details were refused')
+    await expect(confirm.or(refusal).first(),
+        'the Issue Token form neither opened confirmation nor explained why it was refused')
         .toBeVisible({ timeout: 90_000 });
 
-    if (!(await continueButton.isVisible().catch(() => false))) return false;
-    if (onReview) await onReview(main);
-    await continueButton.click();
-    return true;
+    return confirm.isVisible().catch(() => false);
 }
 
 /**
@@ -622,7 +819,7 @@ export async function completeRecoveryPhraseChallenge(page, words) {
  * Pass `waitForBalances: false` when an offline venue needs to switch networks
  * before Home can load the active address balances.
  *
- * Pass `bip39Passphrase` to take the "Use an extra passphrase (advanced)"
+ * Pass `bip39Passphrase` to take the "Use an extra passphrase"
  * branch. That produces an ORDINARY wallet: the passphrase typed here is
  * sealed onto the record under the wallet's own master key, and every later
  * unlock pools a signer from the password alone. It is no longer a way to reach
@@ -640,8 +837,27 @@ export async function completeRecoveryPhraseChallenge(page, words) {
 export async function createWallet(page, options = {}) {
     const {
         password = DEFAULT_PASSWORD, name, ads = 'off', navigate = true,
-        bip39Passphrase = null, waitForBalances = true,
+        bip39Passphrase = null, waitForBalances = true, walletMode = 'full',
     } = options;
+
+    // Create no longer offers a Wallet mode (operator ruling 2026-11-15): every
+    // created wallet is Normal, and only the two-phone pairing sets `watcher`
+    // or `signer`. So a mode wallet is made the way a user makes one: create a
+    // Normal wallet, then add the same phrase in that mode through Settings,
+    // Advanced, "Use another phone as a signer", and switch to it. The vault
+    // then holds two wallets with the same addresses; the mode one is active.
+    if (walletMode !== 'full') {
+        if (bip39Passphrase !== null) {
+            throw new Error('createWallet: the two-phone pairing page has no extra passphrase, so a mode wallet cannot take one');
+        }
+        const words = await createWallet(page, {
+            ...options, name: SHARED_PHRASE_WALLET_NAME, walletMode: 'full',
+        });
+        await addModeWalletByPairing(page, words, {
+            name: name || DEFAULT_MODE_WALLET_NAME[walletMode], password, walletMode,
+        });
+        return words;
+    }
 
     if (navigate) await page.goto('/');
     await dismissIntroCarousel(page);
@@ -657,6 +873,7 @@ export async function createWallet(page, options = {}) {
     // below reveals directly underneath it.
     await page.getByLabel(/^Confirm( password)?$/).fill(password);
     if (bip39Passphrase !== null) {
+        await page.getByRole('button', { name: /^Extra Passphrase/ }).click();
         await page.getByLabel(/^Use an extra passphrase/).check();
         await page.getByLabel('Extra passphrase', { exact: true }).fill(bip39Passphrase);
         await page.getByLabel('Confirm passphrase', { exact: true }).fill(bip39Passphrase);
@@ -683,7 +900,10 @@ export async function createWallet(page, options = {}) {
     const words = await readRecoveryPhrase(page);
     // Wording differs per shell again: the web app says "I have written
     // down...", the extension popup says "I've saved my recovery phrase."
-    await page.getByLabel(/written down|saved my recovery phrase/i).check();
+    // Scoped to the checkbox role: the row's 'About ...' help tip (U57) carries
+    // the same label and its help text says "written down", so getByLabel would
+    // match both and fail strict mode.
+    await page.getByRole('checkbox', { name: /written down|saved my recovery phrase/i }).check();
     await page.getByRole('button', { name: 'Verify recovery phrase' }).click();
 
     await completeRecoveryPhraseChallenge(page, words);
@@ -747,12 +967,12 @@ export async function dismissIntroCarousel(page) {
 }
 
 /**
- * Acknowledges the Automatic Donation System notice shown at the end of
+ * Acknowledges the Automatic Donations notice shown at the end of
  * onboarding, then (by default) turns donations off in Settings.
  *
  * The notice informs; it does not ask (spec §36.1). It has one Continue
  * button and no decline, so `ads: 'off'` takes the walk a user would: Settings
- * -> Automatic Donation System -> the switch. `ads: 'on'` only continues.
+ * -> Automatic Donations -> the switch. `ads: 'on'` only continues.
  *
  * Tolerant by design, like dismissIntroCarousel: the notice lives in
  * the shared CreateWallet route the web shell uses, and the extension popup
@@ -777,7 +997,7 @@ export async function dismissIntroCarousel(page) {
  * to the derivation.
  */
 export async function acknowledgeDonationNotice(page, ads = 'off', { waitForBalances = true } = {}) {
-    const notice = page.getByRole('heading', { name: 'Automatic Donation System', exact: true });
+    const notice = page.getByRole('heading', { name: 'Automatic Donations', exact: true });
     const outcome = await Promise.race([
         notice.waitFor({ state: 'visible', timeout: KDF_STEP_MS }).then(() => 'notice'),
         createdWalletShell(page, waitForBalances)
@@ -809,21 +1029,24 @@ export async function acknowledgeImportNotice(page, ads = 'on') {
 }
 
 /**
- * Turns the Automatic Donation System off the only way the wallet offers:
- * Settings -> Automatic Donation System. Ends back on Home.
+ * Turns automatic donations off the only way the wallet offers: Settings ->
+ * Automatic Donations -> Per transaction -> None (ruling 2026-11-14: one
+ * wallet-wide setting, no switch). Ends back on Home.
  */
 export async function turnOffDonations(page, { waitForBalances = true } = {}) {
     await expect(createdWalletShell(page, waitForBalances)).toBeVisible({ timeout: KDF_STEP_MS });
     await openSettings(page);
-    await page.getByRole('button', { name: /^Automatic donation system/ }).click();
-    const toggle = page.getByRole('switch', { name: 'Turn on Automatic Donation System', exact: true });
-    await expect(toggle).toBeVisible();
-    if (await toggle.isChecked()) {
-        // Click, not check(): the input is controlled by PERSISTED settings,
-        // so `checked` flips only once the vault write resolves.
-        await toggle.click();
-        await expect(toggle).not.toBeChecked();
+    await page.getByRole('button', { name: /^Automatic Donations/ }).click();
+    const perTransaction = page.getByRole('combobox', { name: 'Per transaction', exact: true });
+    await expect(perTransaction).toBeVisible();
+    if (!/None/.test(await perTransaction.textContent())) {
+        await perTransaction.click();
+        await page.getByRole('option', { name: 'None', exact: true }).click();
+        // The trigger shows PERSISTED settings, so it reads None only once the
+        // vault write resolves.
+        await expect(perTransaction).toHaveText(/None/);
     }
+    await expect(page.getByTestId('ads-hero')).toContainText('Automatic Donations off');
     await page.getByRole('button', { name: 'Back to settings', exact: true }).click();
     if (await nav(page).count() > 0) await gotoSection(page, 'Home');
     else await page.getByRole('button', { name: 'Back', exact: true }).click();

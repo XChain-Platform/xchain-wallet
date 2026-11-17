@@ -22,7 +22,9 @@
     appearance: none;
 }
 .row:first-of-type { border-top: none; }
-.row:hover { background: var(--xc-bg-muted); }
+@media (hover: hover) and (pointer: fine) {
+    .row:hover { background: var(--xc-row-hover-bg); }
+}
 .row:focus-visible {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: -2px;

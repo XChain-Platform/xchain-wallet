@@ -88,7 +88,7 @@ describe('Chrome 102 CSS compatibility audit', () => {
         ), 'utf8');
         expect(settingsCss).not.toContain(':has(');
         expect(settingsCss).toMatch(
-            /@media \(max-width: 480px\)[\s\S]*\.page div:not\(\[class\*=['"]labelRow['"]\]\)\s*\{[\s\S]*flex-wrap:\s*wrap !important;/,
+            /@media \(max-width: 480px\)[\s\S]*\.page div:not\(\[class\*=['"]labelRow['"]\]\):not\(\[class\*=['"]popover['"]\]\)\s*\{[\s\S]*flex-wrap:\s*wrap !important;/,
         );
         expect(audit(settingsCss)).toEqual([]);
     });

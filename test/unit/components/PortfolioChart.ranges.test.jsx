@@ -60,8 +60,14 @@ function selectedLabel(tablist) {
 function mountPortfolio(walletId) {
     const messaging = {
         getSettings: vi.fn(async () => ({})),
-        getNativePricesRequest: vi.fn(async () => ({
-            prices: { [MAINNET_CHAIN]: { sparkline: SPARKLINE, historyDaily: HISTORY_DAILY } },
+        // Like the price service, the daily series comes only with a history
+        // request; the chart holds and reuses it once it has it.
+        getNativePricesRequest: vi.fn(async (request) => ({
+            prices: {
+                [MAINNET_CHAIN]: request.includeHistory
+                    ? { sparkline: SPARKLINE, historyDaily: HISTORY_DAILY }
+                    : { sparkline: SPARKLINE },
+            },
         })),
     };
     render(
@@ -155,9 +161,10 @@ describe('TokenDetail range list', () => {
 
     it('draws daily history when a real wallet picks a longer range', async () => {
         const messaging = mountNativeDetail('real-wallet-1');
-        await screen.findByLabelText('1W price chart');
+        // The price line behind the card is a labelled image whose description names the range.
+        await screen.findByRole('img', { name: /Range 1W\./ });
         fireEvent.click(screen.getByRole('tab', { name: '3M' }));
-        expect(await screen.findByLabelText('3M price chart')).toBeTruthy();
+        expect(await screen.findByRole('img', { name: /Range 3M\./ })).toBeTruthy();
         expect(screen.queryByText('No price history yet')).toBeNull();
         expect(messaging.getNativePricesRequest).toHaveBeenCalledWith({
             chainIds: [MAINNET_CHAIN], includeSparkline: false, includeHistory: true, fiatCurrency: 'USD',
@@ -166,6 +173,6 @@ describe('TokenDetail range list', () => {
         expect(tabLabels(tablist)).toEqual(LABELS);
         expect(selectedLabel(tablist)).toBe('3M');
         fireEvent.click(within(tablist).getByRole('tab', { name: '24h' }));
-        expect(await screen.findByLabelText('24h price chart')).toBeTruthy();
+        expect(await screen.findByRole('img', { name: /Range 24h\./ })).toBeTruthy();
     });
 });

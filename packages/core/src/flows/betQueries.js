@@ -10,9 +10,9 @@
 
 // BET read queries (no signing). Thin passthroughs to the SDK's explorer
 // bet-read methods (getBetFeeds / getBetFeed / getBets / getOracleStats), which
-// read the indexer's bet_feeds / bets tables. Back BetFeedsList (market
-// browser), BetFeedDetail (market + pools + place-bet), MyBets and the oracle
-// console. Mirrors voteQueries.js.
+// read the indexer's bet_feeds / bets tables. Back BetFeedsList (the market
+// browser with its My bets and My markets tabs) and BetFeedDetail (market +
+// pools + place-bet). Mirrors voteQueries.js.
 
 /**
  * @typedef {Object} BetQueryOpts

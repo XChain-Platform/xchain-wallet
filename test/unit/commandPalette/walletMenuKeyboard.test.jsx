@@ -131,22 +131,20 @@ describe('wallet menu keyboard', () => {
         expect(currentRow()).toHaveAttribute('data-wallet-menu-row', firstGroup.rows[0].id);
     });
 
-    it('reaches Lock wallet by keyboard and activates it', async () => {
+    it('reaches the Lock wallet header button by Tab, left of Close, and arrows never land on it', async () => {
         await openMenu();
+        const lock = screen.getByRole('button', { name: 'Lock wallet' });
+        const close = screen.getByRole('button', { name: 'Close menu' });
+        expect(lock).not.toHaveAttribute('tabindex', '-1');
+        expect(lock.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(lock.closest('header')).toBe(close.closest('header'));
+        // Arrow keys walk the grid rows only.
         const rowCount = document.querySelectorAll('[data-wallet-menu-row]').length;
-        let reached = false;
         for (let i = 0; i <= rowCount; i += 1) {
-            if (currentRow()?.getAttribute('data-wallet-menu-row') === 'lock') { reached = true; break; }
+            expect(currentRow()?.getAttribute('data-wallet-menu-row')).not.toBe('lock');
             press('ArrowDown');
         }
-        // Relies on data-wallet-menu-row="lock".
-        expect(reached, 'ArrowDown reaches the lock row').toBe(true);
-
-        press('Enter');
-        // A focused button activates on Enter in a browser; jsdom does not.
-        if (!onLock.mock.calls.length && document.activeElement?.tagName === 'BUTTON') {
-            fireEvent.click(document.activeElement);
-        }
+        fireEvent.click(lock);
         expect(onLock).toHaveBeenCalledTimes(1);
     });
 });

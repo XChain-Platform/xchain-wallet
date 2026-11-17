@@ -30,14 +30,14 @@ const ROUTE_NAMES = [
     'MultisigCreate',
     'MultisigSendForm',
     'MultisigSigningSession',
-    'MyBets',
+    'MyDelegations',
     'MyLists',
     'MyOrdersView',
     'MySwapsView',
     'MyTokens',
     'ObligationsView',
-    'OperatorDashboard',
     'OracleConsole',
+    'OrderDetail',
     'OracleForm',
     'OracleRecord',
     'PairPartnerWallet',
@@ -48,6 +48,7 @@ const ROUTE_NAMES = [
     'PsbtSignForm',
     'PublishFileForm',
     'ReceivePicker',
+    'RemoveWallet',
     'RenameAccountForm',
     'RenameWalletForm',
     'RouteNotFound',
@@ -59,16 +60,16 @@ const ROUTE_NAMES = [
     'SignerSelectForm',
     'SleepForm',
     'StakeDetail',
-    'StakeForm',
     'StakeNew',
-    'StakingActionForm',
+    'StakingForm',
     'StakingList',
+    'SwapDetail',
     'SwapForm',
     'SweepForm',
     'TokenAdminForm',
     'TokenPicker',
     'TokenWizard',
-    'UnionListForm',
+    'UnbindForm',
     'VaultUnavailable',
     'VerifySignatureForm',
     'ViewPrivateKey',
@@ -80,6 +81,14 @@ const ROUTE_PROPS = Object.values(ROUTE_REGISTRY).reduce((props, route) => {
     if (!(route.component in props)) props[route.component] = route.minimalProps;
     return props;
 }, {
+    // The remove page only offers a wallet it can name for the typed confirmation.
+    RemoveWallet: { walletName: 'Primary Wallet', activeWalletId: null },
+    // Every staking route renders the one Staking form; scanned here on a
+    // contract target, and on validator staking by its own case below.
+    StakingForm: {
+        target: { kind: 'contract', chainId: 'bitcoin-mainnet', contractActionIndex: '1' },
+        action: 'stake',
+    },
     // Send renders this form in place when its source is a multisig, so it has
     // no route entry; a 2-of-3 P2WSH multisig shows the whole send form.
     MultisigSendForm: {
@@ -182,6 +191,19 @@ describe('M-Z route accessibility', () => {
     it.each(ROUTE_NAMES)('scans %s', async (name) => {
         const Component = await loadRoute(name);
         const props = { ...DEFAULT_PROPS, ...ROUTE_PROPS[name] };
+        const { container } = render(
+            <MessagingProvider shell="web" messaging={messaging()}>
+                <Component {...props} />
+            </MessagingProvider>,
+        );
+        await expectNoSeriousAxeViolations(container);
+    });
+
+    // The Staking form on validator staking: the action dropdown, Mode, the
+    // amount and the signing key, where a contract shows the toggle and Token.
+    it.each(['stake', 'unstake', 'claim-rewards', 'delegate', 'revoke'])('scans StakingForm on validator staking (%s)', async (action) => {
+        const Component = await loadRoute('StakingForm');
+        const props = { ...DEFAULT_PROPS, target: { kind: 'network', chainId: 'bitcoin-mainnet' }, action };
         const { container } = render(
             <MessagingProvider shell="web" messaging={messaging()}>
                 <Component {...props} />

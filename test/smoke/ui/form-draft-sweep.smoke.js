@@ -13,7 +13,7 @@
 // IssueTokenForm + DispenserForm. Both new adopters honor the
 // privacy.formDraftTtlMs setting, persist the user-visible composition
 // fields, exclude password, clear the draft on success, and surface a
-// Restore / Discard banner above the form stage.
+// Restore notice with a discard X above the form stage.
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -75,11 +75,13 @@ for (const [label, src, viewName, restoreFields] of [
             `${label} restoreDraft reads v.${field}`);
     }
 
-    // 6. Banner copy + Restore / Discard wiring.
-    assert.ok(/recovery=\{\{ label: 'Restore', onAction: restoreDraft \}\}/.test(src),
-        `${label} banner exposes a Restore action`);
-    assert.ok(/<DraftDiscardButton onClick=\{dismissDraft\} label="Discard saved draft">/.test(src),
-        `${label} banner exposes a Discard button`);
+    // 6. Shared notice + Restore / discard-X wiring.
+    assert.ok(/<DraftNotice[\s\S]{0,200}?onRestore=\{restoreDraft\}/.test(src),
+        `${label} banner exposes Restore through DraftNotice`);
+    assert.ok(/<DraftNotice[\s\S]{0,200}?onDiscard=\{discardSavedDraft\}/.test(src),
+        `${label} banner wires the discard X to saved-draft deletion`);
+    assert.ok(!/<DraftNotice[\s\S]{0,200}?onDismiss=/.test(src),
+        `${label} banner has no keep-draft dismiss callback`);
     assert.ok(/draft\.hasDraft\(\) && !draftPending/.test(src),
         `${label} only shows the banner when a draft exists and isn't already pending`);
 

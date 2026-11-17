@@ -135,6 +135,12 @@ export function attachAutoLockUnsavedListener(onUnsaved, onMessage) {
     return () => events.removeListener(listener);
 }
 
+// Names this page's realm. A request that changes wallet records carries it,
+// the background echoes it on the broadcast, and the realm that asked skips
+// its own echo: it already knows the outcome and is about to navigate itself.
+export const SURFACE_ID = globalThis.crypto?.randomUUID?.()
+    ?? `surface-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+
 /**
  * Apply a validated background event to one popup or side-panel realm.
  * Callers inject React setters so this small state machine stays unit-testable.
@@ -182,6 +188,9 @@ export function applySurfaceStateEvent(event, handlers) {
         if (event.payload?.change === 'removed') {
             const walletId = event.payload?.walletId;
             if (typeof walletId !== 'string' || !walletId) return undefined;
+            // The removing window handles its own outcome; reacting to the
+            // echo too could reload it onto Home before its page has moved on.
+            if (event.payload?.originSurface === SURFACE_ID) return undefined;
             return handlers.walletRemoved?.(walletId);
         }
         return undefined;

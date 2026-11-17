@@ -46,8 +46,11 @@ describe('LinkForm action layout', () => {
             </MessagingProvider>,
         );
 
-        expect(await screen.findByRole('heading', { level: 1, name: 'Link actions' }))
+        // The title is Title Case; the form Network and From live in the
+        // closed From section, opened here so its Network field is reachable.
+        expect(await screen.findByRole('heading', { level: 1, name: 'Link Actions' }))
             .toBeInTheDocument();
+        fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
         const networkPickers = await screen.findAllByRole('button', { name: /^Network:/ });
         const from = await screen.findByLabelText('From');
         expect(from).toHaveAttribute('readonly');
@@ -80,11 +83,13 @@ describe('LinkForm action layout', () => {
 
         fireEvent.change(actionInputs[0], { target: { value: '10' } });
         fireEvent.change(actionInputs[1], { target: { value: '20' } });
-        expect(await screen.findByText('Found: SEND 10 PEPE, block 902,311'))
-            .toBeInTheDocument();
-        expect(screen.getByText('Found: ISSUE PEPE, block 5,401,220')).toBeInTheDocument();
+        // Each card summarises what its number holds.
+        expect(await within(cards[0]).findByText('Token send')).toBeInTheDocument();
+        expect(within(cards[0]).getByText('902311')).toBeInTheDocument();
+        expect(await within(cards[1]).findByText('Token issuance')).toBeInTheDocument();
+        expect(within(cards[1]).getByText('5401220')).toBeInTheDocument();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Link actions' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Link Actions' }));
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledTimes(1));
         expect(composeForConfirm).toHaveBeenCalledWith(expect.objectContaining({
             chainId: LTC,

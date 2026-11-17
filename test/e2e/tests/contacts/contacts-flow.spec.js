@@ -57,18 +57,20 @@ for (const viewport of VIEWPORTS) {
 
         await test.step('add and edit a Bitcoin contact', async () => {
             await gotoSection(page, 'Contacts');
-            await page.getByRole('button', { name: 'Create first contact' }).click();
+            await page.getByRole('button', { name: 'Add contact', exact: true }).click();
             await page.getByRole('textbox', { name: 'Name', exact: true }).fill(CONTACT_NAME);
             await page.getByRole('textbox', { name: 'Address', exact: true }).fill(CONTACT_ADDRESS);
             await page.getByRole('button', { name: 'Create contact', exact: true }).click();
 
             await expect(contactRow(page, CONTACT_NAME)).toBeVisible();
             await contactRow(page, CONTACT_NAME).click();
-            const actions = page.getByRole('group', { name: 'Contact actions' });
-            await actions.getByRole('button', { name: 'Edit', exact: true }).click();
+            // The contact's actions are an action list (G101); a row's name
+            // carries its description, so it is matched by its leading title.
+            const actions = page.getByRole('list', { name: 'Contact actions' });
+            await actions.getByRole('button', { name: /^Edit\b/ }).click();
             await page.getByRole('textbox', { name: 'Name', exact: true }).fill(EDITED_NAME);
             await page.getByRole('textbox', { name: 'Notes', exact: true }).fill('Primary Bitcoin recipient');
-            await page.getByRole('button', { name: 'Update contact', exact: true }).click();
+            await page.getByRole('button', { name: 'Update Contact', exact: true }).click();
 
             await expect(page.getByRole('heading', { name: 'View Contact' })).toBeVisible();
             await expect(page.getByRole('main').getByText(EDITED_NAME, { exact: true })).toBeVisible();
@@ -79,13 +81,16 @@ for (const viewport of VIEWPORTS) {
 
         await test.step('filter contacts by network', async () => {
             const filter = page.getByRole('button', { name: /^Filter by network/ });
+            // The filter opens the full-screen network list.
             await filter.click();
-            await page.getByRole('option', { name: 'Litecoin', exact: true }).click();
+            await page.getByRole('dialog', { name: 'Network' })
+                .getByRole('button', { name: 'Select Litecoin', exact: true }).click();
             await expect(contactRow(page, EDITED_NAME)).toHaveCount(0);
             await expect(page.getByText('No results for these filters', { exact: true })).toBeVisible();
 
             await filter.click();
-            await page.getByRole('option', { name: 'Bitcoin', exact: true }).click();
+            await page.getByRole('dialog', { name: 'Network' })
+                .getByRole('button', { name: 'Select Bitcoin', exact: true }).click();
             await expect(contactRow(page, EDITED_NAME)).toBeVisible();
             await expectNoHorizontalOverflow(page, `${viewport.name} filtered contacts`);
         });
@@ -99,7 +104,8 @@ for (const viewport of VIEWPORTS) {
             await page.getByRole('button', { name: 'Open address book' }).click();
             await expect(page.getByRole('heading', { name: 'Contacts' })).toBeVisible();
             await page.getByRole('button', { name: /^Filter by network/ }).click();
-            await page.getByRole('option', { name: 'Bitcoin', exact: true }).click();
+            await page.getByRole('dialog', { name: 'Network' })
+                .getByRole('button', { name: 'Select Bitcoin', exact: true }).click();
             await expectNoHorizontalOverflow(page, `${viewport.name} Send contacts picker`);
 
             const pickerRow = page.getByRole('main').getByRole('button')
@@ -118,8 +124,8 @@ for (const viewport of VIEWPORTS) {
         await test.step('delete the contact', async () => {
             await gotoSection(page, 'Contacts');
             await contactRow(page, EDITED_NAME).click();
-            await page.getByRole('group', { name: 'Contact actions' })
-                .getByRole('button', { name: 'Delete', exact: true }).click();
+            await page.getByRole('list', { name: 'Contact actions' })
+                .getByRole('button', { name: /^Delete\b/ }).click();
 
             const dialog = page.getByRole('dialog', {
                 name: `Delete ${EDITED_NAME} from contacts?`,

@@ -112,7 +112,8 @@ function mountAirdrop() {
     return messaging;
 }
 
-const fromField = () => screen.findByLabelText('From');
+// The standard From section labels the field "From address".
+const fromField = () => screen.findByLabelText('From address');
 const strandedAlert = () => screen.queryByText(/No address on this network/i);
 
 afterEach(() => {
@@ -122,6 +123,8 @@ afterEach(() => {
 
 /** Opens the Network picker and picks the chain whose row name matches. */
 async function switchNetwork(name) {
+    // Network sits in the standard From section, closed on load.
+    fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
     fireEvent.click(await screen.findByRole('button', { name: /^Network:/ }));
     const option = await screen.findByRole('button', { name: new RegExp(`^Select ${name}`) });
     fireEvent.click(option);
@@ -131,7 +134,7 @@ describe('AirdropForm keeps a usable source address across a chain change (D-155
     it('renders form-specific help for its network and token fields', async () => {
         mountAirdrop();
 
-        expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'About Network', hidden: true })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'About Token to drop' })).toBeInTheDocument();
     });
 

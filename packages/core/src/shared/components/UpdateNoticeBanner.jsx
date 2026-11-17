@@ -32,7 +32,7 @@ import {
     checkForUpdateNotice,
     hasDirectUpdateLane,
 } from '../../flows/directUpdate.js';
-import { Button } from '../../ui/index.js';
+import { Button, Icon } from '../../ui/index.js';
 
 const DISMISSED_VERSION_KEY = 'xc:update-notice:dismissed-version';
 
@@ -111,7 +111,7 @@ export function UpdateNoticeBanner() {
             <Button
                 size="sm"
                 variant="secondary"
-                icon={null}
+                icon={<Icon.XIcon />}
                 onClick={dismiss}
                 aria-label="Dismiss update notice"
             >

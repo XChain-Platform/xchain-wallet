@@ -110,7 +110,6 @@ describe('route field help tips', () => {
         mount(MigrateToBip39, {
             legacyWalletId: 'wallet-old', onBack() {}, onMigrated() {}, onSweepChain() {},
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         await screen.findByLabelText('Password', { selector: 'input' });
 
         await expectHelp({

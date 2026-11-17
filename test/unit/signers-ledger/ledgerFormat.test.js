@@ -26,13 +26,12 @@ describe('chainIdToLedgerCurrency', () => {
         expect(chainIdToLedgerCurrency('bitcoin-mainnet')).toBe('bitcoin');
     });
 
-    // A Bitcoin Test app exists, but it derives at SLIP-44 coin-type 1' while
-    // the descriptor anchor pins 0' on every Bitcoin network, so mapping it
-    // would silently derive addresses the software signer/backend cannot see.
-    // Hardware-unsupported instead (see chainIdToLedgerCurrency).
-    it("throws for bitcoin-testnet (coin-type parity with the 0' descriptor anchor)", () => {
-        expect(() => chainIdToLedgerCurrency('bitcoin-testnet')).toThrow(/software wallet/);
-        expect(() => chainIdToLedgerCurrency('bitcoin-testnet')).toThrow(/funds would appear missing/);
+    // Operator ruling 2026-11-15: the Bitcoin test networks sign in the
+    // Bitcoin Test app at its own 1', so they map to hw-app-btc's test
+    // currencies, both of which speak the app's new protocol.
+    it('maps bitcoin-testnet and bitcoin-regtest to the Bitcoin Test app currencies', () => {
+        expect(chainIdToLedgerCurrency('bitcoin-testnet')).toBe('bitcoin_testnet');
+        expect(chainIdToLedgerCurrency('bitcoin-regtest')).toBe('bitcoin_regtest');
     });
 
     it('maps litecoin-mainnet to litecoin', () => {
@@ -57,19 +56,37 @@ describe('chainIdToLedgerCurrency', () => {
         expect(() => chainIdToLedgerCurrency('dogecoin-testnet')).toThrow(/software wallet/);
     });
 
-    // Same parity refusal as testnet, in the wording Trezor uses for both, and
-    // never the Litecoin/Dogecoin missing-app text meant for other coins.
-    it.each(['bitcoin-testnet', 'bitcoin-regtest'])('throws the Trezor parity message for %s', (chainId) => {
-        expect(() => chainIdToLedgerCurrency(chainId)).toThrow(/software wallet/);
-        expect(() => chainIdToLedgerCurrency(chainId)).toThrow(/funds would appear missing/);
-        const label = chainId === 'bitcoin-testnet' ? 'Bitcoin testnet' : 'Bitcoin regtest';
-        expect(() => chainIdToLedgerCurrency(chainId)).toThrow(`can't be used on ${label} - `);
+    // The missing-app refusal, named the way the UI names the network, with
+    // the vendor reason and never the raw chainId.
+    it.each([
+        ['litecoin-testnet', 'Litecoin testnet', 'Litecoin'],
+        ['litecoin-regtest', 'Litecoin regtest', 'Litecoin'],
+        ['dogecoin-testnet', 'Dogecoin testnet', 'Dogecoin'],
+        ['dogecoin-regtest', 'Dogecoin regtest', 'Dogecoin'],
+    ])('throws the missing-app message for %s', (chainId, label, coin) => {
+        expect(() => chainIdToLedgerCurrency(chainId)).toThrow(`can't be used on ${label} - use a software wallet`);
+        expect(() => chainIdToLedgerCurrency(chainId)).toThrow(`Ledger has no ${coin} test network app.`);
         expect(() => chainIdToLedgerCurrency(chainId)).not.toThrow(chainId);
-        expect(() => chainIdToLedgerCurrency(chainId)).not.toThrow(/Litecoin|Dogecoin/);
-        const messageOf = (fn) => { try { fn(); } catch (e) { return e.message; } return null; };
-        expect(messageOf(() => chainIdToLedgerCurrency(chainId)))
-            .toBe(messageOf(() => chainIdToTrezorCoin(chainId)));
     });
+
+    // Every refusal carries a stable code, so the connect flow can branch on it.
+    it.each(['litecoin-testnet', 'litecoin-regtest', 'dogecoin-testnet', 'dogecoin-regtest'])(
+        'refuses %s with code HW_NETWORK_UNSUPPORTED', (chainId) => {
+            let err = null;
+            try { chainIdToLedgerCurrency(chainId); } catch (e) { err = e; }
+            expect(err?.code).toBe('HW_NETWORK_UNSUPPORTED');
+        },
+    );
+
+    // Where BOTH vendors refuse a network, they word it the same way.
+    it.each(['dogecoin-testnet', 'dogecoin-regtest', 'litecoin-regtest'])(
+        'words the %s refusal like Trezor up to the vendor reason', (chainId) => {
+            const messageOf = (fn) => { try { fn(); } catch (e) { return e.message; } return null; };
+            const head = (m) => m.slice(0, m.indexOf(' ('));
+            expect(head(messageOf(() => chainIdToLedgerCurrency(chainId))))
+                .toBe(head(messageOf(() => chainIdToTrezorCoin(chainId))));
+        },
+    );
 });
 
 describe('serializeOutputs', () => {

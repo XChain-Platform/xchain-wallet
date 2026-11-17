@@ -36,6 +36,7 @@
 
 import { crypto as cryptoLib, storage as storageLib, flows as flowsLib } from '@xchain-wallet/core';
 import { saveSigningSecret } from './signingSecretSession.js';
+import { startPhraseRecoveryReconcile } from './walletCreate.js';
 import { checkUnlockAllowed, recordFailure } from './unlockThrottle.js';
 
 export class InvalidPasswordError extends Error {
@@ -247,6 +248,9 @@ async function performWalletUnlock(request, deps) {
         // own encrypted 25th word on the record, so a typed one has nothing
         // left to unlock and is deliberately NOT written to the slot.
         await saveSigningSecret(deps.signingSecretBackend, password);
+        // Backfill or refresh the recovery-phrase reset record off the reply
+        // path (operator ruling 2026-11-16); it never fails or slows the unlock.
+        startPhraseRecoveryReconcile(deps, masterKey, password);
     } finally {
         masterKey.fill(0);
     }

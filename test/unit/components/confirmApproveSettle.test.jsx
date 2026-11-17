@@ -38,16 +38,17 @@ describe('ConfirmActionModal Approve settle window', () => {
         approveSettle.ms = 0;
     });
 
-    it('ignores an Approve tap that lands as the review appears', () => {
+    it('ignores an Approve tap that lands as the review appears, without a disabled look (G130)', () => {
         const onApprove = vi.fn();
         render(<ConfirmActionModal {...props({ onApprove })} />);
         const approve = screen.getByTestId('confirm-approve');
 
-        expect(approve).toBeDisabled();
+        expect(approve).toBeEnabled();
         fireEvent.click(approve);
         act(() => { vi.advanceTimersByTime(APPROVE_SETTLE_MS - 1); });
-        expect(approve).toBeDisabled();
         expect(onApprove).not.toHaveBeenCalled();
+        // The settle window is not a reason the page reports.
+        expect(screen.queryByTestId('confirm-blocked')).toBeNull();
     });
 
     it('accepts Approve once the window has passed, exactly once', () => {
@@ -64,14 +65,17 @@ describe('ConfirmActionModal Approve settle window', () => {
 
     it('restarts the window for a newly composed request', () => {
         const first = { psbt: 'a' };
-        const { rerender } = render(<ConfirmActionModal {...props({ composed: first })} />);
+        const onApprove = vi.fn(() => new Promise(() => {}));
+        const { rerender } = render(<ConfirmActionModal {...props({ composed: first, onApprove })} />);
         act(() => { vi.advanceTimersByTime(APPROVE_SETTLE_MS); });
         expect(screen.getByTestId('confirm-approve')).toBeEnabled();
 
-        rerender(<ConfirmActionModal {...props({ composed: { psbt: 'b' } })} />);
-        expect(screen.getByTestId('confirm-approve')).toBeDisabled();
+        rerender(<ConfirmActionModal {...props({ composed: { psbt: 'b' }, onApprove })} />);
+        fireEvent.click(screen.getByTestId('confirm-approve'));
+        expect(onApprove).not.toHaveBeenCalled();
         act(() => { vi.advanceTimersByTime(APPROVE_SETTLE_MS); });
-        expect(screen.getByTestId('confirm-approve')).toBeEnabled();
+        fireEvent.click(screen.getByTestId('confirm-approve'));
+        expect(onApprove).toHaveBeenCalledTimes(1);
     });
 
     it('does not restart the window when only the preflight report refreshes', () => {

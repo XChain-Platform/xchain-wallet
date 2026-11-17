@@ -38,9 +38,12 @@ export function useProtocolFeeQuote({
     const hasQuoteInputs = Boolean(chainId && source && actionKey);
     const canQuote = enabled === true && hasQuoteTransport && hasQuoteInputs;
     const waitingForInputs = enabled === true && hasQuoteTransport && !hasQuoteInputs;
+    // `waiting`: pending only because the form's inputs are not all in yet,
+    // so nothing is loading and the card can say so instead of spinning.
     const [state, setState] = useState(() => ({
         quote: null,
         pending: canQuote || waitingForInputs,
+        waiting: !canQuote && waitingForInputs,
     }));
     // The effect is keyed on the params' content, so a form that rebuilds an
     // equal object on every render does not requote; the ref hands the effect
@@ -51,21 +54,21 @@ export function useProtocolFeeQuote({
     useEffect(() => {
         let active = true;
         if (!canQuote) {
-            setState({ quote: null, pending: waitingForInputs });
+            setState({ quote: null, pending: waitingForInputs, waiting: waitingForInputs });
             return () => { active = false; };
         }
 
-        setState({ quote: null, pending: true });
+        setState({ quote: null, pending: true, waiting: false });
         const timer = setTimeout(() => {
             const request = byActionData
                 ? messaging.quoteProtocolFee({ chainId, source, actionData: actionDataRef.current })
                 : messaging.requoteNativeFee({ chainId, source, actionString: actionKey });
             Promise.resolve(request)
                 .then((quote) => {
-                    if (active) setState({ quote: quote || null, pending: false });
+                    if (active) setState({ quote: quote || null, pending: false, waiting: false });
                 })
                 .catch(() => {
-                    if (active) setState({ quote: null, pending: false });
+                    if (active) setState({ quote: null, pending: false, waiting: false });
                 });
         }, QUOTE_DEBOUNCE_MS);
 

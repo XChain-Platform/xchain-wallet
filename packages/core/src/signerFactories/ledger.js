@@ -13,11 +13,12 @@
 //
 // Same split as `makeTrezorFactory`: core owns the post-transport pair
 // sequence, each shell owns how it obtains the WebHID transport + the
-// `@ledgerhq/hw-app-btc` class. The bitcoin-app pair sequence itself
-// is identical across shells: read the open app off the transport, derive a
-// device identifier from the account-0 xpub (Ledger has no stable
+// `@ledgerhq/hw-app-btc` class. The pair sequence itself is identical
+// across shells: read the open app off the transport, derive a device
+// identifier from the open app's account-0 key (Ledger has no stable
 // serial per §18 rationale), construct a `LedgerSigner`, surface
-// `pairingInfo` for `flows.registerSigner`.
+// `pairingInfo` for `flows.registerSigner`. Any supported coin app may be
+// open; the same call reopens the device before each sign.
 //
 // Core stays free of `@ledgerhq/*` imports. The shell binds them and
 // passes loaders through DI.
@@ -48,8 +49,34 @@ import {
     modelFromLedgerTransport,
     readLedgerAppInfo,
 } from '../signers/index.js';
+import {
+    LEDGER_APP_NAME_FOR_CHAIN,
+    coinTypeFor,
+} from '../../../signers-ledger/src/LedgerSigner.js';
+import { chainIdToLedgerCurrency } from '../../../signers-ledger/src/ledgerFormat.js';
 
-const LEDGER_IDENTITY_PATH = "m/44'/0'/0'";
+/**
+ * The chains each Ledger app serves, in LEDGER_APP_NAME_FOR_CHAIN order:
+ * Bitcoin, Bitcoin Test (testnet and regtest), Litecoin, Dogecoin.
+ * @param {string} appName
+ * @returns {string[]}
+ */
+function chainsServedBy(appName) {
+    return Object.keys(LEDGER_APP_NAME_FOR_CHAIN)
+        .filter((chainId) => LEDGER_APP_NAME_FOR_CHAIN[chainId] === appName);
+}
+
+/**
+ * Where a pairing reads the device identifier in an app: account 0 at the
+ * app's own coin type, `m/44'/<coin type>/0'`, which the app's path
+ * restriction allows. In the Bitcoin app that is `m/44'/0'/0'`, the path
+ * every identifier was read at before the other apps could pair, so a
+ * Bitcoin pairing still gives the same identifier.
+ * @param {string} chainId  any chain the open app serves
+ */
+function identityPathFor(chainId) {
+    return `m/44'/${coinTypeFor(chainId)}/0'`;
+}
 
 /**
  * @typedef {Object} LedgerFactoryDeps
@@ -114,8 +141,6 @@ export function makeLedgerFactory({ getTransport, getAppClass, sdkRegistry }) {
         if (typeof Btc !== 'function') {
             throw new Error('makeLedgerFactory: getAppClass did not return a constructable Btc class');
         }
-        const app = new Btc({ transport, currency: 'bitcoin' });
-
         // Read through the transport, not the app client: hw-app-btc's `Btc`
         // class has no `getAppAndVersion` method.
         let appInfo;
@@ -128,27 +153,31 @@ export function makeLedgerFactory({ getTransport, getAppClass, sdkRegistry }) {
             throw new Error('pairLedgerSigner: device did not report an app name');
         }
 
-        // Pairing reads the identity from Bitcoin's coin-type 0' path. Any
-        // other open app rejects that request with an opaque device code, so
-        // identify the open app before attempting the derivation.
+        // Each coin app answers only its own coin type, so the identifier is
+        // read in whichever supported app is open (Bitcoin, Bitcoin Test,
+        // Litecoin, Dogecoin): this same call reopens the device before a
+        // sign, and the sign needs its own chain's app. Which device it is
+        // gets decided per chain by hardwareSession.ensureLive against the
+        // record's identities (ledgerIdentity.js), not by this identifier.
         //
-        // Worded as end-user copy on purpose: PairSignerForm renders it in the
-        // pairing dialog, so it carries no `pairLedgerSigner:` prefix (that
-        // prefix is what userFacingMessage strips, and stripping this one
-        // would cost the reader the only actionable sentence) and no
-        // coin-type / derivation wording (the reason lives in the comment
-        // above, where the person who needs it is reading).
-        if (appInfo.name !== 'Bitcoin') {
+        // Any other app rejects the request with an opaque device code, so it
+        // is named first. Worded as end-user copy on purpose: PairSignerForm
+        // renders it in the pairing dialog, so it carries no
+        // `pairLedgerSigner:` prefix (that prefix is what userFacingMessage
+        // strips) and no coin-type wording (the reason lives here).
+        const chainIds = chainsServedBy(appInfo.name);
+        if (!chainIds.length) {
             throw new Error(
                 `The "${appInfo.name}" app is open on this device. `
-                + 'Open the Bitcoin app on your Ledger, then try again.',
+                + 'Open the Bitcoin app on your Ledger (or the app for the network you use), then try again.',
             );
         }
+        const app = new Btc({ transport, currency: chainIdToLedgerCurrency(chainIds[0]) });
 
-        // Identity xpub at the BTC account-0 path → device identifier.
+        // Identity key at the open app's account-0 path → device identifier.
         let identity;
         try {
-            identity = await app.getWalletPublicKey(LEDGER_IDENTITY_PATH, { verify: false });
+            identity = await app.getWalletPublicKey(identityPathFor(chainIds[0]), { verify: false });
         } catch (err) {
             throw new Error(`pairLedgerSigner: failed to read identity xpub: ${err?.message || err}`);
         }
@@ -177,6 +206,10 @@ export function makeLedgerFactory({ getTransport, getAppClass, sdkRegistry }) {
                 model,
                 deviceIdentifier,
                 firmwareVersion,
+                // The open app and the chains it serves, which the reconnect
+                // check reads to pick an identity this app can re-derive.
+                appName: appInfo.name,
+                chainIds,
             },
         };
     };

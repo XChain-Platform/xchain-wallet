@@ -28,6 +28,6 @@ describe('regression/route-not-found-h1', () => {
             </MessagingProvider>,
         );
         const headings = screen.getAllByRole('heading', { level: 1 });
-        expect(headings.map((h) => h.textContent)).toEqual(['Page not found']);
+        expect(headings.map((h) => h.textContent)).toEqual(['Page Not Found']);
     });
 });

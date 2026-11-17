@@ -44,8 +44,10 @@ describe('LockedSendOutcomeNotice', () => {
         outcomes = [{ id: 'p1', kind: 'sent', txid: TXID, amount: '0.0003', tick: 'BTC', summary: 'Send 0.0003 BTC to bcrt1qdest' }];
         render(<LockedSendOutcomeNotice walletId="w1" routeKey="home" />);
         const notice = await screen.findByTestId('locked-send-outcome');
+        const title = screen.getByText('Sent while the wallet was locked.');
         expect(notice.getAttribute('role')).toBe('status');
-        expect(notice.textContent).toContain('Sent while the wallet was locked.');
+        expect(title.tagName).toBe('DIV');
+        expect(title.nextElementSibling).toHaveTextContent('Send 0.0003 BTC to bcrt1qdest');
         expect(notice.textContent).toContain('Send 0.0003 BTC to bcrt1qdest');
         expect(notice.textContent).toContain(`${TXID.slice(0, 8)}…${TXID.slice(-8)}`);
     });

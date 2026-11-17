@@ -312,7 +312,7 @@ test.describe('scan and classify (§24.3)', () => {
                 'an xchain: receive intent was not routed').toBe('routed');
             // Anchored on a Receive-only control rather than the title: PageHeader
             // renders its title as a <span>, so there is no heading role to match.
-            await expect(page.getByRole('button', { name: 'Copy QR code', exact: true }),
+            await expect(page.getByRole('button', { name: /^Copy (QR code|payment link)/ }),
                 'a receive intent did not open the Receive screen')
                 .toBeVisible({ timeout: 30_000 });
             await expect(page.getByLabel('To', { exact: true }),

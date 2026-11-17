@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useState } from 'react';
-import { Button, StatusMessage } from '@xchain-wallet/core/ui';
+import { Icon, Notice } from '@xchain-wallet/core/ui';
 import { t } from '../../../core/src/i18n/index.js';
 import { useExtensionWallet } from '../useExtensionWallet.js';
 import styles from './ExtensionBanner.module.css';
@@ -64,62 +64,47 @@ export function ExtensionBanner() {
 
     if (enabled) {
         return (
-            <div role="status" className={styles.banner} data-state="active">
-                <span className={styles.label}>
-                    <strong>{t('extensionBanner.activeTitle')}</strong>
-                    {' '}{t('extensionBanner.activeBody')}
-                </span>
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={null}
-                    onClick={disable}
+            <div className={styles.banner}>
+                <Notice
+                    tone="info"
+                    flush
+                    data-state="active"
+                    title={t('extensionBanner.activeTitle')}
+                    action={{
+                        label: t('extensionBanner.switchBack'),
+                        onAction: disable,
+                        icon: <Icon.RefreshIcon />,
+                    }}
                 >
-                    {t('extensionBanner.switchBack')}
-                </Button>
+                    {t('extensionBanner.activeBody')}
+                </Notice>
             </div>
         );
     }
 
+    // The offer is an info Notice with the one action and the X ("Not now").
+    // A failed connect is its own danger Notice under it, never a box inside it.
     return (
-        <div
-            role="status"
-            className={error ? `${styles.banner} ${styles.withMessage}` : styles.banner}
-            data-state="offer"
-        >
-            <span className={styles.label}>
-                <strong>{t('extensionBanner.detectedTitle')}</strong>
-                {' '}{t('extensionBanner.detectedBody')}
-            </span>
-            <span className={styles.actions}>
-                <Button
-                    variant="primary"
-                    size="sm"
-                    icon={null}
-                    onClick={enable}
-                    disabled={connecting}
-                >
-                    {connecting
+        <div className={styles.banner}>
+            <Notice
+                tone="info"
+                flush
+                data-state="offer"
+                title={t('extensionBanner.detectedTitle')}
+                action={{
+                    label: connecting
                         ? t('extensionBanner.connecting')
-                        : t('extensionBanner.useExtension')}
-                </Button>
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={null}
-                    onClick={dismiss}
-                    aria-label={t('extensionBanner.dismissLabel')}
-                >
-                    {t('extensionBanner.notNow')}
-                </Button>
-            </span>
-            {/* Its own full-width row, so the failure is not squeezed into the
-                text column beside the buttons on a phone. */}
-            {error ? (
-                <div className={styles.message}>
-                    <StatusMessage variant="error">{error}</StatusMessage>
-                </div>
-            ) : null}
+                        : t('extensionBanner.useExtension'),
+                    onAction: enable,
+                    icon: <Icon.LinkIcon />,
+                    disabled: connecting,
+                }}
+                onDismiss={dismiss}
+                dismissLabel={t('extensionBanner.dismissLabel')}
+            >
+                {t('extensionBanner.detectedBody')}
+            </Notice>
+            <Notice tone="danger" flush>{error}</Notice>
         </div>
     );
 }

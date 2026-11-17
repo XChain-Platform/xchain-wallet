@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
@@ -84,9 +84,11 @@ describe('History offline cache', () => {
         expect(client.getAddressHistory).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole('button', { name: /Send.*Confirmed/i }));
-        const explorer = screen.getByRole('button', { name: 'XChain' });
-        expect(explorer).toBeDisabled();
-        expect(explorer).toHaveAttribute('title', 'This action needs a network connection.');
+        // The explorer is a disabled row of the Actions tab's list that says why (G101).
+        const explorer = screen.getByRole('button', { name: /^View on XChain/ });
+        expect(explorer).toHaveAttribute('aria-disabled', 'true');
+        expect(explorer).toHaveTextContent('This action needs a network connection.');
+        expect(screen.queryByRole('link', { name: /^View on XChain/ })).toBeNull();
 
         setNavigatorOnline(true);
         act(() => { window.dispatchEvent(new Event('online')); });
@@ -131,8 +133,15 @@ describe('History offline cache', () => {
         );
 
         expect(await screen.findByText(/Showing saved action details/)).toBeInTheDocument();
-        const networkButtons = screen.getAllByTitle('This action needs a network connection.');
-        expect(networkButtons.length).toBeGreaterThan(1);
-        for (const button of networkButtons) expect(button).toBeDisabled();
+        // The explorer links are rows of the Actions view's action list (G101),
+        // the view the page opens on; offline each stays a dimmed row that
+        // says why.
+        const list = screen.getByRole('list', { name: 'Actions for this transaction' });
+        const networkRows = within(list).getAllByRole('button', { name: /^View on/ });
+        expect(networkRows.length).toBeGreaterThan(1);
+        for (const row of networkRows) {
+            expect(row.getAttribute('aria-disabled')).toBe('true');
+            expect(row).toHaveAccessibleDescription('This action needs a network connection.');
+        }
     });
 });

@@ -10,6 +10,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
+import { feeForRate, networkFeeEditor, openNetworkFeeEditor } from '../../helpers/customNetworkFee.js';
 
 const LTC = 'litecoin-mainnet';
 const LTC_FROM = 'ltc1qyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zuxktx9';
@@ -79,12 +80,13 @@ describe('Send maps encoder refusals onto the field that fixes them', () => {
         ));
         await approveSend(messaging);
         fireEvent.change(await screen.findByLabelText('Network fee'), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '1' } });
+        // Custom opens the Network fee line's one editor (G113).
+        fireEvent.change(networkFeeEditor(), { target: { value: feeForRate(1, LTC) } });
         await submit(messaging);
 
         const alert = await screen.findByText(/below the network minimum of 1 sat\/vB/);
         expect(alert.textContent).not.toMatch(/feePerKb|base units|relay minimum/);
-        expect(screen.getByLabelText(/Custom fee rate/)).toHaveAttribute('aria-invalid', 'true');
+        expect(openNetworkFeeEditor()).toHaveAttribute('aria-invalid', 'true');
     });
 
     it('refuses Review for a custom rate above the chain maximum', async () => {
@@ -92,11 +94,11 @@ describe('Send maps encoder refusals onto the field that fixes them', () => {
         const messaging = mount(rpcError('unused'));
         await approveSend(messaging);
         fireEvent.change(await screen.findByLabelText('Network fee'), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText(/Custom fee rate/), { target: { value: '99999999' } });
+        fireEvent.change(networkFeeEditor(), { target: { value: feeForRate(99999999, LTC) } });
         fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
         expect((await screen.findAllByText('Enter a rate no higher than 1,000 sat/vB.')).length).toBeGreaterThan(0);
-        expect(screen.getByLabelText(/Custom fee rate/)).toHaveAttribute('aria-invalid', 'true');
+        expect(openNetworkFeeEditor()).toHaveAttribute('aria-invalid', 'true');
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 

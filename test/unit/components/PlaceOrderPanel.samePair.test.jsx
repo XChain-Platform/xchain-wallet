@@ -71,7 +71,7 @@ describe('PlaceOrderPanel on a market with the same token on both sides', () => 
         await settle();
         fireEvent.change(screen.getByLabelText(`Price (${tick2})`), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText(`Size (${tick1})`), { target: { value: '1' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place buy order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place Buy Order' }));
         await settle();
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -86,7 +86,7 @@ describe('PlaceOrderPanel on a market with the same token on both sides', () => 
         await settle();
         fireEvent.change(screen.getByLabelText('Price (BTC)'), { target: { value: '0.001' } });
         fireEvent.change(screen.getByLabelText('Size (XCHAIN)'), { target: { value: '1' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Place buy order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Place Buy Order' }));
         await settle();
 
         expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1);

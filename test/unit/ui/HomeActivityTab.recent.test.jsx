@@ -20,7 +20,7 @@ import React from 'react';
 import { HomeTabs } from '../../../packages/core/src/shared/components/HomeTabs.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
-import { RECENT_ACTIVITY_LIMIT } from '../../../packages/core/src/shared/utils/historyRow.js';
+import { RECENT_ACTIVITY_LIMIT, recentActivityEntries } from '../../../packages/core/src/shared/utils/historyRow.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = 'bc1qrecentactivityaddress';
@@ -81,44 +81,33 @@ function rowTimestamps(onSelectEntry) {
 
 afterEach(() => cleanup());
 
-describe('Home Activity tab of a real wallet', () => {
-    it('lists the newest rows, newest first, capped, with View all opening History', () => {
-        const onHistory = vi.fn();
-        const onSelectEntry = vi.fn();
-        const onActivityOpen = vi.fn();
+// The Home Activity tab is retired (ruling n.253): History covers it. The
+// recent-activity ordering and cap still live in recentActivityEntries.
+describe('Home Activity tab of a real wallet is retired', () => {
+    it('keeps the newest rows, newest first, capped', () => {
         const entries = shuffledEntries(120);
-        renderTabs({ recentActivity: entries, onHistory, onSelectEntry, onActivityOpen });
-
-        fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
-
-        expect(onActivityOpen).toHaveBeenCalled();
-        expect(screen.queryByText('Your activity is in History')).toBeNull();
-        expect(screen.getByRole('list', { name: 'Recent activity' })).toBeTruthy();
-
         expect(RECENT_ACTIVITY_LIMIT).toBeGreaterThanOrEqual(50);
         expect(RECENT_ACTIVITY_LIMIT).toBeLessThanOrEqual(100);
-        const times = rowTimestamps(onSelectEntry);
+        const times = recentActivityEntries(entries).map((e) => e.timestamp);
         expect(times).toHaveLength(RECENT_ACTIVITY_LIMIT);
         const expected = entries.map((e) => e.timestamp).sort((a, b) => b - a).slice(0, RECENT_ACTIVITY_LIMIT);
         expect(times).toEqual(expected);
-
-        const viewAll = screen.getByRole('button', { name: 'See all activity' });
-        expect(screen.getByRole('tabpanel').lastElementChild).toBe(viewAll);
-        fireEvent.click(viewAll);
-        expect(onHistory).toHaveBeenCalledTimes(1);
     });
 
-    it('lists every row of a short history', () => {
-        const onSelectEntry = vi.fn();
-        renderTabs({ recentActivity: shuffledEntries(12), onHistory: vi.fn(), onSelectEntry });
-        fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
-        expect(rowTimestamps(onSelectEntry)).toHaveLength(12);
+    it('keeps every row of a short history', () => {
+        expect(recentActivityEntries(shuffledEntries(12))).toHaveLength(12);
     });
 
-    it('shows an empty state for a wallet with no history', () => {
+    it('offers no Activity tab, rows or See all activity button', () => {
+        renderTabs({ recentActivity: shuffledEntries(12), onHistory: vi.fn(), onSelectEntry: vi.fn() });
+        expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
+        expect(document.querySelectorAll('[data-activity-row]')).toHaveLength(0);
+        expect(screen.queryByRole('button', { name: 'See all activity' })).toBeNull();
+    });
+
+    it('shows no activity empty state for a wallet with no history', () => {
         renderTabs({ recentActivity: [], onHistory: vi.fn() });
-        fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
-        expect(screen.getByText('No activity yet')).toBeTruthy();
+        expect(screen.queryByText('No activity yet')).toBeNull();
         expect(document.querySelectorAll('[data-activity-row]')).toHaveLength(0);
     });
 });
@@ -150,10 +139,11 @@ describe('Home recent-activity reads', () => {
                 <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} onHistory={vi.fn()} />
             </MessagingProvider>,
         );
+        // Home settles on its Balances tab; there is no Activity tab to open.
+        await screen.findByRole('tab', { name: /Balances/ });
+        expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
         const historyReadsBeforeTab = messaging.getAddressHistory.mock.calls.length;
-        fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
-        const expectedRows = Math.min(rowCount, RECENT_ACTIVITY_LIMIT);
-        await waitFor(() => expect(document.querySelectorAll('[data-activity-row]')).toHaveLength(expectedRows));
+        expect(document.querySelectorAll('[data-activity-row]')).toHaveLength(0);
         const counts = {
             historyReadsBeforeTab,
             history: messaging.getAddressHistory.mock.calls.length,
@@ -167,7 +157,7 @@ describe('Home recent-activity reads', () => {
         const small = await readsFor(10);
         const large = await readsFor(100);
         expect(small.historyReadsBeforeTab).toBe(0);
-        expect(small.history).toBe(1);
+        expect(small.history).toBe(0);
         expect(large).toEqual(small);
     });
 });

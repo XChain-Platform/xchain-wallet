@@ -108,8 +108,11 @@ describe('SignApproval remaining approval shapes', () => {
             payload: { accountId: 'account-1', psbtHex: 'deadbeef' },
         });
 
-        expect(await screen.findByText('bcrt1qrecipient')).toBeTruthy();
-        expect(screen.getByText(/confirm-threshold/i)).toBeTruthy();
+        await screen.findByText(/confirm-threshold/i);
+        await waitFor(() => {
+            expect(document.querySelector('[title="bcrt1qrecipient"]')).not.toBeNull();
+        });
+        expect(screen.getByTestId('confirm-facts')).toHaveTextContent(/confirm-threshold/i);
         expect(mocks.describeAction).toHaveBeenCalledWith({
             chainId: 'bitcoin-regtest',
             action: 'SEND',

@@ -12,12 +12,22 @@
  * alert stays armed and a receipt can be announced on a later attempt. Only a
  * shown notification returns true.
  *
- * @param {{ Notification: any, reportFailure?: (label: string, err: unknown) => void }} deps
- * @returns {(n: { title: string, body: string }) => boolean}
+ * Settings > Notifications > Desktop notifications (`notifications.desktop`)
+ * gates the OS surface: false never shows one, true or unset (desktop has no
+ * separate permission step, so unset keeps today's behaviour) shows it. A muted
+ * notification returns true so producers treat it as handled and do not keep
+ * retrying; the in-app inbox is written before this adapter runs. A failed
+ * settings read (vault locked) shows the notification.
+ *
+ * @param {{ Notification: any, reportFailure?: (label: string, err: unknown) => void, getSettings?: () => (object | undefined | Promise<object | undefined>) }} deps
+ * @returns {(n: { title: string, body: string }) => Promise<boolean>}
  */
-export function createOsNotifier({ Notification, reportFailure = () => {} }) {
-    return ({ title, body }) => {
+export function createOsNotifier({ Notification, reportFailure = () => {}, getSettings }) {
+    return async ({ title, body }) => {
         try {
+            let settings;
+            try { settings = typeof getSettings === 'function' ? await getSettings() : undefined; } catch { settings = undefined; }
+            if (settings?.notifications?.desktop === false) return true;
             if (!Notification?.isSupported?.()) return false;
             new Notification({ title, body }).show();
             return true;

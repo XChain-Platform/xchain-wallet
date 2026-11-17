@@ -12,6 +12,8 @@ import {
     dismissIntroCarousel,
     expect,
     gotoSection,
+    openFormSection,
+    openFromSection,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -30,7 +32,6 @@ const VIEWPORTS = [
 const RECIPIENT = 'bc1qdevmock02aabbcc';
 const MESSAGE = 'Review this encrypted message before sending.';
 const NORMAL_FEE = '0.25';
-const NORMAL_RATE = '1 DOGE/kB';
 
 async function settleLayout(page) {
     await page.evaluate(() => new Promise((resolve) => {
@@ -91,10 +92,16 @@ for (const viewport of VIEWPORTS) {
             await expect(conversations).toBeVisible({ timeout: 30_000 });
             await expect(conversations.getByRole('button', { name: /Erin Calloway/ })).toBeVisible();
             await expectHeading(page, 'Messaging');
-            await expectSameLineHeights('inbox filter row', [
-                main.getByRole('searchbox', { name: 'Search conversations' }),
-                main.getByRole('button', { name: /^Filter by network/ }),
+            // The title bar holds the New message plus, then the filter icon.
+            await expectSameLineHeights('inbox title bar actions', [
+                page.getByRole('button', { name: 'New message', exact: true }),
+                page.getByRole('button', { name: 'Filter', exact: true }),
             ]);
+            // The search lives in the filter panel, never on the page itself.
+            await expect(main.getByRole('searchbox', { name: 'Search conversations' })).toHaveCount(0);
+            await page.getByRole('button', { name: 'Filter', exact: true }).click();
+            await expect(page.getByRole('dialog', { name: 'Filter' }).getByRole('searchbox', { name: 'Search conversations' })).toBeVisible();
+            await page.keyboard.press('Escape');
             await expectNoHorizontalOverflow(page, `${viewport.name} inbox`);
         });
 
@@ -107,17 +114,16 @@ for (const viewport of VIEWPORTS) {
             await expect(page.getByRole('main').getByText('Moved the savings stash to the new address. All set.'))
                 .toBeVisible();
             await expect(page.getByRole('main').getByText(/ECIES/).first()).toBeVisible();
-            await expectSameLineHeights('thread reply row', [
-                page.getByRole('textbox', { name: 'Message' }),
-                page.getByRole('button', { name: 'Send message' }),
-            ]);
+            // The reply row is one full-width input; Enter sends, no button.
+            await expect(page.getByRole('textbox', { name: 'Reply, press Enter to send' })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Send message' })).toHaveCount(0);
             await expectNoHorizontalOverflow(page, `${viewport.name} thread`);
         });
 
         await test.step('compose renders the selected fee and aligned address controls', async () => {
             await page.getByRole('button', { name: 'Back to previous screen' }).click();
             await expectHeading(page, 'Messaging');
-            await page.getByRole('button', { name: 'New conversation' }).click();
+            await page.getByRole('button', { name: 'New message', exact: true }).click();
 
             const main = page.getByRole('main');
             await expectHeading(page, 'New message');
@@ -126,6 +132,7 @@ for (const viewport of VIEWPORTS) {
             await expect(main.getByText(/Recipient public key found/)).toBeVisible({ timeout: 15_000 });
             await expect(main.getByRole('button', { name: /^Encryption: Standard \(ECIES\)/ }))
                 .toBeVisible();
+            await openFromSection(main);
             await expect(main.getByRole('button', { name: /^Network: Dogecoin/ }))
                 .toBeVisible();
 
@@ -144,17 +151,24 @@ for (const viewport of VIEWPORTS) {
                 .toBeGreaterThan(addressBox.x + addressBox.width / 2);
             expect(bookBox.width, 'compose address row: address book button is not an icon button')
                 .toBeLessThan(addressBox.width / 2);
-            const feeAmount = main.getByRole('button', { name: 'Edit exact fee amount' });
-            const feeRate = main.getByRole('button', { name: 'Edit fee rate (DOGE/kB)' });
+            // The Fees section's Network fee line: the label and its help
+            // tip on the left, the click-to-edit fee on the right.
+            await openFormSection(main, 'Speed and Fees');
+            const feeLine = main.locator('[data-fees-row="network"]');
+            const feeAmount = feeLine.getByRole('button', { name: 'Edit exact fee amount' });
             await expect(feeAmount).toHaveText(NORMAL_FEE);
-            await expect(feeRate).toHaveText(NORMAL_RATE);
-            await expectSameLineHeights('compose fee row', [feeAmount, feeRate]);
+            await expect(feeLine).toContainText('Network fee');
+            await expect(feeLine.getByRole('button', { name: 'Network fee help' })).toBeVisible();
             await expectNoHorizontalOverflow(page, `${viewport.name} compose`);
 
-            // A demo wallet cannot broadcast, so compose stops at the demo note;
-            // the review screen is covered by the regtest messaging specs.
+            // A demo wallet cannot broadcast: no notice warns in advance, and
+            // pressing Send message stops at the refusal; the review screen is
+            // covered by the regtest messaging specs.
             await main.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-            await expect(main.getByRole('button', { name: 'Send message' })).toBeDisabled();
+            await expect(main.getByText(/Demo wallets can.t move funds/)).toHaveCount(0);
+            const sendMessage = main.getByRole('button', { name: 'Send message' });
+            await expect(sendMessage).toBeEnabled();
+            await sendMessage.click();
             await expect(main.getByText(/Demo wallets can.t move funds/)).toBeVisible();
             await expectNoHorizontalOverflow(page, `${viewport.name} compose demo note`);
         });

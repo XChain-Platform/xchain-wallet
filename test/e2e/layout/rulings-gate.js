@@ -31,7 +31,9 @@ export const RULING_KEYS = Object.freeze({
     noticePlacement: { ruling: 'U15', rule: 'A notice is the first item of page content, full content width' },
     dashedBorders: { ruling: 'U16', rule: 'No dotted or dashed borders' },
     offTokenCards: { ruling: 'U16', rule: 'Every card uses the card border and radius tokens' },
-    backBesideSidebar: { ruling: 'U17', rule: 'No Back on a screen the visible sidebar links to' },
+    // U17 (revised 2026-11-14): Back follows how a page was reached (push or
+    // root), which a crawl cannot see, so the sweep's backBesideSidebar list is
+    // no longer counted; test/unit/routes/backButtonPolicy.test.js carries it.
     repeatedText: { ruling: 'U18', rule: 'Screens never repeat titles or help text' },
     pageScrollX: { ruling: 'U19', rule: 'Nothing scrolls the page sideways' },
     headerScrolledAway: { ruling: 'U19', rule: 'The header and navigation never scroll away' },

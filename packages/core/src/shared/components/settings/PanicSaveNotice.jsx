@@ -46,13 +46,13 @@ export function PanicSaveNotice() {
     let notice = null;
     if (status === PANIC_SAVE_CLEAR_FAILED) {
         notice = (
-            <FormNotice variant="error" testId="panic-save-notice" lead={t('settings.panic.couldNotTurnOff')}>
+            <FormNotice variant="error" testId="panic-save-notice" title={t('settings.panic.couldNotTurnOff')}>
                 {t('settings.panic.couldNotTurnOffDetail')}
             </FormNotice>
         );
     } else if (status === PANIC_SAVE_UNSAVED && getPanicArmedBy() === PANIC_ARMED_SELF) {
         notice = (
-            <FormNotice variant="error" testId="panic-save-notice" lead={t('settings.panic.notSaved')}>
+            <FormNotice variant="error" testId="panic-save-notice" title={t('settings.panic.notSaved')}>
                 {t('settings.panic.notSavedDetail')}
             </FormNotice>
         );

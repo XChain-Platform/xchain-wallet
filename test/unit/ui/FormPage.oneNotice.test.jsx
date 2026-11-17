@@ -108,7 +108,8 @@ describe('one notice box per form', () => {
         expect(shown).toHaveLength(1);
         expect(shown[0]).toHaveAttribute('data-variant', 'warning');
         expect(shown[0]).toHaveTextContent('Your unfinished draft was saved.');
-        expect(shown[0]).toHaveTextContent('Destroy is irreversible. The burned amount cannot be recovered.');
+        expect(shown[0]).toHaveTextContent('Destroy is irreversible.');
+        expect(shown[0]).toHaveTextContent('The burned amount cannot be recovered.');
         fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
         expect(restore).toHaveBeenCalledTimes(1);
     });
@@ -154,7 +155,7 @@ describe('one notice box per form', () => {
         expect(shown[0]).toHaveTextContent("You're offline. Some information may be out of date.");
         expect(shown[0]).toHaveTextContent('Destroy is irreversible.');
         expect(screen.queryByRole('button', { name: 'Details' })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         expect(refresh).toHaveBeenCalledTimes(1);
     });
 

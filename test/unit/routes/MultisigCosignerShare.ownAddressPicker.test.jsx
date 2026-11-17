@@ -46,12 +46,12 @@ vi.mock('../../../packages/core/src/shared/components/OwnAddressPickerScreen.jsx
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { MultisigCreate } from '../../../packages/core/src/shared/routes/MultisigCreate.jsx';
+import { MultisigCosignerShare } from '../../../packages/core/src/shared/routes/MultisigCosignerShare.jsx';
 
 afterEach(() => cleanup());
 
 describe('MultisigCosignerShare own-address picker', () => {
-    it('locks the network, disables unavailable rows, and loads the picked share address', async () => {
+    it('allows Bitcoin network selection, disables unavailable rows, and shares the picked address', async () => {
         const getMultisigCosignerInfo = vi.fn().mockResolvedValue({
             addressId: AVAILABLE.id,
             address: AVAILABLE.address,
@@ -66,29 +66,27 @@ describe('MultisigCosignerShare own-address picker', () => {
         };
         render(
             <MessagingProvider shell="web" messaging={messaging}>
-                <MultisigCreate walletId="wallet-1" onBack={() => {}} />
+                <MultisigCosignerShare walletId="wallet-1" onBack={() => {}} />
             </MessagingProvider>,
         );
 
-        await screen.findByLabelText("Use one of this wallet's addresses");
-        fireEvent.click(screen.getByRole('button', {
-            name: "Joining someone else's multisig? Share this wallet as a cosigner",
-        }));
-        const field = screen.getByLabelText('Address to share');
+        const field = await screen.findByLabelText('Address to share');
         expect(field).toHaveAttribute('readonly');
         expect(field).toHaveAttribute('placeholder', 'Select address');
         expect(screen.queryByRole('combobox', { name: 'Address to share' })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Choose address to share' }));
 
         expect(screen.getByTestId('own-address-picker')).toHaveAttribute('data-chain-id', CHAIN);
-        expect(screen.getByTestId('own-address-picker')).toHaveAttribute('data-lock-network', 'true');
-        expect(screen.queryByRole('button', { name: 'Switch picker network' })).toBeNull();
+        expect(screen.getByTestId('own-address-picker')).toHaveAttribute('data-lock-network', 'false');
+        expect(screen.getByRole('button', { name: 'Switch picker network' })).toBeTruthy();
         expect(screen.getByRole('button', {
-            name: `${WATCH_ONLY.address}: Watch-only, unavailable`,
+            name: `${WATCH_ONLY.address}: No key, unavailable`,
         })).toBeDisabled();
         fireEvent.click(screen.getByRole('button', { name: AVAILABLE.address }));
 
         expect(await screen.findByLabelText('Address to share')).toHaveValue(AVAILABLE.address);
+        expect(getMultisigCosignerInfo).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Share' }));
         await waitFor(() => expect(getMultisigCosignerInfo).toHaveBeenCalledWith({
             walletId: 'wallet-1',
             addressId: AVAILABLE.id,

@@ -27,7 +27,7 @@ const ICON_NAMES = [
     'PencilIcon', 'TrashIcon', 'RefreshIcon', 'MigrateIcon',
     'ForwardIcon', 'DocumentIcon', 'LinkIcon', 'UnlinkIcon', 'ExternalLinkIcon',
     'UsbIcon', 'DownloadIcon', 'UploadIcon',
-    'PauseIcon', 'PlayIcon',
+    'PauseIcon', 'PlayIcon', 'BanIcon',
 ];
 
 const SEEN = new Set();

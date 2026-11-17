@@ -24,13 +24,15 @@
 // working token and re-issue under Community - a fresh ISSUE fee, a dead
 // ticker, holders stranded, all for a distinction that never existed.
 //
-// So this file asserts the template distinction where the choice is made,
-// along with the row presentation that helps users scan those choices.
+// So this file asserts the template distinction where the choice is made (the
+// Issue Token form's template picker), along with the row presentation that
+// helps users scan those choices.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+// The Create a token route: TokenWizard renders the one Issue Token form.
 import { TokenWizard } from '../../../packages/core/src/shared/routes/TokenWizard.jsx';
 
 const ADDRESSES = {
@@ -70,10 +72,15 @@ function mountWizard(props = {}) {
     );
 }
 
+async function openTemplates() {
+    fireEvent.click(await screen.findByRole('button', { name: /^Select template/ }));
+    return screen.getAllByRole('option');
+}
+
 async function pickTemplate(label) {
-    fireEvent.click(await screen.findByText(label));
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    await waitFor(() => expect(screen.getByLabelText('Token name (ticker)')).toBeTruthy());
+    await openTemplates();
+    fireEvent.click(screen.getByRole('option', { name: new RegExp(label) }));
+    await waitFor(() => expect(screen.getByLabelText('Ticker')).toBeTruthy());
 }
 
 async function composedParams() {
@@ -85,49 +92,43 @@ async function composedParams() {
 
 afterEach(() => cleanup());
 
-describe('TokenWizard template picker (no phantom dividend template)', () => {
-    it('offers no Community card, so no one can pick the template that changed nothing', async () => {
+describe('Issue Token template picker (no phantom dividend template)', () => {
+    it('offers no Community template, so no one can pick the template that changed nothing', async () => {
         mountWizard();
-        await screen.findByText('Utility token');
-        expect(screen.queryByText('Community')).toBeNull();
+        const options = await openTemplates();
+        expect(options.some((o) => /Community/.test(o.textContent))).toBe(false);
         expect(screen.queryByText(/Dividend-enabled/i)).toBeNull();
     });
 
-    it('opens the full issue form through the Custom template when the shell provides it', async () => {
+    it('opens straight on the full issue form, so no Custom template is needed to reach it', async () => {
         const onCustom = vi.fn();
         mountWizard({ onCustom });
-        fireEvent.click(await screen.findByText('Custom'));
-        expect(onCustom).toHaveBeenCalledOnce();
+        // Every ISSUE field is on this one form already.
+        expect(await screen.findByLabelText('Ticker')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Issue Token' })).toBeTruthy();
+        const options = await openTemplates();
+        expect(options.some((o) => /^Custom/.test(o.textContent))).toBe(false);
+        expect(onCustom).not.toHaveBeenCalled();
     });
 
-    it('renders every template with its icon and name together, without the old note or legacy names', async () => {
-        const { container } = mountWizard();
-        await screen.findByText('Utility token');
-
-        const templates = [
-            ['meme', 'Meme token'],
-            ['utility', 'Utility token'],
-            ['collectible', 'Collectible'],
-            ['edition', 'Limited edition'],
-            ['subtoken', 'Subtoken'],
-            ['custom', 'Custom'],
-        ];
-        for (const [id, name] of templates) {
-            const title = container.querySelector(`[data-template-title="${id}"]`);
-            expect(title, `${id} title row`).toBeTruthy();
-            expect(title.textContent).toBe(name);
-            expect(title.querySelector('svg'), `${id} icon`).toBeTruthy();
-        }
-
-        expect(container.querySelector('[data-template-title="meme"] svg'))
-            .toHaveAttribute('data-icon', 'frog');
-        expect(screen.queryByText(/Any token you issue here can pay dividends/i)).toBeNull();
-        expect(container.textContent).not.toMatch(/child token|subasset|sub-token/i);
-    });
-
-    it('names dividends on the Utility card itself, where the old choice was made', async () => {
+    it('renders every template with its icon and name together, without legacy names', async () => {
         mountWizard();
-        const tagline = await screen.findByText(/Mintable, adjustable supply/i);
+        const options = await openTemplates();
+        const names = ['Meme token', 'Utility token', 'Collectible', 'Limited edition', 'Subtoken'];
+        for (const name of names) {
+            const option = options.find((o) => o.textContent.startsWith(name));
+            expect(option, `${name} option`).toBeTruthy();
+            expect(option.querySelector('svg'), `${name} icon`).toBeTruthy();
+        }
+        expect(screen.queryByText(/Any token you issue here can pay dividends/i)).toBeNull();
+        const listbox = screen.getByRole('listbox');
+        expect(listbox.textContent).not.toMatch(/child token|subasset|sub-token/i);
+    });
+
+    it('names dividends on the Utility template itself, where the old choice was made', async () => {
+        mountWizard();
+        await openTemplates();
+        const tagline = screen.getByText(/Mintable, adjustable supply/i);
         expect(tagline.textContent).toMatch(/dividend/i);
         expect(tagline.textContent).toMatch(/every token/i);
     });
@@ -137,15 +138,14 @@ describe('TokenWizard template picker (no phantom dividend template)', () => {
         // the two cards an issuer used to click, this is the ISSUE they got.
         mountWizard();
         await pickTemplate('Utility token');
-        fireEvent.change(screen.getByLabelText('Token name (ticker)'), {
+        fireEvent.change(screen.getByLabelText('Ticker'), {
             target: { value: 'DANKUTIL' },
         });
-        fireEvent.change(screen.getByLabelText('Supply'), { target: { value: '1000' } });
-        fireEvent.change(screen.getByLabelText('Max mint per transaction'), {
+        fireEvent.change(screen.getByRole('textbox', { name: 'Max supply' }), { target: { value: '1000' } });
+        fireEvent.change(screen.getByLabelText('Max per transaction'), {
             target: { value: '100' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Review token' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Issue token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
 
         const params = await composedParams();
         expect(params).toMatchObject({
@@ -154,7 +154,9 @@ describe('TokenWizard template picker (no phantom dividend template)', () => {
             MAX_SUPPLY: '1000',
             MINT_SUPPLY: '1000',
             MAX_MINT: '100',
-            DECIMALS: '0',
+            // The form's Utility template is divisible (the wizard's left it
+            // off and composed '0').
+            DECIMALS: '8',
         });
         // Mintable and adjustable: no lock may ride this template, or the
         // merged card stops keeping the promise both cards used to make.

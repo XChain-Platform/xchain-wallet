@@ -15,6 +15,19 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { ProjectRosterForm } from '../../../packages/core/src/shared/routes/ProjectRosterForm.jsx';
 import { FormPage } from '../../../packages/core/src/ui/FormPage.jsx';
 import { ListPage } from '../../../packages/core/src/ui/ListPage.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+
+// Tokens join the list only through the token picker; this stand-in picks
+// whatever ticker is typed into it, on the chain the form locked it to.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, chainIdFilter, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <input aria-label="Token to pick" id="pick-tick" />
+            <button type="button" onClick={() => onSelect({ chainId: chainIdFilter, tick: document.getElementById('pick-tick').value })}>Pick token</button>
+            <button type="button" onClick={onBack}>Close token picker</button>
+        </section>
+    ),
+}));
 
 const CHAIN = 'dogecoin-testnet';
 const ADDRESS = {
@@ -52,6 +65,14 @@ function messagingWith(overrides = {}) {
 }
 
 function mount(messaging) {
+    // A wallet's mode is published from the wallet list, not read from
+    // settings; the harness publishes the mode the settings mock names.
+    Promise.resolve(messaging.getSettings()).then((settings) => {
+        publishWalletModes({
+            wallets: [{ id: 'wallet-1', walletMode: settings?.walletMode || 'full' }],
+            activeWalletId: 'wallet-1',
+        });
+    });
     render(
         <MessagingProvider shell="web" messaging={messaging}>
             <ProjectRosterForm
@@ -82,20 +103,25 @@ function expectInsideTemplate(element) {
 }
 
 async function publishList() {
-    await screen.findByText('No list published yet. This will be the first.');
-    fireEvent.change(screen.getByLabelText('Tokens (one per line)'), { target: { value: 'VALID' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save roster' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
+    fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: 'VALID' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
     await screen.findByRole('form', { name: 'Review official token list' });
-    fireEvent.click(screen.getByRole('button', { name: 'Publish list' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish List' }));
     fireEvent.click(await screen.findByTestId('confirm-approve'));
 }
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    resetWalletModes();
+});
 
 describe('ProjectRosterForm: every state renders inside a page template', () => {
     it('renders the watcher-mode refusal inside a template', async () => {
         mount(messagingWith({ getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }) }));
-        expectInsideTemplate(await screen.findByText('Not available in watcher mode'));
+        expectInsideTemplate(await screen.findByText('Not available when another phone signs'));
     });
 
     it('renders the address load error inside a template', async () => {
@@ -126,12 +152,30 @@ describe('ProjectRosterForm: every state renders inside a page template', () => 
         expectInsideTemplate(await screen.findByText('List is on its way'));
     });
 
+    it('keeps Publish List enabled and refuses an empty password in the form', async () => {
+        const messaging = messagingWith({ signerReady: vi.fn().mockResolvedValue({ ready: false }) });
+        mount(messaging);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Add Token' }));
+        fireEvent.change(screen.getByLabelText('Token to pick'), { target: { value: 'VALID' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
+
+        const publish = await screen.findByRole('button', { name: 'Publish List' });
+        expect(publish).toBeEnabled();
+        fireEvent.click(publish);
+        expect(await screen.findByRole('alert', { name: /form errors/i }))
+            .toHaveTextContent('Enter your wallet password.');
+        expect(screen.getByLabelText('Password')).toHaveAttribute('aria-invalid', 'true');
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
     it('renders the done panel inside a template', async () => {
         const messaging = messagingWith({ getActionByTxid: vi.fn().mockResolvedValue({ action_index: 91 }) });
         mount(messaging);
         await publishList();
         await screen.findByRole('form', { name: 'Review official token link' });
-        fireEvent.click(screen.getByRole('button', { name: 'Make it official' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Make It Official' }));
         fireEvent.click(await screen.findByTestId('confirm-approve'));
         await waitFor(() => expect(messaging.linkAction).toHaveBeenCalled());
         expectInsideTemplate(await screen.findByText('Official list published'));

@@ -47,6 +47,23 @@ beforeEach(({ task }) => {
     };
 });
 
+// Wallet modes the shell (or a test) published, or a reader merged from a
+// wallet list, live in a module store; one test's wallets must not decide the
+// next test's mode. Imported here, after the test file's mocks are in place,
+// so a file that mocks the hook module keeps its mock (and may have no reset).
+afterEach(async () => {
+    try {
+        const store = await import('../../packages/core/src/shared/hooks/useWalletMode.js');
+        store.resetWalletModes?.();
+    } catch { /* mocked module without a reset */ }
+    // A form's Advanced choices (fee bumping, chosen coins, change address)
+    // live in a module store too, keyed by form and source address.
+    try {
+        const advanced = await import('../../packages/core/src/shared/components/formStandard/advancedOptions.js');
+        advanced.resetAdvancedStore?.();
+    } catch { /* mocked module without a reset */ }
+});
+
 afterEach(() => {
     console.error = originalConsoleError;
     console.warn = originalConsoleWarn;

@@ -29,3 +29,15 @@
     inset-block-start: var(--xc-space-1);
     inset-inline-end: var(--xc-space-1);
 }
+
+/* The unsigned transaction code: the shared Textarea draws the box and its
+   end padding (which keeps text clear of the scan icon); this only sets the
+   code font. overflow-wrap breaks a long hex run without splitting the
+   placeholder's words. */
+/* Doubled to outrank the shared field's single-class font rule whatever the load order. */
+.codeInput.codeInput {
+    font-family: var(--xc-font-mono);
+    font-size: var(--xc-text-xs);
+    resize: vertical;
+    overflow-wrap: anywhere;
+}

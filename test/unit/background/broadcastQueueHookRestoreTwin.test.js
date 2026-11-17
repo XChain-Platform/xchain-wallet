@@ -21,7 +21,7 @@ import { createBroadcastQueueStore } from '../../../packages/extension/src/backg
 const W = 'w1';
 const CHAIN = 'bitcoin-regtest';
 const ADDR = 'bcrt1qwallet-a';
-const VERDICT = { chainId: CHAIN, donationIncluded: true, donationAmount: 25000 };
+const VERDICT = { chainId: CHAIN, donationIncluded: true, donatedFiat: '25', currency: 'USD' };
 
 function memStorage() {
     let blob = {};

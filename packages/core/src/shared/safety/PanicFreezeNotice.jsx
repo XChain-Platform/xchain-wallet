@@ -99,7 +99,7 @@ export function PanicFreezeNotice({ surface = PANIC_SURFACE_HOME }) {
     const notice = usePanicFreeze(surface);
     if (!notice || !notice.disclose) return null;
     return (
-        <FormNotice variant="error" lead={notice.title}>
+        <FormNotice variant="error" title={notice.title}>
             {notice.detail}
         </FormNotice>
     );
@@ -145,8 +145,8 @@ export function PanicPasswordGate({ children, rejectLabel }) {
  */
 export function PanicSignStatus({ notice, testId, role }) {
     return (
-        <StatusMessage variant="error" testId={testId} role={role}>
-            <strong>{notice.title}</strong>{' '}{notice.detail}
+        <StatusMessage variant="error" testId={testId} role={role} title={notice.title}>
+            {notice.detail}
         </StatusMessage>
     );
 }

@@ -56,6 +56,9 @@ export const MAX_COMPILED_ACTION_BYTES = 8192;
  */
 export const ENVELOPE_MAX_PAYLOAD = 390000;
 
+/** The name a FILE action carries for a picked file the browser gave no name. */
+export const FALLBACK_FILE_NAME = 'file.bin';
+
 /** Multi-part FILE protocol bounds and exact per-piece stored-byte capacities. */
 export const MULTIPART_FILE_MAX_PARTS = 65535;
 export const MULTIPART_FILE_MAX_BYTES = 262_140_000_000;

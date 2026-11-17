@@ -101,7 +101,7 @@ export function PanicModeRow() {
                         {t('settings.panic.remaining')}
                     </span>
                 </div>
-                <Button ref={swap.target} type="button" size="sm" variant="ghost" icon={<Icon.UnlockIcon />} onClick={handleDeactivate}>
+                <Button ref={swap.target} type="button" size="sm" variant="secondary" icon={<Icon.UnlockIcon />} onClick={handleDeactivate}>
                     {t('settings.panic.deactivate')}
                 </Button>
             </div>
@@ -120,7 +120,7 @@ export function PanicModeRow() {
                         </span>
                     </div>
                     <div style={{ display: 'flex', gap: 'var(--xc-space-2)' }}>
-                        <Button type="button" size="sm" variant="ghost" icon={<Icon.XIcon />} onClick={() => setConfirming(false)}>
+                        <Button type="button" size="sm" variant="secondary" icon={<Icon.XIcon />} onClick={() => setConfirming(false)}>
                             {t('common.cancel')}
                         </Button>
                         <Button type="button" size="sm" variant="danger" icon={<Icon.LockIcon />} onClick={handleActivate}>
@@ -147,7 +147,7 @@ export function PanicModeRow() {
     );
 }
 
-function formatPanicCountdown(ms) {
+export function formatPanicCountdown(ms) {
     const totalMin = Math.max(0, Math.ceil(ms / 60_000));
     if (totalMin < 60) return `${totalMin}m`;
     const hours = Math.floor(totalMin / 60);

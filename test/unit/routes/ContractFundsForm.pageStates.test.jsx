@@ -1,10 +1,11 @@
 // ContractFundsForm: every wrap() call lays out through a page template.
 //
 // wrap() is a bare Screen. The load error, the loading line and the
-// broadcast result each reach the page through FormPage, like the form and
-// review stages, and the token list through ListPage, so no state draws
-// straight into the Screen content box. ResultScreen is a template of its
-// own, so the queued and unsigned branches pass it as is.
+// broadcast result each reach the page through FormPage, like the form stage,
+// while review uses ConfirmActionModal as its own page template.
+// ResultScreen is a template of its own, so the queued and unsigned branches
+// pass it as is. The token picker is the standard TokenPicker page, not a
+// wrap() call.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -48,11 +49,12 @@ function wrapCallRoots(fileName) {
 }
 
 describe('ContractFundsForm: every wrap() call passes a page template', () => {
-    it('roots the load error, loading line, results, picker, review and form in FormPage, ListPage or ResultScreen', () => {
+    it('roots the load error, loading line, results and form in FormPage, ListPage or ResultScreen', () => {
         const roots = wrapCallRoots('ContractFundsForm.jsx');
-        expect(roots.length).toBeGreaterThanOrEqual(8);
+        expect(roots.length).toBeGreaterThanOrEqual(6);
         const faults = roots
-            .filter(({ name }) => !['FormPage', 'ListPage', 'ResultScreen'].includes(name))
+            // FormFrame is the Wallet Form Standard frame around FormPage.
+            .filter(({ name }) => !['FormPage', 'FormFrame', 'ListPage', 'ResultScreen'].includes(name))
             .map(({ line, name }) => `ContractFundsForm.jsx:${line} wrap(${name})`);
         expect(faults).toEqual([]);
     });

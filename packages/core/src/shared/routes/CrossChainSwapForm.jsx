@@ -11,9 +11,26 @@
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusNoticeOnAttempt } from '../hooks/useFocusNoticeOnAttempt.js';
-import { AddressField, AddressText, Button, ChainBadge, Checkbox, CopyButton, FeeSelector, FormPage, FormSection, Icon, Input, ListPage, NetworkField, PageHeader, RadioGroup, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
-import { registry as registryLib } from '@xchain-wallet/core';
+import { AddressField, AddressText, Button, ChainBadge, CopyButton, FormNotice, FormPage, Icon, ListPage, PageHeader, Screen, SectionHeader, StatusMessage } from '@xchain-wallet/core/ui';
+import { ListField } from '../components/ListField.jsx';
+import { ExpirationFields, expirationParam, expirationWithinFreePeriod } from '../components/expirationChoice.jsx';
+// Cross-Chain Swap renders through the shared Give/Get standard, the
+// same form as Swap plus Receive at on the get side. The give network sits in
+// the standard's From section; the get token decides the get network.
+import {
+    GiveGetQuick,
+    OwnershipToggle,
+    QuickAddressRow,
+    RateLine,
+    useGiveGetView,
+    ViewSwitch,
+} from '../components/giveGet/index.js';
+// The Wallet Form Standard frame (From, Cross-Chain Swap, Ownership, Swap Terms, Lists, Memo, Network fee, action).
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, MemoSection, joinSummary } from '../components/formStandard/index.js';
+import { ListPickerScreen } from '../components/ListPickerScreen.jsx';
+import { decoder as decoderLib, registry as registryLib } from '@xchain-wallet/core';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
+import { pickedListText } from '../utils/listLabel.js';
 import { formatUnixSecondsLocal } from '../utils/dateTime.js';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
@@ -22,13 +39,13 @@ import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/crossChainSwap.js';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { useNativeFee } from '../hooks/useNativeFee.js';
-import { NativeFeeToggle } from '../components/NativeFeeToggle.jsx';
-import { FeesCard } from '../components/FeesCard.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { MAX_MEMO_LENGTH, memoCharacterError, memoLengthError } from '../utils/memoLimit.js';
 import { compareDecimalStrings, divideDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { addressValidationError } from '../utils/addressValidation.js';
 import { tickerReferenceError } from '../utils/tickerGrammar.js';
+import { orderGiveParts } from '../utils/confirmSummaryParts.js';
+import '../../i18n/locales/en/palette.js';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
@@ -44,6 +61,7 @@ import { useHideReachabilityNotice } from '../components/hideReachabilityNotice.
 import { activeSourceId, externalIndexOf } from '../addressSelection.js';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import {
     estimateNativeSendFee,
     estimateNativeSendFeeTiers,
@@ -51,9 +69,11 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
+import { normalizeProtocolFee } from '../../flows/protocolFeeRow.js';
 import styles from './IssueTokenForm.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 // Same ticker map SwapForm uses. descriptor.coin is long-form
 // ('bitcoin' / 'litecoin' / 'dogecoin'); SWAP serializes the
@@ -71,9 +91,13 @@ const NATIVE_TICKER_BY_COIN = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE
 const isPlainPositive = (value) => /^\d+(\.\d+)?$/.test(String(value).trim())
     && compareDecimalStrings(String(value).trim(), '0') === 1;
 
+// The list-id rule Swap uses, for this form's allow and block lists.
+const isPositiveActionIndex = (value) => /^[0-9]+$/.test(String(value).trim())
+    && /[1-9]/.test(String(value));
+
 function expirationValidationError(mode, input, nowSec = Math.floor(Date.now() / 1000)) {
-    if (mode !== 'custom') return null;
-    if (!input.trim()) return 'Pick an expiration date and time, or switch to the default window.';
+    if (mode === 'default') return null;
+    if (!input.trim()) return 'Pick an expiration date and time, or choose a common term.';
     const ms = Date.parse(input.trim());
     if (!Number.isFinite(ms)) return 'Pick a valid expiration date and time.';
     if (Math.floor(ms / 1000) <= nowSec) return 'Expiration must be in the future.';
@@ -137,11 +161,29 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     // PC-18: EXPIRATION is a wall-clock Unix timestamp, NOT a block count
     // (the indexer rejects EXPIRATION <= BLOCK_TIME as "past", so the old
     // block-count value indexed every cross-chain swap invalid).
-    const [expMode, setExpMode] = useState(/** @type {'default' | 'custom'} */ ('default'));
+    // 'default' is 3 months; the presets fill expInput, which Expires shows.
+    const [expMode, setExpMode] = useState(/** @type {'default' | '6m' | '9m' | '1y' | 'custom'} */ ('default'));
     const [expInput, setExpInput] = useState('');
     const [giveOwnership, setGiveOwnership] = useState(false);
     const [getOwnership, setGetOwnership] = useState(false);
     const [memo, setMemo] = useState('');
+    // Allow and block lists, as on Swap. The SWAP is recorded and
+    // validated on the give chain, so the lists are give-chain lists.
+    const [allowListIdx, setAllowListIdx] = useState('');
+    const [blockListIdx, setBlockListIdx] = useState('');
+    // The picked lists' names, so the fields show a name (G114).
+    const [allowListPick, setAllowListPick] = useState(/** @type {{ index: string, name: unknown } | null} */ (null));
+    const [blockListPick, setBlockListPick] = useState(/** @type {{ index: string, name: unknown } | null} */ (null));
+    const [listPickerFor, setListPickerFor] = useState(/** @type {'allow' | 'block' | null} */ (null));
+    // The Quick | Full view and the section open state live here, above every
+    // early return, so a picker page or the confirm screen never resets them.
+    // Only the Cross-Chain Swap section starts open; the last view is remembered.
+    const giveGetView = useGiveGetView('crossChainSwap', {
+        sections: { from: false, swap: true, ownership: false, options: false, lists: false, memo: false, fee: false },
+    });
+    // Counts review attempts, so a section holding an error reopens on
+    // every attempt even after the user closed it (the standard's revealKey).
+    const [reviewAttempt, setReviewAttempt] = useState(0);
     const [password, setPassword] = useState('');
     const [givePickerOpen, setGivePickerOpen] = useState(false);
     const [getPickerOpen, setGetPickerOpen] = useState(false);
@@ -203,11 +245,17 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             return;
         }
         const addrs = addressesByChain[giveChainId] || [];
+        // A pick already on the give chain stays: a From picked on another
+        // chain switches the give chain first, and this run must not replace
+        // that pick with the new chain's default.
+        const keep = (next) => setFromAddressId((current) => (
+            addrs.some((a) => a.id === current) ? current : next
+        ));
         // Prefer the give-chain's active address; fall back to the existing
         // newest-HD (or any-address) heuristic when none is set.
         const activeId = activeSourceId(addrs, activeByChain[giveChainId]);
         if (activeId) {
-            setFromAddressId(activeId);
+            keep(activeId);
             return;
         }
         const hd = addrs.filter(
@@ -220,7 +268,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                 const bi = (externalIndexOf(b.derivationPath) ?? -1);
                 return bi - ai;
             });
-            setFromAddressId(sorted[0].id);
+            keep(sorted[0].id);
         } else {
             setFromAddressId(null);
         }
@@ -328,6 +376,8 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             const addressError = addressValidationError(getAddress, getDescriptor);
             if (addressError) return addressError;
         }
+        if (allowListIdx && !isPositiveActionIndex(allowListIdx)) return 'Allow-list ID must be a positive whole number.';
+        if (blockListIdx && !isPositiveActionIndex(blockListIdx)) return 'Block-list ID must be a positive whole number.';
         if (memo.includes('|') || memo.includes(';')) return 'Memo cannot contain "|" or ";".';
         const memoError = memoLengthError(memo.trim()) || memoCharacterError(memo.trim());
         if (memoError) return memoError;
@@ -336,7 +386,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         return null;
     }, [giveCoinTicker, getCoinTicker, giveTick, getTick, giveOwnership, giveAmount,
         getOwnership, getAmount, giveTokenInfo?.divisibility, getTokenInfo?.divisibility,
-        giveBalance, getAddress, getDescriptor, memo, expMode, expInput]);
+        giveBalance, getAddress, getDescriptor, allowListIdx, blockListIdx, memo, expMode, expInput]);
 
     const rate = !giveOwnership && !getOwnership
         ? divideDecimalStrings(getAmount, giveAmount, 8)
@@ -382,10 +432,6 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     const giveTicker = giveDescriptor?.coin
         ? NATIVE_TICKER_BY_COIN[giveDescriptor.coin] || giveDescriptor.coin.toUpperCase()
         : null;
-    const feeText = feeEstimate && giveTicker
-        ? `${feeEstimate.coinAmount} ${giveTicker}` + (feeEstimate.rate ? ` (${feeEstimate.rate})` : '')
-        : 'Estimate unavailable';
-
     // §20 / Cluster W FOLLOWUP 5: watcher-mode encode-only branch.
     const { isWatcherMode } = useWalletMode();
 
@@ -403,13 +449,14 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         ...(getOwnership ? { GET_OWNERSHIP: '1' } : { GET_AMOUNT: String(getAmount).trim() }),
         GET_ADDRESS: (getAddress || '').trim(),
         ...((() => {
-            if (expMode !== 'custom' || !expInput.trim()) return {};
-            const ms = Date.parse(expInput.trim());
-            return Number.isFinite(ms) ? { EXPIRATION: String(Math.floor(ms / 1000)) } : {};
+            const expiration = expirationParam(expMode, expInput);
+            return expiration ? { EXPIRATION: expiration } : {};
         })()),
+        ...(allowListIdx ? { ALLOW_LIST: allowListIdx } : {}),
+        ...(blockListIdx ? { BLOCK_LIST: blockListIdx } : {}),
         ...(memo.trim() ? { MEMO: memo.trim() } : {}),
     }), [giveCoinTicker, giveTick, giveOwnership, giveAmount, getCoinTicker, getTick,
-        getOwnership, getAmount, getAddress, expMode, expInput, memo]);
+        getOwnership, getAmount, getAddress, expMode, expInput, allowListIdx, blockListIdx, memo]);
     const swapQuoteActionData = useMemo(() => {
         if (!fromAddress?.address || !giveChainId || !getChainId) return null;
         if (!giveTick.trim() || !getTick.trim() || !getAddress.trim()) return null;
@@ -418,12 +465,25 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         return { action: 'SWAP', params: swapParams };
     }, [fromAddress?.address, giveChainId, getChainId, giveTick, getTick, getAddress,
         giveOwnership, giveAmount, getOwnership, getAmount, validationError, swapParams]);
-    const { quote: protocolFeeQuote, pending: protocolFeePending } = useProtocolFeeQuote({
+    const { quote: protocolFeeQuote, pending: protocolFeePending, waiting: protocolFeeWaiting } = useProtocolFeeQuote({
         messaging,
         chainId: giveChainId,
         source: fromAddress?.address,
         actionData: swapQuoteActionData,
     });
+    const legacyDecoded = useMemo(() => (
+        stage === 'review' || stage === 'submitting'
+            ? decoderLib.decodeAction({ action: 'SWAP', params: swapParams, chainId: giveChainId, chainRegistry })
+            : null
+    ), [giveChainId, stage, swapParams]);
+    const quotedProtocolFee = normalizeProtocolFee(protocolFeeQuote);
+    const legacyComposed = legacyDecoded ? {
+        action: 'SWAP',
+        chainId: giveChainId,
+        decoded: legacyDecoded,
+        quote: protocolFeeQuote,
+        protocolFeeKnownFree: quotedProtocolFee.known && quotedProtocolFee.free,
+    } : null;
 
     // §5.6: SwapForm already composes one PSBT host-side and approves it on
     // the shared confirm page; the cross-chain variant now does the same.
@@ -505,6 +565,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
     // reachable only from the review screen.
     function handleReview(event) {
         event.preventDefault();
+        setReviewAttempt((n) => n + 1);
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) { setFormError(feeStop.formError); return; }
         if (!networkAvailable) return;
@@ -636,11 +697,12 @@ export function CrossChainSwapForm({ walletId, onBack }) {
 
     const header = (
         <PageHeader
+            nested={stage === 'review' || stage === 'submitting'}
             onBack={handleBack}
             backDisabled={stage === 'submitting'}
             title={stage === 'review' || stage === 'submitting'
-                ? 'Review swap'
-                : 'Cross-chain swap'}
+                ? 'Review Swap'
+                : 'Cross-Chain Swap'}
         />
     );
     // Every state draws through a page template: the form and the review
@@ -691,12 +753,12 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     <>
                         <p className={styles.successLabel}>{t('crossChainSwap.success.giveTxLabel')}</p>
                         <code className={styles.txid}>{txid}</code>
-                        <CopyButton value={txid} label="Copy transaction ID" />
+                        <CopyButton value={txid} label="Copy Transaction ID" />
                     </>
                 ) : null}
                 <p className={styles.hint}>{t('crossChainSwap.success.hint')}</p>
                 <div className={styles.actions}>
-                    <Button variant="primary" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
+                    <Button variant="success" icon={<Icon.CheckIcon />} onClick={onBack}>Done</Button>
                 </div>
             </>,
         );
@@ -706,141 +768,52 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         return listPage(<p className={styles.hint}>Loading wallet…</p>);
     }
 
-    // Review and submitting stages: show a confirmation summary with
-    // all swap terms before the user signs. The real broadcast only fires
-    // from here, keeping the form stage completely read-only.
+    // Watch-only review uses the shared Confirm Standard body.
     if (stage === 'review' || stage === 'submitting') {
-        const giveSide = giveOwnership
-            ? `ownership of ${swapParams.GIVE_TICK}`
-            : `${swapParams.GIVE_AMOUNT} ${swapParams.GIVE_TICK}`;
-        const getSide = getOwnership
-            ? `ownership of ${swapParams.GET_TICK}`
-            : `${swapParams.GET_AMOUNT} ${swapParams.GET_TICK}`;
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review cross-chain swap"
-                onSubmit={handleSubmit}
-                status={[
-                    offlineNote,
-                    (isWatcherMode || hw) && submitError ? (
-                        <StatusMessage key="submit" variant="error">{submitError}</StatusMessage>
-                    ) : null,
-                ]}
-                actions={(
-                    <>
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            icon={<Icon.PencilIcon />}
-                            onClick={() => { setStage('form'); setSubmitError(null); }}
-                            disabled={stage === 'submitting'}
-                        >
-                            Edit
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="success"
-                            icon={<Icon.SignIcon />}
-                            loading={stage === 'submitting'}
-                            disabled={
-                                isWatcherMode
-                                    ? false
-                                    : hw
-                                        ? hwStatus !== 'available'
-                                        : (!signerReady && password.length === 0)
-                            }
-                        >
-                            {isWatcherMode
-                                ? 'Create unsigned cross-chain swap transaction'
-                                : hw
-                                    ? `Sign on ${fromAddress?.source === 'trezor' ? 'Trezor' : 'Ledger'}`
-                                    : 'Sign cross-chain swap'}
-                        </Button>
-                    </>
-                )}
-            >
-                <p className={styles.summary}>
-                    Offer to give {giveSide} in exchange for {getSide}.
-                </p>
-                {/* Native definition list remains because the UI kit has no read-only detail-list primitive. */}
-                <dl className={styles.detailsList}>
-                    {giveDescriptor ? (
-                        <DetailRow
-                            label="Give network"
-                            value={<ChainBadge descriptor={giveDescriptor} size="sm" />}
-                        />
-                    ) : null}
-                    <DetailRow
-                        label="Give"
-                        value={giveSide}
-                    />
-                    <DetailRow
-                        label="From"
-                        value={<AddressText address={fromAddress.address} />}
-                    />
-                    {getDescriptor ? (
-                        <DetailRow
-                            label="Get network"
-                            value={<ChainBadge descriptor={getDescriptor} size="sm" />}
-                        />
-                    ) : null}
-                    <DetailRow
-                        label="Get"
-                        value={getSide}
-                    />
-                    {!giveOwnership && !getOwnership ? (
-                        <DetailRow label="Rate" value={rateText} />
-                    ) : null}
-                    <DetailRow
-                        label="Receive at"
-                        value={<AddressText address={swapParams.GET_ADDRESS} />}
-                    />
-                    <DetailRow
-                        label="Expiration"
-                        value={swapParams.EXPIRATION
-                            ? formatUnixSecondsLocal(swapParams.EXPIRATION)
-                            : 'Default window'}
-                    />
-                    {giveOwnership || getOwnership ? (
-                        <DetailRow label="Ownership" value={[giveOwnership ? 'give' : null, getOwnership ? 'get' : null].filter(Boolean).join(' + ')} />
-                    ) : null}
-                    {swapParams.MEMO ? (
-                        <DetailRow label="Memo" value={swapParams.MEMO} />
-                    ) : null}
-                    <DetailRow label="Network fee" value={feeText} />
-                    <DetailRow
-                        label="Protocol fee"
-                        value={`If charged, paid in ${nativeFee.flag ? giveTicker : 'XCHAIN'}; the network fee is separate.`}
-                    />
-                </dl>
-                <p className={styles.hintLeft}>
-                    The give side is escrowed until this offer is matched. If you cancel it or
-                    it expires, the escrow returns to the source address. Paid transaction fees
-                    are not refunded.
-                </p>
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : (
-                    <SignCredentials
-                        unlocked={signerReady}
-                        fromAddress={fromAddress}
-                        chainId={giveChainId}
-                        password={password}
-                        onPasswordChange={(v) => {
-                            setPassword(v);
-                            if (submitError) setSubmitError(null);
-                        }}
-                        onStatusChange={onHwStatusChange}
-                        passwordRef={passwordRef}
-                        submitError={submitError}
-                        disabled={stage === 'submitting'}
-                        getSignerStatus={messaging.getSignerStatus}
-                    />
-                )}
-            </FormPage>,
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' ? 'signing' : 'ready'}
+                composed={legacyComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review'}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setStage('form'); setSubmitError(null); }}
+                decoded={legacyDecoded}
+                chainLabel={giveDescriptor?.displayName || giveChainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={giveTicker || giveCoinTicker}
+                credentials={<p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>}
+                credentialsReady
+                summary={{
+                    verb: t('palette.tradeSwap.title'),
+                    ...orderGiveParts(swapParams, giveCoinTicker),
+                    chainId: giveChainId,
+                    address: fromAddress?.address,
+                    facts: [
+                        ...(!giveOwnership && !getOwnership ? [{ label: 'Rate', value: rateText }] : []),
+                        {
+                            label: 'Expiration',
+                            value: swapParams.EXPIRATION
+                                ? formatUnixSecondsLocal(swapParams.EXPIRATION)
+                                : '3 months',
+                        },
+                    ],
+                    ...(!nativeFee.flag && quotedProtocolFee.known ? {
+                        protocolFee: {
+                            amount: quotedProtocolFee.free ? '0' : String(quotedProtocolFee.amount ?? ''),
+                            ticker: 'XCHAIN',
+                        },
+                    } : {}),
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: giveTicker || giveCoinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -854,8 +827,15 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         return (
             <ActionConfirmScreen
                 confirmAction={actionConfirm.confirmAction}
+                summary={{
+                    verb: t('palette.tradeSwap.title'),
+                    ...orderGiveParts(swapParams, giveCoinTicker),
+                    chainId: giveChainId,
+                    address: fromAddress?.address,
+                }}
                 screenVariant={variant}
                 chainLabel={giveDescriptor?.displayName || giveChainId}
+                feeEstimate={giveTicker ? feeEstimate : null}
                 feeText={feeEstimate?.coinAmount && giveTicker
                     ? `Network fee: ${feeEstimate.coinAmount} ${giveTicker}`
                     : undefined}
@@ -877,17 +857,18 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={giveChainId}
-                onChainChange={(cid) => {
-                    if (cid === giveChainId) return;
-                    setGiveChainId(cid);
-                    setGiveTick('');
-                    setGiveAmount('');
-                    setGiveOwnership(false);
-                    setFormError(null);
-                }}
+                // A picked give token holds From to its network, as on the
+                // Network field; before that, an address on another chain
+                // moves the give Network there first. The get network stays
+                // apart from it, so its addresses cannot be picked here.
+                lockNetwork={Boolean(giveTick.trim())}
+                onChainChange={changeGiveChain}
+                unavailableReason={(_address, cid) => (cid && cid === getChainId
+                    ? 'This address is on the Get network. Give and Get use different networks.'
+                    : null)}
                 onPick={(a) => {
                     setFromAddressId(a.id);
                     setSourcePickerOpen(false);
@@ -901,7 +882,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="Receive at"
+                title="Receive At"
                 walletId={walletId}
                 chainId={getChainId}
                 lockNetwork
@@ -916,14 +897,38 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         );
     }
 
+    // The allow / block list picker page, on the give chain where the
+    // SWAP is recorded and its lists are looked up.
+    if (listPickerFor) {
+        return (
+            <ListPickerScreen
+                variant={variant}
+                messaging={messaging}
+                chainId={giveChainId}
+                addresses={addressesByChain?.[giveChainId] || []}
+                filterType="2"
+                title={listPickerFor === 'allow' ? 'Choose Allow-List' : 'Choose Block-List'}
+                onSelect={(row) => {
+                    const pick = { index: String(row.actionIndex), name: row.name };
+                    if (listPickerFor === 'allow') { setAllowListIdx(row.actionIndex); setAllowListPick(pick); }
+                    else { setBlockListIdx(row.actionIndex); setBlockListPick(pick); }
+                    setListPickerFor(null);
+                }}
+                onBack={() => setListPickerFor(null)}
+            />
+        );
+    }
+
     if (givePickerOpen) {
         return (
             <TokenPicker
                 purpose="send"
                 walletId={walletId}
-                title="Select give token"
-                networkFilter={coinFromChainId(giveChainId)}
+                title="Select Give Token"
+                // Lists every network; the picked asset's chain becomes
+                // the give network (a new chain clears the give side first).
                 onSelect={(sel) => {
+                    if (sel.chainId && sel.chainId !== giveChainId) changeGiveChain(sel.chainId);
                     const nextTick = String(sel.tick || '').toUpperCase();
                     if (nextTick !== giveTick) setGiveAmount('');
                     setGiveTick(nextTick);
@@ -939,9 +944,11 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             <TokenPicker
                 purpose="receive"
                 walletId={walletId}
-                title="Select get token"
-                networkFilter={coinFromChainId(getChainId)}
+                title="Select Get Token"
+                // Lists every network; the picked asset's chain becomes
+                // the get network (a new chain clears the get side first).
                 onSelect={(sel) => {
+                    if (sel.chainId && sel.chainId !== getChainId) changeGetChain(sel.chainId);
                     const nextTick = String(sel.tick || '').toUpperCase();
                     if (nextTick !== getTick) setGetAmount('');
                     setGetTick(nextTick);
@@ -952,16 +959,342 @@ export function CrossChainSwapForm({ walletId, onBack }) {
         );
     }
 
+    // One handler per side, called by that side's token picker when the picked
+    // asset lives on another chain. Each clears only its own side's chain-scoped
+    // values; the give chain also owns the list IDs.
+    function changeGiveChain(cid) {
+        if (cid === giveChainId) return;
+        setGiveChainId(cid);
+        setGiveTick('');
+        setGiveAmount('');
+        setGiveOwnership(false);
+        setAllowListIdx('');
+        setBlockListIdx('');
+        setFormError(null);
+    }
+    function changeGetChain(cid) {
+        if (cid === getChainId) return;
+        setGetChainId(cid);
+        setGetAddress('');
+        setGetAddressTouched(false);
+        setGetTick('');
+        setGetAmount('');
+        setGetOwnership(false);
+        setFormError(null);
+    }
+
+    // The same digits-only rule for every amount input, Quick or Full.
+    const amountInput = (setter) => (rawValue) => {
+        const stripped = String(rawValue).replace(/,/g, '');
+        if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
+        setter(stripped);
+    };
+
+    // The flip button swaps the whole side, network included. The
+    // receive address names a get-chain address, so it is cleared and refilled
+    // by the auto-fill; list IDs name give-chain lists, so they clear too.
+    function flipSides() {
+        setGiveChainId(getChainId);
+        setGetChainId(giveChainId);
+        setGiveTick(getTick);
+        setGetTick(giveTick);
+        setGiveAmount(getAmount);
+        setGetAmount(giveAmount);
+        setGiveOwnership(getOwnership);
+        setGetOwnership(giveOwnership);
+        setGetAddress('');
+        setGetAddressTouched(false);
+        setAllowListIdx('');
+        setBlockListIdx('');
+        setFormError(null);
+    }
+
+    const giveTickUpper = giveTick.trim().toUpperCase();
+    const getTickUpper = getTick.trim().toUpperCase();
+    const giveBalanceText = giveBalance != null && giveTick.trim()
+        ? `${formatWithThousands(giveBalance)} ${giveTickUpper} available`
+        : null;
+    const onGiveMax = giveBalance && Number(giveBalance) > 0
+        ? () => setGiveAmount(giveBalance)
+        : undefined;
+
+    // Swap Terms reads the expiry ("3 months" or "Expires <time>"); Lists
+    // names the lists set, else "None". Receive at stays on the get side here,
+    // where it is required, so it is no part of the terms.
+    const expParam = expirationParam(expMode, expInput);
+    const termsSummary = expMode === 'default'
+        ? '3 months'
+        : (expParam ? `Expires ${formatUnixSecondsLocal(Number(expParam))}` : 'Custom expiry');
+    const listsParts = [];
+    if (allowListIdx) listsParts.push(`Allow list #${allowListIdx}`);
+    if (blockListIdx) listsParts.push(`Block list #${blockListIdx}`);
+    // The standard's summaries join their parts with ", ".
+    const listsSummary = listsParts.length ? joinSummary(...listsParts) : 'None';
+
+    const sideSummary = (tick, amount, ownership) => {
+        const upper = tick.trim().toUpperCase();
+        if (!upper) return 'No token yet';
+        if (ownership) return `Ownership of ${upper}`;
+        return amount ? `${formatWithThousands(amount)} ${upper}` : upper;
+    };
+    // The main section's closed summary, "100 DANKEST for 5 COOL".
+    const swapSummary = giveTickUpper || getTickUpper
+        ? `${sideSummary(giveTick, giveAmount, giveOwnership)} for ${sideSummary(getTick, getAmount, getOwnership)}`
+        : 'No tokens yet';
+
+    const { view, setView, sections, setSectionOpen } = giveGetView;
+    // Spread onto a standard section; the open state lives in
+    // useGiveGetView above the early returns, so a picker page keeps it.
+    // `main` flags Swap as the form's main section (data-form-main).
+    const bind = (id) => ({ open: Boolean(sections[id]), onOpenChange: (open) => setSectionOpen(id, open), main: id === 'swap' });
+    // Which section holds an error, so each review attempt reopens it.
+    const termsHasError = Boolean(expirationValidationError(expMode, expInput));
+    const listsHasError = Boolean((allowListIdx && !isPositiveActionIndex(allowListIdx))
+        || (blockListIdx && !isPositiveActionIndex(blockListIdx)));
+    // The status slot carries the memo's message (validationError); this
+    // flag only reopens the Memo section on each review attempt.
+    const memoHasError = Boolean(memo.includes('|') || memo.includes(';')
+        || memoLengthError(memo.trim()) || memoCharacterError(memo.trim()));
+    const feeHasError = Boolean(customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate }));
+    const swapHasError = Boolean(validationError || formError)
+        && !termsHasError && !listsHasError && !memoHasError && !feeHasError;
+    const revealOn = (hasError) => (hasError ? reviewAttempt : 0);
+
+    const giveNetworkHelp = 'The chain you pay from. The token you give, your From address and the network fee are on this chain; changing it clears the give token.';
+    const getNetworkHelp = 'The chain you want to be paid on. The token you get and your Receive at address are on this chain; changing it clears the get token.';
+    const fromHelp = "The wallet address on the give network whose tokens are escrowed and that pays this swap's network fee.";
+    const receiveHelp = 'The address on the get network that receives what the matcher gives. Type or paste any valid address, or choose one from this wallet.';
+    const giveTokenHelp = 'The token you put up on the give network. It is held in escrow until the swap is matched, cancelled or expires.';
+    const getTokenHelp = 'The token you want in return on the get network. It is paid to your Receive at address when someone matches the swap.';
+
+    // The ownership switches (Swap's wording), built once and shown
+    // in whichever view is open; the help keeps this form's cross-chain copy.
+    const giveOwnershipToggle = (
+        <OwnershipToggle
+            label="Give this token's ownership instead of an amount"
+            help={`Escrow the give token name's ownership record for this cross-chain swap instead of giving a token balance. Transfers the entire ownership of ${giveTickUpper || 'this token'} (single-fill, no partial matches).`}
+            checked={giveOwnership}
+            onChange={setGiveOwnership}
+        />
+    );
+    const getOwnershipToggle = (
+        <OwnershipToggle
+            label="Require the matcher to give that token's ownership instead of an amount"
+            help={`Require the matcher to transfer the get token name's ownership record across chains instead of providing a token balance. The matcher must currently own ${getTickUpper || 'this token'}; on match its ownership transfers to you.`}
+            checked={getOwnership}
+            onChange={setGetOwnership}
+        />
+    );
+    const rateLine = <RateLine text={rateText} />;
+
+    // The Quick body of the main section: the give and get cards
+    // (Receive at stays on the get card), the flip and the rate.
+    const quickSwap = (
+        <GiveGetQuick
+            give={{
+                label: 'You give',
+                help: giveTokenHelp,
+                // No network control; the card shows the asset's network read-only.
+                asset: giveTick && giveChainId ? { chainId: giveChainId, tick: giveTick } : null,
+                assetLabel: 'Give token',
+                onOpenAsset: () => setGivePickerOpen(true),
+                amount: giveAmount,
+                onAmountChange: amountInput(setGiveAmount),
+                amountLabel: 'Give amount',
+                ownership: giveOwnership,
+                ownershipHint: 'Single fill, no partial matches.',
+                balanceText: giveBalanceText,
+                onMax: onGiveMax || null,
+                maxDisabled: !giveBalance,
+                // No From row in the card; From is the standard's first section.
+            }}
+            get={{
+                label: 'You get',
+                help: getTokenHelp,
+                // No network control; the card shows the asset's network read-only.
+                asset: getTick && getChainId ? { chainId: getChainId, tick: getTick } : null,
+                assetLabel: 'Get token',
+                onOpenAsset: () => setGetPickerOpen(true),
+                amount: getAmount,
+                onAmountChange: amountInput(setGetAmount),
+                amountLabel: 'Get amount',
+                ownership: getOwnership,
+                ownershipHint: 'The matcher hands over this token name.',
+                // Receive at is required here; Quick picks from the
+                // wallet, Full also takes a typed or pasted address.
+                address: (
+                    <QuickAddressRow
+                        label="Receive at"
+                        help={receiveHelp}
+                        address={getAddress.trim()}
+                        placeholder="Choose a receive address"
+                        onPick={() => setReceivePickerOpen(true)}
+                        pickLabel="Choose receiving address"
+                    />
+                ),
+            }}
+            onFlip={flipSides}
+            rate={rateLine}
+        />
+    );
+
+    // The Full body of the main section: every give and get field in
+    // one open section (Receive at with the get side), then the rate.
+    const fullSwap = (
+        <>
+                        <TokenField
+                            label="Give token"
+                            help={giveTokenHelp}
+                            value={giveTick && giveChainId ? { chainId: giveChainId, tick: giveTick } : null}
+                            onOpenPicker={() => setGivePickerOpen(true)}
+                        />
+                        {giveOwnership ? null : (
+                            <AmountField
+                                label="Give amount"
+                                help="How many of the give token to escrow for this cross-chain swap. The give side stays escrowed until a match, cancellation, or expiration."
+                                amount={giveAmount}
+                                tick={giveTick}
+                                onAmountFieldChange={amountInput(setGiveAmount)}
+                                onMax={onGiveMax}
+                                maxDisabled={!giveBalance}
+                                balanceText={giveBalanceText}
+                            />
+                        )}
+                        {/* No Get network field; the get token decides it. */}
+                        <AddressField
+                            label="Receive at"
+                            icon="addresses"
+                            help={receiveHelp}
+                            value={getAddress}
+                            onChange={(e) => {
+                                setGetAddress(e.target.value);
+                                setGetAddressTouched(true);
+                            }}
+                            onIconClick={() => setReceivePickerOpen(true)}
+                            iconLabel="Choose receiving address"
+                            placeholder="Automatically filled from your wallet on the get network"
+                            autoComplete="off"
+                        />
+                        <TokenField
+                            label="Get token"
+                            help={getTokenHelp}
+                            value={getTick && getChainId ? { chainId: getChainId, tick: getTick } : null}
+                            onOpenPicker={() => setGetPickerOpen(true)}
+                        />
+                        {getOwnership ? null : (
+                            <AmountField
+                                label="Get amount"
+                                help="How many of the get token the matcher must provide on the get network in exchange for your escrowed tokens."
+                                amount={getAmount}
+                                tick={getTick}
+                                onAmountFieldChange={amountInput(setGetAmount)}
+                            />
+                        )}
+                        {rateLine}
+        </>
+    );
+
+    // The Swap Terms fields, one optional section in both views, so Quick's
+    // terms row expands in place and never switches to Full. The section
+    // carries the Optional tag, so the fields carry none.
+    const termsFields = (
+        <>
+                        {/* A choice among a few named options is the icon dropdown (G44);
+                            Expires always shows and follows it (operator 2026-11-13). */}
+                        <ExpirationFields
+                            name="xswap-exp"
+                            mode={expMode}
+                            input={expInput}
+                            onChange={(mode, input) => { setExpMode(mode); setExpInput(input); }}
+                            help="How long this cross-chain swap stays open for matching. Cancel from My swaps or let the offer expire to return the escrow to the source address. Paid transaction fees are not refunded."
+                            expiresHelp="The local date and time when this cross-chain swap stops accepting matches. Set by the Expiration choice, or pick a time to expire at a specific time."
+                        />
+        </>
+    );
+
+    // The Lists section: who may match the swap.
+    const listsFields = (
+        <>
+                        {/* Allow and block lists (give-network lists, as on Swap) are
+                            picker fields like Token, never grey buttons. */}
+                        <ListField
+                            label="Allow list"
+                            help="Only addresses on this list can match the swap. Pick an address list you published in My Lists on the give network."
+                            placeholder="None set"
+                            valueText={pickedListText(allowListIdx, allowListPick)}
+                            onOpenPicker={() => setListPickerFor('allow')}
+                            onClear={() => setAllowListIdx('')}
+                            clearLabel="Clear allow list"
+                        />
+                        <ListField
+                            label="Block list"
+                            help="Addresses on this list cannot match the swap. Pick an address list you published in My Lists on the give network."
+                            placeholder="None set"
+                            valueText={pickedListText(blockListIdx, blockListPick)}
+                            onOpenPicker={() => setListPickerFor('block')}
+                            onClear={() => setBlockListIdx('')}
+                            clearLabel="Clear block list"
+                        />
+        </>
+    );
+
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
             label="Cross-chain swap"
             onSubmit={handleReview}
-            sectioned
+            data-form-standard="cross-chain-swap"
             // The review composes the terms as they stand at Review, so the
             // fields hold still until the confirm page opens.
             inert={actionConfirm.composing ? '' : undefined}
             aria-busy={actionConfirm.composing ? 'true' : undefined}
+            from={(
+                <FromSection
+                    {...bind('from')}
+                    chainId={giveChainId}
+                    // The get network is never offered as the give network.
+                    chainIds={chainIds.filter((cid) => cid !== getChainId)}
+                    chainRegistry={chainRegistry}
+                    // The give network. A picked give token decides it;
+                    // before one is picked it can change here.
+                    lockNetwork={Boolean(giveTickUpper)}
+                    onNetworkChange={changeGiveChain}
+                    networkHelp={giveNetworkHelp}
+                    address={fromAddress?.address || null}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp={fromHelp}
+                    revealKey={revealOn(!fromAddress)}
+                    // Only once loaded and the give network has no
+                    // address, so a slow read never opens From for good.
+                    missing={giveChainId && !(addressesByChain[giveChainId] || []).length ? (
+                        <FormNotice variant="error">No address on the give network.</FormNotice>
+                    ) : null}
+                />
+            )}
+            fee={(
+                /* Off Bitcoin the native-coin protocol fee is mandatory, so the
+                   card's switch renders as a disclosure rather than a choice -
+                   the same treatment every other ORDER/SWAP surface gives it. */
+                <FeeSection
+                    {...bind('fee')}
+                    chainId={giveChainId}
+                    coinTicker={giveTicker || ''}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={revealOn(feeHasError)}
+                    fees={{
+                        quote: protocolFeeQuote,
+                        pending: protocolFeePending,
+                        waiting: protocolFeeWaiting,
+                        // A swap inside the free period costs no protocol fee.
+                        free: expirationWithinFreePeriod(expMode, expInput),
+                        nativeFeeProps: { ...nativeFee.toggleProps, coinTicker: giveTicker || '' },
+                    }}
+                />
+            )}
             status={[
                 offlineNote,
                 validationError ? (
@@ -971,196 +1304,75 @@ export function CrossChainSwapForm({ walletId, onBack }) {
                     <StatusMessage key="form" variant="error">{formError}</StatusMessage>
                 ) : null,
             ]}
-            actions={(
-                <Button
-                    type="submit"
-                    variant="success"
+            action={(
+                <FormAction
                     icon={<Icon.SwapIcon />}
                     loading={actionConfirm.composing}
                     disabled={actionConfirm.composing || !networkAvailable}
                     title={!networkAvailable ? 'Swapping needs a network connection' : undefined}
                 >
                     {actionConfirm.composing
-                        ? 'Preparing cross-chain swap…'
-                        : 'Create cross-chain swap'}
-                </Button>
+                        ? 'Preparing Cross-Chain Swap…'
+                        : 'Create Cross-Chain Swap'}
+                </FormAction>
             )}
         >
-            <FormSection title="You give">
-                    <NetworkField
-                        label="Give network"
-                        help="The chain you pay from. The token you give, your From address and the network fee are on this chain; changing it clears the give token."
-                        value={giveChainId || ''}
-                        onChange={(cid) => {
-                            if (cid === giveChainId) return;
-                            setGiveChainId(cid);
-                            setGiveTick('');
-                            setGiveAmount('');
-                            setGiveOwnership(false);
-                            setFormError(null);
-                        }}
-                        chainIds={chainIds}
-                        chainRegistry={chainRegistry}
-                    />
-                    {fromAddress ? (
-                        <AddressField
-                            label="From"
-                            icon="addresses"
-                            help="The wallet address on the give network whose tokens are escrowed and that pays this swap's network fee."
-                            value={fromAddress.address}
-                            readOnly
-                            onChange={() => {}}
-                            onIconClick={() => setSourcePickerOpen(true)}
-                            iconLabel="Choose source address"
-                        />
-                    ) : null}
-                    <TokenField
-                        label="Give token"
-                        help="The token you put up on the give network. It is held in escrow until the swap is matched, cancelled or expires."
-                        value={giveTick && giveChainId ? { chainId: giveChainId, tick: giveTick } : null}
-                        onOpenPicker={() => setGivePickerOpen(true)}
-                    />
-                    <Checkbox
-                        label="Give this token's ownership (not a balance)"
-                        help="Escrow the give token name's ownership record for this cross-chain swap instead of giving a token balance."
-                        checked={giveOwnership}
-                        onChange={(e) => setGiveOwnership(e.target.checked)}
-                    />
-                    {!giveOwnership ? (
-                        <AmountField
-                            label="Give amount"
-                            help="How many of the give token to escrow for this cross-chain swap. The give side stays escrowed until a match, cancellation, or expiration."
-                            amount={giveAmount}
-                            tick={giveTick}
-                            onAmountFieldChange={(rawValue) => {
-                                const stripped = String(rawValue).replace(/,/g, '');
-                                if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                                setGiveAmount(stripped);
-                            }}
-                            onMax={giveBalance && Number(giveBalance) > 0
-                                ? () => setGiveAmount(giveBalance)
-                                : undefined}
-                            maxDisabled={!giveBalance}
-                            balanceText={giveBalance != null && giveTick.trim()
-                                ? `${formatWithThousands(giveBalance)} ${giveTick.trim().toUpperCase()} available`
-                                : null}
-                        />
-                    ) : null}
+            {/* The main section, open, holds both sides in either view. */}
+            <FormSection
+                id="swap"
+                title="Cross-Chain Swap"
+                icon={Icon.SwapIcon}
+                {...bind('swap')}
+                revealKey={revealOn(swapHasError)}
+                summary={swapSummary}
+            >
+                {/* One form either way (operator 2026-11-13): Quick | Full only
+                    restyles this section's give and get inputs. */}
+                <ViewSwitch value={view} onChange={setView} label="Swap input style" inSection />
+                {view === 'quick' ? quickSwap : fullSwap}
             </FormSection>
-
-            <FormSection title="You get">
-                    <NetworkField
-                        label="Get network"
-                        help="The chain you want to be paid on. The token you get and your Receive at address are on this chain; changing it clears the get token."
-                        value={getChainId || ''}
-                        onChange={(cid) => {
-                            if (cid === getChainId) return;
-                            setGetChainId(cid);
-                            setGetAddress('');
-                            setGetAddressTouched(false);
-                            setGetTick('');
-                            setGetAmount('');
-                            setGetOwnership(false);
-                            setFormError(null);
-                        }}
-                        chainIds={chainIds}
-                        chainRegistry={chainRegistry}
-                    />
-                    <AddressField
-                        label="Receive at"
-                        icon="addresses"
-                        help="The address on the get network that receives what the matcher gives. Type or paste any valid address, or choose one from this wallet."
-                        value={getAddress}
-                        onChange={(e) => {
-                            setGetAddress(e.target.value);
-                            setGetAddressTouched(true);
-                        }}
-                        onIconClick={() => setReceivePickerOpen(true)}
-                        iconLabel="Choose receiving address"
-                        placeholder="Automatically filled from your wallet on the get network"
-                        autoComplete="off"
-                    />
-                    <TokenField
-                        label="Get token"
-                        help="The token you want in return on the get network. It is paid to your Receive at address when someone matches the swap."
-                        value={getTick && getChainId ? { chainId: getChainId, tick: getTick } : null}
-                        onOpenPicker={() => setGetPickerOpen(true)}
-                    />
-                    <Checkbox
-                        label="Require the matcher to give that token's ownership"
-                        help="Require the matcher to transfer the get token name's ownership record across chains instead of providing a token balance."
-                        checked={getOwnership}
-                        onChange={(e) => setGetOwnership(e.target.checked)}
-                    />
-                    {!getOwnership ? (
-                        <AmountField
-                            label="Get amount"
-                            help="How many of the get token the matcher must provide on the get network in exchange for your escrowed tokens."
-                            amount={getAmount}
-                            tick={getTick}
-                            onAmountFieldChange={(rawValue) => {
-                                const stripped = String(rawValue).replace(/,/g, '');
-                                if (stripped !== '' && !/^\d*\.?\d*$/.test(stripped)) return;
-                                setGetAmount(stripped);
-                            }}
-                        />
-                    ) : null}
+            {/* Both ownership switches live in one optional section in both styles. */}
+            <FormSection
+                id="ownership"
+                title="Ownership"
+                icon={Icon.KeyIcon}
+                optional
+                {...bind('ownership')}
+                summary={giveOwnership || getOwnership ? 'Single fill' : 'Amounts'}
+            >
+                {giveOwnershipToggle}
+                {getOwnershipToggle}
             </FormSection>
-
-            <FormSection title="Timing and fees">
-                <RadioGroup
-                    legend="Expiration"
-                    help="How long this cross-chain swap stays open for matching. Cancel from My swaps or let the offer expire to return the escrow to the source address. Paid transaction fees are not refunded."
-                    name="xswap-exp"
-                    value={expMode}
-                    onChange={setExpMode}
-                    options={[
-                        { value: 'default', label: 'Default window' },
-                        { value: 'custom', label: 'Expire at a specific time' },
-                    ]}
-                />
-                {expMode === 'custom' ? (
-                <Input
-                    label="Expires"
-                    help="The local date and time when this cross-chain swap stops accepting matches."
-                    type="datetime-local"
-                    value={expInput}
-                    onChange={(e) => setExpInput(e.target.value)}
-                />
-                ) : null}
-
-                {/* Native definition list remains because the UI kit has no read-only detail-list primitive. */}
-                <dl className={styles.detailsList}>
-                    <DetailRow label="Rate" value={rateText} />
-                </dl>
-
-                <Input
-                    label="Memo"
-                    optional
-                    maxLength={MAX_MEMO_LENGTH}
-                    help="A public note stored with this cross-chain swap on chain."
-                    value={memo}
-                    onChange={(e) => setMemo(e.target.value)}
-                />
-
-                <FeesCard chainId={giveChainId} quote={protocolFeeQuote} pending={protocolFeePending} feeSelector={feeTiers ? (
-                    <FeeSelector
-                        chainId={giveChainId}
-                        label="Network fee"
-                        coinTicker={giveTicker || ''}
-                        tiers={feeTiers}
-                        value={feePick}
-                        onChange={setFeePick}
-                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                    />
-                ) : null}>
-                {/* Off Bitcoin this is mandatory, so it renders as a
-                    disclosure rather than a choice - the same treatment every other
-                    ORDER/SWAP authoring surface gives it. */}
-                    <NativeFeeToggle {...nativeFee.toggleProps} coinTicker={giveTicker || ''} />
-                </FeesCard>
+            <FormSection
+                id="options"
+                title="Swap Terms"
+                icon={Icon.FilterIcon}
+                optional
+                {...bind('options')}
+                revealKey={revealOn(termsHasError)}
+                summary={termsSummary}
+            >
+                {termsFields}
             </FormSection>
-        </FormPage>,
+            <FormSection
+                id="lists"
+                title="Lists"
+                icon={Icon.ListIcon}
+                optional
+                {...bind('lists')}
+                revealKey={revealOn(listsHasError)}
+                summary={listsSummary}
+            >
+                {listsFields}
+            </FormSection>
+            <MemoSection
+                {...bind('memo')}
+                revealKey={revealOn(memoHasError)}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                maxLength={MAX_MEMO_LENGTH}
+            />
+        </FormFrame>,
     );
 }
 

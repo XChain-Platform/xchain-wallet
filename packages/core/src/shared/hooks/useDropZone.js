@@ -33,6 +33,7 @@
 // the input themselves.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { formatBytes } from '../utils/formatBytes.js';
 
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024; // 2 MB: large enough for PSBT / backup / contacts; small enough to keep paste OOM-proof.
 
@@ -82,7 +83,9 @@ export function useDropZone({
     const handleFile = useCallback(async (file) => {
         if (!file) return;
         if (file.size > maxBytes) {
-            onError?.(`File is too large (${Math.round(file.size / 1024)} KB; max ${Math.round(maxBytes / 1024)} KB).`);
+            // The file's size rounds up and the limit down, so an oversize
+            // file never reads as equal to or under the limit.
+            onError?.(`File is too large (${formatBytes(file.size)}; max ${formatBytes(maxBytes, { limit: true })}).`);
             return;
         }
         if (!matchesAccept(file, accept)) {

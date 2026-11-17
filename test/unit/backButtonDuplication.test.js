@@ -77,9 +77,8 @@ const STEP_BACK_REQUIRED = [
     'packages/core/src/shared/components/OpenOrdersPanel.jsx',
     'packages/core/src/shared/routes/AttachContentForm.jsx',
     'packages/core/src/shared/routes/BatchComposerForm.jsx',
-    'packages/core/src/shared/routes/LinkForm.jsx',
+    // The one List form; its Fork and Edit review keeps Fork's Back step.
     'packages/core/src/shared/routes/ListCreateForm.jsx',
-    'packages/core/src/shared/routes/ListForkForm.jsx',
     'packages/core/src/shared/routes/MultisigSigningSession.jsx',
     'packages/core/src/shared/routes/ParallelComposer.jsx',
     'packages/core/src/shared/routes/ProjectRosterForm.jsx',

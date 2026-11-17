@@ -119,7 +119,8 @@ describe('large wallet screens', () => {
         const startedAt = performance.now();
         const view = render(tree());
 
-        fireEvent.click(await screen.findByRole('tab', { name: 'Tokens' }));
+        // Balances opens on coins and tokens together (operator 2026-11-15).
+        await screen.findByRole('tab', { name: 'Balances' });
         await waitFor(() => {
             expect(view.container.querySelectorAll('[data-balance-key]').length).toBeGreaterThan(0);
         });
@@ -148,6 +149,8 @@ describe('large wallet screens', () => {
         expect(performance.now() - startedAt).toBeLessThan(slowTimeout(3_500));
         expect(screen.getByText('100 of 5,000 history items shown')).toBeInTheDocument();
 
+        // Search sits in the title-bar filter panel.
+        fireEvent.click(screen.getByRole('button', { name: 'History filters' }));
         fireEvent.change(screen.getByLabelText('Search history'), {
             target: { value: 'rltc1qhistorydestination4999' },
         });
@@ -159,7 +162,7 @@ describe('large wallet screens', () => {
                 `${CHAIN}:1:${addresses[0].address}`,
             );
         });
-        expect(screen.queryByRole('button', { name: 'Show more history' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Show More History' })).toBeNull();
     });
 
     it('paginates 300 Addresses, filters the complete set, and renders within its jsdom budget', async () => {
@@ -179,6 +182,8 @@ describe('large wallet screens', () => {
         expect(performance.now() - startedAt).toBeLessThan(slowTimeout(1_500));
         expect(screen.getByText('100 of 300 addresses shown')).toBeInTheDocument();
 
+        // Search sits in the title-bar filter panel.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter addresses' }));
         fireEvent.change(screen.getByRole('searchbox', { name: 'Search addresses' }), {
             target: { value: 'Scale address 299' },
         });

@@ -204,7 +204,7 @@ describe('trading history panel display states', () => {
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent("Couldn't load recent trades.");
         expect(alert).not.toHaveTextContent('Malformed');
-        fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+        fireEvent.click(within(alert).getByRole('button', { name: 'Try Again' }));
 
         expect(await screen.findByText('No trades yet.')).toBeInTheDocument();
         expect(getMarketHistory).toHaveBeenCalledTimes(2);
@@ -225,7 +225,7 @@ describe('trading history panel display states', () => {
 
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent("Couldn't load your open orders.");
-        fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+        fireEvent.click(within(alert).getByRole('button', { name: 'Try Again' }));
 
         expect(await screen.findByText('No open orders on this market.')).toBeInTheDocument();
         expect(getAddressesByChain).toHaveBeenCalledTimes(2);

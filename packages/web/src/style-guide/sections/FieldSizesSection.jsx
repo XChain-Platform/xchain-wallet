@@ -87,7 +87,7 @@ export function FieldSizesSection() {
                                     ariaLabel={`${size} network filter`}
                                 />
                             </div>
-                            <Button size={size} variant="primary">Button</Button>
+                            <Button size={size} variant="primary" icon={<Icon.CheckIcon />}>Button</Button>
                         </div>
                     ))}
                 </div>

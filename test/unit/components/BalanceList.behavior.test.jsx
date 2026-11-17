@@ -136,6 +136,23 @@ describe('BalanceList ordering and visibility', () => {
         );
     });
 
+    it('keeps selected state on the outer row and its nested control for semantics', () => {
+        render(
+            <BalanceList
+                rows={[row('CURRENT')]}
+                selectedKey="bitcoin-mainnet:CURRENT"
+                onSelectToken={() => {}}
+            />,
+        );
+
+        const control = screen.getByRole('button', { name: /^Open CURRENT token details, / });
+        const wrapper = control.closest('[role="listitem"]');
+        expect(wrapper).toHaveAttribute('data-xc-row-state');
+        expect(wrapper).toHaveAttribute('data-selected', 'true');
+        expect(control).toHaveAttribute('aria-current', 'true');
+        expect(control).toHaveClass(balanceStyles.rowContent);
+    });
+
     it('shows artwork without a backing monogram and restores the neutral fallback on error', () => {
         const imageUrl = 'https://issuer.example/slow.png';
         render(<BalanceList rows={[row('ART', { imageUrl })]} />);

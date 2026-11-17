@@ -10,7 +10,7 @@
 
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,7 +21,7 @@ const tracked = (pattern) => execFileSync(
     'git',
     ['ls-files', pattern],
     { cwd: root, encoding: 'utf8' },
-).trim().split('\n').filter(Boolean);
+).trim().split('\n').filter((file) => file && existsSync(join(root, file)));
 
 const tokens = readFileSync(join(root, 'packages/core/src/ui/tokens.css'), 'utf8');
 

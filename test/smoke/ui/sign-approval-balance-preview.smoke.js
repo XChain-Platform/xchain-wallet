@@ -8,19 +8,17 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Smoke for §21, Step 4: SignApproval (signAction) wires <BalanceChanges>.
+// Smoke for §21, Step 4: SignApproval previews signAction balances.
 //
 // Source-level checks that the approval window now:
-//   - imports BalanceChanges + the new approval-side messaging helpers
+//   - fetches balances through the approval-side messaging helpers
 //   - fetches address balances against the dApp-requested chain only
-//     for the signAction kind (signMessage / signPsbt / signIn skip
-//     the preview (they don't move value)
+//     for the signAction kind
 //   - resolves the source address from payload.payload.from.address
 //     when the dApp passes it; otherwise falls back to the wallet's
 //     first address on the requested chain
-//   - degrades gracefully on fetch error
-//   - renders the section only for signAction (no orphan section on
-//     signMessage / signPsbt / signIn)
+//   - puts projected post-action balances in the G127 facts card
+//   - puts preview failures in the shared warning slot
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -58,9 +56,10 @@ assert.match(
     'getAddressesByChain routes to addresses.byChain',
 );
 
-// --- 2. SignApproval imports + state --------------------------------------
+// --- 2. SignApproval Confirm Standard + state -----------------------------
 
-assert.match(signSrc, /import \{ BalanceChanges \}/, 'imports BalanceChanges');
+assert.match(signSrc, /ConfirmStandard,/, 'imports Confirm Standard');
+assert.doesNotMatch(signSrc, /<BalanceChanges|import \{ BalanceChanges \}/, 'G127 retires the balance-change card');
 assert.match(
     signSrc,
     /getAddressBalances,\s*\n\s*getAddressesByChain,/,
@@ -98,36 +97,27 @@ assert.match(
     'fallback picks first address on the requested chain',
 );
 
-// useMemo passes the dApp action + params through the simulator.
+// The facts model passes the dApp action + params through the simulator.
 assert.match(signSrc, /decoderLib\.simulateAction\(/);
 assert.match(signSrc, /action: resolvedPayload\?\.action,/);
 assert.match(signSrc, /params: resolvedPayload\?\.payload \|\| \{\}/);
 assert.match(signSrc, /balances: decoderLib\.balancesFromSdk\(previewBalances\.sdkShape\)/);
 assert.match(signSrc, /feeEstimate:\s*'0'/);
-
-// --- 4. Render gates on signAction ---------------------------------------
-
-const summaryIdx = signSrc.indexOf('<SignSummary');
-const balanceJsxIdx = signSrc.indexOf("kind === 'signAction'", summaryIdx);
-const formIdx = signSrc.indexOf('id="sign-approval-form"');
-assert.ok(
-    summaryIdx > 0 && balanceJsxIdx > 0 && formIdx > 0,
-    'all three blocks present',
-);
-assert.ok(
-    summaryIdx < balanceJsxIdx && balanceJsxIdx < formIdx,
-    'BalanceChanges sits between SignSummary and the password form',
+assert.match(
+    signSrc,
+    /projectedBalanceFacts[\s\S]{0,1200}?label: `Balance after \(\$\{String\(delta\.tick\)\.toUpperCase\(\)\}\)`/,
+    'projected post-action balances become facts',
 );
 
-// signMessage / signPsbt / signIn do NOT render the preview (gated).
-const balanceBlockIdx = signSrc.indexOf('<BalanceChanges', balanceJsxIdx);
-const blockExtract = signSrc.slice(balanceJsxIdx, balanceBlockIdx + 200);
-assert.match(blockExtract, /signAction/, 'render gate references signAction');
-assert.match(blockExtract, /\? \(/, 'gate uses ternary, not unconditional');
+// --- 4. Facts and warning slot -------------------------------------------
 
-// --- 5. Loading + error props plumbed through ----------------------------
-
-assert.match(signSrc, /loading=\{previewBalances\.loading\}/);
-assert.match(signSrc, /error=\{previewBalances\.error\}/);
+assert.match(signSrc, /const generalConfirmationFacts = \[[\s\S]{0,180}?\.\.\.projectedBalanceFacts/);
+assert.match(
+    signSrc,
+    /kind === 'signAction' && previewBalances\.error[\s\S]{0,120}?Balance preview unavailable\./,
+    'preview failure is explicit but non-blocking',
+);
+assert.match(signSrc, /<ConfirmStandard\b[\s\S]{0,2400}?warning=\{confirmationWarning\}/);
+assert.match(signSrc, /<ConfirmStandard[\s\S]{0,2400}?facts=\{confirmationFacts\}/);
 
 console.log('sign-approval-balance-preview smoke OK');

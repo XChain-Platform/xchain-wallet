@@ -8,8 +8,9 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
 vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
-    listWallets: vi.fn(async () => [{ id: 'wallet-1', name: 'Wallet 1' }]),
-    getSettings: vi.fn(async () => ({ walletMode: 'watcher' })),
+    // §20: the mode is the signing wallet's own.
+    listWallets: vi.fn(async () => [{ id: 'wallet-1', name: 'Wallet 1', walletMode: 'watcher' }]),
+    getSettings: vi.fn(async () => ({})),
     getAddressesByChain: vi.fn(async () => ({ 'bitcoin-regtest': [] })),
     parsePsbt: vi.fn(async () => ({
         decomposed: { inputs: [], outputs: [] },
@@ -63,7 +64,7 @@ describe('SignApproval in watcher mode', () => {
             />,
         );
 
-        await screen.findByText(/Watcher mode never signs or asks for a password/i);
+        await screen.findByText(/Another phone signs for this wallet, so it never signs or asks for a password/i);
         expect(screen.queryByLabelText('Password')).toBeNull();
         expect(screen.queryByRole('button', { name: /^(Approve|Sign in)$/i })).toBeNull();
         expect(messaging.resolveApproval).not.toHaveBeenCalled();
@@ -83,7 +84,7 @@ describe('SignApproval in watcher mode', () => {
             addresses: [{ chainId: 'bitcoin-regtest', address: 'bcrt1qwatcher' }],
         } }],
     ])('refuses a %s dApp request for a watch-only account without offering approval', async (kind, request) => {
-        messaging.getSettings.mockResolvedValueOnce({ walletMode: 'full' });
+        messaging.listWallets.mockResolvedValueOnce([{ id: 'wallet-1', name: 'Wallet 1', walletMode: 'full' }]);
         messaging.getAddressesByChain.mockResolvedValueOnce({
             'bitcoin-regtest': [{
                 id: 'watch-address',
@@ -106,7 +107,7 @@ describe('SignApproval in watcher mode', () => {
             />,
         );
 
-        expect(await screen.findByText('This watch-only account cannot sign.')).toBeTruthy();
+        expect(await screen.findByText('This address has no key in this wallet, so it cannot sign.')).toBeTruthy();
         expect(screen.queryByLabelText('Password')).toBeNull();
         expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
         expect(messaging.resolveApproval).not.toHaveBeenCalled();

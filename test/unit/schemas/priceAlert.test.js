@@ -115,6 +115,18 @@ describe('validatePriceAlert', () => {
     });
 });
 
+describe('paused status (2026-11-14)', () => {
+    it('accepts a paused alert and still rejects an unknown status', () => {
+        const alert = createPriceAlert(BASE_INPUT);
+        expect(validatePriceAlert({ ...alert, status: 'paused' }).ok).toBe(true);
+        expect(validatePriceAlert({ ...alert, status: 'snoozed' }).ok).toBe(false);
+    });
+
+    it('keeps the schema at version 1 so stored alerts still validate', () => {
+        expect(createPriceAlert(BASE_INPUT).schemaVersion).toBe(1);
+    });
+});
+
 describe('priceAlertKey', () => {
     it('keeps the native coin key byte-identical', () => {
         expect(priceAlertKey(createPriceAlert(BASE_INPUT))).toBe('bitcoin-mainnet::above::70000::usd');

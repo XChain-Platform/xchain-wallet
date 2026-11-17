@@ -8,14 +8,12 @@
 
 // @vitest-environment jsdom
 
-// Unit: the co-sign approval alerts speak plain words. Decoder codes, policy
-// codes and developer exception text stay out of every role="alert" line and
-// appear only inside a collapsed Technical details disclosure. Mounted for
-// real; the mock stands in for the extension's message-passing bridge only.
+// Unit: the co-sign approval warning slot speaks plain words. Decoder codes,
+// policy codes and developer exception text stay off the confirmation.
 
 import React from 'react';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
 
 vi.mock('../../../packages/extension/src/approval/messaging.js', () => ({
     listWallets: async () => [{ id: 'wallet-1', name: 'Wallet 1' }],
@@ -56,7 +54,7 @@ function renderCoSign() {
 }
 
 function alertText() {
-    return screen.queryAllByRole('alert').map((el) => el.textContent).join('\n');
+    return screen.queryByTestId('confirm-warning')?.textContent || '';
 }
 
 afterAll(() => vi.unstubAllGlobals());
@@ -67,9 +65,9 @@ afterEach(() => {
 });
 
 describe('SignApproval co-sign alerts', () => {
-    it('names an undecodable action in plain words and keeps the decoder code in details', async () => {
+    it('names an undecodable action in plain words without a technical disclosure', async () => {
         messaging.parseCoSign.mockResolvedValue({
-            account: ACCOUNT,
+            account: { ...ACCOUNT, name: '' },
             decodeOk: false,
             decodeReason: 'ENVELOPE_SCRIPT_INVALID',
             action: null,
@@ -80,15 +78,15 @@ describe('SignApproval co-sign alerts', () => {
         });
         renderCoSign();
 
-        const details = await screen.findByTestId('cosign-decode-details');
+        await screen.findByTestId('confirm-warning');
+        expect(screen.getByText('Cosigner account')).toBeTruthy();
         expect(alertText()).toContain('The action in this co-sign request could not be read because the action data is malformed.');
         expect(alertText()).not.toMatch(RAW_CODE);
-        expect(details.hasAttribute('open')).toBe(false);
-        expect(details.textContent).toContain('Technical details');
-        expect(details.textContent).toContain('ENVELOPE_SCRIPT_INVALID');
+        expect(document.querySelector('details')).toBeNull();
+        expect(document.body.textContent).not.toContain('ENVELOPE_SCRIPT_INVALID');
     });
 
-    it('names a policy violation in plain words and keeps the policy code in details', async () => {
+    it('names a policy violation in plain words without the policy code', async () => {
         messaging.parseCoSign.mockResolvedValue({
             account: ACCOUNT,
             decodeOk: true,
@@ -104,13 +102,13 @@ describe('SignApproval co-sign alerts', () => {
         });
         renderCoSign();
 
-        const details = await screen.findByTestId('cosign-policy-details');
+        await screen.findByTestId('confirm-warning');
         expect(alertText()).toContain(
             "This request is outside the account policy because it would go over this account's spending limit for the current period.",
         );
-        expect(alertText()).toContain('The co-signer will refuse it even if you approve.');
+        expect(alertText()).toContain('The cosigner will refuse it even if you approve.');
         expect(alertText()).not.toMatch(RAW_CODE);
-        expect(details.textContent).toContain('POLICY_WINDOW_AMOUNT_EXCEEDED');
+        expect(document.body.textContent).not.toContain('POLICY_WINDOW_AMOUNT_EXCEEDED');
     });
 
     it('falls back to a sentence with no reason for an unmapped policy code', async () => {
@@ -127,29 +125,29 @@ describe('SignApproval co-sign alerts', () => {
         });
         renderCoSign();
 
-        await screen.findByTestId('cosign-policy-details');
-        expect(alertText()).toContain('This request is outside the account policy. The co-signer will refuse it even if you approve.');
+        await screen.findByTestId('confirm-warning');
+        expect(alertText()).toContain('This request is outside the account policy. The cosigner will refuse it even if you approve.');
         expect(alertText()).not.toMatch(RAW_CODE);
     });
 
-    it('hides a developer exception behind the plain sentence', async () => {
+    it('keeps a developer exception off the confirmation', async () => {
         messaging.parseCoSign.mockRejectedValue(
             new Error('previewCoSignRequest: SDK with sdk.coSigner decode + policy is required'),
         );
         renderCoSign();
 
-        const details = await screen.findByTestId('cosign-error-details');
+        await screen.findByTestId('confirm-warning');
         expect(alertText()).toContain('This co-sign request could not be read. Only approve it if you trust the source.');
         expect(alertText()).not.toContain('previewCoSignRequest');
-        expect(details.textContent).toContain('previewCoSignRequest: SDK with sdk.coSigner decode + policy is required');
+        expect(document.querySelector('details')).toBeNull();
     });
 
     it('passes copy written for a user through without a details disclosure', async () => {
-        messaging.parseCoSign.mockRejectedValue(new Error('This co-signer account is turned off.'));
+        messaging.parseCoSign.mockRejectedValue(new Error('This cosigner account is turned off.'));
         renderCoSign();
 
-        await screen.findByText(/This co-signer account is turned off\./);
-        expect(alertText()).toContain('This co-sign request could not be read. This co-signer account is turned off.');
+        await screen.findByText(/This cosigner account is turned off\./);
+        expect(alertText()).toContain('This co-sign request could not be read. This cosigner account is turned off.');
         expect(screen.queryByTestId('cosign-error-details')).toBeNull();
     });
 });
@@ -169,13 +167,14 @@ describe('SignApproval co-sign clock warning', () => {
         needsConfirmation: false,
     };
 
-    it('shows a plain warning with the log text in details when the window clock faulted', async () => {
+    // Co-sign warnings carry no technical disclosure (walk ruling), so the
+    // clamp log stays out of the page.
+    it('shows a plain warning when the window clock faulted', async () => {
         messaging.parseCoSign.mockResolvedValue({ ...base, clockWarnings: ['1 entry timestamp(s) were in the future and were clamped'] });
         renderCoSign();
 
-        const details = await screen.findByTestId('cosign-clock-details');
-        expect(alertText()).toContain('The clock on this device moved in an unexpected way');
-        expect(details.textContent).toContain('were clamped');
+        await waitFor(() => expect(alertText()).toContain('The clock on this device moved in an unexpected way'));
+        expect(document.body.textContent).not.toContain('were clamped');
     });
 
     it('shows nothing extra when there are no clock warnings', async () => {

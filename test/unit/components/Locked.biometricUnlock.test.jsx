@@ -107,20 +107,20 @@ describe('Locked biometric unlock', () => {
         const unavailable = provider({ isSupported: vi.fn(async () => false) });
         mount(unavailable);
         await waitFor(() => expect(unavailable.isSupported).toHaveBeenCalledOnce());
-        expect(screen.queryByRole('button', { name: 'Use biometrics' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Use Biometrics' })).toBeNull();
         expect(screen.getByText(PASSWORD_FALLBACK)).toBeTruthy();
         expect(screen.getByLabelText('Password')).toHaveFocus();
 
         cleanup();
         const notEnrolled = provider({ isRegistered: vi.fn(() => false) });
         mount(notEnrolled);
-        expect(screen.queryByRole('button', { name: 'Use biometrics' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Use Biometrics' })).toBeNull();
         expect(notEnrolled.isSupported).not.toHaveBeenCalled();
 
         cleanup();
         const ready = provider();
         mount(ready);
-        expect(await screen.findByRole('button', { name: 'Use biometrics' })).toBeEnabled();
+        expect(await screen.findByRole('button', { name: 'Use Biometrics' })).toBeEnabled();
     });
 
     it('re-checks enrollment after the asynchronous availability probe', async () => {
@@ -135,7 +135,7 @@ describe('Locked biometric unlock', () => {
         mount(activeProvider);
 
         await waitFor(() => expect(activeProvider.isSupported).toHaveBeenCalledOnce());
-        expect(screen.queryByRole('button', { name: 'Use biometrics' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Use Biometrics' })).toBeNull();
         expect(screen.getByText(PASSWORD_FALLBACK)).toBeTruthy();
         expect(screen.getByLabelText('Password')).toHaveFocus();
     });
@@ -145,7 +145,7 @@ describe('Locked biometric unlock', () => {
             status: 'LOCKED',
             detail: BIOMETRIC_CANCELLED_DETAIL,
         });
-        const button = await screen.findByRole('button', { name: 'Use biometrics' });
+        const button = await screen.findByRole('button', { name: 'Use Biometrics' });
         const password = screen.getByLabelText('Password');
 
         fireEvent.change(password, { target: { value: 'typed password' } });
@@ -154,7 +154,7 @@ describe('Locked biometric unlock', () => {
         fireEvent.click(button);
 
         await waitFor(() => expect(document.activeElement).toBe(password));
-        expect(screen.queryByRole('button', { name: 'Use biometrics' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Use Biometrics' })).toBeNull();
         expect(plugin.biometricUnlock).toHaveBeenCalledOnce();
         expect(messaging.unlockWallet).not.toHaveBeenCalled();
         expect(screen.getAllByText(PASSWORD_FALLBACK)).toHaveLength(1);
@@ -173,12 +173,12 @@ describe('Locked biometric unlock', () => {
         const password = screen.getByLabelText('Password');
         password.blur();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Use biometrics' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Use Biometrics' }));
 
         expect(await screen.findByText(PASSWORD_FALLBACK)).toBeTruthy();
         expect(screen.getAllByText(PASSWORD_FALLBACK)).toHaveLength(1);
         expect(screen.getByLabelText('Password')).toHaveFocus();
-        expect(screen.queryByRole('button', { name: 'Use biometrics' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Use Biometrics' })).toBeNull();
         expect(plugin.biometricUnlock).toHaveBeenCalledOnce();
         expect(document.body.textContent).not.toMatch(/not supported|failed repeatedly/i);
         expect(messaging.unlockWallet).not.toHaveBeenCalled();
@@ -193,12 +193,12 @@ describe('Locked biometric unlock', () => {
         const { messaging } = mount(activeProvider);
         const password = screen.getByLabelText('Password');
         password.blur();
-        fireEvent.click(await screen.findByRole('button', { name: 'Use biometrics' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Use Biometrics' }));
 
         expect(await screen.findByText(PASSWORD_FALLBACK)).toBeTruthy();
         expect(screen.getAllByText(PASSWORD_FALLBACK)).toHaveLength(1);
         expect(screen.getByLabelText('Password')).toHaveFocus();
-        expect(screen.queryByRole('button', { name: 'Use biometrics' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Use Biometrics' })).toBeNull();
         expect(activeProvider.unlock).toHaveBeenCalledOnce();
         expect(messaging.unlockWallet).not.toHaveBeenCalled();
         expect(getLockoutState().failedAttempts).toBe(0);
@@ -213,7 +213,7 @@ describe('Locked biometric unlock', () => {
         const password = screen.getByLabelText('Password');
         password.blur();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Use biometrics' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Use Biometrics' }));
 
         expect(await screen.findByText(/biometric unlock is unavailable. use your wallet password/i)).toBeTruthy();
         expect(password).toHaveFocus();
@@ -227,7 +227,7 @@ describe('Locked biometric unlock', () => {
         recordLockoutFailure();
         const activeProvider = provider();
         const { messaging } = mount(activeProvider);
-        const button = await screen.findByRole('button', { name: 'Use biometrics' });
+        const button = await screen.findByRole('button', { name: 'Use Biometrics' });
 
         expect(button).toBeDisabled();
         fireEvent.click(button);
@@ -240,7 +240,7 @@ describe('Locked biometric unlock', () => {
         recordLockoutFailure();
         const activeProvider = provider();
         const { messaging, onUnlocked } = mount(activeProvider);
-        fireEvent.click(await screen.findByRole('button', { name: 'Use biometrics' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Use Biometrics' }));
 
         await waitFor(() => expect(onUnlocked).toHaveBeenCalledOnce());
         expect(messaging.unlockWallet).toHaveBeenCalledWith('wallet password');

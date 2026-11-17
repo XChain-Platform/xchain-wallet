@@ -83,12 +83,15 @@ assert.match(form, /listGatedKeys\(\{ walletId, chainId: selectedChainId, gateTi
 assert.match(form, /existingKeyHash: packChoice/, 'pack reuse threads existingKeyHash');
 // User-facing copy lives in the English locale; the form renders it through t().
 const { en } = await import(join(wsRoot, 'packages', 'core', 'src', 'i18n', 'locales', 'en', 'index.js'));
-assert.match(form, /t\('gatedPublish\.ackForever'\)/, 'acknowledgment renders through t()');
-assert.match(en['gatedPublish.ackForever'], /published on-chain forever/, 'irreversibility acknowledgment copy');
-assert.match(form, /ackForever/, 'publish blocked until acknowledged');
+// Permanence is stated on the confirm screen, not gated by a checkbox.
+assert.doesNotMatch(form, /ackForever|<Checkbox/, 'no acknowledgement checkbox gates the publish');
+assert.match(form, /notice: `\$\{upload\.confirmLine\} \$\{t\('gatedPublish\.confirmNotice', \{ tick: gateTick \}\)\}`/,
+    'confirm screen names the upload method and carries the permanence notice');
+assert.match(en['gatedPublish.confirmNotice'], /stays on the blockchain for good/, 'permanence notice copy');
 assert.match(form, /buildGatedPublishPsbtRequest\(base\)/, 'watcher branch uses the encode-only path');
 assert.match(form, /useActionConfirmFlow\(\{ messaging, walletId \}\)/, 'full wallets use the shared confirm flow');
-assert.match(form, /composeGatedPublishForConfirm\(base\)/, 'confirm compose prepares the encrypted action host-side');
+// G98: the Advanced section's options ride the compose call.
+assert.match(form, /composeGatedPublishForConfirm\(withAdvancedOptions\(base\)\)/, 'confirm compose prepares the encrypted action host-side');
 assert.match(form, /prebuiltActionData: composed\.gatedPublish\.actionData/, 'approve signs the prepared action bytes');
 assert.match(form, /<ActionConfirmScreen/, 'form swaps to the shared confirm page');
 assert.match(form, /ownerMissing/, 'blocks when the wallet lacks the owner address');
@@ -97,18 +100,19 @@ assert.match(en['gatedPublish.packKeyHash'], /Pack key hash/, 'done screen surfa
 assert.match(form, /ResultScreen/, 'signed but unbroadcast publishes use the queued-result state');
 
 // ---- ManageToken entry + 3-shell wiring ---------------------------------
-const manage = read('packages', 'core', 'src', 'shared', 'routes', 'ManageToken.jsx');
+// The issuer's actions are groups on the one asset page (TokenOwnerActions.jsx).
+const manage = read('packages', 'core', 'src', 'shared', 'components', 'TokenOwnerActions.jsx');
 assert.match(manage, /id: 'gated-content'[^\n]*\.\.\.ownerAction\(options\.onGatedContent\)/,
     'ManageToken action is owner-gated');
-assert.match(manage, /const ownerAction = \(handler\) => \(\{[\s\S]*?onSelect: blockIssuerActions \? undefined : handler,[\s\S]*?disabled: blockIssuerActions/,
-    'ManageToken owner action helper disables actions for non-owners');
+assert.match(manage, /const ownerAction = \(handler\) => \(\{[\s\S]*?onSelect: handler,[\s\S]*?disabled: typeof handler !== 'function'/,
+    'ManageToken owner action helper leaves authorization to form preflight');
 for (const [label, ...p] of [
     ['web', 'packages', 'web', 'src', 'App.jsx'],
     ['desktop', 'packages', 'desktop', 'renderer', 'App.jsx'],
     ['extension', 'packages', 'extension', 'src', 'popup', 'App.jsx'],
 ]) {
     const app = read(...p);
-    assert.match(app, /onGatedContent=\{\(\) => openForm\('gated-publish'\)\}/, `${label}: ManageToken prop wired`);
+    assert.match(app, /onGatedContent: \(ctx\) => openOwnerForm\('gated-publish', ctx\)/, `${label}: issuer handler wired`);
     assert.match(app, /unlockedView === 'gated-publish' && activeWalletId && tokenDetailRef/, `${label}: view routed`);
     assert.match(app, /'attach-content' \| 'gated-publish' \|/, `${label}: view union updated`);
 }

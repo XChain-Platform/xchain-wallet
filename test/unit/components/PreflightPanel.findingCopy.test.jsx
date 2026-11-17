@@ -55,9 +55,9 @@ const DISPENSER_GIVE_AMOUNT = {
 };
 
 describe('PreflightPanel warning copy (§5.2.4)', () => {
-    it('groups the checked block height', () => {
+    it('shows the checked block height ungrouped (G123)', () => {
         mount({ ...reportWith(), stateHeight: 1234567 });
-        expect(screen.getByText('Checked at block 1,234,567')).toBeTruthy();
+        expect(screen.getByText('Checked at block 1234567')).toBeTruthy();
     });
 
     it('groups the unverified check count', () => {

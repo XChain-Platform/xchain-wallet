@@ -14,6 +14,7 @@ import React from 'react';
 
 import { MessagingProvider } from '../../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AirdropForm } from '../../../../packages/core/src/shared/routes/AirdropForm.jsx';
+import { selectOption } from '../../../helpers/selectOption.js';
 import { existingListRowText } from '../../../../packages/core/src/shared/utils/existingListRowText.js';
 import { __clearTokenInfoCache } from '../../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
@@ -89,14 +90,15 @@ function mountAirdrop(row, overrides = {}) {
 
 async function chooseExistingList(row) {
     mountAirdrop(row);
-    fireEvent.change(await screen.findByLabelText(/^Airdrop to/), {
-        target: { value: 'existing' },
-    });
-    fireEvent.click(await screen.findByRole('button', { name: 'Choose list' }));
+    selectOption(await screen.findByLabelText(/^Airdrop to/), 'existing');
+    fireEvent.click(await screen.findByRole('button', { name: /^List:/ }));
     fireEvent.click(await screen.findByRole('button', {
         name: existingListRowText(row),
     }));
 }
+
+// The List field reads the chosen list's name (or List #N when it has none).
+const listField = (text) => screen.findByRole('button', { name: `List: ${text}` });
 
 afterEach(() => {
     cleanup();
@@ -105,16 +107,16 @@ afterEach(() => {
 });
 
 describe('AirdropForm existing-list name', () => {
-    it('shows the same address-list description after selection', async () => {
+    it('shows the address list name in the List field after selection', async () => {
         await chooseExistingList(listRow({ name: 'Treasury wallets' }));
 
-        expect(await screen.findByText('Treasury wallets, address list, 1 address')).toBeTruthy();
+        expect(await listField('Treasury wallets (List #2700)')).toBeTruthy();
     });
 
-    it('shows the same token-list description after selection', async () => {
+    it('shows the token list name in the List field after selection', async () => {
         await chooseExistingList(listRow({ type: '1', name: 'Token holders' }));
 
-        expect(await screen.findByText('Token holders, token list, 1 token')).toBeTruthy();
+        expect(await listField('Token holders (List #2700)')).toBeTruthy();
     });
 
     it('labels a union and refuses to review an uncountable recipient set', async () => {
@@ -125,7 +127,7 @@ describe('AirdropForm existing-list name', () => {
         expect(screen.queryByText(/address list/)).toBeNull();
 
         fireEvent.change(screen.getByLabelText(/^Per-recipient amount/), { target: { value: '5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review airdrop' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review Airdrop' }));
 
         expect(screen.getByRole('alert')).toHaveTextContent(UNION_COPY);
         expect(screen.getByRole('form', { name: 'Token airdrop' })).toBeTruthy();
@@ -134,18 +136,16 @@ describe('AirdropForm existing-list name', () => {
     it.each([
         ['an absent name', undefined],
         ['an empty name', ''],
-    ])('derives an address-list name from its size for %s', async (_case, name) => {
+    ])('falls back to List #N in the field for %s', async (_case, name) => {
         await chooseExistingList(listRow({ name }));
 
-        expect(await screen.findByText('1 address, address list, 1 address')).toBeTruthy();
+        expect(await listField('List #2700')).toBeTruthy();
     });
 
     it('does not offer a list the network refused', async () => {
         mountAirdrop({ ...listRow(), status: 'invalid: LIST_ACTION_INDEX (not owner)' });
-        fireEvent.change(await screen.findByLabelText(/^Airdrop to/), {
-            target: { value: 'existing' },
-        });
-        fireEvent.click(await screen.findByRole('button', { name: 'Choose list' }));
+        selectOption(await screen.findByLabelText(/^Airdrop to/), 'existing');
+        fireEvent.click(await screen.findByRole('button', { name: /^List:/ }));
 
         expect(await screen.findByText('No published lists yet')).toBeTruthy();
         expect(screen.queryByRole('button', { name: /address list/i })).toBeNull();
@@ -154,29 +154,31 @@ describe('AirdropForm existing-list name', () => {
     it('neutralizes U+202E in a loaded list name', async () => {
         await chooseExistingList(listRow({ name: 'Safe\u202Eevil' }));
 
-        expect(await screen.findByText('Safe\u2426evil, address list, 1 address')).toBeTruthy();
-        expect(screen.queryByText('Safe\u202Eevil, address list, 1 address')).toBeNull();
+        expect(await listField('Safe\u2426evil (List #2700)')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /\u202E/ })).toBeNull();
     });
 
     it('review displays the exact built amount with its asset and Back keeps the form values', async () => {
         await chooseExistingList(listRow({ name: 'Treasury wallets' }));
         const amount = screen.getByLabelText(/^Per-recipient amount/);
         fireEvent.change(amount, { target: { value: '5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review airdrop' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review Airdrop' }));
 
-        expect(await screen.findByText('5 DROP')).toBeTruthy();
+        // The sentence states the built amount and asset (no Total block,
+        // G127 revised 2026-11-16).
+        expect(await screen.findByTestId('confirm-sentence')).toHaveTextContent('Airdrop 5 DROP to list #2700');
         expect(screen.getByText('#2700')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         expect(await screen.findByLabelText(/^Per-recipient amount/)).toHaveValue('5');
-        expect(screen.getByText('Treasury wallets, address list, 1 address')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'List: Treasury wallets (List #2700)' })).toBeTruthy();
     });
 
     it('refuses a malformed selected list id before review', async () => {
         const row = listRow({ actionIndex: 'bad-id' });
         await chooseExistingList(row);
         fireEvent.change(screen.getByLabelText(/^Per-recipient amount/), { target: { value: '5' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Review airdrop' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Review Airdrop' }));
 
         expect(screen.getByRole('alert')).toHaveTextContent(
             'The selected list has an invalid action index. Choose the list again.',
@@ -190,10 +192,8 @@ describe('AirdropForm existing-list name', () => {
             { name: 'SDKExplorerError' },
         );
         mountAirdrop(listRow(), { getListsForSource: vi.fn().mockRejectedValue(error) });
-        fireEvent.change(await screen.findByLabelText(/^Airdrop to/), {
-            target: { value: 'existing' },
-        });
-        fireEvent.click(await screen.findByRole('button', { name: 'Choose list' }));
+        selectOption(await screen.findByLabelText(/^Airdrop to/), 'existing');
+        fireEvent.click(await screen.findByRole('button', { name: /^List:/ }));
 
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent("Couldn't load your lists.");

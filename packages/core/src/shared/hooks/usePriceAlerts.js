@@ -28,7 +28,8 @@ import { PRICE_ALERTS_CHANGED_EVENT } from '../../flows/priceAlerts.js';
  * @property {(input: { chainId: string, tick?: string, direction: 'above'|'below', targetFiat: number, fiatCurrency: string }) => Promise<void>} addAlert
  * @property {(id: string, input: { chainId: string, tick?: string, direction: 'above'|'below', targetFiat: number, fiatCurrency: string }) => Promise<void>} updateAlert
  * @property {(id: string) => Promise<void>} removeAlert
- * @property {(id: string) => Promise<void>} rearm
+ * @property {(id: string) => Promise<void>} rearm      re-arms a fired alert or resumes a paused one
+ * @property {(id: string) => Promise<void>} pause
  * @property {() => Promise<void>} reload
  */
 
@@ -124,11 +125,30 @@ export function usePriceAlerts(walletId) {
         await reload();
     }, [walletId, supported, messaging, reload]);
 
+    // Pause keeps the alert and its terms but stops the watcher checking it;
+    // it rides the save route with status 'paused', and Resume is rearm.
+    const pause = useCallback(async (id) => {
+        if (!walletId || !supported) return;
+        const current = alerts.find((alert) => alert.id === id);
+        if (!current) return;
+        await messaging.savePriceAlert({
+            id,
+            walletId,
+            chainId: current.chainId,
+            ...(current.tick ? { tick: current.tick } : {}),
+            direction: current.direction,
+            targetFiat: current.targetFiat,
+            fiatCurrency: current.fiatCurrency,
+            status: 'paused',
+        });
+        await reload();
+    }, [walletId, supported, messaging, reload, alerts]);
+
     const rearm = useCallback(async (id) => {
         if (!walletId || !supported || typeof messaging?.rearmPriceAlert !== 'function') return;
         await messaging.rearmPriceAlert({ id, walletId });
         await reload();
     }, [walletId, supported, messaging, reload]);
 
-    return { alerts, loading, supported, error, addAlert, updateAlert, removeAlert, rearm, reload };
+    return { alerts, loading, supported, error, addAlert, updateAlert, removeAlert, rearm, pause, reload };
 }

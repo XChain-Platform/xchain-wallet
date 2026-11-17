@@ -15,7 +15,7 @@ import React from 'react';
 vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
     TokenPicker: ({ title, onSelect }) => React.createElement(
         'button',
-        { type: 'button', onClick: () => onSelect({ tick: title.includes('give') ? 'AAA' : 'BBB' }) },
+        { type: 'button', onClick: () => onSelect({ tick: title.toLowerCase().includes('give') ? 'AAA' : 'BBB' }) },
         title,
     ),
 }));
@@ -77,11 +77,18 @@ async function fillOrder(utils) {
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: /Select give token/ }));
+        fireEvent.click(utils.getByRole('button', { name: /Select Give Token/ }));
         await drain();
     });
     await change(utils, /^Give amount/, '1');
-    await change(utils, 'Get token', 'BBB');
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: /^Get token:/ }));
+        await drain();
+    });
+    await domAct(async () => {
+        fireEvent.click(utils.getByRole('button', { name: /Select Get Token/ }));
+        await drain();
+    });
     await change(utils, /^Get amount/, '1');
 }
 
@@ -92,7 +99,7 @@ async function fillSwap(utils) {
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: /Select (give|get) token/ }));
+            fireEvent.click(utils.getByRole('button', { name: /Select (Give|Get) Token/ }));
             await drain();
         });
     }
@@ -108,8 +115,8 @@ const MEMOS = [
 ];
 
 describe.each([
-    ['CrossChainOrderForm', CrossChainOrderForm, fillOrder, 'Place order'],
-    ['CrossChainSwapForm', CrossChainSwapForm, fillSwap, 'Create cross-chain swap'],
+    ['CrossChainOrderForm', CrossChainOrderForm, fillOrder, 'Place Order'],
+    ['CrossChainSwapForm', CrossChainSwapForm, fillSwap, 'Create Cross-Chain Swap'],
 ])('%s memo', (_name, Form, fill, submitName) => {
     it.each(MEMOS)('refuses a memo %s before composing', async (_label, memo, message) => {
         const { utils, composeForConfirm } = await mount(Form);

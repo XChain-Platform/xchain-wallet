@@ -158,11 +158,12 @@ describe('ownerOffAllowListMessage', () => {
         expect(copy).toMatch(/add this address to the list|clear the list/i);
     });
 
-    it('abbreviates the address rather than wrapping the sentence around it', () => {
+    // G99: the notice wraps (overflow-wrap: anywhere), so the address is
+    // named in full rather than cut to its ends.
+    it('names the address in full, since the notice wraps', () => {
         const copy = ownerOffAllowListMessage(OWNER);
-        expect(copy).toContain(OWNER.slice(0, 8));
-        expect(copy).toContain(OWNER.slice(-6));
-        expect(copy).not.toContain(OWNER);
+        expect(copy).toContain(`(${OWNER})`);
+        expect(copy).not.toContain('…');
     });
 
     it('shows a short address whole', () => {

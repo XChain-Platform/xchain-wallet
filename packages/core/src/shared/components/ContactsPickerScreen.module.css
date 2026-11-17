@@ -36,9 +36,10 @@
     border-top: none;
 }
 
-.abRow:hover,
-.abRow:focus-visible {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .abRow:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .abRow:focus-visible {

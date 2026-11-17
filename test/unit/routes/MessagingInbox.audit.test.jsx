@@ -12,7 +12,7 @@ import React from 'react';
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { MessagingInbox } from '../../../packages/core/src/shared/routes/MessagingInbox.jsx';
-import { serializeMessageContent } from '../../../packages/core/src/shared/utils/messageContent.js';
+import notificationStyles from '../../../packages/core/src/shared/routes/AlertsRoute.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const OWNER = Object.freeze({
@@ -98,6 +98,20 @@ afterEach(() => {
 });
 
 describe('MessagingInbox audit states', () => {
+    it('explains an empty inbox password and starts no sweep', async () => {
+        const messaging = messagingFor({ ready: false });
+        mount(messaging);
+        const unlock = await screen.findByRole('button', { name: 'Unlock Inbox' });
+        const password = screen.getByLabelText('Password');
+
+        expect(unlock).toBeEnabled();
+        fireEvent.click(unlock);
+
+        expect(messaging.getMessagingInboxSweep).not.toHaveBeenCalled();
+        expect(password).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getAllByText('Enter your password.').length).toBeGreaterThan(0);
+    });
+
     it('ignores malformed message rows without hiding valid conversations', async () => {
         mount(messagingFor({ messages: [
             incoming({
@@ -116,6 +130,39 @@ describe('MessagingInbox audit states', () => {
 
         expect(await screen.findByText('valid message remains visible')).toBeTruthy();
         expect(screen.queryByText('invalid row')).toBeNull();
+    });
+
+    it('shows the Notifications unread dot beside the time only for unread conversations', async () => {
+        const unreadPeer = 'peer-unread';
+        const readPeer = 'peer-read';
+        localStorage.setItem('xc:msgRead:wallet-1:account-1', JSON.stringify({
+            [readPeer]: ['read-tx'],
+        }));
+        mount(messagingFor({ messages: [
+            incoming({
+                from: unreadPeer,
+                txid: 'unread-tx',
+                text: 'Unread preview',
+                timestamp: 2,
+            }),
+            incoming({
+                from: readPeer,
+                txid: 'read-tx',
+                text: 'Read preview',
+                timestamp: 1,
+            }),
+        ] }));
+
+        const unreadRow = (await screen.findByText('Unread preview')).closest('li');
+        const readRow = screen.getByText('Read preview').closest('li');
+        const dot = unreadRow.querySelector('[aria-label="Unread"]');
+        const time = unreadRow.querySelector('time');
+
+        expect(dot).not.toBeNull();
+        expect(dot).toHaveClass(notificationStyles.unreadDot);
+        expect(time.nextElementSibling).toBe(dot);
+        expect(dot.parentElement).toBe(time.parentElement);
+        expect(readRow.querySelector('[aria-label="Unread"]')).toBeNull();
     });
 
     it('neutralizes invisible direction controls while keeping message markup inert', async () => {
@@ -187,17 +234,23 @@ describe('MessagingInbox audit states', () => {
 
         const conversations = await screen.findByRole('list', { name: 'Conversations' });
         fireEvent.click(conversations.querySelector('button'));
-        const copy = await screen.findByRole('button', { name: 'Copy message' });
-        const bubble = copy.closest('div').previousElementSibling;
+        expect(screen.queryByRole('button', { name: /copy/i })).toBeNull();
+        const bubble = (await screen.findByText(/^A{100}/)).closest('[style*="overflow-wrap"]');
         expect(bubble.textContent).toHaveLength(1_048_576);
         expect(bubble.style.overflowWrap).toBe('anywhere');
         expect(utils.container.scrollWidth).toBeLessThanOrEqual(utils.container.clientWidth);
     });
 
-    it('uses the same shared size class for the search and network controls', async () => {
+    it('keeps search and network controls in the standard header filter menu', async () => {
         mount(messagingFor());
 
         await screen.findByText('No messages yet');
+        expect(screen.queryByRole('searchbox', { name: 'Search conversations' })).toBeNull();
+        // The search and the network picker both sit in the title bar's filter panel.
+        const trigger = screen.getByRole('button', { name: 'Filter conversations' });
+        expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+        fireEvent.click(trigger);
+        expect(screen.getByRole('dialog', { name: 'Filter conversations' })).toBeTruthy();
         const searchField = screen.getByRole('searchbox', { name: 'Search conversations' })
             .parentElement.parentElement;
         const networkFilter = screen.getByRole('button', { name: /^Filter by network/ })
@@ -219,12 +272,12 @@ describe('MessagingInbox audit states', () => {
         mount(messaging);
 
         const password = await screen.findByLabelText('Password', { selector: 'input' });
-        const unlock = screen.getByRole('button', { name: 'Unlock inbox' });
+        const unlock = screen.getByRole('button', { name: 'Unlock Inbox' });
         expect(password).not.toHaveAccessibleDescription("Decrypts this account's messages.");
         fireEvent.click(screen.getByRole('button', { name: 'About Password' }));
         expect(screen.getByRole('tooltip')).toHaveTextContent("Decrypts this account's messages.");
         expect(screen.queryByText("Enter your wallet password to decrypt this account's messages.")).toBeNull();
-        expect(unlock.disabled).toBe(true);
+        expect(unlock).toBeEnabled();
 
         fireEvent.change(password, { target: { value: 'secret' } });
         fireEvent.click(unlock);
@@ -241,7 +294,7 @@ describe('MessagingInbox audit states', () => {
         mount(messagingFor({ messages: [REQUEST] }));
 
         const decline = await screen.findByRole('button', { name: 'Decline' });
-        const share = screen.getByRole('button', { name: 'Share my key' });
+        const share = screen.getByRole('button', { name: 'Share My Key' });
         expect(decline.querySelector('svg')).not.toBeNull();
         expect(share.querySelector('svg')).not.toBeNull();
         expect(share.className).toMatch(/success/);
@@ -278,7 +331,7 @@ describe('MessagingInbox audit states', () => {
         }));
 
         await screen.findByText('No messages yet');
-        expect(screen.queryByRole('button', { name: 'Share my key' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Share My Key' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Decline' })).toBeNull();
     });
 
@@ -290,7 +343,7 @@ describe('MessagingInbox audit states', () => {
         messaging.composeForConfirm = vi.fn().mockRejectedValue(failure);
         mount(messaging);
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Share my key' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Share My Key' }));
 
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toMatch(/could not reach the transaction service/i);
@@ -336,17 +389,62 @@ describe('MessagingInbox audit states', () => {
         expect(screen.queryByRole('link', { name: /javascript:/i })).toBeNull();
         expect(getComputedStyle(safeLink.closest('div')).overflowWrap).toBe('anywhere');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy message' }));
+        // No copy button is drawn on the bubble: copy is a right-click action.
+        expect(screen.queryByRole('button', { name: /copy/i })).toBeNull();
+        fireEvent.contextMenu(safeLink.closest('[style*="overflow-wrap"]'));
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy Message' }));
         await waitFor(() => expect(writeText).toHaveBeenCalledWith(text));
     });
 
-    it('renders a validated attachment as a download and omits its envelope from the preview', async () => {
-        const text = serializeMessageContent('Quarterly notes', {
-            name: 'notes.txt',
-            type: 'text/plain',
-            dataUrl: 'data:text/plain;base64,aGVsbG8=',
-            size: 5,
+    it('puts Copy address in the thread header menu, not a loose button', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
         });
+        mount(messagingFor({ messages: [incoming({
+            from: REQUEST.from,
+            txid: 'header-copy-tx',
+            text: 'hello',
+            timestamp: 2,
+        })] }));
+        const conversations = await screen.findByRole('list', { name: 'Conversations' });
+        fireEvent.click(conversations.querySelector('button'));
+        await screen.findByText('hello');
+        expect(screen.queryByRole('button', { name: /copy/i })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Conversation menu' }));
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy Address' }));
+        await waitFor(() => expect(writeText).toHaveBeenCalledWith(REQUEST.from));
+    });
+
+    it('keeps message search inside the standard thread header filter', async () => {
+        mount(messagingFor({ messages: [
+            incoming({ from: REQUEST.from, txid: 'first-message', text: 'alpha note', timestamp: 1 }),
+            incoming({ from: REQUEST.from, txid: 'second-message', text: 'beta note', timestamp: 2 }),
+        ] }));
+
+        fireEvent.click(await screen.findByText('beta note'));
+        expect(await screen.findByText('alpha note')).toBeTruthy();
+        expect(screen.queryByRole('searchbox', { name: 'Search messages' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Filter messages' }));
+        expect(screen.getByRole('dialog', { name: 'Filter messages' })).toBeTruthy();
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search messages' }), {
+            target: { value: 'alpha' },
+        });
+
+        expect(screen.getByText('alpha').closest('[style*="overflow-wrap"]')).toHaveTextContent('alpha note');
+        expect(screen.queryByText('beta note')).toBeNull();
+    });
+
+    it('shows only the text of a message carrying a legacy envelope, with no attachment UI', async () => {
+        const text = 'Quarterly notes\n\n[[xchain-attachment:v1]]\n'
+            + JSON.stringify({
+                name: 'notes.txt',
+                type: 'text/plain',
+                dataUrl: 'data:text/plain;base64,aGVsbG8=',
+                size: 5,
+            });
         mount(messagingFor({ messages: [{
             format: 3,
             chainId: CHAIN,
@@ -359,10 +457,12 @@ describe('MessagingInbox audit states', () => {
 
         fireEvent.click(await screen.findByText('Quarterly notes'));
 
-        const attachment = await screen.findByRole('link', { name: /notes\.txt \(5 bytes\)/ });
-        expect(attachment).toHaveAttribute('download', 'notes.txt');
-        expect(attachment.getAttribute('href')).toBe('data:text/plain;base64,aGVsbG8=');
+        expect(screen.queryByRole('link', { name: /notes\.txt/ })).toBeNull();
+        expect(document.querySelector('a[download]')).toBeNull();
+        expect(document.querySelector('a[href^="data:"]')).toBeNull();
         expect(document.body.textContent).not.toContain('xchain-attachment:v1');
+        expect(document.body.textContent).not.toContain('aGVsbG8=');
+        expect(document.body.textContent).not.toContain('notes.txt');
     });
 
     it('uses the shared relative timestamp inside an opened message thread', async () => {
@@ -454,16 +554,16 @@ describe('MessagingInbox scope and thread isolation', () => {
         ] }));
 
         fireEvent.click(await screen.findByText('message A'));
-        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'draft for A' } });
+        fireEvent.change(screen.getByLabelText('Reply, press Enter to send'), { target: { value: 'draft for A' } });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         fireEvent.click(screen.getByText('message B'));
-        expect(screen.getByLabelText('Message').value).toBe('');
-        fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'draft for B' } });
+        expect(screen.getByLabelText('Reply, press Enter to send').value).toBe('');
+        fireEvent.change(screen.getByLabelText('Reply, press Enter to send'), { target: { value: 'draft for B' } });
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
         fireEvent.click(screen.getByText('message A'));
-        expect(screen.getByLabelText('Message').value).toBe('draft for A');
+        expect(screen.getByLabelText('Reply, press Enter to send').value).toBe('draft for A');
     });
 
     it('shows a plain validation message for an empty quick reply', async () => {
@@ -473,7 +573,8 @@ describe('MessagingInbox scope and thread isolation', () => {
         ] }), { onCompose });
 
         fireEvent.click(await screen.findByText('message A'));
-        fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+        expect(screen.queryByRole('button', { name: 'Send message' })).toBeNull();
+        fireEvent.submit(screen.getByLabelText('Reply, press Enter to send').closest('form'));
 
         expect(screen.getByRole('alert').textContent).toBe('Write a message before continuing.');
         expect(onCompose).not.toHaveBeenCalled();

@@ -75,6 +75,7 @@ import {
     openPaletteCommand,
     test,
 } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
     EXPLORER_URL,
@@ -84,6 +85,7 @@ import {
     REGTEST_COIN,
     expectConfirmModal,
     fundAddress,
+    readIssueSource,
     mintXchain,
     nudgeChain,
     switchToRegtest,
@@ -270,8 +272,10 @@ async function openDispenserAsBuyer(page, sellerAddress) {
     // the app header carries controls whose labels contain "network", so an
     // unscoped or partial lookup is a strict-mode violation. Only reachable once the
     // earlier chain fixes let the spec get this far.
-    await page.getByRole('main').getByRole('combobox', { name: 'Network', exact: true })
-        .selectOption(REGTEST_CHAIN_ID);
+    await pickOption(
+        page.getByRole('main').getByRole('combobox', { name: 'Network', exact: true }),
+        REGTEST_CHAIN_ID,
+    );
 
     // Search by the SELLER's address rather than by ticker: the ticker lane
     // matches GIVE_TICK and GET_TICK both, so a search for XCHAIN would drag
@@ -285,6 +289,9 @@ async function openDispenserAsBuyer(page, sellerAddress) {
     await expect(row).toBeVisible({ timeout: 60_000 });
     await row.click();
 
+    // The dispenser page opens on Actions (G102); the buy panel is the Buy
+    // page a buyer's first action row opens.
+    await page.getByTestId('dispenser-buy-row').click({ timeout: 60_000 });
     await expect(page.getByText('Buy from this dispenser')).toBeVisible({ timeout: 60_000 });
 }
 
@@ -330,9 +337,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // to Bitcoin, so the `From` read below is a BITCOIN address unless
             // the chain is chosen first - which is exactly what the address-shape
             // assertion then catches, several lines after the real cause.
-            await selectVenueChain(seller.getByRole('main'), 'Network');
-            sellerAddress = await seller.getByRole('main')
-                .getByLabel('From', { exact: true }).inputValue();
+            sellerAddress = await readIssueSource(seller.getByRole('main'));
             // The VENUE's address shape, not Bitcoin's: a hardcoded `bcrt1`
             // alternative happens to pass on Litecoin (both accept `[mn2]`)
             // and hides a wrong-chain address on a chain that does not.
@@ -357,20 +362,18 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // to Bitcoin, so the `From` read below is a BITCOIN address unless
             // the chain is chosen first - which is exactly what the address-shape
             // assertion then catches, several lines after the real cause.
-            await selectVenueChain(seller.getByRole('main'), 'Network');
-
             const main = seller.getByRole('main');
             // The address that signs must still be the one that was funded.
-            expect(await main.getByLabel('From', { exact: true }).inputValue(),
+            expect(await readIssueSource(main),
                 'the issue form still signs with the funded address').toBe(sellerAddress);
 
             await main.getByLabel('Ticker', { exact: true }).fill(GIVE_TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(GIVE_SUPPLY);
+            await main.getByLabel('Max supply', { exact: true }).fill(GIVE_SUPPLY);
             // "Initial mint" left blank mints the whole supply now, and
             // "Divisible" is unchecked by default, so the token carries 0
             // decimals and every amount below stays a whole number.
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
             await approveConfirm(seller, `the ISSUE of the throwaway give token ${GIVE_TICK}`);
 
             // The chain's answer, not the app's.
@@ -438,9 +441,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // to Bitcoin, so the `From` read below is a BITCOIN address unless
             // the chain is chosen first - which is exactly what the address-shape
             // assertion then catches, several lines after the real cause.
-            await selectVenueChain(page.getByRole('main'), 'Network');
-            buyerAddress = await page.getByRole('main')
-                .getByLabel('From', { exact: true }).inputValue();
+            buyerAddress = await readIssueSource(page.getByRole('main'));
             expect(buyerAddress, 'the buyer wallet has a signing address')
                 .toMatch(REGTEST_ADDRESS_RE);
             expect(buyerAddress, 'the buyer is a different wallet from the seller')
@@ -464,7 +465,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             const footer = page.getByTestId('buy-balance');
             await expect(footer).toHaveText('0 XCHAIN available', { timeout: 60_000 });
 
-            const panel = page.getByTestId('preflight-panel');
+            const panel = page.locator('[data-verdict][data-dryrun]');
             await expect(panel).toHaveAttribute('data-verdict', 'fail', { timeout: 30_000 });
             await expect(page.getByTestId('preflight-chip')).toHaveText('Will likely fail');
 
@@ -518,9 +519,11 @@ test.describe('dispenser buy funding gate on regtest', () => {
             await expect(page.getByTestId('buy-balance'))
                 .toHaveText(/^1,000(\.0+)? XCHAIN available$/, { timeout: 60_000 });
 
-            const panel = page.getByTestId('preflight-panel');
+            const panel = page.locator('[data-verdict][data-dryrun]');
             await expect(panel).toHaveAttribute('data-verdict', 'pass', { timeout: 30_000 });
-            await expect(page.getByTestId('preflight-chip')).toHaveText('Looks good');
+            // The funding check is local arithmetic with no indexer verdict,
+            // so its pass chip says so rather than "Looks good".
+            await expect(page.getByTestId('preflight-chip')).toHaveText('Not checked by the indexer.');
 
             // Still restricted: funding was all it ever checked, and a pass
             // must not start claiming the fill will land.

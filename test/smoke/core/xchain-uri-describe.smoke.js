@@ -256,7 +256,7 @@ for (const key of requiredKeys) {
 
 assert.equal(
     describeXchainIntent({ kind: 'execute', contractActionIndex: 42 }, { i18n }),
-    'Call contract #42',
+    'Call Contract #42',
 );
 assert.equal(
     describeXchainIntent(

@@ -52,19 +52,18 @@ function renderInfo(tokenInfo) {
 
 const hrefs = () => [...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href'));
 
-async function openMore(label) {
-    fireEvent.click(await screen.findByRole('button', { name: 'More info' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: label }));
+async function openDetails() {
+    fireEvent.click(await screen.findByRole('tab', { name: /Details/ }));
 }
 
 describe('TokenDetail issuer metadata', () => {
     it('names the host a website link opens, so a look-alike domain is visible', async () => {
         renderInfo({ websites: ['https://xchain.io.evil.example/claim', 'https://xn--xchan-9ua.io/'] });
-        await openMore('About');
+        await openDetails();
         const links = await screen.findAllByRole('link', { name: /Website/ });
         expect(links).toHaveLength(2);
-        expect(links[0].textContent).toContain('xchain.io.evil.example');
-        expect(links[1].textContent).toContain('xn--xchan-9ua.io');
+        expect(links[0].textContent).toContain('https://xchain.io.evil.example/claim');
+        expect(links[1].textContent).toContain('https://xn--xchan-9ua.io/');
     });
 
     it('links only real http(s) targets', async () => {
@@ -77,7 +76,7 @@ describe('TokenDetail issuer metadata', () => {
                 { type: 'url', value: 'https://contact.example/' },
             ],
         });
-        await openMore('About');
+        await openDetails();
         await screen.findByRole('link', { name: /Website/ });
         const found = hrefs();
         expect(found.filter((h) => /^(javascript|data|vbscript):/i.test(h))).toEqual([]);
@@ -85,7 +84,7 @@ describe('TokenDetail issuer metadata', () => {
         expect(found).toContain('https://contact.example/');
     });
 
-    it('opens mail only for a plain address and shows anything else as text', async () => {
+    it('shows every email value as plain text', async () => {
         renderInfo({
             contacts: [
                 { type: 'email', value: 'help@issuer.example' },
@@ -93,9 +92,9 @@ describe('TokenDetail issuer metadata', () => {
                 { type: 'email', value: 'not an address' },
             ],
         });
-        await openMore('About');
+        await openDetails();
         await screen.findByText('help@issuer.example');
-        expect(hrefs().filter((h) => h.startsWith('mailto:'))).toEqual(['mailto:help@issuer.example']);
+        expect(hrefs().filter((h) => h.startsWith('mailto:'))).toEqual([]);
         expect(screen.getByText(/bcc=thief@evil\.example/)).toBeTruthy();
     });
 
@@ -103,31 +102,34 @@ describe('TokenDetail issuer metadata', () => {
         const markup = '<img src=x onerror=alert(1)><script>alert(2)</script> ‮evil‬ ';
         const description = markup + 'long text '.repeat(1100);
         renderInfo({ description });
-        await screen.findByText('Description');
-        const body = document.querySelector('[class*="descriptionValue"]');
+        await openDetails();
+        await screen.findByLabelText('Token information profile');
+        const body = document.querySelector('[class*="profileDescription"]');
         expect(body).not.toBeNull();
         expect(body.textContent.length).toBeGreaterThan(10_000);
         expect(document.querySelector('script')).toBeNull();
         expect(document.querySelector('img[src="x"]')).toBeNull();
     });
 
-    it('offers About for a token whose only supplemental metadata is a websites list', async () => {
+    it('shows profile links for a token whose only supplemental metadata is a websites list', async () => {
         renderInfo({ websites: ['https://only-site.example/'] });
-        await openMore('About');
-        expect(await screen.findByRole('link', { name: 'Website · only-site.example' })).toBeTruthy();
+        await openDetails();
+        expect(await screen.findByRole('link', { name: 'Website: https://only-site.example/' })).toBeTruthy();
         expect(screen.queryByText('No additional information')).toBeNull();
     });
 
-    it('hides About when files are the only supplemental metadata', async () => {
+    it('keeps files out of the profile when they are the only supplemental metadata', async () => {
         renderInfo({ files: [{ url: 'https://files.example/a.txt', name: 'A', type: 'text/plain' }] });
-        fireEvent.click(await screen.findByRole('button', { name: 'More info' }));
-        expect(screen.queryByRole('menuitem', { name: 'About' })).toBeNull();
-        expect(screen.getByRole('menuitem', { name: 'Media' })).toBeTruthy();
+        await openDetails();
+        expect(await screen.findByLabelText('Token information profile')).toBeTruthy();
         expect(screen.queryByText('Links')).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: 'Files' }));
+        expect(await screen.findByRole('link', { name: 'Open A' })).toBeTruthy();
     });
 
     it('does not load a script-scheme icon', async () => {
         renderInfo({ images: [{ type: 'icon', url: 'javascript:alert(1)' }], description: 'plain' });
+        await openDetails();
         await screen.findByText('plain');
         const sources = [...document.querySelectorAll('img')].map((img) => img.getAttribute('src'));
         expect(sources.filter((src) => /^javascript:/i.test(src))).toEqual([]);
@@ -170,7 +172,11 @@ describe('TokenDetail market panel when token information cannot be read', () =>
                 <TokenDetail walletId="w1" chainId="bitcoin-mainnet" tick="OFFLINE2" kind="token" quantity="1" onBack={() => {}} />
             </MessagingProvider>,
         );
-        expect(await screen.findByText('Market data is unavailable.')).toBeTruthy();
-        expect(screen.queryByText('Loading market data…')).toBeNull();
+        // Market figures are rows in the Details tab; once the read has failed the price row must
+        // not sit in its loading state (the failure notice above says the details are unavailable).
+        await screen.findByText('Token details could not be loaded from the explorer. Try again in a moment.');
+        await openDetails();
+        await screen.findByText('Price');
+        expect(screen.queryByLabelText('Loading')).toBeNull();
     });
 });

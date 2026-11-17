@@ -39,9 +39,11 @@ assert.match(src, /label=\{t\('settings\.toggle\.turnOn'\)\}\s*accessibleLabel=\
 assert.match(src, /label=(?:\{t\('settings\.developer\.learnMode'\)\}|"Learn Mode")/, 'Learn Mode toggle present');
 assert.match(src, /onToggle\('developerMode'/, 'developerMode field wired');
 assert.match(src, /onToggle\('learnMode'/, 'learnMode field wired');
-assert.match(src, /label=(?:\{t\('settings\.developer\.advancedAction'\)\}|"Advanced action")/, 'Advanced action row present');
+// Each tool opens its own page, so it is a drill-in ListRow (G97) titled by
+// the tool name, not a labelled button.
+assert.match(src, /title=(?:\{t\('settings\.developer\.advancedAction'\)\}|\{?["'`]Advanced action["'`]\}?)/, 'Advanced action row present');
 assert.match(src, /onClick=\{onNavigateToAdvanced\}/, 'Advanced action row opens its route');
-assert.match(src, /label=(?:\{t\('settings\.developer\.actionQueue'\)\}|"Action queue")/, 'Action queue row present');
+assert.match(src, /title=(?:\{t\('settings\.developer\.actionQueue'\)\}|\{?["'`]Action queue["'`]\}?)/, 'Action queue row present');
 assert.match(src, /onClick=\{onNavigateToActionQueue\}/, 'Action queue row opens its route');
 
 // No placeholder ToggleRow remains. The Raw PSBT inspector row was a permanently
@@ -54,8 +56,12 @@ assert.ok(!src.includes('Raw PSBT inspector') && !/Coming soon/.test(src),
     'no Raw PSBT inspector placeholder row (no code delivers it)');
 assert.ok(src.includes("label={t('settings.developer.autoApproveLocalhostDapps')}") || src.includes('label="Auto-approve localhost dApps"'),
     'Auto-approve localhost dApps row present (active, gated on Developer Mode)');
-assert.ok(/RegtestNetworksRow/.test(src),
-    'Regtest networks subsection mounted (replaces the deferred Custom chain registry row)');
+// Regtest and custom networks moved to the Test Networks page that
+// Developer options opens (operator picks 2026-11-14).
+assert.ok(!/RegtestNetworksRow/.test(src),
+    'the old Regtest networks subsection is gone from the Developer section');
+assert.ok(/row\(TEST_NETWORKS_PAGE_ID, 'Test networks', Icon\.BroadcastIcon, TestNetworksPage/.test(settingsSrc),
+    'Developer options lists the Test networks row');
 assert.ok(/LogConsoleRow/.test(src),
     'Logs and diagnostics console row mounted (replaces the deferred toggle)');
 assert.ok(/(?:t\('settings\.developer\.logsAndDiagnosticsConsole'\)|Logs and diagnostics console)/.test(src),
@@ -77,7 +83,14 @@ assert.match(hookSrc, /developerMode = Boolean\(settings\?\.developerMode\)/, 'r
 
 // ─── Settings.jsx wiring ─────────────────────────────────────────
 
-assert.match(settingsSrc, /import \{ DeveloperModeSection \}/, 'Settings.jsx imports section');
+assert.match(settingsSrc, /import \{[^}]*\bDeveloperModeSection\b[^}]*\}/, 'Settings.jsx imports section');
+// The log console is a page of its own, opened from the Logs row, and it
+// mounts the console only while Developer Mode is on.
+assert.match(src, /export function DeveloperLogsPage\(/, 'DeveloperLogsPage is a named export');
+assert.match(src, /if \(!settings\?\.developerMode\) \{[\s\S]+?\}\s*return <LiveLogsScreen \{\.\.\.chrome\} \/>;/,
+    'log console mounts only with Developer Mode on');
+assert.match(settingsSrc, /Component:\s*DeveloperLogsPage/, 'Settings.jsx wires the logs page');
+assert.match(settingsSrc, /onOpenLogs:\s*openLogsPage/, 'the Logs row opens the logs page');
 const idx = settingsSrc.indexOf("id: 'developer'");
 const block = settingsSrc.slice(idx, idx + 900);
 assert.match(block, /kind:\s*'internal-drill'/);

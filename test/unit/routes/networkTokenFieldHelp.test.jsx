@@ -16,7 +16,6 @@ import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCre
 import { OracleForm } from '../../../packages/core/src/shared/routes/OracleForm.jsx';
 import { PublishFileForm } from '../../../packages/core/src/shared/routes/PublishFileForm.jsx';
 import { SellOwnershipForm } from '../../../packages/core/src/shared/routes/SellOwnershipForm.jsx';
-import { UnionListForm } from '../../../packages/core/src/shared/routes/UnionListForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
@@ -62,6 +61,11 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
+// Network sits in the standard From section, closed on load.
+async function openFrom() {
+    fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
+}
+
 async function expectTip(name, copy) {
     const button = (await screen.findAllByRole('button', { name }))[0];
     fireEvent.click(button);
@@ -71,58 +75,72 @@ async function expectTip(name, copy) {
 describe('Network and Token field help on route forms', () => {
     it('Link: form Network and per-card Network tips', async () => {
         mount(LinkForm, {});
+        await openFrom();
         const tips = await screen.findAllByRole('button', { name: 'About Network' });
         expect(tips).toHaveLength(3);
         fireEvent.click(tips[1]);
         expect(screen.getByRole('tooltip')).toHaveTextContent('The chain Action 1 was recorded on.');
     });
 
-    it('Publish: Network tip, gated Token tip, acknowledgement tip', async () => {
+    it('Publish: Network tip and gated Token tip', async () => {
         mount(PublishFileForm, {});
+        // Network sits in the standard From section, closed on load.
+        fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
         await expectTip('About Network', 'The chain the file is published on.');
-        fireEvent.click(screen.getByRole('radio', { name: /token-gated/ }));
+        // Publish as is the themed dropdown (G119): open it, pick Encrypted.
+        fireEvent.click(screen.getByRole('button', { name: /^Publish as: / }));
+        fireEvent.click(screen.getByRole('option', { name: /token-gated/ }));
         await expectTip('About Token', 'Only tokens you own are listed.');
     });
 
-    it('Attach: artwork checkbox tip', async () => {
+    it('Attach: artwork file tip', async () => {
         mount(AttachContentForm, { chainId: CHAIN, tick: 'HELP', issuerAddress: ADDRESS.address });
-        await expectTip(/^About Also make this HELP/, 'this becomes the token\'s picture everywhere');
+        // The token-picture toggle is gone; the file field carries the tip.
+        expect(screen.queryByRole('button', { name: /^Token Picture/ })).toBeNull();
+        await expectTip(/^About Artwork file/, 'Two signatures: one to upload the file');
     });
 
     it('List create: Network tip', async () => {
         mount(ListCreateForm, { chainId: CHAIN });
+        await openFrom();
         await expectTip('About Network', 'The chain the list is published on.');
     });
 
     it('Union list: Network tip', async () => {
-        mount(UnionListForm, { chainId: CHAIN });
+        mount(ListCreateForm, { chainId: CHAIN, initialType: '3' });
+        await openFrom();
         await expectTip('About Network', 'Only your lists on this network can be combined.');
     });
 
-    it('Oracle: Publishing network tip', async () => {
+    it('Oracle: Network tip', async () => {
         mount(OracleForm, { initialChainId: CHAIN });
-        await expectTip('About Publishing network', 'it becomes your oracle\'s identity');
+        await openFrom();
+        await expectTip('About Network','it becomes your oracle\'s identity');
     });
 
     it('Create poll: Network and Governance token tips', async () => {
         mount(CreatePollForm, { chainId: CHAIN, presetTick: 'HELP' });
+        await openFrom();
         await expectTip('About Network', 'The chain the poll is recorded on.');
         await expectTip('About Governance token', 'The token whose holders can vote on this poll.');
     });
 
     it('Delegate vote: Network and Governance token tips', async () => {
         mount(DelegateVoteForm, { chainId: CHAIN, presetTick: 'HELP' });
+        await openFrom();
         await expectTip('About Network', 'The chain the delegation is recorded on.');
         await expectTip('About Governance token', 'voting weight you are delegating');
     });
 
     it('Sell ownership: Network tip', async () => {
         mount(SellOwnershipForm, { chainId: CHAIN, tick: 'HELP' });
-        await expectTip('About Network', 'The chain the name is listed for sale on.');
+        await openFrom();
+        await expectTip('About Network', 'The chain the ownership is listed for sale on.');
     });
 
     it('Controller bind: Network tip', async () => {
         mount(ControllerBindForm, { chainId: CHAIN, tick: 'HELP' });
+        await openFrom();
         await expectTip('About Network', 'The chain the token and its controller binding are on.');
     });
 });

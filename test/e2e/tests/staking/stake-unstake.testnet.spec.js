@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { randomBytes } from 'node:crypto';
-import { createWallet, expect, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFromAddress, test } from '../../fixtures/wallet.js';
 import {
     WALLET_UNLOCK,
     approve,
@@ -117,10 +117,10 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
         await test.step('stake under a new signing key', async () => {
             pubkey = signingPubkey();
             await gotoPalette(page, 'Staking');
-            await page.getByRole('button', { name: 'New stake', exact: true }).click();
+            await page.getByRole('button', { name: 'New Stake', exact: true }).click();
             await page.getByRole('button', { name: /^Validator staking/ }).click();
             const main = page.getByRole('main');
-            await expect(main.getByLabel('From', { exact: true })).toHaveValue(address);
+            await expect(await openFromAddress(main)).toHaveValue(address);
             await main.getByLabel('Signing public key', { exact: true }).fill(pubkey);
             await expect(main.getByText('✓ No existing stake for this public key. New stake is selected.'))
                 .toBeVisible({ timeout: 120_000 });

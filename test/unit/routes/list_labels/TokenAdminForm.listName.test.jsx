@@ -10,18 +10,34 @@ import { TokenAdminForm } from '../../../../packages/core/src/shared/routes/Toke
 import { __clearTokenInfoCache } from '../../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 vi.mock('../../../../packages/core/src/shared/components/ListPickerScreen.jsx', () => ({
-    ListPickerScreen: ({ onSelect }) => (
-        <button
-            type="button"
-            onClick={() => onSelect({
-                actionIndex: '303',
-                type: '2',
-                memberCount: 4,
-                name: 'Picker policy',
-            })}
-        >
-            Pick named list
-        </button>
+    ListPickerScreen: ({ onSelect, initialTab }) => (
+        <div data-initial-tab={initialTab || ''}>
+            <button
+                type="button"
+                onClick={() => onSelect({
+                    actionIndex: '303',
+                    type: '2',
+                    memberCount: 4,
+                    name: 'Picker policy',
+                })}
+            >
+                Pick named list
+            </button>
+            {/* A published list from the All view, as the real picker sends it. */}
+            <button
+                type="button"
+                onClick={() => onSelect({
+                    actionIndex: '204',
+                    type: '2',
+                    memberCount: 3,
+                    homeChain: 'LTC',
+                    homeListIndex: '9',
+                    shared: true,
+                })}
+            >
+                Pick shared list
+            </button>
+        </div>
     ),
 }));
 
@@ -33,9 +49,10 @@ const TOKEN_ADMIN_FORM_SOURCE = readFileSync(
     'utf8',
 );
 
+// The field's clear action: its onClear handler, then its clearLabel.
 function removeHandlerBody(label) {
     const match = TOKEN_ADMIN_FORM_SOURCE.match(new RegExp(
-        `aria-label="${label}"\\s+onClick=\\{\\(\\) => \\{([^}]*)\\}\\}`,
+        `\\(\\) => \\{([^}]*)\\}\\s*:\\s*undefined\\}\\s*clearLabel="${label}"`,
     ));
     expect(match).not.toBeNull();
     return match[1];
@@ -141,7 +158,7 @@ describe('TokenAdminForm list names', () => {
             getListByActionIndex: vi.fn().mockReturnValue(pendingDetail),
         });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Choose allow-list' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Allow list: None set' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick named list' }));
 
         expect(screen.getByText('Picker policy (List #303) · 4 members')).toBeTruthy();
@@ -172,9 +189,23 @@ describe('TokenAdminForm list names', () => {
             }],
         });
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Choose list' }));
+        // Manage token's Shared block list entry opens the picker on All.
+        const pick = await screen.findByRole('button', { name: 'Pick shared list' });
+        expect(pick.parentElement).toHaveAttribute('data-initial-tab', 'all');
+        fireEvent.click(pick);
 
         expect(await screen.findByText('List #204 (shared from LTC list #9) · 3 members')).toBeTruthy();
         expect(screen.queryByText(/Bound target metadata/)).toBeNull();
+    });
+
+    it('labels a published allow list the same way', async () => {
+        mountAdmin({
+            listDetails: { 204: { name: 'Bound target metadata', members: ['a', 'b', 'c'] } },
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'Allow list: None set' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick shared list' }));
+        expect(await screen.findByRole('button', {
+            name: 'Allow list: List #204 (shared from LTC list #9) · 3 members',
+        })).toBeTruthy();
     });
 });

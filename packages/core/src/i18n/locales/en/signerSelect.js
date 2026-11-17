@@ -16,15 +16,14 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // --- signer selection ---------------------------------------
-    'signerSelect.choose': 'Choose signer',
-    'signerSelect.title': 'Signer',
+    'signerSelect.title': 'Sign with',
     'signerSelect.intro':
         "Choose where this operation gets its keys. This choice doesn't share your recovery phrase or private keys.",
     'signerSelect.watcherNote':
-        "Watch-only mode stays active. Choosing a key source here doesn't let this wallet sign transactions.",
-    'signerSelect.loadFailed': 'Failed to load signers.',
+        "Another phone still signs for this wallet. Choosing a key source here doesn't let this wallet sign transactions.",
+    'signerSelect.loadFailed': 'Failed to load hardware wallets.',
     'signerSelect.loadUnreachable':
-        "Couldn't reach the wallet service to list hardware signers. The software wallet stays selected; reopen this screen to try again.",
+        "Couldn't reach the wallet service to list hardware wallets. The software wallet stays selected; reopen this screen to try again.",
 };
 
 addEnglish(messages);

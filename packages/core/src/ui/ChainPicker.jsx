@@ -8,30 +8,20 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import * as branding from '../branding/branding.js';
-import { tickerForCoin } from '../registry/coinTicker.js';
-import { ChevronIcon } from './ChainPicker.icons.jsx';
-import { useBackHandler } from './backStack.js';
-// Ahead of the picker's own sheet, so the shared button base loads first and
-// the trigger's rules follow it; see Chip.jsx for why this is not `composes`.
-import buttonStyles from './Button.module.css';
-import styles from './ChainPicker.module.css';
+import { NetworkField } from './NetworkField.jsx';
 import { t } from '../i18n/index.js';
-import '../i18n/locales/en/components.js';
-import '../i18n/locales/en/extension.js';
 import '../i18n/locales/en/ui.js';
 
 /**
- * Single-select chain picker. Replaces native `<select>` in any
- * "which network are we operating on" form (Send, Swap, Issue,
- * Compose message, Markets filter, etc.).
+ * Single-select chain picker, kept as a name for callers that still import
+ * it. A network is always chosen from the standard Network field and its
+ * full-screen list (operator ruling 2026-11-13), never from a popover, so
+ * this draws NetworkField: the field shows the chosen network's icon and
+ * name, and pressing it opens NetworkPicker, whose rows are drawn like the
+ * token list's (icon, name, ticker and network kind, right chevron).
  *
- * Each row carries the chain's icon and display name. Reads the icon
- * URL from `branding.chainIconSmallUrl(chainId)` so the component
- * stays decoupled from the chain registry's image tick wiring.
- *
- * Searchable when the option count exceeds 6.
+ * An unlabelled picker draws no label row and names itself from its
+ * visible text, as it did before.
  *
  * @param {object} props
  * @param {string} props.value
@@ -42,6 +32,9 @@ import '../i18n/locales/en/ui.js';
  * @param {string} [props.placeholder]
  * @param {boolean} [props.disabled]
  * @param {'sm' | 'md' | 'lg'} [props.size] field size matching Input; defaults to 'md'.
+ * @param {import('react').ReactNode} [props.help]
+ * @param {string} [props.id]      the field's id; NetworkField reads the form's error entry by it
+ * @param {string | null} [props.error]
  */
 export function ChainPicker({
     value,
@@ -50,214 +43,25 @@ export function ChainPicker({
     chainRegistry,
     label,
     placeholder = t('ui.chainPicker.selectANetwork'),
-    disabled,
+    disabled = false,
     size = 'md',
+    help,
+    id,
+    error,
 }) {
-    const [open, setOpen] = useState(false);
-    const [query, setQuery] = useState('');
-    const listboxId = useId();
-    const triggerRef = useRef(null);
-    const popoverRef = useRef(null);
-    const searchRef = useRef(null);
-    const focusOnOpenRef = useRef('selected');
-
-    const closePicker = useCallback((restoreFocus = false) => {
-        setOpen(false);
-        setQuery('');
-        if (restoreFocus) triggerRef.current?.focus();
-    }, []);
-    useBackHandler(open ? () => closePicker(true) : undefined);
-
-    useEffect(() => {
-        if (!open) return undefined;
-        const onClick = (e) => {
-            if (triggerRef.current?.contains(e.target)) return;
-            if (popoverRef.current?.contains(e.target)) return;
-            closePicker(true);
-        };
-        window.addEventListener('mousedown', onClick);
-        return () => window.removeEventListener('mousedown', onClick);
-    }, [closePicker, open]);
-
-    const entries = useMemo(() => {
-        return (chainIds || []).map((id) => {
-            const d = chainRegistry?.get(id);
-            return {
-                id,
-                label: d?.displayName || id,
-                ticker: tickerForCoin(d?.coin),
-                networkKind: d?.networkKind || 'mainnet',
-                iconUrl: branding.chainIconSmallUrl(id),
-            };
-        });
-    }, [chainIds, chainRegistry]);
-
-    const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase();
-        if (!q) return entries;
-        return entries.filter((e) =>
-            e.label.toLowerCase().includes(q)
-            || e.ticker.toLowerCase().includes(q)
-            || e.networkKind.toLowerCase().includes(q)
-        );
-    }, [entries, query]);
-
-    const selected = entries.find((e) => e.id === value) || null;
-
-    useEffect(() => {
-        if (!open) return;
-        if (focusOnOpenRef.current === 'search') {
-            searchRef.current?.focus();
-            return;
-        }
-        const options = listboxOptions(popoverRef.current);
-        const selectedOption = options.find(
-            (option) => option.getAttribute('aria-selected') === 'true',
-        );
-        const fallback = focusOnOpenRef.current === 'last' ? options.at(-1) : options[0];
-        (selectedOption || fallback)?.focus();
-    }, [open]);
-
-    const openPicker = (focus = 'selected') => {
-        focusOnOpenRef.current = focus;
-        setOpen(true);
-    };
-
-    const onPopoverKeyDown = (e) => {
-        const options = listboxOptions(popoverRef.current);
-        if (e.target === searchRef.current) {
-            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-            e.preventDefault();
-            (e.key === 'ArrowDown' ? options[0] : options.at(-1))?.focus();
-            return;
-        }
-
-        const index = options.indexOf(document.activeElement);
-        let nextIndex = null;
-        if (e.key === 'ArrowDown') nextIndex = (index + 1) % options.length;
-        if (e.key === 'ArrowUp') nextIndex = (index - 1 + options.length) % options.length;
-        if (e.key === 'Home') nextIndex = 0;
-        if (e.key === 'End') nextIndex = options.length - 1;
-        if (nextIndex !== null && options.length > 0) {
-            e.preventDefault();
-            options[nextIndex]?.focus();
-            return;
-        }
-        if ((e.key === 'Enter' || e.key === ' ') && index >= 0) {
-            e.preventDefault();
-            options[index].click();
-        }
-        if (e.key === 'Tab') closePicker();
-    };
-
-    // The visual label is a span, so the accessible name pairs the field label
-    // with its current selection. An unlabelled picker keeps its visible text as
-    // its name.
-    const selectionText = selected ? selected.label : placeholder;
-    const accessibleName = label ? `${label}: ${selectionText}` : undefined;
-
     return (
-        <div className={`${styles.wrap} ${styles[size] || ''}`.trim()}>
-            {label ? <span className={styles.label}>{label}</span> : null}
-            <button
-                type="button"
-                ref={triggerRef}
-                className={`${buttonStyles.btn} ${styles.trigger}`}
-                onClick={() => {
-                    if (disabled) return;
-                    if (open) closePicker();
-                    else openPicker(entries.length > 6 ? 'search' : 'selected');
-                }}
-                onKeyDown={(e) => {
-                    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-                    e.preventDefault();
-                    openPicker(e.key === 'ArrowUp' && !selected ? 'last' : 'selected');
-                }}
-                aria-haspopup="listbox"
-                aria-expanded={open ? 'true' : 'false'}
-                aria-controls={open ? listboxId : undefined}
-                aria-label={accessibleName}
-                disabled={disabled}
-            >
-                {selected?.iconUrl ? (
-                    <span className={styles.triggerIcon} aria-hidden="true">
-                        <img src={selected.iconUrl} alt="" />
-                    </span>
-                ) : null}
-                <span className={styles.triggerText}>
-                    {selected ? (
-                        <span className={styles.triggerLabel}>{selected.label}</span>
-                    ) : (
-                        <span className={styles.triggerPlaceholder}>{placeholder}</span>
-                    )}
-                </span>
-                <span className={styles.triggerCaret} aria-hidden="true">
-                    <ChevronIcon open={open} />
-                </span>
-            </button>
-            {open ? (
-                <div
-                    ref={popoverRef}
-                    id={listboxId}
-                    className={styles.popover}
-                    role="listbox"
-                    aria-label={label || t('extension.connect.chains')}
-                    onKeyDown={onPopoverKeyDown}
-                >
-                    {entries.length > 6 ? (
-                        <div className={styles.searchWrap}>
-                            <input
-                                ref={searchRef}
-                                type="text"
-                                className={styles.search}
-                                placeholder={t('components.networkFilter.searchNetworks')}
-                                aria-label={t('components.networkFilter.searchNetworks2')}
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                            />
-                        </div>
-                    ) : null}
-                    <ul className={styles.list}>
-                        {filtered.map((e) => (
-                            <li key={e.id}>
-                                <button
-                                    type="button"
-                                    role="option"
-                                    tabIndex={-1}
-                                    aria-selected={value === e.id ? 'true' : 'false'}
-                                    aria-label={optionAccessibleName(e)}
-                                    className={`${styles.item} ${value === e.id ? styles.itemActive : ''}`}
-                                    onClick={() => { onChange(e.id); closePicker(true); }}
-                                >
-                                    <span className={styles.itemIcon} aria-hidden="true">
-                                        {e.iconUrl ? <img src={e.iconUrl} alt="" /> : null}
-                                    </span>
-                                    <span className={styles.itemBody}>
-                                        <span className={styles.itemLabel}>{e.label}</span>
-                                        <span className={styles.itemSub}>{e.ticker}</span>
-                                    </span>
-                                </button>
-                            </li>
-                        ))}
-                        {filtered.length === 0 ? (
-                            <li className={styles.empty}>{t('components.networkFilter.noMatchingNetworks')}</li>
-                        ) : null}
-                    </ul>
-                </div>
-            ) : null}
-        </div>
+        <NetworkField
+            value={value}
+            onChange={onChange}
+            chainIds={chainIds}
+            chainRegistry={chainRegistry}
+            label={label || ''}
+            placeholder={placeholder}
+            disabled={disabled}
+            size={size}
+            help={help}
+            id={id}
+            error={error}
+        />
     );
-}
-
-// Every network of a coin shows the same name and ticker, so a list that
-// offers more than one network reads as identical rows to a screen reader.
-// A non-mainnet option keeps its visible text plain and says its network in
-// its accessible name; a mainnet option names itself from its visible text.
-function optionAccessibleName(entry) {
-    if (entry.networkKind === 'mainnet') return undefined;
-    return `${entry.label} ${entry.networkKind} ${entry.ticker}`;
-}
-
-function listboxOptions(popover) {
-    return Array.from(popover?.querySelectorAll('[role="option"]') || []);
 }

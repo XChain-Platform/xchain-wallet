@@ -54,14 +54,14 @@ afterEach(() => { cleanup(); localStorage.clear(); });
 describe('Sign message address list', () => {
     it('defaults to a software address when a hardware address is listed first', async () => {
         mount([HW, SOFT]);
-        const field = await screen.findByLabelText('Address');
+        const field = await screen.findByLabelText('Signing address');
         await waitFor(() => expect(field).toHaveValue(SOFT.address));
         expect(field).not.toHaveValue(HW.address);
     });
 
     it('keeps the complete selected address in the read-only field title', async () => {
         mount([{ ...SOFT, label: 'BTC Address #1' }]);
-        const field = await screen.findByLabelText('Address');
+        const field = await screen.findByLabelText('Signing address');
 
         await waitFor(() => expect(field).toHaveValue(SOFT.address));
         expect(field).toHaveAttribute('title', SOFT.address);

@@ -16,30 +16,36 @@ describe('route page-top ownership', () => {
     it('keeps every CreateWallet stage root flush with Screen', () => {
         const source = read('packages/core/src/shared/routes/CreateWallet.jsx');
         const form = rule(read('packages/core/src/ui/FormPage.module.css'), '.form');
-        expect(source.match(/<FormPage\b/g)).toHaveLength(6);
+        // Five FormPage stages (stale, persisting, verify, mnemonic, password); the ads notice stage
+        // renders AdsNotice directly under Screen, and the header sits in BootFrame on a first wallet.
+        expect(source.match(/<FormPage\b/g)).toHaveLength(5);
         expect(form).toMatch(/margin:\s*0/);
         expect(form).toMatch(/padding:\s*0/);
     });
 
-    it('keeps the Settings Keyboard root and its first paragraph flush with Screen', () => {
+    it('keeps the Settings Keyboard root and its first note flush with Screen', () => {
         const settings = read('packages/core/src/shared/routes/Settings.module.css');
         const keyboard = read('packages/core/src/shared/components/settings/KeyboardSection.jsx');
         expect(rule(settings, '.page')).not.toMatch(/(?:margin|padding)(?:-block-start|-top)?\s*:/);
-        expect(keyboard).toMatch(/const INTRO = \{[^}]*margin:\s*0/);
-        expect(keyboard).toContain('<p style={INTRO}>');
+        // The intro note is the shared notice card, not a loose paragraph.
+        expect(keyboard).toMatch(/<WarningCard>\s*<WarningLine>\{t\('settings\.keyboard\.selectRebindThenPressThe'\)\}/);
+        expect(keyboard).not.toContain('<p style={INTRO}>');
     });
 
     it('keeps TokenDetail on the top-spacing-free ListPage root', () => {
         const source = read('packages/core/src/shared/routes/TokenDetail.jsx');
         const page = rule(read('packages/core/src/ui/ListPage.module.css'), '.page');
-        expect(source.match(/<ListPage(?:>|><)/g)).toHaveLength(2);
+        expect(source.match(/<ListPage(?:>|><| className=\{styles\.detailPage\}>)/g)).toHaveLength(2);
         expect(page).not.toMatch(/(?:margin|padding)(?:-block-start|-top)?\s*:/);
     });
 
     it('keeps each Send FormPage root flush with Screen', () => {
         const source = read('packages/core/src/shared/routes/Send.jsx');
         const form = rule(read('packages/core/src/ui/FormPage.module.css'), '.form');
-        expect(source.match(/<FormPage\b/g)).toHaveLength(2);
+        // The review stage is a FormPage; the compose stage is a FormFrame,
+        // which renders its own FormPage root.
+        expect(source.match(/<FormPage\b/g)).toHaveLength(1);
+        expect(source.match(/<FormFrame\b/g)).toHaveLength(1);
         expect(form).toMatch(/margin:\s*0/);
         expect(form).toMatch(/padding:\s*0/);
     });

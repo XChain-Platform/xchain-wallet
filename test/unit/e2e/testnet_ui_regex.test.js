@@ -91,6 +91,12 @@ function literalPieces(pattern) {
             else pieces[pieces.length - 1] += next;
         } else if (METACHARS.has(char)) {
             pieces.push('');
+            // A group's own syntax ((?:, (?=, (?!, (?<=, (?<!, (?<name>) is
+            // not copy, so it never joins the next literal piece.
+            if (char === '(' && body[i + 1] === '?') {
+                const group = /^\?(?::|=|!|<=|<!|<[A-Za-z_$][\w$]*>)/.exec(body.slice(i + 1));
+                if (group) i += group[0].length;
+            }
         } else {
             pieces[pieces.length - 1] += char;
         }
@@ -145,6 +151,8 @@ describe('testnet e2e UI regex locators', () => {
             [['sample.js', sample]],
             ['says known copy. here', 'a known label'],
         )).toEqual(['sample.js:2 /^Planted unmatched\\b/']);
+        expect(longestFragment('^Network\\s*(?:Mainnet|Testnet|Regtest|-)$')).toBe('Network');
+        expect(longestFragment('^(?<lead>Send)\\s(?=now)')).toBe('Send');
     });
 
     it('scans every testnet spec and fixture and finds each pattern in packages/core/src', () => {

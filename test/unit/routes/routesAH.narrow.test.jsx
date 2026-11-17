@@ -18,7 +18,7 @@ const VIEWPORT_WIDTH = 320;
 const originalInnerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
 const originalMatchMedia = window.matchMedia;
 const alertsCss = readFileSync(
-    'packages/core/src/shared/components/AlertsOverlay.module.css',
+    'packages/core/src/shared/routes/AlertsRoute.module.css',
     'utf8',
 );
 
@@ -125,7 +125,7 @@ describe('A through H routes at 320px', () => {
             },
         );
 
-        expect(await screen.findByRole('button', { name: 'Add account' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Add Account' })).toBeInTheDocument();
         expectFitsNarrowViewport(view.container);
     });
 
@@ -155,11 +155,11 @@ describe('A through H routes at 320px', () => {
             { listAccounts: vi.fn().mockResolvedValue([]) },
         );
 
-        expect(screen.getByRole('button', { name: 'Add account' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Add Account' })).toBeInTheDocument();
         expectFitsNarrowViewport(view.container);
     });
 
-    it('wraps alert content within the viewport and exposes its primary action', () => {
+    it('keeps alert content within the viewport, each line ending in an ellipsis, and exposes its primary action', () => {
         const title = 'AlertTitleWithoutAnyNaturalBreakPointsThatCouldWidenTheCard';
         const message = 'AlertMessageWithoutAnyNaturalBreakPointsThatCouldWidenTheCard';
         const view = renderRoute(
@@ -176,12 +176,16 @@ describe('A through H routes at 320px', () => {
         );
 
         expect(screen.getByRole('button', { name: 'Review' })).toBeInTheDocument();
-        expect(ruleBody(alertsCss, '.alert')).toMatch(/min-width:\s*0/);
-        expect(ruleBody(alertsCss, '.alertHead')).toMatch(/min-width:\s*0/);
-        expect(ruleBody(alertsCss, '.alertTitle'))
-            .toMatch(/min-width:\s*0[\s\S]*overflow-wrap:\s*anywhere/);
-        expect(ruleBody(alertsCss, '.alertMessage'))
-            .toMatch(/min-width:\s*0[\s\S]*overflow-wrap:\s*anywhere/);
+        // The text column may shrink below its content. Each Notifications row
+        // is three one-line rows (shared/alertCopy.js): the copy wrapper adds
+        // no box, and a long label, title or message ends in an ellipsis inside
+        // the column instead of widening the row.
+        expect(ruleBody(alertsCss, '.rowGrid')).toMatch(/minmax\(0,\s*1fr\)/);
+        expect(ruleBody(alertsCss, '.copy')).toMatch(/display:\s*contents/);
+        const lineClamp = /\.typeLabel,\s*\.title,\s*\.message\s*\{([^}]*)\}/.exec(alertsCss)?.[1] || '';
+        expect(lineClamp).toMatch(/min-width:\s*0/);
+        expect(lineClamp).toMatch(/overflow:\s*hidden/);
+        expect(lineClamp).toMatch(/text-overflow:\s*ellipsis/);
         expectFitsNarrowViewport(view.container);
     });
 

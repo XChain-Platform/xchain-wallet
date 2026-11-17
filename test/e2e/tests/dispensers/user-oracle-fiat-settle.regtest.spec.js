@@ -72,6 +72,7 @@
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import { createWallet, expect, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
+import { pickFiatCurrency } from '../../fixtures/pickerFields.js';
 import {
     encoderRpc,
     expectConfirmModal as sharedConfirmModal,
@@ -92,6 +93,7 @@ import {
     selectVenueSendAsset,
     selectDispenserOnSource,
     selectPickerAsset,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 import { writeRowsScript } from '../../fixtures/priceSeed.js';
 
@@ -372,7 +374,7 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
             // amount is the mode selector - with one it is Mode A and the
             // validator prices the fill; without one the oracle does.
             await main.getByRole('button', { name: /Advanced options/ }).click();
-            await main.getByLabel('Priced in fiat', { exact: true }).selectOption(ORACLE.fiat);
+            await pickFiatCurrency(main, ORACLE.fiat);
             await main.getByLabel(/^Oracle address/).fill(ORACLE.address);
 
             await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
@@ -431,7 +433,7 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
             const form = page.getByRole('main');
             await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(form);
-            buyer = await form.getByLabel('From').inputValue();
+            buyer = await (await openFromAddress(form)).inputValue();
             expect(buyer, `the buyer wallet has no ${REGTEST_CHAIN_LABEL} address`)
                 .toMatch(REGTEST_ADDRESS_RE);
             expect(buyer, 'the buyer wallet derived the seller\'s address').not.toBe(seller);
@@ -536,6 +538,9 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
 
             const coin = REGTEST_COIN.slice(1);
             const panel = page.getByRole('main');
+            // The dispenser page opens on Actions (G102); the buy panel is the
+            // Buy page a buyer's first action row opens.
+            await panel.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
             await expect(panel, 'no pay-to-buy panel rendered for a Mode B dispenser at all')
                 .toContainText('Pay to buy', { timeout: 30_000 });
 

@@ -27,7 +27,10 @@ vi.mock('@xchain-wallet/core/shared/hooks/useWalletMode.js', () => ({
         isFullMode: true,
         isWatcherMode: false,
         isSignerMode: false,
+        walletModeKnown: true,
     }),
+    useActiveWalletModeSource: () => {},
+    notifyWalletModesChanged: () => {},
 }));
 vi.mock('@xchain-wallet/core/shared/hooks/useMessagingUnread.js', () => ({
     useMessagingUnread: () => 0,

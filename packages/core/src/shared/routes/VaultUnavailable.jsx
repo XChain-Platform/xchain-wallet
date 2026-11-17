@@ -59,45 +59,20 @@
 // to put a one-tap destructive button under their thumb.
 
 import { useState } from 'react';
-import { Button, FormPage, Icon, Input, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, FormPage, Icon, Input, Notice, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
+import { ActionList, ActionListItem } from '../components/ActionList.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { wipeWalletStorage } from '../utils/wipeWalletStorage.js';
 import { isExactTypedConfirmation } from '../../flows/typedConfirmation.js';
 import { t } from '../../i18n/index.js';
 import styles from './VaultUnavailable.module.css';
 
-/** Headline and body per kind. Plain language, and never blame the user. */
-const COPY = {
-    locked: {
-        title: 'Your device needs to be unlocked',
-        body: 'Your wallet is safe on this device. Its keys are held in the'
-            + " device's secure storage, which stays locked until you unlock the"
-            + ' device itself.',
-        nextStep: 'Unlock your device, then choose Try again.',
-    },
-    corrupt: {
-        title: 'This device’s copy of your wallet is damaged',
-        body: 'The wallet file stored here cannot be opened, and trying again'
-            + ' will not repair it.',
-        nextStep: 'Restore your wallet from your recovery phrase or an encrypted backup.',
-    },
-    unavailable: {
-        title: 'Your wallet could not be opened',
-        body: "This device's secure storage could not be reached, so the wallet"
-            + ' was not opened. This is usually temporary.',
-        nextStep: 'Choose Try again. If the problem continues, contact support before clearing any wallet data.',
-    },
-    evicted: {
-        title: 'This browser removed your wallet’s data',
-        body: 'A wallet was set up in this browser, but the browser has since'
-            + ' deleted its encrypted data. The wallet did not do this: browsers'
-            + ' clear site data when storage runs low, when a clear-on-exit or'
-            + ' privacy setting is on, when a cleanup tool runs, and Safari'
-            + ' clears it after seven days without a visit. Install the wallet'
-            + ' app or add this site to your home screen to stop it happening'
-            + ' again.',
-        nextStep: 'Choose Try again once. If the data is still missing, restore your wallet from your recovery phrase or an encrypted backup.',
-    },
+/** The four storage diagnoses share one heading and paragraph shape. */
+const BODY_KEYS = {
+    locked: 'vaultUnavailable.locked.body',
+    corrupt: 'vaultUnavailable.corrupt.body',
+    unavailable: 'vaultUnavailable.unavailable.body',
+    evicted: 'vaultUnavailable.evicted.body',
 };
 
 /** Copy for an install whose meta outlived its vault. */
@@ -120,17 +95,17 @@ const WIPE_COPY = {
             + ' you can import your wallet again. It changes nothing on'
             + ' the blockchain. Without your recovery phrase it cannot be'
             + ' undone.',
-        button: 'Remove damaged data',
-        failed: 'Could not remove the damaged wallet data. Try again, or contact support before clearing anything else.',
+        button: 'Remove Damaged Data',
+        failed: 'Could not remove the damaged wallet data. Try again, or restart the app and try once more.',
     },
     evicted: {
         region: 'Clear what is left of the old wallet',
         note: 'This clears the remaining record of the old wallet on this'
             + ' device so you can import your wallet again from its recovery'
             + ' phrase. It changes nothing on the blockchain. If you would'
-            + ' rather check first whether the data comes back, use Try again.',
-        button: 'Clear and start over',
-        failed: 'Could not clear the old wallet data. Try again, or contact support before clearing anything else.',
+            + ' rather check first whether the data comes back, use Try Again.',
+        button: 'Clear and Start Over',
+        failed: 'Could not clear the old wallet data. Try again, or restart the app and try once more.',
     },
 };
 
@@ -154,8 +129,8 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
     const { shell } = useMessaging();
     const variant = screenVariantFor(shell);
     const incomplete = kind === 'incomplete';
-    const resolvedKind = COPY[kind] || incomplete ? kind : 'unavailable';
-    const copy = incomplete ? incompleteCopy() : COPY[resolvedKind];
+    const resolvedKind = incomplete || BODY_KEYS[kind] ? kind : 'unavailable';
+    const copy = incomplete ? incompleteCopy() : { body: t(BODY_KEYS[resolvedKind]) };
     // A re-read of an incomplete install answers the same, so its screen
     // leads with the reset instead of a retry.
     const offersRetry = resolvedKind !== 'corrupt' && !incomplete;
@@ -167,6 +142,8 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
     const [busy, setBusy] = useState(false);
     const [wipeError, setWipeError] = useState(/** @type {string | null} */ (null));
     const [retryError, setRetryError] = useState(/** @type {string | null} */ (null));
+    const wipeErrors = useFormErrors();
+    const wipeConfirmId = 'vault-unavailable-wipe-confirm';
 
     async function handleRetry() {
         setRetryError(null);
@@ -182,7 +159,11 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
 
     async function handleWipe() {
         if (busy) return;
-        if (!isExactTypedConfirmation(confirmText, 'WIPE')) return;
+        if (!wipeErrors.validate({
+            [wipeConfirmId]: isExactTypedConfirmation(confirmText, 'WIPE')
+                ? null
+                : 'Type WIPE exactly to continue.',
+        })) return;
         setBusy(true);
         setWipeError(null);
         try {
@@ -196,65 +177,66 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
     }
 
     return (
-        <Screen variant={variant}>
-            <div role="alert">
-                <FormPage label={copy.title} onSubmit={(event) => event.preventDefault()}>
-                    <div className={styles.wrap}>
-                        <h1 className={styles.title}>{copy.title}</h1>
-                        <p className={styles.body}>{copy.body}</p>
-                        <p className={styles.nextStep}>{copy.nextStep}</p>
-
-                        {/* The fact the old screen withheld, and the reason none of
-                            this is a catastrophe. Said on every kind, because a user
-                            who has just been told their wallet will not open should
-                            not have to work out whether their coins are gone. */}
-                        <p className={styles.reassure}>
-                            <strong>{t('vaultUnavailable.recoverySafe')}</strong>
-                            {' '}
-                            {t('vaultUnavailable.blockchainSafe')}
-                        </p>
-
-                        {offersRetry ? (
-                            <Button type="button" variant="success" block icon={<Icon.RefreshIcon />} onClick={() => { void handleRetry(); }}>
-                                {t('common.tryAgain')}
-                            </Button>
+        // A vault that cannot open sits outside the wallet shell, like Loading
+        // and Lock, so it has neither an app bar nor a page header.
+        <Screen variant={variant} bodyClassName={styles.centre}>
+            <FormPage
+                label={t('vaultUnavailable.title')}
+                className={styles.vaultCard}
+                onSubmit={(event) => event.preventDefault()}
+                errors={wipeOpen ? wipeErrors : undefined}
+            >
+                <div className={styles.wrap}>
+                    <h1 className={styles.title}>{t('vaultUnavailable.title')}</h1>
+                    <p className={styles.body}>
+                        {copy.body}{copy.nextStep ? ` ${copy.nextStep}` : ''}{' '}
+                        {t('vaultUnavailable.recoverySafe')} {t('vaultUnavailable.blockchainSafe')}
+                    </p>
+                        {/* The recovery actions are one ActionList (G101). The
+                            escape row is offered for `corrupt`, `evicted` and
+                            `incomplete` alone. On `locked` the vault is perfectly
+                            intact and the user simply has not unlocked their
+                            device; on `unavailable` we could not read the vault,
+                            so we are in no position to call it damaged. Erasing
+                            in either case would destroy a working wallet to fix
+                            nothing. */}
+                        {offersRetry || (offersEscape && !wipeOpen) ? (
+                            <ActionList label={t('vaultUnavailable.actions.label')}>
+                                {offersRetry ? (
+                                    <ActionListItem
+                                        icon={<Icon.RefreshIcon />}
+                                        onClick={() => { void handleRetry(); }}
+                                        title={t('vaultUnavailable.actions.retry.title')}
+                                        description={t('vaultUnavailable.actions.retry.description')}
+                                    />
+                                ) : null}
+                                {offersEscape && !wipeOpen && incomplete ? (
+                                    // A removal is red, never the blue or green of a
+                                    // forward step.
+                                    <ActionListItem
+                                        tone="danger"
+                                        icon={<Icon.TrashIcon />}
+                                        onClick={() => setWipeOpen(true)}
+                                        title={t('vaultUnavailable.actions.reset.title')}
+                                        description={t('vaultUnavailable.actions.reset.description')}
+                                        aria-expanded="false"
+                                        aria-controls="vault-unavailable-wipe-panel"
+                                    />
+                                ) : null}
+                                {offersEscape && !wipeOpen && !incomplete ? (
+                                    <ActionListItem
+                                        icon={<Icon.KeyIcon />}
+                                        onClick={() => setWipeOpen(true)}
+                                        title={t('vaultUnavailable.actions.restore.title')}
+                                        description={t('vaultUnavailable.actions.restore.description')}
+                                        aria-expanded="false"
+                                        aria-controls="vault-unavailable-wipe-panel"
+                                    />
+                                ) : null}
+                            </ActionList>
                         ) : null}
                         {retryError ? (
                             <StatusMessage variant="error">{retryError}</StatusMessage>
-                        ) : null}
-
-                        {/* Offered for `corrupt` and `evicted` alone. On `locked` the
-                            vault is perfectly intact and the user simply has not
-                            unlocked their device; on `unavailable` we could not read
-                            the vault, so we are in no position to call it damaged.
-                            Erasing in either case would destroy a working wallet to
-                            fix nothing. */}
-                        {offersEscape && !wipeOpen && incomplete ? (
-                            <Button
-                                type="button"
-                                variant="primary"
-                                block
-                                icon={<Icon.TrashIcon />}
-                                onClick={() => setWipeOpen(true)}
-                                aria-expanded="false"
-                                aria-controls="vault-unavailable-wipe-panel"
-                            >
-                                {t('vaultUnavailable.incomplete.reset')}
-                            </Button>
-                        ) : null}
-                        {offersEscape && !wipeOpen && !incomplete ? (
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                icon={<Icon.KeyIcon />}
-                                style={{ alignSelf: 'center' }}
-                                onClick={() => setWipeOpen(true)}
-                                aria-expanded="false"
-                                aria-controls="vault-unavailable-wipe-panel"
-                            >
-                                {t('vaultUnavailable.restore')}
-                            </Button>
                         ) : null}
 
                         {offersEscape && wipeOpen ? (
@@ -264,13 +246,15 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                 role="region"
                                 aria-label={wipeCopy.region}
                             >
-                                <StatusMessage variant="warning" role={null} className={styles.wipeWarning}>
-                                    <strong>
-                                        {t('vaultUnavailable.wipeWarning')}
-                                    </strong>
-                                </StatusMessage>
-                                <p className={styles.wipeNote}>{wipeCopy.note}</p>
+                                <Notice
+                                    tone="danger"
+                                    role="note"
+                                    title={t('vaultUnavailable.wipeWarning')}
+                                >
+                                    {wipeCopy.note}
+                                </Notice>
                                 <Input
+                                    id={wipeConfirmId}
                                     type="text"
                                     label={t('vaultUnavailable.wipeConfirm')}
                                     help={t('common.typedConfirmationHint', { word: 'WIPE' })}
@@ -287,7 +271,6 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                     icon={<Icon.TrashIcon />}
                                     onClick={handleWipe}
                                     loading={busy}
-                                    disabled={busy || !isExactTypedConfirmation(confirmText, 'WIPE')}
                                 >
                                     {wipeCopy.button}
                                 </Button>
@@ -295,7 +278,13 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                     type="button"
                                     variant="secondary"
                                     block
-                                    onClick={() => { setWipeOpen(false); setConfirmText(''); setWipeError(null); }}
+                                    icon={<Icon.XIcon />}
+                                    onClick={() => {
+                                        setWipeOpen(false);
+                                        setConfirmText('');
+                                        setWipeError(null);
+                                        wipeErrors.reset();
+                                    }}
                                     disabled={busy}
                                 >
                                     {t('common.cancel')}
@@ -305,9 +294,8 @@ export function VaultUnavailable({ kind, onRetry, wipe = wipeWalletStorage }) {
                                 ) : null}
                             </div>
                         ) : null}
-                    </div>
-                </FormPage>
-            </div>
+                </div>
+            </FormPage>
         </Screen>
     );
 }

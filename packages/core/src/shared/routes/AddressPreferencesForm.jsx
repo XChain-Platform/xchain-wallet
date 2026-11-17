@@ -21,15 +21,22 @@
 
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { AddressField, AddressText, Button, Checkbox, FeeSelector, FieldNote, FormPage, FormSection, Icon, InfoTip, Input, ListPage, NetworkField, PageHeader, RadioGroup, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { Button, Checkbox, FieldNote, Icon, InfoTip, ListPage, PageHeader, IconSelect, Screen, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
+// The Wallet Form Standard frame. Its
+// FormSection is the collapsible standard one, not ui/FormSection.jsx.
+import { FeeSection, FormAction, FormFrame, FormSection, FromSection, MemoSection, useFormSections } from '../components/formStandard/index.js';
+import { SummaryAddress } from '../components/formStandard/SummaryAddress.jsx';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { humanizeError } from '../utils/humanizeError.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
+import { ConfirmActionModal } from '../components/ConfirmActionModal.jsx';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/addressPreferences.js';
+import '../../i18n/locales/en/components.js';
 import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import { useActionForm } from '../hooks/useActionForm.js';
 import { useOwnerActionLane } from '../hooks/useOwnerActionLane.js';
@@ -53,6 +60,7 @@ import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 
 const PROTOCOL_COIN_TICKER = { bitcoin: 'BTC', litecoin: 'LTC', dogecoin: 'DOGE' };
 const chainRegistry = registryLib.defaultRegistry();
+const NO_ACKNOWLEDGMENTS = new Set();
 
 /**
  * @param {object} props
@@ -90,7 +98,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     const coinTicker = descriptor ? PROTOCOL_COIN_TICKER[descriptor.coin] : '';
     // The address whose preferences this form reads and writes: From, which
-    // opens on the address the screen was opened for (U60).
+    // opens on the address the screen was opened for.
     const editedAddress = fromAddress?.address || address;
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
@@ -102,6 +110,16 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
     const [submitError, setSubmitError] = useState(/** @type {string | null} */ (null));
     const [result, setResult] = useState(/** @type {any} */ (null));
+    // Section open state, held above the picker page and the review
+    // step. Address Info (which address the preferences belong to) and
+    // the Protocol fee section start open.
+    const formSections = useFormSections({
+        from: true, protocolFee: true, incoming: false, dispensers: false, memo: false, fee: false,
+    });
+    // Which closed section holds the error Review refused on; each
+    // attempt bumps the counter so that section reopens every time.
+    const [errorAt, setErrorAt] = useState(/** @type {{ section: string | null, attempt: number }} */ ({ section: null, attempt: 0 }));
+    const markError = (section) => setErrorAt((prev) => ({ section, attempt: prev.attempt + 1 }));
 
     // The three preferences as the WIRE values they will be written as.
     const [feePref, setFeePref] = useState(/** @type {'1' | '2'} */ ('2'));
@@ -115,7 +133,6 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     // Current on-chain values: loaded for the form prefill, then RE-FETCHED
     // at review entry (the confirm-time baseline the review compares against).
-    const [current, setCurrent] = useState(/** @type {any} */ (null));
     const [currentError, setCurrentError] = useState(/** @type {string | null} */ (null));
     const [reviewBaseline, setReviewBaseline] = useState(/** @type {any} */ (null));
     // A ref closes the same-tick gap before React renders a new stage. Only one
@@ -146,12 +163,10 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         // this form: a demo wallet's addresses never go to an explorer (issue #82).
         if (demoGuard.blocked) return undefined;
         initialPrefillOpen.current = true;
-        setCurrent(null);
         setCurrentError(null);
         messaging.getAddressPreferences({ chainId, address: editedAddress })
             .then((prefs) => {
                 if (cancelled) return;
-                setCurrent(prefs);
                 if (!initialPrefillOpen.current) return;
                 // 0 and 2 share the donate-to-protocol effect; the form
                 // writes the explicit value.
@@ -197,6 +212,11 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         DISPENSER_PREFERENCE: dispPref,
         ...(memo.trim() ? { MEMO: memo.trim() } : {}),
     }), [feePref, requireMemo, dispPref, memo]);
+    const preferenceReviewComposed = useMemo(() => ({
+        action: 'ADDRESS',
+        chainId,
+        protocolFeeKnownFree: true,
+    }), [chainId]);
 
     const hwSignerInfo = useSignerInfo({
         walletId,
@@ -220,10 +240,11 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         const trimmedMemo = value.trim();
         if (trimmedMemo.includes('|') || trimmedMemo.includes(';')) {
             setFormError('Memo cannot contain "|" or ";".');
+            markError('memo');
             return true;
         }
         const memoError = memoLengthError(trimmedMemo);
-        if (memoError) { setFormError(memoError); return true; }
+        if (memoError) { setFormError(memoError); markError('memo'); return true; }
         return false;
     }
 
@@ -231,8 +252,9 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         event.preventDefault();
         if (reviewPending.current) return;
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { setFormError(feeStop.formError); return; }
+        if (feeStop) { setFormError(feeStop.formError); markError('fee'); return; }
         setFormError(null);
+        setErrorAt((prev) => (prev.section ? { ...prev, section: null } : prev));
         if (refuseMemo(memo)) return;
         reviewPending.current = true;
         initialPrefillOpen.current = false;
@@ -307,8 +329,9 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     const header = (
         <PageHeader
+            nested={stage === 'review'}
             onBack={stage === 'review' ? () => setStage('form') : onBack}
-            title={stage === 'review' || stage === 'submitting' ? 'Review preferences' : 'On-chain preferences'}
+            title={stage === 'review' || stage === 'submitting' ? 'Review Preferences' : 'Address Preferences'}
         />
     );
     const wrap = (children) => (
@@ -332,7 +355,14 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         return (
             <ActionConfirmScreen
                 {...ownerLane.confirmProps}
+                summary={{
+                    verb: t('components.confirmSummary.verbSetAddressPreferences'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                }}
                 screenVariant={variant}
+                feeEstimate={feeEstimate}
                 signerReady={signerReady}
                 hwSignerInfo={hwSignerInfo}
                 hintClassName={styles.hint}
@@ -378,57 +408,45 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
 
     if (stage === 'review' || stage === 'submitting') {
         const rows = writtenRows(actionParams, reviewBaseline);
-        return wrap(
-            <FormPage
-                demoGuard={demoGuard}
-                label="Review preferences"
-                onSubmit={handleSubmit}
-                status={submitError ? (
-                    <StatusMessage variant="error">{submitError}</StatusMessage>
+        return (
+            <ConfirmActionModal
+                phase={stage === 'submitting' || ownerLane.composing ? 'signing' : 'ready'}
+                composed={preferenceReviewComposed}
+                report={null}
+                reportLoading={false}
+                acknowledged={NO_ACKNOWLEDGMENTS}
+                onAcknowledge={() => {}}
+                canApprove={stage === 'review' && !ownerLane.composing}
+                onApprove={() => handleSubmit({ preventDefault() {} })}
+                onReject={() => { setSubmitError(null); setStage('form'); }}
+                decoded={null}
+                chainLabel={descriptor?.displayName || chainId}
+                screenVariant={variant}
+                error={submitError}
+                sourceAddress={fromAddress?.address}
+                nativeTicker={coinTicker}
+                credentialsReady
+                credentials={isWatcherMode ? (
+                    <p className={styles.hint}>{t('common.watcherBuildsUnsigned')}</p>
                 ) : null}
-                actions={(
-                    <Button
-                        type="submit"
-                        variant="primary"
-                        icon={<Icon.ForwardIcon />}
-                        loading={stage === 'submitting' || ownerLane.composing}
-                    >
-                        {isWatcherMode ? 'Build unsigned transaction' : 'Continue to confirmation'}
-                    </Button>
-                )}
-            >
-                <p className={styles.summary}>
-                    Writes all three on-chain preferences for this address in one
-                    ADDRESS action. Unchanged rows are re-written with their current
-                    value; the protocol has no &quot;keep current&quot; for this action.
-                </p>
-                <dl className={styles.detailsList}>
-                    <dt className={styles.detailsLabel}>Address</dt>
-                    <dd className={styles.detailsValue}>
-                        <AddressText address={fromAddress.address} />
-                    </dd>
-                    {rows.map((r) => (
-                        <DetailRow
-                            key={r.label}
-                            label={r.label}
-                            value={r.changed ? `${r.value} - CHANGED` : `${r.value} (unchanged)`}
-                            emphasize={r.changed}
-                        />
-                    ))}
-                    {memo.trim() ? <DetailRow label="Memo" value={memo.trim()} /> : null}
-                    <DetailRow
-                        label="Network fee"
-                        value={feeEstimate
-                            ? `${feeEstimate.coinAmount} ${coinTicker}${feeEstimate.rate ? ` (${feeEstimate.rate})` : ''}`
-                            : 'Estimate unavailable'}
-                    />
-                </dl>
-                {isWatcherMode ? (
-                    <p className={styles.hint}>
-                        {t('common.watcherBuildsUnsigned')}
-                    </p>
-                ) : null}
-            </FormPage>,
+                summary={{
+                    verb: t('components.confirmSummary.verbSetAddressPreferences'),
+                    direction: 'none',
+                    chainId,
+                    address: fromAddress?.address,
+                    facts: [
+                        ...rows.map((row) => ({
+                            label: row.label,
+                            value: row.changed ? `${row.value} - changed` : `${row.value} (unchanged)`,
+                        })),
+                        ...(memo.trim() ? [{ label: 'Memo', value: memo.trim() }] : []),
+                    ],
+                    notice: 'All three preferences are written together. Unchanged values are re-written with their current setting.',
+                }}
+                networkFee={feeEstimate?.coinAmount ? {
+                    amount: String(feeEstimate.coinAmount), ticker: coinTicker, estimate: true,
+                } : null}
+            />
         );
     }
 
@@ -436,7 +454,7 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         return (
             <OwnAddressPickerScreen
                 variant={variant}
-                title="From address"
+                title="From Address"
                 walletId={walletId}
                 chainId={chainId}
                 onChainChange={(cid) => { setChainId(cid); setFromAddressId(null); resetForNewAddress(); }}
@@ -450,116 +468,126 @@ export function AddressPreferencesForm({ walletId, chainId: initialChainId, addr
         );
     }
 
+    const errorKey = (section) => (errorAt.section === section ? errorAt.attempt : 0);
+    // The Wallet Form Standard. Address Info (open; closed it shows the
+    // address shortened) holds the Network and the address whose
+    // preferences are written; Protocol Fee Handling
+    // is the main section (open); Incoming Sends and Dispensers are closed
+    // required sections (every write carries all three values); Memo is an
+    // optional closed section; then the one Network fee row and the status
+    // slot above Update preferences.
     return wrap(
-        <FormPage
+        <FormFrame
             demoGuard={demoGuard}
-            label="On-chain preferences"
+            label="Address preferences"
             onSubmit={handleReview}
-            sectioned
             status={formError ? (
                 <StatusMessage variant="error">{formError}</StatusMessage>
             ) : null}
-            actions={(
-                <Button type="submit" variant="primary" icon={<Icon.PencilIcon />}>Update preferences</Button>
+            action={(
+                <FormAction icon={<Icon.PencilIcon />}>Update Preferences</FormAction>
             )}
-        >
-            {/* The form opens with Network, then From (U60). */}
-            <FormSection title="Address">
-                <NetworkField
-                    label="Network"
-                    value={chainId}
-                    onChange={(cid) => { setChainId(cid); setFromAddressId(null); resetForNewAddress(); }}
+            from={(
+                <FromSection
+                    {...formSections.bind('from')}
+                    title={t('addressPreferences.addressInfo')}
+                    icon={Icon.ReceiveIcon}
+                    addressLabel={t('addressPreferences.address')}
+                    summary={fromAddress.address ? <SummaryAddress address={fromAddress.address} /> : t('addressPreferences.notSet')}
+                    chainId={chainId}
                     chainIds={chainsWithAddresses.length ? chainsWithAddresses : [chainId]}
                     chainRegistry={chainRegistry}
+                    onNetworkChange={(cid) => { setChainId(cid); setFromAddressId(null); resetForNewAddress(); }}
+                    networkHelp={t('addressPreferences.networkHelp')}
+                    address={fromAddress.address}
+                    onOpenPicker={() => setSourcePickerOpen(true)}
+                    pickerLabel="Choose source address"
+                    addressHelp="The address whose preferences you set. It sends this action and pays the network fee. Once written, its preferences are visible to the whole network."
                 />
-                <AddressField
-                    label="From"
-                    icon="addresses"
-                    value={fromAddress.address}
-                    readOnly
-                    onChange={() => {}}
-                    onIconClick={() => setSourcePickerOpen(true)}
-                    iconLabel="Choose source address"
-                    help="The address whose preferences you set. It sends this action and pays the network fee. Once written, its preferences are visible to the whole network."
+            )}
+            fee={(
+                <FeeSection
+                    {...formSections.bind('fee')}
+                    chainId={chainId}
+                    coinTicker={coinTicker}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={setFeePick}
+                    customEstimate={feeCustomEstimate}
+                    revealKey={errorKey('fee')}
                 />
-            </FormSection>
-            <FormSection title="Protocol fee handling">
+            )}
+        >
+            <FormSection
+                id="protocol-fee"
+                title="Protocol Fee Handling"
+                icon={Icon.CoinsIcon}
+                {...formSections.bind('protocolFee')}
+                summary={feePref === '1' ? 'Destroy' : 'Donate (default)'}
+            >
                 {currentError ? (
                     <FieldNote variant="error">{currentError}</FieldNote>
                 ) : null}
-                {current ? (
-                    <dl className={`${styles.detailsList} ${styles.flatDetailsList}`}>
-                        <DetailRow
-                            label="Currently on the network"
-                            value={current.onChain ? 'Custom preferences set' : 'Protocol defaults (never written)'}
-                        />
-                    </dl>
-                ) : null}
-                <RadioGroup
-                    legend="Choose how the protocol fee is handled"
+                {/* The choices below start at this address's current settings, so
+                    there is no separate "Currently on the network" line. */}
+                <IconSelect
+                    label="How the protocol fee is handled"
                     help="When this address pays a protocol fee, donate it to protocol development (the default) or destroy it, which removes it from supply for good."
-                    name="feePref"
                     value={feePref}
                     onChange={pick('fee', setFeePref)}
                     options={[
-                        { value: '2', label: 'Donate to protocol development (default)' },
-                        { value: '1', label: feePreferenceLabel(1) },
+                        { value: '2', label: 'Donate to protocol development', icon: <Icon.HandshakeIcon /> },
+                        { value: '1', label: 'Destroy (reduces supply)', icon: <Icon.TrashIcon /> },
                     ]}
                 />
             </FormSection>
 
             <FormSection
-                title="Incoming sends"
-                // Checkbox has no help prop, so the tip sits on the section title (U57).
-                trailing={<InfoTip aria="About Incoming sends" label="When ticked, the network refuses any send to this address that carries no memo. Useful for an exchange or service that tells customers apart by memo." />}
+                id="incoming"
+                title="Incoming Sends"
+                icon={Icon.IncomingIcon}
+                {...formSections.bind('incoming')}
+                summary={requireMemo ? 'Memo required' : 'Any send'}
             >
-                <Checkbox
-                    label="Require a memo on any send to this address"
-                    checked={requireMemo}
-                    onChange={(e) => pick('requireMemo', setRequireMemo)(e.target.checked)}
-                />
-            </FormSection>
-
-            <FormSection title="Dispensers on this address">
-                <RadioGroup
-                    legend="Who may open dispensers"
-                    help="By default only this address can open a dispenser that sells from its balance. Allowing anyone lets other addresses open a dispenser funded by this address."
-                    name="dispPref"
-                    value={dispPref}
-                    onChange={pick('dispenser', setDispPref)}
+                <p className={styles.hint}>Useful for an exchange or service that tells customers apart by memo.</p>
+                <IconSelect
+                    label="Require memo on incoming sends"
+                    help="With Yes, the network refuses any send to this address that carries no memo."
+                    value={requireMemo ? 'yes' : 'no'}
+                    onChange={(v) => pick('requireMemo', setRequireMemo)(v === 'yes')}
                     options={[
-                        { value: '1', label: 'Only this address may open dispensers (default)' },
-                        { value: '2', label: 'Anyone may open a dispenser funded by this address' },
+                        { value: 'no', label: 'No', icon: <Icon.ThumbsDownIcon /> },
+                        { value: 'yes', label: 'Yes', icon: <Icon.ThumbsUpIcon /> },
                     ]}
                 />
             </FormSection>
 
-            <FormSection title="Memo and network fee">
-                <Input
-                    label="Memo"
-                    optional
-                    maxLength={MAX_MEMO_LENGTH}
-                    help="A short public note stored with this preferences update on chain. Anyone can read it."
-                    value={memo}
-                    onChange={(e) => setMemo(e.target.value)}
-                    autoComplete="off"
+            <FormSection id="dispensers" title="Dispensers" icon={Icon.DollarIcon} {...formSections.bind('dispensers')} summary={dispPref === '2' ? 'Anyone' : 'Only me'}>
+                <IconSelect
+                    label="Who may open dispensers"
+                    help="By default only this address can open a dispenser that sells from its balance. Allowing anyone lets other addresses open a dispenser funded by this address."
+                    value={dispPref}
+                    onChange={pick('dispenser', setDispPref)}
+                    options={[
+                        { value: '2', label: 'Anyone', icon: <Icon.UsersIcon /> },
+                        { value: '1', label: 'Only me', icon: <Icon.UserIcon /> },
+                    ]}
                 />
-                {feeTiers ? (
-                    <FeeSelector
-                        chainId={chainId}
-                        label="Network fee"
-                        coinTicker={coinTicker}
-                        tiers={feeTiers}
-                        value={feePick}
-                        onChange={setFeePick}
-                        customEstimate={feePick.mode === 'custom' ? feeCustomEstimate : null}
-                    />
-                ) : null}
             </FormSection>
-        </FormPage>,
+
+            {/* Memo is its own optional section holding only the memo, so the
+                section title names the field and carries its count. The
+                network fee is the one Network fee row. */}
+            <MemoSection
+                {...formSections.bind('memo')}
+                revealKey={errorKey('memo')}
+                maxLength={MAX_MEMO_LENGTH}
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+            />
+        </FormFrame>,
     );
 }
-
 // The three write rows the review shows, each compared against the
 // re-fetched baseline (never the load-time snapshot).
 function writtenRows(params, baseline) {
@@ -586,15 +614,4 @@ function writtenRows(params, baseline) {
             changed: Number(params.DISPENSER_PREFERENCE) !== dispNow,
         },
     ];
-}
-
-function DetailRow({ label, value, emphasize = false }) {
-    return (
-        <>
-            <dt className={styles.detailsLabel}>{label}</dt>
-            <dd className={styles.detailsValue}>
-                {emphasize ? <strong>{value}</strong> : value}
-            </dd>
-        </>
-    );
 }

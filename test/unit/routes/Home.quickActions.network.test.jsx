@@ -3,14 +3,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Home quick actions against the network: offline refusals carry one message
-// and never navigate, a connection that flaps decides at the moment of the
-// click, and an indexer that fails or stalls leaves the actions that need no
-// network (Receive, History, Addresses) routing.
+// Home against the network: offline, a failing indexer and a stalled one
+// leave Home with its notice, Retry and loading skeleton and never with a
+// Send / Receive / Exchange / More row (those live in the navigation).
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
@@ -54,9 +53,8 @@ function handlers() {
         onReceive: vi.fn(),
         onExchange: vi.fn(),
         onSwap: vi.fn(),
-        onCreateToken: vi.fn(),
+        onActions: vi.fn(),
         onHistory: vi.fn(),
-        onAddresses: vi.fn(),
     };
 }
 
@@ -70,132 +68,52 @@ function mountHome(messaging, props, shell = 'desktop') {
     );
 }
 
-function setOnline(online) {
-    Object.defineProperty(navigator, 'onLine', { configurable: true, value: online });
-    act(() => { window.dispatchEvent(new Event(online ? 'online' : 'offline')); });
+function expectNoQuickActions() {
+    expect(screen.queryByRole('group', { name: 'Quick actions' })).toBeNull();
+    for (const name of ['Send', 'Receive', 'Exchange', 'More', 'More actions']) {
+        expect(screen.queryByRole('button', { name })).toBeNull();
+    }
 }
+
+const failingRead = () => vi.fn().mockRejectedValue(Object.assign(
+    new Error('Explorer returned HTTP 500'), { status: 500, service: 'explorer' },
+));
+
+beforeEach(() => { localStorage.clear(); });
 
 afterEach(() => {
     cleanup();
     delete navigator.onLine;
 });
 
-describe('Home network actions while offline', () => {
-    it.each([
-        ['Exchange', 'onExchange', /Exchange needs a network connection\./],
-        ['Create token', 'onCreateToken', /Creating a token needs a network connection\./],
-    ])('refuses %s with one message and does not navigate', async (name, prop, message) => {
+describe('Home draws no quick actions against the network', () => {
+    it('has none while offline', async () => {
         Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
-        const h = handlers();
-        mountHome(makeMessaging(), h);
-
-        const button = await screen.findByRole('button', { name });
-        expect(button).toHaveAttribute('aria-disabled', 'true');
-        fireEvent.click(button);
-        expect(h[prop]).not.toHaveBeenCalled();
-        const shown = await screen.findAllByText(message);
-        expect(shown).toHaveLength(1);
+        mountHome(makeMessaging(), handlers());
+        expect((await screen.findAllByText(/You are offline/)).length).toBe(1);
+        expectNoQuickActions();
     });
-});
 
-describe('Home network actions across an offline and online flap', () => {
-    it('decides each click by the connection at that moment', async () => {
+    it('has none beside Retry when the first balance read fails with nothing saved', async () => {
         Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-        const h = handlers();
-        mountHome(makeMessaging(), h);
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
-        const exchange = () => within(row).getByRole('button', { name: 'Exchange' });
-
-        setOnline(false);
-        await waitFor(() => expect(exchange()).toHaveAttribute('aria-disabled', 'true'));
-        fireEvent.click(exchange());
-        expect(h.onExchange).not.toHaveBeenCalled();
-
-        setOnline(true);
-        await waitFor(() => expect(exchange()).not.toHaveAttribute('aria-disabled'));
-        fireEvent.click(exchange());
-        expect(h.onExchange).toHaveBeenCalledTimes(1);
-
-        // A fast flap that ends offline leaves the next click refused.
-        setOnline(false);
-        setOnline(true);
-        setOnline(false);
-        await waitFor(() => expect(exchange()).toHaveAttribute('aria-disabled', 'true'));
-        fireEvent.click(exchange());
-        fireEvent.click(within(row).getByRole('button', { name: 'Swap' }));
-        expect(h.onExchange).toHaveBeenCalledTimes(1);
-        expect(h.onSwap).not.toHaveBeenCalled();
+        mountHome(makeMessaging(failingRead()), handlers());
+        expect(await screen.findByRole('button', { name: 'Retry' })).toBeTruthy();
+        expectNoQuickActions();
     });
-});
 
-describe('Home actions while the indexer fails or stalls', () => {
-    it.each([
-        ['returns HTTP 500', () => vi.fn().mockRejectedValue(Object.assign(
-            new Error('Explorer returned HTTP 500'), { status: 500, service: 'explorer' },
-        ))],
-        ['never answers', () => vi.fn(() => new Promise(() => {}))],
-    ])('routes Receive, History and Addresses when the indexer %s', async (_label, makeRead) => {
+    it('has none on a compact Home whose first balance read returns HTTP 500', async () => {
         Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-        const h = handlers();
-        const messaging = makeMessaging(makeRead());
-        mountHome(messaging, h);
+        mountHome(makeMessaging(failingRead()), handlers(), 'popup');
+        expect(await screen.findByRole('button', { name: 'Retry' })).toBeTruthy();
+        expectNoQuickActions();
+    });
 
+    it('shows the loading skeleton with no action row when the indexer never answers', async () => {
+        Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+        const messaging = makeMessaging(vi.fn(() => new Promise(() => {})));
+        mountHome(messaging, handlers());
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalled());
-        fireEvent.click(await screen.findByRole('button', { name: 'Receive' }));
-        fireEvent.click(screen.getByRole('button', { name: 'History' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Addresses' }));
-        expect(h.onReceive).toHaveBeenCalledTimes(1);
-        expect(h.onHistory).toHaveBeenCalledTimes(1);
-        expect(h.onAddresses).toHaveBeenCalledTimes(1);
-    });
-    it('keeps the quick actions on a compact Home whose first balance read returns HTTP 500', async () => {
-        // Earlier cases save balances for this wallet; this case starts with nothing saved.
-        localStorage.clear();
-        Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-        const h = handlers();
-        mountHome(makeMessaging(vi.fn().mockRejectedValue(Object.assign(
-            new Error('Explorer returned HTTP 500'), { status: 500, service: 'explorer' },
-        ))), h, 'popup');
-
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
-        expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
-        fireEvent.click(within(row).getByRole('button', { name: 'Receive' }));
-        fireEvent.click(within(row).getByRole('button', { name: 'Send' }));
-        expect(h.onReceive).toHaveBeenCalledTimes(1);
-        expect(h.onSend).toHaveBeenCalledTimes(1);
-    });
-});
-
-describe('Home quick actions beside Retry when the first balance read fails with nothing saved', () => {
-    // Earlier cases save balances for this wallet; each case here starts with nothing saved.
-    beforeEach(() => { localStorage.clear(); });
-
-    it('renders Retry and the Send, Receive and Exchange group on a full Home', async () => {
-        Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
-        const h = handlers();
-        const read = vi.fn().mockRejectedValue(Object.assign(
-            new Error('Explorer returned HTTP 500'), { status: 500, service: 'explorer' },
-        ));
-        mountHome(makeMessaging(read), h);
-
-        const retry = await screen.findByRole('button', { name: 'Retry' });
-        expect(retry).toBeTruthy();
-        const row = screen.getByRole('group', { name: 'Quick actions' });
-        for (const name of ['Send', 'Receive', 'Exchange']) {
-            expect(within(row).getByRole('button', { name })).toBeTruthy();
-        }
-        fireEvent.click(within(row).getByRole('button', { name: 'Receive' }));
-        expect(h.onReceive).toHaveBeenCalledTimes(1);
-    });
-
-    it('renders the quick action group while offline with nothing saved (control)', async () => {
-        Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
-        const h = handlers();
-        mountHome(makeMessaging(vi.fn(() => new Promise(() => {}))), h);
-
-        const row = await screen.findByRole('group', { name: 'Quick actions' });
-        for (const name of ['Send', 'Receive', 'Exchange']) {
-            expect(within(row).getByRole('button', { name })).toBeTruthy();
-        }
+        expect(await screen.findByRole('status', { name: 'Loading balances' })).toBeTruthy();
+        expectNoQuickActions();
     });
 });

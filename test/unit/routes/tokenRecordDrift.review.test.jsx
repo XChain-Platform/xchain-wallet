@@ -12,6 +12,7 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { MintForm } from '../../../packages/core/src/shared/routes/MintForm.jsx';
 import { SleepForm } from '../../../packages/core/src/shared/routes/SleepForm.jsx';
 import { SellOwnershipForm } from '../../../packages/core/src/shared/routes/SellOwnershipForm.jsx';
@@ -35,11 +36,15 @@ const SLEEP_ADDRESS = { ...ADDRESS, address: 'bc1qcr8te4kr609gcawutmrza0j4xv80jy
 const OTHER_OWNER = 'bc1q9d4ywgfnd8h43da5tpcxcn6ytpx4rstuq6u2dq';
 const CHANGED = /changed since this form opened/;
 
-function baseMessaging(extra = {}) {
+// `walletMode` among the extras is the mode of wallet `w`, published the way the
+// shell does from the wallet list; every other entry is a messaging method.
+function baseMessaging({ walletMode = 'full', ...extra } = {}) {
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     return {
         getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
         getActiveAddresses: vi.fn().mockResolvedValue({ [CHAIN]: { id: ADDRESS.id } }),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: 'full' }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode }]),
         signerReady: vi.fn().mockResolvedValue({ ready: true }),
         getIndexerWatermark: vi.fn().mockResolvedValue({ watermark: 100 }),
         listContacts: vi.fn().mockResolvedValue([]),
@@ -52,6 +57,7 @@ function baseMessaging(extra = {}) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     __clearTokenInfoCache();
 });
 
@@ -132,18 +138,19 @@ describe('Review re-reads the token', () => {
                 <SleepForm walletId="w" mode="tick" initialChainId={CHAIN} initialTick="gate" onBack={() => {}} />
             </MessagingProvider>,
         );
-        await screen.findByText('gate is currently PAUSED indefinitely.');
+        // The paused token offers only Resume.
+        const resume = await screen.findByRole('button', { name: 'Resume Token' });
         getTokenInfo.mockResolvedValue({
             chainId: CHAIN, tick: 'gate', creator: SLEEP_ADDRESS.address, locks: { sleep: true },
         });
-        fireEvent.click(screen.getByRole('radio', { name: 'Resume now (unpause)' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Resume token' }));
+        await waitFor(() => expect(resume).toBeEnabled());
+        fireEvent.click(resume);
 
         expect(await screen.findByText(CHANGED)).toBeInTheDocument();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
     });
 
-    it('Sell name stops when the name changed owner after the form opened', async () => {
+    it('Sell Ownership stops when the name changed owner after the form opened', async () => {
         const getTokenInfo = vi.fn().mockResolvedValue({
             chainId: CHAIN, tick: 'alpha', creator: ADDRESS.address, locks: {},
         });
@@ -154,7 +161,7 @@ describe('Review re-reads the token', () => {
             </MessagingProvider>,
         );
         const price = await screen.findByLabelText(/^Price/);
-        const button = screen.getByRole('button', { name: 'List name for sale' });
+        const button = screen.getByRole('button', { name: 'List Ownership for Sale' });
         fireEvent.change(price, { target: { value: '5' } });
         await waitFor(() => expect(button).toBeEnabled());
         getTokenInfo.mockResolvedValue({
@@ -172,7 +179,7 @@ describe('Review re-reads the token', () => {
         });
         const buildActionPsbtRequest = vi.fn().mockResolvedValue({ psbtHex: '70736274ff00', chainId: CHAIN });
         const messaging = baseMessaging({
-            getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
+            walletMode: 'watcher',
             getTokenInfo,
             buildActionPsbtRequest,
         });
@@ -195,7 +202,7 @@ describe('Review re-reads the token', () => {
             chainId: CHAIN, tick: 'TOKEN', creator: ADDRESS.address, locks: {}, mintMax: '500', divisibility: 0,
         });
         fireEvent.change(stop, { target: { value: '900' } });
-        const preview = screen.getByRole('button', { name: 'Update mint settings' });
+        const preview = screen.getByRole('button', { name: 'Update Mint Settings' });
         await waitFor(() => expect(preview).toBeEnabled());
         fireEvent.click(preview);
 

@@ -36,6 +36,7 @@ import {
 import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
 import { isUnknownAddressTypeError } from './sdkAddressTypes.js';
 import { InvalidMnemonicError, normalizeMnemonic } from './importMnemonic.js';
+import { refuseHardwareWallet } from './hardwareWallet.js';
 
 export const DEFAULT_DRY_RUN_GAP = 10;
 
@@ -154,6 +155,7 @@ export async function dryRunRestore({
     if (!sdkRegistry) throw new Error('dryRunRestore: sdkRegistry is required');
     const wallet = await vault.wallets?.get?.(walletId);
     if (!wallet) throw new Error(`dryRunRestore: wallet "${walletId}" was not found`);
+    refuseHardwareWallet(wallet, 'a phrase check');
     if (wallet.format !== 'bip39' && wallet.format !== 'counterwallet-legacy') {
         throw new Error(`dryRunRestore: unsupported stored format "${wallet.format}"`);
     }

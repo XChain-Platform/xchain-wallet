@@ -70,7 +70,7 @@ assert.ok(/offeredChainIds/.test(modal),
 // Page semantics (0375b8f): renders as its own Screen with a back-arrow
 // PageHeader, same pattern as Import address, not an overlay dialog.
 assert.ok(/<Screen variant=\{variant\} header=\{header\} footer=\{footer\}>/.test(modal)
-    && /<PageHeader[\s\S]*?title="Add addresses"/.test(modal),
+    && /<PageHeader[\s\S]*?title="Add Addresses"/.test(modal),
     'renders as a page with a back-navigable header');
 assert.ok(/const footer = coinOptions\.length > 0 \? \([\s\S]*?<form aria-label="Generate addresses" onSubmit=\{handleGenerate\}>/.test(modal)
     && /<FormPage[\s\S]*?onSubmit=\{handleGenerate\}/.test(modal),
@@ -101,8 +101,12 @@ assert.ok(/<AddAddressModal[\s\S]*?onGenerated=\{\(\) => setHomeReloadKey/.test(
     'Home opens Add addresses and refetches balances once one lands');
 
 const receive = readFileSync(join(sharedRoutes, 'Receive.jsx'), 'utf8');
-assert.ok(/noAddresses \?[\s\S]*?Generate an address/.test(receive),
+// The smoke runner swaps t('key') for its English text; a direct run reads the key.
+assert.ok(/noAddresses \?[\s\S]*?actionLabel=(?:\{t\('receive\.generateAnAddress'\)\}|"Generate an Address")[\s\S]*?setAddAddressOpen\(true\)/.test(receive),
     'Receive renders a generate CTA when the account holds no address anywhere');
+assert.ok(readFileSync(join(sharedRoutes, '..', '..', 'i18n', 'locales', 'en', 'receive.js'), 'utf8')
+    .includes("'receive.generateAnAddress': 'Generate an Address'"),
+    'the generate CTA reads Generate an Address');
 assert.ok(/<AddAddressModal[\s\S]*?onGenerated=\{\(\) => setReloadKey/.test(receive),
     'Receive opens Add addresses and reloads its chain list on generate');
 

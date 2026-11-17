@@ -42,8 +42,10 @@ assert.ok(
     /import \{ useToast \} from '\.\/ToastHost\.jsx'/.test(src),
     'banner imports useToast',
 );
+// The banner box is the kit Notice since the 2026-11-15 Notice Standard, so it
+// names itself with an aria-label and no longer needs useId for a heading.
 assert.ok(
-    /import \{ useCallback, useEffect, useId, useRef, useState \} from 'react'/.test(src),
+    /import \{[^}]*\buseRef\b[^}]*\} from 'react'/.test(src),
     'banner imports useRef (transition tracking + bannerRef)',
 );
 

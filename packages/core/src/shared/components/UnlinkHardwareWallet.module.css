@@ -1,0 +1,5 @@
+/* This screen keeps its notice inside the shared form card. Set the shared
+   form gap variable so FormPage's notice correction uses the same 8px rhythm. */
+[data-unlink-hardware-wallet].form {
+    --xc-form-gap: var(--xc-space-2);
+}

@@ -30,21 +30,22 @@ const web = join(wsRoot, 'packages', 'web');
 const desktop = join(wsRoot, 'packages', 'desktop');
 const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
-const formPath = join(sharedRoutes, 'StakeForm.jsx');
-assert.ok(existsSync(formPath), 'StakeForm.jsx exists');
+// Validator Stake is one action of the one Staking form (StakingForm.jsx);
+// the old StakeForm.jsx is gone.
+const formPath = join(sharedRoutes, 'StakingForm.jsx');
+assert.ok(existsSync(formPath), 'StakingForm.jsx exists');
+assert.ok(!existsSync(join(sharedRoutes, 'StakeForm.jsx')), 'StakeForm.jsx is merged into StakingForm.jsx');
 const formSrc = readFileSync(formPath, 'utf8');
 
-assert.ok(/export function StakeForm\b/.test(formSrc), 'StakeForm is a named export');
-assert.equal(
-    (formSrc.match(/^export\s+(function|const|class)\b/gm) || []).length,
-    1,
-    'StakeForm.jsx only exports the component',
-);
+assert.ok(/export function StakingForm\b/.test(formSrc), 'StakingForm is a named export');
+// Network Stake is the (network, stake) row of the action table.
+const networkStakeRow = formSrc.split("'network:stake': {")[1]?.split(/\n    '[a-z]+:[a-z-]+': \{/)[0] || '';
+assert.ok(networkStakeRow, 'StakingForm has a network:stake action row');
 
 // 4-stage state machine
 for (const stage of ['form', 'review', 'submitting', 'done']) {
     assert.ok(new RegExp(`'${stage}'`).test(formSrc),
-        `StakeForm tracks '${stage}' stage`);
+        `StakingForm tracks '${stage}' stage`);
 }
 
 // Capability-model fields: amount input + new/top-up mode radio.
@@ -57,21 +58,25 @@ assert.ok(/New stake/.test(formSrc), 'StakeForm offers "New stake" mode');
 assert.ok(/Top up an existing stake/.test(formSrc),
     'StakeForm offers "Top up" mode (VERSION 2)');
 assert.ok(/AMOUNT:\s*amount\.trim\(\)/.test(formSrc),
-    'StakeForm passes AMOUNT in action params');
+    'StakingForm passes AMOUNT in the network stake params');
 
 // Pubkey validation: 64 hex chars
 assert.ok(/\[0-9a-fA-F\]\{64\}/.test(formSrc),
-    'StakeForm validates signing pubkey as 64 hex chars');
+    'StakingForm validates signing pubkey as 64 hex chars');
 
-// Wiring
+// Wiring: the network stake row names its host calls; the form calls the
+// row's software and hardware lanes.
+assert.ok(/software:\s*'stakeAction'/.test(networkStakeRow), 'network stake signs through stakeAction');
+assert.ok(/hardware:\s*'stakeActionHw'/.test(networkStakeRow), 'network stake signs hardware through stakeActionHw');
+assert.ok(/wire:\s*'STAKE'/.test(networkStakeRow), 'network stake composes STAKE');
 for (const call of [
-    'messaging.stakeAction',
-    'messaging.stakeActionHw',
+    'messaging[cfg.software]',
+    'messaging[cfg.hardware]',
     'messaging.getAddressesByChain',
     'messaging.getSignerStatus',
     'messaging.getStakesForAddress',   // auto-detect new-vs-top-up mode
 ]) {
-    assert.ok(formSrc.includes(call), `StakeForm calls ${call}`);
+    assert.ok(formSrc.includes(call), `StakingForm calls ${call}`);
 }
 
 // Auto-detect status hint should be wired
@@ -83,8 +88,8 @@ for (const status of ['checking', 'new', 'topup', 'error']) {
 }
 // Watcher mode wins before the hardware and software signing lanes.
 assert.ok(
-    /else if \(isHwSource\) \{[\s\S]+?messaging\.stakeActionHw/.test(formSrc),
-    'StakeForm branches HW vs software signing',
+    /if \(isWatcherMode\) \{[\s\S]+?\} else if \(isHwSource\) \{[\s\S]+?messaging\[cfg\.hardware\]/.test(formSrc),
+    'StakingForm branches watcher, then HW vs software signing',
 );
 assert.ok(/InvalidPasswordError/.test(formSrc),
     'StakeForm distinguishes wrong-password');
@@ -183,8 +188,12 @@ for (const [shell, appPath] of [
     ['desktop', join(desktop, 'renderer', 'App.jsx')],
 ]) {
     const app = readFileSync(appPath, 'utf8');
-    assert.ok(app.includes('StakeForm'), `${shell} App.jsx imports StakeForm`);
+    assert.ok(app.includes("import('@xchain-wallet/core/shared/routes/StakingForm.jsx')"),
+        `${shell} App.jsx loads StakingForm`);
     assert.ok(app.includes("'stake-form'"), `${shell} tracks stake-form sub-route`);
+    const stakeBlock = app.split("unlockedView === 'stake-form'")[1]?.split('unlockedView ===')[0] || '';
+    assert.ok(/<StakingForm\b[\s\S]*target=\{\{ kind: 'network', chainId: stakingRef\.chainId \}\}[\s\S]*action="stake"/.test(stakeBlock),
+        `${shell} stake-form opens the Staking form on validator Stake`);
     assert.ok(/stakingRef,\s*setStakingRef/.test(app),
         `${shell} declares stakingRef state`);
     assert.ok(/onPickValidator=\{\(chainId\)\s*=>\s*\{\s*setStakingRef\(\{ kind: 'validator', chainId, address: '' \}\);\s*setUnlockedView\('stake-form'\)/.test(app),
@@ -192,5 +201,5 @@ for (const [shell, appPath] of [
 }
 
 console.log(
-    'OK: stake form smoke (capability-staking model: amount + signing pubkey, new-stake/top-up modes, bg handler + 3-shell messaging + StakeNew onPickValidator wire-through)',
+    'OK: stake form smoke (StakingForm validator Stake, capability-staking model: amount + signing pubkey, new-stake/top-up modes, bg handler + 3-shell messaging + StakeNew onPickValidator wire-through)',
 );

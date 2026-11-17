@@ -91,7 +91,9 @@ describe('TokenAdminForm mint setting validation', () => {
         fireEvent.change(await screen.findByLabelText(label), { target: { value } });
         await submitWhenEnabled();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(message);
+        // The failing field alone is outlined.
+        expect(screen.getByLabelText(label)).toHaveAttribute('aria-invalid', 'true');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -105,7 +107,7 @@ describe('TokenAdminForm mint setting validation', () => {
 
         expect(field).toHaveValue('1,000');
         await submitWhenEnabled();
-        expect(await screen.findByRole('alert')).toHaveTextContent('Max mint per transaction must be a positive number.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent('Max mint per transaction must be a positive number.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -116,7 +118,7 @@ describe('TokenAdminForm mint setting validation', () => {
         });
         await submitWhenEnabled();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Sending new supply needs a mint supply amount.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent('Sending new supply needs a mint supply amount.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -127,7 +129,7 @@ describe('TokenAdminForm mint setting validation', () => {
         });
         await submitWhenEnabled();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(
             'Mint supply must be a whole number because MINTABLE is indivisible.',
         );
         expect(composeForConfirm).not.toHaveBeenCalled();
@@ -142,7 +144,7 @@ describe('TokenAdminForm mint setting validation', () => {
         });
         await submitWhenEnabled();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Only 600 MINTABLE can still be minted.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent('Only 600 MINTABLE can still be minted.');
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -156,7 +158,7 @@ describe('TokenAdminForm mint setting validation', () => {
         });
         await submitWhenEnabled();
 
-        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/not valid for Bitcoin/i));
+        await waitFor(() => expect(screen.getByRole('alert', { name: 'Form errors' })).toHaveTextContent(/not valid for Bitcoin/i));
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 });
@@ -169,7 +171,7 @@ describe('TokenAdminForm mint supply against the supply cap', () => {
         fireEvent.change(await screen.findByLabelText('Mint supply now'), { target: { value: '601' } });
         await submitWhenEnabled();
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent(
             'Only 600 MINTABLE can still be minted.',
         );
         expect(composeForConfirm).not.toHaveBeenCalled();

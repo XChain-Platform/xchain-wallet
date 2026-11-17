@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = { address: 'bc1qexampleexampleexampleexampleexampleex' };
-const LOADING = { name: 'Loading betting markets' };
+const LOADING = { name: 'Loading prediction markets' };
 
 function mount(betFeeds) {
     render(
@@ -40,18 +40,18 @@ describe('BetFeedsList loading notice', () => {
         const page = status.parentElement;
         expect(page.firstElementChild).toBe(status);
 
-        const takingBets = screen.getByRole('tab', { name: 'Taking bets' });
-        const allMarkets = screen.getByRole('tab', { name: 'All markets' });
-        // The toolbar is the page child holding the filter buttons; its row
-        // starts with the network field, then the filter button group.
-        const toolbar = [...page.children].find((el) => el.contains(takingBets));
-        const networkField = toolbar.firstElementChild.firstElementChild;
-        expect(networkField.contains(takingBets)).toBe(false);
-        expect(networkField.textContent).toMatch(/Network/);
+        // The Network, Status and Sort choices sit behind the title bar's filter
+        // button; the page holds only the view tabs after the notice.
+        expect(screen.getByRole('button', { name: 'Filter prediction markets' })).toBeTruthy();
+        expect(within(page).queryByRole('tab', { name: 'Positions available' })).toBeNull();
+        expect(within(page).queryByLabelText('Network')).toBeNull();
 
-        expect(follows(status, networkField)).toBe(true);
-        expect(follows(status, takingBets)).toBe(true);
-        expect(follows(status, allMarkets)).toBe(true);
+        const all = screen.getByRole('tab', { name: 'All' });
+        const myBets = screen.getByRole('tab', { name: 'My predictions' });
+        const myMarkets = screen.getByRole('tab', { name: 'My markets' });
+        expect(follows(status, all)).toBe(true);
+        expect(follows(status, myBets)).toBe(true);
+        expect(follows(status, myMarkets)).toBe(true);
     });
 
     it('clears the loading status once market rows load', async () => {
@@ -64,7 +64,7 @@ describe('BetFeedsList loading notice', () => {
     it('clears the loading status when the feed read fails', async () => {
         mount(vi.fn().mockRejectedValue(new Error('Explorer unavailable')));
 
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument());
         expect(screen.queryByRole('status', LOADING)).toBeNull();
     });
 });

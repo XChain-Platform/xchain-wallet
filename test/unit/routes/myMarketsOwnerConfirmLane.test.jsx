@@ -18,8 +18,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, act as domAct, fireEvent, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { MyOrdersView } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
-import { MySwapsView } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
+import { MySwapsWithDetail, swapRowButton } from '../mySwapsWithDetail.jsx';
 
 const CHAIN = 'dogecoin-testnet';
 const OWN = 'ndDEAAyn7DcGeaQ6chBWH2vaSdYAXVGNhc';
@@ -66,16 +67,27 @@ const VIEWS = [
         feeds: (rows) => ({
             getOrdersForAddress: () => Promise.resolve({ data: rows }),
             getOrderCancelsForAddress: () => Promise.resolve({ data: [] }),
+            // The explorer's order detail: the listed order's own fields and its state.
             getOrderDetail: ({ actionIndex }) => Promise.resolve({
-                action: 'ORDER', action_index: actionIndex, status: 'valid',
+                ...(rows.find((r) => String(r.action_index) === String(actionIndex)) || marketRow(actionIndex)),
+                action: 'ORDER',
                 state: { give_remaining: '500', get_remaining: '10', expiration: String(FUTURE), status: 'open' },
             }),
             listAutopayOrders: () => Promise.resolve([]),
         }),
+        // Cancel and Edit live on the order's detail page, which its row opens.
+        openDetail: async (utils) => {
+            const row = listRow(utils, 'Orders');
+            await step(() => fireEvent.click(within(row).getByRole('button')));
+            await step(() => {});
+        },
+        // The detail page's action rows (G101) are named by their title, then their description.
+        actionLabel: (label) => new RegExp(`^${label} order`),
     },
     {
         name: 'My swaps',
-        Component: MySwapsView,
+        // The list with its rows opening Swap Details, as the shells wire it.
+        Component: MySwapsWithDetail,
         action: 'SWAP',
         indexKey: 'SWAP_ACTION_INDEX',
         noun: 'swap',
@@ -86,7 +98,21 @@ const VIEWS = [
         feeds: (rows) => ({
             getSwapsForAddress: () => Promise.resolve({ data: rows }),
             getSwapCancelsForAddress: () => Promise.resolve({ data: [] }),
+            // The explorer's swap detail: the listed swap's own fields and its state.
+            getSwapDetail: ({ actionIndex }) => Promise.resolve({
+                ...(rows.find((r) => String(r.action_index) === String(actionIndex)) || marketRow(actionIndex)),
+                action: 'SWAP',
+                state: { expiration: String(FUTURE), status: 'open' },
+            }),
         }),
+        // Cancel and Edit live on the swap's details page, which its row opens.
+        openDetail: async (utils) => {
+            await step(() => fireEvent.click(swapRowButton(within, utils, 700)));
+            await step(() => {});
+        },
+        actionLabel: (label) => new RegExp(`^${label} swap`),
+        detailLabel: 'Swap Details',
+        listName: 'Swaps',
     },
 ];
 
@@ -99,7 +125,7 @@ beforeEach(() => {
         ],
     });
 });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); resetWalletModes(); vi.useRealTimers(); });
 
 async function drain(rounds = 24) {
     for (let i = 0; i < rounds; i += 1) {
@@ -111,16 +137,19 @@ async function drain(rounds = 24) {
 async function mount(view, {
     owner = HD_ADDRESS,
     rows = [marketRow(700)],
-    settings = { walletMode: 'full' },
+    walletMode = 'full',
     preflight = PASS,
     chainId = CHAIN,
     onCreate,
 } = {}) {
     const calls = [];
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode }], activeWalletId: 'w' });
     const log = (method, value) => (args) => { calls.push({ method, args }); return Promise.resolve(value); };
     const target = {
         getAddressesByChain: () => Promise.resolve({ [chainId]: [owner] }),
-        getSettings: () => Promise.resolve(settings),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'w', name: 'W', walletMode }]),
         signerReady: () => Promise.resolve({ ready: true }),
         getSignerStatus: () => Promise.resolve({ status: owner.source === 'hd' ? 'unlocked' : 'available' }),
         getListsForSource: () => Promise.resolve({ data: [{ action_index: '2701', type: '2', status: 'valid' }] }),
@@ -165,7 +194,28 @@ async function step(fn) {
     await domAct(async () => { fn(); await drain(); });
 }
 
-async function openAction(utils, label) {
+// The listed offer's row, found by its key (the ring layout's row names the trade, not its number).
+function listRow(utils, listName) {
+    const list = utils.getByRole('list', { name: listName });
+    return list.querySelector('[data-order-row$=":700"], [data-swap-row$=":700"]');
+}
+
+// The detail page's header card, present once a row has opened its detail.
+const detailHeader = (utils) => utils.container.querySelector('[data-trade-header]');
+
+// Picks the Actions or Details tab of the detail page's toggle (G102).
+async function chooseTab(utils, name) {
+    const tab = utils.queryByRole('tab', { name });
+    if (tab && tab.getAttribute('aria-selected') !== 'true') await step(() => fireEvent.click(tab));
+}
+
+async function openAction(utils, label, view) {
+    if (view?.openDetail) {
+        if (!detailHeader(utils)) await view.openDetail(utils);
+        await chooseTab(utils, 'Actions');
+        await step(() => fireEvent.click(utils.getByRole('button', { name: view.actionLabel(label) })));
+        return;
+    }
     const row = within(utils.getByRole('list', { name: /^Open / })).getByText('#700', { exact: false }).closest('li');
     await step(() => fireEvent.click(within(row).getByRole('button', { name: label })));
 }
@@ -192,18 +242,16 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
 
     it('cancels only after the pre-flight, signing the composed bytes', async () => {
         const { utils, calls } = await mount(view);
-        await openAction(utils, 'Cancel');
-        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun}` })));
+        await openAction(utils, 'Cancel', view);
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` })));
 
         expect(signCalls(calls), 'nothing signs before Approve').toHaveLength(0);
         const compose = calls.find((c) => c.method === 'composeForConfirm');
         expect(compose.args.actionData).toEqual({ action: view.action, params: { VERSION: '1', [view.indexKey]: '700' } });
         expect(compose.args.encoderOpts, 'DOGE pays its protocol fee natively').toMatchObject({ payFeeInNativeCoin: true });
-        const from = utils.getByTestId('confirm-source').textContent;
-        expect(from, 'the confirm page names the signer').toContain(OWN.slice(0, 6));
-        expect(from).toContain(OWN.slice(-6));
-        expect(utils.getByLabelText(`Confirm Cancel ${view.noun} (#700)`)).toBeTruthy();
-        expect(utils.getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 DOGE');
+        expect(utils.getByTestId('confirm-facts')).toBeTruthy();
+        expect(utils.getByTestId('confirm-raw-parameter')).toHaveTextContent('700');
+        expect(utils.getByTestId('confirm-fee-network')).toHaveTextContent('0.00001234 DOGE');
 
         await approve(utils);
         const sign = calls.find((c) => c.method === view.software.cancel);
@@ -214,8 +262,8 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
 
     it('blocks a cancel the pre-flight says the network would refuse', async () => {
         const { utils, calls } = await mount(view, { preflight: REFUSED });
-        await openAction(utils, 'Cancel');
-        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun}` })));
+        await openAction(utils, 'Cancel', view);
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` })));
         await approve(utils);
 
         expect(calls.some((c) => c.method === 'preflight')).toBe(true);
@@ -224,11 +272,23 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
 
     it('keeps a broadcast cancel pending while explorer feeds are stale', async () => {
         const { utils } = await mount(view);
-        await openAction(utils, 'Cancel');
-        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun}` })));
+        await openAction(utils, 'Cancel', view);
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Cancel ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` })));
         await approve(utils);
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Done' })));
 
+        if (view.openDetail) {
+            // Done returns to the detail page, now Closing with no Cancel (the
+            // stored status stays cancelling; Closing is its display word,
+            // operator 2026-11-14).
+            expect(within(detailHeader(utils)).getByText('Closing')).toBeTruthy();
+            expect(utils.queryByRole('button', { name: view.actionLabel('Cancel') })).toBeNull();
+            // Back on the list (a fresh load) the row still reads Closing.
+            await step(() => fireEvent.click(utils.getByRole('button', { name: /back/i })));
+            const row = listRow(utils, view.listName || 'Orders');
+            expect(within(row).getByText('Closing')).toBeTruthy();
+            return;
+        }
         const closed = utils.getByRole('list', { name: new RegExp(`Closed ${view.noun}s`, 'i') });
         const row = within(closed).getByText('#700', { exact: false }).closest('li');
         expect(within(row).getByText('Cancelling')).toBeTruthy();
@@ -237,10 +297,10 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
 
     it('edits a hardware owner on the device lane with the same composed bytes', async () => {
         const { utils, calls } = await mount(view, { owner: HW_ADDRESS });
-        await openAction(utils, 'Edit');
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Set block-list' })));
+        await openAction(utils, 'Edit', view);
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Block list: None set' })));
         await step(() => fireEvent.click(utils.getByRole('button', { name: /Address list #2701/ })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: `Update ${view.noun}` })));
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Update ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` })));
 
         const compose = calls.find((c) => c.method === 'composeForConfirm');
         expect(compose.args.actionData.params).toEqual({ VERSION: '2', [view.indexKey]: '700', BLOCK_LIST: '2701' });
@@ -255,10 +315,25 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
     it('offers a bound-list removal on regtest and sends the zero sentinel', async () => {
         const rows = [marketRow(700, { allow_list: '2701', block_list: '0' })];
         const { utils, calls } = await mount(view, { rows, chainId: 'dogecoin-regtest' });
-        expect(utils.getByText(/Allow list #2701 · Block list none/)).toBeTruthy();
-        await openAction(utils, 'Edit');
+        if (view.openDetail) {
+            // The order's lists show on its detail page, under Details.
+            await view.openDetail(utils);
+            await chooseTab(utils, 'Details');
+            const card = view.detailLabel
+                ? utils.container.querySelector(`dl[aria-label="${view.detailLabel}"]`)
+                : utils.getByLabelText('Order details');
+            expect(within(card).getByText('Allow list', { selector: 'dt' }).nextElementSibling).toHaveTextContent('#2701');
+            // Order and Swap detail word an unbound list the same way.
+            expect(within(card).getByText('Block list', { selector: 'dt' }).nextElementSibling).toHaveTextContent('None');
+        } else {
+            expect(utils.getByText(/Allow list #2701 · Block list none/)).toBeTruthy();
+        }
+        await openAction(utils, 'Edit', view);
+        // The Allow list field shows the bound list; its clear action removes it.
+        expect(utils.getByRole('button', { name: 'Allow list: Allow list #2701' })).toBeTruthy();
         await step(() => fireEvent.click(utils.getByRole('button', { name: 'Remove allow list' })));
-        await step(() => fireEvent.click(utils.getByRole('button', { name: `Update ${view.noun}` })));
+        expect(utils.getByRole('button', { name: 'Allow list: None after this update' })).toBeTruthy();
+        await step(() => fireEvent.click(utils.getByRole('button', { name: `Update ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` })));
 
         const compose = calls.find((c) => c.method === 'composeForConfirm');
         expect(compose.args.actionData.params).toEqual({
@@ -269,14 +344,14 @@ describe.each(VIEWS)('$name owner actions sign through the confirm page', (view)
     it('keeps the removal choice hidden while the activation is unarmed', async () => {
         const rows = [marketRow(700, { allow_list: '2701' })];
         const { utils } = await mount(view, { rows });
-        await openAction(utils, 'Edit');
+        await openAction(utils, 'Edit', view);
         expect(utils.queryByRole('button', { name: 'Remove allow list' })).toBeNull();
     });
 
     it('keeps watcher mode on its unsigned build, with no signature to pre-flight', async () => {
-        const { utils, calls } = await mount(view, { settings: { walletMode: 'watcher' } });
-        await openAction(utils, 'Cancel');
-        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Create unsigned transaction' })));
+        const { utils, calls } = await mount(view, { walletMode: 'watcher' });
+        await openAction(utils, 'Cancel', view);
+        await step(() => fireEvent.click(utils.getByRole('button', { name: 'Create Unsigned Transaction' })));
 
         expect(calls.find((c) => c.method === 'buildActionPsbtRequest').args.actionData.action).toBe(view.action);
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);

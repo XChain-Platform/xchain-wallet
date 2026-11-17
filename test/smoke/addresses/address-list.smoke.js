@@ -50,20 +50,22 @@ assert.ok(/<MultisigBadge[\s\S]*?threshold=\{(?:row\.)?multisig\.threshold\}/.te
 // tokenQuery), so the route honours those instead of owning chip state.
 assert.ok(/networkFilter/.test(route),
     'AddressList honours the networkFilter prop (replaces the removed chip bar)');
-assert.ok(/aria-label="Addresses"/.test(route),
+// Each account group's list is labelled by its account, or Addresses when
+// the list is not grouped.
+assert.ok(/aria-label=(?:"Addresses"|\{group\.title \|\| (?:t\('home\.addresses'\)|'Addresses')\})/.test(route),
     'AddressList row container is labeled');
 assert.ok(/Multisig receive/.test(route),
     'AddressList synthesizes a "Multisig receive" row when the address is not in the persisted table');
 
-// --- Home: new onAddresses nav prop + button ------------------------------
+// --- Entry: the wallet menu's Addresses row, not a Home button -------------
+// Home has no bottom action row; Addresses is a wallet menu row.
 
 const home = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
-assert.ok(/\bonAddresses\b/.test(home),
-    'Home accepts an onAddresses nav prop');
-assert.ok(/onClick=\{onAddresses\}[\s\S]*?disabled=\{!onAddresses\}/.test(home),
-    'Home renders an Addresses button wired to onAddresses');
-assert.ok(/Addresses/.test(home),
-    'Home surfaces the "Addresses" button label');
+assert.ok(!/\bonAddresses\b/.test(home),
+    'Home carries no Addresses button of its own');
+const walletMenuSrc = readFileSync(join(sharedRoutes, '..', 'walletMenu.js'), 'utf8');
+assert.ok(/id: 'addresses', labelKey: 'walletMenu\.row\.addresses'/.test(walletMenuSrc),
+    'the wallet menu carries the Addresses row');
 
 // --- App.jsx wiring (all three shells) ------------------------------------
 
@@ -79,8 +81,8 @@ for (const [shell, appPath] of [
         `${shell} tracks 'addresses' sub-route`);
     assert.ok(/<AddressList\b[\s\S]*?walletId=\{activeWalletId\}/.test(app),
         `${shell} App.jsx mounts <AddressList> with the active walletId`);
-    assert.ok(/onAddresses=\{activeWalletId \? \(\) => setUnlockedView\('addresses'\) : undefined\}/.test(app),
-        `${shell} Home receives the onAddresses nav prop`);
+    assert.ok(!/onAddresses=\{/.test(app),
+        `${shell} passes no onAddresses to Home`);
 }
 
 console.log(

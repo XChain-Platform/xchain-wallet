@@ -1,0 +1,26 @@
+/* History's filter controls inside the shared title-line filter
+   (ListFilterMenu). The holder only gives the '/' shortcut a handle on the
+   filter, so it adds no box of its own to the title line. */
+.holder {
+    display: contents;
+}
+
+/* History's multi-select pickers span the panel at the control
+   height, matching the network picker and the search box above them. */
+.picker.picker {
+    width: 100%;
+}
+
+.picker.picker > div > button[aria-haspopup='listbox'] {
+    width: 100%;
+    min-height: var(--xc-control-h-md);
+    justify-content: space-between;
+    box-sizing: border-box;
+}
+
+/* A hairline between the filters and the view options (fiat and
+   grouping), so the view toggles do not read as more filters. */
+.viewOptions {
+    padding-top: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+}

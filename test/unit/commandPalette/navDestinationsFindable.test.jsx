@@ -20,10 +20,14 @@ const SYNONYMS = {
     history: ['transactions', 'activity'],
     send: ['transfer'],
     receive: ['address', 'deposit'],
+    'my-tokens': ['tokens', 'assets'],
     scan: ['qr', 'camera'],
-    markets: ['dex', 'market', 'exchange'],
+    markets: ['dex', 'exchange'],
     'market-activity': ['marketplace', 'market'],
     'dispensers-list': ['vending', 'dispenser'],
+    'bet-markets': ['bet', 'betting'],
+    'governance-polls': ['governance', 'vote'],
+    'staking-dashboard': ['staking', 'stake'],
     'contracts-list': ['contract', 'vm'],
     messaging: ['inbox', 'messages'],
     contacts: ['address book', 'people'],
@@ -58,11 +62,11 @@ function reaches(commands, query, expectedId, navigate, scan) {
     return false;
 }
 
-// The demo wallet is the narrowest catalogue; every destination must survive it.
+// Every navigation destination must be findable in a wallet where its gate is open.
 describe('every sidebar and bottom-bar destination is findable in the command palette', () => {
     const navigate = vi.fn();
     const scan = vi.fn();
-    const commands = buildCommands({ ...ctxFor(navigate, scan), isDemoWallet: true });
+    const commands = buildCommands(ctxFor(navigate, scan));
     const ids = [...new Set([...NAV_SURFACE_DESTINATIONS.sidebar, ...Object.values(NAV_SURFACE_DESTINATIONS).flat()])];
 
     it.each(ids)('%s is found by its visible label', (id) => {

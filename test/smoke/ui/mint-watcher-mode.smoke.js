@@ -48,8 +48,8 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /if \(!isWatcherMode && !isHwSource && \(!signerReady && password\.length === 0\)\) return;/,
-    'password gate skipped in watcher mode',
+    /if \(!isWatcherMode && !isHwSource && !signerReady && password\.length === 0\) \{[\s\S]{0,180}reviewErrors\.validate\(\{ 'mint-review-password':[\s\S]{0,120}return;\s*\}/,
+    'password gate skipped in watcher mode and reports a field error when empty',
 );
 assert.match(
     formSrc,
@@ -63,8 +63,8 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /Create unsigned transaction/,
-    'submit button reads "Create unsigned transaction" in watcher mode',
+    /Create Unsigned Transaction/,
+    'submit button reads "Create Unsigned Transaction" in watcher mode',
 );
 
 console.log('mint-watcher-mode smoke OK');

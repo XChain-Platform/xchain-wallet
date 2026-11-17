@@ -73,13 +73,12 @@ for (const path of cssFiles(join(wsRoot, 'packages'))) {
 /**
  * Each entry: relative CSS path + the button class that needs the
  * focus ring. The pattern matches `.<klass>:focus-visible { ...
- * outline: ... var(--xc-focus-ring) ...}`.
+ * outline: ... var(--xc-focus-ring) ...}`. The backup reminder's dismiss
+ * and the queued banner's send and discard buttons left this list with the
+ * Notice Standard (2026-11-15): they are the kit Notice X and kit Buttons,
+ * which carry the shared ring themselves.
  */
 const targets = [
-    [join(components, 'AlertsOverlay.module.css'), 'close'],
-    [join(components, 'BackupReminderCard.module.css'), 'dismissBtn'],
-    [join(components, 'QueuedBroadcastBanner.module.css'), 'broadcastBtn'],
-    [join(components, 'QueuedBroadcastBanner.module.css'), 'discardBtn'],
     [join(components, 'RawPsbtViewer.module.css'), 'toggle'],
     [join(components, 'ReachabilityBanner.module.css'), 'detailsToggle'],
     [join(ui, 'FeeSelector.module.css'), 'slider'],

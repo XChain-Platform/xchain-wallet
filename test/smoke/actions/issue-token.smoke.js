@@ -11,9 +11,9 @@
 // Smoke for Phase 2, Step 5 (piece 2c): issueToken flow +
 // action.issue host handler + shell messaging helpers.
 //
-// End-to-end wiring behind the Token Creation Wizard's sign stage:
+// End-to-end wiring behind the Issue token form's sign step:
 //
-//   TokenWizard.jsx               → messaging.issueToken({ ... })
+//   IssueTokenForm.jsx            → messaging.issueToken({ ... })
 //   popup/messaging.js            → chrome.runtime.sendMessage('action.issue', ...)
 //   web/messaging.js              → hostBridge.sendMessage('action.issue', ...)
 //   createBackgroundHost.js       → host.register('action.issue', ...)
@@ -115,17 +115,24 @@ for (const [shell, src] of [['popup', popupMsg], ['web', webMsg]]) {
     );
 }
 
-// --- 4. Wizard calls through the helper -----------------------------
+// --- 4. The Issue form calls through the helper ----------------------
 
-const wizard = readFileSync(
-    join(core, 'src', 'shared', 'routes', 'TokenWizard.jsx'),
-    'utf8',
+const routes = join(core, 'src', 'shared', 'routes');
+const wizard = readFileSync(join(routes, 'TokenWizard.jsx'), 'utf8');
+const issueForm = readFileSync(join(routes, 'IssueTokenForm.jsx'), 'utf8');
+assert.ok(
+    /return <IssueTokenForm\b/.test(wizard),
+    'the Issue a Token route renders IssueTokenForm',
 );
 assert.ok(
-    /messaging\.issueToken\s*\(/.test(wizard),
-    'TokenWizard calls messaging.issueToken from the sign stage',
+    /messaging\.issueToken\s*\(/.test(issueForm),
+    'IssueTokenForm calls messaging.issueToken from the confirmed approval',
+);
+assert.ok(
+    /prebuiltPsbt/.test(issueForm) && /actionConfirm\.run/.test(issueForm),
+    'IssueTokenForm signs the same prebuilt transaction the confirmation page showed',
 );
 
 console.log(
-    'OK: issueToken smoke (flow + guard rails + action.issue handler wiring + messaging helpers + wizard call-site)',
+    'OK: issueToken smoke (flow + guard rails + action.issue handler wiring + messaging helpers + issue form call-site)',
 );

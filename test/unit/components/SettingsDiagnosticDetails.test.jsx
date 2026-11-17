@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ContactsSection } from '../../../packages/core/src/shared/components/settings/ContactsSection.jsx';
 import { BackupSection } from '../../../packages/core/src/shared/components/settings/BackupSection.jsx';
-import { RegtestRow } from '../../../packages/core/src/shared/components/settings/DeveloperModeSection.jsx';
+import { AddNetworkPage, activationMessage } from '../../../packages/core/src/shared/components/settings/TestNetworksPages.jsx';
 import {
     auditedContactsJson,
     malformedContactsCsv,
@@ -54,7 +54,7 @@ describe('settings diagnostic disclosures', () => {
         fireEvent.change(screen.getByLabelText('Recovery phrase to test'), {
             target: { value: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Run test' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Run Test' }));
 
         const mismatch = await screen.findByText(/Address #2: your wallet has bc1qexpected, but this recovery phrase gives bc1qderivedmismatch/);
         const missing = screen.getByText(/Address #3: not in your wallet yet; this recovery phrase gives bc1qderivednew/);
@@ -214,9 +214,12 @@ describe('settings diagnostic disclosures', () => {
         expect(screen.getByText(/File is too large/)).toBeTruthy();
     });
 
-    it('lists each account left unchanged during network activation', async () => {
+    // Activation asks for the password in place on Add Network and returns to
+    // Test Networks at once (operator picks 2026-11-14), so the accounts it
+    // left alone are named in the toast it raises.
+    it('names each account left unchanged during network activation', async () => {
         const messaging = {
-            getSettings: vi.fn().mockResolvedValue(settings),
+            getSettings: vi.fn().mockResolvedValue({ ...settings, developerMode: true, fees: {} }),
             listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1' }]),
             listSigners: vi.fn().mockResolvedValue([]),
             activateChainRequest: vi.fn().mockResolvedValue({
@@ -225,27 +228,22 @@ describe('settings diagnostic disclosures', () => {
                 skippedAccountDetails: [{ accountId: 'account-1', name: 'Savings' }],
             }),
         };
-        const descriptor = { id: 'bitcoin-regtest', displayName: 'Bitcoin Regtest' };
-        mount(
-            <RegtestRow
-                descriptor={descriptor}
-                isActive={false}
-                disabled={false}
-                activeWallet={{ id: 'wallet-1' }}
-            />,
-            messaging,
-        );
+        const onReturnTo = vi.fn();
+        mount(<AddNetworkPage activeWallet={{ id: 'wallet-1' }} onReturnTo={onReturnTo} />, messaging);
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Activate…' }));
-        const password = await screen.findByLabelText('Bitcoin Regtest activation password');
-        fireEvent.change(password, { target: { value: 'secret' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Activate Bitcoin Regtest' }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Bitcoin Regtest/ }));
+        fireEvent.change(await screen.findByLabelText('Wallet password'), { target: { value: 'secret' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Activate Network' }));
 
-        expect(await screen.findByText('Activated. Derived 1 address.')).toBeTruthy();
-        const summary = screen.getByText('Accounts not changed (1)');
-        fireEvent.click(summary);
-        expect(screen.getByText('Savings')).toBeTruthy();
-        expect(screen.getByText(/Already has an address on Bitcoin Regtest/)).toBeTruthy();
         await waitFor(() => expect(messaging.activateChainRequest).toHaveBeenCalledOnce());
+        expect(messaging.activateChainRequest).toHaveBeenCalledWith(expect.objectContaining({
+            walletId: 'wallet-1',
+            chainId: 'bitcoin-regtest',
+            password: 'secret',
+        }));
+        await waitFor(() => expect(onReturnTo).toHaveBeenCalledWith('developer-test-networks'));
+        const r = await messaging.activateChainRequest.mock.results[0].value;
+        expect(activationMessage({ id: 'bitcoin-regtest', displayName: 'Bitcoin Regtest' }, r))
+            .toBe('Bitcoin Regtest is active. New addresses made: 1. Already had an address on it, so left unchanged: Savings.');
     });
 });

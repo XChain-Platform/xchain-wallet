@@ -14,6 +14,15 @@ import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import historyStyles from '../../../packages/core/src/shared/routes/History.module.css';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import { userEvent } from '../../helpers/userEvent.js';
+import {
+    EXPORT_ITEM,
+    MORE_ACTIONS,
+    REFRESH_ITEM,
+    chooseHistoryMenuItem,
+    historyMenuItem,
+    historyMoreButton,
+    queryHistoryMenuItem,
+} from './historyMoreMenu.js';
 
 const CHAIN = 'litecoin-regtest';
 const ADDRESS = 'mtkx2FQ7QhPPZmVyLKVWMkfmYmvQRUXCmi';
@@ -59,7 +68,7 @@ function mountHistory(rows) {
         getMultisigReceiveAddress: vi.fn().mockRejectedValue(new Error('none')),
         getSettings: vi.fn().mockResolvedValue({ fiatCurrency: 'EUR' }),
     };
-    render(
+    return render(
         <MessagingProvider shell="web" messaging={messaging}>
             <History walletId="w1" accountId="a1" />
         </MessagingProvider>,
@@ -95,52 +104,79 @@ describe('History export button', () => {
         const user = userEvent.setup();
         mountHistory([historyRow()]);
 
-        const trigger = await screen.findByRole('button', { name: 'Export…' });
-        await waitFor(() => expect(trigger).toBeEnabled());
-        trigger.focus();
+        // Export sits in the title line's ⋯ menu; it opens the dialog from
+        // the keyboard: Tab from ⋯ onto the item, then Enter.
+        const more = await screen.findByRole('button', { name: MORE_ACTIONS });
+        await waitFor(() => expect(historyMenuItem(EXPORT_ITEM)).toBeEnabled());
+        more.focus();
+        await user.tab();
+        expect(historyMenuItem(EXPORT_ITEM)).toHaveFocus();
         await user.keyboard('{Enter}');
 
         const dialog = await screen.findByRole('dialog', { name: 'Export history' });
         const dialogQueries = within(dialog);
-        const controls = [
-            ...dialogQueries.getAllByRole('radio'),
-            ...dialogQueries.getAllByRole('checkbox'),
-            ...dialogQueries.getAllByRole('button'),
-        ];
-        expect(controls).toHaveLength(17);
-        await waitFor(() => expect(controls[0]).toHaveFocus());
-        for (const control of controls.slice(1)) {
+        // The dialog's tab sequence in document order: the Format and Columns
+        // labels each carry a '?' help tip (ruling 2026-11-13) ahead of their
+        // choices, then the Format dropdown (G119, no radios), the checkboxes
+        // and the buttons.
+        const controls = Array.from(dialog.querySelectorAll('button, input'))
+            .filter((element) => !element.disabled);
+        expect(dialogQueries.queryAllByRole('radio')).toHaveLength(0);
+        expect(controls).toHaveLength(
+            dialogQueries.getAllByRole('checkbox').length
+            + dialogQueries.getAllByRole('button').length,
+        );
+        expect(controls).toHaveLength(18);
+        const formatTip = dialogQueries.getByRole('button', { name: 'About Format' });
+        const columnsTip = dialogQueries.getByRole('button', { name: 'About Columns' });
+        const formatField = dialogQueries.getByRole('button', { name: /^Format: CSV/ });
+        expect(formatField.querySelector('svg')).not.toBeNull();
+        expect(controls.indexOf(formatTip)).toBeLessThan(controls.indexOf(formatField));
+        expect(controls.indexOf(columnsTip)).toBeLessThan(controls.indexOf(dialogQueries.getAllByRole('checkbox')[0]));
+        await waitFor(() => expect(controls).toContain(document.activeElement));
+        const start = controls.indexOf(document.activeElement);
+        // One full lap: every control in turn, wrapping from the last back to the first.
+        for (let step = 1; step <= controls.length; step += 1) {
             await user.tab();
-            expect(control).toHaveFocus();
+            expect(controls[(start + step) % controls.length]).toHaveFocus();
         }
-        await user.tab();
-        expect(controls[0]).toHaveFocus();
+        expect(controls[start]).toHaveFocus();
 
         await user.keyboard('{Escape}');
         expect(screen.queryByRole('dialog', { name: 'Export history' })).toBeNull();
-        expect(trigger).toHaveFocus();
+        // The menu item that opened the dialog closed with the menu, so focus
+        // goes back to the ⋯ button that holds it.
+        await waitFor(() => expect(more).toHaveFocus());
     });
 
     it('is enabled for visible rows and disabled with a reason when filters hide them', async () => {
         mountHistory([historyRow()]);
 
-        const button = await screen.findByRole('button', { name: 'Export…' });
-        await waitFor(() => expect(button).toBeEnabled());
+        await screen.findByRole('button', { name: MORE_ACTIONS });
+        await waitFor(() => expect(historyMenuItem(EXPORT_ITEM)).toBeEnabled());
+        expect(historyMenuItem(EXPORT_ITEM)).not.toHaveAttribute('title');
+        fireEvent.click(historyMoreButton());
+        expect(screen.queryByRole('menu')).toBeNull();
 
-        fireEvent.change(screen.getByLabelText('Search history'), {
+        // The search box lives in the title-line filter menu.
+        fireEvent.click(screen.getByRole('button', { name: 'History filters' }));
+        fireEvent.change(await screen.findByLabelText('Search history'), {
             target: { value: 'no such transaction' },
         });
 
-        await waitFor(() => expect(button).toBeDisabled());
-        expect(screen.getByText('No rows match the current filters.')).toBeInTheDocument();
-        expect(button).toHaveAttribute('aria-describedby', 'history-export-disabled-reason');
+        // The item stays in the menu, disabled, and its title gives the reason.
+        await waitFor(() => expect(historyMenuItem(EXPORT_ITEM)).toBeDisabled());
+        expect(historyMenuItem(EXPORT_ITEM))
+            .toHaveAttribute('title', 'No rows match the current filters.');
     });
 
     it('hides export controls when there is no history', async () => {
         mountHistory([]);
 
         await screen.findByText('No activity yet');
-        expect(screen.queryByRole('button', { name: 'Export…' })).toBeNull();
+        // The ⋯ menu still offers Refresh; Export joins it only once there is history.
+        expect(historyMenuItem(REFRESH_ITEM)).toBeInTheDocument();
+        expect(queryHistoryMenuItem(EXPORT_ITEM)).toBeNull();
         expect(screen.queryByText('There are no history rows to export.')).toBeNull();
     });
 
@@ -150,28 +186,37 @@ describe('History export button', () => {
 
         try {
             mountHistory([historyRow()]);
-            const trigger = await screen.findByRole('button', { name: 'Export…' });
-            const additionalDetails = screen.getByRole('button', { name: 'More filters' });
+            const trigger = await screen.findByRole('button', { name: MORE_ACTIONS });
+            await waitFor(() => expect(historyMenuItem(EXPORT_ITEM)).toBeEnabled());
+            const exportItem = historyMenuItem(EXPORT_ITEM);
+            fireEvent.click(trigger);
+            // The filters, Show fiat and Grouping sit in the title-line filter menu.
+            const filterButton = screen.getByRole('button', { name: 'History filters' });
+            fireEvent.click(filterButton);
+            expect(filterButton).toHaveAttribute('aria-expanded', 'true');
             const showFiat = screen.getByRole('button', { name: 'Show fiat: Off' });
             const grouping = screen.getByRole('radiogroup', { name: 'Grouping mode' });
-            const toolbar = additionalDetails.parentElement;
+            const toolbar = showFiat.parentElement;
             const phone = mediaBlock(historyCss, 'not all and (min-width: 480px)');
 
             expect(window.innerWidth).toBe(360);
             expect(toolbar).not.toBeNull();
-            expect(additionalDetails.parentElement).toBe(toolbar);
-            expect(showFiat.parentElement).toBe(toolbar);
             expect(grouping.parentElement).toBe(toolbar);
-            // Export sits in the page actions row beside Refresh, outside the
-            // foldable filter card, so it stays reachable while the filters
-            // are folded.
-            expect(trigger.parentElement).toHaveAttribute('data-xc-page-actions');
+            // Export sits in the ⋯ menu, an outlined icon button on the title
+            // line right of the filter (G02, G95): nothing sits between the
+            // header and the list, and it stays reachable with the filters
+            // closed.
+            expect(trigger.closest('[data-history-header-actions]')).not.toBeNull();
+            const titleLine = screen.getByRole('heading', { name: 'History', level: 1 }).closest('div');
+            expect(titleLine.contains(trigger)).toBe(true);
+            expect(exportItem.closest('#history-filter-panel')).toBeNull();
+            expect(document.querySelector('[data-xc-page-actions]')).toBeNull();
             expect(trigger.closest('#history-filter-panel')).toBeNull();
             expect(trigger.closest(`.${historyStyles.filterFooter}`)).toBeNull();
-            for (const control of [additionalDetails, showFiat, grouping, trigger]) {
+            for (const control of [showFiat, grouping]) {
                 expect(control).toHaveClass(historyStyles.toolbarControl);
             }
-            expect(additionalDetails).toHaveAttribute('aria-pressed', 'false');
+            expect(trigger).toHaveClass(historyStyles.headerIconButton);
             expect(showFiat).toHaveAttribute('aria-pressed', 'false');
             expect(trigger).toHaveClass(buttonStyles.secondary);
             expect(ruleBody(historyCss, '.filterFooter')).toMatch(
@@ -192,10 +237,11 @@ describe('History export button', () => {
 
 describe('History export shortcut (§34.2)', () => {
     it('opens the export dialog on e when rows are visible', async () => {
-        mountHistory([historyRow()]);
+        const { container } = mountHistory([historyRow()]);
 
-        const button = await screen.findByRole('button', { name: 'Export…' });
-        await waitFor(() => expect(button).toBeEnabled());
+        // The shortcut needs no menu: once a row shows, e opens the dialog.
+        await waitFor(() => expect(container.querySelector('[data-history-key]')).not.toBeNull());
+        expect(screen.queryByRole('menu')).toBeNull();
         fireEvent.keyDown(document.body, { key: 'e' });
 
         expect(await screen.findByRole('dialog', { name: 'Export history' })).toBeInTheDocument();
@@ -206,7 +252,9 @@ describe('History export shortcut (§34.2)', () => {
         mountHistory([]);
 
         await screen.findByText('No activity yet');
-        expect(screen.queryByRole('button', { name: 'Export…' })).toBeNull();
+        expect(queryHistoryMenuItem(EXPORT_ITEM)).toBeNull();
+        fireEvent.click(historyMoreButton());
+        expect(screen.queryByRole('menu')).toBeNull();
         fireEvent.keyDown(document.body, { key: 'e' });
 
         expect(screen.queryByRole('dialog', { name: 'Export history' })).toBeNull();
@@ -222,9 +270,9 @@ describe('large History export', () => {
         }));
         mountHistory(rows);
 
-        const open = await screen.findByRole('button', { name: 'Export…' });
-        await waitFor(() => expect(open).toBeEnabled());
-        fireEvent.click(open);
+        await screen.findByRole('button', { name: MORE_ACTIONS });
+        await waitFor(() => expect(historyMenuItem(EXPORT_ITEM)).toBeEnabled());
+        chooseHistoryMenuItem(EXPORT_ITEM);
         vi.useFakeTimers();
         fireEvent.click(screen.getByRole('button', { name: 'Export' }));
 
@@ -239,8 +287,10 @@ describe('large History export', () => {
         vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
         vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
         vi.stubGlobal('Blob', NodeBlob);
-        fireEvent.click(screen.getByRole('button', { name: 'Export…' }));
-        fireEvent.click(screen.getByRole('radio', { name: /^JSON/ }));
+        chooseHistoryMenuItem(EXPORT_ITEM);
+        // Format is the themed dropdown (G119): open it, pick JSON.
+        fireEvent.click(screen.getByRole('button', { name: /^Format: / }));
+        fireEvent.click(screen.getByRole('option', { name: /^JSON/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Export' }));
         await act(async () => { await vi.advanceTimersByTimeAsync(100); });
 

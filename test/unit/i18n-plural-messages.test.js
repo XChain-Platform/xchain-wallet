@@ -39,7 +39,8 @@ describe('ICU plural messages', () => {
         expect(format(en['settings.contacts.storedCount'], { count: 2 })).toBe('2 contacts stored');
         expect(format(en['locked.countdown.seconds'], { count: 1 })).toBe('1 second');
         expect(format(en['locked.countdown.minutes'], { count: 3 })).toBe('3 minutes');
-        expect(format(en['settings.page.donatedOn'], { amounts: '0.00025 BTC, 1.25 DOGE' }))
-            .toBe('On · 0.00025 BTC, 1.25 DOGE donated');
+        expect(format(en['settings.ads.donationCount'], { count: 0 })).toBe('No donations yet');
+        expect(format(en['settings.ads.donationCount'], { count: 1 })).toBe('1 donation');
+        expect(format(en['settings.ads.donationCount'], { count: 3 })).toBe('3 donations');
     });
 });

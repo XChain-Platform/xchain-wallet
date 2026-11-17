@@ -12,9 +12,5 @@ import { t } from '../../i18n/index.js';
 
 export const typedConfirmationCopy = {
     hint: (word) => t('common.typedConfirmationHint', { word }),
-    listShare: () => t('common.typedConfirmationListShareHint'),
-    listTransfer: () => t('common.typedConfirmationListTransferHint'),
-    listTransferReview: () => t('common.typedConfirmationListTransferReviewHint'),
     oracle: (deviationPct) => t('common.typedConfirmationOracleHint', { deviationPct }),
-    sleep: () => t('common.typedConfirmationSleepHint'),
 };

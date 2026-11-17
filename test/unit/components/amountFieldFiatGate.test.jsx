@@ -21,6 +21,7 @@ import React from 'react';
 import { readFileSync } from 'node:fs';
 import { AmountField } from '../../../packages/core/src/shared/components/AmountField.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
+import inputStyles from '../../../packages/core/src/ui/Input.module.css';
 import {
     registerLocale,
     setLocale,
@@ -114,7 +115,7 @@ describe('AmountField fiat gate', () => {
 });
 
 describe('AmountField input contract', () => {
-    it.each([320, 360])('keeps Max on one line in a %ipx field', (width) => {
+    it.each([320, 360])('keeps the Max icon inside a %ipx field with its room reserved', (width) => {
         const u = render(
             <div style={{ width }}>
                 <AmountField
@@ -128,22 +129,16 @@ describe('AmountField input contract', () => {
         const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
         const max = u.getByRole('button', { name: 'Use max available amount' });
 
-        expect(input.style.paddingInlineEnd).toContain('--amount-action-width');
-        expect(amountFieldStyles).toMatch(
-            /--amount-action-width:\s*calc\(var\(--amount-control-height\) \+ var\(--xc-space-8\)\)/,
-        );
+        expect(input).toHaveClass(inputStyles.inputWithFieldAction);
+        expect(max.parentElement).toHaveClass(inputStyles.controlActions);
         expect(amountFieldStyles).toMatch(/\.amountFieldWrap input\s*\{[^}]*min-width:\s*0/s);
-        expect(amountFieldStyles).toMatch(
-            /\.maxAction > span\s*\{[^}]*min-width:\s*max-content[^}]*white-space:\s*nowrap/s,
-        );
-        expect(max.textContent).not.toMatch(/\s/);
+        expect(max.textContent).toBe('');
     });
 
     it('keeps the Max end room when the form offers no max', () => {
         const u = mount();
         const input = u.getByRole('textbox', { name: 'Amount (BTC)' });
-        expect(input.style.paddingInlineEnd).toContain('--amount-action-width');
-        expect(input.style.getPropertyValue('--amount-end-room')).toContain('--amount-action-width');
+        expect(input).toHaveClass(inputStyles.inputWithFieldAction);
         expect(u.getByRole('button', { name: 'Use max available amount' })).toBeDisabled();
     });
 

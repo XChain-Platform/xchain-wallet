@@ -82,7 +82,7 @@ function mount({ tick, overrides } = {}) {
 async function fillMultiClassBind() {
     fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '7' } });
     fireEvent.click(screen.getByLabelText('burn'));
-    fireEvent.click(screen.getByRole('button', { name: 'Bind address' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
     fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'one password' } });
 }
 
@@ -93,7 +93,7 @@ describe('ControllerBindForm multi-class binds', () => {
         mount();
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '7' } });
         fireEvent.click(screen.getByLabelText('transfer'));
-        fireEvent.click(screen.getByRole('button', { name: 'Bind address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
 
         expect(await screen.findByText('Choose at least one action class.')).toBeTruthy();
     });
@@ -107,7 +107,10 @@ describe('ControllerBindForm multi-class binds', () => {
         const { messaging } = mount({ overrides: { advancedAction } });
         await fillMultiClassBind();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Sign: bind controller' }));
+        expect(screen.getByTestId('confirm-facts')).toHaveTextContent('Action classes');
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
+        expect(screen.queryByText(/Estimate unavailable/)).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
         await waitFor(() => expect(advancedAction).toHaveBeenCalledTimes(2));
         expect(messaging.buildControllerBindParams.mock.calls.slice(0, 2).map(([request]) => request.actionClass))
@@ -120,10 +123,10 @@ describe('ControllerBindForm multi-class binds', () => {
             .toBeLessThan(messaging.buildControllerBindParams.mock.invocationCallOrder[1]);
         expect(messaging.getAddressUtxos.mock.invocationCallOrder[0])
             .toBeGreaterThan(advancedAction.mock.invocationCallOrder[0]);
-        expect(await screen.findByText(/Sent: tx-transfer/)).toBeTruthy();
-        expect(screen.getByText(/Failed:/)).toBeTruthy();
+        expect(await screen.findByText(/sent: tx-transfer/i)).toBeTruthy();
+        expect(screen.getByText(/failed:/i)).toBeTruthy();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Sign: bind controller' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(advancedAction).toHaveBeenCalledTimes(3));
         expect(messaging.buildControllerBindParams.mock.calls.map(([request]) => request.actionClass))
             .toEqual(['transfer', 'burn', 'burn']);
@@ -131,10 +134,31 @@ describe('ControllerBindForm multi-class binds', () => {
         expect(await screen.findByText('Bind sequence completed. The network will apply each controller change shortly.')).toBeTruthy();
     });
 
+    it('Back on the hardware sign page returns to the review with no failure, and the class signs again', async () => {
+        const back = Object.assign(new Error('Signing stopped from the hardware wallet page (HW_SIGN_BACK).'), { code: 'HW_SIGN_BACK' });
+        const advancedAction = vi.fn()
+            .mockResolvedValueOnce({ txid: 'tx-transfer' })
+            .mockRejectedValueOnce(back)
+            .mockResolvedValueOnce({ txid: 'tx-burn' });
+        mount({ overrides: { advancedAction } });
+        await fillMultiClassBind();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+        await waitFor(() => expect(advancedAction).toHaveBeenCalledTimes(2));
+        expect(await screen.findByText(/sent: tx-transfer/i)).toBeTruthy();
+        expect(screen.queryByText(/failed:/i)).toBeNull();
+        expect(screen.queryByText(/HW_SIGN_BACK/)).toBeNull();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+        await waitFor(() => expect(advancedAction).toHaveBeenCalledTimes(3));
+        expect(await screen.findByText('Bind sequence completed. The network will apply each controller change shortly.')).toBeTruthy();
+    });
+
     it('keeps one class on the shared confirm path exactly once', async () => {
         const { messaging } = mount();
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '7' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Bind address' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Bind Address' }));
 
         expect(await screen.findByTestId('confirm-modal')).toBeTruthy();
         expect(messaging.buildControllerBindParams).toHaveBeenCalledTimes(1);
@@ -147,42 +171,55 @@ describe('ControllerBindForm multi-class binds', () => {
 
         expect(token).toHaveAccessibleName(/^Token: ALPHA/);
         expect(document.body.textContent).not.toContain('does not own');
+        expect(screen.getByRole('heading', { name: 'Bind Controller' })).toBeTruthy();
         fireEvent.click(token);
 
-        expect(await screen.findByRole('heading', { name: 'Select token' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'ALPHA' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'BETA' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'NOTOWNED' })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'BETA' }));
+        // The standard token picker opens with its own title, not the form's,
+        // and lists only the tokens this wallet owns.
+        expect(await screen.findByRole('heading', { name: 'Select Token' })).toBeTruthy();
+        expect(screen.queryByRole('heading', { name: 'Bind Controller' })).toBeNull();
+        const row = (tick) => (name) => name.startsWith(`Select ${tick} on Bitcoin,`);
+        expect(await screen.findByRole('button', { name: row('ALPHA') })).toBeTruthy();
+        expect(screen.getByRole('button', { name: row('BETA') })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: row('NOTOWNED') })).toBeNull();
+        expect(screen.getAllByRole('button', { name: (name) => name.startsWith('Select ') })).toHaveLength(2);
+        fireEvent.click(screen.getByRole('button', { name: row('BETA') }));
 
         expect(await screen.findByRole('button', { name: /^Token: BETA/ })).toBeTruthy();
         expect(await screen.findByDisplayValue(SECOND.address)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Bind token' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Bind Token' })).toBeTruthy();
     });
 
     it('uses target-specific labels and the Controller link icon', async () => {
         const tokenView = mount({ tick: 'ALPHA' });
-        const tokenButton = await screen.findByRole('button', { name: 'Bind token' });
+        const tokenButton = await screen.findByRole('button', { name: 'Bind Token' });
         expect(tokenButton.querySelector('svg')).toBeTruthy();
         tokenView.unmount();
 
         mount();
-        const addressButton = await screen.findByRole('button', { name: 'Bind address' });
+        const addressButton = await screen.findByRole('button', { name: 'Bind Address' });
         expect(addressButton.querySelector('svg')).toBeTruthy();
     });
 
     it('puts form-specific help on From, target, and Action class and marks cooldown optional', async () => {
         mount();
 
+        // From is a closed standard section; open it to reach its help tip.
+        fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
         expect(await screen.findByRole('button', { name: 'About From' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'About What to protect' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'About Action class' })).toBeTruthy();
         expect(screen.queryByText('How controller bindings work')).toBeNull();
         expect(document.querySelector('details')).toBeNull();
 
+        // Cooldown lives in its own closed Cooldown section, and the
+        // section header (not the field) carries the Optional tag.
         const cooldown = screen.getByLabelText('Cooldown blocks');
-        const describedBy = cooldown.getAttribute('aria-describedby').split(' ');
-        expect(describedBy.map((id) => document.getElementById(id)?.textContent)).toContain('Optional');
+        const cooldownSection = cooldown.closest('[data-form-section="cooldown"]');
+        expect(cooldownSection).not.toBeNull();
+        const cooldownHeader = cooldownSection.querySelector('button[aria-expanded]');
+        expect(cooldownHeader).toHaveTextContent('Optional');
+        expect(cooldownHeader).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByText(/Cooldown blocks \(optional\)/i)).toBeNull();
     });
 });

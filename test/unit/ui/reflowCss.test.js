@@ -36,8 +36,10 @@ describe('zoom reflow CSS', () => {
         const pageHeader = readCss('packages/core/src/ui/PageHeader.module.css');
         const onboarding = readCss('packages/core/src/shared/routes/OnboardingCarousel.module.css');
 
-        expect(pageHeader).toMatch(/\.title\s*\{[^}]*overflow-wrap:\s*anywhere[^}]*white-space:\s*normal/s);
-        expect(pageHeader).not.toMatch(/\.title\s*\{[^}]*text-overflow:\s*ellipsis/s);
+        // Operator rule 2026-11-13: a title is one line that ends in an ellipsis,
+        // so it never runs under the trailing buttons (the header grid lane grows
+        // to its buttons instead).
+        expect(pageHeader).toMatch(/\.title\s*\{[^}]*overflow:\s*hidden[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s);
         expect(onboarding).toMatch(/\.frameViewport\s*\{[^}]*overflow-x:\s*hidden[^}]*overflow-y:\s*auto/s);
     });
 });

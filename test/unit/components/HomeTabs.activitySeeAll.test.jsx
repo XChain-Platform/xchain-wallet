@@ -92,7 +92,7 @@ afterEach(() => {
     localStorage.clear();
 });
 
-function renderActivity(props) {
+function renderHome(props) {
     render(
         <HomeTabs
             chainRegistry={chainRegistry}
@@ -100,77 +100,62 @@ function renderActivity(props) {
             {...props}
         />,
     );
-    fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
-    return screen.getByRole('tabpanel');
 }
 
-function expectTrailingSeeAll(panel, onHistory) {
+// The Home Activity tab is retired (ruling n.253): History covers it, so Home
+// offers Balances, NFTs and DeFi only and never draws activity rows or
+// the See all activity button.
+function expectNoActivityTab() {
+    expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent.trim())).toEqual(
+        expect.not.arrayContaining(['Activity']),
+    );
+    expect(document.querySelector('[data-activity-row]')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'See all activity' })).toBeNull();
     expect(screen.queryByText(NOTE)).toBeNull();
-    expect(panel.querySelector('[data-activity-row]')).not.toBeNull();
-    const button = screen.getByRole('button', { name: 'See all activity' });
-    expect(panel.lastElementChild).toBe(button);
-    expect(button.classList.contains(buttonStyles.block)).toBe(true);
-    expect(button.classList.contains(buttonStyles.success)).toBe(true);
-    expect(button.classList.contains(buttonStyles.primary)).toBe(false);
-    expect(button.classList.contains(buttonStyles.link)).toBe(false);
-    const icon = button.querySelector('svg');
-    expect(icon).not.toBeNull();
-    expect(icon.querySelectorAll('path')).toHaveLength(3);
-    expect(icon.querySelector('path')?.getAttribute('d')).toBe('M3 12a9 9 0 1 0 3-6.7');
-    fireEvent.click(button);
-    expect(onHistory).toHaveBeenCalledTimes(1);
 }
 
-describe('Home Activity tab See all activity', () => {
-    it('ends a real wallet\'s rows with a full-width success button and no intro note', () => {
-        const onHistory = vi.fn();
-        const panel = renderActivity({
+describe('Home has no Activity tab', () => {
+    it('offers no Activity tab or See all activity button for a real wallet', () => {
+        renderHome({
             balances: {},
             walletId: 'wallet-real',
             recentActivity: [entry(1), entry(2), entry(3)],
-            onHistory,
+            onHistory: vi.fn(),
         });
-        expectTrailingSeeAll(panel, onHistory);
+        expectNoActivityTab();
     });
 
-    it('ends the demo wallet\'s rows with the same button', () => {
+    it('offers none for the demo wallet either', () => {
         markDemoWallet('demo-wallet');
-        const onHistory = vi.fn();
-        const panel = renderActivity({
+        renderHome({
             balances: demoBalances,
             walletId: 'demo-wallet',
             recentActivity: [entry(1), entry(2)],
-            onHistory,
+            onHistory: vi.fn(),
         });
-        expectTrailingSeeAll(panel, onHistory);
+        expectNoActivityTab();
     });
 
-    it('shows the same success button under the empty state', () => {
-        const onHistory = vi.fn();
-        const panel = renderActivity({
+    it('shows no activity empty state with an empty recent list', () => {
+        renderHome({
             balances: {},
             walletId: 'wallet-real',
             recentActivity: [],
-            onHistory,
+            onHistory: vi.fn(),
         });
-        expect(screen.getByText('No activity yet')).toBeTruthy();
-        const button = screen.getByRole('button', { name: 'See all activity' });
-        expect(panel.lastElementChild).toBe(button);
-        expect(button.classList.contains(buttonStyles.success)).toBe(true);
-        expect(button.querySelector('svg')).not.toBeNull();
+        expectNoActivityTab();
+        expect(screen.queryByText('No activity yet')).toBeNull();
     });
 
-    it('renders no button without an onHistory handler', () => {
-        renderActivity({ balances: {}, walletId: 'wallet-real', recentActivity: [entry(1)] });
-        expect(document.querySelector('[data-activity-row]')).not.toBeNull();
-        expect(screen.queryByRole('button', { name: 'See all activity' })).toBeNull();
-        expect(screen.queryByText(NOTE)).toBeNull();
+    it('stays without an Activity tab when no onHistory handler is wired', () => {
+        renderHome({ balances: {}, walletId: 'wallet-real', recentActivity: [entry(1)] });
+        expectNoActivityTab();
     });
 
-    it('renders no button on the demo list without an onHistory handler', () => {
-        markDemoWallet('demo-wallet');
-        renderActivity({ balances: demoBalances, walletId: 'demo-wallet', recentActivity: [entry(1)] });
-        expect(document.querySelector('[data-activity-row]')).not.toBeNull();
-        expect(screen.queryByRole('button', { name: 'See all activity' })).toBeNull();
+    it('opens on Balances', () => {
+        renderHome({ balances: {}, walletId: 'wallet-real', recentActivity: [entry(1)], onHistory: vi.fn() });
+        const selected = screen.getAllByRole('tab').find((tab) => tab.getAttribute('aria-selected') === 'true');
+        expect(selected?.textContent).toMatch(/Balances/);
     });
 });

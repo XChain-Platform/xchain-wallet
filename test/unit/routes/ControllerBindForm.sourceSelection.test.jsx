@@ -91,7 +91,7 @@ describe('ControllerBindForm source selection', () => {
 
         expect(await screen.findByText(NO_SOURCE)).toBeTruthy();
         const network = screen.getByRole('button', { name: 'Network: Bitcoin' });
-        expect(screen.getByRole('button', { name: 'Bind address' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Bind Address' })).toBeDisabled();
 
         fireEvent.click(network);
         fireEvent.click(screen.getByRole('button', { name: /Select Litecoin/ }));
@@ -99,7 +99,7 @@ describe('ControllerBindForm source selection', () => {
         expect(await screen.findByRole('button', { name: 'Network: Litecoin' })).toBeTruthy();
         expect(await screen.findByDisplayValue(hdAddress.address)).toBeTruthy();
         expect(screen.queryByText(NO_SOURCE)).toBeNull();
-        expect(screen.getByRole('button', { name: 'Bind address' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Bind Address' })).toBeEnabled();
     });
 
     it('skips a default chain that has no eligible address', async () => {
@@ -108,6 +108,8 @@ describe('ControllerBindForm source selection', () => {
             [LITECOIN]: [hdAddress],
         });
 
+        // Network lives in the closed From section; open it first.
+        fireEvent.click(await screen.findByRole('button', { name: /^From\b/, expanded: false }));
         expect(await screen.findByRole('button', { name: 'Network: Litecoin' })).toBeTruthy();
         expect(await screen.findByDisplayValue(hdAddress.address)).toBeTruthy();
         expect(screen.queryByText(NO_SOURCE)).toBeNull();
@@ -126,7 +128,7 @@ describe('ControllerBindForm source selection', () => {
 
         const guard = await screen.findByLabelText('Guard contract');
         expect(await screen.findByText(/Device not detected/)).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Bind address' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Bind Address' })).toBeDisabled();
         expect(screen.queryByText(NO_SOURCE)).toBeNull();
         fireEvent.submit(guard.closest('form'));
         expect(messaging.buildControllerBindParams).not.toHaveBeenCalled();
@@ -141,8 +143,8 @@ describe('ControllerBindForm source selection', () => {
         const messaging = mount({ [LITECOIN]: [watchAddress] });
 
         const guard = await screen.findByLabelText('Guard contract');
-        expect(screen.getByText('This watch-only account cannot sign.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Bind address' })).toBeDisabled();
+        expect(screen.getByText('This address has no key in this wallet, so it cannot sign.')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Bind Address' })).toBeDisabled();
         expect(screen.queryByText(NO_SOURCE)).toBeNull();
         fireEvent.submit(guard.closest('form'));
         expect(messaging.buildControllerBindParams).not.toHaveBeenCalled();
@@ -201,11 +203,11 @@ describe('ControllerBindForm page template', () => {
             </MessagingProvider>,
         );
         fireEvent.change(await screen.findByLabelText('Guard contract'), { target: { value: '42' } });
-        const bind = screen.getByRole('button', { name: 'Bind address' });
+        const bind = screen.getByRole('button', { name: 'Bind Address' });
         await waitFor(() => expect(bind).toBeEnabled());
         fireEvent.click(bind);
-        expect(screen.getByText(/Watcher mode: this prepares the transaction for your offline signer/)).toBeInTheDocument();
-        const sign = await screen.findByRole('button', { name: 'Bind controller' });
+        expect(screen.getByText(/Another phone signs for this wallet: this prepares the transaction for it/)).toBeInTheDocument();
+        const sign = await screen.findByRole('button', { name: 'Approve' });
         fireEvent.click(sign);
         const txidCell = await screen.findByText(txid);
         expect(messaging.buildControllerBindParams).toHaveBeenCalled();

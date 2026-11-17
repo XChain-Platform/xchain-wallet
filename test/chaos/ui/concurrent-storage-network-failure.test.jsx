@@ -12,6 +12,7 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+import { selectOption } from '../../helpers/selectOption.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AppearanceSection } from '../../../packages/core/src/shared/components/settings/AppearanceSection.jsx';
 import { AddAddressModal } from '../../../packages/core/src/shared/routes/AddAddressModal.jsx';
@@ -101,7 +102,7 @@ describe('chaos/ui/concurrent-storage-network-failure', () => {
             />,
         );
 
-        const generate = await screen.findByRole('button', { name: 'Generate' });
+        const generate = await screen.findByRole('button', { name: 'Add Address' });
         fireEvent.click(generate);
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -129,7 +130,9 @@ describe('chaos/ui/concurrent-storage-network-failure', () => {
 
         const theme = await screen.findByRole('combobox', { name: 'Theme' });
         expect(theme).toHaveValue('system');
-        fireEvent.change(theme, { target: { value: 'dark' } });
+        // Theme is the wallet's themed dropdown, picked by opening it and
+        // clicking the option, the way a person does.
+        selectOption(theme, 'dark');
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Could not save appearance settings. Try again.',

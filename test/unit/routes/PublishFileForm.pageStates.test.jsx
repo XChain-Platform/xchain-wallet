@@ -97,7 +97,8 @@ describe('PublishFileForm lays out every page state through a template', () => {
         const roots = wrapCallRoots();
         expect(roots.length).toBeGreaterThanOrEqual(6);
         const faults = roots
-            .filter(({ name }) => !['ListPage', 'FormPage'].includes(name))
+            // FormFrame (the Wallet Form Standard frame) renders a FormPage.
+            .filter(({ name }) => !['ListPage', 'FormPage', 'FormFrame'].includes(name))
             .map(({ line, name }) => `PublishFileForm.jsx:${line} wrap(${name})`);
         expect(faults).toEqual([]);
     });

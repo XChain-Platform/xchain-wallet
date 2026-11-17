@@ -47,9 +47,9 @@ describe('clipboard control feedback', () => {
     it('reports a plain failure when raw transaction copying is unavailable', async () => {
         render(<RawPsbtViewer developerMode psbtHex="deadbeef" />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Copy unsigned transaction code' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Copy Unsigned Transaction Code' }));
 
-        expect(await screen.findByText('Copy failed: clipboard unavailable')).toBeTruthy();
+        expect(await screen.findByText('Copy Failed: Clipboard Unavailable')).toBeTruthy();
         expect(writeText).toHaveBeenCalledWith('deadbeef');
     });
 
@@ -79,15 +79,15 @@ describe('clipboard control feedback', () => {
             .toMatch(/input/);
         expect(screen.getByRole('button', { name: 'Copy unsigned transaction code' }).className)
             .toMatch(/btn/);
-        expect(screen.getByRole('radiogroup', { name: 'Animated QR format' }))
+        // QR format is the themed dropdown with an icon per option (G119).
+        expect(screen.queryAllByRole('radio')).toHaveLength(0);
+        const format = screen.getByRole('button', { name: 'QR format: XCW (this wallet)' });
+        expect(format).toHaveAttribute('aria-haspopup', 'listbox');
+        expect(format.querySelector('svg')).not.toBeNull();
+        fireEvent.click(format);
+        fireEvent.click(screen.getByRole('option', { name: 'BBQr (Sparrow / Coldcard / SeedSigner)' }));
+        expect(screen.getByRole('button', { name: 'QR format: BBQr (Sparrow / Coldcard / SeedSigner)' }))
             .toBeInTheDocument();
-        const xcw = screen.getByRole('radio', { name: 'XCW (this wallet)' });
-        const bbqr = screen.getByRole('radio', {
-            name: 'BBQr (Sparrow / Coldcard / SeedSigner)',
-        });
-        expect(xcw).toBeChecked();
-        fireEvent.click(bbqr);
-        expect(bbqr).toBeChecked();
     });
 
     it('ignores a copy result after the transaction payload changes', async () => {

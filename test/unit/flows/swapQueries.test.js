@@ -79,3 +79,75 @@ describe('swapLifecycleFor (PC-21)', () => {
             .rejects.toThrow(/unknown kind/);
     });
 });
+
+// My Swaps' list read: the swap pages, one edits read and the chain clock,
+// never a read per swap, so the page's reads stay flat as its rows grow.
+describe('swapsForAddress reads a fixed set whatever the row count', () => {
+    const NOW = 2_000_000_000;
+
+    function sdkWith(rowCount, edits = []) {
+        const rows = Array.from({ length: rowCount }, (_, i) => ({
+            action_index: String(5000 + i),
+            source: 'owner',
+            swap_status: 'open',
+            expiration: NOW - 60,
+            allow_list: null,
+            block_list: null,
+            status: 'valid',
+        }));
+        return {
+            explorer: { coin: 'DOGE' },
+            getSwaps: vi.fn(async () => ({ data: rows, total: rows.length })),
+            getSwapEdits: vi.fn(async () => ({ data: edits, total: edits.length })),
+            getAction: vi.fn(async () => ({ state: { status: 'open' } })),
+            getStatus: vi.fn(async () => ({
+                last_block: { DOGE: 10 }, chain_tip: { DOGE: 10 }, last_block_time: { DOGE: NOW },
+            })),
+        };
+    }
+
+    const readCounts = (sdk) => ({
+        getSwaps: sdk.getSwaps.mock.calls.length,
+        getSwapEdits: sdk.getSwapEdits.mock.calls.length,
+        getAction: sdk.getAction.mock.calls.length,
+        getStatus: sdk.getStatus.mock.calls.length,
+    });
+
+    it('makes the same reads for 2 rows as for 40 rows, with no detail read per swap', async () => {
+        const small = sdkWith(2);
+        const large = sdkWith(40);
+        await swapsForAddress({ sdkRegistry: fakeRegistry(small), chainId: 'c', address: 'owner' });
+        await swapsForAddress({ sdkRegistry: fakeRegistry(large), chainId: 'c', address: 'owner' });
+
+        expect(readCounts(small)).toEqual({ getSwaps: 1, getSwapEdits: 1, getAction: 0, getStatus: 1 });
+        expect(readCounts(large)).toEqual(readCounts(small));
+    });
+
+    it('overlays the latest valid edit as the row state and classifies expiry on it', async () => {
+        const sdk = sdkWith(2, [
+            { action_index: '6001', swap_action_index: '5000', expiration: NOW + 600, status: 'valid' },
+            { action_index: '6003', swap_action_index: '5000', expiration: NOW + 3600, block_list: '77', status: 'valid' },
+            // An invalid edit changes nothing.
+            { action_index: '6004', swap_action_index: '5000', expiration: NOW + 9, status: 'invalid' },
+        ]);
+        const response = await swapsForAddress({ sdkRegistry: fakeRegistry(sdk), chainId: 'c', address: 'owner' });
+        const [edited, untouched] = response.data;
+
+        expect(edited.state).toMatchObject({
+            status: 'open', expiration: NOW + 3600, block_list: '77', expiry_status: 'open',
+        });
+        // The unedited swap keeps its creation expiration, already past the chain clock.
+        expect(untouched.state).toMatchObject({ status: 'expired', expiration: NOW - 60, expiry_status: 'expired' });
+    });
+
+    it('keeps the creation terms when the edits read fails, and skips it for an empty list', async () => {
+        const failing = sdkWith(1);
+        failing.getSwapEdits = vi.fn(async () => { throw new Error('edits down'); });
+        const response = await swapsForAddress({ sdkRegistry: fakeRegistry(failing), chainId: 'c', address: 'owner' });
+        expect(response.data[0].state).toMatchObject({ expiration: NOW - 60 });
+
+        const empty = sdkWith(0);
+        await swapsForAddress({ sdkRegistry: fakeRegistry(empty), chainId: 'c', address: 'owner' });
+        expect(empty.getSwapEdits).not.toHaveBeenCalled();
+    });
+});

@@ -80,7 +80,7 @@ afterEach(() => {
 });
 
 describe('Lock token', () => {
-    it('shows seven lock switches whose icon flips from unlock to lock', async () => {
+    it('shows seven lock switches whose item icon stays the same when the switch flips', async () => {
         mount('lock');
         const switches = await screen.findAllByRole('switch');
         expect(switches).toHaveLength(7);
@@ -91,14 +91,17 @@ describe('Lock token', () => {
         fireEvent.click(first);
         await waitFor(() => expect(first).toBeChecked());
         const after = row(first).querySelector('span[aria-hidden="true"]').innerHTML;
-        expect(after).not.toBe(before);
+        // The icon names the thing locked; the switch alone shows the state.
+        expect(after).toBe(before);
     });
 
     it('has no top permanence notice and a Lock token action that is not the danger style', async () => {
         mount('lock');
         await screen.findAllByRole('switch');
         expect(document.body.textContent).not.toMatch(/Locking is permanent\. Each flag below/);
-        const submit = screen.getByRole('button', { name: /Lock token/ });
+        expect(document.body.textContent).not.toMatch(/one-way switch/);
+        // The standard's action labels are Title Case.
+        const submit = screen.getByRole('button', { name: /Lock Token/ });
         expect(submit.className).not.toMatch(/danger/);
         expect(screen.getByRole('textbox', { name: /^Type LOCK to confirm/ })).toBeInTheDocument();
     });
@@ -108,7 +111,9 @@ describe('From help tips', () => {
     for (const mode of ['lock', 'mint-settings', 'callback-settings']) {
         it(`gives From its help tip on ${mode}`, async () => {
             mount(mode);
-            expect(await screen.findByRole('button', { name: 'About From' })).toBeInTheDocument();
+            // The standard From section is closed; its field is From address.
+            fireEvent.click(await screen.findByRole('button', { name: /^From / }));
+            expect(await screen.findByRole('button', { name: 'About From address' })).toBeInTheDocument();
         });
     }
 });
@@ -121,7 +126,8 @@ describe('Callback settings', () => {
 
     it('drops the static explainer lines', async () => {
         mount('callback-settings');
-        await screen.findByRole('button', { name: 'About From' });
+        // The From help tip sits in the closed From section (hidden).
+        await screen.findByRole('button', { name: 'About From address', hidden: true });
         expect(document.body.textContent).not.toContain('A callback lets you later recall');
         expect(document.body.textContent).not.toContain('Values you leave blank keep their current setting');
         expect(screen.getByRole('button', { name: 'About Payout per unit' })).toBeInTheDocument();

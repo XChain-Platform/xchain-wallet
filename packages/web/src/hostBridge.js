@@ -35,7 +35,7 @@
 // `chromeMessaging.sendMessage` wrapper). Keeps the route-level
 // messaging helpers nearly identical across shells.
 
-import { deriveMasterKeyAsync, makeFreshKdfParams } from '../../core/src/crypto/kdf.js';
+import { deriveMasterKeyAsync, kdfParamsEqual, makeFreshKdfParams } from '../../core/src/crypto/kdf.js';
 import { defaultRegistry } from '../../core/src/registry/index.js';
 import { SDKRegistry } from '../../core/src/sdk/SDKRegistry.js';
 import { isDevMockAddress, mockDeriveAddress } from '../../core/src/sdk/devMockAddresses.js';
@@ -44,6 +44,8 @@ import { SignerPool } from '../../core/src/signers/SignerPool.js';
 import { Vault } from '../../core/src/storage/Vault.js';
 import { VaultConflictError, VaultEvictedError, VaultIncompleteError } from '../../core/src/storage/backend.js';
 import { configureFiatRateSource } from '../../core/src/flows/priceLookup.js';
+import { legacySettingsMigrationCtx } from '../../core/src/flows/legacyRates.js';
+import { VAULT_SESSION_LOCK_NAME } from '../../core/src/flows/eraseSchedule.js';
 import { createFileRefResolver } from '../../core/src/flows/fileRefSource.js';
 import { PassphraseMismatchError } from '../../core/src/flows/unlockWallet.js';
 import { NotificationService } from '../../core/src/notifications/NotificationService.js';
@@ -53,6 +55,7 @@ import { GovernancePollWatcher } from '../../core/src/notifications/GovernancePo
 import { DeadlineWatcher } from '../../core/src/notifications/DeadlineWatcher.js';
 import { DispenserEscrowWatcher } from '../../core/src/notifications/DispenserEscrowWatcher.js';
 import { CoinpayAutopayWatcher } from '../../core/src/notifications/CoinpayAutopayWatcher.js';
+import { createLockedAutopay } from '../../core/src/market/autopaySession.js';
 import { getActiveAddresses } from '../../core/src/notifications/getActiveAddresses.js';
 import {
     SOUND_PREVIEW_EVENT,
@@ -87,7 +90,15 @@ import { resolveBackupPointerContent } from '../../extension/src/background/back
 // in-page lanes below raise the same named WalletExistsError the pre-host
 // shells raise, and check the storage blob as well as the meta slot. The
 // onboarding chain default is shared for the same reason (a second copy drifts).
-import { assertFreshVault, DEFAULT_ACTIVE_CHAIN_IDS } from '../../extension/src/background/walletCreate.js';
+import {
+    assertFreshVault,
+    DEFAULT_ACTIVE_CHAIN_IDS,
+    handleHardwareWalletBalances,
+    hardwareWalletInput,
+    hardwareWalletResult,
+    seedHardwareSettings,
+} from '../../extension/src/background/walletCreate.js';
+import { addHardwareWallet } from '../../core/src/flows/hardwareWallet.js';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import {
     fakeBalanceFor,
@@ -115,7 +126,13 @@ import { buildDevMockActionString } from './devMockActionString.js';
 // key is derived under.
 function webVaultKeyring() {
     // Resolved per read, so building a host never touches the meta store.
-    return createVaultKeyring({ metaBackend: { load: () => createMetaBackend().load() } });
+    // save is for the recovery-phrase reset record beside the kdfParams.
+    return createVaultKeyring({
+        metaBackend: {
+            load: () => createMetaBackend().load(),
+            save: (next) => createMetaBackend().save(next),
+        },
+    });
 }
 
 // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build
@@ -260,6 +277,95 @@ function devHeldBaseUnits(address, chainId, tick) {
     const { native, tokens } = fakeBalanceFor(address, chainId);
     const row = [native, ...tokens].find((t) => t && String(t.tick).toUpperCase() === want);
     return row ? Number(row.quantity ?? 0) : null;
+}
+
+function devMockValueIsSet(value) {
+    return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
+function devMockCreatePollParams(values = {}) {
+    const ctx = 'voting.createPollParams';
+    if (!devMockValueIsSet(values.tick)) throw new Error(`${ctx}: tick is required`);
+    if (!devMockValueIsSet(values.endBlock)) throw new Error(`${ctx}: endBlock is required (a future block)`);
+
+    const sourceOptions = typeof values.options === 'string'
+        ? values.options.split(',')
+        : values.options;
+    if (!Array.isArray(sourceOptions)) {
+        throw new Error(`${ctx}: options is required (array of at least two labels)`);
+    }
+    const options = sourceOptions.map((option) => String(option).trim()).filter(Boolean);
+    if (options.length < 2) throw new Error(`${ctx}: options must have at least two non-empty labels`);
+    if (options.some((option) => option.includes(','))) {
+        throw new Error(`${ctx}: option labels cannot contain a comma`);
+    }
+
+    const maxSelections = devMockValueIsSet(values.maxSelections) ? Number(values.maxSelections) : 1;
+    if (!Number.isInteger(maxSelections) || maxSelections < 1 || maxSelections > options.length) {
+        throw new Error(`${ctx}: maxSelections must be an integer between 1 and the option count (${options.length})`);
+    }
+    const tallyMode = devMockValueIsSet(values.tallyMode) ? String(values.tallyMode) : 'approval';
+    if (!['approval', 'split'].includes(tallyMode)) {
+        throw new Error(`${ctx}: tallyMode must be one of approval, split`);
+    }
+    const weightMode = devMockValueIsSet(values.weightMode) ? String(values.weightMode) : 'balance';
+    if (!['balance', 'flat', 'quadratic', 'time_weighted'].includes(weightMode)) {
+        throw new Error(`${ctx}: weightMode must be one of balance, flat, quadratic, time_weighted`);
+    }
+    if (weightMode === 'quadratic' && !(Number(values.minVoteBalance) > 0)) {
+        throw new Error(`${ctx}: quadratic weighting requires minVoteBalance > 0`);
+    }
+    for (const field of ['quorum', 'decideThreshold']) {
+        if (devMockValueIsSet(values[field])) {
+            const number = Number(values[field]);
+            if (!(number > 0 && number <= 1)) throw new Error(`${ctx}: ${field} must be a fraction 0 < x <= 1`);
+        }
+    }
+    if (devMockValueIsSet(values.minVoters)
+        && (!Number.isInteger(Number(values.minVoters)) || Number(values.minVoters) < 0)) {
+        throw new Error(`${ctx}: minVoters must be a non-negative integer`);
+    }
+
+    const params = {
+        version: 0,
+        tick: String(values.tick).trim(),
+        endBlock: String(values.endBlock),
+        options: options.join(','),
+        maxSelections: String(maxSelections),
+        tallyMode,
+        weightMode,
+    };
+    for (const field of [
+        'quorum', 'minVoters', 'minVoteBalance', 'decideThreshold', 'question', 'deposit',
+    ]) {
+        if (devMockValueIsSet(values[field])) params[field] = String(values[field]);
+    }
+    if (devMockValueIsSet(values.callbackContract)) {
+        if (!devMockValueIsSet(values.callbackMethod)) {
+            throw new Error(`${ctx}: callbackMethod is required when callbackContract is set (binding poll)`);
+        }
+        params.callbackContract = String(values.callbackContract);
+        params.callbackMethod = String(values.callbackMethod);
+        if (devMockValueIsSet(values.callbackParams)) {
+            params.callbackParams = Array.isArray(values.callbackParams)
+                ? JSON.stringify(values.callbackParams)
+                : String(values.callbackParams);
+        }
+        const callbackOn = devMockValueIsSet(values.callbackOn) ? String(values.callbackOn) : 'pass';
+        if (!['pass', 'always'].includes(callbackOn)) {
+            throw new Error(`${ctx}: callbackOn must be one of pass, always`);
+        }
+        params.callbackOn = callbackOn;
+        if (devMockValueIsSet(values.gasEscrow)) params.gasEscrow = String(values.gasEscrow);
+        if (devMockValueIsSet(values.callbackDelayBlocks)) {
+            const delay = Number(values.callbackDelayBlocks);
+            if (!Number.isInteger(delay) || delay < 0) {
+                throw new Error(`${ctx}: callbackDelayBlocks must be a non-negative integer`);
+            }
+            params.callbackDelayBlocks = String(delay);
+        }
+    }
+    return params;
 }
 
 const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
@@ -421,6 +527,9 @@ const createDevMockSdk = import.meta.env?.PROD ? null : (constructorOpts) => {
                 const tail = (publicKeys || []).map((key) => String(key).slice(2, 10)).join('');
                 return { address: mockDeriveAddress(chainId, 'p2tr', tail), tweaks: [] };
             },
+        },
+        voting: {
+            createPollParams: devMockCreatePollParams,
         },
         wallet: {
             /**
@@ -744,6 +853,9 @@ function sharedBroadcastQueueStore() {
  * @returns {Promise<void>}
  */
 export async function sealPageBroadcastQueue() {
+    // A wallet wipe ends locked auto pay before anything else: its vault is
+    // the one being erased.
+    try { await lockedAutopay.end('wallet-wipe'); } catch (_err) { /* the wipe goes on */ }
     const sealed = broadcastQueueStore;
     broadcastQueueStore = null;
     if (!sealed) return;
@@ -781,7 +893,52 @@ let dispenserEscrowWatcher = null;
 let priceOracleInstance = null;
 let cancelNotificationStart = null;
 
-const WEB_VAULT_LOCK_NAME = 'xchain-wallet:vault-session';
+// Last read `settings.notifications.desktop`, kept for the web notify adapter,
+// whose send point is synchronous. The notification service re-reads settings
+// before every delivery, so the value is fresh when the adapter runs.
+let desktopNotificationsSetting;
+const getDesktopNotificationsSetting = () => desktopNotificationsSetting;
+function rememberDesktopNotificationsSetting(settings) {
+    desktopNotificationsSetting = settings?.notifications?.desktop;
+    return settings;
+}
+
+// PC-16 Phase B: auto pay keeps paying armed orders after a lock, for as long
+// as this tab stays open. The session lives in this page's memory only and is
+// reachable through nothing but the status and Stop exports below. While it
+// runs it holds the page's vault lease (another tab cannot open the vault and
+// race its writes); every end except an unlock gives the lease back.
+const lockedAutopay = createLockedAutopay({
+    shellKind: 'web',
+    notify: createWebNotifyAdapter({ getDesktopSetting: getDesktopNotificationsSetting }),
+    logger: console,
+    onEnded: (reason) => {
+        if (reason !== 'unlock' && !vault) void releaseWebVaultLease();
+    },
+});
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    // Closing or navigating away ends it; nothing survives the page.
+    window.addEventListener('pagehide', () => { void lockedAutopay.end('page-closed'); });
+}
+
+/**
+ * Locked screen: how many orders auto pay is covering and up to how much.
+ * Plain data only.
+ *
+ * @returns {{ active: boolean, orders?: number, caps?: Array<{ chainId: string, ticker: string, amount: string }> }}
+ */
+export function getLockedAutopayStatus() {
+    return lockedAutopay.status();
+}
+
+/** Locked screen Stop: ends locked auto pay. Needs no password. */
+export async function stopLockedAutopay() {
+    await lockedAutopay.end('stopped');
+    return lockedAutopay.status();
+}
+
+// Core owns the name: the due-erase gate (flows/eraseSchedule.js) checks the same lease.
+const WEB_VAULT_LOCK_NAME = VAULT_SESSION_LOCK_NAME;
 
 function createWebVaultLeaseCoordinator({ getLockManager, getQueueStore, isNativeVault, isBrowserRuntime }) {
     /** @type {{ release: () => Promise<void> } | null} */
@@ -941,10 +1098,13 @@ function startNotificationsNow() {
     // One sound-aware adapter for every producer below (§6 M4.1): core
     // resolves the sound per delivery from settings.sounds, the adapter plays
     // it on the in-app path. The adapter is stateless, so sharing one is safe.
-    const notify = withNotificationSound(createWebNotifyAdapter(), async () => {
-        const flowsNs = await getFlows();
-        return flowsNs.getSettings(vault);
-    });
+    const notify = withNotificationSound(
+        createWebNotifyAdapter({ getDesktopSetting: getDesktopNotificationsSetting }),
+        async () => {
+            const flowsNs = await getFlows();
+            return rememberDesktopNotificationsSetting(await flowsNs.getSettings(vault));
+        },
+    );
     notificationService = new NotificationService({
         getActiveAddresses: async () => {
             const flowsNs = await getFlows();
@@ -1104,8 +1264,12 @@ function startNotificationsNow() {
             reservationLedger: host.reservationLedger,
             notify,
             shellKind: 'web',
+            // Shared with the locked session so a lock or unlock hands the
+            // payer lease over instead of waiting it out.
+            instanceId: lockedAutopay.instanceId,
             logger: console,
         });
+        coinpayAutopayWatcher.seedAttempted?.(lockedAutopay.takeHandoff());
         coinpayAutopayWatcher.start();
         coinpayAutopayWatcher.refresh().catch(() => { /* WS triggers are best-effort */ });
     }
@@ -1462,9 +1626,12 @@ export async function createWalletLocal(req) {
         strengthBits = 128,
         bip39Passphrase = '',
         activeChainIds = DEFAULT_ACTIVE_CHAIN_IDS,
+        walletMode,
     } = req;
 
     const meta = createMetaBackend();
+    // A new vault ends any locked auto pay session on the old one.
+    await lockedAutopay.end('wallet-switch');
     const lease = await acquireWebVaultLease();
     let masterKey = null;
     let sessionStarted = false;
@@ -1483,7 +1650,7 @@ export async function createWalletLocal(req) {
         // Writes stay in memory until the commit below: a reload, crash or closed
         // tab part-way through leaves nothing on the device instead of a blob
         // with no kdf params that no screen can open or replace.
-        const v = new Vault({ backend: storage, masterKey, autoSave: false });
+        const v = new Vault({ backend: storage, masterKey, autoSave: false, settingsMigrationCtx: legacySettingsMigrationCtx() });
         openedVault = v;
         await v.open();  // blank document
         const flowsNs = await getFlows();
@@ -1500,6 +1667,7 @@ export async function createWalletLocal(req) {
             // Same password, same params: the wallet seal reuses the vault
             // key instead of paying a second Argon2id round.
             masterKey,
+            walletMode,
         });
         vault = v;
         await sdkBound();
@@ -1532,6 +1700,7 @@ export async function createWalletLocal(req) {
         v.setAutoSave(true);
         await meta.save({ kdfParams });
         sessionStarted = true;
+        startWebPhraseRecoveryReconcile(v, meta, masterKey, password);
         return { mnemonic: result.mnemonic, walletName: result.wallet.name };
     } catch (err) {
         if (!sessionStarted) {
@@ -1573,6 +1742,7 @@ export async function importMnemonicLocal(req) {
         chainId,
         addressType,
         activeNetwork,
+        walletMode,
     } = req;
     if (importingWif && (typeof chainId !== 'string' || chainId.length === 0)) {
         throw new Error('wallet.import: chainId is required for a WIF private key');
@@ -1593,6 +1763,8 @@ export async function importMnemonicLocal(req) {
         );
     }
 
+    // A new vault ends any locked auto pay session on the old one.
+    await lockedAutopay.end('wallet-switch');
     const lease = await acquireWebVaultLease();
     let masterKey = null;
     let sessionStarted = false;
@@ -1611,7 +1783,7 @@ export async function importMnemonicLocal(req) {
         // Writes stay in memory until the commit below: a reload, crash or closed
         // tab part-way through leaves nothing on the device instead of a blob
         // with no kdf params that no screen can open or replace.
-        const v = new Vault({ backend: storage, masterKey, autoSave: false });
+        const v = new Vault({ backend: storage, masterKey, autoSave: false, settingsMigrationCtx: legacySettingsMigrationCtx() });
         openedVault = v;
         await v.open();
         await sdkBound();
@@ -1626,6 +1798,7 @@ export async function importMnemonicLocal(req) {
                 sdkRegistry,
                 name,
                 kdfParams,
+                walletMode,
             })
             : await flowsNs.importMnemonic({
                 password,
@@ -1647,6 +1820,7 @@ export async function importMnemonicLocal(req) {
                 // mainnet). Undefined keeps the flow's own inference from the
                 // first chain id.
                 activeNetwork,
+                walletMode,
             });
         vault = v;
         await sdkBound();
@@ -1679,6 +1853,7 @@ export async function importMnemonicLocal(req) {
         v.setAutoSave(true);
         await meta.save({ kdfParams });
         sessionStarted = true;
+        startWebPhraseRecoveryReconcile(v, meta, masterKey, password);
         // §19.5.2 restore half: bring back the labels + contacts this seed
         // published earlier. Runs after sdkBound() so the explorer endpoints
         // are resolved, and after the wallet is fully persisted so a dead
@@ -1794,6 +1969,8 @@ export async function importBackupLocal(req) {
     }
 
     const meta = createMetaBackend();
+    // A new vault ends any locked auto pay session on the old one.
+    await lockedAutopay.end('wallet-switch');
     const lease = await acquireWebVaultLease();
     let masterKey = null;
     // This call's own copy of the key the restored wallet is now sealed under.
@@ -1816,7 +1993,7 @@ export async function importBackupLocal(req) {
         // Writes stay in memory until the commit below: a reload, crash or closed
         // tab part-way through leaves nothing on the device instead of a blob
         // with no kdf params that no screen can open or replace.
-        const v = new Vault({ backend: storage, masterKey, autoSave: false });
+        const v = new Vault({ backend: storage, masterKey, autoSave: false, settingsMigrationCtx: legacySettingsMigrationCtx() });
         openedVault = v;
         await v.open();
         const common = {
@@ -1880,6 +2057,10 @@ export async function importBackupLocal(req) {
         v.setAutoSave(true);
         await meta.save({ kdfParams });
         sessionStarted = true;
+        // The restored wallet was re-sealed under its own fresh params; its key
+        // is already in hand, so the record needs no second derivation.
+        startWebPhraseRecoveryReconcile(v, meta, masterKey, password,
+            deviceKey && result.walletId ? new Map([[result.walletId, deviceKey]]) : undefined);
         return {
             walletId: result.walletId,
             walletName: result.payload?.wallet?.name,
@@ -1898,6 +2079,97 @@ export async function importBackupLocal(req) {
         if (deviceKey) deviceKey.fill(0);
         if (lease && !sessionStarted) await releaseWebVaultLease(lease);
     }
+}
+
+/**
+ * Fresh install whose first wallet is a hardware wallet. Web twin of the
+ * extension/desktop pre-host `wallet.create.hardware`: the same persistence
+ * path as `createWalletLocal`, with `addHardwareWallet` in place of the seed
+ * flow. Nothing is pooled (the keys stay on the device); the pool is still
+ * built so a software wallet added later in the current session can join it.
+ *
+ * @param {{ password: string, name?: string, device: object, accounts: object[] }} req
+ * @returns {Promise<{ walletId: string, walletName: string, signer: object | null, accounts: object[], addresses: object[] }>}
+ */
+export async function createHardwareWalletLocal(req) {
+    const password = req?.password;
+    if (typeof password !== 'string' || password.length === 0) {
+        throw new Error('wallet.create.hardware: password is required');
+    }
+    const input = hardwareWalletInput(req);
+    const meta = createMetaBackend();
+    // A new vault ends any locked auto pay session on the old one.
+    await lockedAutopay.end('wallet-switch');
+    const lease = await acquireWebVaultLease();
+    let masterKey = null;
+    let sessionStarted = false;
+    // What THIS call put into module state, so a failure tears down only that.
+    let openedVault = null;
+    let ownPool = null;
+    let ownHost = null;
+    // The blob backend this call may have written to; set once the vault is known empty.
+    let ownStorage = null;
+    try {
+        await assertFreshVault({ metaBackend: meta, storageBackend: createStorageBackend() });
+        const kdfParams = makeFreshKdfParams();
+        masterKey = await deriveMasterKeyAsync(password, kdfParams);
+        const storage = createStorageBackend();
+        ownStorage = storage;
+        // Writes stay in memory until the commit below, as createWalletLocal.
+        const v = new Vault({ backend: storage, masterKey, autoSave: false, settingsMigrationCtx: legacySettingsMigrationCtx() });
+        openedVault = v;
+        await v.open();
+        await seedHardwareSettings(v, chainRegistry, input.accounts);
+        const result = await addHardwareWallet({ ...input, vault: v, chainRegistry });
+        vault = v;
+        await sdkBound();
+        signerPool = new SignerPool();
+        ownPool = signerPool;
+        host = createBackgroundHost({
+            vault,
+            chainRegistry,
+            sdkRegistry,
+            signerPool,
+            getDiagnosticContext: webDiagnosticContext,
+            broadcastQueueStore: sharedBroadcastQueueStore(),
+            vaultKeyring: webVaultKeyring(),
+        });
+        ownHost = host;
+        startNotifications();
+        // Commit: one blob write, then the kdf params that make it openable.
+        await v.save();
+        v.setAutoSave(true);
+        await meta.save({ kdfParams });
+        sessionStarted = true;
+        startWebPhraseRecoveryReconcile(v, meta, masterKey, password);
+        return hardwareWalletResult(result);
+    } catch (err) {
+        if (!sessionStarted) {
+            tearDownFailedOnboarding({ openedVault, ownPool, ownHost });
+            await discardPartialVault(ownStorage, meta, err);
+        }
+        throw err;
+    } finally {
+        if (masterKey) masterKey.fill(0);
+        if (lease && !sessionStarted) await releaseWebVaultLease(lease);
+    }
+}
+
+/**
+ * `wallet.hardware.balances` for the web shell, with or without an open
+ * vault: the connect flow's accounts step runs before the vault exists on a
+ * fresh install. Same reader as the extension/desktop pre-host lane; an open
+ * vault's settings keep the price-data switch.
+ *
+ * @param {{ items: Array<{ chainId: string, address: string }> }} req
+ */
+export async function hardwareBalancesLocal(req) {
+    await sdkBound();
+    return handleHardwareWalletBalances(req, {
+        chainRegistry,
+        sdkRegistry,
+        readSettings: () => (vault ? vault.settings.get() : null),
+    });
 }
 
 /** Lazy-load the flows namespace so tests that don't touch onboarding
@@ -1944,6 +2216,11 @@ export async function unlockWalletLocal(req) {
     // on the native shells by `installNativeGuardPersistence`). That gate is
     // UI-level: a caller reaching this function directly is not counted, and
     // every attempt costs a full KDF.
+    //
+    // PC-16 Phase B: an unlock ends locked auto pay first, so its vault is
+    // closed before this one opens. The session held the page's lease, which
+    // this unlock now inherits (acquire answers null for an owned lease).
+    const autopayEnded = await lockedAutopay.end('unlock');
     const lease = await acquireWebVaultLease();
     let masterKey = null;
     let sessionStarted = false;
@@ -1954,7 +2231,7 @@ export async function unlockWalletLocal(req) {
     try {
         masterKey = await deriveMasterKeyAsync(password, meta.kdfParams);
         const storage = createStorageBackend();
-        const v = new Vault({ backend: storage, masterKey });
+        const v = new Vault({ backend: storage, masterKey, settingsMigrationCtx: legacySettingsMigrationCtx() });
         try {
             await v.open();
         } catch (err) {
@@ -2027,6 +2304,8 @@ export async function unlockWalletLocal(req) {
         ownHost = host;
         startNotifications();
         sessionStarted = true;
+        // Backfill or refresh the recovery-phrase reset record off the reply path.
+        startWebPhraseRecoveryReconcile(v, createMetaBackend(), masterKey, password);
         return pooled
             ? { unlocked: true, passphraseCaptureNeeded }
             : { unlocked: true, passphraseCaptureNeeded, poolUnavailable: true };
@@ -2051,27 +2330,161 @@ export async function unlockWalletLocal(req) {
     } finally {
         if (masterKey) masterKey.fill(0);
         if (lease && !sessionStarted) await releaseWebVaultLease(lease);
+        // A failed unlock after locked auto pay ended leaves nothing open.
+        else if (autopayEnded && !sessionStarted && !vault) await releaseWebVaultLease();
     }
+}
+
+/**
+ * Write the recovery-phrase reset record for the vault this call committed or
+ * opened, off the reply path (operator ruling 2026-11-16). The page keeps that
+ * vault open, so the reconcile reads it directly; it writes only the meta slot.
+ * The key is copied before this returns; a lock that closes the vault meanwhile,
+ * or any other failure, leaves the backfill to the next unlock.
+ *
+ * @param {import('@xchain-wallet/core').storage.Vault} liveVault
+ * @param {{ load: () => Promise<any>, save: (m: any) => Promise<void> }} metaBackend
+ * @param {Uint8Array} masterKey
+ * @param {string} password
+ * @param {Map<string, Uint8Array>} [knownWalletKeys]   wallet seal keys already derived; copied here
+ */
+function startWebPhraseRecoveryReconcile(liveVault, metaBackend, masterKey, password, knownWalletKeys) {
+    if (!(masterKey instanceof Uint8Array) || !liveVault) return;
+    const key = new Uint8Array(masterKey);
+    const known = new Map([...(knownWalletKeys ?? new Map())].map(([id, k]) => [id, new Uint8Array(k)]));
+    // Yield a macrotask first so the reply that started this paints before
+    // the backfill's phrase derivation takes the page thread.
+    lastPhraseRecoveryJob = new Promise((resolve) => { setTimeout(resolve, 0); })
+        .then(() => getFlows())
+        .then((flowsNs) => flowsNs.reconcilePhraseRecoveryInMeta({
+            metaBackend,
+            vault: liveVault,
+            vaultKey: key,
+            password,
+            knownWalletKeys: known,
+        }))
+        .catch((err) => console.warn('[xchain] phrase recovery not written:', /** @type {any} */ (err)?.name || err))
+        .finally(() => {
+            key.fill(0);
+            for (const k of known.values()) k.fill(0);
+        });
+}
+
+/** The most recent off-path recovery-record job; settles, never rejects. */
+let lastPhraseRecoveryJob = Promise.resolve();
+
+/** Test seam: wait for the off-path recovery-record write to land. */
+export function __phraseRecoveryJobForTests() {
+    return lastPhraseRecoveryJob;
+}
+
+/**
+ * Forgot Password: which ways back this device offers, with the vault closed.
+ * @returns {Promise<{ hasWallet: boolean, phraseReset: boolean }>}
+ */
+export async function recoveryStatusLocal() {
+    const meta = await createMetaBackend().load();
+    const flowsNs = await getFlows();
+    return { hasWallet: Boolean(meta?.kdfParams), phraseReset: flowsNs.phraseResetAvailable(meta) };
+}
+
+/**
+ * Reset the unlock password with one wallet's recovery phrase, erasing
+ * nothing, then unlock with the new password through `unlockWalletLocal`.
+ * The reset holds the page's vault lease, like every write to a closed vault.
+ *
+ * @param {{ phrase: string, newPassword: string }} req
+ */
+export async function resetPasswordWithPhraseLocal(req) {
+    const flowsNs = await getFlows();
+    const phrase = req?.phrase;
+    const newPassword = req?.newPassword;
+    if (typeof phrase !== 'string' || phrase.trim().length === 0) {
+        throw new flowsNs.RecoveryPhraseMismatchError();
+    }
+    if (vault) throw new Error('wallet.recovery.resetWithPhrase: the wallet is already unlocked');
+    const metaBackend = createMetaBackend();
+    const meta = /** @type {any} */ (await metaBackend.load());
+    if (!meta || !meta.kdfParams) throw new NoVaultError();
+    // A reset opens the vault, so locked auto pay ends first, as an unlock does.
+    await lockedAutopay.end('unlock');
+    const lease = await acquireWebVaultLease();
+    let result;
+    try {
+        result = await flowsNs.resetPasswordWithRecoveryPhrase({
+            storageBackend: createStorageBackend(),
+            meta,
+            phrase,
+            newPassword,
+            settingsMigrationCtx: legacySettingsMigrationCtx(),
+        });
+        try {
+            const latest = /** @type {any} */ (await metaBackend.load());
+            if (latest && kdfParamsEqual(latest.kdfParams, meta.kdfParams)) {
+                await metaBackend.save(flowsNs.withPhraseRecovery(latest, result.meta.phraseRecovery ?? null));
+            }
+        } catch (err) {
+            // The blob is sealed under the new password; the unlock below rebuilds the record.
+            console.warn('[xchain] phrase reset: recovery record not refreshed:', /** @type {any} */ (err)?.name || err);
+        }
+    } finally {
+        if (lease) await releaseWebVaultLease(lease);
+    }
+    const reply = await unlockWalletLocal({ password: newPassword });
+    return { ...reply, passwordReset: true, skippedWalletIds: result.skippedWalletIds };
+}
+
+/**
+ * Prove a backup file would restore, touching no vault. Forgot Password erases
+ * only after this resolves.
+ *
+ * @param {{ fileContent: string, password: string, walletPassword?: string }} req
+ */
+export async function verifyBackupForRestoreLocal(req) {
+    const flowsNs = await getFlows();
+    const meta = await createMetaBackend().load();
+    return flowsNs.verifyBackupFileForRestore({
+        fileContent: req?.fileContent,
+        password: req?.password,
+        walletPassword: req?.walletPassword,
+        currentWalletIds: flowsNs.vaultWalletIds(meta),
+    });
 }
 
 /**
  * Close the vault + drop the host. Matches the extension's
  * `wallet.lock` behaviour.
  *
+ * PC-16 Phase B: when an armed auto pay order has GIVE left, the locked
+ * session takes the vault (and keeps the page's lease) just before the pool
+ * is zeroed, and keeps paying while this tab is open. The host still goes:
+ * every manual route answers "wallet is locked".
+ *
  * @returns {Promise<{ locked: true }>}
  */
 export async function lockWalletLocal() {
+    let keptForAutopay = false;
+    if (vault && signerPool) {
+        keptForAutopay = await lockedAutopay.lock({
+            vault,
+            signerPool,
+            chainRegistry,
+            sdkRegistry,
+            reservationLedger: host?.reservationLedger,
+            watcher: coinpayAutopayWatcher,
+        });
+    }
     stopNotifications();
     if (signerPool) {
         try { signerPool.lockAll(); } catch (_err) { /* best-effort */ }
     }
     signerPool = null;
-    if (vault) {
+    if (vault && !lockedAutopay.holdsVault(vault)) {
         try { vault.close(); } catch (_err) { /* best-effort */ }
     }
     vault = null;
     host = null;
-    await releaseWebVaultLease();
+    if (!keptForAutopay && !lockedAutopay.isActive()) await releaseWebVaultLease();
     return { locked: true };
 }
 

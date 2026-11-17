@@ -37,6 +37,7 @@
 // has already put an address in it before the first step runs.
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import { switchToRegtest } from '../../fixtures/regtest.js';
 
 const PASSWORD = 'regtestpassword123';
@@ -87,7 +88,7 @@ async function generateAddress(page, purpose) {
             'the Add addresses screen offers no Purpose selector, so this build cannot create a '
             + 'dispenser sub-address (messaging.generateDispenserAddress is missing)')
             .toBeVisible({ timeout: 30_000 });
-        await select.selectOption('dispenser');
+        await pickOption(select, 'dispenser');
     }
 
     await page.getByTestId('add-address-generate').click();
@@ -106,6 +107,8 @@ async function generateAddress(page, purpose) {
 async function readPath(page, rowName) {
     await page.getByRole('button', { name: rowName, exact: true }).click();
 
+    // The path row sits on the Details tab, behind the default Actions tab.
+    await page.getByRole('tab', { name: 'Details' }).click();
     const field = page.getByTestId('address-detail-derivation-path');
     await expect(field, 'the address detail view showed no derivation path').toBeVisible({ timeout: 30_000 });
     const value = (await field.innerText()).trim();
@@ -138,7 +141,7 @@ test.describe('dispenser sub-address allocation on regtest', () => {
 
             // PROVE THE ROLE TOOK, before trusting anything downstream of it.
             // Every other assertion here is equally true of a receive address, so
-            // if `selectOption` silently no-opped this spec would pass while
+            // if `pickOption` silently no-opped this spec would pass while
             // testing nothing at all. The default dispenser label is the only
             // role signal the list surfaces, dispenser-ness being metadata rather
             // than a path segment.

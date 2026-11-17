@@ -58,14 +58,17 @@ test.describe('demo wallet', () => {
         expect(focused?.y ?? -1).toBeGreaterThanOrEqual(0);
     });
 
-    test('demo Send opens at once with the inline demo note', async ({ page }) => {
+    test('demo Send opens at once with no demo notice and refuses the press', async ({ page }) => {
         await gotoSection(page, 'Send');
         const main = page.getByRole('main');
         await expect(main.getByRole('form', { name: 'Send', exact: true })).toBeVisible({ timeout: 5_000 });
-        const note = main.getByRole('status').filter({ hasText: /Demo wallets can't move funds/ });
-        await expect(note).toHaveCount(1);
-        await expect(note.getByRole('button', { name: 'Create a real wallet' })).toBeVisible();
-        await expect(main.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+        await expect(main.getByText(/Demo wallets can't move funds/)).toHaveCount(0);
+        const send = main.getByRole('button', { name: 'Send', exact: true });
+        await expect(send).toBeEnabled();
+        await send.click();
+        const refusal = main.getByTestId('demo-guard-refusal');
+        await expect(refusal).toContainText(/Demo wallets can't move funds/);
+        await expect(refusal.getByRole('button', { name: /Create a real wallet/i })).toBeVisible();
     });
 
     test('a demo wallet never shows the out-of-date notice', async ({ page }) => {
@@ -75,24 +78,11 @@ test.describe('demo wallet', () => {
         await expect(page.getByText(/Some information may be out of date/)).toHaveCount(0);
     });
 
-    test('Home quick-action tiles are outlined at desktop width', async ({ page }) => {
+    test('Home has no quick action tiles at desktop width', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 800 });
         await gotoSection(page, 'Home');
-        const tiles = page.getByRole('group', { name: 'Quick actions' }).getByRole('button');
-        await expect(tiles.first()).toBeVisible();
-        const looks = await tiles.evaluateAll((buttons) => buttons.map((button) => {
-            const style = getComputedStyle(button);
-            const accent = getComputedStyle(document.documentElement).getPropertyValue('--xc-accent-primary').trim();
-            const probe = document.createElement('span');
-            probe.style.color = accent;
-            document.body.append(probe);
-            const accentRgb = getComputedStyle(probe).color;
-            probe.remove();
-            return { label: button.innerText.trim(), background: style.backgroundColor, accentRgb };
-        }));
-        for (const look of looks) {
-            expect(look.background, `${look.label} tile must not be filled with the accent`).not.toBe(look.accentRgb);
-        }
+        await expect(page.getByRole('main')).toBeVisible();
+        await expect(page.getByRole('group', { name: 'Quick actions' })).toHaveCount(0);
     });
 });
 

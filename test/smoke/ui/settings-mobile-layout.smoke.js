@@ -31,7 +31,8 @@ assert.equal(
     1,
     'the shared Settings template owns the responsive layout scope',
 );
-assert.match(route, /<SettingsPageTemplate\s+view="subpage"\s+sectionId=\{section\.id\}>/,
+// The frame props (flat lists, G126 form pages) may follow the section id.
+assert.match(route, /<SettingsPageTemplate\s+view="subpage"\s+sectionId=\{section\.id\}(?:\s+flat=\{[^}]*\})?(?:\s+formFrame=\{[^}]*\})?\s*>/,
     'drilldown Settings pages use the shared template');
 assert.match(route, /<SettingsPageTemplate\s+view="list"/,
     'the Settings list uses the shared template');

@@ -53,18 +53,18 @@ function mountDetail(acct) {
 }
 
 describe('Agent accounts list', () => {
-    it('empty: one green New agent account with an icon, no second blue button', async () => {
+    it('empty: one New agent account plus on the title line with an icon, no second button', async () => {
         const { onProvision } = mountList([]);
         expect(await screen.findByRole('heading', { name: 'No agent accounts yet' })).toBeInTheDocument();
         const buttons = screen.getAllByRole('button', { name: 'New agent account' });
         expect(buttons).toHaveLength(1);
-        expect(buttons[0]).toHaveClass(buttonStyles.success);
+        expect(buttons[0]).toHaveClass(buttonStyles.ghost);
         expect(buttons[0].querySelector('svg')).not.toBeNull();
         fireEvent.click(buttons[0]);
         expect(onProvision).toHaveBeenCalledTimes(1);
     });
 
-    it('filled: rows in one list card with leading icons, no how-it-works box', async () => {
+    it('filled: rows in one list card with leading initials tiles, no how-it-works box', async () => {
         mountList([account(), account({ id: 'acct-2', name: 'Payroll agent', enabled: false })]);
         const list = await screen.findByRole('list', { name: 'Agent accounts' });
         expect(list).toHaveClass(listStyles.list);
@@ -72,35 +72,38 @@ describe('Agent accounts list', () => {
         expect(items).toHaveLength(2);
         for (const li of items) {
             expect(li.getAttribute('style')).toBeNull();
-            expect(li.querySelector(`.${listStyles.rowIcon} svg`)).not.toBeNull();
+            // The leading mark is the agent's tile (initials by default), as on wallets and accounts.
+            expect(li.querySelector('[data-agent-tile]')).not.toBeNull();
         }
         expect(screen.queryByText('How agent accounts work')).toBeNull();
-        expect(screen.getByRole('button', { name: 'New agent account' })).toHaveClass(buttonStyles.success);
+        expect(screen.getByRole('button', { name: 'New agent account' })).toHaveClass(buttonStyles.ghost);
     });
 });
 
 describe('Agent account detail', () => {
-    it('a disabled account offers a green Enable with an icon; Edit policy carries an icon', async () => {
+    // The account page's actions are one action list (G101), each row with an icon.
+    it('a turned-off account offers a Turn on row; Edit rules carries an icon', async () => {
         mountDetail(account({ enabled: false }));
-        const enable = await screen.findByRole('button', { name: 'Enable' });
-        expect(enable).toHaveClass(buttonStyles.success);
-        expect(enable.querySelector('svg')).not.toBeNull();
-        const edit = screen.getByRole('button', { name: 'Edit policy' });
+        const turnOn = await screen.findByRole('button', { name: /^Turn on/ });
+        expect(turnOn.querySelector('svg')).not.toBeNull();
+        const edit = screen.getByRole('button', { name: /^Edit rules/ });
         expect(edit).not.toHaveClass(buttonStyles.success);
         expect(edit.querySelector('svg')).not.toBeNull();
     });
 
-    it('an enabled account offers Disable with an icon and no green button', async () => {
+    it('an active account offers a Turn off row with an icon and no green button', async () => {
         mountDetail(account());
-        const disable = await screen.findByRole('button', { name: 'Disable' });
-        expect(disable).not.toHaveClass(buttonStyles.success);
-        expect(disable.querySelector('svg')).not.toBeNull();
+        const turnOff = await screen.findByRole('button', { name: /^Turn off/ });
+        expect(turnOff).not.toHaveClass(buttonStyles.success);
+        expect(turnOff.querySelector('svg')).not.toBeNull();
+        // Turning off is undone by Turn on, so the row keeps the default tone, not red.
+        expect(turnOff).toHaveAttribute('data-tone', 'default');
     });
 
-    it('the edit view names its action Update policy, tips Account name, and has no What changes box', async () => {
+    it('the edit view names its action Update Policy, tips Account name, and has no What changes box', async () => {
         mountDetail(account());
-        fireEvent.click(await screen.findByRole('button', { name: 'Edit policy' }));
-        const update = screen.getByRole('button', { name: 'Update policy' });
+        fireEvent.click(await screen.findByRole('button', { name: /^Edit rules/ }));
+        const update = screen.getByRole('button', { name: 'Update Policy' });
         expect(update).toHaveClass(buttonStyles.success);
         expect(update.querySelector('svg')).not.toBeNull();
         expect(screen.getByRole('button', { name: 'About Account name' })).toBeInTheDocument();

@@ -82,31 +82,33 @@ function answerRecoveryQuiz() {
 }
 
 async function openAddWallet() {
-    // Wallet switching lives on the Settings page.
+    // Wallet switching lives under Settings > Wallets > My Wallets. Each row's
+    // name also carries its changing summary, so rows match on the title.
     fireEvent.click((await screen.findAllByRole('button', { name: 'Settings' }))[0]);
     // Settings is a lazy route, so its first import in jsdom can outlast the default wait.
-    fireEvent.click(await screen.findByRole('button', { name: /^This wallet/ }, { timeout: 20_000 }));
-    fireEvent.click(await screen.findByRole('button', { name: /Switch \/ rename/ }));
-    await screen.findByRole('heading', { name: 'Wallets' });
-    fireEvent.click(screen.getByRole('button', { name: 'Add wallet' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Wallets\b/ }, { timeout: 20_000 }));
+    fireEvent.click(await screen.findByRole('button', { name: /^My Wallets\b/ }));
+    await screen.findByRole('heading', { name: 'My Wallets' });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Wallet' }));
 }
 
 async function createWallet() {
-    fireEvent.click(await screen.findByRole('button', { name: 'Create new wallet' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create New Wallet' }));
     // Create wallet is a lazy route, and Onboarding no longer warms the core
     // barrel at startup, so its first import in jsdom can outlast the default wait.
     fireEvent.change(await screen.findByLabelText('Wallet name', {}, { timeout: 20_000 }), { target: { value: 'Second Wallet' } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
     fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: PASSWORD } });
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reveal Recovery Phrase' }));
     fireEvent.click(await screen.findByRole('checkbox', { name: /saved my recovery phrase/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
     answerRecoveryQuiz();
-    fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 }
 
 async function importWallet() {
-    fireEvent.click(await screen.findByRole('button', { name: 'Import wallet' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Import Wallet' }));
     fireEvent.change(await screen.findByLabelText('Recovery phrase'), { target: { value: PHRASE } });
     fireEvent.change(screen.getByLabelText('Wallet name'), { target: { value: 'Second Wallet' } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: PASSWORD } });
@@ -147,6 +149,9 @@ describe('regression/add-wallet-becomes-active', () => {
         expect(await screen.findByRole('button', { name: 'Home', current: 'page' }))
             .toBeInTheDocument();
         await waitFor(() => expect(readActiveWallet()).toBe(host.second.id));
-        expect(await screen.findByTitle('Second Wallet')).toBeInTheDocument();
+        // The app bar no longer names the wallet; Home's balance card is
+        // captioned with the active wallet's name.
+        expect(await screen.findByRole('region', { name: 'Second Wallet' })).toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'First Wallet' })).toBeNull();
     });
 });

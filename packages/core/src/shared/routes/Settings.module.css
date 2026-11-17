@@ -9,14 +9,6 @@
     --xc-form-gap: var(--xc-settings-row-gap);
 }
 
-.searchField {
-    width: 100%;
-}
-
-.searchField > * {
-    margin-bottom: 0;
-}
-
 .searchHighlightScope {
     display: contents;
 }
@@ -48,6 +40,40 @@
 
 .settingsSurface > * + * {
     border-top: 1px solid var(--xc-border);
+}
+
+/* A form page (G126, operator 2026-11-15): at phone and popup widths there is
+   no card around the whole form; from 600px, the Form Standard breakpoint
+   (FormPage.module.css, U03), the surface stays one card. Below it the surface
+   drops exactly what the template's flat style drops, so a narrow form page
+   reads like a flat page. */
+@media not all and (min-width: 600px) {
+    .settingsSurface.formFrame {
+        padding: 0;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    /* The Screen body already supplies the 8px header-to-content gap. A form
+       frame's child must not add the Settings card row inset after the card
+       itself has disappeared. */
+    .settingsSurface.settingsSurface.settingsSurface.formFrame > * {
+        padding-block-start: 0;
+    }
+}
+
+/* G126 revision (operator 2026-11-15): from 600px the form sits in one card
+   at the standard form column width (--xc-form-card-max-width, FormPage's
+   wide card), centred, never the full page width. */
+@media (min-width: 600px) {
+    .settingsSurface.formFrame {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: var(--xc-form-card-max-width);
+        margin-inline: auto;
+    }
 }
 
 /* Secondary actions remain compact even when their copy wraps on a phone. */
@@ -138,9 +164,9 @@
         max-width: 100%;
     }
 
-    /* Keep field labels and their help tips together while other flex rows
-       remain free to wrap without relational-selector support. */
-    .page div:not([class*='labelRow']) {
+    /* Keep field labels with their help tips and leave open dropdowns at their
+       trigger width while other flex rows wrap without relational selectors. */
+    .page div:not([class*='labelRow']):not([class*='popover']) {
         flex-wrap: wrap !important;
         min-width: 0;
         max-width: 100%;

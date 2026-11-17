@@ -26,7 +26,8 @@ const sendSrc = readFileSync(
 
 // --- imports -----------------------------------------------------------
 
-assert.match(sendSrc, /FeeSelector,/, 'FeeSelector imported from ui');
+assert.match(sendSrc, /FeeSection,/, 'FeeSection imported from the form standard');
+assert.doesNotMatch(sendSrc, /<FeeSelector\b/, 'the selector renders only inside the fee section');
 assert.match(
     sendSrc,
     /import \{[\s\S]*estimateNativeSendFee[\s\S]*estimateNativeSendFeeTiers[\s\S]*customFeeEstimate[\s\S]*\}/,
@@ -73,9 +74,9 @@ assert.match(
 
 // --- selector renders in the form -------------------------------------
 
-const formIdx = sendSrc.indexOf('<FeeSelector');
-assert.notEqual(formIdx, -1, 'FeeSelector renders in the form');
-const formBlock = sendSrc.slice(formIdx, formIdx + 400);
+const formIdx = sendSrc.indexOf('<FeeSection');
+assert.notEqual(formIdx, -1, 'the Network fee section renders in the form');
+const formBlock = sendSrc.slice(formIdx, formIdx + 600);
 assert.match(formBlock, /tiers=\{feeTiers\}/);
 assert.match(formBlock, /value=\{feePick\}/);
 assert.match(formBlock, /onChange=\{setFeePick\}/);

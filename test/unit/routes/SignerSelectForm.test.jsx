@@ -11,9 +11,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { SignerSelectForm } from '../../../packages/core/src/shared/routes/SignerSelectForm.jsx';
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); resetWalletModes(); });
 
 const HARDWARE_SIGNER = {
     id: 'signer-ledger',
@@ -31,7 +32,9 @@ function mount({
     walletMode = 'full',
 } = {}) {
     const listSigners = vi.fn().mockResolvedValue(list);
-    const getSettings = vi.fn().mockResolvedValue({ walletMode });
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
+    const getSettings = vi.fn().mockResolvedValue({});
     const view = render(
         <MessagingProvider shell="web" messaging={{ listSigners, getSettings }}>
             <SignerSelectForm walletId="wallet-1" value={value} onChange={onChange} />
@@ -59,7 +62,7 @@ describe('SignerSelectForm optional callback safety', () => {
         mount({ list: [HARDWARE_SIGNER], value: 'missing-signer', onChange });
 
         await waitFor(() => expect(onChange).toHaveBeenCalledWith(null));
-        expect(screen.getByRole('radio', { name: /Software wallet/i })).not.toBeChecked();
+        expect(screen.getByRole('button', { name: /^Sign with: / })).not.toHaveAccessibleName(/Software wallet/i);
     });
 });
 
@@ -68,22 +71,41 @@ describe('SignerSelectForm option guidance', () => {
         const onChange = vi.fn();
         mount({ list: [HARDWARE_SIGNER], onChange });
 
-        expect(await screen.findByText('Software wallet (this seed)')).toBeTruthy();
-        expect(screen.getByText(/Uses this wallet's recovery phrase/i)).toBeTruthy();
-        expect(screen.getByText('Travel Ledger')).toBeTruthy();
-        expect(screen.getByText(/Hardware device: connect Ledger Nano X and approve there/i))
-            .toHaveTextContent('firmware 2.2.4');
-        expect(screen.getByText(/doesn't share your recovery phrase or private keys/i)).toBeTruthy();
+        // The themed icon dropdown (G44): no radio list, and the trigger shows
+        // the chosen signer with its line under the name.
+        const trigger = await screen.findByRole('button', { name: 'Sign with: Software wallet (this seed)' });
+        expect(screen.queryByRole('radio')).toBeNull();
+        expect(trigger).toHaveTextContent(/Uses this wallet's recovery phrase/i);
 
-        fireEvent.click(screen.getByRole('radio', { name: /Travel Ledger/i }));
+        fireEvent.focus(screen.getByRole('button', { name: 'About Sign with' }));
+        expect(screen.getByRole('tooltip')).toHaveTextContent(/doesn't share your recovery phrase or private keys/i);
+        fireEvent.keyDown(document, { key: 'Escape' });
+
+        fireEvent.click(trigger);
+        const ledger = screen.getByRole('option', { name: /Travel Ledger/i });
+        expect(ledger).toHaveTextContent(/Hardware wallet: connect Ledger Nano X and approve there/i);
+        expect(ledger).toHaveTextContent('firmware 2.2.4');
+        fireEvent.click(ledger);
         expect(onChange).toHaveBeenCalledWith('signer-ledger');
     });
 
-    it('states that choosing a signer does not leave watch-only mode', async () => {
+    it('names an unlabelled signer by product name, never raw vendor and model codes', async () => {
+        mount({ list: [{ id: 'signer-trezor', kind: 'trezor', vendor: 'trezor', model: 'T' }], value: 'signer-trezor' });
+
+        const trigger = await screen.findByRole('button', { name: /^Sign with: / });
+        expect(trigger).toHaveTextContent('Trezor Model T');
+        expect(trigger).toHaveTextContent(/connect Trezor Model T and approve there/i);
+        expect(trigger).not.toHaveTextContent(/trezor T\b(?! )/);
+    });
+
+    it('states that choosing a key source does not stop another phone signing', async () => {
         mount({ list: [HARDWARE_SIGNER], walletMode: 'watcher' });
 
-        expect(await screen.findByRole('note')).toHaveTextContent(
-            /Watch-only mode stays active.*doesn't let this wallet sign transactions/i,
+        const note = await screen.findByRole('note');
+        expect(note).toHaveTextContent(
+            /Another phone still signs for this wallet.*doesn't let this wallet sign transactions/i,
         );
+        // A note is a warning card line, never a loose notice.
+        expect(note.querySelector('[data-warning-line]')).not.toBeNull();
     });
 });

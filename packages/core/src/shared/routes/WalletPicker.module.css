@@ -7,12 +7,14 @@
     margin: 0;
 }
 
+/* One fact per row: the label at the left, the value at the right, 8px in
+   from the card's edges (G14, G80). */
 .detailRow {
-    display: grid;
-    grid-template-columns: minmax(120px, 1fr) 2fr;
-    gap: var(--xc-space-3);
-    padding: var(--xc-space-2) var(--xc-space-3);
+    display: flex;
+    justify-content: space-between;
     align-items: baseline;
+    gap: var(--xc-space-2);
+    padding: var(--xc-space-2);
 }
 
 .detailRow + .detailRow {
@@ -20,63 +22,49 @@
 }
 
 .detailLabel {
-    font-size: var(--xc-text-xs);
+    flex: 0 0 auto;
+    font-size: var(--xc-text-sm);
     color: var(--xc-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-weight: 600;
     margin: 0;
 }
 
 .detailValue {
+    flex: 1 1 auto;
+    min-width: 0;
     margin: 0;
     font-size: var(--xc-text-sm);
     color: var(--xc-text);
+    text-align: end;
     word-break: break-word;
+}
+
+/* The identity card text on Wallet Details and Account Details: the name
+   over its type line and Active bubble. */
+.identityText {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--xc-space-1) / 2);
+    min-width: 0;
+}
+
+.identityName {
+    font-size: var(--xc-text-md, 1rem);
+    overflow-wrap: anywhere;
+}
+
+.identityMeta {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    flex-wrap: wrap;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
 }
 
 .code {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.85em;
     color: var(--xc-text-muted);
-}
-
-/* 3-dot menu trigger floats inside the wallet row's top-right corner.
-   `.rowWrap` is the positioning context; the wallet button stretches
-   to full width, and the menu button overlays it. */
-.rowWrap {
-    position: relative;
-    width: 100%;
-}
-
-.rowLabel {
-    display: flex;
-    align-items: center;
-    gap: var(--xc-space-2);
-}
-
-.rowName {
-    min-width: 0;
-    /* Clipping for the ellipsis also cuts the 4px active-identity ring on every
-       side, so pad it back in and cancel the padding with the same margin. */
-    padding-block: var(--xc-space-1);
-    padding-inline: var(--xc-space-1);
-    margin-block: calc(0px - var(--xc-space-1));
-    margin-inline: calc(var(--xc-space-1) * -1);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.currentMark {
-    flex: 0 0 auto;
-    display: inline-flex;
-    color: var(--xc-accent-text);
-}
-
-.rowCurrent {
-    border-color: var(--xc-accent-primary);
-    background: color-mix(in srgb, var(--xc-accent-primary) 8%, var(--xc-surface-raised));
 }
 
 .pickerActions {
@@ -103,60 +91,20 @@
     }
 }
 
-/* Scoped to the row so the absolute placement outranks the kit Button's
-   position and variant whatever order the stylesheets load in. The button is
-   centred with auto block margins, not a translate: the kit's pressed state
-   sets its own transform, which replaced a centring translate and dropped the
-   button half its height on press, so the release landed on the row and the
-   click never reached the button. */
-.rowWrap .rowMenuBtn {
-    appearance: none;
-    background: var(--xc-surface);
-    border: 1px solid var(--xc-border-strong);
-    position: absolute;
-    inset-block: 0;
-    margin-block: auto;
-    inset-inline-end: 8px;
-    z-index: 1;
-    width: var(--xc-button-height);
-    height: var(--xc-button-height);
-    min-height: var(--xc-tap-min);
+/* The My Wallets and My Accounts row subtitle: the row's detail, then the
+   Active pill on the active row. */
+.rowMeta {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    color: var(--xc-text-muted);
-    cursor: pointer;
-    border-radius: var(--xc-control-radius);
+    gap: var(--xc-space-2);
+    flex-wrap: wrap;
 }
 
-.rowWrap .rowMenuBtn:hover {
-    background: var(--xc-bg-muted);
-    color: var(--xc-text);
-    border-color: var(--xc-accent-primary);
-}
-
-.rowWrap .rowMenuBtn:focus-visible {
-    outline: 2px solid var(--xc-focus-ring);
-    outline-offset: 2px;
-}
-
-/* Wallet and account pickers: one flush list card with divider lines, rows
-   never boxed apart (U41, U58). */
-.list {
-    composes: flush from '../../ui/Card.module.css';
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.list > li + li {
-    border-top: 1px solid var(--xc-border);
-}
-
-.listRow {
-    min-height: var(--xc-tap-min);
-    border-radius: 0;
+.activeBadge {
+    padding: 0 var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-success-bg);
+    color: var(--xc-success);
+    font-size: var(--xc-text-xs);
+    font-weight: 700;
 }

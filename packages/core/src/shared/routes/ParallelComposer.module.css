@@ -1,11 +1,11 @@
-.acknowledgement {
-    align-items: flex-start;
+/* Add Action sits under the last row section, at its leading edge. */
+.addRow {
+    display: flex;
+    justify-content: flex-start;
 }
 
-.acknowledgement input {
-    margin-top: 0.15rem;
-}
-
+/* A row's state as one fact row: the label left in sentence case, the pill
+   right; never an uppercase label. */
 .rowStatus {
     display: flex;
     align-items: center;
@@ -13,10 +13,7 @@
     gap: var(--xc-space-2);
     min-width: 0;
     color: var(--xc-text-muted);
-    font-size: var(--xc-text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    font-size: var(--xc-text-sm);
 }
 
 .summaryList {

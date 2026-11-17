@@ -4,13 +4,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ListCreateForm } from '../../../packages/core/src/shared/routes/ListCreateForm.jsx';
-import { ListForkForm } from '../../../packages/core/src/shared/routes/ListForkForm.jsx';
+import { ListForkRoute as ListForkForm } from '../../helpers/listFormRoutes.jsx';
 import { MigrateToBip39 } from '../../../packages/core/src/shared/routes/MigrateToBip39.jsx';
-import { OperatorDashboard } from '../../../packages/core/src/shared/routes/OperatorDashboard.jsx';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = Object.freeze({
@@ -58,27 +57,13 @@ function mount(Component, props, messaging = messagingWith()) {
     ));
 }
 
-describe('primary actions explain missing list, publisher, and migration input', () => {
-    it('OperatorDashboard asks for a feed reference number', async () => {
-        mount(OperatorDashboard, {
-            walletId: 'wallet-1', chainId: CHAIN, address: ADDRESS.address, onBack() {},
-        });
-        fireEvent.click(await screen.findByRole('button', { name: 'Enter publisher mode' }));
-        await waitFor(() => expect(screen.queryByText('Loading source address…')).toBeNull());
-        const action = screen.getByRole('button', { name: 'Publish value' });
-
-        expect(action).toBeEnabled();
-        fireEvent.click(action);
-
-        expect(await screen.findByText('Feed reference number is required.')).toBeTruthy();
-    });
-
+describe('primary actions explain missing list and migration input', () => {
     it('ListCreateForm asks for a token', async () => {
         mount(ListCreateForm, {
             walletId: 'wallet-1', chainId: CHAIN, initialType: '1', onBack() {},
         });
         await screen.findByDisplayValue(ADDRESS.address);
-        const action = screen.getByRole('button', { name: 'Publish list' });
+        const action = screen.getByRole('button', { name: /^Publish List$/ });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
@@ -101,8 +86,8 @@ describe('primary actions explain missing list, publisher, and migration input',
             onBack() {},
             onDone() {},
         });
-        await screen.findByText(/Forking token list #2700/);
-        const action = screen.getByRole('button', { name: 'Publish edit' });
+        await screen.findByLabelText('Tokens');
+        const action = screen.getByRole('button', { name: /^Publish fork$/i });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);
@@ -114,8 +99,7 @@ describe('primary actions explain missing list, publisher, and migration input',
         mount(MigrateToBip39, {
             legacyWalletId: 'legacy-wallet', onBack() {},
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-        const action = screen.getByRole('button', { name: 'Generate recovery phrase' });
+        const action = screen.getByRole('button', { name: 'Generate Recovery Phrase' });
 
         expect(action).toBeEnabled();
         fireEvent.click(action);

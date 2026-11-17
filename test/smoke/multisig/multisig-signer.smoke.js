@@ -297,8 +297,8 @@ for (const [shell, msgPath] of [
 
 const routePath = join(sharedRoutes, 'MultisigSigningSession.jsx');
 const route = readFileSync(routePath, 'utf8');
-assert.ok(/Sign with my key/.test(route),
-    'sign-screen surfaces a "Sign with my key" entry point');
+assert.ok(/Sign with My Key/.test(route),
+    'sign-screen surfaces a "Sign with My Key" entry point');
 assert.ok(/messaging\.signMultisigLocally/.test(route),
     'sign-screen calls messaging.signMultisigLocally');
 // The screen must repeat the limit in the SAME words the signers throw

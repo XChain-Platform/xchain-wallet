@@ -104,7 +104,8 @@ describe('PortfolioChart fixed-height slot', () => {
     it('declares the slot, chart and placeholder heights equal to the Sparkline height', () => {
         const css = readFileSync(CSS_PATH, 'utf8');
         const jsx = readFileSync(JSX_PATH, 'utf8');
-        const sparklineHeight = /<Sparkline[\s\S]*?height=\{(\d+)\}/.exec(jsx)?.[1];
+        // Drawn behind the balance card the chart fills it (100%); on its own it is a fixed slot.
+        const sparklineHeight = /<Sparkline[\s\S]*?height=\{behind \? '100%' : (\d+)\}/.exec(jsx)?.[1];
         expect(sparklineHeight).toBe('40');
         const px = `${sparklineHeight}px`;
 

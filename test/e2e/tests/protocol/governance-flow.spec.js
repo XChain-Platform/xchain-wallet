@@ -94,9 +94,12 @@ async function installGovernanceFixture(page) {
             },
         }));
         const fixtureActive = { [chainId]: activeAddresses[chainId] };
-        const settings = { ...currentSettings, walletMode: 'watcher' };
+        // The wallet was created watch-only, so its own list entry carries the
+        // mode; the fixture host keeps serving that list.
+        const settings = { ...currentSettings };
 
         const results = {
+            'wallet.list': wallets,
             'addresses.byChain': fixtureAddresses,
             'addresses.active': fixtureActive,
             'balances.wallet': { [chainId]: fixtureBalances },
@@ -209,7 +212,7 @@ for (const viewport of VIEWPORTS) {
     test(`governance flows render and review correctly at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         test.slow();
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        await createWallet(page);
+        await createWallet(page, { walletMode: 'watcher' });
         await installGovernanceFixture(page);
 
         await gotoPalette(page, 'Governance');
@@ -219,8 +222,9 @@ for (const viewport of VIEWPORTS) {
 
         await page.getByRole('button', { name: /Fund the community governance portal/ }).click();
         await expect(page.getByText(POLL.question, { exact: true })).toBeVisible();
-        await expect(page.getByText('987654321 weight', { exact: true })).toBeVisible();
-        await expectScreen(page, `${viewport.name} poll detail`, 'Poll #42');
+        // Result, the closed poll's first tab: each final result row's figures.
+        await expect(page.getByText('987654321 weight, 17 voters', { exact: true })).toBeVisible();
+        await expectScreen(page, `${viewport.name} poll detail`, 'Poll');
         await page.getByRole('button', { name: 'Back to previous screen' }).click();
 
         await page.getByRole('button', { name: 'Create poll', exact: true }).click();
@@ -236,29 +240,29 @@ for (const viewport of VIEWPORTS) {
         await page.getByRole('button', { name: 'Advanced (gates + deposit)' }).click();
         await page.getByLabel('Creation deposit (XCHAIN)', { exact: true }).fill(DEPOSIT);
         await expectScreen(page, `${viewport.name} create poll`, 'Create poll');
-        await page.getByRole('main').getByRole('button', { name: 'Create poll', exact: true }).click();
+        await page.getByRole('main').getByRole('button', { name: 'Create Poll', exact: true }).click();
 
-        await expectReviewAtTop(page, 'Review poll');
+        await expectReviewAtTop(page, 'Review Poll');
         const pollReview = page.getByRole('form', { name: 'Review poll' });
         await expect(pollReview.getByText(`${DEPOSIT} XCHAIN`, { exact: true })).toBeVisible();
         await expect(pollReview.getByText(NORMAL_FEE, { exact: true })).toBeVisible();
         await expect(pollReview.getByText('XCP', { exact: true })).toBeVisible();
-        await expectScreen(page, `${viewport.name} poll review`, 'Review poll');
-        await returnToGovernance(page, 'Create poll');
+        await expectScreen(page, `${viewport.name} poll review`, 'Review Poll');
+        await returnToGovernance(page, 'Create Poll');
 
         await page.getByRole('button', { name: 'Delegate votes', exact: true }).click();
         await expect(page.getByRole('main').getByRole('button', { name: /^Governance token:/ }))
             .toBeVisible();
         await chooseGovernanceToken(page);
         await page.getByLabel('Delegate to address', { exact: true }).fill(DELEGATE_ADDRESS);
-        await expectScreen(page, `${viewport.name} delegate vote`, 'Delegate votes');
-        await page.getByRole('main').getByRole('button', { name: 'Delegate votes', exact: true }).click();
+        await expectScreen(page, `${viewport.name} delegate vote`, 'Delegate Votes');
+        await page.getByRole('main').getByRole('button', { name: 'Delegate Votes', exact: true }).click();
 
-        await expectReviewAtTop(page, 'Review delegate votes');
+        await expectReviewAtTop(page, 'Review Delegate Votes');
         const delegateReview = page.getByRole('form', { name: 'Review delegate votes' });
         await expect(delegateReview.getByText(NORMAL_FEE, { exact: true })).toBeVisible();
         await expect(delegateReview.getByText('XCP', { exact: true })).toBeVisible();
         await expect(delegateReview.getByLabel(DELEGATE_ADDRESS)).toBeVisible();
-        await expectScreen(page, `${viewport.name} delegation review`, 'Review delegate votes');
+        await expectScreen(page, `${viewport.name} delegation review`, 'Review Delegate Votes');
     });
 }

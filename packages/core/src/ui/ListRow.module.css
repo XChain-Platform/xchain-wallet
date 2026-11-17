@@ -25,13 +25,13 @@
 
 @media (hover: hover) and (pointer: fine) {
     .interactive:hover:not(:disabled) {
-        background: var(--xc-control-bg-hover);
+        background: var(--xc-row-hover-bg);
     }
 }
 
 .interactive:active:not(:disabled) {
-    background: var(--xc-control-bg-hover);
-    box-shadow: inset 0 0 0 1px var(--xc-control-selected);
+    background: var(--xc-row-hover-bg);
+    box-shadow: none;
 }
 
 .interactive:focus-visible {
@@ -39,9 +39,45 @@
     outline-offset: 2px;
 }
 
-.interactive:is([aria-current='page'], [aria-selected='true']) {
-    background: var(--xc-control-bg-hover);
-    box-shadow: inset 0 0 0 1px var(--xc-control-selected);
+.interactive:is([aria-current]:not([aria-current='false']), [aria-selected='true']) {
+    background: var(--xc-row-active-bg);
+    box-shadow: none;
+    font-weight: inherit;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .interactive:is([aria-current]:not([aria-current='false']), [aria-selected='true']):hover:not(:disabled) {
+        background: var(--xc-row-hover-bg);
+    }
+}
+
+/* Wide list-and-detail rows keep the side-menu hover and active colours, but
+   their fills run edge to edge inside the list card. The card clips only the
+   first and last fills to its rounded outer corners. */
+.interactive[data-xc-split-row] {
+    width: 100%;
+    margin-inline: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .interactive[data-xc-split-row]:hover:not(:disabled) {
+        background: var(--xc-row-hover-bg);
+        box-shadow: none;
+    }
+}
+
+.interactive[data-xc-split-row]:is([aria-current]:not([aria-current='false']), [aria-selected='true']) {
+    background: var(--xc-row-active-bg);
+    box-shadow: none;
+    font-weight: inherit;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .interactive[data-xc-split-row]:is([aria-current]:not([aria-current='false']), [aria-selected='true']):hover:not(:disabled) {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .interactive:disabled {
@@ -104,7 +140,18 @@
     text-align: end;
 }
 
+/* Drawn at the page header Back chevron's size (a 32px icon box) so a row that
+   opens a page matches the Back that returns. The glyph fills only the middle
+   third of the box and the rest is clipped, so it adds no width. */
 .chevron {
-    --xc-icon-size: var(--xc-icon-sm);
+    --xc-icon-size: 32px;
+    width: calc(var(--xc-icon-size) / 3);
+    overflow: hidden;
     color: var(--xc-text-muted);
+}
+
+.chevron svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
 }

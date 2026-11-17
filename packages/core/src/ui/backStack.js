@@ -25,6 +25,10 @@ const handlers = [];
 let armed = false;
 /** True while a `history.back()` WE issued is still in flight. */
 let ignoreNextPop = false;
+/** The popstate our own `history.back()` caused, so route history can skip it too. */
+let internalPop = null;
+/** History writes waiting for a Back of ours to land. */
+const settledWaiters = [];
 let syncScheduled = false;
 let listening = false;
 let routeHistoryManaged = false;
@@ -113,8 +117,7 @@ function sync() {
     // which syncs again.
     if (ignoreNextPop) return;
     const want = handlers.some((entry) => entry.kind !== 'route')
-        || (!routeHistoryManaged && handlers.length > 0);
-    if (want && !armed) {
+        || (!routeHistoryManaged && handlers.length > 0);    if (want && !armed) {
         window.history.pushState({ xcBack: true }, '');
         armed = true;
     } else if (!want && armed && window.history.state?.xcRoute) {
@@ -152,9 +155,12 @@ function scheduleSync() {
     setTimeout(sync, 0);
 }
 
-function onPopState() {
+function onPopState(event) {
     if (ignoreNextPop) {
         ignoreNextPop = false;
+        internalPop = event;
+        // History writes that waited for this Back now see the entry it landed on.
+        for (const run of settledWaiters.splice(0)) run();
         // Handlers that registered while that Back was in flight still need their sentinel.
         scheduleSync();
         return;
@@ -180,6 +186,58 @@ function onKeyDown(event) {
     top.run();
 }
 
+function ensureListening() {
+    if (listening || typeof window === 'undefined') return;
+    window.addEventListener('popstate', onPopState);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('xchain:native-edge-back', onNativeEdgeBack);
+    listening = true;
+}
+
+/**
+ * Step the browser history back `steps` entries for a Back the shell has
+ * already shown, so the popstate that follows is internal (see
+ * `isInternalPop`) and moves no page. Refused, returning false, while a
+ * Back of ours is still in flight (the current entry is unknown until it
+ * lands; see `afterHistorySettles`) or a sentinel of ours is the current
+ * entry, since stepping from it would land one entry short.
+ *
+ * @param {number} [steps]
+ * @returns {boolean} true when the step was issued
+ */
+export function stepHistoryBack(steps = 1) {
+    if (!Number.isInteger(steps) || steps < 1) return false;
+    if (!hasHistory() || unloading || ignoreNextPop) return false;
+    if (armed || isBareSentinel(window.history.state)) return false;
+    // The flag that marks our pops is cleared only by our own popstate listener.
+    ensureListening();
+    goBackInternally(steps);
+    return true;
+}
+
+/**
+ * Run a history write once no Back of ours is in flight. While one is, the
+ * current entry is about to change (a stale sentinel being taken out), so a
+ * write made now would land on an entry that is then left.
+ *
+ * @param {() => void} run
+ */
+export function afterHistorySettles(run) {
+    if (!ignoreNextPop) {
+        run();
+        return;
+    }
+    ensureListening();
+    settledWaiters.push(run);
+}
+
+function goBackInternally(steps) {
+    ignoreNextPop = true;
+    if (steps === 1) window.history.back();
+    else window.history.go(-steps);
+}
+
 /**
  * Register a back action. The most recently registered overlay or screen step
  * is "on top"; route handlers run only when neither is present.
@@ -191,13 +249,7 @@ function onKeyDown(event) {
 export function registerBackHandler(run, kind = 'overlay') {
     homeBackAt = null;
     ensureNativeListener();
-    if (!listening && typeof window !== 'undefined') {
-        window.addEventListener('popstate', onPopState);
-        window.addEventListener('beforeunload', onBeforeUnload);
-        window.addEventListener('keydown', onKeyDown, true);
-        window.addEventListener('xchain:native-edge-back', onNativeEdgeBack);
-        listening = true;
-    }
+    ensureListening();
     const entry = { run, kind };
     handlers.push(entry);
     scheduleSync();
@@ -293,11 +345,22 @@ export function setRouteHistoryManaged(managed) {
     scheduleSync();
 }
 
+/**
+ * True when a popstate came from this module taking its own stale sentinel
+ * out, not from the user pressing Back. Route history must not treat it as a
+ * Back, or leaving an overlay would also leave the page under it.
+ */
+export function isInternalPop(event) {
+    return ignoreNextPop || (event != null && event === internalPop);
+}
+
 /** Test seam: forget everything, as a fresh page load would. */
 export function resetBackStackForTests() {
     handlers.length = 0;
     armed = false;
     ignoreNextPop = false;
+    internalPop = null;
+    settledWaiters.length = 0;
     syncScheduled = false;
     unloading = false;
     clearTimeout(unloadTimer);

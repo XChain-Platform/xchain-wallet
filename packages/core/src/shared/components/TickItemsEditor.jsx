@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
+import { Button, Icon, Select, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { fetchTokenInfo } from '../hooks/useTokenInfo.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
@@ -50,6 +50,12 @@ export const MAX_TICK_LOOKUPS = 50;
  * @param {() => void} props.onOpenPicker
  * @param {Record<string, 'found' | 'missing' | null>} props.status   lookup verdicts, keyed by tick
  * @param {(status: Record<string, 'found' | 'missing' | null>) => void} props.onStatusChange
+ * @param {import('react').ReactNode} [props.fileField]   an optional upload field, placed under the token box
+ * @param {string} [props.error]
+ * @param {boolean} [props.readOnly]
+ * @param {boolean} [props.pickerDisabled]
+ * @param {import('react').ReactNode} [props.pickerIcon]
+ * @param {import('react').ReactNode} [props.pickerLabel]
  */
 export function TickItemsEditor({
     value,
@@ -64,6 +70,12 @@ export function TickItemsEditor({
     onOpenPicker,
     status,
     onStatusChange,
+    fileField = null,
+    error,
+    readOnly = false,
+    pickerDisabled = false,
+    pickerIcon,
+    pickerLabel = t('components.tickItemsEditor.addFromTokenPicker'),
 }) {
     const controlId = useId();
     const memberTicks = items.valid;
@@ -207,7 +219,8 @@ export function TickItemsEditor({
     }
 
     function onItemKeyDown(event, index) {
-        if (event.target !== event.currentTarget
+        if (readOnly
+            || event.target !== event.currentTarget
             || !event.altKey
             || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
         event.preventDefault();
@@ -222,6 +235,8 @@ export function TickItemsEditor({
                 help={help}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
+                error={error}
+                readOnly={readOnly}
                 rows={6}
                 spellCheck={false}
                 autoCapitalize="off"
@@ -229,9 +244,12 @@ export function TickItemsEditor({
                 aria-invalid={invalidTicks.length > 0 || hasMissing ? 'true' : undefined}
                 aria-describedby={describedBy}
             />
-            <div className={styles.fromLine}>
-                <Button type="button" variant="ghost" onClick={onOpenPicker}>
-                    {t('components.tickItemsEditor.addFromTokenPicker')}
+            {fileField}
+            {/* Full width in the same import row as Create List's Add from
+                Contacts, so the two list types' add buttons match. */}
+            <div className={styles.importActions}>
+                <Button type="button" variant="ghost" icon={pickerIcon} disabled={pickerDisabled} onClick={onOpenPicker}>
+                    {pickerLabel}
                 </Button>
             </div>
             {memberTicks.length > 0 ? (
@@ -269,7 +287,7 @@ export function TickItemsEditor({
                                         onChange={(event) => setItemCoin(item, event.target.value)}
                                     >
                                         {LIST_TICK_COINS.map((option) => (
-                                            <option key={option} value={option}>{option}</option>
+                                            <Select.Option key={option} value={option} icon={<Icon.CoinsIcon />}>{option}</Select.Option>
                                         ))}
                                     </Select>
                                 ) : null}
@@ -278,31 +296,29 @@ export function TickItemsEditor({
                                         type="button"
                                         size="sm"
                                         variant="ghost"
-                                        disabled={index === 0}
+                                        disabled={readOnly || index === 0}
                                         aria-label={t('components.tickItemsEditor.moveUp', { accessibleItem })}
+                                        icon={<Icon.ChevronDownIcon style={{ transform: 'rotate(180deg)' }} />}
                                         onClick={() => moveItem(index, -1)}
-                                    >
-                                        ↑
-                                    </Button>
+                                    />
                                     <Button
                                         type="button"
                                         size="sm"
                                         variant="ghost"
-                                        disabled={index === memberTicks.length - 1}
+                                        disabled={readOnly || index === memberTicks.length - 1}
                                         aria-label={t('components.tickItemsEditor.moveDown', { accessibleItem })}
+                                        icon={<Icon.ChevronDownIcon />}
                                         onClick={() => moveItem(index, 1)}
-                                    >
-                                        ↓
-                                    </Button>
+                                    />
                                     <Button
                                         type="button"
                                         size="sm"
                                         variant="ghost"
+                                        disabled={readOnly}
                                         aria-label={t('components.tickItemsEditor.remove', { accessibleItem })}
+                                        icon={<Icon.XIcon />}
                                         onClick={() => removeItem(index)}
-                                    >
-                                        ×
-                                    </Button>
+                                    />
                                 </div>
                             </li>
                         );

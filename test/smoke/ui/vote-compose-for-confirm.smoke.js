@@ -81,7 +81,8 @@ const VOTE_FORMS = [
 ];
 for (const [file, builder] of VOTE_FORMS) {
     const src = read('packages', 'core', 'src', 'shared', 'routes', file);
-    assert.match(src, /messaging\.composeVoteForConfirm\(\{/,
+    // G98: the Advanced section's choices wrap the compose request.
+    assert.match(src, /messaging\.composeVoteForConfirm\(withAdvancedOptions\(\{/,
         `${file}: composes through the VOTE builder route`);
     assert.ok(src.includes(`'${builder}'`), `${file}: names the ${builder} builder`);
 

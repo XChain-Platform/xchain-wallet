@@ -5,8 +5,10 @@
 
 import { Profiler } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { slowTimeout } from '../../helpers/testEnvSpeed.js';
+import { showHomeBalances } from '../../helpers/homeBalances.js';
+import { findSelectOption, openSelectListbox } from '../../helpers/selectOption.js';
 
 const mocks = vi.hoisted(() => {
     const chainIds = ['bitcoin-mainnet', 'litecoin-mainnet', 'dogecoin-mainnet'];
@@ -192,21 +194,30 @@ describe('Home large-wallet performance', () => {
         const initialElapsedMs = performance.now() - startedAt;
         const initialCommitCount = commitCount;
 
+        // Balances opens on coins and tokens together (operator 2026-11-15),
+        // so the first render draws all 303 rows, still within the initial
+        // render's budget.
         console.info(`Home large-wallet initial render: ${initialElapsedMs.toFixed(1)} ms, ${initialCommitCount} commits, ${renderDurationMs.toFixed(1)} ms profiled`);
         expect(initialElapsedMs).toBeLessThan(slowTimeout(800));
         expect(renderDurationMs).toBeLessThan(slowTimeout(800));
         expect(initialCommitCount).toBeLessThanOrEqual(3);
-        expect(view.container.querySelectorAll('[data-balance-key]')).toHaveLength(3);
+        expect(view.container.querySelectorAll('[data-balance-key]')).toHaveLength(303);
         expect(Object.values(mocks.historyByChain).flat()).toHaveLength(2_000);
         expect(mocks.useCollectibleKeys).toHaveBeenLastCalledWith([], true);
         expect(mocks.synthesizeDemoHistory).not.toHaveBeenCalled();
 
+        // Open the filter and the Type list first, so only the pick itself
+        // is measured.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
+        const typeList = openSelectListbox(within(screen.getByRole('dialog', { name: 'Filter and sort' }))
+            .getByRole('button', { name: /^Type/ }));
+        const beforePick = commitCount;
         const tokenStartedAt = performance.now();
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        fireEvent.click(findSelectOption(typeList, 'tokens'));
         const tokenElapsedMs = performance.now() - tokenStartedAt;
-        const tokenCommitCount = commitCount - initialCommitCount;
+        const tokenCommitCount = commitCount - beforePick;
 
-        console.info(`Home 300-token tab render: ${tokenElapsedMs.toFixed(1)} ms, ${tokenCommitCount} commits`);
+        console.info(`Home 300-token Type render: ${tokenElapsedMs.toFixed(1)} ms, ${tokenCommitCount} commits`);
         expect(tokenElapsedMs).toBeLessThan(slowTimeout(1_500));
         expect(tokenCommitCount).toBeLessThanOrEqual(2);
         expect(view.container.querySelectorAll('[data-balance-key]')).toHaveLength(300);
@@ -248,7 +259,8 @@ describe('Home large-wallet performance', () => {
         const heroRenders = mocks.heroRenders.mock.calls.length;
         const chartRenders = mocks.chartRenders.mock.calls.length;
 
-        fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+        showHomeBalances('tokens');
+        fireEvent.click(screen.getByRole('tab', { name: 'NFTs' }));
 
         expect(mocks.heroRenders).toHaveBeenCalledTimes(heroRenders);
         expect(mocks.chartRenders).toHaveBeenCalledTimes(chartRenders);

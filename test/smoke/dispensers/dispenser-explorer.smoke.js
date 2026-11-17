@@ -51,6 +51,10 @@ assert.ok(existsSync(explorerPath), 'DispenserExplorer.jsx exists');
 
 const explorerSrc = readFileSync(explorerPath, 'utf8');
 const detailSrc = readFileSync(detailPath, 'utf8');
+const actionConfirmSrc = readFileSync(
+    join(core, 'src', 'shared', 'components', 'ActionConfirmScreen.jsx'),
+    'utf8',
+);
 
 // --- 1. Single-component export ---------------------------------------
 
@@ -66,7 +70,8 @@ assert.equal(
 
 // --- 2. Search modes + active network scope ---------------------------
 
-assert.ok(/searchMode/.test(explorerSrc), 'explorer tracks searchMode state');
+// One search box: the query's shape picks the lane, so there is no mode toggle.
+assert.ok(/function searchLanes\(q\)/.test(explorerSrc), 'explorer derives its search lanes from the query');
 for (const mode of ["'token'", "'address'"]) {
     assert.ok(
         explorerSrc.includes(mode),
@@ -79,7 +84,9 @@ assert.ok(
 );
 // Operator ruling: the chain filter stays, but its options name the chain
 // without the network kind.
-assert.ok(/<Select\b[\s\S]*?label="Network"/.test(explorerSrc) && /chainFilter/.test(explorerSrc),
+// The filter is the standard Network field and its full-screen list
+// (operator ruling 2026-11-13), never a Select of chains.
+assert.ok(/<NetworkField\b[\s\S]*?label="Network"/.test(explorerSrc) && /chainFilter/.test(explorerSrc),
     'explorer keeps a network filter');
 assert.ok(!/networkKind\}/.test(explorerSrc),
     'explorer renders no network-kind label');
@@ -103,7 +110,7 @@ assert.ok(
     'address searches call messaging.getDispensersForAddress',
 );
 assert.ok(
-    /Promise\.all\(targetChains\.map/.test(explorerSrc),
+    /targetChains\.map\(\(cid\) => \(\{ lane, cid \}\)\)[\s\S]*?Promise\.all\(jobs\.map/.test(explorerSrc),
     'explorer fans out queries per target network in parallel',
 );
 
@@ -154,7 +161,7 @@ assert.ok(
 );
 assert.ok(
     /copyText\(text\)/.test(detailSrc)
-        && /Copy dispenser payment address/.test(detailSrc),
+        && /Copy Dispenser Payment Address/.test(detailSrc),
     'pay-here panel uses the shared clipboard path and names the copied address',
 );
 assert.ok(
@@ -166,8 +173,12 @@ assert.ok(
     // Copy reworded for plain language ("inherent risk of UTXO-chain buys" ->
     // "a normal risk when buying on these chains"). The WARNING is what matters:
     // pin the substance (payment reaches the creator, nothing is released).
-    /the payment reaches the creator but[\s\S]{0,40}?no \{giveTick\} is released/.test(detailSrc),
-    'token-paid review stage warns about UTXO-chain buy race',
+    /extraWarnings=\{\[[\s\S]{0,240}?the payment reaches the creator but no \$\{giveTick\} is released/.test(detailSrc),
+    'token-paid review sends the UTXO-chain buy race warning to Confirm Standard',
+);
+assert.ok(
+    /extraWarnings=\{extraWarnings\}/.test(actionConfirmSrc),
+    'ActionConfirmScreen forwards form safety warnings to its shared warning slot',
 );
 assert.ok(
     /ownerAddress/.test(detailSrc),
@@ -195,17 +206,19 @@ for (const [shell, appPath] of [
         /onBrowseDispensers:\s*\(\)\s*=>\s*setUnlockedView\('dispenser-explorer'\)/.test(app),
         `${shell} wires onBrowseDispensers to the explorer sub-route`,
     );
+    // Both the list and the explorer open the detail, and Back pops the one
+    // navigation history, so it lands on whichever of them opened it.
     assert.ok(
-        /origin:\s*['"]explorer['"]/.test(app),
-        `${shell} tags explorer-originating nav with origin:"explorer"`,
+        /<DispenserExplorer[\s\S]*?setDispenserRef\(\{ chainId, actionIndex \}\);\s*setUnlockedView\('dispenser-detail'\)/.test(app),
+        `${shell} opens the detail from the explorer`,
     );
     assert.ok(
-        /origin:\s*['"]list['"]/.test(app),
-        `${shell} tags list-originating nav with origin:"list"`,
+        /<DispensersList[\s\S]*?setDispenserRef\(\{ chainId, actionIndex \}\);\s*setUnlockedView\('dispenser-detail'\)/.test(app),
+        `${shell} opens the detail from the list`,
     );
     assert.ok(
-        /dispenserRef\.origin\s*===\s*['"]explorer['"]/.test(app),
-        `${shell} dispatches detail's back button on origin`,
+        /<DispenserDetail[\s\S]*?onBack=\{goBack\}/.test(app),
+        `${shell} detail's back button pops the navigation history`,
     );
 }
 

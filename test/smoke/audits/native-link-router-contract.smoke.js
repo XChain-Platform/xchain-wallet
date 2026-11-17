@@ -82,7 +82,7 @@ for (const path of ['/wallet/link', '/wallet/linkage/x', '/wallet/privacy/', '/w
 }
 assert.match(
     webApp,
-    /const \[unlockedView, setUnlockedView\] = useState\([\s\S]*?\('home'\),\s*\);/,
+    /const nav = useNavHistory\(\{\s*initialView: \/\*\* @type \{[^}]*\} \*\/ \('home'\),/,
     'an unclaimed path that starts the shell must leave the wallet on its safe Home default',
 );
 assert.match(

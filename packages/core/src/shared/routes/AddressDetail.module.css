@@ -1,0 +1,88 @@
+/* Copyright © 2025–2026 Dankest, LLC
+ * Based on XChain Platform by Dankest, LLC – https://dankest.llc
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * This file is part of XChain Platform. Licensed under the GNU Affero
+ * General Public License v3.0 or later; see LICENSE.md. A commercial
+ * license (without AGPL source-disclosure terms) is available -
+ * contact legal@dankest.llc. */
+
+/* View Address: the identity card (label, network icon beside the QR, the
+   address with its copy icon), then the shared Actions | Details toggle,
+   whose own panel spaces its blocks 8px apart. */
+
+/* The card stretches its rows so the address row has the card's width to
+   measure against, not its own content's. */
+.card.card {
+    align-items: stretch;
+}
+
+/* The network icon on the left and the QR on the right, about the same
+   size, centred as a pair. */
+.pair {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-2);
+}
+
+.networkIcon {
+    --xc-avatar-size-hero: 120px;
+    --xc-avatar-pip-hero: 40px;
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+/* A fixed box, so the pair does not shift while the QR image renders. The
+   QR is bare and the same 120px as the network icon. */
+.qr {
+    flex: 0 0 auto;
+    inline-size: 120px;
+    block-size: 120px;
+}
+
+/* The address and its copy icon on one line, centred as a pair. The row
+   takes the card's full width, so AddressText's fit mode measures the room
+   left beside the icon and cuts the middle only when the whole address does
+   not fit. */
+.addressRow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--xc-space-2);
+    inline-size: 100%;
+    min-inline-size: 0;
+}
+
+.addressText {
+    flex: 0 1 auto;
+    min-inline-size: 0;
+}
+
+.copy {
+    flex: 0 0 auto;
+    display: inline-flex;
+}
+
+/* A plain sentence-case heading over a group of rows, inside its card. */
+.groupHeading {
+    margin: 0 0 var(--xc-space-2);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+}
+
+/* The preferences card's loading or error line, muted and small. */
+.prefsStatus {
+    margin: 0;
+    font-size: var(--xc-text-xs);
+    line-height: 1.4;
+    color: var(--xc-text-muted);
+}
+
+.factLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}

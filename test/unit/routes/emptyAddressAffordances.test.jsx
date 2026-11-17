@@ -115,12 +115,12 @@ describe('Home with no addresses', () => {
             emptyMessaging(),
         );
 
-        const cta = await screen.findByRole('button', { name: /Generate an address/i });
+        const cta = await screen.findByRole('button', { name: /Generate an Address/i });
         expect(cta).toBeTruthy();
         expect(screen.getAllByText('Fund your wallet')).toHaveLength(1);
         expect(screen.queryByText('No coins yet')).toBeNull();
         expect(screen.queryByText(/Use Receive to generate one/)).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Buy coins' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Buy Coins' }));
         expect(onExchange).toHaveBeenCalledTimes(1);
     });
 
@@ -148,8 +148,9 @@ describe('Home with no addresses', () => {
             emptyMessaging({ generateReceiveAddress }),
         );
 
-        fireEvent.click(await screen.findByRole('button', { name: /Generate an address/i }));
-        fireEvent.click(await screen.findByRole('button', { name: /^Generate$/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Generate an Address/i }));
+        // The Add addresses submit reads "Add Address" (was "Generate").
+        fireEvent.click(await screen.findByRole('button', { name: /^Add Address$/ }));
 
         await waitFor(() => expect(generateReceiveAddress).toHaveBeenCalledTimes(1));
         expect(generateReceiveAddress.mock.calls[0][0]).toMatchObject({
@@ -168,8 +169,8 @@ describe('Home with no addresses', () => {
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalled());
         const before = messaging.getWalletBalances.mock.calls.length;
 
-        fireEvent.click(await screen.findByRole('button', { name: /Generate an address/i }));
-        fireEvent.click(await screen.findByRole('button', { name: /^Generate$/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Generate an Address/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /^Add Address$/ }));
 
         await waitFor(() => {
             expect(messaging.getWalletBalances.mock.calls.length).toBeGreaterThan(before);
@@ -184,7 +185,7 @@ describe('Import WIF chain picker', () => {
             messaging,
         );
         fireEvent.click(await screen.findByRole('button', { name: /Add or import address/i }));
-        fireEvent.click(await screen.findByRole('menuitem', { name: /Import address/i }));
+        fireEvent.click(await screen.findByRole('menuitem', { name: /Import Address/i }));
         return screen.findByRole('button', { name: /Import/i });
     }
 
@@ -206,7 +207,7 @@ describe('Import WIF chain picker', () => {
         const importWifRequest = vi.fn(async () => ({ address: { address: 'bcrt1qimported' } }));
         await openImportForm(emptyMessaging({ importWifRequest }));
 
-        const wifField = await screen.findByLabelText(/WIF private key/i);
+        const wifField = await screen.findByLabelText(/WIF private key/i, { selector: 'input' });
         fireEvent.change(wifField, { target: { value: 'cQexampleWifKeyValueForRegtestOnly' } });
         const pwField = screen.queryByLabelText(/Wallet password/i, { selector: 'input' });
         if (pwField) fireEvent.change(pwField, { target: { value: 'correct horse' } });

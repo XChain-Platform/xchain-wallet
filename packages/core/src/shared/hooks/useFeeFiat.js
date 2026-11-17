@@ -11,18 +11,19 @@ import { useFiatRate, useTickFiatRate } from './useFiatRate.js';
  * Fiat formatters for the two fees an XChain action can disclose.
  * Network fees use the chain coin's rate. Protocol fees use XCHAIN's own
  * rate, so a BTC price is never applied to an XCHAIN-denominated amount.
+ * `active: false` (nothing to price yet) reads no rates at all.
  */
-export function useFeeFiat({ chainId, chainCoin, nativeTicker, settings } = {}) {
+export function useFeeFiat({ chainId, chainCoin, nativeTicker, settings, active = true } = {}) {
     const fiatCurrency = settings?.fiatCurrency || 'USD';
     const allowCoingeckoFallback = settings?.privacy?.priceDataEnabled !== false;
     // The action's own chain decides: test coins have no market price even
     // when another network is active. Without a chain, the active network does.
     const networkKind = chainId ? defaultRegistry().get(chainId)?.networkKind : null;
-    const enabled = networkKind
+    const enabled = active && (networkKind
         ? networkKind === 'mainnet'
         : Boolean(settings)
             && settings.activeNetwork !== 'testnet'
-            && settings.activeNetwork !== 'regtest';
+            && settings.activeNetwork !== 'regtest');
     const nativeRate = useFiatRate({
         chainCoin,
         fiatCurrency,

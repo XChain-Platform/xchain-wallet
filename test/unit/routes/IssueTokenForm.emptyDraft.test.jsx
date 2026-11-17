@@ -53,20 +53,20 @@ afterEach(() => { cleanup(); localStorage.clear(); });
 describe('Issue token draft with nothing typed', () => {
     it('saves nothing for an untouched form and offers nothing on the next visit', async () => {
         mount();
-        await screen.findByLabelText('From');
+        await screen.findByLabelText('From address');
         // Let the source pick and the autosave settle.
         await new Promise((r) => setTimeout(r, 50));
         expect(draftKeys()).toEqual([]);
 
         cleanup();
         mount();
-        await screen.findByLabelText('From');
+        await screen.findByLabelText('From address');
         expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
     });
 
     it('saves what is typed after an untouched visit, so a lock cannot lose it', async () => {
         mount();
-        await screen.findByLabelText('From');
+        await screen.findByLabelText('From address');
         await new Promise((r) => setTimeout(r, 50));
         cleanup();
 

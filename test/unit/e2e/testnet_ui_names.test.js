@@ -102,6 +102,8 @@ describe('testnet e2e UI name literals', () => {
     it('lets only the live testnet wallets unlock without mainnet balances', () => {
         const fixture = fs.readFileSync(path.join(E2E, 'fixtures/wallet.js'), 'utf8');
         const expectedOptOuts = [
+            // A signer-mode Home renders no balance to wait for.
+            'tests/settings/wallet-mode.regtest.spec.js',
             'tests/staking/partial-claim.testnet.spec.js',
             'tests/staking/stake-unstake.testnet.spec.js',
         ];

@@ -94,9 +94,13 @@ const tokenInfoSrc = readFileSync(join(core, 'src', 'flows', 'tokenInfo.js'), 'u
 assert.ok(/projects/.test(tokenInfoSrc),
     'normalizeTokenInfo carries the explorer projects[] field');
 const tokenDetail = readFileSync(join(sharedRoutes, 'TokenDetail.jsx'), 'utf8');
-assert.ok(/<DetailRow label="Projects">/.test(tokenDetail), 'TokenDetail renders project membership in Details');
-const manageSrc = readFileSync(join(sharedRoutes, 'ManageToken.jsx'), 'utf8');
-assert.ok(!/officialBanner/.test(manageSrc), 'ManageToken omits the Official banner from its identity box');
+assert.ok(/const projects = .*assetInfo\?\.projects/.test(tokenDetail),
+    'TokenDetail reads project membership into the Details profile');
+assert.ok(/Official: part of the <strong>\{project\.project\}<\/strong> project/.test(tokenDetail),
+    'TokenDetail renders official project membership in Details');
+// The issuer's actions are groups on the one asset page (TokenOwnerActions.jsx).
+const manageSrc = readFileSync(join(sharedRoutes, '..', 'components', 'TokenOwnerActions.jsx'), 'utf8');
+assert.ok(!/officialBanner/.test(manageSrc), 'the issuer groups draw no Official banner');
 
 // --- Background host ---
 
@@ -122,8 +126,8 @@ for (const [shell, msgPath] of [
 assert.ok(/onManageRoster/.test(manageSrc), 'ManageToken accepts onManageRoster');
 assert.ok(/id:\s*['"]official-list['"][^\n]*\.\.\.ownerAction\(options\.onManageRoster\)/.test(manageSrc),
     'ManageToken renders the Official-list action');
-assert.ok(/const ownerAction = \(handler\) => \(\{[\s\S]*?disabled: blockIssuerActions/.test(manageSrc),
-    'ManageToken disables Official list for non-owners');
+assert.ok(/const ownerAction = \(handler\) => \(\{[\s\S]*?onSelect: handler,[\s\S]*?disabled: typeof handler !== 'function'/.test(manageSrc),
+    'ManageToken leaves Official list authorization to form preflight');
 
 for (const [shell, appPath] of [
     ['popup', join(ext, 'src', 'popup', 'App.jsx')],
@@ -135,8 +139,8 @@ for (const [shell, appPath] of [
         `${shell} App.jsx imports ProjectRosterForm`);
     assert.ok(app.includes("'project-roster'"),
         `${shell} tracks 'project-roster' sub-route`);
-    assert.ok(/onManageRoster=\{\(\) => openForm\('project-roster'\)\}/.test(app),
-        `${shell} ManageToken wires onManageRoster`);
+    assert.ok(/onManageRoster: \(ctx\) => openOwnerForm\('project-roster', ctx\)/.test(app),
+        `${shell} the asset page wires onManageRoster`);
 }
 
 console.log(

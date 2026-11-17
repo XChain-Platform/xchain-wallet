@@ -48,14 +48,15 @@ function toMnemonic() {
 
 function toVerifyAndSubmit() {
     toMnemonic();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
     fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Verify recovery phrase' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Verify Recovery Phrase' }));
     const words = PHRASE.split(' ');
     for (const input of screen.getAllByLabelText(/^Word \d+$/)) {
         const position = Number(input.labels[0].textContent.match(/\d+/)[0]);
         fireEvent.change(input, { target: { value: words[position - 1] } });
     }
-    fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 }
 
 beforeEach(() => {
@@ -95,7 +96,7 @@ describe('CreateWallet in a window another window out-created', () => {
         const guard = (elsewhere) => ({ elsewhere, report: () => {} });
         const { rerender } = render(tree({ importMnemonic, staleGuard: guard(false) }));
         toMnemonic();
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
         expect(document.body).toHaveTextContent('abandon');
 
         rerender(tree({ importMnemonic, staleGuard: guard(true) }));
@@ -122,6 +123,6 @@ describe('CreateWallet in a window another window out-created', () => {
 
         await waitFor(() => expect(document.body).toHaveTextContent(EXISTS));
         expect(document.body).not.toHaveTextContent('was not saved');
-        expect(screen.getByRole('button', { name: 'Create wallet' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Create Wallet' })).toBeTruthy();
     });
 });

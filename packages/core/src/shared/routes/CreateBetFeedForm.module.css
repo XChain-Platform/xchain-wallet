@@ -1,0 +1,262 @@
+/* Open a Market in the shared Quick | Full standard: outcome rows, the Default
+   Terms row with its chips, and the live preview card in the bet market's blue.
+   Colours come from tokens so dark themes follow; outcome dots are fixed hues. */
+
+/* ---- Outcomes ------------------------------------------------------- */
+
+.groupLabel {
+    --xc-icon-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+    color: var(--xc-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.groupLabel > svg {
+    color: var(--xc-accent-text);
+}
+
+.outcomeRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+/* The coloured circle is the field's leading icon (G112): its box is the shared
+   icon box, set in from the start edge by the shared inset token, so the space
+   above, below and before it is equal. */
+.outcomeDot {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: var(--xc-field-icon-inset-md);
+    z-index: var(--xc-z-base);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--xc-control-icon-md);
+    height: var(--xc-control-h-md);
+    pointer-events: none;
+}
+
+.outcomeDot::before {
+    content: '';
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--outcome-dot);
+}
+
+.outcomeField {
+    position: relative;
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+}
+
+.outcomeField .outcomeInput.outcomeInput {
+    padding-inline-start: calc(var(--xc-field-icon-inset-md) + var(--xc-control-icon-md) + var(--xc-field-icon-gap));
+}
+
+/* A dashed outline row, not the slate ghost fill. */
+.addOutcome.addOutcome {
+    --xc-button-hover-bg: var(--xc-control-bg-hover);
+    --xc-button-hover-border: var(--xc-border-strong, var(--xc-border));
+    width: 100%;
+    border: 1px dashed var(--xc-border-strong, var(--xc-border));
+    border-radius: var(--xc-radius-md);
+    background: transparent;
+    color: var(--xc-accent-text);
+}
+
+.addOutcome.addOutcome:hover {
+    background: var(--xc-control-bg-hover);
+    color: var(--xc-accent-text);
+}
+
+.groupHint {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    line-height: 1.4;
+}
+
+/* ---- Quick view: Default Terms row -------------------------------- */
+
+.terms {
+    --xc-icon-size: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    width: 100%;
+    min-width: 0;
+    padding: var(--xc-space-2) var(--xc-space-3);
+    border: 1px solid var(--xc-border);
+    border-radius: var(--xc-card-radius, var(--xc-radius-md));
+    background: var(--xc-card-bg, var(--xc-surface));
+    color: var(--xc-text);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+
+.terms:hover {
+    background: var(--xc-control-bg-hover);
+}
+
+.terms:focus-visible {
+    outline: 2px solid var(--xc-focus-ring);
+    outline-offset: 2px;
+}
+
+.termsIcon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--xc-accent-text);
+}
+
+.termsTitle {
+    min-width: 0;
+    font-size: var(--xc-text-sm);
+    font-weight: 600;
+}
+
+.termsEdit {
+    flex: 0 0 auto;
+    margin-inline-start: auto;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 500;
+}
+
+.chip {
+    max-width: 100%;
+    overflow: hidden;
+    padding: 2px var(--xc-space-2);
+    border: 1px solid var(--xc-border);
+    border-radius: 999px;
+    background: var(--xc-surface-2, var(--xc-surface));
+    color: var(--xc-text);
+    font-size: var(--xc-text-xs);
+    line-height: 1.5;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ---- Live preview card ------------------------------------------- */
+
+.previewBody {
+    padding-block: var(--xc-space-3);
+}
+
+.preview {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    padding: var(--xc-card-pad, var(--xc-space-3));
+    border-radius: var(--xc-card-radius);
+    /* The preview uses the same scheme-owned surface as the market hero. */
+    background: var(--xc-hero-bg);
+    border: 1px solid var(--xc-hero-border);
+    box-shadow: var(--xc-hero-shadow);
+    color: var(--xc-hero-text);
+}
+
+/* The card's gradient may be dropped in forced-colors mode, so its surface
+   and label colour are pinned to system colours together. */
+@media (forced-colors: active) {
+    .preview {
+        background: Canvas;
+        color: CanvasText;
+        border: 1px solid CanvasText;
+    }
+}
+
+.previewQuestion {
+    margin: 0;
+    color: var(--xc-hero-text);
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.previewPlaceholder {
+    opacity: 0.75;
+    font-weight: 600;
+}
+
+.previewMeta {
+    --xc-icon-size: 0.875rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-1) var(--xc-space-3);
+    color: var(--xc-hero-text-muted);
+    font-size: var(--xc-text-xs);
+}
+
+.previewMetaItem {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.previewOutcomes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--xc-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.previewOutcome {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    min-width: 0;
+    padding: var(--xc-space-2);
+    border-radius: var(--xc-radius-sm, 6px);
+    background: var(--xc-hero-chip-bg);
+    color: var(--xc-hero-text);
+    font-size: var(--xc-text-sm);
+    font-weight: 700;
+}
+
+.previewOutcomeLabel {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.previewOutcomePct {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---- Submitted screen: facts as label-left value-right rows ---------- */
+.resultFacts {
+    composes: flush from '../../ui/Card.module.css';
+    list-style: none;
+    margin: 0;
+    overflow: hidden;
+}
+
+.resultValue {
+    min-width: 0;
+    font-weight: 600;
+    text-align: end;
+    overflow-wrap: anywhere;
+}
+
+/* The copied-market note sits 8px above the form. */
+.duplicatedNote {
+    margin-bottom: var(--xc-space-2);
+}

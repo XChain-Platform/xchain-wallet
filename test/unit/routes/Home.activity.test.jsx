@@ -55,30 +55,28 @@ afterEach(() => {
 });
 
 describe('Home Activity tab', () => {
-    it('shows an empty Activity tab for a real wallet with no history', async () => {
+    // Home no longer has an Activity tab: History holds the same list, so
+    // Home shows only the Balances, NFTs and DeFi tabs.
+    it('has no Activity tab for a real wallet with no history', async () => {
         const onHistory = vi.fn();
         mountHome(onHistory);
 
-        fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
-
-        await waitFor(() => expect(screen.getByText('No activity yet')).toBeTruthy());
-        expect(screen.queryByText('Your activity is in History')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Open History' })).toBeNull();
-        expect(screen.getByRole('button', { name: 'See all activity' })).toBeTruthy();
+        expect(await screen.findByRole('tab', { name: 'Balances' })).toBeTruthy();
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent))
+            .toEqual(['Balances', 'NFTs', 'DeFi']);
+        expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'See all activity' })).toBeNull();
         expect(onHistory).not.toHaveBeenCalled();
     });
 
-    it('loads demo activity through the standard recent activity list', async () => {
+    it('has no Activity tab for a demo wallet and reads no history for Home', async () => {
         const onHistory = vi.fn();
         markDemoWallet(WALLET.id);
         const { messaging } = mountHome(onHistory);
 
-        fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
-
-        expect(await screen.findByRole('list', { name: 'Recent activity' })).toBeTruthy();
-        expect(screen.getAllByRole('button', { name: /Send|Receive|Issue|Mint|Dispenser|Order|Swap/i }).length)
-            .toBeGreaterThan(0);
-        expect(screen.getByRole('button', { name: 'See all activity' })).toBeTruthy();
+        expect(await screen.findByRole('tab', { name: 'Balances' })).toBeTruthy();
+        expect(screen.queryByRole('tab', { name: 'Activity' })).toBeNull();
+        expect(screen.queryByRole('list', { name: 'Recent activity' })).toBeNull();
         expect(messaging.getAddressHistory).not.toHaveBeenCalled();
         expect(onHistory).not.toHaveBeenCalled();
     });

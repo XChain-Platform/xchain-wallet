@@ -76,60 +76,63 @@ describe('web create-wallet flow', () => {
 
         render(<App />);
 
-        expect(await screen.findByRole('heading', { name: 'Create a new wallet' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Create a New Wallet' })).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'XChain Wallet' })).not.toBeInTheDocument();
     });
 
     it('enters Home with its skeleton before post-create data loads finish', async () => {
         render(<App />);
 
-        expect(await screen.findByRole('heading', { name: 'XChain Wallet' })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Create new wallet' }));
+        expect(await screen.findByRole('heading', { name: 'XChain Wallet', hidden: true })).toHaveClass('sr-only');
+        fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
 
-        expect(await screen.findByRole('heading', { name: 'Create a new wallet' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Create a New Wallet' })).toBeInTheDocument();
         const password = screen.getByLabelText(/^Password/);
         const confirm = screen.getByLabelText('Confirm password');
         await waitFor(() => expect(password).toHaveFocus());
-        expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+        // G22: Next is always enabled; a press with empty fields is refused by name.
+        expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
 
         fireEvent.change(password, { target: { value: 'short' } });
         fireEvent.change(confirm, { target: { value: 'short' } });
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        expect(await screen.findByText('Password must be at least 8 characters.')).toBeInTheDocument();
-        expect(screen.queryByRole('heading', { name: 'Write down your recovery phrase' })).toBeNull();
+        // In the form's error notice and under the Password field.
+        expect(await screen.findAllByText('Password must be at least 8 characters.')).toHaveLength(2);
+        expect(screen.queryByRole('heading', { name: 'Write Down Your Recovery Phrase' })).toBeNull();
 
         fireEvent.change(password, { target: { value: 'correct horse battery staple' } });
         fireEvent.change(confirm, { target: { value: 'correct horse battery staple' } });
         fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
-        const recoveryHeading = await screen.findByRole('heading', { name: 'Write down your recovery phrase' });
+        const recoveryHeading = await screen.findByRole('heading', { name: 'Write Down Your Recovery Phrase' });
         await waitFor(() => expect(recoveryHeading).toHaveFocus());
         expect(screen.queryByRole('list', { name: 'Recovery phrase' })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Reveal recovery phrase' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal Recovery Phrase' }));
         expect(within(await screen.findByRole('list', { name: 'Recovery phrase' })).getAllByRole('listitem')).toHaveLength(12);
-        const verifyButton = screen.getByRole('button', { name: 'Verify recovery phrase' });
-        expect(verifyButton).toBeDisabled();
+        const verifyButton = screen.getByRole('button', { name: 'Verify Recovery Phrase' });
+        // G130: enabled before the box is ticked; the tap answers on the checkbox.
+        expect(verifyButton).toBeEnabled();
 
         fireEvent.click(screen.getByRole('checkbox', { name: /saved my recovery phrase/ }));
         fireEvent.click(verifyButton);
 
-        expect(await screen.findByRole('heading', { name: 'Verify your recovery phrase' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Verify Your Recovery Phrase' })).toBeInTheDocument();
         const quizInputs = screen.getAllByLabelText(/^Word \d+$/);
         await waitFor(() => expect(quizInputs[0]).toHaveFocus());
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
-        expect(await screen.findByText('Fill in every word.')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
+        expect((await screen.findAllByText('Fill in every word.')).length).toBeGreaterThan(0);
         expect(background.importMnemonic).not.toHaveBeenCalled();
 
         answerQuiz(() => 'wrong');
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
-        expect(await screen.findByText(/does not match/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
+        expect((await screen.findAllByText(/does not match/)).length).toBeGreaterThan(0);
         expect(background.importMnemonic).not.toHaveBeenCalled();
 
         const words = PHRASE.split(' ');
         answerQuiz((position) => words[position - 1]);
-        fireEvent.click(screen.getByRole('button', { name: 'Create wallet' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create Wallet' }));
 
-        const donationHeading = await screen.findByRole('heading', { name: 'Automatic Donation System' });
+        const donationHeading = await screen.findByRole('heading', { name: 'Automatic Donations' });
         await waitFor(() => expect(donationHeading).toHaveFocus());
         expect(background.importMnemonic).toHaveBeenCalledTimes(1);
         expect(background.importMnemonic).toHaveBeenCalledWith(expect.objectContaining({

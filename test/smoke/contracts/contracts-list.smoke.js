@@ -63,9 +63,10 @@ assert.equal(
 
 // --- 2. Three sections ------------------------------------------------
 
-assert.ok(/My contracts \(published by me\)/.test(listSrc), 'My contracts section title');
-assert.ok(/My interactions \(deposits \/ withdrawals\)/.test(listSrc), 'My interactions section title');
-assert.ok(/Browse all contracts/.test(listSrc), 'Browse all section title');
+// One list at a time, picked by the operator-ruled icon tabs above it.
+assert.ok(/<Icon\.GridIcon \/>All</.test(listSrc), 'All contracts tab');
+assert.ok(/<Icon\.UserIcon \/>My Contracts</.test(listSrc), 'My Contracts tab');
+assert.ok(/<Icon\.DollarIcon \/>Interactions</.test(listSrc), 'Interactions tab');
 
 // --- 3. Messaging wiring + row merging --------------------------------
 
@@ -95,7 +96,7 @@ assert.ok(
     'ContractsList sorts rows newest-block-first',
 );
 assert.ok(
-    /Filter by name or number/.test(listSrc),
+    /searchPlaceholder="Search"[\s\S]*?searchLabel="Search contracts"/.test(listSrc),
     'ContractsList renders a client-side search input',
 );
 
@@ -132,8 +133,8 @@ assert.ok(
     'ContractsList does not build its explanatory sentences out of action labels',
 );
 assert.ok(
-    /Contract calls that don&apos;t move funds aren&apos;t listed/.test(listSrc),
-    'ContractsList says in plain words that fund-neutral calls are not listed yet',
+    !/Contract calls that don&apos;t move funds aren&apos;t listed/.test(listSrc),
+    'ContractsList no longer carries the fund-neutral calls note under the Interactions tab',
 );
 assert.ok(
     /Published contracts appear here after you publish one\./.test(listSrc),
@@ -144,7 +145,7 @@ assert.ok(
     'ContractsList surfaces the empty "My interactions" state once for the section',
 );
 assert.ok(
-    /Indexed contracts appear here after contract data loads/.test(listSrc),
+    /Published and indexed contracts appear here after one is created\./.test(listSrc),
     'ContractsList surfaces the empty "Browse all" state once for the section',
 );
 assert.ok(
@@ -292,22 +293,21 @@ for (const [shell, appPath] of [
         `${shell} App.jsx uses the contract-chain address gate hook`);
     assert.ok(app.includes("'contracts-list'"),
         `${shell} tracks the contracts-list sub-route`);
-    assert.ok(
-        /onContracts=\{activeWalletId\s*&&\s*hasVmAddress\s*\?\s*\(\)\s*=>\s*setUnlockedView\('contracts-list'\)\s*:\s*undefined\}/.test(app),
-        `${shell} passes onContracts to Home only when activeWalletId && hasVmAddress`,
-    );
-    assert.ok(
-        !/onContracts=\{[^}]*hasBtcAddress/.test(app),
-        `${shell} must not gate Contracts on a BTC address any more`,
-    );
+    assert.ok(/\bhasVmAddress\b/.test(app),
+        `${shell} keeps the contract-chain address gate for the Contracts row`);
+    assert.ok(!/onContracts=\{/.test(app),
+        `${shell} passes no onContracts to Home`);
 }
 
-// --- 8. Home.jsx Contracts button gated by onContracts prop -----------
+// --- 8. Contracts is a wallet menu row gated on a contract-chain address --
+// Home has no bottom action row; the wallet menu's Contracts row carries
+// the contract-chain gate.
 
 const homeSrc = readFileSync(join(sharedRoutes, 'Home.jsx'), 'utf8');
-assert.ok(/\bonContracts\b/.test(homeSrc), 'Home exposes onContracts prop');
-assert.ok(/\{onContracts \?/.test(homeSrc),
-    'Home renders the Contracts button only when onContracts is passed');
+assert.ok(!/\bonContracts\b/.test(homeSrc), 'Home carries no Contracts button of its own');
+const walletMenuSrc = readFileSync(join(sharedRoutes, '..', 'walletMenu.js'), 'utf8');
+assert.ok(/id: 'contracts-list', labelKey: 'walletMenu\.row\.contracts', icon: 'ContractIcon', gate: 'vm'/.test(walletMenuSrc),
+    'the wallet menu Contracts row is gated on a contract-chain address');
 
 console.log(
     'OK: contracts list smoke (ContractsList shared route + five explorer passthroughs + messaging helpers in popup/web/desktop + BTC-address gate via useBtcAddressesPresent + Home onContracts wiring)',

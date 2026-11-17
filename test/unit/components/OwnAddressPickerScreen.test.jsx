@@ -9,7 +9,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 vi.mock('../../../packages/core/src/shared/routes/AddressList.jsx', () => ({
     AddressList: ({
         walletId, accountId, title, pickerMode, networkFilter, networkLocked, pickerUnavailableReason,
-        pickerActions, onPick, onBack,
+        pickerActions, pickerSelectedAddress, onPick, onBack,
     }) => (
         <section
             data-testid="address-list"
@@ -21,6 +21,7 @@ vi.mock('../../../packages/core/src/shared/routes/AddressList.jsx', () => ({
             data-picker-action-count={pickerActions.length}
             data-network-locked={String(networkLocked)}
             data-unavailable={pickerUnavailableReason ? pickerUnavailableReason({ id: 'address-2' }, 'bitcoin-mainnet') : ''}
+            data-selected-address={pickerSelectedAddress?.id || ''}
         >
             <button type="button" onClick={() => onPick({ id: 'address-2', address: 'bc1-picked' }, 'bitcoin-mainnet')}>
                 Pick Bitcoin address
@@ -59,6 +60,7 @@ describe('OwnAddressPickerScreen', () => {
                 onChainChange={onChainChange}
                 onBack={onBack}
                 pickerActions={[{ key: 'new', label: 'New address', onSelect: vi.fn() }]}
+                selectedAddress={{ id: 'address-1', address: 'bc1-current' }}
             />,
         );
         return { onPick, onChainChange, onBack };
@@ -74,6 +76,7 @@ describe('OwnAddressPickerScreen', () => {
         expect(screen.getByTestId('address-list')).toHaveAttribute('data-network-filter', 'bitcoin');
         expect(screen.getByTestId('address-list')).toHaveAttribute('data-picker-action-count', '1');
         expect(screen.getByTestId('address-list')).toHaveAttribute('data-network-locked', 'false');
+        expect(screen.getByTestId('address-list')).toHaveAttribute('data-selected-address', 'address-1');
     });
 
     it('keeps a fixed-chain form on its chain and passes the unavailable reason through', () => {
@@ -92,6 +95,15 @@ describe('OwnAddressPickerScreen', () => {
         expect(screen.getByTestId('address-list')).toHaveAttribute('data-network-locked', 'true');
         expect(screen.getByTestId('address-list')).toHaveAttribute('data-network-filter', 'bitcoin');
         expect(screen.getByTestId('address-list')).toHaveAttribute('data-unavailable', 'Watch-only');
+    });
+
+    it('keeps a form that cannot follow a chain switch on its own chain', () => {
+        render(
+            <OwnAddressPickerScreen walletId="wallet-1" chainId="bitcoin-mainnet" onPick={vi.fn()} onBack={vi.fn()} pickerActions={[]} />,
+        );
+
+        expect(screen.getByTestId('address-list')).toHaveAttribute('data-network-locked', 'true');
+        expect(screen.getByTestId('address-list')).toHaveAttribute('data-network-filter', 'bitcoin');
     });
 
     it('never locks a picker that has no chain to lock to', () => {

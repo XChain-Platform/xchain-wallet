@@ -42,8 +42,10 @@ const web = join(wsRoot, 'packages', 'web');
 const sharedRoutes = join(core, 'src', 'shared', 'routes');
 
 const formPath = join(sharedRoutes, 'TokenAdminForm.jsx');
+const confirmPath = join(core, 'src', 'shared', 'components', 'ConfirmActionModal.jsx');
 assert.ok(existsSync(formPath), 'TokenAdminForm.jsx exists');
 const src = readFileSync(formPath, 'utf8');
+const confirmSrc = readFileSync(confirmPath, 'utf8');
 
 // --- 1. Public surface + CSS reuse ------------------------------------
 
@@ -99,7 +101,13 @@ assert.ok(
     'TokenAdminForm calls decoder with action: "ISSUE"',
 );
 assert.ok(/decoderLib\.decodeAction/.test(src), 'TokenAdminForm invokes decoder.decodeAction');
-assert.ok(src.includes('decoded.warnings'), 'TokenAdminForm renders decoder warnings');
+assert.ok(
+    /decoded=\{decoded\}/.test(src)
+        && /actionWarnings: reviewWarningIds/.test(src)
+        && /withoutCoveredWarnings\(reviewFormatted\.warnings, cardIds\)/.test(confirmSrc)
+        && /decodedWarnings:[\s\S]{0,120}formattedDecoded\?\.warnings/.test(confirmSrc),
+    'TokenAdminForm decoder and permanence warnings share the Confirm Standard warning slot without duplicates',
+);
 
 // --- 6. Sign wires through messaging.issueToken -----------------------
 
@@ -116,14 +124,16 @@ assert.ok(
 //
 // U63: the main forward action of every form is green (FormPage turns a
 // primary submit into the success style), Lock token included; the typed
-// LOCK confirmation carries the permanence warning instead of a red button.
+// LOCK confirmation stays, and the permanence warning is the confirm
+// screen's warnings card (actionWarnings TOKEN_LOCK), not the field hint.
 assert.ok(
     !/mode === 'lock' \? 'danger'/.test(src),
     'TokenAdminForm no longer paints Lock token with the danger variant',
 );
 assert.ok(
-    /typedConfirmationLockAboveHint/.test(src),
-    'Lock token keeps its typed LOCK confirmation, which says locking is permanent',
+    /label="Type LOCK to confirm"/.test(src)
+        && /t\('common\.typedConfirmationHint', \{ word: 'LOCK' \}\)/.test(src),
+    'Lock token keeps its typed LOCK confirmation with the plain typing hint',
 );
 
 // --- 8. ActionsMenu + App.jsx sub-routes ------------------------------

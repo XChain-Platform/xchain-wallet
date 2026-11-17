@@ -53,12 +53,15 @@ import {
     test,
 } from '../../fixtures/wallet.js';
 import { LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import { NATIVE_FEE_ONLY } from '../../fixtures/priceSeed.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
     expectConfirmModal,
     actionStatuses,
     fundAddress,
+    issuePlainToken,
+    readIssueSource,
     mintXchain,
     readReceiveAddress,
     REGTEST_COIN,
@@ -189,14 +192,8 @@ test.describe('the PC-26 gated SEND guard', () => {
             await openPaletteCommand(issuer, 'Issue token');
             const main = issuer.getByRole('main');
             await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-            await selectVenueChain(main);
-            await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Supply', { exact: true }).fill(SUPPLY);
-            const password = main.getByLabel('Password', { exact: true });
-            if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
-                await password.fill(PASSWORD);
-            }
-            await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+            await readIssueSource(main);
+            await issuePlainToken(main, { ticker: TICK, supply: SUPPLY, password: PASSWORD });
 
             await expectConfirmModal(issuer, 'the ISSUE');
             await approveConfirm(issuer);
@@ -211,7 +208,9 @@ test.describe('the PC-26 gated SEND guard', () => {
 
         await test.step('the issuer publishes a gated file against the tick', async () => {
             await openPaletteCommand(issuer, 'Publish file');
-            await issuer.getByRole('radio', { name: /Encrypted & token-gated/ }).click();
+            // Publish as is the themed dropdown (G119).
+            await issuer.getByRole('button', { name: /^Publish as: / }).click();
+            await issuer.getByRole('option', { name: /^Encrypted & token-gated/ }).click();
             // PublishFileForm pins role="listitem" on this owned-token row (it
             // sits inside a role="list" container), so it answers to
             // 'listitem', not 'button', in the accessibility tree. A listitem
@@ -226,16 +225,13 @@ test.describe('the PC-26 gated SEND guard', () => {
                 mimeType: 'text/plain',
                 buffer: Buffer.from('gated content payload for the e2e guard spec'),
             });
-            await main.getByRole('checkbox', {
-                name: /I understand the encrypted file is published on-chain forever/,
-            }).check();
-            await main.getByRole('button', { name: 'Publish file', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish File', exact: true }).click();
 
             const reviewPassword = main.getByLabel('Password', { exact: true });
             if (await reviewPassword.count() > 0 && await reviewPassword.isVisible().catch(() => false)) {
                 await reviewPassword.fill(PASSWORD);
             }
-            await main.getByRole('button', { name: 'Sign and publish' }).click();
+            await main.getByRole('button', { name: 'Sign and Publish' }).click();
             await expectConfirmModal(issuer, 'the gated publish', 60_000);
             await expect(issuer.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
             await issuer.getByTestId('confirm-approve').click();
@@ -317,7 +313,7 @@ test.describe('the PC-26 gated SEND guard', () => {
 
             await openPaletteCommand(holder, 'Advanced action');
             await selectVenueChain(holder);
-            await holder.getByLabel('Action', { exact: true }).selectOption('SEND');
+            await pickOption(holder.getByLabel('Action', { exact: true }), 'SEND');
 
             // The tick-specific "HAS active gated content" line only renders
             // once `useGatedTickNotice` has a TICK to check (it is debounced

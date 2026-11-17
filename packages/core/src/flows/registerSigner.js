@@ -31,6 +31,53 @@
 // separately and persist `Address` records the usual way.
 
 import { createSignerRecord, SIGNER_KINDS } from '../schemas/signer.js';
+import {
+    isLedgerIdentity, ledgerIdentitiesFromAccounts, withLedgerIdentities,
+} from '../signers/ledgerIdentity.js';
+
+/**
+ * One SignerRecord by id. The vault's collections answer `get`; a few older
+ * callers and their stand-ins name it `find`, which the vault never had, so
+ * every device route that looked a record up that way threw a TypeError.
+ *
+ * @param {{ signers?: { get?: Function, find?: Function } } | null | undefined} vault
+ * @param {string} signerId
+ * @returns {Promise<any>}
+ */
+export async function getSignerRecord(vault, signerId) {
+    const signers = vault?.signers;
+    if (!signers) return null;
+    if (typeof signers.get === 'function') return (await signers.get(signerId)) ?? null;
+    if (typeof signers.find === 'function') return (await signers.find(signerId)) ?? null;
+    return null;
+}
+
+/**
+ * Record on a Ledger SignerRecord the identity of every network these
+ * addresses are the first read of: a network added to an account after
+ * pairing (the add-network read, or Add account with that app open). An
+ * identity the record already holds is never replaced, so each network keeps
+ * the key it was first read with and every later read and sign is checked
+ * against it. Any other record, or nothing new, writes nothing.
+ *
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {string} signerId
+ * @param {Array<{chainId: string, accountIndex?: number, derivationPath: string, publicKey: string}>} reads
+ * @returns {Promise<string[]>} the chain ids newly recorded
+ */
+export async function recordLedgerIdentities(vault, signerId, reads) {
+    if (!vault?.signers || typeof signerId !== 'string' || !signerId) return [];
+    const record = await getSignerRecord(vault, signerId);
+    if (record?.vendor !== 'ledger') return [];
+    const held = record.identities && typeof record.identities === 'object' ? record.identities : {};
+    const fresh = ledgerIdentitiesFromAccounts(reads);
+    const added = Object.keys(fresh).filter((chainId) => !isLedgerIdentity(held[chainId]));
+    if (!added.length) return [];
+    const identities = { ...held };
+    for (const chainId of added) identities[chainId] = fresh[chainId];
+    await vault.signers.put({ ...record, identities });
+    return added;
+}
 
 /**
  * @typedef {Object} RegisterSignerOpts
@@ -42,7 +89,22 @@ import { createSignerRecord, SIGNER_KINDS } from '../schemas/signer.js';
  * @property {string} deviceIdentifier
  * @property {string} [label]                      optional user-chosen label
  * @property {string | null} [firmwareVersion]
+ * @property {Record<string, {path: string, fingerprint: string}>} [identities]
+ *           Ledger only: the per-chain identities of the keys this pairing
+ *           read (signers/ledgerIdentity.js). A Ledger paired again from
+ *           another coin app reports another deviceIdentifier, so these are
+ *           what match it to its record; they are merged into that record.
  */
+
+/** The well-formed entries of an identities map, or null when there are none. */
+function cleanIdentities(identities) {
+    if (!identities || typeof identities !== 'object') return null;
+    const out = {};
+    for (const [chainId, entry] of Object.entries(identities)) {
+        if (chainId && isLedgerIdentity(entry)) out[chainId] = { path: entry.path, fingerprint: entry.fingerprint };
+    }
+    return Object.keys(out).length ? out : null;
+}
 
 /**
  * @param {RegisterSignerOpts} opts
@@ -74,15 +136,19 @@ export async function registerSigner(opts) {
         throw new Error('registerSigner: deviceIdentifier is required');
     }
 
+    const identities = vendor === 'ledger' ? cleanIdentities(opts.identities) : null;
     const existing = await findSigner(vault, {
-        walletId, vendor, deviceIdentifier,
+        walletId, vendor, deviceIdentifier, identities,
     });
     if (existing) {
+        // The record keeps its id and its first identifier; a Ledger gains the
+        // identities of the chains this pairing read.
         const updated = {
             ...existing,
             firmwareVersion: opts.firmwareVersion ?? existing.firmwareVersion,
             label: opts.label ?? existing.label,
             lastSeenAt: new Date().toISOString(),
+            ...(identities ? { identities: { ...(existing.identities || {}), ...identities } } : {}),
         };
         await vault.signers.put(updated);
         return updated;
@@ -95,6 +161,7 @@ export async function registerSigner(opts) {
         deviceIdentifier,
         label: opts.label,
         firmwareVersion: opts.firmwareVersion ?? null,
+        ...(identities ? { identities } : {}),
     });
     await vault.signers.put(record);
     return record;
@@ -104,17 +171,27 @@ export async function registerSigner(opts) {
  * List signer records for a wallet. Returns an empty array when no
  * signers have been paired.
  *
+ * With `withIdentities`, each Ledger record also carries an identity for
+ * every chain it has a stored address on (signers/ledgerIdentity.js), so a
+ * record paired before identities were stored, or a chain added after
+ * pairing, can still be checked from that chain's app on reconnect. That
+ * costs one bulk address read, made only when the wallet has a Ledger.
+ *
  * @param {import('../storage/Vault.js').Vault} vault
  * @param {string} walletId
+ * @param {{ withIdentities?: boolean }} [opts]
  * @returns {Promise<import('../schemas/signer.js').SignerRecord[]>}
  */
-export async function listSignersForWallet(vault, walletId) {
+export async function listSignersForWallet(vault, walletId, { withIdentities = false } = {}) {
     if (!vault) throw new Error('listSignersForWallet: vault is required');
     if (typeof walletId !== 'string' || !walletId) {
         throw new Error('listSignersForWallet: walletId is required');
     }
     const all = await vault.signers.list();
-    return all.filter((r) => r.walletId === walletId);
+    const own = all.filter((r) => r.walletId === walletId);
+    if (!withIdentities || !vault.addresses || !own.some((r) => r.vendor === 'ledger')) return own;
+    const addresses = await vault.addresses.list();
+    return own.map((r) => withLedgerIdentities(r, addresses));
 }
 
 /**
@@ -139,15 +216,26 @@ export async function unregisterSigner(vault, signerId) {
  * Find an existing signer record by (walletId, vendor, deviceIdentifier).
  * Used by registerSigner for re-pair idempotence.
  *
+ * A Ledger's identifier depends on the coin app open at pairing, so the
+ * same Ledger paired again from another app (Litecoin, say) reports another
+ * one. With `identities`, a Ledger record of the wallet also matches when any
+ * of its identities (stored, or derived from the addresses it gave; see
+ * signers/ledgerIdentity.js) hashes the same key. The addresses are read only
+ * when no identifier matched and the wallet has a Ledger record.
+ *
  * @param {import('../storage/Vault.js').Vault} vault
- * @param {{ walletId: string, vendor: string, deviceIdentifier: string }} query
+ * @param {{ walletId: string, vendor: string, deviceIdentifier: string,
+ *   identities?: Record<string, {path: string, fingerprint: string}> | null }} query
  * @returns {Promise<import('../schemas/signer.js').SignerRecord | null>}
  */
-export async function findSigner(vault, { walletId, vendor, deviceIdentifier }) {
+export async function findSigner(vault, { walletId, vendor, deviceIdentifier, identities }) {
     const all = await vault.signers.list();
-    return all.find((r) =>
-        r.walletId === walletId
-        && r.vendor === vendor
-        && r.deviceIdentifier === deviceIdentifier,
-    ) || null;
+    const own = all.filter((r) => r.walletId === walletId && r.vendor === vendor);
+    const exact = own.find((r) => r.deviceIdentifier === deviceIdentifier);
+    if (exact) return exact;
+    const wanted = new Set(Object.values(cleanIdentities(identities) || {}).map((entry) => entry.fingerprint));
+    if (vendor !== 'ledger' || wanted.size === 0 || own.length === 0) return null;
+    const addresses = vault.addresses ? await vault.addresses.list() : [];
+    return own.find((r) => Object.values(withLedgerIdentities(r, addresses).identities || {})
+        .some((entry) => wanted.has(entry?.fingerprint))) || null;
 }

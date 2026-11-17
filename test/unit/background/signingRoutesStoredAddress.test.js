@@ -166,7 +166,7 @@ describe('a software route signs only with the signer the stored address calls f
     });
 });
 
-const NOT_CONNECTED = /Hardware signer is not connected/;
+const NOT_CONNECTED = /Hardware wallet is not connected/;
 
 describe('the hardware lane resolves the address inside the request wallet', () => {
     it('accepts an address of this wallet by id', async () => {

@@ -5,15 +5,16 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { selectOption } from '../../helpers/selectOption.js';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import { ContactsList } from '../../../packages/core/src/shared/routes/ContactsList.jsx';
 import { ContractsList } from '../../../packages/core/src/shared/routes/ContractsList.jsx';
 import { DispensersList } from '../../../packages/core/src/shared/routes/DispensersList.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { MarketsList } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
 import { MessagingInbox } from '../../../packages/core/src/shared/routes/MessagingInbox.jsx';
-import { MyBets } from '../../../packages/core/src/shared/routes/MyBets.jsx';
 import { MyLists } from '../../../packages/core/src/shared/routes/MyLists.jsx';
 import { MyOrdersView } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
 import { MySwapsView } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
@@ -162,11 +163,9 @@ describe('list first-load states', () => {
         expect(screen.queryByText(/Nothing staked yet/)).toBeNull();
     });
 
-    it('retries a failed list load without showing its empty state', async () => {
+    it('leaves a failed market load on its plain empty state (G91)', async () => {
         const messaging = {
-            getMarkets: vi.fn()
-                .mockRejectedValueOnce(new Error('transport detail'))
-                .mockResolvedValueOnce([]),
+            getMarkets: vi.fn().mockRejectedValueOnce(new Error('transport detail')),
             listWatchlistForWallet: vi.fn().mockResolvedValue([]),
         };
         mount(MarketsList, messaging, {
@@ -175,34 +174,42 @@ describe('list first-load states', () => {
             onOpenMarket: () => {},
         });
 
-        expect(await screen.findByText('Could not load markets. Try again.')).toBeInTheDocument();
-        expect(screen.queryByText('No markets for BTC')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-        await waitFor(() => expect(messaging.getMarkets).toHaveBeenCalledTimes(2));
+        // The reachability banner reports network trouble once; the list adds
+        // no error line or Try Again of its own.
         expect(await screen.findByText('No markets for BTC')).toBeInTheDocument();
+        expect(screen.queryByText('Could not load markets. Try again.')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull();
+        expect(document.body.textContent).not.toContain('transport detail');
     });
 
+    // My bets is a tab of Prediction markets (view 'bets').
     it('shows a busy state and retries a plain My bets failure', async () => {
         const firstLoad = deferred();
-        const getAddressesByChain = vi.fn()
+        const bets = vi.fn()
             .mockImplementationOnce(() => firstLoad.promise)
-            .mockResolvedValueOnce({});
-        mount(MyBets, {
-            getAddressesByChain,
-            bets: vi.fn().mockResolvedValue([]),
-        });
+            .mockResolvedValueOnce([]);
+        mount(BetFeedsList, {
+            getAddressesByChain: vi.fn().mockResolvedValue({ 'bitcoin-mainnet': [{ address: ADDRESS }] }),
+            // A market the wallet has not bet in, so the empty My bets list
+            // is the tab's own empty state, not the network's.
+            betFeeds: vi.fn().mockResolvedValue({ data: [{ action_index: '1', label: 'Q', outcomes: 'Yes,No', source: 'bc1qother' }] }),
+            bets,
+        }, { view: 'bets', onOpenMarket: () => {} });
 
-        expect(screen.getByRole('status', { name: 'Loading bets' })).toBeInTheDocument();
+        // My bets waits on the wallet's bets under the list's own loading line.
+        expect(await screen.findByRole('status', { name: 'Loading prediction markets' })).toBeInTheDocument();
         await act(async () => firstLoad.reject(new Error('private transport detail')));
-        expect(await screen.findByText('Could not load your bets. Try again.')).toBeInTheDocument();
+        expect(await screen.findByText('Could not load positions for any of your addresses.')).toBeInTheDocument();
         expect(document.body).not.toHaveTextContent('private transport detail');
 
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-        await waitFor(() => expect(getAddressesByChain).toHaveBeenCalledTimes(2));
-        expect(await screen.findByText('No bets yet')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
+        await waitFor(() => expect(bets).toHaveBeenCalledTimes(2));
+        expect(await screen.findByText('No predictions yet')).toBeInTheDocument();
     });
 
-    it('shows a busy state and retries a plain My orders failure', async () => {
+    // G91: a failed read shows the plain empty state; the reachability
+    // banner reports network trouble once, so the page adds no error or Try Again.
+    it('shows a busy state, then the plain empty state on a My orders failure', async () => {
         const firstLoad = deferred();
         const getAddressesByChain = vi.fn()
             .mockImplementationOnce(() => firstLoad.promise)
@@ -214,15 +221,13 @@ describe('list first-load states', () => {
 
         expect(screen.getByRole('status', { name: 'Loading orders' })).toBeInTheDocument();
         await act(async () => firstLoad.reject(new Error('private transport detail')));
-        expect(await screen.findByText('Could not load your orders. Try again.')).toBeInTheDocument();
-        expect(document.body).not.toHaveTextContent('private transport detail');
-
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-        await waitFor(() => expect(getAddressesByChain).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('No orders yet')).toBeInTheDocument();
+        expect(document.body).not.toHaveTextContent('private transport detail');
+        expect(screen.queryByText('Could not load your orders. Try again.')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull();
     });
 
-    it('shows a busy state and retries a plain My swaps failure', async () => {
+    it('shows a busy state, then the plain empty state on a My swaps failure', async () => {
         const firstLoad = deferred();
         const getAddressesByChain = vi.fn()
             .mockImplementationOnce(() => firstLoad.promise)
@@ -234,12 +239,10 @@ describe('list first-load states', () => {
 
         expect(screen.getByRole('status', { name: 'Loading swaps' })).toBeInTheDocument();
         await act(async () => firstLoad.reject(new Error('private transport detail')));
-        expect(await screen.findByText('Could not load your swaps. Try again.')).toBeInTheDocument();
-        expect(document.body).not.toHaveTextContent('private transport detail');
-
-        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-        await waitFor(() => expect(getAddressesByChain).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('No swaps yet')).toBeInTheDocument();
+        expect(document.body).not.toHaveTextContent('private transport detail');
+        expect(screen.queryByText('Could not load your swaps. Try again.')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try Again' })).toBeNull();
     });
 
 });
@@ -257,10 +260,11 @@ describe('filtered list empty states', () => {
         mount(ContactsList, { listContacts: vi.fn().mockResolvedValue([contact]) });
         await screen.findByText('Alice');
 
+        fireEvent.click(screen.getByRole('button', { name: 'Filter contacts' }));
         fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'missing' } });
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset Filters' }));
         expect(screen.getByLabelText('Search contacts')).toHaveValue('');
         expect(await screen.findByText('Alice')).toBeInTheDocument();
         expect(screen.queryByText('No contacts yet')).toBeNull();
@@ -285,12 +289,17 @@ describe('filtered list empty states', () => {
         mount(DispensersList, messaging, { onOpenDispenser: () => {} });
         await screen.findByText('Open');
 
+        // Search sits in the title-line filter menu.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter dispensers' }));
         fireEvent.change(screen.getByLabelText('Search dispensers'), { target: { value: 'missing' } });
-        expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
+        expect(await screen.findByText('No matching dispensers')).toBeInTheDocument();
+        expect(screen.getByText('Change or clear the filter to see more.')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        // The empty state has no Reset button here; clearing the search shows the row again.
+        fireEvent.change(screen.getByLabelText('Search dispensers'), { target: { value: '' } });
         expect(screen.getByLabelText('Search dispensers')).toHaveValue('');
-        expect(await screen.findByText('Open')).toBeInTheDocument();
+        expect(screen.queryByText('No matching dispensers')).toBeNull();
+        expect(screen.getByRole('list')).toHaveTextContent('Open');
         expect(screen.queryByText('No dispensers yet')).toBeNull();
     });
 
@@ -307,13 +316,16 @@ describe('filtered list empty states', () => {
         });
         await screen.findByText('DOGE');
 
+        // Search and the Show choice (Popular, All, Watchlist) sit in the
+        // title-line filter menu.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter markets' }));
         fireEvent.change(screen.getByLabelText('Search markets'), { target: { value: 'missing' } });
-        fireEvent.click(screen.getByRole('tab', { name: 'Watchlist' }));
+        selectOption(screen.getByRole('combobox', { name: 'Show markets' }), 'all');
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reset Filters' }));
         expect(screen.getByLabelText('Search markets')).toHaveValue('');
-        expect(screen.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('combobox', { name: 'Show markets' })).toHaveValue('popular');
         expect(await screen.findByText('DOGE')).toBeInTheDocument();
     });
 
@@ -333,13 +345,15 @@ describe('filtered list empty states', () => {
         mount(MyTokens, messaging, { onIssue: () => {}, onSelectTick: () => {} });
         await screen.findByText('FILTERME');
 
-        fireEvent.change(screen.getByRole('combobox', { name: 'Filter tokens by type' }), {
-            target: { value: 'holding' },
-        });
+        // The type choice sits in the title-line filter menu, as a list of options.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter tokens' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Filter tokens by type: All tokens' }));
+        fireEvent.click(screen.getByRole('option', { name: 'Holding' }));
         expect(await screen.findByText('No results for these filters')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Filter tokens by type: Holding' })).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
-        expect(screen.getByRole('combobox', { name: 'Filter tokens by type' })).toHaveValue('all');
+        fireEvent.click(screen.getByRole('button', { name: 'Reset Filters' }));
+        expect(screen.getByRole('button', { name: 'Filter tokens by type: All tokens' })).toBeInTheDocument();
         expect(screen.getByLabelText('Search your tokens by ticker or description')).toHaveValue('');
         expect(await screen.findByText('FILTERME')).toBeInTheDocument();
         expect(screen.queryByText('No owned tokens yet')).toBeNull();

@@ -9,10 +9,21 @@
 // contact legal@dankest.llc.
 
 import { readFileSync } from 'node:fs';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, act as domAct, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+
+vi.mock('../../../packages/core/src/shared/components/ListPickerScreen.jsx', () => ({
+    ListPickerScreen: ({ title, onSelect }) => React.createElement(
+        'button',
+        { type: 'button', onClick: () => onSelect({ actionIndex: '81', name: 'Picked list' }) },
+        `Pick ${title}`,
+    ),
+}));
+
+afterEach(() => { resetWalletModes(); });
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
 import { decodeAction } from '../../../packages/core/src/decoder/actionDecoder.js';
 
@@ -98,7 +109,7 @@ describe('BET v4 signing description', () => {
         expect(decoded.details.find((row) => row.label === 'Allow list')?.value).toBe('Retain current');
         expect(decoded.details.find((row) => row.label === 'Block list')?.value).toBe('Detach');
         expect(decoded.warnings.join(' ')).toMatch(/market creator.*market is open/);
-        expect(decoded.warnings.join(' ')).toContain('future bets only');
+        expect(decoded.warnings.join(' ')).toContain('future purchases only');
     });
 });
 
@@ -106,14 +117,20 @@ async function drain(rounds = 16) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
 }
 
-function routeHarness(feeds, settings = { walletMode: 'full' }) {
+function routeHarness(feeds, { walletMode = 'full' } = {}) {
     const calls = [];
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'wallet-1', walletMode }], activeWalletId: 'wallet-1' });
     const target = {
         getAddressesByChain: () => Promise.resolve({ [CHAIN]: [ADDRESS] }),
-        getSettings: () => Promise.resolve(settings),
+        getSettings: () => Promise.resolve({}),
+        listWallets: () => Promise.resolve([{ id: 'wallet-1', name: 'W', walletMode }]),
         signerReady: () => Promise.resolve({ ready: false }),
         getSignerStatus: () => Promise.resolve({ status: 'locked' }),
         betFeeds: () => Promise.resolve({ data: feeds }),
+        getListByActionIndex: ({ actionIndex }) => Promise.resolve(
+            actionIndex === '12' ? { name: 'Existing members', list: [] } : { list: [] },
+        ),
         preflight: () => Promise.resolve({ verdict: 'pass', findings: [], unverified: [] }),
         composeBetForConfirm: (args) => {
             calls.push({ method: 'composeBetForConfirm', args });
@@ -159,6 +176,13 @@ function buttonsNamed(utils, name) {
         .filter((button) => (button.textContent || '').trim() === name);
 }
 
+// An action list row (G101) reads its title then its description, so it is
+// found by the title text alone.
+function actionRowsTitled(utils, title) {
+    return Array.from(utils.container.querySelectorAll('li button'))
+        .filter((button) => (button.querySelector('[data-tone]:not([aria-hidden])')?.textContent || '').trim() === title);
+}
+
 describe('OracleConsole owner-only open-feed editor', () => {
     const openOwned = {
         action_index: '42', source: OWNER, label: 'Open owned', outcomes: 'Yes,No',
@@ -180,18 +204,28 @@ describe('OracleConsole owner-only open-feed editor', () => {
             await drain();
         });
 
-        expect(buttonsNamed(utils, 'Edit lists')).toHaveLength(1);
+        expect(actionRowsTitled(utils, 'Edit lists')).toHaveLength(1);
         await domAct(async () => {
-            fireEvent.click(buttonsNamed(utils, 'Edit lists')[0]);
+            fireEvent.click(actionRowsTitled(utils, 'Edit lists')[0]);
             await drain();
         });
-        expect(utils.getByLabelText('New allow-list index')).toBeTruthy();
-        expect(utils.getByLabelText('New block-list index')).toBeTruthy();
-        expect(utils.container.textContent).toContain('Changes affect future bets only');
+        // Picker fields (G114): the market's bound list reads by name, an
+        // unbound one reads "None set".
+        expect(utils.getByRole('button', { name: 'Allow list: Existing members (List #12)' })).toBeTruthy();
+        expect(utils.getByRole('button', { name: 'Block list: None set' })).toBeTruthy();
+        expect(utils.container.textContent).toContain('Changes affect future purchases only');
 
         await domAct(async () => {
-            fireEvent.change(utils.getByLabelText('New allow-list index'), { target: { value: '81' } });
-            fireEvent.click(buttonsNamed(utils, 'Update lists')[0]);
+            fireEvent.click(utils.getByRole('button', { name: /^Allow list:/ }));
+            await drain();
+        });
+        await domAct(async () => {
+            fireEvent.click(utils.getByRole('button', { name: 'Pick Choose Allow-List' }));
+            await drain();
+        });
+        expect(utils.getByRole('button', { name: 'Allow list: Picked list (List #81)' })).toBeTruthy();
+        await domAct(async () => {
+            fireEvent.click(buttonsNamed(utils, 'Update Lists')[0]);
             await drain();
         });
         const compose = calls.find((call) => call.method === 'composeBetForConfirm');
@@ -221,11 +255,12 @@ describe('OracleConsole owner-only open-feed editor', () => {
             utils = mountConsole(messaging);
             await drain();
         });
-        fireEvent.click(buttonsNamed(utils, 'Edit lists')[0]);
-        fireEvent.change(utils.getByLabelText('New allow-list index'), { target: { value: '81' } });
+        fireEvent.click(actionRowsTitled(utils, 'Edit lists')[0]);
+        await domAct(async () => { fireEvent.click(utils.getByRole('button', { name: /^Allow list:/ })); await drain(); });
+        await domAct(async () => { fireEvent.click(utils.getByRole('button', { name: 'Pick Choose Allow-List' })); await drain(); });
         expect(utils.queryByLabelText('Password')).toBeNull();
         await domAct(async () => {
-            fireEvent.click(buttonsNamed(utils, 'Create unsigned transaction')[0]);
+            fireEvent.click(buttonsNamed(utils, 'Create Unsigned Transaction')[0]);
             await drain();
         });
         expect(calls.find((call) => call.method === 'buildBetActionPsbtRequest')?.args).toMatchObject({

@@ -44,11 +44,14 @@ for (const field of ['chainId', 'fromAddressId', 'action', 'paramsJson', 'status
         `ParallelComposer rows carry ${field}`);
 }
 
-// Spec warning + acknowledgment gate before starting the sign loop.
+// Spec warning on Review, repeated as a confirm-screen notice in place of an
+// acknowledgement checkbox.
 assert.ok(/No rollback:/i.test(src),
     'ParallelComposer surfaces the no-rollback warning');
-assert.ok(/acknowledgedNoRollback/.test(src),
-    'ParallelComposer requires explicit ack before signing');
+assert.ok(/notice: t\('parallelComposer\.confirmNotice'\)/.test(src),
+    'ParallelComposer passes the no-rollback fact to the confirm screen');
+assert.ok(!/acknowledgedNoRollback/.test(src),
+    'ParallelComposer carries no acknowledgement gate');
 assert.ok(/Sign all/.test(src),
     'ParallelComposer renders the "Sign all" submit button');
 

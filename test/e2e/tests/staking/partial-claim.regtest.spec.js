@@ -306,7 +306,7 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
 
             pubkey = newSigningPubkey();
             await openPaletteCommand(page, 'Staking');
-            const newStakeBtn = page.getByRole('button', { name: 'New stake', exact: true });
+            const newStakeBtn = page.getByRole('button', { name: 'New Stake', exact: true });
             await expect(newStakeBtn).toBeVisible({ timeout: 30_000 });
             await newStakeBtn.click();
             const validatorOption = page.getByRole('button', { name: /^Validator staking/ });
@@ -347,8 +347,8 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
 
-            const claimBtn = page.getByRole('group', { name: 'Stake actions' })
-                .getByRole('button', { name: 'Claim', exact: true });
+            const claimBtn = page.getByRole('list', { name: 'Stake actions' })
+                .getByRole('button', { name: /^Claim\b/ });
             await expect(claimBtn).toBeVisible({ timeout: 30_000 });
             await expect(claimBtn).toBeEnabled();
             await claimBtn.click();
@@ -359,7 +359,7 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             encoder.composedData = null;
             encoder.rejectNextBroadcast = true;
             await amountField(main).fill(PARTIAL_CLAIM);
-            await main.getByRole('button', { name: 'Claim rewards', exact: true }).click();
+            await main.getByRole('button', { name: 'Claim Rewards', exact: true }).click();
 
             const confirm = page.getByTestId('confirm-modal');
             await expect(confirm).toBeVisible({ timeout: 60_000 });
@@ -384,8 +384,8 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
             const row = page.getByRole('button', { name: /^Open Validator stake, / });
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
-            const claimBtn = page.getByRole('group', { name: 'Stake actions' })
-                .getByRole('button', { name: 'Claim', exact: true });
+            const claimBtn = page.getByRole('list', { name: 'Stake actions' })
+                .getByRole('button', { name: /^Claim\b/ });
             await expect(claimBtn).toBeEnabled({ timeout: 30_000 });
             await claimBtn.click();
 
@@ -394,7 +394,7 @@ test.describe('partial COLLECT (validator reward claim) on regtest', () => {
                 .toBeVisible({ timeout: 30_000 });
             encoder.composedData = null;
             await amountField(main).fill(PARTIAL_CLAIM);
-            await main.getByRole('button', { name: 'Claim rewards', exact: true }).click();
+            await main.getByRole('button', { name: 'Claim Rewards', exact: true }).click();
 
             const confirm = page.getByTestId('confirm-modal');
             await expect(confirm).toBeVisible({ timeout: 60_000 });

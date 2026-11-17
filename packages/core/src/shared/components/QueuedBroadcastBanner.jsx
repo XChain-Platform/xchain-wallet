@@ -24,8 +24,8 @@
 // normal AND the queue is non-empty, surface a one-shot toast with a
 // "Review" action so the user knows the transactions are ready to send.
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { ChainBadge, StatusMessage, useReducedMotion } from '@xchain-wallet/core/ui';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button, ChainBadge, Icon, Notice, StatusMessage, useReducedMotion } from '@xchain-wallet/core/ui';
 import { defaultRegistry } from '../../registry/index.js';
 import { useMessaging } from '../useMessaging.js';
 import { useReachability } from '../hooks/useReachability.js';
@@ -48,7 +48,6 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     const [busyId, setBusyId] = useState(/** @type {string | null} */ (null));
     const [busyKind, setBusyKind] = useState(/** @type {'send' | 'remove' | null} */ (null));
     const [error, setError] = useState(/** @type {string | null} */ (null));
-    const titleId = useId();
     // Cluster G FOLLOWUP 3: reconnection prompt. Track previous
     // reachability `overall` so a transition `offline|degraded → normal`
     // with a non-empty queue surfaces a one-shot toast nudging the user
@@ -249,16 +248,18 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
     return (
         <section
             ref={bannerRef}
-            aria-labelledby={titleId}
+            aria-label={`${t('components.queuedBroadcastBanner.waitingToSend')}${queue.length})`}
             className={styles.banner}
         >
-            <div
-                id={titleId}
-                className={styles.title}
+            {/* A failed send is its own danger Notice above the queue, never a box inside one. */}
+            <StatusMessage tone="danger" flush>{error}</StatusMessage>
+            {/* The queue is a static info Notice (part of the page, not a live region). */}
+            <Notice
+                tone="info"
+                role={null}
+                flush
+                title={<>{t('components.queuedBroadcastBanner.waitingToSend')}{queue.length})</>}
             >
-                {t('components.queuedBroadcastBanner.waitingToSend')}{queue.length})
-            </div>
-            <StatusMessage variant="error">{error}</StatusMessage>
             <ul className={styles.list}>
                 {queue.map((entry) => (
                     <li key={entry.id} className={styles.row}>
@@ -282,9 +283,11 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                             ) : null}
                         </div>
                         <div className={styles.actions}>
-                            <button
+                            <Button
                                 type="button"
-                                className={styles.broadcastBtn}
+                                variant="secondary"
+                                size="sm"
+                                icon={<Icon.SendIcon />}
                                 onClick={() => broadcast(entry.id)}
                                 disabled={busyId !== null}
                                 data-queued-send
@@ -295,10 +298,12 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                                 {busyId === entry.id
                                     ? t('settings.developer.sending')
                                     : (entry.resumedClaim ? t('components.queuedBroadcastBanner.trySendingAgain') : t('components.queuedBroadcastBanner.sendNow2'))}
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                                 type="button"
-                                className={styles.discardBtn}
+                                variant="secondary"
+                                size="sm"
+                                icon={<Icon.TrashIcon />}
                                 onClick={() => discard(entry.id)}
                                 disabled={busyId !== null}
                                 aria-label={busyId === entry.id && busyKind === 'remove'
@@ -306,11 +311,12 @@ export function QueuedBroadcastBanner({ walletId, intervalMs = 30_000 }) {
                                     : t('components.queuedBroadcastBanner.removeFromQueue', { summary: entry.summary })}
                             >
                                 {busyId === entry.id && busyKind === 'remove' ? t('settings.thisWallet.removing') : t('send.recipient.remove')}
-                            </button>
+                            </Button>
                         </div>
                     </li>
                 ))}
             </ul>
+        </Notice>
         </section>
     );
 }

@@ -30,6 +30,29 @@ import {
 } from '../../../packages/desktop/renderer/deepLinkRoute.js';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import { userEvent } from '../../helpers/userEvent.js';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
+
+// The Asset field opens the token picker page; a stub with one button per
+// tick the cases choose keeps them about Send's own behaviour.
+vi.mock('../../../packages/core/src/shared/routes/TokenPicker.jsx', () => ({
+    TokenPicker: ({ title, onSelect, onBack }) => (
+        <section aria-label={title}>
+            <h2>{title}</h2>
+            {['BTC', 'PEPE', 'XCP'].map((tick) => (
+                <button key={tick} type="button" onClick={() => onSelect({ chainId: 'bitcoin-mainnet', tick })}>
+                    {`Pick ${tick}`}
+                </button>
+            ))}
+            <button type="button" onClick={onBack}>Back</button>
+        </section>
+    ),
+}));
+
+/** Choose the asset on the Asset picker page, as a user does. */
+function chooseAsset(tick) {
+    fireEvent.click(screen.getByRole('button', { name: /^Asset/ }));
+    fireEvent.click(screen.getByRole('button', { name: `Pick ${tick}` }));
+}
 import { decomposedFor, signedReplyFor } from '../../helpers/hwSignedReply.js';
 
 const CHAIN_ID = 'bitcoin-mainnet';
@@ -92,6 +115,9 @@ function mount({
     hardware = null,
     prefill = null,
 } = {}) {
+    // A wallet's mode is published by the shell from the wallet list, not read
+    // from settings.
+    publishWalletModes({ wallets: [{ id: WALLET_ID, walletMode }], activeWalletId: WALLET_ID });
     const sourceAddress = hardware ? {
         id: 'address-1',
         address: FROM,
@@ -399,6 +425,7 @@ async function approveWithPassword(messaging) {
 
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     localStorage.clear();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -522,7 +549,7 @@ describe('Send flow with mocked messaging', () => {
         const messaging = mount({ prefill: route.sendPrefill });
 
         expect(await screen.findByRole('form', { name: 'Send' })).toBeInTheDocument();
-        expect(screen.getByLabelText('Token')).toHaveValue('BTC');
+        expect(screen.getByRole('button', { name: /^Asset: BTC/ })).toBeInTheDocument();
         expect(screen.getByLabelText(/^Amount \(/)).toHaveValue(AMOUNT);
         expect(screen.getByTestId('payment-request-message')).toHaveTextContent(message);
         expect(document.querySelector('img[src="x"]')).toBeNull();
@@ -574,6 +601,7 @@ describe('Send flow with mocked messaging', () => {
             `xchain:BTC/execute?contract=12&method=pay&params=${encodeURIComponent(argument)}`,
             registry,
         );
+        publishWalletModes({ wallets: [{ id: WALLET_ID, walletMode: 'watcher' }], activeWalletId: WALLET_ID });
         const base = {
             getAddressesByChain: vi.fn().mockResolvedValue({
                 [CHAIN_ID]: [{
@@ -587,7 +615,9 @@ describe('Send flow with mocked messaging', () => {
             getActiveAddresses: vi.fn().mockResolvedValue({}),
             getSettings: vi.fn().mockResolvedValue({ walletMode: 'watcher' }),
             signerReady: vi.fn().mockResolvedValue({ ready: false }),
-            getContractByActionIndex: vi.fn().mockResolvedValue(null),
+            getContractByActionIndex: vi.fn().mockResolvedValue({
+                data: { abi: { version: 1, methods: { pay: { params: [{ name: 'memo', type: 'string' }] } } } },
+            }),
             buildActionPsbtRequest: vi.fn().mockResolvedValue({ psbtHex: PSBT }),
         };
         const messaging = new Proxy(base, {
@@ -613,14 +643,19 @@ describe('Send flow with mocked messaging', () => {
         );
 
         expect(await screen.findByLabelText('Method')).toHaveValue('pay');
-        expect(screen.getByLabelText('Arguments')).toHaveValue(argument);
+        expect(screen.getByLabelText('memo (string)')).toHaveValue(argument);
         expect(document.querySelector('img[src="x"]')).toBeNull();
         expect(globalThis.contractLinkRan).toBeUndefined();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Call contract' }));
-        const review = await screen.findByRole('form', { name: 'Review contract call' });
-        expect(review).toHaveTextContent(argument);
+        fireEvent.click(screen.getByRole('button', { name: 'Call Contract' }));
+        const review = await screen.findByTestId('confirm-modal');
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Call Contract');
+        expect(screen.getByTestId('confirm-facts')).toHaveTextContent(argument);
+        expect(screen.getByTestId('confirm-status')).toHaveAttribute('data-state', 'notChecked');
+        expect(screen.getByTestId('confirm-reject')).toHaveTextContent('Reject');
+        expect(screen.getByTestId('confirm-approve')).toHaveTextContent('Approve');
+        expect(review).toHaveAccessibleName('Confirm Call Contract');
         expect(document.querySelector('img[src="x"]')).toBeNull();
         expect(messaging.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
@@ -628,14 +663,17 @@ describe('Send flow with mocked messaging', () => {
     it('keeps field labels ahead of their values in DOM reading order', async () => {
         mount();
 
-        const from = await screen.findByLabelText('From');
+        const from = await screen.findByLabelText('From address');
         const fromLabel = document.querySelector(`label[for="${from.id}"]`);
-        const token = screen.getByLabelText('Token');
-        const tokenLabel = document.querySelector(`label[for="${token.id}"]`);
+        // The Asset field is a picker button whose visible label row sits
+        // directly before it in its field wrapper.
+        const asset = screen.getByRole('button', { name: /^Asset/ });
+        const assetLabelRow = asset.parentElement.firstElementChild;
 
         expect(fromLabel.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING)
             .toBeTruthy();
-        expect(tokenLabel.compareDocumentPosition(token) & Node.DOCUMENT_POSITION_FOLLOWING)
+        expect(assetLabelRow).toHaveTextContent('Asset');
+        expect(assetLabelRow.compareDocumentPosition(asset) & Node.DOCUMENT_POSITION_FOLLOWING)
             .toBeTruthy();
     });
 
@@ -671,6 +709,18 @@ describe('Send flow with mocked messaging', () => {
         expect(warnings).toHaveTextContent(
             'The network fee is more than 10% of the BTC amount you are sending.',
         );
+        const notice = warnings.closest('[data-testid="confirm-warning"]');
+        expect(notice).not.toBeNull();
+        // The short warning sits after the details in the scrolling page;
+        // the docked footer holds only Reject and Approve (G127 revised).
+        expect(warnings.closest('[data-testid="confirm-decision"]')).toBeNull();
+        expect(notice.closest('main')).not.toBeNull();
+        const facts = screen.getByTestId('confirm-facts');
+        expect(facts.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getAllByText('This sends more than 90% of your BTC balance.')).toHaveLength(1);
+        expect(screen.getAllByText(
+            'The network fee is more than 10% of the BTC amount you are sending.',
+        )).toHaveLength(1);
 
         await approveWithPassword(messaging);
         expect(messaging.sendToken).toHaveBeenCalledWith(expect.objectContaining({ amount: '0.91' }));
@@ -679,7 +729,7 @@ describe('Send flow with mocked messaging', () => {
     it('tabs through payment fields and reviews only a valid Enter submission', async () => {
         const user = userEvent.setup();
         const messaging = mount();
-        await screen.findByLabelText('From');
+        await screen.findByLabelText('From address');
         const destination = await screen.findByLabelText(/^To$/);
         const contacts = screen.getByRole('button', { name: 'Open address book' });
         destination.focus();
@@ -687,16 +737,16 @@ describe('Send flow with mocked messaging', () => {
         await user.tab();
         expect(document.activeElement).toBe(contacts);
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Token' }));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Asset' }));
         await user.tab();
-        expect(document.activeElement).toBe(screen.getByLabelText('Token'));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Asset/ }));
         await user.tab();
         expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Amount (BTC)' }));
         await user.tab();
         expect(document.activeElement).toBe(screen.getByLabelText(/^Amount \(/));
         await user.keyboard('{Enter}');
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Enter a recipient address.');
+        expect(await screen.findByRole('alert', { name: 'Form errors' })).toHaveTextContent('Enter a recipient address.');
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
         fireEvent.change(destination, { target: { value: TO } });
@@ -767,12 +817,12 @@ describe('Send flow with mocked messaging', () => {
             },
         });
         await screen.findByLabelText(/^To$/);
-        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'PEPE' } });
+        chooseAsset('PEPE');
         const password = await screen.findByLabelText('Wallet password', {}, { timeout: 1500 });
         fireEvent.change(password, { target: { value: PASSWORD } });
-        fireEvent.click(screen.getByRole('button', { name: 'Recover keys' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Recover Keys' }));
 
-        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'BTC' } });
+        chooseAsset('BTC');
         expect(screen.queryByLabelText('Wallet password')).not.toBeInTheDocument();
         scan.resolve({ recoveredKeyHashes: ['aa'] });
         await Promise.resolve();
@@ -810,15 +860,17 @@ describe('Send flow with mocked messaging', () => {
 
         expect(toField).toHaveValue(TO);
         expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.25000000');
-        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'XCP' } });
+        chooseAsset('XCP');
         expect(screen.getByLabelText('Memo')).toHaveValue('Coffee shop');
 
-        fireEvent.change(toField, { target: { value: '' } });
-        fireEvent.paste(toField, {
+        // The picker page replaced the form, so read the field again.
+        const freshToField = screen.getByLabelText(/^To$/);
+        fireEvent.change(freshToField, { target: { value: '' } });
+        fireEvent.paste(freshToField, {
             clipboardData: { getData: () => `bitcoin:${TO}?req-extra=needed` },
         });
 
-        expect(toField).toHaveValue('');
+        expect(freshToField).toHaveValue('');
         expect(await screen.findByText(
             'This payment request requires a feature this wallet does not support.',
         )).toBeInTheDocument();
@@ -857,10 +909,11 @@ describe('Send flow with mocked messaging', () => {
         fireEvent.paste(toField, {
             clipboardData: { getData: () => `bitcoin:${TO}?amount=0.25&message=Rent` },
         });
-        fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'XCP' } });
+        chooseAsset('XCP');
         expect(screen.getByLabelText('Memo')).toHaveValue('Rent');
 
-        fireEvent.paste(toField, {
+        // The picker page replaced the form, so read the field again.
+        fireEvent.paste(screen.getByLabelText(/^To$/), {
             clipboardData: { getData: () => `bitcoin:${TO}?amount=0.5` },
         });
         expect(screen.getByLabelText('Memo')).toHaveValue('');
@@ -1089,13 +1142,13 @@ describe('Send flow with mocked messaging', () => {
             tick: 'BTC',
             amount: AMOUNT,
         }));
-        expect(within(confirm).getByTestId('confirm-chain-badge')).toHaveTextContent('Bitcoin');
-        expect(within(confirm).getByTestId('confirm-source')).toHaveTextContent(FROM);
-        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`Send ${AMOUNT} BTC`);
-        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`TokenBTC`);
-        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`Amount${AMOUNT}`);
-        expect(within(confirm).getByTestId('action-intent')).toHaveTextContent(`To${TO}`);
-        expect(within(confirm).getByTestId('confirm-fee')).toHaveTextContent('Network fee: 0.00001234 BTC');
+        // Confirm Standard (G127): the sentence says the amount and token, the
+        // address line is the recipient, From names the spender, and the fee
+        // is a facts row; every address whole in its title.
+        expect(within(confirm).getByTestId('confirm-source').getAttribute('title')).toBe(FROM);
+        expect(within(confirm).getByTestId('confirm-sentence')).toHaveTextContent(`Send ${AMOUNT} BTC to`);
+        expect(within(confirm).getByTestId('confirm-address').querySelector(`[title="${TO}"]`)).not.toBeNull();
+        expect(within(confirm).getByTestId('confirm-fee-network')).toHaveTextContent('0.00001234 BTC');
         expect(within(confirm).getByLabelText('Password')).toBeInTheDocument();
 
         await approveWithPassword(messaging);
@@ -1119,7 +1172,7 @@ describe('Send flow with mocked messaging', () => {
         expect(announcement).toHaveAttribute('aria-atomic', 'true');
         expect(announcement).toHaveTextContent(/network accepted your transaction/i);
         expect(within(screen.getByRole('main')).getAllByRole('status')).toHaveLength(1);
-        expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Copy Transaction ID' })).toBeInTheDocument();
         expect(screen.getByRole('link', { name: /View in block explorer/i })).toHaveAttribute(
             'href',
             `https://explorer.xchain.io/BTC/tx/${TXID}`,
@@ -1155,9 +1208,9 @@ describe('Send flow with mocked messaging', () => {
         await approveWithPassword(messaging);
         await screen.findByRole('heading', { name: 'Broadcast pending' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Save recipient' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Recipient' }));
         fireEvent.change(screen.getByLabelText('Contact name'), { target: { value: 'Alice' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Save contact' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Contact' }));
 
         await waitFor(() => expect(messaging.saveContact).toHaveBeenCalledWith({
             input: {
@@ -1167,7 +1220,7 @@ describe('Send flow with mocked messaging', () => {
             },
         }));
         expect(await screen.findByText('Recipient saved to contacts.')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Save recipient' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Save Recipient' })).not.toBeInTheDocument();
     });
 
     it('submits only one contact save when the post-send form submits twice', async () => {
@@ -1178,7 +1231,7 @@ describe('Send flow with mocked messaging', () => {
         await openPasswordConfirm(messaging);
         await approveWithPassword(messaging);
         await screen.findByRole('heading', { name: 'Broadcast pending' });
-        fireEvent.click(screen.getByRole('button', { name: 'Save recipient' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save Recipient' }));
         fireEvent.change(screen.getByLabelText('Contact name'), { target: { value: 'Alice' } });
         const saveForm = screen.getByLabelText('Contact name').closest('form');
 
@@ -1203,7 +1256,7 @@ describe('Send flow with mocked messaging', () => {
         expect(within(screen.getByRole('main')).getByRole('status')).toHaveTextContent(/queued-transactions banner/i);
         expect(within(screen.getByRole('main')).getByRole('status')).toHaveTextContent(/don't send this payment again/i);
         expect(screen.queryByText(TXID)).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Send another' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Send Another' })).not.toBeInTheDocument();
     });
 
     it('shows a known node rejection plainly and retains the signed transaction without re-signing', async () => {
@@ -1281,23 +1334,22 @@ describe('Send flow with mocked messaging', () => {
 
         const review = await screen.findByRole('form', { name: 'Review payment' });
         expect(scroller.scrollTop).toBe(0);
-        expect(screen.getByRole('heading', { name: 'Review and send' })).toHaveFocus();
-        expect(review).toHaveTextContent(`Send ${AMOUNT} BTC on Bitcoin to ${TO}`);
-        expect(review).toHaveTextContent('Network');
-        expect(review).toHaveTextContent('Bitcoin');
-        expect(review).toHaveTextContent('From');
-        expect(review).toHaveTextContent('bc1qse…ndersa');
-        expect(review).toHaveTextContent('Token');
-        expect(review).toHaveTextContent('BTC');
-        expect(review).toHaveTextContent('Amount');
-        expect(review).toHaveTextContent(AMOUNT);
-        expect(review).toHaveTextContent('Destination');
-        expect(review).toHaveTextContent(TO);
-        expect(review).toHaveTextContent('Network fee');
+        expect(screen.getByRole('heading', { name: 'Confirm' })).toHaveFocus();
+        expect(within(review).getByTestId('confirm-sentence')).toHaveTextContent(`Send ${AMOUNT} BTC`);
+        expect(within(review).getByTestId('confirm-address')).toContainElement(
+            within(review).getByLabelText(TO),
+        );
+        // No Total block (G127 revised 2026-11-16).
+        expect(within(review).queryByTestId('confirm-total-main')).toBeNull();
+        expect(within(review).getByTestId('confirm-source')).toHaveAttribute('title', FROM);
+        expect(within(review).getByTestId('confirm-fee-network')).toHaveTextContent('0.000015 BTC');
+        expect(within(review).queryByText(/Technical details/)).not.toBeInTheDocument();
+        expect(review.querySelector('details')).toBeNull();
         expect(within(review).queryByLabelText('Password')).not.toBeInTheDocument();
 
-        expect(review).toHaveTextContent('Watcher mode: this prepares the transaction for your offline signer.');
-        fireEvent.click(within(review).getByRole('button', { name: 'Send' }));
+        expect(review).toHaveTextContent('Another phone signs for this wallet: this prepares the transaction for it.');
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
         expect(messaging.buildSendPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({
@@ -1312,6 +1364,23 @@ describe('Send flow with mocked messaging', () => {
         expect(await screen.findByTestId('result-screen-notice'))
             .toHaveTextContent('Unsigned transaction, ready for signing');
         expect(screen.getByLabelText('Unsigned transaction code')).toHaveValue(PSBT);
+    });
+
+    it('puts watcher send warnings after the details, with only the buttons docked', async () => {
+        mount({ walletMode: 'watcher' });
+        fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
+        fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.91' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+
+        const warnings = await screen.findByTestId('send-unusual-warnings');
+        const notice = warnings.closest('[data-testid="confirm-warning"]');
+        const decision = screen.getByTestId('confirm-decision');
+        expect(warnings).toHaveTextContent('This sends more than 90% of your BTC balance.');
+        expect(notice.closest('main')).not.toBeNull();
+        expect([...decision.children]).toEqual([screen.getByTestId('confirm-buttons')]);
+        const facts = screen.getByTestId('confirm-facts');
+        expect(facts.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getAllByText('This sends more than 90% of your BTC balance.')).toHaveLength(1);
     });
 
     it('submits only one watcher build when the review form submits twice', async () => {
@@ -1346,7 +1415,7 @@ describe('Send flow with mocked messaging', () => {
                 getActiveAddresses: vi.fn(() => active.promise),
             },
         });
-        await waitFor(() => expect(screen.getByLabelText('From')).toHaveValue(SAVED_LOOKALIKE));
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(SAVED_LOOKALIKE));
         await fillSendForm();
         const review = await screen.findByRole('form', { name: 'Review payment' });
         expect(review).toHaveTextContent('bc1q11…abcdef');
@@ -1354,7 +1423,7 @@ describe('Send flow with mocked messaging', () => {
         active.resolve({ [CHAIN_ID]: { id: 'active', address: FROM } });
         await Promise.resolve();
         expect(review).toHaveTextContent('bc1q11…abcdef');
-        fireEvent.click(within(review).getByRole('button', { name: 'Send' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledWith(
             expect.objectContaining({ from: expect.objectContaining({ address: SAVED_LOOKALIKE }) }),
@@ -1370,7 +1439,7 @@ describe('Send flow with mocked messaging', () => {
             overrides: { buildSendPsbtRequest: vi.fn(() => build.promise) },
         });
         await fillSendForm();
-        fireEvent.click(await screen.findByRole('button', { name: 'Send' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(messaging.buildSendPsbtRequest).toHaveBeenCalledTimes(1));
 
         messaging.unmountView();

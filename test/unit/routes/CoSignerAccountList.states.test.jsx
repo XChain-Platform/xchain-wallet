@@ -42,7 +42,7 @@ describe('CoSignerAccountList states', () => {
     it('shows loading while agent accounts resolve', () => {
         mount(vi.fn(() => pending()));
 
-        expect(screen.getByRole('heading', { name: 'Agent accounts' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'My Agents' })).toBeInTheDocument();
         expect(screen.getByText(/Loading/)).toBeInTheDocument();
         expect(screen.queryByText('No agent accounts yet')).toBeNull();
     });
@@ -53,6 +53,24 @@ describe('CoSignerAccountList states', () => {
         expect(await screen.findByRole('heading', { name: 'No agent accounts yet' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'New agent account' }));
         expect(onProvision).toHaveBeenCalledTimes(1);
+    });
+
+    it('narrows the list from the header filter and says when nothing matches (G95)', async () => {
+        mount(vi.fn().mockResolvedValue([
+            { id: 'a-1', name: 'Build agent', chainId: 'bitcoin-regtest', aggregateAddress: 'bcrt1pbuildagent0000000000000001', enabled: true },
+            { id: 'a-2', name: 'Trading bot', chainId: 'bitcoin-regtest', aggregateAddress: 'bcrt1ptradingbot00000000000000002', enabled: false },
+        ]));
+        await screen.findByText('Build agent');
+
+        // The filter sits in the header left of the plus and holds the search box.
+        fireEvent.click(screen.getByRole('button', { name: 'Filter agent accounts' }));
+        const search = await screen.findByRole('searchbox', { name: 'Search agent accounts by name, rule or address' });
+        fireEvent.change(search, { target: { value: 'trading' } });
+        expect(screen.queryByText('Build agent')).toBeNull();
+        expect(screen.getByText('Trading bot')).toBeInTheDocument();
+
+        fireEvent.change(search, { target: { value: 'no such account' } });
+        expect(screen.getByRole('heading', { name: 'No matching agent accounts' })).toBeInTheDocument();
     });
 
     it('shows load failures without the empty state', async () => {
@@ -112,7 +130,10 @@ describe('CoSignerAccountList states', () => {
         // No how-it-works box: the provision form's field tips carry that help (U57, U95).
         expect(screen.queryByText('How agent accounts work')).toBeNull();
         expect(screen.getByText('Active')).toBeInTheDocument();
-        expect(document.body.textContent).not.toMatch(/Bitcoin|regtest|testnet|not mainnet/i);
+        // The network badge is the row's only network indicator: no "Network: X"
+        // line (U12, G61) and never a "not mainnet" warning.
+        expect(screen.queryByText(/Network: /)).toBeNull();
+        expect(document.body.textContent).not.toMatch(/not mainnet/i);
         fireEvent.click(screen.getByRole('button', { name: /Build agent/ }));
         expect(onOpen).toHaveBeenCalledWith('account-1');
     });

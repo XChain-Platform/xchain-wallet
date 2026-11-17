@@ -54,7 +54,7 @@ function handlerBody(source, type) {
 
 const addImport = handlerBody(host, 'wallet.add.import');
 
-assert.match(addImport, /\{\s*vault,[^}]*signerPool\s*\}/,
+assert.match(addImport, /\{\s*vault,[^}]*signerPool(?:,\s*[^}]*)?\s*\}/,
     'wallet.add.import is not handed the signer pool, so the wallet it adds cannot sign '
     + 'unattended (PC-16 auto-pay never fires for it)');
 assert.match(addImport, /signerPool\s*&&\s*req\?\.password/,

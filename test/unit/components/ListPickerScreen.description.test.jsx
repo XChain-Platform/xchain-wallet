@@ -42,6 +42,9 @@ describe('ListPickerScreen description detail', () => {
     it('renders an empty result through the shared list page and empty state', async () => {
         renderPicker([]);
 
+        // A wallet with no lists opens on All; My lists says how to get one.
+        expect(await screen.findByText('No lists found')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('radio', { name: 'My lists' }));
         const title = await screen.findByText('No address lists yet');
         expect(screen.getByText('Address lists published from this network appear here.')).toBeTruthy();
         expect(title.tagName).toBe('P');
@@ -64,7 +67,7 @@ describe('ListPickerScreen description detail', () => {
         expect(alert).not.toHaveTextContent('/api/lists');
 
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-        expect(await screen.findByText('No address lists yet')).toBeInTheDocument();
+        expect(await screen.findByText('No lists found')).toBeInTheDocument();
         expect(messaging.getListsForSource).toHaveBeenCalledTimes(2);
     });
 
@@ -184,6 +187,8 @@ describe('ListPickerScreen description detail', () => {
         ]);
         await screen.findByText('Treasury (List #10)');
 
+        // The search lives in the title bar filter panel (G95).
+        fireEvent.click(screen.getByRole('button', { name: 'Filter lists' }));
         const search = screen.getByRole('searchbox', { name: 'Search lists' });
         for (const [query, match, miss] of [
             ['payROLL', 'Payroll (List #11) (pending)', 'Treasury (List #10)'],
@@ -202,6 +207,7 @@ describe('ListPickerScreen description detail', () => {
         renderPicker([{ action_index: '10', type: '2', name: 'Treasury' }]);
         await screen.findByText('Treasury (List #10)');
 
+        fireEvent.click(screen.getByRole('button', { name: 'Filter lists' }));
         fireEvent.change(screen.getByRole('searchbox', { name: 'Search lists' }), {
             target: { value: 'missing' },
         });
@@ -220,7 +226,8 @@ describe('ListPickerScreen description detail', () => {
             { type: '2', list: ['a', 'b'] },
             { onSelect, onBack },
         );
-        await waitFor(() => expect(screen.getByText('2 members')).toBeInTheDocument());
+        // A named row's line names its type, since its title does not.
+        await waitFor(() => expect(screen.getByText('Address list · 2 members')).toBeInTheDocument());
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).toHaveBeenCalledOnce();

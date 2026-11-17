@@ -141,11 +141,13 @@ test.describe(`Publish a multipart file in funding waves on ${REGTEST_CHAIN_LABE
         const main = page.getByRole('main');
         await test.step('review all parts, transactions, and the single fee', async () => {
             await openPaletteCommand(page, 'Publish file');
-            await expect(main.getByRole('radiogroup', { name: 'Publish mode' }))
-                .toBeVisible({ timeout: 30_000 });
-            await main.getByRole('radio', { name: /Public/ }).check();
+            // Publish as is the themed dropdown (G119): open it, pick Public.
+            const publishAs = main.getByRole('button', { name: /^Publish as: / });
+            await expect(publishAs).toBeVisible({ timeout: 30_000 });
+            await publishAs.click();
+            await main.getByRole('option', { name: /^Public/ }).click();
             await selectVenueChain(main, 'Network');
-            await main.getByLabel('Choose file to publish').setInputFiles({
+            await main.getByLabel('File to publish').setInputFiles({
                 name: FILE_NAME,
                 mimeType: 'application/octet-stream',
                 buffer: bytes,

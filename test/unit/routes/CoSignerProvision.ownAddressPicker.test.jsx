@@ -74,10 +74,10 @@ describe('CoSignerProvision own-address picker', () => {
             target: { value: `03${'c'.repeat(64)}` },
         });
         fireEvent.click(screen.getByRole('checkbox', { name: 'Send' }));
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Create agent account' })).toBeEnabled());
-        fireEvent.click(screen.getByRole('button', { name: 'Create agent account' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Agent Account' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Create Agent Account' }));
 
-        expect(await screen.findByRole('heading', { name: 'Review agent account' })).toBeTruthy();
+        expect(await screen.findByRole('heading', { name: 'Review Agent Account' })).toBeTruthy();
         expect(screen.getByLabelText(ADDRESS_B.address)).toBeTruthy();
         expect(screen.getByText(ADDRESS_B.publicKey)).toBeTruthy();
     });

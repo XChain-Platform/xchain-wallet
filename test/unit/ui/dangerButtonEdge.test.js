@@ -3,9 +3,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// A danger button inside the red error notice shares the notice's fill, so
-// only its edge sets it apart. The edge uses the label token of the danger
-// fill and must clear the 3:1 non-text contrast against the notice.
+// A danger button's edge uses the label token of the danger fill and must
+// clear the 3:1 non-text contrast against that fill. The error notice is no
+// longer a solid red fill (Notice Standard, 2026-11-15: a light red tint with
+// a thin red border), so a danger button inside it stands out by its fill.
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -43,7 +44,7 @@ function contrast(a, b) {
 describe('danger button edge on the error notice', () => {
     it('draws the edge in the danger label token', () => {
         expect(block(buttonCss, '.danger {')).toMatch(/border-color:\s*var\(--xc-on-danger\)/);
-        expect(block(statusCss, '.row.error {')).toMatch(/background:\s*var\(--xc-danger\)/);
+        expect(block(statusCss, '.row.error {')).toMatch(/background:\s*var\(--xc-danger-bg\)/);
     });
 
     it.each([

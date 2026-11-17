@@ -33,16 +33,21 @@ assert.match(form, /value: 'public'/, 'Public mode option present');
 assert.match(form, /value: 'gated'/, 'Encrypted mode option present');
 assert.match(form, /useState\(\/\*\* @type \{'public' \| 'gated'\} \*\/ \('public'\)\)/,
     'Public is the default mode');
-assert.match(form, /getOwnedTokens/, 'gate picker enumerates OWNED ticks only (issuer-only rule)');
+// Encrypted mode is the PC-25 composition core drawn as this page, handed
+// the draft; its gate picker enumerates OWNED ticks only (issuer-only rule).
 assert.match(form, /<GatedPublishForm/, 'Encrypted mode routes into the PC-25 composition core');
+assert.match(form, /shared=\{\{\s*fileMeta,\s*setFileMeta,\s*title,\s*setTitle,\s*memo,\s*setMemo,/,
+    'the file, title and memo carry into Encrypted mode');
 assert.match(form, /maxPublicFileBytes/, 'public lane uses the encoding-aware ceiling');
 assert.match(form, /fileActionParams/,
     'watcher branch composes via the shared params helper (no drift vs fileAction)');
 assert.match(form, /buildActionPsbtRequest/, 'watcher path builds an unsigned PSBT');
 assert.match(form, /ResultScreen/, 'watcher result surface rendered');
-assert.match(form, /ackForever/, 'irreversibility acknowledgment gates review');
-assert.match(form, /on-chain forever/, 'permanence copy present');
-assert.match(form, /Shorten the title or memo/,
+assert.doesNotMatch(form, /ackForever/, 'no acknowledgement checkbox gates review');
+assert.match(form, /notice: `\$\{upload\.confirmLine\} \$\{t\('publishFile\.confirm\.notice'\)\}`/,
+    'the confirm screen names the upload method and states the permanence');
+assert.match(form, /t\('publishFile\.review\.permanent'\)/, 'watcher review keeps its permanence line');
+assert.match(form, /t\('publishFile\.metadataTooLarge'/,
     'review re-checks the ceiling after metadata edits');
 assert.match(form, /fileActionHw/, 'HW signing path wired');
 assert.match(form, /SignCredentials/, 'standard signing surface used');

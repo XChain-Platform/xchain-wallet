@@ -57,10 +57,12 @@
     color: var(--xc-info-text);
 }
 
+/* The Notice Standard's danger tone: a warning toast paints the same red as
+   an error toast (G120). */
 .variant_warning {
-    border-color: var(--xc-warning);
-    background: linear-gradient(var(--xc-warning-bg), var(--xc-warning-bg)), var(--xc-surface-raised);
-    color: var(--xc-warning-text);
+    border-color: var(--xc-danger);
+    background: linear-gradient(var(--xc-danger-bg), var(--xc-danger-bg)), var(--xc-surface-raised);
+    color: var(--xc-danger-text);
 }
 
 .variant_success {
@@ -91,9 +93,15 @@
 .icon {
     flex: 0 0 auto;
     align-self: flex-start;
-    font-size: var(--xc-icon-sm);
-    font-weight: 700;
-    line-height: 1.4;
+    display: inline-flex;
+    align-items: center;
+    height: 1.4em;
+}
+
+/* The tone's SVG icon (circle i, circle !, circle check), as in a Notice. */
+.icon svg {
+    width: var(--xc-icon-sm);
+    height: var(--xc-icon-sm);
 }
 
 .message {
@@ -159,7 +167,6 @@
     border: none;
     color: inherit;
     cursor: pointer;
-    font-size: var(--xc-text-lg);
     line-height: 1;
     padding: 0 var(--xc-space-1);
     border-radius: var(--xc-radius-sm);
@@ -171,6 +178,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+}
+.dismissBtn svg {
+    width: var(--xc-icon-md);
+    height: var(--xc-icon-md);
 }
 .dismissBtn:hover {
     color: var(--xc-text);

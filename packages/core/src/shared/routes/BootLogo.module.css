@@ -1,0 +1,6 @@
+.standardSize {
+    display: block;
+    width: 152px;
+    height: 94px;
+    object-fit: contain;
+}

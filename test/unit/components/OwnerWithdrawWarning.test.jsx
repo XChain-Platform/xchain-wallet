@@ -44,4 +44,23 @@ describe('OwnerWithdrawWarning', () => {
         expect(warning).toHaveTextContent(OWNER_WITHDRAW_WARNING);
         expect(warning).toHaveTextContent('Only send tokens here if you trust the deployer.');
     });
+
+    it('stacks the bold title and the description as separate block lines', () => {
+        renderWarning(true);
+
+        const warning = screen.getByTestId('owner-withdraw-warning');
+        const title = screen.getByText('Deployer can withdraw');
+        // The Notice title is its own block, not an inline lead-in run on to the text.
+        expect(title.tagName).toBe('DIV');
+        expect(title.textContent).toBe('Deployer can withdraw');
+        const body = screen.getByText(OWNER_WITHDRAW_WARNING, { exact: false });
+        expect(body).not.toBe(title);
+        expect(body.contains(title)).toBe(false);
+        expect(title.contains(body)).toBe(false);
+        expect(body.tagName).toBe('DIV');
+        expect(title.nextElementSibling).toBe(body);
+        expect(title.parentElement).toBe(body.parentElement);
+        expect(warning).toContainElement(title);
+        expect(warning.querySelector('strong')).toBeNull();
+    });
 });

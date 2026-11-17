@@ -10,8 +10,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { act as domAct, cleanup, render } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
-import { MyBets } from '../../../packages/core/src/shared/routes/MyBets.jsx';
+import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsList.jsx';
 import { OracleConsole } from '../../../packages/core/src/shared/routes/OracleConsole.jsx';
+
+const MyBetsTab = (props) => <BetFeedsList {...props} view="bets" onOpenMarket={() => {}} />;
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = {
@@ -52,13 +54,15 @@ function baseMessaging(overrides) {
 }
 
 describe('betting history empty states', () => {
-    it('does not call a failed My bets read an empty history', async () => {
-        const utils = await mount(MyBets, baseMessaging({
+    // My predictions is a tab of Prediction markets (view 'bets').
+    it('does not call a failed My predictions read an empty history', async () => {
+        const utils = await mount(MyBetsTab, baseMessaging({
+            betFeeds: () => Promise.resolve({ data: [] }),
             bets: () => Promise.reject(new Error('explorer unavailable')),
         }));
         const shown = utils.container.textContent || '';
-        expect(shown).toMatch(/could not load bets for any of your addresses/i);
-        expect(shown).not.toMatch(/have not placed any bets yet/i);
+        expect(shown).toMatch(/could not load positions for any of your addresses/i);
+        expect(shown).not.toMatch(/no positions yet/i);
     });
 
     it('does not call a failed oracle market read an empty history', async () => {
@@ -67,6 +71,14 @@ describe('betting history empty states', () => {
         }));
         const shown = utils.container.textContent || '';
         expect(shown).toMatch(/could not load your markets/i);
-        expect(shown).not.toMatch(/have not created any betting markets/i);
+        expect(shown).not.toMatch(/have not created any prediction markets/i);
+    });
+
+    it('names an empty oracle list with prediction market copy', async () => {
+        const utils = await mount(OracleConsole, baseMessaging({
+            betFeeds: () => Promise.resolve({ data: [] }),
+        }));
+        const shown = utils.container.textContent || '';
+        expect(shown).toMatch(/Prediction markets created by this wallet appear here/);
     });
 });

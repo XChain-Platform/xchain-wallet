@@ -3,16 +3,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The token market panel keeps one placeholder in its price-history slot
-// whenever no chart is drawn, so the slot never reads as a blank band,
-// including when the token record cannot be read and the panel carries its
-// unavailable hint. Drawn and empty states use the same fixed-height slot
-// inside the market card at every width.
+// The token's chart is drawn behind the balance card. Whatever is drawn
+// (a price line, or with no price history the balance from the wallet's own
+// rows, operator ruling 2026-11-15) the chart slot stays in the card and
+// fills it, so the card never changes height, and the page prints no pricing
+// status text in its place.
 
 import React from 'react';
 import { readFileSync } from 'node:fs';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 vi.mock('../../../packages/core/src/flows/demoMode.js', async (importOriginal) => {
     const actual = await importOriginal();
@@ -37,6 +37,8 @@ beforeAll(() => {
     globalThis.ResizeObserver = globalThis.ResizeObserver || StubObserver;
 });
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
+
+beforeEach(() => window.localStorage.setItem('xc:assetBalanceUnit', 'asset'));
 
 afterEach(() => {
     cleanup();
@@ -67,57 +69,71 @@ function renderToken(walletId, assetInfo, { readFails = false } = {}) {
     );
 }
 
-function historySlot() {
-    return document.querySelector('[class*="marketHistorySlot"]');
+function chartPanel() {
+    return screen.getByRole('region', { name: /^(Price|Value|Balance) chart$/ });
 }
 
-function inMarketCard(el) {
-    return el.closest('[class*="marketCardOffset"]') !== null;
+function chartSlot() {
+    return chartPanel().querySelector('[class*="slot"]');
+}
+
+function inBalanceCard(el) {
+    return el.closest('[class*="heroStack"]') !== null;
 }
 
 async function settledSlot() {
+    await screen.findByRole('region', { name: 'SLOTPROBE' });
     await vi.waitFor(() => {
-        expect(screen.queryByRole('status', { name: 'Loading price history' })).toBeNull();
-        expect(historySlot()).not.toBeNull();
+        expect(chartPanel()).toHaveAttribute('data-chart-behind', 'true');
+        expect(chartSlot()).not.toBeNull();
     });
-    return historySlot();
+    return chartSlot();
 }
 
 describe('token market history slot', () => {
-    it('shows only the hint, not the no-history placeholder, when the token record cannot be read', async () => {
+    it('draws the balance line in the slot and prints no status text when the token record cannot be read', async () => {
         renderToken('real-wallet', null, { readFails: true });
         const slot = await settledSlot();
-        await vi.waitFor(() => expect(slot.textContent).toContain('Market data is unavailable.'));
-        expect(slot.textContent).not.toContain('No price history yet');
-        expect(inMarketCard(slot)).toBe(true);
-        expect(document.querySelectorAll('[class*="marketHistorySlot"]')).toHaveLength(1);
+        await vi.waitFor(() => expect(screen.getByRole('tab', { name: 'Details' })).toBeTruthy());
+        // No price line is invented; the hero draws the balance the wallet holds.
+        expect(within(chartPanel()).queryByRole('img', { name: /^Price trend/ })).toBeNull();
+        await vi.waitFor(() => expect(within(slot).getByRole('img', { name: /^Balance over 1W/ })).toBeTruthy());
+        expect(document.body).not.toHaveTextContent('Market data is unavailable.');
+        expect(document.body).not.toHaveTextContent('No price history yet');
+        expect(inBalanceCard(slot)).toBe(true);
+        expect(chartPanel().querySelectorAll('[class*="slot"]')).toHaveLength(1);
     });
 
-    it('shows the no-history placeholder when the token record has no market price', async () => {
+    it('draws the balance line in the slot and shows no DEX trades when the token record has no market price', async () => {
         renderToken('real-wallet', { creator: 'bcrt1qx' });
         const slot = await settledSlot();
-        await vi.waitFor(() => expect(slot.textContent).toContain('No price history yet'));
-        expect(slot.textContent).not.toContain('Market data is unavailable.');
-        expect(inMarketCard(slot)).toBe(true);
+        expect(within(chartPanel()).queryByRole('img', { name: /^Price trend/ })).toBeNull();
+        await vi.waitFor(() => expect(within(slot).getByRole('img', { name: /^Balance over 1W/ })).toBeTruthy());
+        expect(document.body).not.toHaveTextContent('No price history yet');
+        expect(inBalanceCard(slot)).toBe(true);
         expect(document.body).not.toHaveTextContent('Indexed market activity builds');
-        expect(document.querySelectorAll('[class*="marketHistorySlot"]')).toHaveLength(1);
-        expect(document.querySelector('[class*="marketCardOffset"]').textContent).toContain('Market cap');
+        expect(chartPanel().querySelectorAll('[class*="slot"]')).toHaveLength(1);
+        fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+        expect(await screen.findByText('No DEX trades yet')).toBeTruthy();
     });
 
-    it('draws the chart and no placeholder when a price series loads', async () => {
+    it('draws the selected asset-unit series in the same slot when market data loads', async () => {
         renderToken('demo-wallet', { creator: 'bcrt1qx', marketPrice: '0.5', totalSupply: '1000' });
-        expect(await screen.findByRole('img', { name: /^Price trend/ })).toBeTruthy();
-        const slot = historySlot();
-        expect(slot.querySelector('[aria-label$="price chart"]')).not.toBeNull();
+        const chart = await screen.findByRole('img', { name: /^Balance over 1W/ });
+        const slot = chartSlot();
+        expect(slot.contains(chart)).toBe(true);
         expect(slot.textContent).not.toContain('No price history yet');
-        expect(inMarketCard(slot)).toBe(true);
+        expect(inBalanceCard(slot)).toBe(true);
+        expect(chartPanel().querySelectorAll('[class*="slot"]')).toHaveLength(1);
     });
 
-    it('declares one token-based fixed height for chart and placeholder states', () => {
-        const css = readFileSync('packages/core/src/shared/routes/TokenDetail.module.css', 'utf8');
-        const slot = /\.marketHistorySlot\s*\{([^}]*)\}/s.exec(css)?.[1] || '';
-        expect(slot).toContain('block-size: calc(var(--xc-space-8) * 2 + var(--xc-space-2))');
-        expect(slot).toContain('min-block-size: calc(var(--xc-space-8) * 2 + var(--xc-space-2))');
-        expect(css).not.toMatch(/@media[^}]*marketHistorySlot/s);
+    it('fills the card with the chart slot in both the chart and the empty states', () => {
+        const css = readFileSync('packages/core/src/shared/components/PortfolioChart.module.css', 'utf8');
+        const panel = /\.behind\s*>\s*\[role='tabpanel'\]\s*\{([^}]*)\}/s.exec(css)?.[1] || '';
+        expect(panel).toMatch(/position:\s*absolute/);
+        expect(panel).toMatch(/inset:\s*0/);
+        const slot = /\.behind \.slot,\s*\.behind \.chart\s*\{([^}]*)\}/s.exec(css)?.[1] || '';
+        expect(slot).toContain('block-size: 100%');
+        expect(slot).toContain('min-block-size: 0');
     });
 });

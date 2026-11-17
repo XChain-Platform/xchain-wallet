@@ -53,8 +53,10 @@ const desktopAppSrc = readFileSync(
 assert.match(formSrc, /export function SignMessageForm/, 'exports SignMessageForm');
 assert.match(formSrc, /messaging\.signMessageRequest/, 'calls messaging.signMessageRequest');
 assert.match(formSrc, /messaging\.getAddressesByChain/, 'loads chain/address map');
-assert.match(formSrc, /<NetworkField/, 'uses the NetworkField picker for chain selection (U59)');
-assert.match(formSrc, /<AddressField[\s\S]*icon="addresses"/, 'uses the own-address field');
+// The Wallet Form Standard's FromSection renders the NetworkField
+// picker and the own-address AddressField (icon="addresses").
+assert.match(formSrc, /<FromSection[\s\S]*title="Signing with"[\s\S]*onNetworkChange=/, 'uses the standard Signing with section (NetworkField picker, U59)');
+assert.match(formSrc, /<FromSection[\s\S]*onOpenPicker=/, 'uses the own-address field of the standard source section');
 assert.match(formSrc, /<OwnAddressPickerScreen/, 'opens the own-address picker');
 assert.match(formSrc, /<Textarea/, 'uses the kit message textarea');
 assert.match(

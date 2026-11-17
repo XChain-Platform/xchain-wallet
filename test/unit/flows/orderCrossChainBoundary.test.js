@@ -126,7 +126,7 @@ describe('the same-chain ORDER surfaces stay single-chain', () => {
     it('CreateOrderForm tells the user where the cross-chain case lives', () => {
         // In rendered copy, not a comment: the boundary is stated to the
         // user, not only to the next maintainer.
-        expect(codeOf(CREATE_ORDER_FORM)).toMatch(/use Cross-chain order/);
+        expect(codeOf(CREATE_ORDER_FORM)).toMatch(/use Cross-Chain Order/);
     });
 });
 

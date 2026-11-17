@@ -33,6 +33,7 @@ import {
 } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
+import { createLockedAutopay } from '@xchain-wallet/core/notifications/index.js';
 import {
     ChromeMetaBackend,
     ChromeSessionBackend,
@@ -270,7 +271,69 @@ async function restartNetworkWatchers() {
 // chrome.notifications works while every wallet surface is closed.
 const chromeNotify = createChromeNotifier(
     typeof chrome === 'undefined' ? undefined : chrome,
+    { getSettings: () => (vault ? flowsLib.getSettings(vault) : undefined) },
 );
+
+// PC-16 Phase B: auto pay keeps paying armed orders after a lock, for as long
+// as this service worker lives. The session (sealed keys, the open vault) is
+// in worker memory only and dies with the worker. A boolean marker in
+// chrome.storage.session (no key, no amount) remembers that one was running,
+// so the next worker can tell the person to unlock to resume auto pay.
+const LOCKED_AUTOPAY_MARKER_KEY = 'lockedAutopayRunning';
+function setLockedAutopayMarker(running) {
+    try {
+        const area = typeof chrome === 'undefined' ? null : chrome.storage?.session;
+        if (!area) return;
+        const op = running
+            ? area.set({ [LOCKED_AUTOPAY_MARKER_KEY]: true })
+            : area.remove(LOCKED_AUTOPAY_MARKER_KEY);
+        if (op && typeof op.catch === 'function') op.catch(() => { /* best-effort */ });
+    } catch (_err) { /* best-effort */ }
+}
+const lockedAutopay = createLockedAutopay({
+    shellKind: 'extension',
+    instanceId: EXTENSION_AUTOPAY_INSTANCE_ID,
+    notify: chromeNotify,
+    loadNotified: () => coinpayAutopayNotifiedStore.load(),
+    saveNotified: (keys) => coinpayAutopayNotifiedStore.save(keys),
+    logger: console,
+    onStarted: () => setLockedAutopayMarker(true),
+    onEnded: () => setLockedAutopayMarker(false),
+});
+
+// A worker that starts with the marker set lost a running session when the
+// previous worker ended: say so once, then clear it.
+async function noticeEndedLockedAutopay() {
+    const area = typeof chrome === 'undefined' ? null : chrome.storage?.session;
+    if (!area || typeof area.get !== 'function') return;
+    let stored;
+    try { stored = await area.get(LOCKED_AUTOPAY_MARKER_KEY); } catch (_err) { return; }
+    if (stored?.[LOCKED_AUTOPAY_MARKER_KEY] !== true || lockedAutopay.isActive()) return;
+    setLockedAutopayMarker(false);
+    try {
+        await chromeNotify({
+            kind: 'coinpay-autopay-manual',
+            title: 'Auto pay stopped',
+            body: 'Unlock to resume auto pay.',
+        });
+    } catch (_err) { /* best-effort */ }
+}
+void noticeEndedLockedAutopay();
+
+// Hand armed auto pay to its locked session just before a lock zeroes the
+// pool. A lock with nothing armed (or a repeat lock with no vault) does
+// nothing here and the lock path runs exactly as before.
+async function captureLockedAutopay() {
+    if (!vault || !signerPool || !host) return false;
+    return lockedAutopay.lock({
+        vault,
+        signerPool,
+        chainRegistry,
+        sdkRegistry,
+        reservationLedger: host.reservationLedger,
+        watcher: coinpayAutopayWatcher,
+    });
+}
 // SignerPool persists across the unlocked session. Populated by the
 // pre-host `wallet.unlock` handler while the password is in scope, so
 // account.create / receive.getAddress (etc.) can derive without a
@@ -611,6 +674,7 @@ async function buildHost() {
             saveNotified: (keys) => coinpayAutopayNotifiedStore.save(keys),
             logger: console,
         });
+        coinpayAutopayWatcher.seedAttempted?.(lockedAutopay.takeHandoff());
         coinpayAutopayWatcher.start();
         coinpayAutopayWatcher.refresh().catch(() => { /* WS triggers are best-effort */ });
     }
@@ -661,7 +725,10 @@ function tearDownHost() {
         detachHost = null;
     }
     if (vault) {
-        try { vault.close(); } catch (_err) { /* best-effort */ }
+        // A vault locked auto pay took is the session's to close.
+        if (!lockedAutopay.holdsVault(vault)) {
+            try { vault.close(); } catch (_err) { /* best-effort */ }
+        }
         vault = null;
     }
     if (signerPool) {
@@ -690,6 +757,9 @@ function tearDownHost() {
  * @returns {Promise<void>}
  */
 async function sealBroadcastQueues() {
+    // Wipe only: the vault being erased is the one locked auto pay holds
+    // (PC-16 Phase B), so that session ends first.
+    try { await lockedAutopay.end('wallet-wipe'); } catch (_err) { /* the wipe goes on */ }
     try {
         await sealBroadcastQueueStore(broadcastQueueStore);
     } catch (err) {
@@ -737,7 +807,12 @@ const lockBackstop = createLockBackstop({
         sessionBackend: new ChromeSessionBackend(),
         signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
     }),
-    tearDownHost: () => {
+    // Manual and idle locks both come through here; armed auto pay moves to
+    // its locked session before the teardown zeroes the pool.
+    tearDownHost: async () => {
+        try { await captureLockedAutopay(); } catch (err) {
+            console.error('[xchain] locked auto pay could not start:', err);
+        }
         const teardown = tearDownHost();
         void surfaceStateEvents.publish('session', { state: 'locked' });
         return teardown;
@@ -806,6 +881,13 @@ attachSessionMetaListener({
     // rule: a secret that survived the clear leaves the idle alarm the job.
     onLocked: (result) => lockBackstop.onLocked(result),
     isLockPending: () => lockBackstop.cleanupPending === true,
+    // PC-16 Phase B: the Locked screen's auto pay line and Stop, and the end
+    // of locked auto pay before any unlock, create or import opens a vault.
+    lockedAutopay,
+    beforeSessionStart: (type) => lockedAutopay.end(type === 'wallet.unlock' ? 'unlock' : 'wallet-switch'),
+    // wallet.hardware.balances keeps the open vault's price-data switch; with
+    // no open vault (a fresh install) the defaults apply.
+    readSettings: () => (vault ? vault.settings.get() : null),
 });
 
 // Signer bridge: always on, independent of vault unlock state. The

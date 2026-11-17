@@ -38,19 +38,21 @@ assert.match(
     'imports priceLookup helpers',
 );
 
-// --- feeEstimate piped into simulator ---------------------------------
+// --- known fee reaches Confirm Standard before approval ---------------
 
 assert.match(sendSrc, /feeEstimate = useMemo/, 'feeEstimate is memoized');
 assert.match(sendSrc, /estimateNativeSendFee\(/, 'fee estimate flow invoked');
 assert.match(
     sendSrc,
-    /feeEstimate:\s*feeStr/,
-    'simulator gets the real fee instead of "0"',
+    /const reviewFeeAmount = feeEstimate\?\.coinAmount[\s\S]{0,300}amount: reviewFeeAmount/,
+    'Confirm Standard receives the known network fee before approval',
 );
-assert.doesNotMatch(
+// No Total block (G127 revised 2026-11-16): the fee is a facts card row.
+assert.doesNotMatch(sendSrc, /confirmTotal\(/, 'Send builds no Total block');
+assert.match(
     sendSrc,
-    /feeEstimate:\s*'0'/,
-    'no leftover hardcoded "0" feeEstimate',
+    /\.\.\.feeFacts\(reviewFees\)/,
+    'known fee is pinned in the Confirm Standard facts card',
 );
 
 // --- fiat rate + toggle state -----------------------------------------

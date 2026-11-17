@@ -76,11 +76,11 @@ describe('ActivityRow button classes', () => {
         expect(css).not.toMatch(/^\s*composes\s*:/m);
     });
 
-    it('points the Button hover fill at the muted row fill, not the ghost slate', () => {
+    it('points the Button hover fill at the shared row token', () => {
         const css = readFileSync(join(process.cwd(), 'packages/core/src/shared/components/ActivityRow.module.css'), 'utf8');
         const row = css.match(/^\.row\s*\{([^}]*)\}/m);
         expect(row).not.toBeNull();
-        expect(row[1]).toMatch(/--xc-button-hover-bg:\s*var\(--xc-bg-muted\)/);
+        expect(row[1]).toMatch(/--xc-button-hover-bg:\s*var\(--xc-row-hover-bg\)/);
         expect(row[1]).toMatch(/--xc-button-hover-border:\s*transparent/);
     });
 });

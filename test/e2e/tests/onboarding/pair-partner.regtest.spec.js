@@ -11,8 +11,13 @@
 // Campaign coverage map, "Onboarding & wallet lifecycle" -> "Pair a watcher or
 // signer" (§20.5), undriven since the lane shipped.
 //
-// WHY THIS ONE. It is the fourth onboarding lane and the only one that ends
-// with two DEVICES trusting each other. Its whole reason to exist is stated in
+// WHERE IT LIVES NOW. The lane left the welcome screen on 2026-11-15 and is
+// Settings, Advanced, "Use another phone as a signer": each device first has a
+// Normal wallet (an open vault), and the lane ADDS the shared phrase to it as
+// a new wallet in the picked role.
+//
+// WHY THIS ONE. It is the only lane that ends with two DEVICES trusting each
+// other. Its whole reason to exist is stated in
 // `flows/pairPartner.js`: before it, a mistyped word in the shared recovery
 // phrase surfaced as a PSBT the offline signer could not sign, discovered after
 // the air-gap round trip with no diagnosis attached. So the assertion that
@@ -59,7 +64,7 @@
 //       --config=playwright.regtest.config.js tests/onboarding/pair-partner.regtest.spec.js
 
 import {
-    expect, test, dismissIntroCarousel,
+    expect, test, createWallet, fillPairAnotherPhone,
     LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY,
 } from '../../fixtures/wallet.js';
 import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
@@ -124,20 +129,13 @@ async function pairLaneToExchange(page, { role, mnemonic, name, url = '/' }) {
     // A browser launched by `launchWithQrCamera` is not the config's project, so
     // it has no baseURL and needs the absolute one.
     await page.goto(url);
-    await dismissIntroCarousel(page);
-    await page.getByRole('button', { name: 'Pair an offline signer' }).click();
+    // The lane needs an open vault, so the device gets a Normal wallet first,
+    // the way a user has one before opening Settings.
+    await createWallet(page, { password: PASSWORD, name: 'Device Wallet', navigate: false });
 
-    // The role stage names the OTHER half, which is the wording a user reasons
-    // about ("this device watches") - not the mode string.
-    const roleButton = role === 'watcher'
-        ? 'This device watches. Pair a signer'
-        : 'This device signs. Pair a watcher';
-    await page.getByRole('button', { name: roleButton }).click();
-
-    await page.getByLabel('Wallet name').fill(name);
-    await page.getByLabel('Shared recovery phrase').fill(mnemonic);
-    await page.getByLabel('Password for this device').fill(PASSWORD);
-    await page.getByLabel('Confirm password').fill(PASSWORD);
+    // The role buttons say what THIS phone does, the wording a user reasons
+    // about, not the mode string.
+    await fillPairAnotherPhone(page, { words: mnemonic, name, password: PASSWORD, walletMode: role });
     await page.getByRole('button', { name: 'Continue' }).click();
 
     // Argon2id on the import, then the host derives an account node per active
@@ -428,7 +426,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                     .toBe(false);
 
                 const res = await submitPartnerCode(watcher.page, {
-                    partnerCode: foreignCode.code, cta: 'Pair a signer',
+                    partnerCode: foreignCode.code, cta: 'Pair the Signer Phone',
                 });
                 expect(res.ok,
                     'the watcher PAIRED with a signer restored from a different recovery phrase. '
@@ -445,13 +443,13 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 // Same seed, same fingerprint, both halves watchers: a pair
                 // that would leave nobody able to sign. Only the mode says so.
                 const res = await submitPartnerCode(watcher.page, {
-                    partnerCode: watcherCode.code, cta: 'Pair a signer',
+                    partnerCode: watcherCode.code, cta: 'Pair the Signer Phone',
                 });
                 expect(res.ok,
                     'a watcher paired with ANOTHER watcher, so both halves of the "air-gapped pair" '
                     + 'build transactions and neither one signs them')
                     .toBe(false);
-                expect(/must be in signer mode/i.test(res.message),
+                expect(/set up for the same job/i.test(res.message),
                     'the wrong-role pairing was refused without naming the role that is missing')
                     .toBe(true);
             });
@@ -462,7 +460,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 // and a correctly-set-up user would be told their devices do
                 // not match.
                 const res = await submitPartnerCode(watcher.page, {
-                    partnerCode: signerCode.code, cta: 'Pair a signer',
+                    partnerCode: signerCode.code, cta: 'Pair the Signer Phone',
                 });
                 expect(res.ok,
                     'the genuine signer half was refused after two failed attempts, so the form is '
@@ -481,7 +479,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 // testing only one direction leaves the signer unaware of its
                 // watcher.
                 const res = await submitPartnerCode(signer.page, {
-                    partnerCode: watcherCode.code, cta: 'Pair a watcher',
+                    partnerCode: watcherCode.code, cta: 'Pair the Other Phone',
                 });
                 expect(res.ok,
                     'the signer half refused the watcher it had just been paired WITH, so the lane '
@@ -564,7 +562,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
             // And the point of all of it: a device that has only ever SEEN the
             // other one pairs with it.
             const res = await submitPartnerCode(page, {
-                partnerCode: (await box.inputValue()).trim(), cta: 'Pair a watcher',
+                partnerCode: (await box.inputValue()).trim(), cta: 'Pair the Other Phone',
             });
             expect(res.ok,
                 'the code arrived intact over the camera and the pairing was still refused, so the '

@@ -101,10 +101,12 @@ async function flush(ms = 400) {
     }
 }
 
-const signButton = () => screen.getByRole('button', { name: 'Sign airdrop' });
+// Step 2 is the Confirm Standard modal: Approve never looks disabled (G130),
+// and a tap while the stored-list read holds signing composes nothing.
+const signButton = () => screen.getByRole('button', { name: 'Approve' });
 
 async function submitReview() {
-    await act(async () => { fireEvent.submit(signButton().closest('form')); });
+    await act(async () => { fireEvent.click(signButton()); });
     await flush(50);
 }
 
@@ -118,7 +120,8 @@ describe('AirdropForm step 2 waits for the stored-list read', () => {
         await flush();
 
         expect(messaging.getListByActionIndex).toHaveBeenCalledWith({ chainId: CHAIN, actionIndex: '42' });
-        expect(signButton()).toBeDisabled();
+        await submitReview();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
         expect(screen.getByText(PENDING_NOTICE)).toBeInTheDocument();
         await submitReview();
         expect(messaging.composeForConfirm).not.toHaveBeenCalled();
@@ -131,7 +134,7 @@ describe('AirdropForm step 2 waits for the stored-list read', () => {
 
         await act(async () => { read.resolve({ type: '2', list: [KEPT] }); });
         await flush();
-        expect(signButton()).not.toBeDisabled();
+        expect(signButton()).toBeInTheDocument();
         expect(screen.queryByText(PENDING_NOTICE)).toBeNull();
         expect(document.body.textContent).toMatch(/The published list holds 1 of the 2 addresses you submitted/);
         expect(document.body.textContent).toContain(DROPPED);
@@ -143,7 +146,7 @@ describe('AirdropForm step 2 waits for the stored-list read', () => {
         const messaging = mountReview({ read: () => Promise.reject(new Error('explorer unreachable')) });
         await flush();
 
-        expect(signButton()).not.toBeDisabled();
+        expect(signButton()).toBeInTheDocument();
         expect(screen.queryByText(PENDING_NOTICE)).toBeNull();
         expect(document.body.textContent).not.toMatch(/The published list holds/);
         await submitReview();
@@ -153,10 +156,11 @@ describe('AirdropForm step 2 waits for the stored-list read', () => {
     it('lets signing go ahead once a read that never settles passes its time limit', async () => {
         const messaging = mountReview({ read: () => new Promise(() => {}) });
         await flush();
-        expect(signButton()).toBeDisabled();
+        await submitReview();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
 
         await flush(15_000);
-        expect(signButton()).not.toBeDisabled();
+        expect(signButton()).toBeInTheDocument();
         expect(screen.queryByText(PENDING_NOTICE)).toBeNull();
         await submitReview();
         expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1);
@@ -167,7 +171,7 @@ describe('AirdropForm step 2 waits for the stored-list read', () => {
         await flush();
 
         expect(messaging.getListByActionIndex).not.toHaveBeenCalled();
-        expect(signButton()).not.toBeDisabled();
+        expect(signButton()).toBeInTheDocument();
         expect(screen.queryByText(PENDING_NOTICE)).toBeNull();
     });
 });
@@ -183,8 +187,8 @@ describe('AirdropForm reconcile with a row that has no member array', () => {
         expect(messaging.getListByActionIndex).toHaveBeenCalled();
         expect(document.body.textContent).not.toMatch(/rejected by the network/);
         expect(document.body.textContent).not.toMatch(/The published list holds/);
-        expect(signButton()).not.toBeDisabled();
-        expect(document.body.textContent).toMatch(/Recipients2Total distribution~2 XCHAIN/);
+        expect(signButton()).toBeInTheDocument();
+        expect(document.body.textContent).toMatch(/Recipients\s*2(?!\d)/);
     });
 
     it('still reports every address as rejected when the stored list really is empty', async () => {

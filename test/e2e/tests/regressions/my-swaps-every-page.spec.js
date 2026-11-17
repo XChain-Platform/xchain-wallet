@@ -84,14 +84,18 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 360, height: 780 
         await createWallet(page);
 
         await openPaletteCommand(page, 'My swaps');
-        const open = page.getByRole('list', { name: 'Open swaps' });
-        await expect(open.getByRole('listitem')).toHaveCount(TOTAL - 1, { timeout: 60_000 });
-        await expect(open.getByText(`#${OLDEST + 1}`, { exact: true })).toBeVisible();
+        // One list of every swap, each row with its fill ring and status word
+        // (ruling 2026-11-13, wallet-orders-layout-1-ring). The ring layout's
+        // row names the trade, not the swap's number, so rows are found by key.
+        const list = page.getByRole('list', { name: 'Swaps' });
+        await expect(list.getByRole('listitem')).toHaveCount(TOTAL, { timeout: 60_000 });
+        await expect(list.locator(`[data-swap-row$=":${OLDEST + 1}"]`)).toBeVisible();
 
-        const closed = page.getByRole('list', { name: 'Closed swaps' });
-        const cancelledRow = closed.getByRole('listitem').filter({ hasText: `#${OLDEST}` });
-        await expect(cancelledRow.getByLabel('Status: Cancelled')).toBeVisible();
-        await expect(cancelledRow.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
+        const cancelledRow = list.locator(`[data-swap-row$=":${OLDEST}"]`);
+        await expect(cancelledRow.getByText('Cancelled', { exact: true })).toBeVisible();
+        // The row opens the swap's details; it holds no Cancel of its own.
+        await expect(cancelledRow.getByRole('button')).toHaveCount(1);
+        await expect(cancelledRow.getByRole('button', { name: /^Cancel swap/i })).toHaveCount(0);
 
         const overflow = await documentOverflow(page);
         expect(overflow.scrollWidth, 'My swaps scrolls sideways').toBeLessThanOrEqual(overflow.clientWidth);

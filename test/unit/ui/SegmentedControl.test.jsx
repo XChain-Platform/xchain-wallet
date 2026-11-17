@@ -56,7 +56,8 @@ describe('SegmentedControl', () => {
         const css = readFileSync('packages/core/src/ui/SegmentedControl.module.css', 'utf8');
 
         expect(css).toMatch(/\.segmented\s*\{[^}]*height:\s*var\(--xc-control-h-md\)/s);
-        expect(css).toMatch(/\.segmented\s*\{[^}]*border-radius:\s*var\(--xc-control-radius\)/s);
+        // The view toggle takes the card corner radius, not the control one.
+        expect(css).toMatch(/\.segmented\s*\{[^}]*border-radius:\s*var\(--xc-card-radius\)/s);
         expect(css).toMatch(/data-tone='success'[^}]*var\(--xc-success-fill\)/s);
         expect(css).toMatch(/data-tone='danger'[^}]*var\(--xc-danger\)/s);
     });

@@ -1,7 +1,8 @@
 .wrap {
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-3);
+    /* 8px between every Home block. */
+    gap: var(--xc-space-2);
     width: 100%;
 }
 
@@ -26,31 +27,29 @@
     width: auto;
 }
 
+/* The tabs share the row evenly, as every view toggle does. */
 .tabsRow [role='tab'] {
-    flex: 0 0 auto;
+    flex: 1 1 0;
     white-space: nowrap;
 }
 
 @media not all and (min-width: 600px) {
-    /* The tab row has the whole width here. The five labels take about
-       16.4em at the tab font size on the widest text rendering a platform
-       gives Inter (hinted, whole-pixel advances run several percent wider
-       than the unhinted measure), so each tab's side padding gives way, down
-       to 1px, when the 12px default would push Activity behind a sideways
-       scroll: a 320px phone, or 130 and 150 percent text. When even 1px of
-       padding cannot hold the labels, the tab font size gives way to what
-       the row can carry, so the tabs never scroll sideways. Rows with room
-       keep the 12px padding and the token font size unchanged. A WebView
-       without container queries keeps the 12px padding and the scrolling
-       row. */
+    /* The tab row has the whole width here. The four labels (Coins, Tokens,
+       NFTs, DeFi) take about 11em at the tab font size on the widest text
+       rendering a platform gives Inter, and the rest of the row is fixed:
+       four 16px icons, their gaps, the tabs' side padding and the dividers,
+       about 136px. When a 320px phone or 130 and 150 percent text leaves the
+       labels less than that, the tab font size gives way to what the row can
+       carry, so no label runs into its neighbour and the tabs never scroll
+       sideways. Rows with room keep the token font size unchanged. A WebView
+       without container queries keeps the token size and the scrolling row. */
     @supports (container-type: inline-size) and (width: 1cqw) {
         .tabsRow {
             container-type: inline-size;
         }
 
         .tabsRow [role='tab'] {
-            font-size: min(var(--xc-text-sm), calc((100cqw - var(--home-tabs-aside) - 10px) / 16.4));
-            padding-inline: clamp(calc(var(--xc-space-1) / 4), calc((100cqw - var(--home-tabs-aside) - 16.4em) / 10), var(--xc-space-3));
+            font-size: min(var(--xc-text-sm), calc((100cqw - var(--home-tabs-aside) - 136px) / 11));
         }
     }
 
@@ -99,4 +98,113 @@
    one step below the row list. */
 .seeAllActivity {
     margin-top: var(--xc-space-3);
+}
+
+/* An icon beside each Home tab label. */
+.tabWithIcon {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+.tabIcon {
+    --xc-icon-size: var(--xc-icon-sm);
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+
+/* The balance content and its full-bleed chart share one clipped surface. */
+.heroStack {
+    display: grid;
+    position: relative;
+    box-sizing: border-box;
+    border: 1px solid var(--xc-hero-border);
+    border-radius: var(--xc-card-radius);
+    background: var(--xc-hero-bg);
+    box-shadow: var(--xc-hero-shadow);
+    overflow: hidden;
+    color: var(--xc-hero-text);
+}
+
+/* Forced-colors mode drops the app blue, so the card pins both halves. */
+@media (forced-colors: active) {
+    .heroStack {
+        background: Canvas;
+        color: CanvasText;
+        border: 1px solid CanvasText;
+    }
+}
+
+.heroStack > * {
+    grid-area: 1 / 1;
+    min-width: 0;
+}
+
+.heroStack > section:first-child {
+    position: relative;
+    z-index: 2;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    pointer-events: none;
+}
+
+.heroStack > section:first-child button,
+.heroStack > section:first-child [role='menu'] {
+    pointer-events: auto;
+}
+
+/* Set by the card's component when a chart is drawn behind it (Safari 16
+   has no :has()), so the range chips at the foot clear the figures. */
+.heroStackWithChart > section:first-child {
+    padding-bottom: calc(var(--xc-space-6) + var(--xc-space-1) + var(--xc-space-2));
+}
+
+.heroStackWithChart {
+    min-height: 160px;
+}
+
+/* The Home tabs take the shared view-toggle look (SegmentedControl.module.css). */
+
+/* Inside the row the tabs share the width evenly while they fit; a tab never
+   shrinks below its icon and label (the shared min-width: max-content), so a
+   longer label such as Tokens takes room from a shorter one instead of
+   running into its neighbour. The side padding stays tight enough that all
+   four tabs fit beside the filter button on a 360px popup. */
+.tabsRow.tabsRow [role='tab'] {
+    flex: 1 1 0;
+    padding-inline: var(--xc-space-1);
+}
+
+/* The DeFi rows' forward chevron, at the Back chevron's size like the Coins
+   and Tokens rows (BalanceList .rowChevron): a 32px icon box that gives back
+   its empty sides so the stroke meets the row's padding. */
+.rowChevron {
+    --xc-icon-size: 32px;
+    display: inline-flex;
+    justify-content: center;
+    /* Only the middle third of the box holds the glyph and its stroke; the
+       rest is clipped so the box adds no width and never overhangs the row. */
+    width: calc(var(--xc-icon-size) / 3);
+    overflow: hidden;
+}
+
+.rowChevron svg {
+    flex: 0 0 auto;
+    width: var(--xc-icon-size);
+    height: var(--xc-icon-size);
+}
+
+/* A DeFi row is two lines: the action and its status badge on top, the amount
+   and date under them, the chevron down the right edge. Tripled selector to
+   outrank ActivityRow's narrow width areas. */
+.defiRow.defiRow.defiRow {
+    grid-template-areas:
+        "mark label label status trailing"
+        "mark primary primary time trailing";
+    /* A Coins or Tokens row's height: its content floor plus the shared
+       row inset above and below (BalanceList .row and .rowContent). */
+    min-height: calc(var(--xc-control-h-lg) + 2 * var(--xc-list-row-padding));
+    box-sizing: border-box;
 }

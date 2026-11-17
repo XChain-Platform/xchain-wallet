@@ -8,18 +8,18 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 import { AboutSection } from '../../../packages/core/src/shared/components/settings/AboutSection.jsx';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { LICENSE_URL } from '../../../packages/core/src/buildInfo.js';
 
 afterEach(cleanup);
 
-describe('About: license link', () => {
-    it('is a body-font inline-block link with a space before the arrow', () => {
+describe('About: license row without a license page', () => {
+    it('is an external anchor row to the license file', () => {
         const { container } = render(<MessagingProvider><AboutSection /></MessagingProvider>);
-        const link = [...container.querySelectorAll('a')].find((a) => a.textContent.startsWith('License file'));
+        const link = [...container.querySelectorAll('a')].find((a) => a.textContent.startsWith('License'));
         expect(link).toBeTruthy();
-        expect(link.style.fontFamily).toBe('');
-        expect(link.style.display).toBe('inline-block');
-        expect(link.style.textAlign).toBe('start');
-        expect(link.style.fontSize).toBe('var(--xc-text-xs)');
-        expect(link.textContent).toBe('License file ↗');
+        expect(link.getAttribute('href')).toBe(LICENSE_URL);
+        expect(link).toHaveTextContent('Free software under the GNU AGPL v3.0 or later.');
+        expect(link.target).toBe('_blank');
+        expect(link.rel).toBe('noreferrer noopener');
     });
 });

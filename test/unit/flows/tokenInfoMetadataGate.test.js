@@ -198,3 +198,14 @@ describe('social destination identity', () => {
         });
     });
 });
+
+describe('TIS enhanced HTML guard', () => {
+    it('returns only a presence bit and never returns issuer HTML', async () => {
+        const { tisToMediaBundle } = await import('../../../packages/core/src/flows/tokenInfo.js');
+        const bundle = tisToMediaBundle({ html: '<script>globalThis.executed = true</script>' });
+
+        expect(bundle.htmlAvailable).toBe(true);
+        expect(bundle.html).toBeUndefined();
+        expect(globalThis.executed).toBeUndefined();
+    });
+});

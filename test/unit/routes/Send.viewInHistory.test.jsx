@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// M2.4: the Send success card gains a "View in history" action landing on
+// M2.4: the Send success card gains a "View in History" action landing on
 // the merged entry, which the wallet builds from its own PendingTx record
 // the instant broadcast succeeds - before the network has necessarily
 // reported it. These drive the REAL Send component end to end (fill ->
@@ -22,6 +22,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Send } from '../../../packages/core/src/shared/routes/Send.jsx';
@@ -124,7 +126,7 @@ async function driveToBroadcastDone(messaging) {
 
 afterEach(() => cleanup());
 
-describe('Send success card: "View in history" (M2.4)', () => {
+describe('Send success card: "View in History" (M2.4)', () => {
     it('updates pending, failed, and confirmed status without remounting', async () => {
         const statusHarness = { phase: 'pending' };
         const { messaging } = mount({ statusHarness });
@@ -146,7 +148,7 @@ describe('Send success card: "View in history" (M2.4)', () => {
         const { messaging } = mount({ onViewHistory });
         await driveToBroadcastDone(messaging);
 
-        const button = screen.getByRole('button', { name: /View in history/i });
+        const button = screen.getByRole('button', { name: /View in History/i });
         expect(button).toBeInTheDocument();
 
         // Pre-validation honesty (§7): a broadcast is not a network sighting.
@@ -155,6 +157,30 @@ describe('Send success card: "View in history" (M2.4)', () => {
         const hint = screen.getByText(/already appears in History/i);
         expect(hint.textContent).toMatch(/up to a minute/i);
         expect(hint.textContent).not.toMatch(/confirmed|accepted/i);
+        // A note is a WarningCard line, never a loose paragraph, and never
+        // inside the success card (no card in a card).
+        expect(hint).toHaveAttribute('data-warning-line', 'plain');
+        expect(hint.closest('[data-send-history-note]')).not.toBeNull();
+        expect(hint.closest('[data-transaction-status]')).toBeNull();
+    });
+
+    it('lists the sent facts as label-left rows with no uppercase labels', async () => {
+        const { messaging } = mount({ onViewHistory: vi.fn() });
+        await driveToBroadcastDone(messaging);
+
+        const css = readFileSync(
+            join(process.cwd(), 'packages/core/src/shared/routes/Send.module.css'),
+            'utf8',
+        ).replace(/\/\*[\s\S]*?\*\//g, '');
+        for (const selector of ['.successRow dt', '.successLabel', '.detailsLabel', '.detailsToggle']) {
+            const body = new RegExp(`${selector.replace('.', '\\.')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] || '';
+            expect(body, selector).not.toMatch(/text-transform:\s*uppercase/);
+        }
+        const row = /\.successRow\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+        expect(row).toMatch(/justify-content:\s*space-between/);
+        expect(row).not.toMatch(/flex-direction:\s*column/);
+        expect(/\.successSummary\s*\{([^}]*)\}/.exec(css)?.[1] || '').not.toMatch(/composes:\s*card/);
+        expect(screen.getByText('Transaction ID')).toBeInTheDocument();
     });
 
     it('navigates with the transaction identity, matching History\'s initialFocus shape', async () => {
@@ -162,7 +188,7 @@ describe('Send success card: "View in history" (M2.4)', () => {
         const { messaging } = mount({ onViewHistory });
         await driveToBroadcastDone(messaging);
 
-        fireEvent.click(screen.getByRole('button', { name: /View in history/i }));
+        fireEvent.click(screen.getByRole('button', { name: /View in History/i }));
 
         expect(onViewHistory).toHaveBeenCalledTimes(1);
         expect(onViewHistory).toHaveBeenCalledWith({ chainId: CHAIN_ID, txHash: TXID });
@@ -172,11 +198,11 @@ describe('Send success card: "View in history" (M2.4)', () => {
         const { messaging } = mount({ onViewHistory: undefined });
         await driveToBroadcastDone(messaging);
 
-        expect(screen.queryByRole('button', { name: /View in history/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: /View in History/i })).toBeNull();
         expect(screen.queryByText(/already appears in History/i)).toBeNull();
         // The rest of the card is untouched: still exactly the two
         // pre-existing actions.
-        expect(screen.getByRole('button', { name: /^Send another$/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Send Another$/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^Done$/ })).toBeInTheDocument();
     });
 
@@ -188,7 +214,7 @@ describe('Send success card: "View in history" (M2.4)', () => {
         const { messaging } = mount();
         await driveToBroadcastDone(messaging);
 
-        const copyButton = screen.getByRole('button', { name: /Copy transaction ID/i });
+        const copyButton = screen.getByRole('button', { name: /Copy Transaction ID/i });
         fireEvent.click(copyButton);
 
         await waitFor(() => expect(copyButton).toHaveAttribute('data-state', 'failed'));

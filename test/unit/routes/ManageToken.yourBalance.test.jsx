@@ -6,11 +6,13 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const source = readFileSync(
-    join(process.cwd(), 'packages/core/src/shared/routes/ManageToken.jsx'),
+    join(process.cwd(), 'packages/core/src/shared/components/TokenOwnerActions.jsx'),
     'utf8',
 );
 
-describe('ManageToken balance stats removal', () => {
+// The management identity card has no balance, and the issuer's module reads
+// no wallet balances or holding statistic of its own.
+describe('issuer actions: no balance stats', () => {
     it('does not request wallet balances or render a holding statistic', () => {
         expect(source).not.toContain('getWalletBalances');
         expect(source).not.toContain('yourBalance');

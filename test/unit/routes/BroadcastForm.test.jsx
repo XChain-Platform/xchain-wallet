@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { BroadcastForm } from '../../../packages/core/src/shared/routes/BroadcastForm.jsx';
 
 const ADDRESS = 'bc1qexampleexampleexampleexampleexampleex';
@@ -53,9 +54,12 @@ function mountForm(chainId = 'bitcoin-mainnet', addresses = ADDRESSES, props = {
         psbt: 'aa00', encoding: 'psbt', actionString: 'ACT', version: 0,
     });
     broadcastAction = vi.fn().mockResolvedValue({ txid: 'deadbeef' });
+    // The wallet's mode is read from the wallet list, not from settings.
+    publishWalletModes({ wallets: [{ id: 'w', walletMode: props.walletMode || 'full' }], activeWalletId: 'w' });
     const target = {
         getAddressesByChain: vi.fn().mockResolvedValue(addresses),
-        getSettings: vi.fn().mockResolvedValue({ walletMode: props.walletMode || 'full' }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        listWallets: vi.fn().mockResolvedValue([{ id: 'w', name: 'W', walletMode: props.walletMode || 'full' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         listContacts: vi.fn().mockResolvedValue([]),
         composeForConfirm,
@@ -106,6 +110,7 @@ beforeEach(() => {
 });
 afterEach(() => {
     cleanup();
+    resetWalletModes();
     vi.useRealTimers();
 });
 
@@ -115,15 +120,18 @@ describe('BroadcastForm plain message flow', () => {
         await fill('watcher broadcast');
         submit();
 
-        expect(await screen.findByRole('button', { name: 'Create unsigned transaction' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Announce' })).toBeNull();
-        expect(screen.getByText(/Watcher mode: this prepares the transaction for your offline signer/)).toBeTruthy();
+        expect(await screen.findByRole('heading', { name: 'Confirm' })).toBeTruthy();
+        expect(screen.getByTestId('confirm-sentence')).toHaveTextContent('Announce "watcher broadcast"');
+        expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+        expect(screen.getByText(/Another phone signs for this wallet: this prepares the transaction for it/)).toBeTruthy();
     });
 
     it('renders only the format 0 authoring fields', async () => {
         mountForm();
 
-        expect(await screen.findByRole('button', { name: 'About Network' })).toBeInTheDocument();
+        // Network sits in the standard From section, closed on load.
+        expect(await screen.findByRole('button', { name: 'About Network', hidden: true })).toBeInTheDocument();
         const message = await screen.findByLabelText('Message');
         expect(message.tagName).toBe('TEXTAREA');
         expect(message).toHaveAttribute('required');
@@ -168,8 +176,12 @@ describe('BroadcastForm plain message flow', () => {
         expect(message.length).toBe(251);
         await fill(message);
 
-        expect(screen.getByText('Message is 251 characters; the network accepts at most 250 characters.')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Announce' })).toBeDisabled();
+        expect(screen.getAllByText('Message is 251 characters; the network accepts at most 250 characters.').length).toBeGreaterThan(0);
+        // G22: Announce stays enabled; the press is refused before compose.
+        const broadcast = screen.getByRole('button', { name: 'Announce' });
+        expect(broadcast).not.toBeDisabled();
+        fireEvent.click(broadcast);
+        await waitFor(() => expect(screen.getAllByText(/Message is 251 characters/).length).toBeGreaterThan(0));
         expect(composeForConfirm).not.toHaveBeenCalled();
     });
 
@@ -199,7 +211,7 @@ describe('BroadcastForm success screen', () => {
         await waitFor(() => expect(broadcastAction).toHaveBeenCalledTimes(1));
         expect(await screen.findByRole('heading', { name: 'Broadcast pending' })).toBeTruthy();
         expect(screen.getByText('deadbeef')).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Copy transaction ID' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Copy Transaction ID' })).toBeTruthy();
         expect(document.body.textContent).not.toMatch(/Litecoin|regtest|testnet|not mainnet/i);
         expect(screen.getByRole('link', { name: 'View on explorer' })).toHaveAttribute(
             'href',
@@ -208,7 +220,7 @@ describe('BroadcastForm success screen', () => {
         expect(screen.getByRole('status')).toHaveAttribute('aria-atomic', 'true');
         expect(screen.getAllByRole('status')).toHaveLength(1);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Announce another' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Announce Another' }));
         expect(await screen.findByRole('button', { name: 'Announce' })).toBeTruthy();
         expect(screen.queryByText('deadbeef')).toBeNull();
         expect(confirm).not.toBeInTheDocument();
@@ -232,7 +244,10 @@ describe('BroadcastForm field help tips', () => {
         mountForm();
         await screen.findByLabelText('Message');
 
-        const fromTip = screen.getByRole('button', { name: 'About From' });
+        // The From field lives in the standard From section (closed
+        // on load) and is labelled "From address".
+        fireEvent.click(screen.getByRole('button', { name: /^From\b/, expanded: false }));
+        const fromTip = screen.getByRole('button', { name: 'About From address' });
         expect(document.getElementById(fromTip.getAttribute('aria-describedby')).textContent)
             .toBe('The address that signs and pays for this message. The message is recorded on-chain as coming from this address.');
         const messageTip = screen.getByRole('button', { name: 'About Message' });

@@ -1,14 +1,15 @@
+/* The outer surface stays solid while the chart supplies its own fade. */
 .hero {
-    background: linear-gradient(180deg, var(--xc-accent-primary) 0%, var(--xc-accent-primary-hover) 100%);
-    color: var(--xc-on-accent);
-    border: 1px solid var(--xc-border-strong);
+    background: var(--xc-hero-bg);
+    color: var(--xc-hero-text);
+    border: 1px solid var(--xc-hero-border);
     border-radius: var(--xc-card-radius);
     padding: var(--xc-card-pad);
     display: flex;
     flex-direction: column;
     /* Preserve the untokenized 2px optical separation within the hero. */
     gap: 2px;
-    box-shadow: var(--xc-shadow-md);
+    box-shadow: var(--xc-hero-shadow);
 }
 
 .row {
@@ -31,16 +32,9 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
+    color: var(--xc-hero-text-muted);
 }
 
-.scope {
-    font-weight: 500;
-    margin-inline-start: var(--xc-space-1);
-    color: color-mix(in srgb, var(--xc-on-accent) 60%, transparent);
-    text-transform: none;
-    letter-spacing: 0;
-}
 
 /* Home's slot for the one balance actions menu. */
 .actions {
@@ -85,8 +79,10 @@
     text-align: start;
 }
 
-.actionRow:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .actionRow:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .actionRow:focus-visible {
@@ -96,9 +92,9 @@
 
 .eye {
     appearance: none;
-    background: color-mix(in srgb, var(--xc-on-accent) 15%, transparent);
-    border: none;
-    color: var(--xc-on-accent);
+    background: var(--xc-hero-chip-bg);
+    border: 1px solid var(--xc-hero-border);
+    color: var(--xc-hero-chip-text);
     width: var(--xc-control-h-sm);
     height: var(--xc-control-h-sm);
     border-radius: var(--xc-control-radius);
@@ -110,11 +106,11 @@
 }
 
 .eye:hover {
-    background: color-mix(in srgb, var(--xc-on-accent) 25%, transparent);
+    background: var(--xc-hero-chip-bg);
 }
 
 .eye:focus-visible {
-    outline: 2px solid var(--xc-on-accent);
+    outline: 2px solid var(--xc-hero-text);
     outline-offset: 2px;
 }
 
@@ -149,7 +145,7 @@
     font-weight: 800;
     line-height: 1.1;
     letter-spacing: -0.01em;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
 }
 
 .amountMessage {
@@ -176,7 +172,7 @@
 .amountCode {
     font-size: var(--xc-text-lg);
     font-weight: 600;
-    color: color-mix(in srgb, var(--xc-on-accent) 75%, transparent);
+    color: color-mix(in srgb, var(--xc-hero-text) 75%, transparent);
     letter-spacing: 0;
     white-space: nowrap;
     vertical-align: baseline;
@@ -184,7 +180,7 @@
 
 .hidden {
     letter-spacing: 0.15em;
-    color: color-mix(in srgb, var(--xc-on-accent) 55%, transparent);
+    color: color-mix(in srgb, var(--xc-hero-text) 55%, transparent);
 }
 
 /* The summary and its individual facts wrap independently on phone widths. */
@@ -208,14 +204,6 @@
     min-width: 0;
 }
 
-.metaRight {
-    flex: 0 0 auto;
-    color: color-mix(in srgb, var(--xc-on-accent) 70%, transparent);
-    font-size: var(--xc-text-xs);
-    font-weight: 500;
-    text-align: end;
-}
-
 .changePositive,
 .changeNegative,
 .changeNeutral {
@@ -229,15 +217,15 @@
 }
 
 .changePositive {
-    color: color-mix(in srgb, var(--xc-success) 45%, var(--xc-on-accent));
+    color: color-mix(in srgb, var(--xc-success) 45%, var(--xc-hero-text));
 }
 
 .changeNegative {
-    color: color-mix(in srgb, var(--xc-danger) 45%, var(--xc-on-accent));
+    color: color-mix(in srgb, var(--xc-danger) 45%, var(--xc-hero-text));
 }
 
 .changeNeutral {
-    color: color-mix(in srgb, var(--xc-on-accent) 70%, transparent);
+    color: color-mix(in srgb, var(--xc-hero-text) 70%, transparent);
 }
 
 @media not all and (min-width: 480px) {
@@ -246,11 +234,171 @@
     }
 }
 
-/* Engines disagree on whether gradients survive forced-colors mode, so pin
- * the surface and its label to one system pair instead of guessing. */
+/* Pin the surface and its label to one system pair in forced-colors mode
+ * instead of guessing how the engine maps the app blue. */
 @media (forced-colors: active) {
     .hero {
-        background: var(--xc-accent-primary);
-        color: var(--xc-on-accent);
+        background: var(--xc-hero-bg);
+        color: var(--xc-hero-text);
     }
+}
+
+/* The hero toggles, shown as a row of buttons in the card. */
+.inlineActions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--xc-space-1);
+}
+
+/* A row holding the inline buttons sizes its actions column to them at every
+   width. TotalBalanceHero sets the class, since the Safari 16 baseline has
+   no :has(). */
+.row.rowWithActions {
+    grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.inlineActions.inlineActions {
+    justify-self: end;
+    width: max-content;
+    margin-inline-start: 0;
+}
+
+/* The card's buttons use the solid hero control surface. */
+/* Compact card: the round buttons are 32px so the caption row is only as
+   tall as the wallet name, and the rows sit closer together. */
+.eye.eye {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    --xc-icon-size: var(--xc-icon-sm);
+    border-radius: 50%;
+    background: var(--xc-hero-chip-bg);
+    color: var(--xc-hero-chip-text);
+}
+
+.eye.eye:hover {
+    background: var(--xc-hero-chip-bg);
+}
+
+/* A switched-on card button looks the same as the others, with
+   no ring, so every circle in the card is drawn alike. */
+.eye.eye[aria-pressed='true'],
+.eye.eye[aria-pressed='true']:not(:disabled) {
+    box-shadow: none;
+    border: 1px solid var(--xc-hero-border);
+    background: var(--xc-hero-chip-bg);
+}
+
+/* The wallet's name as the card caption, at a readable size. */
+.label.walletLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
+    font-size: var(--xc-text-xl);
+    font-weight: 700;
+    line-height: 1.2;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--xc-hero-text);
+    overflow: visible;
+}
+
+/* The wallet look matches the token detail caption's 24px artwork, spacing and
+   alignment while reusing the same avatar primitive as the wallet switcher. */
+.walletLabelIcon {
+    --xc-avatar-size-header: 24px;
+    --xc-avatar-initials-header: 9px;
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+}
+
+.walletLabelCopy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.walletLabelText {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.modeCaption {
+    color: var(--xc-hero-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: nowrap;
+}
+
+/* The selected range controls both the chart direction and its matching pill. */
+.changePositive.changePositive,
+.changeNegative.changeNegative {
+    display: inline-block;
+    padding: 2px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    text-shadow: none;
+    font-size: var(--xc-text-md);
+    font-weight: 800;
+}
+
+.changePositive.changePositive {
+    background: var(--xc-hero-pill-up-bg);
+    color: var(--xc-hero-pill-up-text);
+}
+
+.changeNegative.changeNegative {
+    background: var(--xc-hero-pill-down-bg);
+    color: var(--xc-hero-pill-down-text);
+}
+
+/* The masked change takes the same pill box as the figure, so
+   hiding the balance leaves the card's height exactly as it was. */
+.hiddenChange {
+    display: inline-block;
+    padding: 2px var(--xc-space-2);
+    border-radius: var(--xc-radius-pill);
+    background: var(--xc-hero-chip-bg);
+    font-size: var(--xc-text-md);
+    font-weight: 800;
+}
+
+/* The up/down figure sits above the balance. The hero lays its
+   caption, buttons, change line and balance out on one grid, with the row
+   wrapper stepping aside so its cells join that grid. */
+.hero.hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-areas:
+        'label actions'
+        'meta meta'
+        'amount amount';
+    align-items: center;
+    column-gap: var(--xc-space-2);
+    row-gap: 2px;
+}
+
+.hero.hero > .row {
+    display: contents;
+}
+
+.hero.hero > .meta {
+    grid-area: meta;
+    justify-self: start;
+}
+
+/* A transparent layer keeps each round button's touch target at the touch floor. */
+.eye.eye::before {
+    content: '';
+    position: absolute;
+    inset: calc((32px - max(32px, var(--xc-control-hit-min, 24px))) / 2);
 }

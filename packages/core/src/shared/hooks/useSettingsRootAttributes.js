@@ -33,13 +33,14 @@ import { REDUCED_MOTION_ATTR } from '../../ui/reducedMotion.js';
 
 export const THEME_ATTR = 'data-xc-theme';
 export const LEARN_MODE_ATTR = 'data-xc-learn-mode';
-const CACHE_KEY = 'xc:displayPrefs';
+export const DISPLAY_PREFS_CACHE_KEY = 'xc:displayPrefs';
 
 /**
  * @typedef {object} DisplayPrefs
  * @property {'system'|'light'|'dark'} [theme]
  * @property {'auto'|'always'|'never'} [reducedMotion]
  * @property {boolean} [learnMode]
+ * @property {Record<string, number>} [panelSplits]
  */
 
 function setAttr(name, value) {
@@ -97,7 +98,7 @@ export function applySettingsRootAttributes(prefs) {
 /** @returns {DisplayPrefs | null} the last preferences seen while unlocked */
 export function readCachedDisplayPrefs() {
     try {
-        const raw = globalThis.localStorage?.getItem(CACHE_KEY);
+        const raw = globalThis.localStorage?.getItem(DISPLAY_PREFS_CACHE_KEY);
         if (!raw) return null;
         const parsed = JSON.parse(raw);
         return parsed && typeof parsed === 'object' ? parsed : null;
@@ -109,11 +110,46 @@ export function readCachedDisplayPrefs() {
 /** @param {DisplayPrefs} prefs */
 export function cacheDisplayPrefs(prefs) {
     try {
-        globalThis.localStorage?.setItem(CACHE_KEY, JSON.stringify({
+        const panelSplits = readCachedDisplayPrefs()?.panelSplits;
+        globalThis.localStorage?.setItem(DISPLAY_PREFS_CACHE_KEY, JSON.stringify({
             theme: prefs?.theme,
             reducedMotion: prefs?.reducedMotion,
             learnMode: Boolean(prefs?.learnMode),
+            ...(panelSplits && typeof panelSplits === 'object' ? { panelSplits } : {}),
         }));
+    } catch { /* storage may be blocked in some shells */ }
+}
+
+/** @returns {number | null} a page's remembered start-panel width */
+export function readPanelSplitPreference(storageKey) {
+    if (!storageKey) return null;
+    const value = Number(readCachedDisplayPrefs()?.panelSplits?.[storageKey]);
+    return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * Keep a non-sensitive, per-page panel width in the same per-device display
+ * mirror as theme and motion. A null width means the page uses its default.
+ *
+ * @param {string} storageKey
+ * @param {number | null} px
+ */
+export function writePanelSplitPreference(storageKey, px) {
+    if (!storageKey) return;
+    try {
+        const current = readCachedDisplayPrefs() || {};
+        const panelSplits = current.panelSplits && typeof current.panelSplits === 'object'
+            ? { ...current.panelSplits }
+            : {};
+        if (px === null) delete panelSplits[storageKey];
+        else if (Number.isFinite(px) && px > 0) panelSplits[storageKey] = Math.round(px);
+        const next = {
+            theme: current.theme,
+            reducedMotion: current.reducedMotion,
+            learnMode: Boolean(current.learnMode),
+            ...(Object.keys(panelSplits).length > 0 ? { panelSplits } : {}),
+        };
+        globalThis.localStorage?.setItem(DISPLAY_PREFS_CACHE_KEY, JSON.stringify(next));
     } catch { /* storage may be blocked in some shells */ }
 }
 

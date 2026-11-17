@@ -9,7 +9,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { formatLocalDateTime } from '../../../packages/core/src/shared/utils/dateTime.js';
 import { MyOrdersView } from '../../../packages/core/src/shared/routes/MyOrdersView.jsx';
-import { MySwapsView } from '../../../packages/core/src/shared/routes/MySwapsView.jsx';
+import { MySwapsWithDetail } from '../mySwapsWithDetail.jsx';
 
 const CHAIN = 'dogecoin-testnet';
 const OWNER = 'ndDEAAyn7DcGeaQ6chBWH2vaSdYAXVGNhc';
@@ -53,24 +53,35 @@ const VIEWS = [
         feeds: {
             getOrdersForAddress: vi.fn(async () => ({ data: [marketRow()] })),
             getOrderCancelsForAddress: vi.fn(async () => ({ data: [] })),
+            // The explorer's order detail: the order's own fields and its state.
             getOrderDetail: vi.fn(async () => ({
+                ...marketRow(),
                 state: { status: 'open', expiration: CURRENT_EXPIRATION, give_remaining: '500' },
             })),
             listAutopayOrders: vi.fn(async () => []),
         },
+        // Cancel and Edit live on the order's detail page, which its row opens.
+        detailPage: true,
     },
     {
         noun: 'swap',
-        Component: MySwapsView,
+        // The list with its rows opening Swap Details, as the shells wire it.
+        Component: MySwapsWithDetail,
         indexKey: 'SWAP_ACTION_INDEX',
         submitMethods: ['swapAction'],
         feeds: {
             getSwapsForAddress: vi.fn(async () => ({ data: [marketRow()] })),
             getSwapCancelsForAddress: vi.fn(async () => ({ data: [] })),
+            // The explorer's swap detail: the swap's own fields and its state.
             getSwapDetail: vi.fn(async () => ({
+                ...marketRow(),
+                action: 'SWAP',
                 state: { status: 'open', expiration: CURRENT_EXPIRATION },
             })),
         },
+        // Cancel and Edit live on the swap's details page, which its row opens.
+        detailPage: true,
+        listName: 'Swaps',
     },
 ];
 
@@ -129,6 +140,15 @@ function mount(view) {
 }
 
 async function openAction(view, label) {
+    if (view.detailPage) {
+        const orders = await screen.findByRole('list', { name: view.listName || 'Orders' });
+        fireEvent.click(within(orders).getByRole('button'));
+        // The detail page's action rows (G101) are named by their title, then their description.
+        fireEvent.click(await screen.findByRole('button', {
+            name: new RegExp(`^${label} ${view.noun}`),
+        }));
+        return;
+    }
     const list = await screen.findByRole('list', { name: `Open ${view.noun}s` });
     fireEvent.click(within(list).getByRole('button', { name: label }));
 }
@@ -159,9 +179,10 @@ describe.each(VIEWS)('$noun action wording', (view) => {
         fireEvent.change(screen.getByLabelText('New expiration', { selector: 'input' }), {
             target: { value: EDIT_VALUE },
         });
-        fireEvent.click(screen.getByRole('button', { name: `Update ${view.noun}` }));
+        fireEvent.click(screen.getByRole('button', { name: `Update ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` }));
 
-        const intent = await screen.findByTestId('action-intent');
+        // The decoded Expiration row is a facts card row (G127).
+        const intent = await screen.findByTestId('confirm-facts');
         const formatted = formatLocalDateTime(Number(EDIT_EXPIRATION));
         expect(intent).toHaveTextContent(formatted);
         expect(intent).not.toHaveTextContent(EDIT_EXPIRATION);
@@ -183,7 +204,7 @@ describe.each(VIEWS)('$noun action wording', (view) => {
     it('shows the cancel broadcast transaction with an explorer link', async () => {
         mount(view);
         await openAction(view, 'Cancel');
-        fireEvent.click(screen.getByRole('button', { name: `Cancel ${view.noun}` }));
+        fireEvent.click(screen.getByRole('button', { name: `Cancel ${view.noun[0].toUpperCase()}${view.noun.slice(1)}` }));
         await approve();
 
         await screen.findByText('Cancel broadcast');
@@ -196,15 +217,21 @@ describe('My orders cancel refresh', () => {
         const view = VIEWS[0];
         mount(view);
         await openAction(view, 'Cancel');
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel Order' }));
         await approve();
 
         await screen.findByText('Cancel broadcast');
         fireEvent.click(screen.getByRole('button', { name: 'Done' }));
 
-        const closed = await screen.findByRole('list', { name: 'Closed orders' });
-        expect(within(closed).getByText('Cancelling')).toBeTruthy();
-        expect(within(closed).queryByRole('button', { name: 'Cancel' })).toBeNull();
+        // Done returns to the order's detail, Closing and with no Cancel.
+        const card = await screen.findByRole('region', { name: 'Order' });
+        await waitFor(() => expect(within(card).getByText('Closing')).toBeTruthy());
+        expect(screen.queryByRole('button', { name: /^Cancel order/ })).toBeNull();
+
+        // The list still reads Closing once it reloads.
+        fireEvent.click(screen.getByRole('button', { name: /back/i }));
+        const orders = await screen.findByRole('list', { name: 'Orders' });
+        expect(await within(orders).findByText('Closing')).toBeTruthy();
         expect(screen.queryByRole('list', { name: 'Open orders' })).toBeNull();
     });
 });

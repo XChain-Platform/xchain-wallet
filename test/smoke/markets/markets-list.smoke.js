@@ -43,10 +43,13 @@ assert.ok(existsSync(routePath), 'MarketsList.jsx exists');
 const routeSrc = readFileSync(routePath, 'utf8');
 assert.ok(/export function MarketsList\b/.test(routeSrc),
     'MarketsList is a named export');
-assert.ok(/listWatchlistForWallet/.test(routeSrc)
-    && /saveWatchlistEntry/.test(routeSrc)
-    && /clearWatchlistEntry/.test(routeSrc),
-    'MarketsList reads + writes the watchlist via messaging');
+// The list reads the watchlist for its Show watchlist choice; the star that
+// writes it lives on the market page.
+assert.ok(/listWatchlistForWallet/.test(routeSrc),
+    'MarketsList reads the watchlist via messaging');
+const marketViewSrc = readFileSync(join(core, 'src', 'shared', 'routes', 'MarketView.jsx'), 'utf8');
+assert.ok(/saveWatchlistEntry/.test(marketViewSrc) && /clearWatchlistEntry/.test(marketViewSrc),
+    'MarketView writes the watchlist via messaging');
 assert.ok(/messaging\.getMarkets\(/.test(routeSrc),
     'MarketsList queries sdk.getMarkets per chain');
 assert.ok(/onOpenMarket/.test(routeSrc),
@@ -120,8 +123,11 @@ for (const [shell, msgPath] of [
 // --- 5. Home + App wiring (3 shells) ----------------------------
 
 const homeSrc = withEnglishCopy(readFileSync(join(core, 'src', 'shared', 'routes', 'Home.jsx'), 'utf8'));
-assert.ok(/onMarkets/.test(homeSrc), 'Home accepts onMarkets prop');
-assert.ok(/>\s*Markets\s*</.test(homeSrc), 'Home renders a "Markets" button');
+// Home has no bottom action row; Markets is a wallet menu row.
+assert.ok(!/onMarkets/.test(homeSrc), 'Home carries no Markets button of its own');
+assert.ok(/id: 'markets', labelKey: 'walletMenu\.row\.dex'/.test(
+    readFileSync(join(core, 'src', 'shared', 'walletMenu.js'), 'utf8'),
+), 'the wallet menu carries the Markets row');
 
 // The web shell keeps its DEX routing in `packages/web/src/surfaces/dex.jsx`
 // rather than inline in App.jsx: a store-profile build swaps that
@@ -160,8 +166,8 @@ for (const [shell, appPath] of [
         `${shell} App owns the 'markets-picker' destination route`,
     );
     assert.ok(
-        /onMarkets=\{(?:DEX_SURFACE_ENABLED && )?activeWalletId/.test(app),
-        `${shell} App threads onMarkets into Home`,
+        !/onMarkets=\{/.test(app),
+        `${shell} App passes no onMarkets to Home`,
     );
     assert.ok(
         /activeMarket,\s*setActiveMarket/.test(app),

@@ -334,6 +334,10 @@ export function pendingTxToEntry({
     const failedAtMs = failed
         ? (isoToMs(pendingTx?.updatedAt) ?? broadcastAtMs ?? isoToMs(pendingTx?.createdAt))
         : null;
+    // A proved send is dated like an indexed row, by its block: the moment
+    // the wallet learned of that block is the nearest time it has to one, so
+    // the row shows, sorts and files under the same time.
+    const confirmedAtMs = chainConfirmed ? isoToMs(pendingTx?.confirmedAt) : null;
     return {
         key: pendingKeyFor(chainId, txHash || `ptx-${pendingTxId}`),
         chainId,
@@ -343,7 +347,7 @@ export function pendingTxToEntry({
         blockIndex: 0,
         timestamp: failed
             ? (failedAtMs ?? observedAtMs)
-            : (firstSeenMs ?? broadcastAtMs ?? observedAtMs),
+            : (confirmedAtMs ?? firstSeenMs ?? broadcastAtMs ?? observedAtMs),
         txHash,
         source,
         raw: {
@@ -380,7 +384,7 @@ export function pendingTxToEntry({
             confirmedBlockIndex: chainConfirmed && Number.isInteger(confirmedBlock) && confirmedBlock > 0
                 ? confirmedBlock
                 : null,
-            confirmedAtMs: chainConfirmed ? isoToMs(pendingTx?.confirmedAt) : null,
+            confirmedAtMs,
         },
     };
 }
@@ -568,6 +572,49 @@ export function pendingDisplayState(entry, nowMs, windows) {
 }
 
 /**
+ * Whether an entry is still in flight: no block carries it as far as History
+ * knows, and nothing has settled it either way. These are the rows of the
+ * Pending section and of the merged sort's first rank. A blockless row whose
+ * status pill already reads Confirmed (proved into a block by this wallet) or
+ * Failed (given up on, dropped, or its coins spent elsewhere) is settled and
+ * belongs with the other settled rows, so section and pill never disagree.
+ *
+ * Mirrors `classifyEntryStatus` (historyFilter.js, which imports this module)
+ * for blockless entries: in flight exactly when that reads `pending`.
+ *
+ * @param {object} entry
+ * @param {number} [nowMs]
+ */
+export function isInFlightEntry(entry, nowMs = Date.now()) {
+    if (Number(entry?.blockIndex ?? 0) > 0) return false;
+    const raw = entry?.raw || {};
+    const statusField = String(raw.status || raw.STATUS || '').toLowerCase();
+    if (statusField === 'invalid' || statusField === 'failed') return false;
+    if (raw.valid === 0 || raw.valid === false) return false;
+    if (!entry?.pending) return true;
+    const state = pendingDisplayState(entry, nowMs);
+    return state !== 'confirmed' && state !== 'failed'
+        && state !== 'dropped' && state !== 'replaced-elsewhere';
+}
+
+/**
+ * The time a settled row is ordered and dated by, in ms. A row this wallet
+ * proved into a block has no block time of its own (nothing indexed it), so
+ * the moment the wallet learned of that block stands in for it; every other
+ * row uses its own clock.
+ *
+ * @param {object} entry
+ * @returns {number | null}
+ */
+export function entryOrderTimeMs(entry) {
+    if (Number(entry?.blockIndex ?? 0) <= 0 && entry?.pending?.chainConfirmed === true) {
+        const confirmedAt = firstSeenToMs(entry.pending.confirmedAtMs);
+        if (confirmedAt != null) return confirmedAt;
+    }
+    return entryTimeMs(entry);
+}
+
+/**
  * Merge newly observed per-chain heights without lowering a height already
  * shown to the user. An indexer replica can briefly answer from an older
  * snapshot, but that lag is not evidence that confirmations disappeared.
@@ -589,8 +636,10 @@ export function mergeMonotonicChainHeights(previous, observed) {
 }
 
 /**
- * Sort order for a merged list (I-22): pending first, then every entry
- * newest first by its own clock.
+ * Sort order for a merged list (I-22): in-flight rows first, then every entry
+ * newest first by its own clock. A blockless row that is already settled
+ * (Confirmed or Failed, see `isInFlightEntry`) sorts with the settled rows by
+ * `entryOrderTimeMs`, not with the pending ones.
  *
  * The clock is the point. History fans out over every chain the wallet uses
  * and merges the results into ONE list, and a block height is a per-chain
@@ -609,19 +658,25 @@ export function mergeMonotonicChainHeights(previous, observed) {
  *
  * @param {object} a
  * @param {object} b
+ * @param {number} [nowMs]  the clock "dropped" is judged against; pass one
+ *        value for a whole sort so no row changes rank mid-sort
  */
-export function compareMergedEntries(a, b) {
-    const aPending = Number(a?.blockIndex ?? 0) <= 0;
-    const bPending = Number(b?.blockIndex ?? 0) <= 0;
+export function compareMergedEntries(a, b, nowMs = Date.now()) {
+    const aPending = isInFlightEntry(a, nowMs);
+    const bPending = isInFlightEntry(b, nowMs);
     if (aPending !== bPending) return aPending ? -1 : 1;
 
     // An entry with no usable stamp sinks below every dated one. A zero would
     // instead float it to the top of an ascending subtraction.
-    const aMs = entryTimeMs(a) ?? -Infinity;
-    const bMs = entryTimeMs(b) ?? -Infinity;
+    const aMs = (aPending ? entryTimeMs(a) : entryOrderTimeMs(a)) ?? -Infinity;
+    const bMs = (bPending ? entryTimeMs(b) : entryOrderTimeMs(b)) ?? -Infinity;
     if (aMs !== bMs) return bMs - aMs;
 
-    if (aPending || a?.chainId !== b?.chainId) return 0;
-    if (b.blockIndex !== a.blockIndex) return b.blockIndex - a.blockIndex;
+    // Height and action index are a sequence only between indexed rows of
+    // one chain; a blockless row has neither.
+    const aBlock = Number(a?.blockIndex ?? 0);
+    const bBlock = Number(b?.blockIndex ?? 0);
+    if (aPending || a?.chainId !== b?.chainId || aBlock <= 0 || bBlock <= 0) return 0;
+    if (bBlock !== aBlock) return bBlock - aBlock;
     return Number(b.actionIndex) - Number(a.actionIndex);
 }

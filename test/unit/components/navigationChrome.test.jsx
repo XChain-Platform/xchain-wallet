@@ -70,10 +70,14 @@ const NAV_ITEMS = [
     'history',
     'send',
     'receive',
+    'my-tokens',
     'scan',
     'markets',
     'market-activity',
     'dispensers-list',
+    'bet-markets',
+    'governance-polls',
+    'staking-dashboard',
     'contracts-list',
     'messaging',
     'contacts',
@@ -96,15 +100,17 @@ describe('navigation route highlighting', () => {
             history: 'History',
             send: 'Send',
             receive: 'Receive',
-            scan: 'Scan',
-            markets: 'DEX',
+            'my-tokens': 'My Tokens',
+            markets: 'Exchange (DEX)',
             'market-activity': 'Marketplace',
             'dispensers-list': 'Dispensers',
+            'bet-markets': 'Prediction markets',
+            'governance-polls': 'Governance',
+            'staking-dashboard': 'Staking',
             'contracts-list': 'Contracts',
+            'cosigner-accounts': 'My Agents',
             messaging: 'Messaging',
             contacts: 'Contacts',
-            lists: 'Lists',
-            obligations: 'Payments due',
             settings: 'Settings',
         };
         const { rerender } = render(
@@ -115,6 +121,8 @@ describe('navigation route highlighting', () => {
                     onSelect={() => {}}
                     onOpenSettings={() => {}}
                     hasVmAddress
+                    hasBtcAddress
+                    hasGovernanceAddress
                 />
             </>,
         );
@@ -130,6 +138,8 @@ describe('navigation route highlighting', () => {
                         onSelect={() => {}}
                         onOpenSettings={() => {}}
                         hasVmAddress
+                        hasBtcAddress
+                        hasGovernanceAddress
                     />
                 </>,
             );
@@ -154,11 +164,13 @@ describe('navigation route highlighting', () => {
 
     it.each([
         ['send-picker', 'send'],
-        ['receive-picker', 'receive'],
         ['action-detail', 'history'],
         ['cross-chain-order', 'markets'],
         ['market-activity', 'market-activity'],
         ['contract-stake', 'contracts-list'],
+        ['staking-dashboard', 'staking-dashboard'],
+        ['stake-detail', 'staking-dashboard'],
+        ['staking-claim', 'staking-dashboard'],
         ['list-transfer', 'lists'],
         ['coinpay', 'obligations'],
         ['connected-sites', 'settings'],
@@ -178,16 +190,22 @@ describe('navigation route highlighting', () => {
         expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current');
     });
 
-    it('places Marketplace after DEX and removes both when trading is unavailable', () => {
+    it('lights Staking rather than Contracts while Staking is open', () => {
+        render(<LeftNav currentView="staking-dashboard" onSelect={() => {}} hasVmAddress hasBtcAddress />);
+        expect(screen.getByRole('button', { name: 'Contracts' })).not.toHaveAttribute('aria-current');
+        expect(screen.getByRole('button', { name: 'Staking' })).toHaveAttribute('aria-current', 'page');
+    });
+
+    it('places Marketplace after Exchange and removes both when trading is unavailable', () => {
         const { rerender } = render(<LeftNav currentView="market-activity" onSelect={() => {}} />);
         const labels = screen.getAllByRole('button').map((button) => button.textContent.trim());
 
-        expect(labels.indexOf('Marketplace')).toBe(labels.indexOf('DEX') + 1);
+        expect(labels.indexOf('Marketplace')).toBe(labels.indexOf('Exchange (DEX)') + 1);
         expect(screen.getByRole('button', { name: 'Marketplace' })).toHaveAttribute('aria-current', 'page');
         expect(screen.getByRole('button', { name: 'Marketplace' })).toHaveAttribute('title', 'Marketplace');
 
         rerender(<LeftNav currentView="home" onSelect={() => {}} hasDexSurface={false} />);
-        expect(screen.queryByRole('button', { name: 'DEX' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Exchange (DEX)' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Marketplace' })).toBeNull();
     });
 
@@ -304,6 +322,8 @@ describe('navigation Tab order', () => {
                     onLock={() => {}}
                     walletName="Main wallet"
                     hasVmAddress
+                    hasBtcAddress
+                    hasGovernanceAddress
                 />
                 <button type="button">After navigation</button>
             </>,
@@ -311,9 +331,10 @@ describe('navigation Tab order', () => {
         screen.getByRole('button', { name: 'Before navigation' }).focus();
 
         const order = [
-            'Open the wallet menu', 'Home', 'History', 'Send', 'Receive',
-            'Scan', 'DEX', 'Marketplace', 'Dispensers', 'Contracts', 'Messaging', 'Contacts',
-            'Lists', 'Payments due', 'Settings', 'Lock wallet',
+            'Open the wallet menu', 'Home', 'Send', 'Receive', 'My Tokens', 'History',
+            'Exchange (DEX)', 'Marketplace', 'Dispensers', 'Prediction markets',
+            'Governance', 'Staking', 'Contracts', 'My Agents', 'Messaging', 'Contacts',
+            'Settings', 'Lock wallet',
             'After navigation',
         ];
         for (const label of order) {
@@ -355,8 +376,9 @@ describe('Settings account picker navigation', () => {
         expect(screen.getByRole('button', { name: 'Back to previous screen' })).toBeInTheDocument();
 
         const webApp = readFileSync('packages/web/src/App.jsx', 'utf8');
+        // The label follows the navigation history: Settings below the picker.
         expect(webApp).toContain(
-            "backLabel={accountPickerBackTo === 'settings' ? t('shell.settings.back') : undefined}",
+            "backLabel={nav.previousView === 'settings' ? t('shell.settings.back') : undefined}",
         );
     });
 });
@@ -429,13 +451,13 @@ describe('AppHeader button labels and tooltips', () => {
             />,
         );
 
-        expect(screen.getByRole('button', { name: 'Lock wallet' }))
-            .toHaveAttribute('title', 'Lock wallet');
+        expect(screen.queryByRole('button', { name: 'Lock wallet' })).toBeNull();
         const menu = screen.getByRole('button', { name: 'Open menu' });
         expect(menu).toHaveAttribute('title', 'Open menu');
         expect(menu).toHaveAttribute('aria-haspopup', 'dialog');
         expect(menu).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getByText('Primary wallet')).toBeInTheDocument();
+        // The approved header carries icons only; the wallet's name is no longer drawn in it.
+        expect(screen.queryByText('Primary wallet')).toBeNull();
 
         fireEvent.click(menu);
         expect(onMenuToggle).toHaveBeenCalledOnce();

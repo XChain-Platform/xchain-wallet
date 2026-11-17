@@ -20,7 +20,7 @@ function scan(text) {
     const onClassified = vi.fn();
     render(<ScanRoute onClassified={onClassified} onBack={vi.fn()} />);
     fireEvent.change(screen.getByLabelText('Or paste it here'), { target: { value: text } });
-    fireEvent.click(screen.getByRole('button', { name: 'Use pasted text' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use Pasted Text' }));
     return { onClassified, alert: document.querySelector('[role="alert"]')?.textContent || '' };
 }
 

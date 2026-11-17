@@ -155,10 +155,9 @@ describe('viewport surfaces keep content inside device safe areas', () => {
     });
 
     it.each([
-        ['Alerts overlay', 'packages/core/src/shared/components/AlertsOverlay.module.css', '.overlay'],
         ['Notice modal', 'packages/core/src/shared/components/OverlaySurface.module.css', '.dialogOverlay'],
         ['Gated file viewer', 'packages/core/src/shared/components/GatedFileViewer.module.css', '.overlay'],
-        ['Contacts modal', 'packages/core/src/shared/routes/ContactsList.module.css', '.modalOverlay'],
+        // Contacts' add-address dialog became the Add Address page (2026-11-15).
     ])('%s pads all four viewport edges', (_name, path, selector) => {
         const css = read(path);
         const rule = css.match(new RegExp(`\\${selector}\\s*\\{[^}]*\\}`))[0];

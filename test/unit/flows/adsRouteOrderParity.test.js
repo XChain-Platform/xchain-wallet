@@ -4,6 +4,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { composeForConfirm } from '../../../packages/core/src/flows/composeForConfirm.js';
 import { submitAction } from '../../../packages/core/src/flows/submitAction.js';
+import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
+
+// A fixed coin price, so the due $25.00 queue is 0.0005 coin = 50,000 sats.
+vi.mock('../../../packages/core/src/flows/priceLookup.js', async (importOriginal) => ({
+    ...(await importOriginal()),
+    refreshFiatRates: vi.fn(async () => ({ updated: [] })),
+    getFiatRate: vi.fn(() => ({ rate: 50000, stale: false, chainCoin: 'bitcoin', fiatCurrency: 'USD' })),
+}));
 
 const CHAIN_ID = 'bitcoin-regtest';
 const SOURCE = 'bcrt1qsource';
@@ -12,7 +20,7 @@ const EXISTING = { address: 'bcrt1qrecipient', value: 7000 };
 // chain and network, so the regtest double carries both.
 const NATIVE_FEE = { address: 'mfeesX6rLE6V3WPg9tsbL2fHNS7E4rDAim', value: 6000 };
 const ORACLE_FEE = { address: 'bcrt1qoracle', value: 3000 };
-const DONATION = { address: 'bcrt1qdonation', value: 5000 };
+const DONATION = { address: 'bcrt1qdonation', value: 50000 };
 const ACTION_DATA = {
     action: 'DISPENSER',
     params: {
@@ -24,20 +32,8 @@ const ACTION_DATA = {
 };
 
 function harness({ encoding = 'OP_RETURN' } = {}) {
-    let settings = {
-        ads: {
-            enabled: true,
-            perChain: {
-                [CHAIN_ID]: {
-                    accumulatedSats: DONATION.value,
-                    triggerAmountSats: 1000,
-                    perTxAmountSats: 1,
-                    lifetimeTxCount: 0,
-                    lifetimeDonatedSats: 0,
-                },
-            },
-        },
-    };
+    const defaults = createDefaultSettings();
+    let settings = { ...defaults, ads: { ...defaults.ads, queued: '25', sendAt: '25' } };
     const createTx = vi.fn(async () => ({ psbt: 'COMMIT-PSBT', encoding }));
     const spendP2sh = vi.fn(async () => ({ psbt: 'REVEAL-PSBT' }));
     const sdk = {
@@ -88,9 +84,12 @@ function harness({ encoding = 'OP_RETURN' } = {}) {
                 : { inputs: [{}], outputs: [{ scriptType: 'p2sh' }] },
         },
     };
+    // Only a mainnet send carries the automatic donation, and the ADS gate
+    // reads the descriptor's network kind; the native fee pin reads the SDK's
+    // own network above, so the regtest fee destination still applies.
     const descriptor = {
         coin: 'BTC',
-        networkKind: 'regtest',
+        networkKind: 'mainnet',
         adsDonationAddress: DONATION.address,
         feeStrategy: { rbfSupported: true },
     };
@@ -118,7 +117,7 @@ function encoderOpts() {
     };
 }
 
-describe('ADS output order parity', () => {
+describe('automatic donation output order parity', () => {
     it('places protocol fees before ADS in atomic and confirmation composition', async () => {
         const composedHarness = harness();
         await composeForConfirm({

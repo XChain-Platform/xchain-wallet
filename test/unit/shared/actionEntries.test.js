@@ -6,8 +6,8 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-// Unit: the Actions menu entry list, which used to be copy-pasted into all
-// three shells.
+// Unit: the Actions menu entry list, one list shared by all three shells in
+// place of a copy in each.
 //
 // Two behaviours are worth pinning, because both were regressions in the
 // shipped triplicate:
@@ -60,6 +60,12 @@ describe('ACTION_ENTRY_DEFS', () => {
         const broadcast = ACTION_ENTRY_DEFS.find((entry) => entry.id === 'broadcast');
         expect(broadcast.label).toBe('Announce');
         expect(broadcast.description).toMatch(/publish/i);
+    });
+
+    it('names the prediction markets destination with buy wording', () => {
+        const markets = ACTION_ENTRY_DEFS.find((entry) => entry.id === 'bet-markets');
+        expect(markets.label).toBe('Prediction markets');
+        expect(markets.description).toBe('Browse prediction markets, buy and track positions, or run a market of your own as its oracle.');
     });
 
     it('leaves developer tools out of All actions and lists Multisig signing for multisig sends', () => {

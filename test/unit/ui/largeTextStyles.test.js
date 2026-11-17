@@ -66,8 +66,10 @@ describe('large text layout styles', () => {
         expect(`${appHeader}\n${pageHeader}`)
             .not.toMatch(/font-size:\s*\d*\.?\d+px/);
         expect(rule(appHeader, '.left')).toMatch(/overflow:\s*hidden/);
-        expect(rule(pageHeader, '.title')).toMatch(/overflow-wrap:\s*anywhere/);
-        expect(rule(pageHeader, '.title')).toMatch(/white-space:\s*normal/);
+        // Operator rule 2026-11-13: a header title is one bounded line ending in an ellipsis.
+        expect(rule(pageHeader, '.title')).toMatch(/overflow:\s*hidden/);
+        expect(rule(pageHeader, '.title')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(pageHeader, '.title')).toMatch(/white-space:\s*nowrap/);
         expect(rule(networkFilter, '.triggerLabel')).toMatch(/text-overflow:\s*ellipsis/);
     });
 
@@ -92,13 +94,21 @@ describe('large text layout styles', () => {
 
     it('reflows affected primary phone screens before scaled text crowds their rows', () => {
         const send = readCore('shared', 'routes', 'Send.module.css');
+        const confirmStandard = readCore('shared', 'components', 'ConfirmStandard.module.css');
         const receive = readCore('shared', 'routes', 'Receive.module.css');
         const history = readCore('shared', 'routes', 'History.module.css');
         const settings = readCore('shared', 'routes', 'Settings.module.css');
 
         const sendPhone = block(send, '@media not all and (min-width: 480px)');
-        expect(sendPhone).toMatch(/\.detailsList,[\s\S]*?\.advancedReviewList\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-        expect(sendPhone).toMatch(/\.successTxidRow,[\s\S]*?\.recipientRowHead\s*\{[^}]*flex-wrap:\s*wrap/);
+        // Confirm Standard replaced Send's review list. Its sentence wraps,
+        // facts stay within the page, and both decision buttons can shrink.
+        expect(rule(confirmStandard, '.sentence')).toMatch(/overflow-wrap:\s*anywhere/);
+        expect(rule(confirmStandard, '.facts')).toMatch(/width:\s*100%/);
+        expect(rule(confirmStandard, '.oneLine')).toMatch(/text-overflow:\s*ellipsis/);
+        expect(rule(confirmStandard, '.button')).toMatch(/min-width:\s*0/);
+        // The extra-recipient row heads left with the Multi tab's list, whose
+        // rows are ListRows that wrap on their own.
+        expect(sendPhone).toMatch(/\.successTxidRow,[\s\S]*?\.saveRecipientActions\s*\{[^}]*flex-wrap:\s*wrap/);
 
         // The Receive label editor keeps its field action attached in one row at
         // every width (Receive.layout.test.js), so it has no phone reflow block.
@@ -107,8 +117,10 @@ describe('large text layout styles', () => {
         const historyPhone = block(history, '@media not all and (min-width: 480px)');
         expect(historyPhone).toMatch(/\.rowMeta\s*\{[^}]*flex-wrap:\s*wrap/);
         expect(historyPhone).toMatch(/\.detailsTable tbody\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-        expect(rule(history, '.resultsHeader')).toMatch(/flex-wrap:\s*wrap/);
-        expect(rule(history, '.resultsHeader > div')).toMatch(/flex-wrap:\s*wrap/);
+        // History has no results header row to wrap: the "Updated" line is gone
+        // and its header buttons sit in the ⋯ menu, a popup sized to its items.
+        expect(rule(history, '.resultsHeader')).toBe('');
+        expect(rule(history, '.headerMore')).toMatch(/width:\s*max-content/);
 
         const settingsPhone = block(settings, '@media (max-width: 480px)');
         expect(settingsPhone).toMatch(/\.page button\s*\{[^}]*max-width:\s*100%/s);
