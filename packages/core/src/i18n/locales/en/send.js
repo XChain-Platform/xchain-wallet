@@ -19,6 +19,8 @@ const messages = {
     'send.empty.title': 'Nothing to send yet',
     'send.max.coinsHeld':
         "Every coin at this address is held by another send from this wallet that hasn't gone out yet, so Max can't create a payment.",
+    'send.max.uneconomicalInputs':
+        'Max leaves {amount} {ticker} at this address because those coins cost at least as much in network fees as they would add to the payment.',
     'send.empty.body': 'Receive coins or tokens on this network before creating a payment.',
     'send.backToEdit': 'Edit payment',
     'send.memoForbiddenChars': "A memo can't include a vertical bar (|) or semicolon (;).",

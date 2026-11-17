@@ -755,10 +755,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [maxNote, setMaxNote] = useState(/** @type {string | null} */ (null));
     const maxRequestRef = useRef(0);
     const maxContextRef = useRef(/** @type {string | null} */ (null));
+    const maxUtxosRef = useRef(/** @type {any[] | null} */ (null));
     const cancelMax = useCallback(() => {
         setMaxActive(false);
         setMaxUnavailable(false);
         setMaxNote(null);
+        maxUtxosRef.current = null;
         maxRequestRef.current += 1;
         setMaxBusy(false);
     }, []);
@@ -2871,6 +2873,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 if (!mountedRef.current || requestId !== maxRequestRef.current) return;
                 setAmount('');
                 setFiatAmount('');
+                maxUtxosRef.current = null;
                 setMaxUnavailable(true);
                 setMaxNote(heldQuote?.coinsHeld
                     ? t('send.max.coinsHeld')
@@ -2881,6 +2884,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             let maxSats = balanceSats;
             const quoted = await quoteMaxSats();
             if (!mountedRef.current || requestId !== maxRequestRef.current) return;
+            maxUtxosRef.current = Array.isArray(quoted?.utxos) ? quoted.utxos : null;
+            let leftBehindSats = null;
+            try {
+                leftBehindSats = typeof quoted?.leftBehindSats === 'string'
+                    ? BigInt(quoted.leftBehindSats)
+                    : null;
+            } catch {
+                leftBehindSats = null;
+            }
             if (quoted?.coinsHeld) {
                 setAmount('');
                 setFiatAmount('');
@@ -2902,7 +2914,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 setFiatAmount('');
                 setMaxUnavailable(true);
                 setMaxNote(maxSats <= 0n
-                    ? 'The selected network fee uses the available balance, so Max cannot create a payment.'
+                    ? (leftBehindSats != null && leftBehindSats > 0n
+                        ? t('send.max.uneconomicalInputs', {
+                            amount: decimalStringFromSats(leftBehindSats, descriptor),
+                            ticker: tickerUpper,
+                        })
+                        : 'The selected network fee uses the available balance, so Max cannot create a payment.')
                     : `The spendable balance after the selected network fee is below the ${decimalStringFromSats(floor, descriptor)} `
                         + `${tickerUpper} dust minimum, so Max cannot create a payment.`);
                 setMaxBusy(false);
@@ -2911,8 +2928,13 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
             display = nativeDecimalsFor(descriptor) === 8
                 ? decimalStringFromSats(maxSats)
                 : decimalStringFromSats(maxSats, descriptor);
-            note = 'Max sends the spendable balance after the selected network fee. '
-                + 'A coin amount that costs more to spend than it is worth may remain at this address.';
+            note = leftBehindSats != null && leftBehindSats > 0n
+                ? t('send.max.uneconomicalInputs', {
+                    amount: decimalStringFromSats(leftBehindSats, descriptor),
+                    ticker: tickerUpper,
+                })
+                : 'Max sends the spendable balance after the selected network fee. '
+                    + 'A coin amount that costs more to spend than it is worth may remain at this address.';
         } else {
             // A TOKEN balance is not satoshi-denominated and pays no coin fee out of itself,
             // so it is swept verbatim at the tick's own divisibility. The 8-dp sats path
@@ -3207,7 +3229,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 memo: isNativeSend ? undefined : (memo.trim() || undefined),
                 rbf: rbfForSend,
                 ...(changeAddress ? { change: changeAddress.address } : {}),
-                ...(coinControlEnabled ? { utxos: selectedUtxos } : {}),
+                ...(maxActive && Array.isArray(maxUtxosRef.current)
+                    ? { utxos: maxUtxosRef.current }
+                    : (coinControlEnabled ? { utxos: selectedUtxos } : {})),
                 ...(feePerKb != null ? { feePerKb } : {}),
                 // PC-52: `legs` supersedes to/tick/amount host-side. Sent only for a
                 // real multi-recipient send so a single send composes the identical
@@ -3365,7 +3389,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         chainId, fromAddress, walletId, toAddress, tick, amount, memo, rbfForSend,
         feePerKb, settings, messaging, confirmAction, draft, haptic,
         isNativeSend, isHwSource, isMultiSend, sendLegs, sendTotals, startUndoSend,
-        clearUndoHold, resetUndoSend, reportUndoHandoffOutcome, showToast, changeAddress, coinControlEnabled, selectedUtxos,
+        clearUndoHold, resetUndoSend, reportUndoHandoffOutcome, showToast, changeAddress, coinControlEnabled, selectedUtxos, maxActive,
         feeTiers,
     ]);
 
@@ -3425,7 +3449,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 memo: isNativeSend ? undefined : (memo.trim() || undefined),
                 rbf: rbfForSend,
                 ...(changeAddress ? { change: changeAddress.address } : {}),
-                ...(coinControlEnabled ? { utxos: selectedUtxos } : {}),
+                ...(maxActive && Array.isArray(maxUtxosRef.current)
+                    ? { utxos: maxUtxosRef.current }
+                    : (coinControlEnabled ? { utxos: selectedUtxos } : {})),
                 ...(feePerKb != null ? { feePerKb } : {}),
                 // PC-52: multi-recipient legs, on the watcher and HW paths too
                 // (buildSendPsbt and the HW send handler take the same shape).

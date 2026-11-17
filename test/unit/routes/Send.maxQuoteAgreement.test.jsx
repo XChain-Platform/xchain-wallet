@@ -169,6 +169,26 @@ describe('Send Max quote agreement', () => {
         });
     });
 
+    it('composes Max with the economical inputs returned by its quote', async () => {
+        const retained = [{ ...UTXO, value: 75_000_000 }];
+        const quote = vi.fn().mockResolvedValue({
+            ...quoteFor('74999000'),
+            inputSats: '75000000',
+            leftBehindSats: '25000000',
+            utxos: retained,
+        });
+        const messaging = mount({ quote });
+        await enterDestination();
+
+        await useMax();
+        await waitFor(() => expect(screen.getByLabelText(/^Amount \(/)).toHaveValue('0.74999000'));
+        expect(screen.getByText(/Max leaves 0\.25 BTC/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledTimes(1));
+
+        expect(messaging.composeForConfirm.mock.calls[0][0].utxos).toEqual(retained);
+    });
+
     it.each([
         ['resolves null', () => vi.fn().mockResolvedValue(null)],
         ['throws', () => vi.fn(async () => { throw new Error('quote unavailable'); })],

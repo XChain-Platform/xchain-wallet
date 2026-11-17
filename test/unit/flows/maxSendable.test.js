@@ -147,6 +147,59 @@ describe('quoteMaxSendable', () => {
         expect(Number(probed.value)).toBe(BALANCE);
     });
 
+    it('drops Dogecoin inputs that cost more to spend and quotes the retained set', async () => {
+        const large = [
+            { txid: '00'.repeat(32), vout: 1, value: 225_340_320 },
+            { txid: '33'.repeat(32), vout: 0, value: 100_000_000 },
+        ];
+        const uneconomical = [
+            { txid: '75'.repeat(32), vout: 1, value: 1_000_000 },
+            { txid: 'f9'.repeat(32), vout: 1, value: 1_000_000 },
+            { txid: '31'.repeat(32), vout: 1, value: 10 },
+            { txid: 'd1'.repeat(32), vout: 1, value: 10 },
+            { txid: 'f5'.repeat(32), vout: 1, value: 10 },
+        ];
+        const available = 325_340_320;
+        const fee = 45_600_000;
+        const createTx = encoderThatRefuses({ available, fee });
+        const h = makeHarness({
+            coin: 'dogecoin',
+            createTx,
+            utxos: [...large, ...uneconomical],
+        });
+
+        const quote = await quoteMaxSendable(ARGS(h, {
+            encoderOpts: { pubkey: 'pub', change: 'src-address', feePerKb: 100_000_000 },
+        }));
+
+        expect(createTx).toHaveBeenCalledWith(expect.objectContaining({ utxos: large }));
+        expect(quote).toMatchObject({
+            maxSats: '279740320',
+            feeSats: String(fee),
+            inputSats: String(available),
+            leftBehindSats: '2000030',
+            utxos: large,
+        });
+    });
+
+    it('offers zero without probing when every input costs more to spend', async () => {
+        const h = makeHarness({
+            coin: 'dogecoin',
+            utxos: [{ txid: 'aa'.repeat(32), vout: 0, value: 1_000_000 }],
+        });
+
+        const quote = await quoteMaxSendable(ARGS(h, {
+            encoderOpts: { pubkey: 'pub', change: 'src-address', feePerKb: 100_000_000 },
+        }));
+
+        expect(quote).toMatchObject({
+            maxSats: '0',
+            leftBehindSats: '1000000',
+            utxos: [],
+        });
+        expect(h.sdk.encoder.createTx).not.toHaveBeenCalled();
+    });
+
     it('prices only the outputs selected by coin control', async () => {
         const selectedBalance = 20_000_000;
         const h = makeHarness({
