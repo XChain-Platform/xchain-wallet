@@ -16,13 +16,13 @@ const chainRegistry = { get: (chainId) => descriptors[chainId] || null };
 describe('default transaction fee rate', () => {
     it('converts each chain Normal tier to the encoder per-kilobyte value', () => {
         expect(normalFeePerKb({ chainId: 'btc', chainRegistry })).toBe(6_000);
-        expect(normalFeePerKb({ chainId: 'doge', chainRegistry })).toBe(100_000_000);
+        expect(normalFeePerKb({ chainId: 'doge', chainRegistry })).toBe(2_000_000);
     });
 
     it('fills only a missing fee choice', () => {
         expect(withDefaultFeePerKb({
             chainId: 'doge', chainRegistry, encoderOpts: { rbf: false },
-        })).toEqual({ rbf: false, feePerKb: 100_000_000 });
+        })).toEqual({ rbf: false, feePerKb: 2_000_000 });
 
         const explicitRate = { feePerKb: 7, rbf: true };
         expect(withDefaultFeePerKb({

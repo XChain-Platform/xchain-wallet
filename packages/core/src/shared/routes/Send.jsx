@@ -2778,10 +2778,12 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     // a send the address can genuinely pay for. Both of those states are excluded here, so
     // this fires only when the balances came back clean and this address holds none of the
     // selected token.
+    // The balance read can come back with the half this send spends from marked
+    // unavailable; then its amount is unknown, not zero.
+    const sourceHalfUnavailable = Array.isArray(previewBalances.sdkShape?.unavailable)
+        && previewBalances.sdkShape.unavailable.includes(isNativeSend ? 'native' : 'tokens');
     const sourceLacksTick = useMemo(() => {
-        const unavailable = Array.isArray(previewBalances.sdkShape?.unavailable)
-            && previewBalances.sdkShape.unavailable.includes(isNativeSend ? 'native' : 'tokens');
-        if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape || unavailable) return null;
+        if (previewBalances.loading || previewBalances.error || !previewBalances.sdkShape || sourceHalfUnavailable) return null;
         const tickUpper = tick.trim().toUpperCase();
         // A native coin always comes back as a row, holding "0" when empty, so a
         // zero amount counts as none too (an empty BTC address on a phone showed
@@ -2796,7 +2798,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         }
         return `This address holds no ${tickUpper}. A send spends from one address, not from the `
             + 'whole wallet, so pick the address that holds it in the From field above.';
-    }, [previewBalances, sourceBalance, tick, otherAddressHasTick, isNativeSend]);
+    }, [previewBalances, sourceBalance, tick, otherAddressHasTick, sourceHalfUnavailable]);
 
     /**
      * The amount to fill in for "send everything", priced by the encoder that
@@ -4777,8 +4779,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                             ? t('send.balance.unavailable', { error: previewBalances.error })
                             : networkOffline && !isDemo && !previewBalances.sdkShape
                                 ? t('send.balance.unknown')
-                                : Array.isArray(previewBalances.sdkShape?.unavailable)
-                                    && previewBalances.sdkShape.unavailable.includes(isNativeSend ? 'native' : 'tokens')
+                                : sourceHalfUnavailable
                                     ? t('send.balance.unknown')
                                     : sourceBalance
                                         ? t('send.balance.available', {
