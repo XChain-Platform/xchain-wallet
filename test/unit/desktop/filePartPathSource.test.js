@@ -12,6 +12,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { openPathPartSource } from '../../../packages/desktop/main/filePartPathSource.js';
 
+const { createBackgroundHost, sendMessage } = vi.hoisted(() => ({
+    createBackgroundHost: vi.fn(() => ({ handle: vi.fn() })),
+    sendMessage: vi.fn(),
+}));
+
+vi.mock('@xchain-wallet/extension/src/background/createBackgroundHost.js', () => ({ createBackgroundHost }));
+vi.mock('../../../packages/desktop/renderer/bridgeMessaging.js', () => ({ sendMessage }));
+vi.mock('../../../packages/desktop/renderer/errorCapture.js', () => ({ getRecentShellErrors: vi.fn() }));
+
+const { createDesktopMessageHost } = await import('../../../packages/desktop/main/messageHost.js');
+const { fileMultipart } = await import('../../../packages/desktop/renderer/messaging.js');
+
 const MIB = 1024 * 1024;
 const LARGE_FILE_SIZE = 50 * MIB;
 const tempDirs = [];
@@ -58,6 +70,9 @@ async function sourceFor(filePath) {
 
 afterEach(async () => {
     vi.restoreAllMocks();
+    createBackgroundHost.mockClear();
+    sendMessage.mockReset();
+    delete globalThis.xchainWalletBridge;
     await Promise.all(tempDirs.splice(0).map((dir) => fs.promises.rm(dir, { recursive: true, force: true })));
 });
 
@@ -134,5 +149,52 @@ describe('desktop path part source', () => {
         await fs.promises.utimes(filePath, changedTime, changedTime);
 
         await expect(source.readSlice(0, 1)).rejects.toMatchObject({ code: 'FILE_CHANGED' });
+    });
+
+    it('replaces an inline renderer file with a path reference without reading it', async () => {
+        const file = {
+            size: LARGE_FILE_SIZE,
+            arrayBuffer: vi.fn(),
+            text: vi.fn(),
+            stream: vi.fn(),
+            slice: vi.fn(),
+        };
+        globalThis.xchainWalletBridge = {
+            filePathOf: vi.fn(() => '/picked/large.bin'),
+        };
+        const request = { walletId: 'wallet-1', fileRef: { kind: 'inline', blob: file } };
+
+        fileMultipart(request);
+
+        expect(sendMessage).toHaveBeenCalledWith('action.fileMultipart', {
+            walletId: 'wallet-1',
+            fileRef: { kind: 'path', path: '/picked/large.bin', size: LARGE_FILE_SIZE },
+        });
+        expect(file.arrayBuffer).not.toHaveBeenCalled();
+        expect(file.text).not.toHaveBeenCalled();
+        expect(file.stream).not.toHaveBeenCalled();
+        expect(file.slice).not.toHaveBeenCalled();
+    });
+
+    it('registers the path resolver with the desktop main-process host', async () => {
+        const filePath = await tempFile('host.bin', Buffer.from('host path bytes'));
+        const fileStat = await fs.promises.stat(filePath);
+        const deps = { vault: {}, chainRegistry: {}, sdkRegistry: {} };
+
+        createDesktopMessageHost(deps);
+
+        expect(createBackgroundHost).toHaveBeenCalledTimes(1);
+        const hostDeps = createBackgroundHost.mock.calls[0][0];
+        expect(hostDeps.vault).toBe(deps.vault);
+        expect(hostDeps.chainRegistry).toBe(deps.chainRegistry);
+        expect(hostDeps.sdkRegistry).toBe(deps.sdkRegistry);
+        expect(hostDeps.fileBlobs).toBeNull();
+        const source = await hostDeps.resolveFileRef({
+            kind: 'path',
+            path: filePath,
+            size: fileStat.size,
+        });
+        expect(source).toMatchObject({ size: fileStat.size, mtimeMs: fileStat.mtimeMs });
+        expect(await source.readSlice(5, 9)).toEqual(Buffer.from('path'));
     });
 });

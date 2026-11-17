@@ -24,7 +24,9 @@
 
 // Workspace alias rather than a relative path: Vite, electron-builder and
 // the Node-level smoke tests all resolve it the same way.
+import { createFileRefResolver } from '@xchain-wallet/core/flows/fileRefSource.js';
 import { createBackgroundHost } from '@xchain-wallet/extension/src/background/createBackgroundHost.js';
+import { createPathFileRefKind } from './pathFileRefKind.js';
 
 /**
  * @typedef {Object} DesktopHostDeps
@@ -60,7 +62,17 @@ export function createDesktopMessageHost(deps) {
     if (!deps?.vault) throw new Error('createDesktopMessageHost: vault is required');
     if (!deps?.chainRegistry) throw new Error('createDesktopMessageHost: chainRegistry is required');
     if (!deps?.sdkRegistry) throw new Error('createDesktopMessageHost: sdkRegistry is required');
-    const host = createBackgroundHost(deps);
+    const resolveFileRef = createFileRefResolver({
+        kinds: { path: createPathFileRefKind() },
+    });
+    const desktopDeps = new Proxy(deps, {
+        get(target, property, receiver) {
+            if (property === 'fileBlobs') return null;
+            if (property === 'resolveFileRef') return resolveFileRef;
+            return Reflect.get(target, property, receiver);
+        },
+    });
+    const host = createBackgroundHost(desktopDeps);
     return {
         host,
         async handle(message) {
