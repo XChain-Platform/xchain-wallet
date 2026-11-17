@@ -441,7 +441,7 @@ describe('MigrateToBip39 safety and completion', () => {
         answerQuiz();
         fireEvent.click(screen.getByRole('button', { name: 'Create New Wallet' }));
 
-        expect(await screen.findByText('Could not load all migration addresses.')).toBeTruthy();
+        expect(await screen.findByText('Some migration addresses failed to load.')).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         expect(await screen.findByRole('button', { name: 'Review Sweep' })).toBeTruthy();
         expect(messaging.addImportedWallet).toHaveBeenCalledTimes(1);

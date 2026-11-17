@@ -1949,10 +1949,10 @@ function UnionListBody({
             <FormPage
                 as="div"
                 label="Union list submitted"
+                title="Union list submitted"
+                headingAs="h2"
                 actions={<Button type="button" variant="success" icon={<Icon.CheckIcon />} onClick={onDone}>Done</Button>}
-            >
-                <h2 className={styles.successTitle}>Union list submitted</h2>
-            </FormPage>,
+            />,
         );
     }
 
@@ -3272,9 +3272,10 @@ function ListMembersBody({
             <FormPage
                 as="div"
                 label={cfg.formLabel}
+                title="List rename submitted"
+                headingAs="h2"
                 actions={<Button type="button" variant="success" icon={<Icon.CheckIcon />} onClick={onDone}>Done</Button>}
             >
-                <h2 className={styles.successTitle}>List rename submitted</h2>
                 <p className={styles.hint}>The new list details appear when this transaction confirms.</p>
                 {metaResult.txid ? (
                     <dl className={styles.detailsList}>
@@ -4700,9 +4701,10 @@ function ListTransferBody({ cfg, walletId, listRef, actionField = null, shared, 
             <FormPage
                 as="div"
                 label="List transfer submitted"
+                title="List transfer submitted"
+                headingAs="h2"
                 actions={<Button type="button" variant="success" icon={<Icon.CheckIcon />} onClick={onDone}>Done</Button>}
             >
-                <h2 className={styles.successTitle}>List transfer submitted</h2>
                 <p className={styles.hint}>The new owner takes control when the transfer confirms.</p>
                 {result.txid ? (
                     <dl className={styles.detailsList}>

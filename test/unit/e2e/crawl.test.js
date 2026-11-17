@@ -13,7 +13,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { chooseFirstOfferedToken, reachKnownScreen } from '../../e2e/layout/crawl.js';
-import { measureInPage, measureRulings, recordMeasuredScreen } from '../../e2e/layout/sweep.js';
+import { measureButtonSizes } from '../../e2e/layout/button-outlines.js';
+import { measureInPage,measureRulings, recordMeasuredScreen } from '../../e2e/layout/sweep.js';
 
 describe('click crawler form and screen helpers', () => {
     it('opens an empty token field and chooses the first offered balance', async () => {
@@ -123,7 +124,9 @@ describe('click crawler form and screen helpers', () => {
             rulings,
         });
         expect(page.evaluate).toHaveBeenNthCalledWith(1, measureInPage, { contrast: false });
-        expect(page.evaluate).toHaveBeenNthCalledWith(3, measureRulings);
+        // Call 3 is the shared button measurement every shell now records.
+        expect(page.evaluate).toHaveBeenNthCalledWith(3, measureButtonSizes);
+        expect(page.evaluate).toHaveBeenNthCalledWith(4, measureRulings);
         expect(page.screenshot).toHaveBeenCalledWith({ path: join(outDir, '003-palette-send.png') });
     });
 });

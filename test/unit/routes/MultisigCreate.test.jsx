@@ -532,7 +532,7 @@ describe('MultisigCreate key validation', () => {
         await pickLocalAddress();
         await fillExternalCosigner({ ...EXTERNAL, pubkey: UNRELATED_EXTERNAL.pubkey });
 
-        expect(screen.getByText(/Public key does not match the account public key and account path/i)).toBeTruthy();
+        expect(screen.getByText(/Public key differs from the one this account public key and account path give/i)).toBeTruthy();
     });
 
     it('locks Taproot signatures to the cosigner count', async () => {
