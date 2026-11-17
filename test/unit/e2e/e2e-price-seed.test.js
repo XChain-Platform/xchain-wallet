@@ -342,18 +342,43 @@ describe('e2e price seed', () => {
             const query = async (sql, params) => {
                 calls.push({ sql, params });
                 return [
-                    { validator_count: 1, source_action_index: null },
-                    { validator_count: 1, source_action_index: null },
+                    { coin_pair: XCHAIN_PAIR, validator_count: 1, source_action_index: null },
+                    { coin_pair: 'LTC/USD', validator_count: 1, source_action_index: null },
                 ];
             };
+            const skipped = [];
 
-            await expect(writePriceSeedRows(query, rows)).resolves.toBe(0);
+            await expect(writePriceSeedRows(query, rows, PRICE_SEED_MARKER_FLOOR, skipped)).resolves.toBe(0);
+            expect(skipped.sort()).toEqual(['LTC/USD', XCHAIN_PAIR].sort());
             expect(calls).toHaveLength(1);
+            expect(calls[0].sql).toContain('coin_pair');
             expect(calls[0].sql).toContain("status = 'finalized'");
             expect(calls[0].sql).toContain('INTERVAL 5 MINUTE');
             expect(calls[0].sql).toContain('validator_count');
             expect(calls[0].sql).toContain('source_action_index');
             expect(calls[0].params).toEqual([PRICE_SEED_MARKER_FLOOR]);
+        });
+
+        it('seeds a pair the venue oracle skips while standing aside for the pair it prices', async () => {
+            // A venue after a fresh regtest genesis: the hub finalized the coin
+            // pair every minute but every round "without XCHAIN/USD", since the
+            // fresh chain had no XCHAIN market, so XCHAIN/USD went stale.
+            const calls = [];
+            const query = async (sql, params) => {
+                calls.push({ sql, params });
+                return calls.length === 1
+                    ? [{ coin_pair: 'LTC/USD', validator_count: 1, source_action_index: null }]
+                    : { affectedRows: 1 };
+            };
+            const skipped = [];
+            const xchainRows = rows.filter((row) => row.coinPair === XCHAIN_PAIR);
+
+            await expect(writePriceSeedRows(query, rows, PRICE_SEED_MARKER_FLOOR, skipped))
+                .resolves.toBe(xchainRows.length);
+            expect(xchainRows.length).toBeGreaterThan(0);
+            expect(skipped).toEqual(['LTC/USD']);
+            const inserted = calls.slice(1).map((call) => call.params[1]);
+            expect(inserted.every((pair) => pair === XCHAIN_PAIR)).toBe(true);
         });
 
         it('still refuses a foreign live oracle before writing any fixture row', async () => {
@@ -461,10 +486,11 @@ describe('e2e price seed', () => {
                 expect(calls).toHaveLength(0);
             });
 
-            it('runs from the write script only after the writer stood aside, at chain time minus the price age', () => {
+            it('runs from the write script only for the pairs the writer stood aside for, at chain time minus the price age', () => {
                 const script = writeRowsScript(rows, { chainTime: CHAIN });
                 expect(script).toContain('async function clearStaleSeedRows');
-                expect(script).toContain('written === 0');
+                expect(script).toContain('skippedPairs.length');
+                expect(script).toContain('pairs: skippedPairs');
                 expect(script).toContain('const STALE_BEFORE = ' + (CHAIN - ORACLE_MAX_PRICE_AGE_SECONDS) + ';');
                 expect(script).toContain('const SYNTHETIC_ROUNDS = ' + JSON.stringify(SYNTHETIC_ROUNDS) + ';');
                 expect(writeRowsScript(rows)).toContain('const STALE_BEFORE = null;');
