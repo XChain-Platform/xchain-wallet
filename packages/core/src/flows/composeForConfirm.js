@@ -52,6 +52,7 @@ import { compressionFieldOf, declaresDeflateRaw } from './payloadCompression.js'
 import { compiledPayloadByteLen, envelopeEncoderOpts, rawDataByteLen } from './envelopeSelection.js';
 import { capRbfToDescriptor } from './rbfCap.js';
 import { assertSafeActionText } from '../shared/utils/actionTextSafety.js';
+import { withDefaultFeePerKb } from './feeEstimate.js';
 
 // FILE v0's COMPRESSION field index in the full action string, and the encoder's
 // own field-setting rule mirrored byte for byte (pad the optional fields up to
@@ -165,7 +166,11 @@ export async function composeForConfirm({
     const descriptor = chainRegistry.get(chainId);
     if (!descriptor) throw new Error(`composeForConfirm: unknown chain "${chainId}"`);
     // Cap RBF before anything reads the options, so the preview and the signed bytes agree.
-    const requestedEncoderOpts = capRbfToDescriptor(descriptor, callerEncoderOpts);
+    const requestedEncoderOpts = capRbfToDescriptor(descriptor, withDefaultFeePerKb({
+        chainId,
+        chainRegistry,
+        encoderOpts: callerEncoderOpts,
+    }));
     const sdk = sdkRegistry.get(chainId);
     if (!sdk.encoder) {
         throw new Error('composeForConfirm: SDK encoder not initialized; call sdkRegistry.initActive([chainId]) first');

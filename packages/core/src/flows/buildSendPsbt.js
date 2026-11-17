@@ -33,6 +33,7 @@ import { normalizeSource } from './sendToken.js';
 import { isBareNativePayment, nativePaymentOutput } from './nativePayment.js';
 import { prepareGatedSend } from './gatedSendGuard.js';
 import { capRbfToDescriptor } from './rbfCap.js';
+import { withDefaultFeePerKb } from './feeEstimate.js';
 import {
     assertMultiSendSupported,
     assertNoGatedLegs,
@@ -87,6 +88,14 @@ export async function buildSendPsbt(opts) {
 
     const descriptor = opts.chainRegistry.get(opts.chainId);
     if (!descriptor) throw new Error(`buildSendPsbt: unknown chain "${opts.chainId}"`);
+    const requestedFeeOpts = withDefaultFeePerKb({
+        chainId: opts.chainId,
+        chainRegistry: opts.chainRegistry,
+        encoderOpts: {
+            ...(opts.fee !== undefined && { fee: opts.fee }),
+            ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
+        },
+    });
     // PC-52: the watcher builds the same bytes the signer will sign, so it
     // makes the same multi-recipient refusals as sendToken.
     assertMultiSendSupported({ legs, descriptor });
@@ -159,8 +168,7 @@ export async function buildSendPsbt(opts) {
         change: opts.change || source.address,
         ...(Array.isArray(opts.utxos) && opts.utxos.length > 0 ? { utxos: opts.utxos } : {}),
         ...(nativeOut ? { customOutputs: [nativeOut] } : {}),
-        ...(opts.fee !== undefined && { fee: opts.fee }),
-        ...(opts.feePerKb !== undefined && { feePerKb: opts.feePerKb }),
+        ...requestedFeeOpts,
         // Cap RBF to the chain's descriptor; the encoder signals it on any chain it is asked to.
         ...(opts.rbf !== undefined && capRbfToDescriptor(descriptor, { rbf: opts.rbf })),
     });

@@ -125,6 +125,20 @@ beforeEach(() => {
 });
 
 describe('submitAction honours Settings > Privacy change-address rotation', () => {
+    it('hands the Normal rate to the encoder when the form supplied none', async () => {
+        const h = harness({ privacy: { changeAddressRotation: false } });
+        await call(h);
+        expect(encoderOptsSeen().feePerKb).toBe(6_000);
+    });
+
+    it('keeps an explicit form rate', async () => {
+        const h = harness({ privacy: { changeAddressRotation: false } });
+        await call(h, {
+            encoderOpts: { pubkey: 'ab', change: SOURCE, sourceAddress: SOURCE, feePerKb: 12_345 },
+        });
+        expect(encoderOptsSeen().feePerKb).toBe(12_345);
+    });
+
     it('[REGRESSION] change returns to the SOURCE address when rotation is off', async () => {
         const h = harness({ privacy: { changeAddressRotation: false } });
         const result = await call(h);

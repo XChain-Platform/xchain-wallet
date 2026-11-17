@@ -228,6 +228,22 @@ describe('Bet opens Buy a position', () => {
         expect(utils.calls.compose[0].params).toEqual({
             feedActionIndex: '730010', outcome: 1, amount: '12', outcomes: ['Yes', 'No'], memo: 'gl',
         });
+        expect(utils.calls.compose[0].feePerKb).toBe(6_000);
+    });
+
+    it('forwards a selected Fast fee rate to the transaction compose', async () => {
+        const utils = await openMarket();
+        const form = await openPlaceBet(utils, 'Yes');
+        fireEvent.change(utils.getByLabelText('Amount (EXAMPLE)'), { target: { value: '12' } });
+        await press(utils.getByRole('button', { name: /^Speed and Fees\b/, expanded: false }));
+        await press(utils.container.querySelector('button[aria-label="Fast"]'));
+        expect(utils.getByRole('slider', { name: 'Network fee' })).toHaveAttribute(
+            'aria-valuetext', expect.stringMatching(/^Fast: /),
+        );
+
+        await press(form.querySelector('button[type="submit"]'), 60);
+        expect(utils.calls.compose).toHaveLength(1);
+        expect(utils.calls.compose[0].feePerKb).toBe(12_000);
     });
 });
 

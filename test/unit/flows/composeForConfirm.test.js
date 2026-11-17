@@ -64,6 +64,13 @@ describe('composeForConfirm', () => {
         expect(h.createTx).toHaveBeenCalledOnce();
     });
 
+    it('uses the Normal chain rate when the form supplies no fee choice', async () => {
+        const h = makeHarness();
+        h.chainRegistry.get = () => ({ coin: 'bitcoin', networkKind: 'mainnet' });
+        await composeForConfirm(BASE_ARGS(h));
+        expect(h.createTx.mock.calls[0][0].feePerKb).toBe(6_000);
+    });
+
     it('folds the due donation output into customOutputs pre-modal but does NOT advance the queue', async () => {
         const h = makeHarness({ adsEnabled: true, adsCanSubmit: true });
         const composed = await composeForConfirm(BASE_ARGS(h));

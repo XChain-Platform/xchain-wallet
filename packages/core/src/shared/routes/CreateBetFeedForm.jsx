@@ -33,7 +33,13 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen, ActionWarningsCard } from '../components/ActionConfirmScreen.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
-import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import {
+    customFeeEstimate,
+    customFeeReviewStop,
+    displayRateToSettingsCustom,
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+} from '../../flows/feeEstimate.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -227,6 +233,9 @@ export function CreateBetFeedForm({
     const [allowPick, setAllowPick] = useState(/** @type {{ index: string, name: unknown } | null} */ (null));
     const [blockPick, setBlockPick] = useState(/** @type {{ index: string, name: unknown } | null} */ (null));
     const [memo, setMemo] = useState('');
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
 
     const [password, setPassword] = useState('');
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
@@ -334,10 +343,23 @@ export function CreateBetFeedForm({
     // broadcast, the miner fee is spent, and the market never exists.
     const coinTicker = protocolCoinTickerFor(descriptor || chainId);
     const nativeFee = useNativeFee(chainId);
-    const feeEstimate = useMemo(
-        () => estimateNativeSendFee({ chainId, chainRegistry, speed: 'normal' }),
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
         [chainId],
     );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers?.[feePick.mode] || estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate?.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
 
     const cleanOutcomes = useMemo(
         () => outcomes.map((o) => o.trim()).filter((o) => o.length > 0),
@@ -538,6 +560,12 @@ export function CreateBetFeedForm({
         event?.preventDefault?.();
         const problem = validate();
         if (problem) { setFormError(problem.message); revealField(problem.field); return; }
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) {
+            betView.setSectionOpen('fee', true);
+            setFormError(feeStop.formError);
+            return;
+        }
         if (submitLockRef.current) return;
         submitLockRef.current = true;
         setSubmitting(true);
@@ -551,6 +579,7 @@ export function CreateBetFeedForm({
                     builder: 'createMarketParams',
                     params: marketParams,
                     payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
                 });
                 setResult(res);
                 return;
@@ -564,10 +593,12 @@ export function CreateBetFeedForm({
                     // FEE_DESTINATION output has to be inside the PSBT the user
                     // approves and the tamper check verifies.
                     payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
                 })),
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId, chainId, from, params: marketParams, prebuiltPsbt,
                     payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
                 }),
             });
             setResult(res);
@@ -1207,14 +1238,14 @@ export function CreateBetFeedForm({
                    the row states the real answer instead of the chain's rule. Most
                    markets are free (the first 90 days cost nothing), and on LTC the
                    row used to promise a coin payment for every one of them. */
-                /* FeeSection's fixed-fee mode: the form composes at the
-                   normal rate, so no speed picker; the Fees section shows the
-                   network fee figure and the open cost as the protocol fee. */
                 <FeeSection
                     {...bind('fee')}
                     chainId={chainId}
                     coinTicker={coinTicker}
-                    fixedFee={feeEstimate?.coinAmount || null}
+                    tiers={feeTiers}
+                    value={feePick}
+                    onChange={(next) => { setFeePick(next); setFormError(null); }}
+                    customEstimate={feeCustomEstimate}
                     fees={{
                         quote,
                         pending: !quote && !quoteFailed,

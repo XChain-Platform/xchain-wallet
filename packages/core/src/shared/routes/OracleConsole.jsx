@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, FormErrorSummary, FormErrorsContext, Icon, InfoTip, Input, ListPage, PageHeader, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
@@ -27,6 +27,15 @@ import { neutralizeControlText } from '../utils/textHardening.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { FeeSection } from '../components/formStandard/index.js';
+import {
+    customFeeEstimate,
+    customFeeReviewStop,
+    displayRateToSettingsCustom,
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+} from '../../flows/feeEstimate.js';
+import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import styles from './IssueTokenForm.module.css';
 import consoleStyles from './OracleConsole.module.css';
 
@@ -232,6 +241,9 @@ export function useOracleMarketActions({ walletId, demoGuard, onDone }) {
     const [currentListNames, setCurrentListNames] = useState(/** @type {Record<string, string>} */ ({}));
     const [password, setPassword] = useState('');
     const [formError, setFormError] = useState(/** @type {string | null} */ (null));
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
     const formErrors = useFormErrors();
     const [result, setResult] = useState(/** @type {any} */ (null));
     // Watcher lane only: the build is not a confirm phase, so composing never
@@ -246,6 +258,25 @@ export function useOracleMarketActions({ walletId, demoGuard, onDone }) {
     }, []);
 
     const fromAddress = active?.owner || null;
+    const feeChainId = active?.chainId || '';
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId: feeChainId, chainRegistry }),
+        [feeChainId],
+    );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId: feeChainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [feeChainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers?.[feePick.mode]
+            || estimateNativeSendFee({ chainId: feeChainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate?.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
     const isHw = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
     const signerReady = useSignerReady(walletId);
     const [hwStatus, setHwStatus] = useState('idle');
@@ -308,6 +339,12 @@ export function useOracleMarketActions({ walletId, demoGuard, onDone }) {
         // A demo wallet never composes; the press answers with the refusal.
         if (demoGuard?.blocked) { demoGuard.refuse(); return; }
         const from = sourceDescriptor(feed.owner);
+        const selectsFee = builder === 'resolveMarketParams' || builder === 'cancelMarketParams';
+        if (selectsFee) {
+            const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+            if (feeStop) { setFormError(feeStop.formError); return; }
+        }
+        const feeOpts = selectsFee && feePerKb != null ? { feePerKb } : {};
         setFormError(null);
         setResult(null);
         try {
@@ -320,6 +357,7 @@ export function useOracleMarketActions({ walletId, demoGuard, onDone }) {
                         from,
                         builder,
                         params,
+                        ...feeOpts,
                     });
                     setResult(res);
                 } finally {
@@ -332,10 +370,10 @@ export function useOracleMarketActions({ walletId, demoGuard, onDone }) {
                 chainId: feed.chainId,
                 from,
                 compose: () => messaging.composeBetForConfirm({
-                    walletId, chainId: feed.chainId, from, builder, params,
+                    walletId, chainId: feed.chainId, from, builder, params, ...feeOpts,
                 }),
                 onApprove: (prebuiltPsbt) => submit({
-                    walletId, chainId: feed.chainId, from, params, prebuiltPsbt,
+                    walletId, chainId: feed.chainId, from, params, prebuiltPsbt, ...feeOpts,
                 }),
             });
             // The oracle actions once reported NOTHING on
@@ -371,6 +409,7 @@ export function useOracleMarketActions({ walletId, demoGuard, onDone }) {
     function begin(feed, mode) {
         formErrors.reset();
         setActive({ ...feed, mode });
+        setFeePick({ mode: 'normal' });
         setOutcome(null);
         if (mode === 'edit') {
             setAllowList('');
@@ -584,6 +623,17 @@ export function useOracleMarketActions({ walletId, demoGuard, onDone }) {
                             );
                         })}
                     </div>
+                    <FeeSection
+                        id="oracle-resolve-fee"
+                        chainId={active.chainId}
+                        coinTicker={protocolCoinTickerFor(active.chainId)}
+                        tiers={feeTiers}
+                        value={feePick}
+                        onChange={(next) => { setFeePick(next); setFormError(null); }}
+                        customEstimate={feeCustomEstimate}
+                        advanced={false}
+                        defaultOpen
+                    />
                     {passwordField}
                     <Button
                         variant="success"
@@ -607,6 +657,17 @@ export function useOracleMarketActions({ walletId, demoGuard, onDone }) {
         if (active.mode === 'cancel') {
             return (
                 <div className={consoleStyles.inlineForm}>
+                    <FeeSection
+                        id="oracle-cancel-fee"
+                        chainId={active.chainId}
+                        coinTicker={protocolCoinTickerFor(active.chainId)}
+                        tiers={feeTiers}
+                        value={feePick}
+                        onChange={(next) => { setFeePick(next); setFormError(null); }}
+                        customEstimate={feeCustomEstimate}
+                        advanced={false}
+                        defaultOpen
+                    />
                     {passwordField}
                     {/* The refund line is the confirm screen's warnings card; a
                         watcher build has no confirm screen, so it shows it here. */}

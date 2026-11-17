@@ -53,6 +53,7 @@ import { resolveChangeAddress } from './changeAddress.js';
 import { actionDisplayLabel } from '../shared/utils/actionDisplayLabel.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
 import { assertNoOfferCancelInFlight, assertReferencedOfferActionable } from './marketExpiry.js';
+import { withDefaultFeePerKb } from './feeEstimate.js';
 import { assertSafeActionText } from '../shared/utils/actionTextSafety.js';
 
 /**
@@ -243,7 +244,7 @@ export async function submitAction({
     }
     // Set once the build is armed, just before signing (see the claim below).
     let adsAtEncode = null;
-    let effectiveEncoderOpts = encoderOpts;
+    let effectiveEncoderOpts = withDefaultFeePerKb({ chainId, chainRegistry, encoderOpts });
     let effectiveSdkRegistry = sdkRegistry;
     // The claim this send holds on the due queue while it is pending: cleared
     // when it is released, and booked with the broadcast otherwise.
@@ -518,12 +519,12 @@ export async function submitAction({
     // check read the same options after createTx returns.
     effectiveEncoderOpts = adsAtEncode
         ? {
-            ...encoderOpts,
-            customOutputs: Array.isArray(encoderOpts?.customOutputs)
-                ? encoderOpts.customOutputs.slice()
+            ...effectiveEncoderOpts,
+            customOutputs: Array.isArray(effectiveEncoderOpts?.customOutputs)
+                ? effectiveEncoderOpts.customOutputs.slice()
                 : [],
         }
-        : encoderOpts;
+        : effectiveEncoderOpts;
     effectiveSdkRegistry = adsAtEncode ? adsAtEncode.registry : sdkRegistry;
     const encoderOptsForSubmit = changeRotation?.rotated
         ? { ...effectiveEncoderOpts, change: changeRotation.address }

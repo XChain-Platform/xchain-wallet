@@ -39,6 +39,7 @@ import { isChunkEncoding } from './nativeFeeLane.js';
 import { capRbfToDescriptor } from './rbfCap.js';
 import { chunkLaneOpener } from '../shared/utils/chunkLaneCopy.js';
 import { assertSafeActionText } from '../shared/utils/actionTextSafety.js';
+import { withDefaultFeePerKb } from './feeEstimate.js';
 
 /**
  * Thrown when a watcher-composed action needs a second, revealing transaction
@@ -113,6 +114,11 @@ export async function buildActionPsbt(opts) {
 
     const descriptor = opts.chainRegistry.get(opts.chainId);
     if (!descriptor) throw new Error(`buildActionPsbt: unknown chain "${opts.chainId}"`);
+    const requestedEncoderOpts = withDefaultFeePerKb({
+        chainId: opts.chainId,
+        chainRegistry: opts.chainRegistry,
+        encoderOpts: opts.encoderOpts,
+    });
 
     const sdk = opts.sdkRegistry.get(opts.chainId);
     const encoder = sdk?.encoder;
@@ -129,7 +135,7 @@ export async function buildActionPsbt(opts) {
     const preflight = await applyNativeFeePreflight({
         sdk,
         actionData: opts.actionData,
-        encoderOpts: opts.encoderOpts || {},
+        encoderOpts: requestedEncoderOpts,
         source: source.address,
     });
     // Oracle usage fee: the watcher/unsigned path composes the same output the

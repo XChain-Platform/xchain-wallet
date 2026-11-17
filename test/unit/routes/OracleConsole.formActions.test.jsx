@@ -49,6 +49,7 @@ function messagingFor(status) {
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
         betFeeds: ({ chainId }) => Promise.resolve({ data: chainId === CHAIN ? [feed(status)] : [] }),
         composeForConfirm: vi.fn(),
+        composeBetForConfirm: vi.fn(() => new Promise(() => {})),
     };
     return new Proxy(target, { get(t, prop) { return prop in t ? t[prop] : () => Promise.resolve({}); } });
 }
@@ -120,6 +121,19 @@ describe('OracleConsole inline form actions', () => {
         expect(utils.getByLabelText('Form errors')).toHaveTextContent('Choose the winning outcome.');
         expect(utils.messaging.composeForConfirm).not.toHaveBeenCalled();
         expectEveryButtonHasIcon(utils);
+    });
+
+    it('resolve forwards a selected Fast fee rate to the transaction compose', async () => {
+        const utils = await openForm('closed', /^Resolve/);
+        fireEvent.click(utils.getByRole('button', { name: 'Yes' }));
+        fireEvent.click(utils.container.querySelector('button[aria-label="Fast"]'));
+        expect(utils.getByRole('slider', { name: 'Network fee' })).toHaveAttribute(
+            'aria-valuetext', expect.stringMatching(/^Fast: /),
+        );
+        fireEvent.click(utils.getByRole('button', { name: 'Publish Result' }));
+        expect(utils.messaging.composeBetForConfirm).toHaveBeenCalledWith(
+            expect.objectContaining({ builder: 'resolveMarketParams', feePerKb: 12_000 }),
+        );
     });
 
     it('cancel: Cancel Market stays the danger action with an icon and no green button shows', async () => {

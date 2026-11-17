@@ -57,7 +57,11 @@ async function drain(rounds = 16) {
  * Watcher-mode messaging: submit calls the build request and the form shows
  * whatever it returns as its result.
  */
-function messagingFor({ getAddressesByChain, built = { txid: 'market-txid' } } = {}) {
+function messagingFor({
+    getAddressesByChain,
+    built = { txid: 'market-txid' },
+    buildBetActionPsbtRequest = () => Promise.resolve(built),
+} = {}) {
     const target = {
         getAddressesByChain: getAddressesByChain || (() => Promise.resolve({ [CHAIN]: [HD_ADDRESS] })),
         getActiveAddresses: () => Promise.resolve({}),
@@ -67,7 +71,7 @@ function messagingFor({ getAddressesByChain, built = { txid: 'market-txid' } } =
         betProjectFeedCreateFee: () => Promise.resolve({
             durationSeconds: 3801600, days: 44, billableDays: 0, free: true, fee: '0.00000000',
         }),
-        buildBetActionPsbtRequest: () => Promise.resolve(built),
+        buildBetActionPsbtRequest,
     };
     return new Proxy(target, {
         get(t, prop) {
@@ -160,6 +164,22 @@ describe('CreateBetFeedForm lays out every page state through a template', () =>
         expect(page.querySelector('[data-bet-create-permanent]')?.textContent).toContain('permanent');
         expect(page.querySelector('dt')).toBeNull();
         expectInsideTemplate(byText(page, 'button', 'Done'));
+    });
+
+    it('forwards the selected Fast fee rate to the watcher build', async () => {
+        const buildBetActionPsbtRequest = vi.fn().mockResolvedValue({ txid: 'market-txid' });
+        const utils = await mount({ buildBetActionPsbtRequest });
+        await domAct(async () => {
+            fireEvent.click(utils.container.querySelector('[data-form-section="fee"] [data-form-section-toggle]'));
+            fireEvent.click(utils.container.querySelector('button[aria-label="Fast"]'));
+            await drain();
+        });
+        expect(utils.getByRole('slider', { name: 'Network fee' })).toHaveAttribute(
+            'aria-valuetext', expect.stringMatching(/^Fast: /),
+        );
+
+        await buildMarket(utils);
+        expect(buildBetActionPsbtRequest).toHaveBeenCalledWith(expect.objectContaining({ feePerKb: 12_000 }));
     });
 
     it.each([

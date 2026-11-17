@@ -197,6 +197,36 @@ export function estimateNativeSendFeeTiers({ chainId, chainRegistry } = {}) {
 }
 
 /**
+ * Return the encoder's per-kilobyte value for the Normal fee tier.
+ *
+ * @param {object} opts
+ * @param {string} opts.chainId
+ * @param {{ get: (id: string) => any }} opts.chainRegistry
+ * @returns {number | null}
+ */
+export function normalFeePerKb({ chainId, chainRegistry } = {}) {
+    const estimate = estimateNativeSendFee({ chainId, chainRegistry, speed: DEFAULT_SPEED });
+    if (!estimate?.unit || !Number.isFinite(estimate.rateValue) || estimate.rateValue <= 0) return null;
+    return displayRateToSettingsCustom(estimate.unit, estimate.rateValue);
+}
+
+/**
+ * Keep an explicit fee choice, otherwise apply the chain's Normal rate.
+ *
+ * @param {object} opts
+ * @param {string} opts.chainId
+ * @param {{ get: (id: string) => any }} opts.chainRegistry
+ * @param {object} [opts.encoderOpts]
+ * @returns {object}
+ */
+export function withDefaultFeePerKb({ chainId, chainRegistry, encoderOpts } = {}) {
+    const current = encoderOpts && typeof encoderOpts === 'object' ? encoderOpts : {};
+    if (current.fee !== undefined || current.feePerKb !== undefined) return current;
+    const feePerKb = normalFeePerKb({ chainId, chainRegistry });
+    return feePerKb === null ? current : { ...current, feePerKb };
+}
+
+/**
  * Refusal copy for a custom rate outside the chain bounds, or null when the
  * rate is in range or unjudged. Settings and every compose form's fee control
  * share these messages and bounds.

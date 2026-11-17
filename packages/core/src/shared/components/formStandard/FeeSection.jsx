@@ -202,8 +202,8 @@ export function feeSummaryParts({
  *
  * A fee error (`error`) opens the section by itself.
  *
- * Fixed-fee mode (`fixedFee`): for a lane that takes no speed pick (List
- * transfer and union, Open a Market), the slider is left out and the Network fee line
+ * Fixed-fee mode (`fixedFee`): for a lane that takes no speed pick, the slider
+ * is left out and the Network fee line
  * shows that figure; the summary reads "Normal · ~$0.39". `tiers`, `value`
  * and `onChange` are not needed in this mode.
  *

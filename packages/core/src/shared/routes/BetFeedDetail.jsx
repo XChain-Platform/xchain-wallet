@@ -31,7 +31,13 @@ import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hook
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { useNativeFee } from '../hooks/useNativeFee.js';
 import { useProtocolFeeQuote } from '../hooks/useProtocolFeeQuote.js';
-import { estimateNativeSendFee } from '../../flows/feeEstimate.js';
+import {
+    customFeeEstimate,
+    customFeeReviewStop,
+    displayRateToSettingsCustom,
+    estimateNativeSendFee,
+    estimateNativeSendFeeTiers,
+} from '../../flows/feeEstimate.js';
 import { protocolCoinTickerFor } from '../../registry/nativeFee.js';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
@@ -317,6 +323,9 @@ export function BetFeedDetail({
     // route. Back from Place Bet returns to the market with the outcome kept.
     const [stage, setStage] = useState(/** @type {'view' | 'place'} */ ('view'));
     const [memo, setMemo] = useState('');
+    const [feePick, setFeePick] = useState(
+        /** @type {{ mode: 'low' | 'normal' | 'fast' | 'custom', customRate?: number }} */ ({ mode: 'normal' }),
+    );
     // Open state of the Place Bet sections, held above the early returns (the
     // From picker page) so it survives them. The bet is the form's main
     // section and starts open; From, Memo and Network fee start closed.
@@ -449,10 +458,23 @@ export function BetFeedDetail({
     // miner fee, and never joins the pool.
     const coinTicker = protocolCoinTickerFor(chainId);
     const nativeFee = useNativeFee(chainId);
-    const feeEstimate = useMemo(
-        () => estimateNativeSendFee({ chainId, chainRegistry }),
+    const feeTiers = useMemo(
+        () => estimateNativeSendFeeTiers({ chainId, chainRegistry }),
         [chainId],
     );
+    const feeCustomEstimate = useMemo(
+        () => (feePick.mode === 'custom'
+            ? customFeeEstimate({ chainId, chainRegistry, rate: Number(feePick.customRate) || 0 })
+            : null),
+        [chainId, feePick],
+    );
+    const feeEstimate = feePick.mode === 'custom'
+        ? feeCustomEstimate
+        : (feeTiers?.[feePick.mode] || estimateNativeSendFee({ chainId, chainRegistry, speed: feePick.mode }));
+    const feePerKb = (feeEstimate?.unit
+        && Number.isFinite(feeEstimate.rateValue) && feeEstimate.rateValue > 0)
+        ? displayRateToSettingsCustom(feeEstimate.unit, feeEstimate.rateValue)
+        : null;
 
     const actionConfirm = useActionConfirmFlow({ messaging, walletId });
     // A real ref, not `{ current: password }`: Approve runs from the closure
@@ -587,6 +609,12 @@ export function BetFeedDetail({
             'bet-stake': amountPrecisionError || amountProblem,
             'bet-memo': memoError,
         })) return;
+        const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
+        if (feeStop) {
+            sections.setOpen('fee', true);
+            setFormError(feeStop.formError);
+            return;
+        }
         if (submitLockRef.current) return;
         submitLockRef.current = true;
         setSubmitting(true);
@@ -602,6 +630,7 @@ export function BetFeedDetail({
                     builder: 'placeBetParams',
                     params: betParams(),
                     payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
                 });
                 setResult(res);
                 return;
@@ -615,6 +644,7 @@ export function BetFeedDetail({
                     // FEE_DESTINATION output has to be inside the PSBT the user
                     // approves and the tamper check verifies.
                     payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
                 })),
                 // The market can close while the review is on screen, and a
                 // bet is judged by the block it lands in: signing then pays
@@ -624,6 +654,7 @@ export function BetFeedDetail({
                 onApprove: (prebuiltPsbt) => submitConfirmed({
                     walletId, chainId, from, params: betParams(), prebuiltPsbt,
                     payFeeInNativeCoin: nativeFee.flag,
+                    ...(feePerKb != null ? { feePerKb } : {}),
                 }),
             });
             setResult(res);
@@ -1592,14 +1623,14 @@ export function BetFeedDetail({
                         />
                     )}
                     fee={(
-                        /* FeeSection's fixed-fee mode, as on Open a Market: bets
-                           take no fee pick, so the Fees section shows the
-                           network fee figure and the protocol fee lines. */
                         <FeeSection
                             {...sections.bind('fee')}
                             chainId={chainId}
                             coinTicker={coinTicker}
-                            fixedFee={feeEstimate?.coinAmount || null}
+                            tiers={feeTiers}
+                            value={feePick}
+                            onChange={(next) => { setFeePick(next); setFormError(null); }}
+                            customEstimate={feeCustomEstimate}
                             fees={{
                                 quote: protocolFeeQuote,
                                 pending: protocolFeePending,
