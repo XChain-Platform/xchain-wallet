@@ -18,11 +18,15 @@ import {
     isString,
     result,
 } from './validate.js';
+import {
+    MULTIPART_FILE_MAX_BYTES,
+    MULTIPART_FILE_MAX_PARTS,
+    MULTIPART_FILE_PART_CAPACITY,
+} from '../flows/fileSizeLimits.js';
 import { randomUUID } from '../util/uuid.js';
 
-export const CURRENT_VERSION = 1;
-export const MAX_FILE_PARTS = 32;
-export const MAX_FILE_BYTES = 12_000_000;
+export const CURRENT_VERSION = 2;
+export const MAX_WAVE_PIECES = 100;
 
 export const PENDING_FILE_UPLOAD_STAGES = /** @type {const} */ ([
     'funding',
@@ -34,34 +38,38 @@ export const PENDING_FILE_UPLOAD_STAGES = /** @type {const} */ ([
 
 /** @typedef {{ index: number, signedTxids: string[], txid: string | null, actionIndex: string | null }} PendingFilePiece */
 /** @typedef {{ tick: string, issueActionIndex: string }} PendingFileLinkTarget */
+/** @typedef {{ index: number, fundingTxid: string | null, fundingOutputs: unknown[], pieces: PendingFilePiece[] }} PendingFileWave */
 
 /**
  * @typedef {Object} PendingFileUpload
- * @property {1} schemaVersion
+ * @property {2} schemaVersion
  * @property {string} id
  * @property {string} walletId
  * @property {string} chainId
  * @property {string} sourceAddress
- * @property {string} originalSha256
- * @property {string} fileHash
  * @property {Record<string, unknown>} meta
- * @property {'envelope' | 'standard' | null} [lane]
- * @property {string | null} [buildMode]
+ * @property {'envelope' | 'standard' | null} lane
+ * @property {string | null} buildMode
  * @property {Record<string, unknown> | null} gate
  * @property {string} compression
  * @property {number} totalParts
  * @property {number} totalBytes
- * @property {string[]} partDigests
- * @property {string | null} fundingTxid
- * @property {(number | string | Record<string, unknown>)[]} fundingOutputs
- * @property {PendingFilePiece[]} pieces
+ * @property {number | null} partCapacity
+ * @property {string} fileHash
+ * @property {string} originalSha256
+ * @property {number | null} approvedRate
+ * @property {number} wavesDone
  * @property {typeof PENDING_FILE_UPLOAD_STAGES[number]} stage
  * @property {PendingFileLinkTarget | null} linkTarget
+ * @property {string | null} blobKey
+ * @property {string | null} path
  * @property {string} createdAt
+ * @property {PendingFileWave | null} wave
  */
 
 function initialPieces(totalParts) {
-    return Array.from({ length: totalParts + 1 }, (_, offset) => ({
+    const count = Math.min(totalParts + 1, MAX_WAVE_PIECES);
+    return Array.from({ length: count }, (_, offset) => ({
         index: offset - 1,
         signedTxids: [],
         txid: null,
@@ -73,30 +81,55 @@ function cloneFundingOutput(output) {
     return isPlainObject(output) ? { ...output } : output;
 }
 
+function clonePiece(piece) {
+    return { ...piece, signedTxids: [...(piece.signedTxids || [])] };
+}
+
+function initialWave(input) {
+    const pieces = initialPieces(input.totalParts);
+    const outputs = isArray(input.fundingOutputs)
+        ? input.fundingOutputs.slice(0, pieces.length).map(cloneFundingOutput)
+        : [];
+    return { index: 0, fundingTxid: null, fundingOutputs: outputs, pieces };
+}
+
+function cloneWave(wave) {
+    if (wave === null) return null;
+    return {
+        index: wave.index,
+        fundingTxid: wave.fundingTxid,
+        fundingOutputs: (wave.fundingOutputs || []).map(cloneFundingOutput),
+        pieces: (wave.pieces || []).map(clonePiece),
+    };
+}
+
 /** @returns {PendingFileUpload} */
 export function createPendingFileUpload(input) {
+    const lane = input.lane ?? null;
     return {
         schemaVersion: CURRENT_VERSION,
-        id: randomUUID(),
+        id: input.id ?? randomUUID(),
         walletId: input.walletId,
         chainId: input.chainId,
         sourceAddress: input.sourceAddress,
-        originalSha256: input.originalSha256,
-        fileHash: input.fileHash,
         meta: { ...input.meta },
-        lane: input.lane ?? null,
+        lane,
         buildMode: input.buildMode ?? null,
         gate: input.gate == null ? null : { ...input.gate },
         compression: input.compression,
         totalParts: input.totalParts,
         totalBytes: input.totalBytes,
-        partDigests: [...input.partDigests],
-        fundingTxid: null,
-        fundingOutputs: input.fundingOutputs.map(cloneFundingOutput),
-        pieces: initialPieces(input.totalParts),
-        stage: 'funding',
+        partCapacity: input.partCapacity ?? MULTIPART_FILE_PART_CAPACITY[lane] ?? null,
+        fileHash: input.fileHash,
+        originalSha256: input.originalSha256,
+        approvedRate: input.approvedRate ?? null,
+        wavesDone: input.wavesDone ?? 0,
+        stage: input.stage ?? 'funding',
         linkTarget: input.linkTarget == null ? null : { ...input.linkTarget },
-        createdAt: new Date().toISOString(),
+        blobKey: input.blobKey ?? null,
+        path: input.path ?? null,
+        createdAt: input.createdAt ?? new Date().toISOString(),
+        wave: input.wave === undefined ? initialWave(input) : cloneWave(input.wave),
     };
 }
 
@@ -106,19 +139,21 @@ const isFundingOutput = (value) => isPlainObject(value)
     || (Number.isSafeInteger(value) && value >= 0)
     || isNonEmptyString(value);
 
-function isPiece(piece, expectedIndex) {
+function isPiece(piece, totalParts) {
     return isPlainObject(piece)
-        && piece.index === expectedIndex
+        && Number.isInteger(piece.index)
+        && piece.index >= -1
+        && piece.index < totalParts
         && isArray(piece.signedTxids)
         && piece.signedTxids.every(isNonEmptyString)
         && isNullableString(piece.txid)
         && isNullableString(piece.actionIndex);
 }
 
-function isPiecePlan(pieces, totalParts) {
-    return isArray(pieces)
-        && pieces.length === totalParts + 1
-        && pieces.every((piece, offset) => isPiece(piece, offset - 1));
+function isPieceWave(pieces, totalParts) {
+    if (!isArray(pieces) || pieces.length === 0 || pieces.length > MAX_WAVE_PIECES) return false;
+    if (!pieces.every((piece) => isPiece(piece, totalParts))) return false;
+    return new Set(pieces.map((piece) => piece.index)).size === pieces.length;
 }
 
 function isLinkTarget(value) {
@@ -141,41 +176,61 @@ function validateIdentity(errors, record) {
 
 function validatePlan(errors, record) {
     check(errors, 'meta', isPlainObject(record.meta), 'must be an object');
-    check(errors, 'lane', record.lane === undefined || record.lane === null
-        || isOneOf(record.lane, ['envelope', 'standard']),
-    'must be absent, null, envelope, or standard');
-    check(errors, 'buildMode', record.buildMode === undefined || record.buildMode === null
-        || isNonEmptyString(record.buildMode),
-    'must be absent, null, or a non-empty string');
+    check(errors, 'lane', record.lane === null || isOneOf(record.lane, ['envelope', 'standard']),
+        'must be null, envelope, or standard');
+    check(errors, 'buildMode', record.buildMode === null || isNonEmptyString(record.buildMode),
+        'must be null or a non-empty string');
     check(errors, 'gate', record.gate === null || isPlainObject(record.gate),
         'must be null or an object');
     check(errors, 'compression', isString(record.compression), 'must be a string');
     check(errors, 'totalParts', Number.isInteger(record.totalParts)
-        && record.totalParts >= 2 && record.totalParts <= MAX_FILE_PARTS,
-    `must be an integer from 2 to ${MAX_FILE_PARTS}`);
-    check(errors, 'totalBytes', Number.isInteger(record.totalBytes)
-        && record.totalBytes > 0 && record.totalBytes <= MAX_FILE_BYTES,
-    `must be an integer from 1 to ${MAX_FILE_BYTES}`);
-    check(errors, 'partDigests', isArray(record.partDigests)
-        && record.partDigests.length === record.totalParts
-        && record.partDigests.every(isDigest),
-    'must contain one lowercase sha256 digest per part');
+        && record.totalParts >= 2 && record.totalParts <= MULTIPART_FILE_MAX_PARTS,
+    `must be an integer from 2 to ${MULTIPART_FILE_MAX_PARTS}`);
+    check(errors, 'totalBytes', Number.isSafeInteger(record.totalBytes)
+        && record.totalBytes > 0 && record.totalBytes <= MULTIPART_FILE_MAX_BYTES,
+    `must be an integer from 1 to ${MULTIPART_FILE_MAX_BYTES}`);
+    check(errors, 'partCapacity', record.partCapacity === null
+        || (Number.isSafeInteger(record.partCapacity) && record.partCapacity > 0),
+    'must be null or a positive safe integer');
+    check(errors, 'approvedRate', record.approvedRate === null
+        || (Number.isFinite(record.approvedRate) && record.approvedRate > 0),
+    'must be null or a positive number');
+}
+
+function validateWave(errors, record) {
+    const wave = record.wave;
+    if (wave === null) return;
+    if (!check(errors, 'wave', isPlainObject(wave), 'must be null or an object')) return;
+    check(errors, 'wave.index', Number.isSafeInteger(wave.index) && wave.index >= 0,
+        'must be a non-negative safe integer');
+    check(errors, 'wave.fundingTxid', isNullableString(wave.fundingTxid),
+        'must be null or a non-empty string');
+    const piecesValid = check(errors, 'wave.pieces', isPieceWave(wave.pieces, record.totalParts),
+        `must contain 1 to ${MAX_WAVE_PIECES} unique valid pieces`);
+    check(errors, 'wave.fundingOutputs', isArray(wave.fundingOutputs)
+        && wave.fundingOutputs.length <= MAX_WAVE_PIECES
+        && wave.fundingOutputs.every(isFundingOutput)
+        && (!piecesValid || [0, wave.pieces.length].includes(wave.fundingOutputs.length)),
+    'must be empty or contain one valid output per piece');
 }
 
 function validateProgress(errors, record) {
-    check(errors, 'fundingTxid', isNullableString(record.fundingTxid),
-        'must be null or a non-empty string');
-    check(errors, 'fundingOutputs', isArray(record.fundingOutputs)
-        && record.fundingOutputs.length === record.totalParts + 1
-        && record.fundingOutputs.every(isFundingOutput),
-    'must contain one funding amount or output object per piece');
-    check(errors, 'pieces', isPiecePlan(record.pieces, record.totalParts),
-        'must contain manifest index -1 followed by every part index');
+    const maxWaves = Math.ceil((record.totalParts + 1) / MAX_WAVE_PIECES);
+    check(errors, 'wavesDone', Number.isSafeInteger(record.wavesDone)
+        && record.wavesDone >= 0 && record.wavesDone <= maxWaves,
+    'must be a valid completed wave count');
     check(errors, 'stage', isOneOf(record.stage, PENDING_FILE_UPLOAD_STAGES),
         `must be one of ${PENDING_FILE_UPLOAD_STAGES.join(', ')}`);
     check(errors, 'linkTarget', isLinkTarget(record.linkTarget),
         'must be null or a tick and issueActionIndex pair');
+    check(errors, 'blobKey', record.blobKey === null || isNonEmptyString(record.blobKey),
+        'must be null or a non-empty string');
+    check(errors, 'path', record.path === null || isNonEmptyString(record.path),
+        'must be null or a non-empty string');
+    check(errors, 'source', !(isNonEmptyString(record.blobKey) && isNonEmptyString(record.path)),
+        'must use blobKey or path, not both');
     check(errors, 'createdAt', isIsoTimestamp(record.createdAt), 'must be an ISO timestamp');
+    validateWave(errors, record);
 }
 
 export function validatePendingFileUpload(record) {

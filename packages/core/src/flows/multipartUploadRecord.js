@@ -8,6 +8,11 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import {
+    MULTIPART_FILE_MAX_BYTES,
+    MULTIPART_FILE_MAX_PARTS,
+} from './fileSizeLimits.js';
+
 export const FILE_UPLOAD_RECORD_INVALID = 'FILE_UPLOAD_RECORD_INVALID';
 export const FILE_UPLOAD_FUNDING_INVALID = 'FILE_UPLOAD_FUNDING_INVALID';
 export const FILE_UPLOAD_STAGE_INVALID = 'FILE_UPLOAD_STAGE_INVALID';
@@ -48,10 +53,16 @@ function validatePlan(input) {
         requireRecord(typeof input[field] === 'string' && DIGEST.test(input[field]),
             field, 'must be 64 hexadecimal characters');
     }
-    requireRecord(Number.isInteger(input.totalParts) && input.totalParts >= 2 && input.totalParts <= 32,
-        'totalParts', 'must be an integer from 2 to 32');
-    requireRecord(Number.isInteger(input.totalBytes) && input.totalBytes >= 1 && input.totalBytes <= 12_000_000,
-        'totalBytes', 'must be an integer from 1 to 12000000');
+    requireRecord(
+        Number.isInteger(input.totalParts)
+            && input.totalParts >= 2 && input.totalParts <= MULTIPART_FILE_MAX_PARTS,
+        'totalParts', `must be an integer from 2 to ${MULTIPART_FILE_MAX_PARTS}`,
+    );
+    requireRecord(
+        Number.isInteger(input.totalBytes)
+            && input.totalBytes >= 1 && input.totalBytes <= MULTIPART_FILE_MAX_BYTES,
+        'totalBytes', `must be an integer from 1 to ${MULTIPART_FILE_MAX_BYTES}`,
+    );
     requireRecord(Array.isArray(input.partDigests), 'partDigests', 'must be an array');
     requireRecord(input.partDigests.length === input.totalParts,
         'partDigests', 'length must equal totalParts');

@@ -35,6 +35,7 @@ import { CURRENT_VERSION as AUTOPAY_ORDER_VERSION } from './autopayOrder.js';
 import { CURRENT_VERSION as AUTOPAY_LEASE_VERSION } from './autopayLease.js';
 import { randomUUID } from '../util/uuid.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
+import { MULTIPART_FILE_PART_CAPACITY } from '../flows/fileSizeLimits.js';
 
 /**
  * @typedef {(record: any) => any} MigrationStep
@@ -255,7 +256,39 @@ export const gatedKeyMigrations = {};
 export const pendingDeployMigrations = {};
 
 /** @type {MigrationMap} */
-export const pendingFileUploadMigrations = {};
+export const pendingFileUploadMigrations = {
+    1: (r) => {
+        const {
+            partDigests: _partDigests,
+            fundingTxid,
+            fundingOutputs,
+            pieces,
+            ...header
+        } = r;
+        const lane = r.lane ?? null;
+        return {
+            ...header,
+            schemaVersion: 2,
+            lane,
+            buildMode: r.buildMode ?? null,
+            partCapacity: MULTIPART_FILE_PART_CAPACITY[lane] ?? null,
+            approvedRate: null,
+            wavesDone: 0,
+            blobKey: null,
+            path: null,
+            wave: {
+                index: 0,
+                fundingTxid,
+                fundingOutputs: fundingOutputs.map((output) =>
+                    output && typeof output === 'object' ? { ...output } : output),
+                pieces: pieces.map((piece) => ({
+                    ...piece,
+                    signedTxids: [...piece.signedTxids],
+                })),
+            },
+        };
+    },
+};
 
 // AutopayOrder / AutopayLease (PC-16) are base-v1 schemas; no upgrade steps yet.
 /** @type {MigrationMap} */
