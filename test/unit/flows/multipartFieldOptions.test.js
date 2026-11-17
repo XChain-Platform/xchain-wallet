@@ -24,7 +24,7 @@ import {
 
 const METHODS = ['taproot', 'standard'];
 const SOFTWARE = Object.freeze({ source: 'hd', label: 'Primary' });
-const STANDARD_MAX_BYTES = 531_750_990;
+const STANDARD_MAX_BYTES = 531_488_850;
 
 class LengthStub extends Uint8Array {
     get byteLength() { return STANDARD_MAX_BYTES + 1; }

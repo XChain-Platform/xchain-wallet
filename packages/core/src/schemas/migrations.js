@@ -35,7 +35,7 @@ import { CURRENT_VERSION as AUTOPAY_ORDER_VERSION } from './autopayOrder.js';
 import { CURRENT_VERSION as AUTOPAY_LEASE_VERSION } from './autopayLease.js';
 import { randomUUID } from '../util/uuid.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
-import { MULTIPART_FILE_PART_CAPACITY } from '../flows/fileSizeLimits.js';
+import { multipartPartCapacity } from '../flows/fileSizeLimits.js';
 
 /**
  * @typedef {(record: any) => any} MigrationStep
@@ -266,12 +266,13 @@ export const pendingFileUploadMigrations = {
             ...header
         } = r;
         const lane = r.lane ?? null;
+        const indexDigits = Math.max(2, String(r.totalParts - 1).length);
         return {
             ...header,
             schemaVersion: 2,
             lane,
             buildMode: r.buildMode ?? null,
-            partCapacity: MULTIPART_FILE_PART_CAPACITY[lane] ?? null,
+            partCapacity: lane === null ? null : multipartPartCapacity(lane, indexDigits),
             approvedRate: null,
             wavesDone: 0,
             manifestActionIndex: pieces.find((piece) => piece.index === -1)?.actionIndex ?? null,

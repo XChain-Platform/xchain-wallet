@@ -14,7 +14,10 @@ import {
     planMultipartStream,
     readPlannedParts,
 } from '../../../packages/core/src/flows/multipartStreamPlan.js';
-import { MULTIPART_ENVELOPE_PART_CAPACITY } from '../../../packages/core/src/flows/fileSizeLimits.js';
+import {
+    MULTIPART_ENVELOPE_PART_CAPACITY,
+    MULTIPART_STANDARD_PART_CAPACITY,
+} from '../../../packages/core/src/flows/fileSizeLimits.js';
 
 function deterministicBytes(length, seed = 0x13579bdf) {
     const bytes = new Uint8Array(length);
@@ -112,6 +115,20 @@ describe('streaming multipart planning', () => {
             .toEqual([MULTIPART_ENVELOPE_PART_CAPACITY - 1, 2]);
         expect(Math.max(...reads.map(([start, end]) => end - start)))
             .toBe(MULTIPART_ENVELOPE_PART_CAPACITY);
+    });
+
+    it('matches the file planner after Standard parts cross 100 indexes', async () => {
+        const bytes = deterministicBytes(MULTIPART_STANDARD_PART_CAPACITY * 101);
+        const streamed = await planMultipartStream(trackedSource(bytes), {}, {
+            carrier: 'STANDARD',
+        });
+        const inMemory = await planMultipartFile(bytes, {}, { carrier: 'STANDARD' });
+
+        expectPlanParity(streamed, inMemory);
+        expect(streamed.totalParts).toBeGreaterThan(100);
+        expect(streamed.totalParts).toBe(inMemory.totalParts);
+        expect(streamed.partCapacity).toBe(inMemory.partCapacity);
+        expect(streamed.partCapacity).toBeLessThan(MULTIPART_STANDARD_PART_CAPACITY);
     });
 
     it('keeps an over-150-to-1 compression result raw', async () => {

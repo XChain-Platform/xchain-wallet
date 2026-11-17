@@ -28,8 +28,8 @@ function expectInvalid(input, subject) {
 
 describe('multipart field size refusal mapping', () => {
     it.each([
-        ['taproot', 'TOO_MANY_PARTS', 25_553_407_200],
-        ['standard', 'TOO_MANY_PARTS', 531_750_990],
+        ['taproot', 'TOO_MANY_PARTS', 25_553_145_060],
+        ['standard', 'TOO_MANY_PARTS', 531_488_850],
         ['taproot', 'ORIGINAL_BYTES_TOO_LARGE', 262_140_000_000],
         ['standard', 'ORIGINAL_BYTES_TOO_LARGE', 262_140_000_000],
         ['taproot', 'STORED_BYTES_TOO_LARGE', 262_140_000_000],
@@ -43,9 +43,9 @@ describe('multipart field size refusal mapping', () => {
         expect(result.single[method]).toBe(false);
     });
 
-    it('derives the Standard part-count cap from 65,535 parts of 8,114 bytes', () => {
+    it('derives the Standard part-count cap from its five-digit capacity', () => {
         const result = multipartFieldReasons(preview('standard', 'TOO_MANY_PARTS'));
-        expect(result.caps.standard).toBe(65_535 * 8_114);
+        expect(result.caps.standard).toBe(65_535 * 8_110);
     });
 });
 

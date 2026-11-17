@@ -67,6 +67,18 @@ function v1Record() {
 }
 
 describe('pendingFileUpload v2 bounded persistence', () => {
+    it('derives a widened-index capacity when callers omit it', () => {
+        const record = createPendingFileUpload(input({
+            totalParts: 101,
+            partCapacity: undefined,
+        }));
+        const legacy = v1Record();
+        legacy.totalParts = 101;
+
+        expect(record.partCapacity).toBe(389_919);
+        expect(migratePendingFileUpload(legacy).partCapacity).toBe(389_919);
+    });
+
     it('serializes a 65,535-part header below 64 KB without part digests', () => {
         const record = createPendingFileUpload(input({
             totalParts: 65_535,

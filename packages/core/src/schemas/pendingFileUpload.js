@@ -21,7 +21,7 @@ import {
 import {
     MULTIPART_FILE_MAX_BYTES,
     MULTIPART_FILE_MAX_PARTS,
-    MULTIPART_FILE_PART_CAPACITY,
+    multipartPartCapacity,
 } from '../flows/fileSizeLimits.js';
 import { randomUUID } from '../util/uuid.js';
 
@@ -108,6 +108,7 @@ function cloneWave(wave) {
 /** @returns {PendingFileUpload} */
 export function createPendingFileUpload(input) {
     const lane = input.lane ?? null;
+    const indexDigits = Math.max(2, String(input.totalParts - 1).length);
     return {
         schemaVersion: CURRENT_VERSION,
         id: input.id ?? randomUUID(),
@@ -121,7 +122,8 @@ export function createPendingFileUpload(input) {
         compression: input.compression,
         totalParts: input.totalParts,
         totalBytes: input.totalBytes,
-        partCapacity: input.partCapacity ?? MULTIPART_FILE_PART_CAPACITY[lane] ?? null,
+        partCapacity: input.partCapacity
+            ?? (lane === null ? null : multipartPartCapacity(lane, indexDigits)),
         fileHash: input.fileHash,
         originalSha256: input.originalSha256,
         manifestActionIndex: input.manifestActionIndex ?? null,

@@ -12,7 +12,7 @@ import {
     GATED_MULTIPART_MAX_BYTES,
     MULTIPART_FILE_MAX_BYTES,
     MULTIPART_FILE_MAX_PARTS,
-    MULTIPART_FILE_PART_CAPACITY,
+    multipartPartCapacity,
 } from './fileSizeLimits.js';
 
 const CARRIER_BY_METHOD = Object.freeze({
@@ -47,8 +47,9 @@ function mapMethod(method, quote, reason) {
     }
     if (reason === 'TOO_MANY_PARTS') {
         const carrier = CARRIER_BY_METHOD[method];
+        const indexDigits = String(MULTIPART_FILE_MAX_PARTS - 1).length;
         const cap = Math.min(
-            MULTIPART_FILE_MAX_PARTS * MULTIPART_FILE_PART_CAPACITY[carrier],
+            MULTIPART_FILE_MAX_PARTS * multipartPartCapacity(carrier, indexDigits),
             MULTIPART_FILE_MAX_BYTES,
         );
         return { reason: 'tooLarge', cap, single: false };

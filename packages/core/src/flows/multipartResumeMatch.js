@@ -33,11 +33,14 @@ export function findResumableUpload(records, { walletId, chainId, originalSha256
     return newest;
 }
 
-export function confirmResumePick(record, { fileHash, totalParts, sourceAddress }) {
+export function confirmResumePick(record, { fileHash, totalParts, partCapacity, sourceAddress }) {
     const sameHash = typeof fileHash === 'string'
         && typeof record.fileHash === 'string'
         && fileHash.toLowerCase() === record.fileHash.toLowerCase();
-    if (!sameHash || totalParts !== record.totalParts) {
+    const sameCapacity = !Number.isSafeInteger(record.partCapacity)
+        || !Number.isSafeInteger(partCapacity)
+        || partCapacity === record.partCapacity;
+    if (!sameHash || totalParts !== record.totalParts || !sameCapacity) {
         throw resumeError(
             'RESUME_PLAN_MISMATCH',
             `Resume plan mismatch: record hash ${record.fileHash}; picked hash ${fileHash}`,

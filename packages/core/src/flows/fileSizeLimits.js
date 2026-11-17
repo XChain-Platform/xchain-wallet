@@ -68,6 +68,20 @@ export const MULTIPART_FILE_PART_CAPACITY = Object.freeze({
     standard: MULTIPART_STANDARD_PART_CAPACITY,
 });
 
+const MULTIPART_TWO_DIGIT_ACTION_BYTES = 'FILE|2|'.length + 64 + '|'.length + 2;
+
+export function multipartPartCapacity(carrier, indexDigits = 2) {
+    const lane = String(carrier || 'TAPROOT').toUpperCase();
+    const baseCapacity = lane === 'STANDARD' || lane === 'P2SH'
+        ? MULTIPART_STANDARD_PART_CAPACITY
+        : MULTIPART_ENVELOPE_PART_CAPACITY;
+    const actionBytes = MULTIPART_TWO_DIGIT_ACTION_BYTES + indexDigits - 2;
+    const baseCompiledAction = MULTIPART_TWO_DIGIT_ACTION_BYTES
+        + pushPrefixSize(MULTIPART_TWO_DIGIT_ACTION_BYTES);
+    const compiledAction = actionBytes + pushPrefixSize(actionBytes);
+    return baseCapacity - (compiledAction - baseCompiledAction);
+}
+
 /** Activation time keyed by the trailing network segment of a chain id. */
 export const FILE_MULTIPART_ACTIVATION_TIME = Object.freeze({
     mainnet: null,

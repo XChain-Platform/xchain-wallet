@@ -13,10 +13,9 @@ import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/
 import pako from 'pako';
 import {
     GATED_MULTIPART_MAX_BYTES,
-    MULTIPART_ENVELOPE_PART_CAPACITY,
     MULTIPART_FILE_MAX_BYTES,
     MULTIPART_FILE_MAX_PARTS,
-    MULTIPART_STANDARD_PART_CAPACITY,
+    multipartPartCapacity,
 } from './fileSizeLimits.js';
 import {
     GATED_IV_BYTES,
@@ -86,11 +85,19 @@ function prepareStoredBytes(original, gate) {
     };
 }
 
-function capacityFor(carrier) {
-    const lane = String(carrier || 'TAPROOT').toUpperCase();
-    return lane === 'STANDARD' || lane === 'P2SH'
-        ? MULTIPART_STANDARD_PART_CAPACITY
-        : MULTIPART_ENVELOPE_PART_CAPACITY;
+function capacityFor(carrier, indexDigits = 2) {
+    return multipartPartCapacity(carrier, indexDigits);
+}
+
+function capacityForStoredLength(carrier, storedBytes) {
+    let digits = 2;
+    for (;;) {
+        const capacity = capacityFor(carrier, digits);
+        const totalParts = Math.ceil(storedBytes / capacity);
+        const needed = Math.max(2, String(totalParts - 1).length);
+        if (needed <= digits) return { capacity, totalParts };
+        digits = needed;
+    }
 }
 
 function assertOriginalBounds(length, gate, carrier) {
@@ -105,8 +112,7 @@ function assertOriginalBounds(length, gate, carrier) {
             originalBytes: length, maxBytes: MULTIPART_FILE_MAX_BYTES,
         });
     }
-    const capacity = capacityFor(carrier);
-    const totalParts = Math.ceil(length / capacity);
+    const { capacity, totalParts } = capacityForStoredLength(carrier, length);
     if (totalParts > MULTIPART_FILE_MAX_PARTS) {
         throw rangeError('TOO_MANY_PARTS', 'original bytes require too many multipart pieces', {
             totalParts, maxParts: MULTIPART_FILE_MAX_PARTS, capacity,
@@ -125,6 +131,17 @@ function splitStoredBytes(stored, capacity) {
         parts[parts.length - 1] = concatBytes(previous.slice(-1), parts.at(-1));
     }
     return parts;
+}
+
+function splitForIndexWidth(stored, carrier) {
+    let digits = 2;
+    for (;;) {
+        const partCapacity = capacityFor(carrier, digits);
+        const buffers = splitStoredBytes(stored, partCapacity);
+        const needed = Math.max(2, String(buffers.length - 1).length);
+        if (needed <= digits) return { partCapacity, buffers };
+        digits = needed;
+    }
 }
 
 function bytesOfPart(part) {
@@ -147,8 +164,7 @@ export function fileHashOf(parts) {
 }
 
 function buildParts(stored, carrier) {
-    const partCapacity = capacityFor(carrier);
-    const buffers = splitStoredBytes(stored, partCapacity);
+    const { partCapacity, buffers } = splitForIndexWidth(stored, carrier);
     if (buffers.length > MULTIPART_FILE_MAX_PARTS) {
         throw rangeError('TOO_MANY_PARTS', 'stored bytes require too many multipart pieces', {
             totalParts: buffers.length, maxParts: MULTIPART_FILE_MAX_PARTS, capacity: partCapacity,
