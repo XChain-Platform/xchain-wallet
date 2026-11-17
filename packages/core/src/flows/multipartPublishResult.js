@@ -12,6 +12,7 @@ import {
     MULTIPART_FILE_MAX_BYTES,
     MULTIPART_FILE_MAX_PARTS,
 } from './fileSizeLimits.js';
+import { multipartTransactionCount } from './multipartWaves.js';
 
 function invalid(field) {
     const error = new Error(`multipartPublishResult: invalid ${field}`);
@@ -63,7 +64,7 @@ export function multipartPublishResult(reply, { originalBytes } = {}) {
         txid: reply.txid,
         totalParts,
         totalBytes,
-        transactions: 1 + (2 * (totalParts + 1)),
+        transactions: multipartTransactionCount(totalParts),
         keyHash: gatedKeyHash(reply.upload),
         compression: reply.upload?.gated === true ? null : {
             rawLength: originalBytes,
