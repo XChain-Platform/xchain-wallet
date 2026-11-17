@@ -41,6 +41,7 @@ import {
 } from '@xchain-wallet/core/flows/fileMultipartRoutes.js';
 import { publishMultipartFile } from '@xchain-wallet/core/flows/publishMultipartFile.js';
 import { multipartPairSizes } from '@xchain-wallet/core/flows/uploadMethod.js';
+import { createFileRefResolver } from '@xchain-wallet/core/flows/fileRefSource.js';
 import {
     buildEditFeedListsParams,
     buildBetActionPsbt,
@@ -81,6 +82,7 @@ import {
 import { createLockedSendOutcomeStore, finishPatchFor } from './lockedSendOutcomes.js';
 import { createSignThrottleStorage } from './signThrottleStorage.js';
 import { createLogConsoleStorage } from './logConsoleStorage.js';
+import { createPendingFileBlobs } from '../storage/pendingFileBlobs.js';
 import {
     createActionSafetySessionStorage,
     ownSpendStoreFrom,
@@ -1337,9 +1339,17 @@ export function createBackgroundHost(deps) {
         // Outcomes of sends that settled after a lock closed the vault. Every
         // host in one process reads the same store (lockedSendOutcomes.js).
         lockedSendOutcomes = createLockedSendOutcomeStore(),
+        fileBlobs = createPendingFileBlobs(),
+        resolveFileRef = createFileRefResolver({ blobStore: fileBlobs }),
         ...hostDeps
     } = deps ?? {};
     const host = new MessageHost(hostDeps);
+    if (hostDeps.vault && !Object.prototype.hasOwnProperty.call(hostDeps.vault, 'pendingFileBlobs')) {
+        Object.defineProperty(hostDeps.vault, 'pendingFileBlobs', {
+            value: fileBlobs,
+            configurable: true,
+        });
+    }
 
     // A lock closes the vault while an approved send is still signing or
     // broadcasting; the send finishes and its last write to its pending record
@@ -5547,6 +5557,8 @@ export function createBackgroundHost(deps) {
             vault,
             chainRegistry,
             sdkRegistry,
+            resolveFileRef,
+            fileBlobs,
             onBroadcastFailure: enqueueOnBroadcastFailure(req?.walletId),
         });
     });

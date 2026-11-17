@@ -46,6 +46,7 @@ import { VaultConflictError, VaultEvictedError, VaultIncompleteError } from '../
 import { configureFiatRateSource } from '../../core/src/flows/priceLookup.js';
 import { legacySettingsMigrationCtx } from '../../core/src/flows/legacyRates.js';
 import { VAULT_SESSION_LOCK_NAME } from '../../core/src/flows/eraseSchedule.js';
+import { createFileRefResolver } from '../../core/src/flows/fileRefSource.js';
 import { PassphraseMismatchError } from '../../core/src/flows/unlockWallet.js';
 import { NotificationService } from '../../core/src/notifications/NotificationService.js';
 import { PriceAlertWatcher } from '../../core/src/notifications/PriceAlertWatcher.js';
@@ -1686,6 +1687,8 @@ export async function createWalletLocal(req) {
             chainRegistry,
             sdkRegistry,
             signerPool,
+            fileBlobs: null,
+            resolveFileRef: createFileRefResolver(),
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
@@ -1837,6 +1840,8 @@ export async function importMnemonicLocal(req) {
             chainRegistry,
             sdkRegistry,
             signerPool,
+            fileBlobs: null,
+            resolveFileRef: createFileRefResolver(),
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
@@ -2039,6 +2044,8 @@ export async function importBackupLocal(req) {
             chainRegistry,
             sdkRegistry,
             signerPool,
+            fileBlobs: null,
+            resolveFileRef: createFileRefResolver(),
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
@@ -2288,6 +2295,8 @@ export async function unlockWalletLocal(req) {
             chainRegistry,
             sdkRegistry,
             signerPool,
+            fileBlobs: null,
+            resolveFileRef: createFileRefResolver(),
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
