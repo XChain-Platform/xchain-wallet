@@ -31,9 +31,9 @@ describe('multipart FILE protocol constants', () => {
         expect(MULTIPART_ENVELOPE_PART_CAPACITY).toBe(389_920);
         expect(MULTIPART_STANDARD_PART_CAPACITY).toBe(8_114);
         expect(FILE_MULTIPART_ACTIVATION_TIME).toEqual({
-            mainnet: null, testnet: 1_796_083_200, regtest: 0,
+            mainnet: null, testnet: 1_794_787_200, regtest: 0,
         });
-        expect(fileMultipartActivationTime('bitcoin-testnet')).toBe(1_796_083_200);
+        expect(fileMultipartActivationTime('bitcoin-testnet')).toBe(1_794_787_200);
         expect(fileMultipartActivationTime('litecoin-regtest')).toBe(0);
         expect(fileMultipartActivationTime('bitcoin-unknown')).toBeUndefined();
     });

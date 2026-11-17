@@ -73,7 +73,7 @@ export const MULTIPART_FILE_PART_CAPACITY = Object.freeze({
 /** Activation time keyed by the trailing network segment of a chain id. */
 export const FILE_MULTIPART_ACTIVATION_TIME = Object.freeze({
     mainnet: null,
-    testnet: 1_796_083_200,
+    testnet: 1_794_787_200,
     regtest: 0,
 });
 
