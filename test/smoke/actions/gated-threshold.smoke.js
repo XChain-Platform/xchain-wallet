@@ -106,7 +106,8 @@ assert.match(form, /thresholdActive && gateMinAmount\.trim\(\)\s*\n?\s*\? \{ gat
 const content = read('packages', 'core', 'src', 'flows', 'gatedContent.js');
 assert.match(content, /row\.gate_min_amount \?\? row\.gateMinAmount/, 'listGatedFiles carries the threshold through');
 const detail = read('packages', 'core', 'src', 'shared', 'routes', 'TokenDetail.jsx');
-assert.match(detail, /hold ≥ \{f\.gateMinAmount\} \{tick\} to unlock/, 'gated rows show the hold-N-to-unlock hint');
+assert.match(detail, /Hold \{formatWithThousands\(f\.gateMinAmount \|\| '1'\)\}/,
+    'locked gallery tiles show the formatted hold-N requirement');
 assert.match(detail, /file\.gateMinAmount \? `at least \$\{file\.gateMinAmount\}` : 'at least 1'/,
     'locked-access copy names the real threshold');
 

@@ -160,6 +160,7 @@ export function deleteAddressMessage({ record, holdings = [], balanceStatus = 'l
  * @param {Array<{ key: string, label: string, sublabel?: string, onSelect: () => void }>} [props.pickerActions]   picker mode only: caller-supplied rows rendered above the address list (e.g. Dispenser's "New dispenser address"); unaffected by search/filters
  * @param {boolean} [props.networkLocked]   picker mode only: the list stays on `networkFilter` and the network switch is hidden, for a form bound to one chain
  * @param {(record: any, chainId: string) => string | null} [props.pickerUnavailableReason]   picker mode only: a non-empty reason disables that row and shows the reason on it
+ * @param {any | null} [props.pickerSelectedAddress]   picker mode only: address currently shown by the calling screen
  */
 export function AddressList({
     walletId,
@@ -182,6 +183,7 @@ export function AddressList({
     networkLocked = false,
     pickerUnavailableReason,
     title,
+    pickerSelectedAddress = null,
 }) {
     const { messaging, shell } = useMessaging();
     const variant = screenVariantFor(shell);
@@ -1324,6 +1326,12 @@ export function AddressList({
                     const unavailable = pickerMode && row.record && pickerUnavailableReason
                         ? pickerUnavailableReason(row.record, row.chainId) || null
                         : null;
+                    const pickerCurrent = pickerMode && Boolean(pickerSelectedAddress) && (
+                        (pickerSelectedAddress.id && row.record?.id === pickerSelectedAddress.id)
+                        || (row.chainId === (pickerSelectedAddress.chainId || pickerSelectedAddress.chain)
+                            && String(row.address || '').toLowerCase()
+                                === String(pickerSelectedAddress.address || '').toLowerCase())
+                    );
                     return (
                         <li key={row.key}>
                             <ListRow
@@ -1335,6 +1343,7 @@ export function AddressList({
                                     setSelected(row);
                                 }}
                                 aria-label={t('routes.addressList.viewAddress2', { address: row.address })}
+                                aria-current={pickerCurrent ? 'true' : undefined}
                                 aria-busy="false"
                                 chevron
                                 title={(

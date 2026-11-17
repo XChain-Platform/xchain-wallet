@@ -244,6 +244,15 @@ assert.ok(readFileSync(join(root, '.github/workflows/release.yml'), 'utf8')
         const profile = readActualExpiry(file, { run: () => '<key>ExpirationDate</key><date>garbage</date>' });
         assert.equal(profile.date, null, 'an unparseable profile ExpirationDate is not a measurement');
         assert.match(profile.reason, /unparseable/);
+
+        const fallback = readActualExpiry(file, {
+            run: (command) => {
+                if (command === 'security') throw new Error('security cms unavailable');
+                return '<key>ExpirationDate</key><date>2027-08-07T01:34:10Z</date>';
+            },
+        });
+        assert.equal(fallback.date?.toISOString(), '2027-08-07T01:34:10.000Z',
+            'openssl decodes a profile when security cms is unavailable');
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }

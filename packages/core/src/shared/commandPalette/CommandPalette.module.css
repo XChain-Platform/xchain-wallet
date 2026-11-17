@@ -483,7 +483,7 @@
     font-weight: inherit;
 }
 
-.walletGroupList .walletRow[data-wallet-menu-focused] {
+.walletGroupList .walletRow[data-wallet-menu-keyboard-focused] {
     outline: 2px solid var(--xc-focus-ring);
     outline-offset: -2px;
 }
@@ -651,7 +651,7 @@
         border-color: Canvas;
     }
 
-    .walletGroupList .walletRow[data-wallet-menu-focused] {
+    .walletGroupList .walletRow[data-wallet-menu-keyboard-focused] {
         outline: 2px solid Highlight;
     }
 }

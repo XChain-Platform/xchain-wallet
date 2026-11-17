@@ -48,8 +48,8 @@ async function renderManage({ isOwner = true, tokenInfo = {}, ...handlers } = {}
             }),
         ),
     );
-    // The identity card names the token; its description is a Details row.
-    await screen.findByRole('region', { name: 'Token identity' });
+    // The standard hero names the token; its description is a Details row.
+    await screen.findByRole('region', { name: 'SHAREDLIST' });
     return messaging;
 }
 

@@ -18,7 +18,7 @@
 import React from 'react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 vi.mock('../../../packages/core/src/flows/demoMode.js', async (importOriginal) => {
@@ -53,9 +53,14 @@ beforeAll(() => {
 });
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 
+beforeEach(() => {
+    window.localStorage.removeItem('xc:assetBalanceUnit');
+});
+
 afterEach(() => {
     cleanup();
     __clearTokenInfoCache();
+    localStorage.removeItem('xc:assetBalanceUnit');
 });
 
 function historyRows(nowSec) {
@@ -196,6 +201,8 @@ describe('asset and token-management pages', () => {
         cleanup();
         __clearTokenInfoCache();
         renderManagedToken();
+        const managedHero = await screen.findByRole('region', { name: 'MYTOKEN' });
+        fireEvent.click(within(managedHero).getByRole('button', { name: 'Show balance in MYTOKEN' }));
         const managedToken = await layoutOf('MYTOKEN');
 
         const expected = {
@@ -222,7 +229,10 @@ describe('asset and token-management pages', () => {
 
     it('gives a token with no price history its balance line from the wallet rows', async () => {
         renderHeldToken();
-        await screen.findByRole('region', { name: 'MYTOKEN' });
+        const hero = await screen.findByRole('region', { name: 'MYTOKEN' });
+        expect(within(hero).getByText('No price yet')).toBeTruthy();
+        expect(screen.getByText('No market price for MYTOKEN yet')).toBeTruthy();
+        fireEvent.click(within(hero).getByRole('button', { name: 'Show balance in MYTOKEN' }));
         const chart = await screen.findByRole('region', { name: 'Balance chart' });
         const line = await within(chart).findByRole('img', { name: /^Balance over 1W/ });
         // 1W: 4 sent 3 days ago (from 6), then 1 and 2 received; the line ends at 5.
@@ -231,17 +241,18 @@ describe('asset and token-management pages', () => {
         expect(await within(chart).findByRole('img', { name: /^Balance over 24h/ })).toBeTruthy();
     });
 
-    it('puts the Details facts in the standard card, 8px under the tab row', async () => {
+    it('puts the profile and Details facts together, 8px under the tab row', async () => {
         renderManagedToken();
         fireEvent.click(await screen.findByRole('tab', { name: 'Details' }));
         const region = await screen.findByRole('region', { name: 'Token details' });
         const card = region.closest('[data-details-card]');
         expect(card).not.toBeNull();
         expect(card.className).toMatch(/detailsCard/);
-        // The card is the tab panel's first block, and the panel follows the tab row.
+        // The approved About profile leads the facts card in the same tab panel.
         const panel = card.parentElement;
         expect(panel.getAttribute('role')).toBe('tabpanel');
-        expect(panel.firstElementChild).toBe(card);
+        expect(panel.firstElementChild).toBe(screen.getByRole('region', { name: 'Token information profile' }));
+        expect(panel.firstElementChild.nextElementSibling).toBe(card);
         const tablist = screen.getByRole('tablist', { name: 'Coin or token view' });
         expect(panel.previousElementSibling).toBe(tablist.closest('[class*="tabs"]') || tablist);
 
@@ -285,6 +296,9 @@ describe('asset and token-management pages', () => {
                 block_index: 1000 - i,
             }));
             const messaging = renderHeldToken(tokenMessaging({ rows }));
+            const hero = await screen.findByRole('region', { name: 'MYTOKEN' });
+            const showBalance = within(hero).queryByRole('button', { name: 'Show balance in MYTOKEN' });
+            if (showBalance) fireEvent.click(showBalance);
             await screen.findByRole('region', { name: 'Balance chart' });
             fireEvent.click(screen.getByRole('tab', { name: 'History' }));
             const list = await screen.findByRole('list', { name: 'MYTOKEN history' });

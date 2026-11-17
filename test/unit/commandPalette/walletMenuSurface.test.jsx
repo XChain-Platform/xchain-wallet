@@ -171,18 +171,21 @@ describe('CommandPalette wallet menu surface', () => {
         const input = screen.getByRole('combobox');
 
         const current = screen.getByRole('option', { name: 'Send' });
-        expect(current).toHaveAttribute(
-            'data-wallet-menu-focused',
-            '',
-        );
+        expect(current).not.toHaveAttribute('data-wallet-menu-keyboard-focused');
         expect(current).toHaveClass(styles.walletRowActive);
         fireEvent.keyDown(input, { key: 'ArrowDown' });
         const focused = screen.getByRole('option', { name: 'Receive' });
         expect(focused).toHaveAttribute(
-            'data-wallet-menu-focused',
+            'data-wallet-menu-keyboard-focused',
             '',
         );
         expect(focused).not.toHaveClass(styles.walletRowActive);
+        fireEvent.mouseMove(current);
+        expect(current).toHaveAttribute('aria-selected', 'true');
+        expect(current).not.toHaveAttribute('data-wallet-menu-keyboard-focused');
+        expect(focused).not.toHaveAttribute('data-wallet-menu-keyboard-focused');
+        fireEvent.keyDown(input, { key: 'ArrowDown' });
+        expect(focused).toHaveAttribute('data-wallet-menu-keyboard-focused', '');
         fireEvent.keyDown(input, { key: 'Enter' });
         expect(menu.onSelect).toHaveBeenCalledWith('receive');
     });

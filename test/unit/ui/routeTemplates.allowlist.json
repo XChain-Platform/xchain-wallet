@@ -36,6 +36,12 @@
                 "reason": "The result-screen successTitle heading, plus the per-transaction labels inside the result and the review summary: items of the action's own result and confirm screens, not group titles. One result pattern shared by every action; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
             }
         },
+        "packages/core/src/shared/routes/BetFeedDetail.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Your position names the approved position summary card inside the market detail, not a page group or a second page title."
+            }
+        },
         "packages/core/src/shared/routes/CoSignerAccountDetail.jsx": {
             "heading": {
                 "count": 1,
@@ -126,6 +132,12 @@
                 "reason": "Result-screen titles (the successTitle heading, and the watcher-mode refusal title where the form has one) inside the result screen of an action (its FormPage or ListPage). One result pattern shared by every action, not a group title; moving it onto SectionHeader changes its type scale for all of them at once, which is a design call."
             }
         },
+        "packages/core/src/shared/routes/PollDetail.jsx": {
+            "heading": {
+                "count": 1,
+                "reason": "Your vote names the wallet-specific vote summary inside the poll result panel, not a page group or a second page title."
+            }
+        },
         "packages/core/src/shared/routes/ProjectRosterForm.jsx": {
             "heading": {
                 "count": 4,
@@ -172,8 +184,8 @@
                 "reason": "The inline password prompt that unlocks a gated file inside the token detail files panel; a field under the file list, not a page form."
             },
             "heading": {
-                "count": 2,
-                "reason": "Screen-reader-only headings name the coin when the page is embedded as wide Home's detail panel (G115), where no page header names it; nothing visible is drawn."
+                "count": 1,
+                "reason": "A screen-reader-only heading names the coin when the page is embedded as wide Home's detail panel (G115), where no page header names it; nothing visible is drawn."
             }
         },
         "packages/core/src/shared/routes/AddAccountForm.jsx": {

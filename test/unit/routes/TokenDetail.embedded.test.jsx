@@ -14,7 +14,7 @@
 // value-chart hero; its reads are the selected asset's own, the same whatever
 // else the wallet holds.
 
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -35,6 +35,7 @@ beforeAll(() => {
     globalThis.ResizeObserver = globalThis.ResizeObserver || StubObserver;
 });
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
+beforeEach(() => window.localStorage.setItem('xc:assetBalanceUnit', 'asset'));
 afterEach(() => { cleanup(); __clearTokenInfoCache(); });
 
 function messagingFor(tokenInfo, otherHoldings = 0) {

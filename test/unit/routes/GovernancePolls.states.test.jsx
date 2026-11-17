@@ -138,7 +138,7 @@ describe('GovernancePolls states', () => {
         await screen.findByText('Ship the release?');
         const list = screen.getByRole('list');
         expect(list.tagName).toBe('UL');
-        expect(list).toHaveAttribute('aria-label', 'Governance polls');
+        expect(list).toHaveAttribute('aria-label', 'Governance Polls');
         expect(betListCss).toMatch(/\.marketList\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill, minmax\(min\(100%, 290px\), 1fr\)\)/s);
         expect(betCardCss).toMatch(/\.card\s*\{[^}]*composes:\s*card from '\.\.\/\.\.\/ui\/Card\.module\.css'/s);
         const items = screen.getAllByRole('listitem');

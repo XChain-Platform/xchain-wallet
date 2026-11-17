@@ -24,9 +24,25 @@ describe('list row hover and selected styles', () => {
         expect(hover).not.toMatch(/accent|box-shadow|border|outline/);
     });
 
-    it('gives Home rows no hover rule of their own', () => {
+    it('gives BalanceList one outer paint layer at narrow and wide widths', () => {
+        const source = read('packages/core/src/shared/components/BalanceList.jsx');
         const css = read('packages/core/src/shared/components/BalanceList.module.css');
-        expect(css).not.toMatch(/\.row(?:Content|Clickable|Pinned)?:hover/);
+        const cardCss = read('packages/core/src/ui/Card.module.css');
+        const outerHover = css.match(/@media \(hover: hover\) and \(pointer: fine\)\s*\{\s*\.row\.row\[data-xc-row-state\]:hover\s*\{([^}]*)\}/);
+        const outerSelected = cardCss.match(/:root \[data-xc-row-state\]:is\([\s\S]*?\)\s*\{([^}]*)\}/);
+        const innerStates = css.match(/\.row\.row > \.rowContent\.rowContent:is\([\s\S]*?\)\s*\{([^}]*)\}/);
+
+        expect(source).toMatch(/data-xc-row-state=\{clickable \? '' : undefined\}[\s\S]*data-selected=\{selected \? 'true' : undefined\}/);
+        expect(source).toMatch(/<ListRow[\s\S]*aria-current=\{selected \? 'true' : undefined\}/);
+        expect(outerHover[1]).toMatch(/background:\s*var\(--xc-row-hover-bg\)/);
+        expect(css.slice(0, outerHover.index)).not.toMatch(/@media \(min-width:/);
+        expect(innerStates[0]).toMatch(/\[aria-current\]:not\(\[aria-current='false'\]\)/);
+        expect(innerStates[1]).toMatch(/background:\s*transparent/);
+
+        const selectedLayerBackgrounds = [outerSelected[1], innerStates[1]]
+            .map((rule) => rule.match(/background:\s*([^;]+);/)[1]);
+        expect(selectedLayerBackgrounds).toEqual(['var(--xc-row-active-bg)', 'transparent']);
+        expect(selectedLayerBackgrounds.filter((background) => background !== 'transparent')).toHaveLength(1);
     });
 
     it('opts every DEX market row into the shared edge-to-edge states', () => {
@@ -42,7 +58,7 @@ describe('list row hover and selected styles', () => {
         const css = read('packages/core/src/shared/routes/MarketsList.module.css');
         expect(source).not.toContain('data-selected={selected');
         expect(css).not.toMatch(/\[data-selected=['"]true['"]\]|\[aria-current=['"]true['"]\]/);
-        expect(css).not.toMatch(/xc-row-(?:hover|active)-bg|xc-shadow-nav-indicator/);
+        expect(css).not.toMatch(/xc-row-active-bg|xc-shadow-nav-indicator/);
     });
 
     it('keeps the focus ring to keyboard focus', () => {

@@ -216,6 +216,7 @@ export const TOKEN_GROUPS = [
             token('--xc-shadow-bottom-sheet', 'Bottom sheet elevation alias', 'shadow'),
             token('--xc-shadow-surface-ring', 'Surface-colored ring', 'shadow'),
             token('--xc-shadow-accent-ring', 'Accent ring', 'shadow'),
+            token('--xc-shadow-selected-ring', 'Selected collectible ring', 'shadow'),
             token('--xc-shadow-focus-ring', 'Focus ring shadow', 'shadow'),
             token('--xc-shadow-danger-focus-ring', 'Danger focus ring', 'shadow'),
             token('--xc-shadow-status-halo', 'Status dot halo', 'shadow'),

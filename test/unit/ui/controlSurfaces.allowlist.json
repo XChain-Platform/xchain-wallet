@@ -195,7 +195,7 @@
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
         "packages/core/src/shared/components/DataTable.module.css": {
-            "count": 2,
+            "count": 3,
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
         "packages/core/src/shared/components/ToastStack.module.css": {

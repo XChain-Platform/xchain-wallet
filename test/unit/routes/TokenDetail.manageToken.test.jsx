@@ -11,7 +11,7 @@
 // TokenDetail lets any wallet open Manage. The selected form owns the
 // authoritative submit-time ownership refusal.
 
-import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll, beforeEach, afterAll } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
@@ -26,6 +26,8 @@ afterEach(() => {
     __clearTokenInfoCache();
     localStorage.removeItem('xc:activeAccount:w1');
 });
+
+beforeEach(() => localStorage.setItem('xc:assetBalanceUnit', 'asset'));
 
 // jsdom has no ResizeObserver; TokenDetail's balance hero uses one to
 // auto-shrink the amount text. Same stub as test/unit/routes-render.test.jsx.

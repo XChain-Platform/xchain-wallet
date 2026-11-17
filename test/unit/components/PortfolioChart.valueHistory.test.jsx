@@ -634,4 +634,45 @@ describe('wide Home detail panel', () => {
         expect(messaging.getAddressHistory).not.toHaveBeenCalled();
         expect(messaging.getAddressesByChain.mock.calls.length).toBeLessThanOrEqual(1);
     });
+
+    it('keeps Value available for an unpriced token in wide Home and restores Balance on demand', async () => {
+        const rows = [btcRow('100000000'), tokenRow('BARK', 40, null)];
+        const source = { prepared: prepareValuation({ rows }), priceMap: PRICES, seedId: 'real-wallet', synthesize: false };
+        const messaging = {
+            ...messagingStub(),
+            getTokenInfo: vi.fn(async () => ({ creator: 'bc1qissuer', totalSupply: '1000' })),
+            getHoldersForToken: vi.fn(async () => ({ data: [] })),
+            listGatedContent: vi.fn(async () => []),
+            getSupplyHistory: vi.fn(async () => []),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <HoldingValueContext.Provider value={source}>
+                    <TokenDetail
+                        embedded
+                        walletId="real-wallet"
+                        chainId={BTC}
+                        tick="BARK"
+                        kind="token"
+                        quantity="40"
+                        divisibility={0}
+                        fiatRate={null}
+                        onBack={() => {}}
+                    />
+                </HoldingValueContext.Provider>
+            </MessagingProvider>,
+        );
+
+        const hero = await screen.findByRole('region', { name: 'BARK' });
+        const swap = within(hero).getByRole('button', { name: 'Show balance in BARK' });
+        expect(swap).toBeEnabled();
+        expect(within(hero).getByText('Value')).toBeTruthy();
+        expect(within(hero).getByText('No price yet')).toBeTruthy();
+        expect(screen.getByText('No market price for BARK yet')).toBeTruthy();
+        expect(document.querySelector('[data-chart-scale]')).toBeNull();
+
+        fireEvent.click(swap);
+        expect(within(hero).getByText('Balance')).toBeTruthy();
+        expect(await screen.findByRole('img', { name: /^Balance over 1W/ })).toBeTruthy();
+    });
 });

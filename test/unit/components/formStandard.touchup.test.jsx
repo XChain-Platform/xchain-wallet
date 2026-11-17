@@ -9,6 +9,7 @@
 // style; NetworkField notSource; RadioGroup option icons).
 
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
 import {
@@ -66,6 +67,11 @@ describe('FromSection touch-up props', () => {
 });
 
 describe('FormSection touch-up props', () => {
+    it('uses the standard row hover fill for every section header', () => {
+        const css = readFileSync('packages/core/src/shared/components/formStandard/formStandard.module.css', 'utf8');
+        expect(css).toMatch(/\.sectionHeader\s*\{[^}]*--xc-button-hover-bg:\s*var\(--xc-row-hover-bg\);[^}]*--xc-button-hover-border:\s*transparent;/s);
+    });
+
     it('marks the main section and puts a tag after Optional', () => {
         const { container } = render(
             <FormSection id="locks" title="Locks" optional main tag={<span>Irreversible</span>} summary="Not set">

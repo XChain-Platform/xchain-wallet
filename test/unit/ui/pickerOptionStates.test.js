@@ -36,7 +36,9 @@ describe('picker option state colors', () => {
         expect(tokenSource).toContain('<BalanceList');
         expect(balanceSource).toMatch(/data-xc-row-state=\{clickable \? '' : undefined\}/);
         expect(balanceSource).toMatch(/data-selected=\{selected \? 'true' : undefined\}/);
-        expect(balance).toMatch(/\.row > \.rowContent:is\(:hover, :active\)\s*\{[^}]*background:\s*transparent/s);
+        expect(balance).toMatch(/\.row\.row\[data-xc-row-state\]:hover\s*\{[^}]*background:\s*var\(--xc-row-hover-bg\)/s);
+        expect(balance).toMatch(/\.row\.row\[data-xc-row-state\]:active\s*\{[^}]*background:\s*var\(--xc-row-hover-bg\)/s);
+        expect(balance).toMatch(/\.row\.row > \.rowContent\.rowContent:is\([\s\S]*?:hover,[\s\S]*?:active,[\s\S]*?\)\s*\{[^}]*background:\s*transparent/s);
         expect(rowStates).toMatch(/\[data-xc-row-state\][^{]*:hover\s*\{[^}]*background:\s*var\(--xc-row-hover-bg\)/s);
         expect(rowStates).toMatch(/\[data-selected='true'\][^)]*\)\s*\{[^}]*background:\s*var\(--xc-row-active-bg\)/s);
 

@@ -66,6 +66,15 @@ describe('<TokenPicker> selection hand-off', () => {
         }));
     });
 
+    it('marks the current asset with the shared selected-row state', async () => {
+        mountPicker({ selectedKey: `${CHAIN}:BTC` });
+
+        const current = await screen.findByRole('button', {
+            name: (name) => name.startsWith('Select Bitcoin on Bitcoin, '),
+        });
+        expect(current).toHaveAttribute('aria-current', 'true');
+    });
+
     it('restores the rows when the search is cleared', async () => {
         mountPicker();
         await screen.findAllByText(LONG_TICKER);

@@ -103,6 +103,12 @@ function renderTestnetCoin(messaging = testnetCoinMessaging(), { divisibility = 
     return messaging;
 }
 
+async function chooseBalance(name, tick) {
+    const hero = await screen.findByRole('region', { name });
+    const button = within(hero).queryByRole('button', { name: `Show balance in ${tick}` });
+    if (button) fireEvent.click(button);
+}
+
 function tokenMessaging({ chainId = REGTEST, network = 'regtest', balance = '5' } = {}) {
     const nowSec = Math.floor(Date.now() / 1000);
     return {
@@ -138,6 +144,7 @@ function TitleProbe({ view }) {
 describe('a coin on a test network', () => {
     it('charts its balance from the wallet rows, so its blue hero has a chart and range buttons', async () => {
         const messaging = renderTestnetCoin();
+        await chooseBalance('Bitcoin', 'BTC');
         const hero = await screen.findByRole('region', { name: 'Bitcoin' });
         const stack = hero.closest('[class*="heroStack"]');
         expect(stack?.className).toMatch(/heroStackWithChart/);
@@ -159,6 +166,7 @@ describe('a coin on a test network', () => {
     it('reads the rows once for the hero line and the History tab, the same reads at 1 and 20 rows', async () => {
         const readsAt = async (count) => {
             const messaging = renderTestnetCoin(testnetCoinMessaging({ rows: coinRows(Math.floor(Date.now() / 1000), count) }));
+            await chooseBalance('Bitcoin', 'BTC');
             await screen.findByRole('region', { name: 'Balance chart' });
             fireEvent.click(screen.getByRole('tab', { name: 'History' }));
             const panel = await waitFor(() => {
@@ -181,6 +189,7 @@ describe('a coin on a test network', () => {
 
     it('takes the chain\'s decimals when the row did not carry its divisibility', async () => {
         renderTestnetCoin(testnetCoinMessaging(), { divisibility: null });
+        await chooseBalance('Bitcoin', 'BTC');
         const chart = await screen.findByRole('region', { name: 'Balance chart' });
         const line = await within(chart).findByRole('img', { name: /^Balance over 1W/ });
         // Read in whole BTC, the 0.5 receive steps the line (never a flat line at 0 units).
@@ -195,6 +204,7 @@ describe('the change pill', () => {
                 <TokenDetail walletId="w1" chainId={REGTEST} tick="MYTOKEN" quantity="5" divisibility={0} onBack={() => {}} />
             </MessagingProvider>,
         );
+        await chooseBalance('MYTOKEN', 'MYTOKEN');
         const chart = await screen.findByRole('region', { name: 'Balance chart' });
         await within(chart).findByRole('img', { name: /^Balance over 1W/ });
         expect(screen.queryByLabelText(CHANGE_PILL)).toBeNull();
@@ -202,6 +212,7 @@ describe('the change pill', () => {
 
     it('is left off a coin\'s balance line on a test network', async () => {
         renderTestnetCoin();
+        await chooseBalance('Bitcoin', 'BTC');
         const chart = await screen.findByRole('region', { name: 'Balance chart' });
         await within(chart).findByRole('img', { name: /^Balance over 1W/ });
         expect(screen.queryByLabelText(CHANGE_PILL)).toBeNull();

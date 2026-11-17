@@ -382,15 +382,22 @@ const SOCIAL_SERVICE_HOSTS = {
 
 function normalizeSocialEntry(entry) {
     if (!entry || typeof entry !== 'object') return null;
+    const value = typeof entry.data === 'string' ? entry.data : '';
+    const claimedPlatform = String(entry.type || 'url').toLowerCase();
     const url = normalizeMediaUrl(entry.data);
-    if (!url) return null;
+    if (!url) return value ? {
+        platform: claimedPlatform,
+        claimedPlatform,
+        host: '',
+        url: null,
+        value,
+    } : null;
     let host;
     try {
         host = new URL(url).hostname.toLowerCase();
     } catch {
         return null;
     }
-    const claimedPlatform = String(entry.type || 'url').toLowerCase();
     const expectedHosts = SOCIAL_SERVICE_HOSTS[claimedPlatform] || [];
     const hostMatches = expectedHosts.some(
         (expected) => host === expected || host.endsWith(`.${expected}`),
@@ -412,13 +419,33 @@ function normalizeSocialEntry(entry) {
  * @returns {string | null}
  */
 export function descriptionJsonUrl(description) {
+    return tisDescriptionReference(description)?.url || null;
+}
+
+export const MAX_TIS_DOCUMENT_BYTES = 512 * 1024;
+const TIS_HASH_RE = /^[a-f0-9]{64}$/i;
+const ORDINALS_JSON_HOST = ['inscription-decoder', 'vercel', 'app'].join('.');
+const ORDINALS_JSON_BASE = `https://${ORDINALS_JSON_HOST}/api/image?type=json&tx=`;
+
+/**
+ * Resolve a supported TIS description pointer without accepting active or
+ * local schemes. The optional HTTPS suffix is a SHA-256 digest of the exact
+ * response bytes, not a display title.
+ *
+ * @param {string | null | undefined} description
+ * @returns {{ url: string, expectedHash: string | null } | null}
+ */
+export function tisDescriptionReference(description) {
     if (!description || typeof description !== 'string') return null;
     let t = description.trim();
     if (!t) return null;
-    // Strip ;title suffix used by the legacy shorthand
-    // ("https://.../JDOG.json;JDOG token info").
-    const semi = t.indexOf(';');
-    if (semi > 0 && /^https?:\/\//i.test(t)) {
+    let expectedHash = null;
+    const semi = t.lastIndexOf(';');
+    if (semi > 0 && /^https:\/\//i.test(t)) {
+        const suffix = t.slice(semi + 1).trim();
+        if (TIS_HASH_RE.test(suffix)) expectedHash = suffix.toLowerCase();
+        // Preserve the historical `;title` fetch form, but only a 64-hex
+        // suffix is security material and therefore enforced.
         t = t.slice(0, semi).trim();
     }
     // Arweave gateway "/x.json" suffix trick: drop it; the gateway 404s.
@@ -429,38 +456,54 @@ export function descriptionJsonUrl(description) {
             t = arweavePrefix + suffix.slice(0, -'/x.json'.length);
         }
     }
-    if (/^ipfs:\/\//i.test(t)) {
-        return `${IPFS_GATEWAY_BASE}/${t.slice('ipfs://'.length)}`;
+    if (/^ipfs:/i.test(t)) {
+        const ref = t.replace(/^ipfs:(\/\/)?/i, '').trim();
+        return ref ? { url: `${IPFS_GATEWAY_BASE}/${ref}`, expectedHash: null } : null;
+    }
+    if (/^ord:/i.test(t)) {
+        let ref = t.replace(/^ord:/i, '').trim();
+        if (!ref) return null;
+        if (!TIS_HASH_RE.test(ref)) {
+            try {
+                const bytes = Uint8Array.from(atob(ref), (char) => char.charCodeAt(0));
+                ref = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+            } catch {
+                return null;
+            }
+        }
+        return TIS_HASH_RE.test(ref)
+            ? { url: `${ORDINALS_JSON_BASE}${ref.toLowerCase()}`, expectedHash: null, viaExplorer: true }
+            : null;
     }
     if (/^ar:/i.test(t)) {
-        return `${ARWEAVE_GATEWAY_BASE}/${t.replace(/^ar:/i, '')}`;
+        const ref = t.replace(/^ar:/i, '').trim();
+        return ref ? { url: `${ARWEAVE_GATEWAY_BASE}/${ref}`, expectedHash: null } : null;
     }
-    if (t.toLowerCase().startsWith(arweavePrefix.toLowerCase())) return t;
-    if (/^https?:\/\//i.test(t) && /\.json(?:[?#]|$)/i.test(t)) return t;
-    // Bare "host/path.json": promote to https.
-    if (isBareHostPathJsonUrl(t)) {
-        return 'https://' + t;
+    if (t.toLowerCase().startsWith(arweavePrefix.toLowerCase())) {
+        return { url: t, expectedHash };
+    }
+    if (/^https:\/\//i.test(t) && /\.json(?:[?#]|$)/i.test(t)) {
+        return { url: t, expectedHash };
     }
     return null;
 }
 
-// Replaces /^[^\s/]+\.[^\s/]+\/.+\.json(?:[?#]|$)/i (js/polynomial-redos).
-// Both `[^\s/]+` groups admit '.', so a string with many dots and no
-// slash forces the regex to try every way of splitting them before
-// failing: exponential backtracking. Since neither group may contain a
-// slash, the whole "host" portion is exactly the text before the
-// first '/', so this checks the same thing directly: that prefix has
-// no whitespace and a dot that isn't its very first or very last
-// character (equivalent to "some split point k with 0<k<len-1"), then
-// the remainder is matched with the original (unambiguous) suffix
-// regex.
-function isBareHostPathJsonUrl(t) {
-    const slash = t.indexOf('/');
-    if (slash <= 0) return false;
-    const hostPart = t.slice(0, slash);
-    if (/\s/.test(hostPart)) return false;
-    if (!hostPart.slice(1, -1).includes('.')) return false;
-    return /^\/.+\.json(?:[?#]|$)/i.test(t.slice(slash));
+function explorerRelayUrl(sdk, target) {
+    if (typeof sdk?.fileRawUrl !== 'function') return null;
+    try {
+        const relay = new URL(sdk.fileRawUrl('0'));
+        if (relay.protocol !== 'https:') return null;
+        const parts = relay.pathname.split('/').filter(Boolean);
+        const apiAt = parts.indexOf('api');
+        if (apiAt < 1) return null;
+        relay.pathname = `/${parts.slice(0, apiAt).join('/')}/relay`;
+        relay.search = '';
+        relay.hash = '';
+        relay.searchParams.set('url', target);
+        return relay.href;
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -639,10 +682,12 @@ function tisEntryToMedia(entry) {
         && typeof objectEntry.data_ref === 'string' && objectEntry.data_ref)
         ? objectEntry.data_ref : null;
     const normalizedUrl = dataRef ? null : normalizeMediaUrl(data);
-    if (!normalizedUrl && !dataRef) return null;
+    const source = typeof data === 'string' ? data : null;
+    if (!normalizedUrl && !dataRef && !source) return null;
     const locked = Boolean(objectEntry?.locked);
     return {
         url: locked ? null : normalizedUrl,
+        source,
         dataRef,
         type: objectEntry?.type ? String(objectEntry.type) : null,
         name: objectEntry?.name ? String(objectEntry.name) : null,
@@ -685,6 +730,7 @@ export function tisToMediaBundle(doc) {
         audio: /** @type {TisMediaEntry[]} */ ([]),
         video: /** @type {TisMediaEntry[]} */ ([]),
         website: null,
+        websiteText: null,
         websites: /** @type {string[]} */ ([]),
         socials: /** @type {TisSocialEntry[]} */ ([]),
         files: /** @type {TisFileEntry[]} */ ([]),
@@ -723,21 +769,19 @@ export function tisToMediaBundle(doc) {
             // String shorthand → plaintext URL file.
             if (typeof f === 'string') {
                 const url = normalizeMediaUrl(f);
-                if (!url) return null;
-                return {
-                    url, name: null, type: null, dataRef: null,
-                    locked: false, packId: null, title: null, hash: null, size: null,
-                };
+                return { url, source: f, name: null, title: null, type: null, dataRef: null, hash: null, size: null, locked: false, packId: null };
             }
             // Object form supports: { data: <url>, data_ref: 'action:<index>',
             // name, type, locked, pack_id }. data_ref takes precedence over data
             // when both are present (on-chain reference wins over off-chain URL).
             const dataRef = typeof f.data_ref === 'string' && f.data_ref ? f.data_ref : null;
             const normalizedUrl = dataRef ? null : normalizeMediaUrl(f.data);
-            if (!dataRef && !normalizedUrl) return null;
+            const source = typeof f.data === 'string' ? f.data : null;
+            if (!dataRef && !normalizedUrl && !source) return null;
             const locked = Boolean(f.locked);
             return {
                 url: locked ? null : normalizedUrl,
+                source,
                 dataRef,
                 name: (f.name) ? String(f.name) : null,
                 title: (f.title) ? String(f.title) : null,
@@ -764,7 +808,8 @@ export function tisToMediaBundle(doc) {
     const socials = (Array.isArray(doc.social) ? doc.social : [])
         .map(normalizeSocialEntry)
         .filter(Boolean);
-    const website = typeof doc.website === 'string' ? normalizeMediaUrl(doc.website) : null;
+    const websiteText = typeof doc.website === 'string' ? doc.website : null;
+    const website = websiteText ? normalizeMediaUrl(websiteText) : null;
     // Build the de-duplicated websites array. legacyJsonToTis lifts
     // legacy `website_alternate1/2` and native TIS `websites: []`
     // entries onto `doc.websites`; here we normalize each URL and drop
@@ -833,6 +878,7 @@ export function tisToMediaBundle(doc) {
         audio,
         video,
         website,
+        websiteText,
         websites,
         socials,
         files,
@@ -877,11 +923,11 @@ function extractMediaUrlsFromText(text) {
  * @param {string} tick
  * @param {any} raw                                     explorer row
  * @param {ReturnType<typeof tisToMediaBundle> | null} [tisBundle]
- * @param {{ allowRemoteMedia?: boolean }} [options]
+ * @param {{ allowRemoteMedia?: boolean, tisReadError?: boolean }} [options]
  * @returns {TokenInfo}
  */
 export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options = {}) {
-    const { allowRemoteMedia = true } = options;
+    const { allowRemoteMedia = true, tisReadError = false } = options;
     const row = Array.isArray(raw) ? raw[0] : raw;
     const onChainDescription = row?.info?.description ?? null;
     const creator = row?.info?.owner ?? null;
@@ -1016,12 +1062,13 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
     // since it's usually the human-readable version. The hero `imageUrl`
     // falls back to the regex extractor for tokens that didn't bother
     // with a TIS document.
-    const description = tisBundle?.description || onChainDescription;
+    const description = tisBundle?.description || (tisReadError ? null : onChainDescription);
     const name = tisBundle?.name || null;
     const images = allowRemoteMedia ? (tisBundle?.images || []) : [];
     const audio = allowRemoteMedia ? (tisBundle?.audio || []) : [];
     const video = allowRemoteMedia ? (tisBundle?.video || []) : [];
     const website = tisBundle?.website || null;
+    const websiteText = tisBundle?.websiteText || null;
     const websites = tisBundle?.websites || [];
     const socials = tisBundle?.socials || [];
     const files = tisBundle?.files || [];
@@ -1076,6 +1123,7 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
         audio,
         video,
         website,
+        websiteText,
         websites,
         socials,
         files,
@@ -1087,6 +1135,7 @@ export function normalizeTokenInfo(chainId, tick, raw, tisBundle = null, options
         pgpsig,
         htmlAvailable,
         tisAvailable,
+        tisReadError,
         dns,
     };
 }
@@ -1102,6 +1151,155 @@ function truthyFlag(v) {
     return v === true || v === 1 || String(v).trim() === '1';
 }
 
+function isRecord(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function optionalString(record, key, maxLength) {
+    return record[key] === undefined
+        || (typeof record[key] === 'string' && record[key].length <= maxLength);
+}
+
+function uniqueJsonItems(items) {
+    const seen = new Set();
+    for (const item of items) {
+        let key;
+        try { key = JSON.stringify(item); } catch { return false; }
+        if (seen.has(key)) return false;
+        seen.add(key);
+    }
+    return true;
+}
+
+function validArray(record, key, validateItem, unique = false) {
+    if (record[key] === undefined) return true;
+    return Array.isArray(record[key])
+        && (!unique || uniqueJsonItems(record[key]))
+        && record[key].every(validateItem);
+}
+
+function validMediaEntry(kind, entry, requireData, validateGating) {
+    if (!isRecord(entry)) return false;
+    const enums = {
+        images: ['icon', 'standard', 'large', 'hires'],
+        audio: ['m4a', 'mp3', 'wav'],
+        video: ['mp4', 'mov', 'wmv'],
+    };
+    if (entry.type === undefined) return false;
+    if (enums[kind] && !enums[kind].includes(entry.type)) return false;
+    if (!optionalString(entry, 'data', 255)
+        || !optionalString(entry, 'name', 255)
+        || !optionalString(entry, 'hash', 64)) return false;
+    if (requireData) {
+        if (typeof entry.data !== 'string') return false;
+    } else if (typeof entry.data !== 'string' && typeof entry.data_ref !== 'string') {
+        return false;
+    }
+    if (!validateGating) return true;
+    return optionalString(entry, 'title', 255)
+        && optionalString(entry, 'data_ref', 255)
+        && (entry.locked === undefined || typeof entry.locked === 'boolean')
+        && optionalString(entry, 'pack_id', 255);
+}
+
+function validTisCore(doc) {
+    if (!isRecord(doc)
+        || typeof doc.tick !== 'string'
+        || typeof doc.name !== 'string'
+        || doc.name.length > 127
+        || !optionalString(doc, 'description', 2048)
+        || !optionalString(doc, 'html', 10_000)
+        || !optionalString(doc, 'website', 255)) return false;
+    if (doc.website !== undefined && !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(doc.website)) return false;
+    if (doc.owner !== undefined) {
+        if (!isRecord(doc.owner)
+            || !optionalString(doc.owner, 'name', 128)
+            || !optionalString(doc.owner, 'title', 128)
+            || !optionalString(doc.owner, 'organization', 128)) return false;
+    }
+    if (!validArray(doc, 'contacts', (entry) => isRecord(entry)
+        && ['address', 'email', 'phone', 'fax', 'url'].includes(entry.type)
+        && typeof entry.data === 'string' && entry.data.length <= 255, true)) return false;
+    if (!validArray(doc, 'categories', (entry) => isRecord(entry)
+        && ['main', 'sub', 'other'].includes(entry.type)
+        && typeof entry.data === 'string' && entry.data.length <= 255, true)) return false;
+    if (!validArray(doc, 'social', (entry) => isRecord(entry)
+        && typeof entry.type === 'string'
+        && typeof entry.data === 'string' && entry.data.length <= 255)) return false;
+    if (!validArray(doc, 'dns', (entry) => isRecord(entry)
+        && ['A', 'AAAA', 'ALIAS', 'CAA', 'CNAME', 'NS', 'SRV', 'TXT', 'URL', 'MX', ''].includes(entry.type)
+        && typeof entry.host === 'string' && entry.host.length <= 255
+        && typeof entry.value === 'string' && entry.value.length <= 255
+        && (entry.priority === undefined || Number.isInteger(entry.priority))
+        && (entry.type !== 'MX' || Number.isInteger(entry.priority)), true)) return false;
+    if (doc.packs !== undefined) {
+        if (!isRecord(doc.packs)) return false;
+        for (const pack of Object.values(doc.packs)) {
+            if (!isRecord(pack)
+                || !optionalString(pack, 'name', 255)
+                || !optionalString(pack, 'description', 2048)) return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Schema-equivalent validation for the published v1.0.0 through v1.1.2
+ * contracts. v1.0.0 requires `data` and leaves later gating keys open;
+ * v1.1.1 and v1.1.2 accept `data_ref` and type those keys. v1.1.2's
+ * corrected DNS requirements are enforced for every version.
+ */
+export function validateTisDocument(doc) {
+    if (!validTisCore(doc)) return false;
+    const kinds = ['images', 'audio', 'video', 'files'];
+    const validatesAs = (requireData, validateGating) => kinds.every((kind) => (
+        validArray(doc, kind, (entry) => validMediaEntry(kind, entry, requireData, validateGating), true)
+    ));
+    return validatesAs(false, true) || validatesAs(true, false);
+}
+
+async function responseTextWithinLimit(response) {
+    const announced = Number(response?.headers?.get?.('content-length'));
+    if (Number.isFinite(announced) && announced > MAX_TIS_DOCUMENT_BYTES) return null;
+    if (typeof response?.body?.getReader === 'function') {
+        const reader = response.body.getReader();
+        const chunks = [];
+        let length = 0;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = value instanceof Uint8Array ? value : new Uint8Array(value);
+            length += chunk.length;
+            if (length > MAX_TIS_DOCUMENT_BYTES) {
+                await reader.cancel();
+                return null;
+            }
+            chunks.push(chunk);
+        }
+        const bytes = new Uint8Array(length);
+        let offset = 0;
+        for (const chunk of chunks) {
+            bytes.set(chunk, offset);
+            offset += chunk.length;
+        }
+        return { text: new TextDecoder().decode(bytes), bytes };
+    }
+    if (typeof response?.arrayBuffer === 'function') {
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.length > MAX_TIS_DOCUMENT_BYTES) return null;
+        return { text: new TextDecoder().decode(bytes), bytes };
+    }
+    const text = await response.text();
+    const bytes = new TextEncoder().encode(text);
+    return bytes.length <= MAX_TIS_DOCUMENT_BYTES ? { text, bytes } : null;
+}
+
+async function sha256Hex(bytes) {
+    if (!globalThis.crypto?.subtle) return null;
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 /**
  * Fetch a token's TIS document (or legacy CoinDaddy JSON) and convert it
  * into the wallet's media bundle. Returns null when the description
@@ -1113,16 +1311,24 @@ function truthyFlag(v) {
  * @param {string} args.description                      on-chain description string
  * @param {typeof fetch} args.fetch                      injected for testability
  * @param {AbortSignal} [args.signal]                    cancels in-flight fetch
+ * @param {any} [args.sdk]                              configured explorer client
  * @returns {Promise<ReturnType<typeof tisToMediaBundle> | null>}
  */
-export async function fetchTisBundle({ description, fetch: fetchImpl, signal }) {
-    const jsonUrl = descriptionJsonUrl(description);
-    if (!jsonUrl || typeof fetchImpl !== 'function') return null;
+export async function fetchTisBundle({ description, fetch: fetchImpl, signal, sdk }) {
+    const reference = tisDescriptionReference(description);
+    if (!reference || typeof fetchImpl !== 'function') return null;
     try {
-        const resp = await fetchWithRetry(fetchImpl, jsonUrl, { signal, redirect: 'follow' });
+        const fetchUrl = reference.viaExplorer
+            ? explorerRelayUrl(sdk, reference.url)
+            : reference.url;
+        if (!fetchUrl) return null;
+        const resp = await fetchWithRetry(fetchImpl, fetchUrl, { signal, redirect: 'follow' });
         if (!resp || !resp.ok) return null;
-        const text = await resp.text();
-        return parseTisText(text);
+        if (resp.url && !/^https:\/\//i.test(resp.url)) return null;
+        const body = await responseTextWithinLimit(resp);
+        if (!body) return null;
+        if (reference.expectedHash && await sha256Hex(body.bytes) !== reference.expectedHash) return null;
+        return parseTisText(body.text);
     } catch {
         return null;
     }
@@ -1160,8 +1366,10 @@ export async function fetchOnChainTisBundle({ sdk, actionIndex, coin = null }) {
         const u8 = bytes instanceof Uint8Array
             ? bytes
             : new Uint8Array(/** @type {any} */ (bytes));
-        const text = new TextDecoder().decode(u8);
-        return parseTisText(text) ?? rawImageBundle(u8, actionIndex, coin);
+        const parsed = u8.length <= MAX_TIS_DOCUMENT_BYTES
+            ? parseTisText(new TextDecoder().decode(u8))
+            : null;
+        return parsed ?? rawImageBundle(u8, actionIndex, coin);
     } catch {
         return null;
     }
@@ -1200,11 +1408,8 @@ function parseTisText(text) {
     if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
     let parsed;
     try { parsed = JSON.parse(trimmed); } catch { return null; }
-    // The legacy adapter is idempotent for native TIS docs (already
-    // has images[]/audio[]/video[]/social[]), so we run it
-    // unconditionally to handle both shapes.
-    const tis = legacyJsonToTis(parsed);
-    return tisToMediaBundle(tis);
+    if (!validateTisDocument(parsed)) return null;
+    return tisToMediaBundle(parsed);
 }
 
 /**
@@ -1278,6 +1483,7 @@ export async function tokenInfoFor({
         }
     }
     let tisBundle = null;
+    let tisAttempted = false;
     if (metadataFetchEnabled && !demo) {
         const row = Array.isArray(raw) ? raw[0] : raw;
         const description = row?.info?.description;
@@ -1287,13 +1493,16 @@ export async function tokenInfoFor({
         const resolvedFetch = fetchImpl
             || (typeof fetch === 'function' ? fetch : null);
         if (actionRef) {
+            tisAttempted = true;
             // On-chain TIS document; resolve through the same explorer
             // the token row came from (no external fetch).
             tisBundle = await fetchOnChainTisBundle({ sdk, actionIndex: actionRef[2], coin: actionRef[1] || null });
-        } else if (description && resolvedFetch) {
+        } else if (description && resolvedFetch && tisDescriptionReference(description)) {
+            tisAttempted = true;
             tisBundle = await fetchTisBundle({
                 description,
                 fetch: resolvedFetch,
+                sdk,
             });
         }
     }
@@ -1306,6 +1515,7 @@ export async function tokenInfoFor({
     if (!demo) resolveMediaDataRefs(tisBundle, sdk);
     const info = normalizeTokenInfo(chainId, tick, raw, tisBundle, {
         allowRemoteMedia: metadataFetchEnabled && !demo,
+        tisReadError: tisAttempted && !tisBundle,
     });
     // Marks a record built without the explorer's answer, so callers neither
     // cache it nor present its empty fields as the token's real state.

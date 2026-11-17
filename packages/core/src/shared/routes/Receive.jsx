@@ -1030,6 +1030,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 accountId={accountId}
                 chainId={activeChainId}
                 onChainChange={setActiveChainId}
+                selectedAddress={address}
                 onPick={(a) => {
                     addressManuallySelectedRef.current = true;
                     addressTypeRef.current = a?.addressType || addressType;
@@ -1056,6 +1057,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
                 networkFilter={coinFromChainId(activeChainId)}
                 // A picker of the coin and its tokens is titled Asset.
                 title={t('send.asset')}
+                selectedKey={`${activeChainId}:${reqTick || nativeTicker}`}
                 onSelect={(sel) => {
                     if (sel?.chainId === activeChainId && sel?.tick) {
                         setTokenPick({ chainId: sel.chainId, tick: String(sel.tick), divisibility: sel.divisibility ?? null });

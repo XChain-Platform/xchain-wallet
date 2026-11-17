@@ -23,6 +23,8 @@
 }
 
 .sectionHeader {
+    --xc-button-hover-bg: var(--xc-row-hover-bg);
+    --xc-button-hover-border: transparent;
     border-radius: inherit;
     width: 100%;
     min-width: 0;

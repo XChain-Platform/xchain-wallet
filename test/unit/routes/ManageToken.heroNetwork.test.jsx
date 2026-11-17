@@ -18,13 +18,14 @@ const detailStyles = readFileSync(
     'utf8',
 );
 
-describe('ManageToken selects the owner identity header', () => {
+describe('ManageToken selects the shared token hero', () => {
     it('keeps the shared asset page in owner view', () => {
         expect(source).toContain('<TokenDetail');
         expect(source).toContain('ownerView');
         expect(source).not.toContain('<Screen');
-        expect(detailSource).toContain('aria-label="Token identity"');
-        expect(detailSource).toContain('<TickerIcon chainId={chainId} tick={tick} context="list" />');
-        expect(detailStyles).toMatch(/\.manageIdentityIcon\s*\{[^}]*--xc-avatar-size-list:\s*48px/s);
+        expect(detailSource).toContain('Every coin and token surface uses the same Home-style');
+        expect(detailSource).toContain('showHeroChart ? `${homeTabsStyles.heroStack} ${homeTabsStyles.heroStackWithChart}`');
+        expect(detailSource).not.toContain('aria-label="Token identity"');
+        expect(detailStyles).toMatch(/\.cardCaptionIconWrap\s*\{/);
     });
 });

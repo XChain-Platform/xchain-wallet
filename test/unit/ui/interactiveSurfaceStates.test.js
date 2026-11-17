@@ -25,6 +25,7 @@ const surfaces = [
         hoverSelectors: ['.toggle:hover'],
         hoverBackground: 'var(--xc-control-bg-hover)',
         selectedSelector: '.pressed',
+        selectedToken: '--xc-toggle-selected-bg',
     },
     {
         // Every view toggle (Tabs and SegmentedControl) shares one sheet: a
@@ -41,15 +42,17 @@ const surfaces = [
         file: 'packages/core/src/ui/ListRow.module.css',
         base: '.interactive',
         hoverSelectors: ['.interactive:hover'],
-        hoverBackground: 'var(--xc-control-bg-hover)',
-        selectedSelector: "[aria-current='page']",
+        hoverBackground: 'var(--xc-row-hover-bg)',
+        selectedSelector: '[aria-current]',
+        selectedToken: '--xc-row-active-bg',
     },
     {
         file: 'packages/core/src/shared/routes/ActionsMenu.module.css',
         base: '.entry',
         hoverSelectors: ['.entry:hover'],
-        hoverBackground: 'var(--xc-control-bg-hover)',
+        hoverBackground: 'var(--xc-row-hover-bg)',
         selectedSelector: "[aria-current='page']",
+        selectedToken: '--xc-row-active-bg',
     },
     {
         file: 'packages/core/src/shared/components/CollectiblesView.module.css',

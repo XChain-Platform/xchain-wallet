@@ -94,7 +94,10 @@ const tokenInfoSrc = readFileSync(join(core, 'src', 'flows', 'tokenInfo.js'), 'u
 assert.ok(/projects/.test(tokenInfoSrc),
     'normalizeTokenInfo carries the explorer projects[] field');
 const tokenDetail = readFileSync(join(sharedRoutes, 'TokenDetail.jsx'), 'utf8');
-assert.ok(/<DetailRow label="Projects">/.test(tokenDetail), 'TokenDetail renders project membership in Details');
+assert.ok(/const projects = .*assetInfo\?\.projects/.test(tokenDetail),
+    'TokenDetail reads project membership into the Details profile');
+assert.ok(/Official: part of the <strong>\{project\.project\}<\/strong> project/.test(tokenDetail),
+    'TokenDetail renders official project membership in Details');
 // The issuer's actions are groups on the one asset page (TokenOwnerActions.jsx).
 const manageSrc = readFileSync(join(sharedRoutes, '..', 'components', 'TokenOwnerActions.jsx'), 'utf8');
 assert.ok(!/officialBanner/.test(manageSrc), 'the issuer groups draw no Official banner');

@@ -1,12 +1,16 @@
 // Copyright © 2025-2026 Dankest, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// A gated (locked) TIS entry is ciphertext on chain: the token page must keep it
+// visible as locked and must never hand its bytes to an img, audio or video
+// element or a download link. The Files tab builds its rows with
+// tokenFileEntries and draws each one with PublicFileTile.
+
 import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
-import { MediaSubpanel, tokenMediaBuckets } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
+import { PublicFileTile, tokenFileEntries } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
 
-const packs = { p1: { name: 'Bonus pack', description: 'extras' } };
 const locked = (extra = {}) => ({
     url: null, dataRef: 'action:7', type: null, name: null,
     locked: true, packId: 'p1', title: null, ...extra,
@@ -18,70 +22,36 @@ const open = (url, extra = {}) => ({
 
 afterEach(cleanup);
 
-describe('MediaSubpanel gated entries', () => {
-    it('renders a lock card instead of an audio element for a locked audio entry', () => {
-        const { container } = render(
-            <MediaSubpanel kind="audio" images={[]} audio={[locked({ name: 'Secret track' })]} video={[]} files={[]} packs={packs} />,
-        );
-        expect(container.querySelector('audio')).toBeNull();
-        expect(screen.getByRole('group', { name: 'Locked: Secret track' })).toBeTruthy();
-        expect(screen.getByText('Bonus pack')).toBeTruthy();
-    });
-
-    it('renders a lock card instead of a video element for a locked video entry', () => {
-        const { container } = render(
-            <MediaSubpanel kind="video" images={[]} audio={[]} video={[locked({ title: 'Teaser' })]} files={[]} packs={packs} />,
-        );
-        expect(container.querySelector('video')).toBeNull();
-        expect(screen.getByRole('group', { name: 'Locked: Teaser' })).toBeTruthy();
-    });
-
-    it('renders a lock card instead of an img for a locked image entry and keeps unlocked images', () => {
-        const { container } = render(
-            <MediaSubpanel
-                kind="image"
-                images={[locked(), open('https://example.test/a.png')]}
-                audio={[]}
-                video={[]}
-                files={[]}
-                packs={packs}
-            />,
-        );
-        expect(container.querySelectorAll('img')).toHaveLength(1);
-        expect(container.querySelector('img').getAttribute('src')).toBe('https://example.test/a.png');
-        expect(screen.getByRole('group', { name: 'Locked: Token-gated media' })).toBeTruthy();
-    });
-
-    it('shows a locked file as a lock card with no download link', () => {
-        const { container } = render(
-            <MediaSubpanel kind="files" images={[]} audio={[]} video={[]} files={[locked({ name: 'bonus.zip' })]} packs={packs} />,
-        );
-        expect(container.querySelector('a')).toBeNull();
-        expect(screen.getByRole('group', { name: 'Locked: bonus.zip' })).toBeTruthy();
-    });
-
-    it('renders unlocked audio exactly as before', () => {
-        const { container } = render(
-            <MediaSubpanel kind="audio" images={[]} audio={[open('https://example.test/a.mp3')]} video={[]} files={[]} packs={packs} />,
-        );
-        expect(container.querySelector('audio').getAttribute('src')).toBe('https://example.test/a.mp3');
-        expect(screen.queryByRole('group')).toBeNull();
+describe('tokenFileEntries gated entries', () => {
+    it('keeps locked entries of every kind without a URL', () => {
+        const entries = tokenFileEntries({
+            images: [locked({ name: 'Token-gated media', dataRef: 'action:7' })],
+            audio: [locked({ name: 'Secret track', dataRef: 'action:8' })],
+            video: [locked({ title: 'Teaser', dataRef: 'action:9' })],
+            files: [locked({ name: 'bonus.zip', dataRef: 'action:10' })],
+        });
+        expect(entries.map((e) => e.kind).sort()).toEqual(['audio', 'file', 'image', 'video']);
+        expect(entries.every((e) => e.locked && !e.url)).toBe(true);
     });
 });
 
-describe('tokenMediaBuckets gated entries', () => {
-    it('keeps locked entries without a URL and drops unlocked entries without one', () => {
-        const info = {
-            images: [locked({ type: 'large' }), open(null, { type: 'large' })],
-            audio: [locked(), open(null)],
-            video: [locked()],
-            files: [locked(), open('http://[bad')],
-        };
-        const out = tokenMediaBuckets(info);
-        expect(out.images).toHaveLength(1);
-        expect(out.audio).toHaveLength(1);
-        expect(out.video).toHaveLength(1);
-        expect(out.files).toHaveLength(1);
-        expect([...out.images, ...out.audio, ...out.video, ...out.files].every((e) => e.locked)).toBe(true);
+describe('PublicFileTile gated entries', () => {
+    it.each([
+        ['image', locked({ name: 'Token-gated media' })],
+        ['audio', locked({ name: 'Secret track' })],
+        ['video', locked({ title: 'Teaser' })],
+        ['file', locked({ name: 'bonus.zip' })],
+    ])('draws a locked %s entry with no media element and no link', (kind, entry) => {
+        const [file] = tokenFileEntries({ [kind === 'image' ? 'images' : kind === 'file' ? 'files' : kind]: [entry] });
+        const { container } = render(<PublicFileTile file={file} onOpenExternal={() => {}} />);
+        expect(container.querySelector('img, audio, video, a')).toBeNull();
+        expect(container.textContent).toContain('Locked: Yes');
+    });
+
+    it('still opens an unlocked image with its preview', () => {
+        const [file] = tokenFileEntries({ images: [open('https://example.test/a.png', { name: 'a.png' })] });
+        const { container } = render(<PublicFileTile file={file} onOpenExternal={() => {}} />);
+        expect(container.querySelector('img').getAttribute('src')).toBe('https://example.test/a.png');
+        expect(screen.getByRole('link', { name: 'Open a.png' })).toBeTruthy();
     });
 });

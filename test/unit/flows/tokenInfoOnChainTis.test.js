@@ -28,7 +28,7 @@ const TIS_JSON = JSON.stringify({
     tick: 'ART1',
     name: 'Art One',
     categories: [{ type: 'main', data: 'NFT' }],
-    images: [{ data_ref: 'action:101', type: 'image/png', name: 'art.png' }],
+    images: [{ data_ref: 'action:101', type: 'standard', name: 'art.png' }],
 });
 
 function sdkReturning(bytes) {

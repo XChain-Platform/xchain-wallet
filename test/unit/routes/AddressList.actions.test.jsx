@@ -294,6 +294,17 @@ describe('Address detail actions', () => {
         expect(screen.getByRole('button', { name: /Filter by network/ })).toBeInTheDocument();
     });
 
+    it('marks the address currently shown by the calling screen', async () => {
+        mount(messagingWith(), {
+            pickerMode: true,
+            onPick: vi.fn(),
+            pickerSelectedAddress: { id: 'addr-1', address: ADDRESS },
+        });
+
+        expect(await screen.findByRole('button', { name: `View address ${ADDRESS}` }))
+            .toHaveAttribute('aria-current', 'true');
+    });
+
     it('disables a picker row the form cannot use and says why', async () => {
         const onPick = vi.fn();
         mount(messagingWith(), {
