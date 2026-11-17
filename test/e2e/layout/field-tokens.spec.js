@@ -84,13 +84,14 @@ test('dark mode fields share the field tokens', async ({ page }, testInfo) => {
     try {
         await gotoSection(page, 'Settings');
         await page.getByRole('main').getByRole('button', { name: /^Advanced\b/ }).click();
-        await page.getByRole('main').getByRole('button', { name: /^Developer mode\b/ }).click();
-        const dev = page.getByRole('switch', { name: 'Turn on developer mode', exact: true });
-        if (!(await dev.isChecked())) await dev.click();
+        const dev = page.getByRole('switch', { name: 'Developer mode', exact: true });
+        if (!(await dev.isChecked())) {
+            await dev.click();
+            await expect(dev).toBeChecked();
+        }
         await snap('settings-Developer mode on');
-        // Back twice: row page to the Advanced group page, then to the index.
+        // Back once: the switch lives on the Advanced group page.
         const back = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
-        await back.click();
         await back.click();
         await page.getByRole('main').getByRole('button', { name: /^Network and Fees\b/ }).click();
         await page.getByRole('main').getByRole('button', { name: /^Network endpoints\b/i }).first().click();

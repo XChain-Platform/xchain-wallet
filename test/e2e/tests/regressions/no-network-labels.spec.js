@@ -4,9 +4,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
+    backToSettingsList,
     dismissIntroCarousel,
     expect,
     gotoSection,
+    openAutomaticDonations,
+    openSettings,
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
@@ -34,17 +37,16 @@ const TOP_LEVEL_ROUTES = [
     { name: 'Settings' },
 ];
 
-const SETTINGS_SUBPAGES = [
-    'This wallet',
-    'Display',
-    'Keyboard',
-    'Privacy',
-    'Safety',
-    'Backup',
-    'Fees',
-    'Connected sites',
-    'Automatic Donations',
+const SETTINGS_PAGES = [
     'About',
+    'Wallets',
+    'Security',
+    'Backup and Recovery',
+    'Privacy and Sites',
+    'Appearance',
+    'Notifications',
+    'Network and Fees',
+    'Advanced',
 ];
 
 const NETWORK_LABEL_RE = /\b(?:regtest|testnet)\b|Not mainnet/i;
@@ -171,23 +173,27 @@ test('a regtest demo wallet keeps network state and demo status out of the shell
             });
         }
 
-        for (const subpage of SETTINGS_SUBPAGES) {
+        for (const subpage of SETTINGS_PAGES) {
             const label = `Settings / ${subpage} at ${viewport.width}x${viewport.height}`;
             await test.step(label, async () => {
-                await gotoSection(page, 'Settings');
+                await openSettings(page);
                 const row = page.getByRole('main').getByRole('button', {
                     name: new RegExp(`^${escapeRegExp(subpage)}\\b(?! the )`),
                 });
-                // Phone layouts leave Keyboard out of Settings; wait for the
-                // list to render before deciding the row is absent.
-                await expect(page.getByRole('main').getByRole('button', { name: /^Display\b/ })).toBeVisible();
-                if (subpage === 'Keyboard' && await row.count() === 0) return;
                 await row.scrollIntoViewIfNeeded();
                 await row.click();
                 await expect(page.getByRole('heading', { level: 1, name: subpage, exact: true })).toBeVisible();
                 await expectCleanShell(page, label);
-                await page.getByRole('button', { name: 'Back to settings' }).click();
+                await backToSettingsList(page);
             });
         }
+
+        const donationsLabel = `Settings / Network and Fees / Automatic Donations at ${viewport.width}x${viewport.height}`;
+        await test.step(donationsLabel, async () => {
+            await openAutomaticDonations(page);
+            await expect(page.getByRole('heading', { level: 1, name: 'Automatic Donations', exact: true })).toBeVisible();
+            await expectCleanShell(page, donationsLabel);
+            await backToSettingsList(page);
+        });
     }
 });

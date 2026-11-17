@@ -10,6 +10,7 @@ describe('nextPaint', () => {
     });
 
     afterEach(() => {
+        vi.restoreAllMocks();
         vi.unstubAllGlobals();
     });
 
@@ -40,6 +41,30 @@ describe('nextPaint', () => {
 
         expect(settled).toBe(false);
         await vi.runAllTimersAsync();
+        await painted;
+        expect(settled).toBe(true);
+    });
+
+    it('resolves without requesting a frame when the document is hidden', async () => {
+        const frame = vi.fn();
+        vi.stubGlobal('requestAnimationFrame', frame);
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+
+        await nextPaint();
+
+        expect(frame).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('resolves after 50 ms when a visible document receives no frame', async () => {
+        vi.stubGlobal('requestAnimationFrame', vi.fn());
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+        let settled = false;
+        const painted = nextPaint().then(() => { settled = true; });
+
+        await vi.advanceTimersByTimeAsync(49);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
         await painted;
         expect(settled).toBe(true);
     });

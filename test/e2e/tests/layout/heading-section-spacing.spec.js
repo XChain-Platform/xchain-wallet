@@ -20,6 +20,7 @@ import {
     dismissIntroCarousel,
     expect,
     gotoSection,
+    openAutomaticDonations,
     openSettings,
     test,
     unlockedShell,
@@ -35,7 +36,7 @@ const SIZES = [
 const NAV_ROUTES = ['History', 'Marketplace', 'Contracts', 'Dispensers', 'Contacts', 'Lists', 'Payments due'];
 
 // Settings screens whose section headings or card titles are checked.
-const SETTINGS_SECTIONS = ['Display', 'Connected sites', 'Automatic Donations', 'Keyboard'];
+const SETTINGS_SECTIONS = ['Display', 'Connected sites', 'Keyboard'];
 
 async function enterDemoWallet(page) {
     await page.goto('/');
@@ -166,10 +167,21 @@ for (const [width, height] of SIZES) {
             expectScreen(`Settings > ${section}`, screen, tokens, { stackedGap: false });
             // Per-network blocks and shortcut groups title themselves with the
             // card or section role, never a raw size.
-            const role = section === 'Keyboard' ? tokens.sectionTitle : section === 'Automatic Donations' ? tokens.cardTitle : null;
+            const role = section === 'Keyboard' ? tokens.sectionTitle : null;
             for (const chain of role ? screen.bare : []) {
                 expect(chain, `Settings > ${section}: heading "${chain.text}"`).toMatchObject(role);
             }
+        }
+
+        // Automatic Donations is a Network and Fees child page, so exercise it
+        // separately from the Settings landing-page rows above.
+        await gotoSection(page, 'Home');
+        await openAutomaticDonations(page);
+        await page.waitForTimeout(400);
+        const donations = await page.evaluate(readScreen);
+        expectScreen('Settings > Automatic Donations', donations, tokens, { stackedGap: false });
+        for (const chain of donations.bare) {
+            expect(chain, `Settings > Automatic Donations: heading "${chain.text}"`).toMatchObject(tokens.cardTitle);
         }
     });
 }
