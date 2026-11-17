@@ -6556,6 +6556,43 @@ export function createBackgroundHost(deps) {
         return validateActionDryRun({ ...req, sdkRegistry });
     });
 
+    // Live network fee tiers from the encoder. The encoder names the middle
+    // tier "medium" while the wallet calls it "normal", so normalize that one
+    // boundary here for every shell.
+    host.register('sdk.estimateFee', async (req, { sdkRegistry }) => {
+        const chainId = req?.chainId;
+        if (typeof chainId !== 'string' || !chainId) {
+            throw new Error('sdk.estimateFee: chainId is required');
+        }
+        const sdk = sdkRegistry.get(chainId);
+        const owner = typeof sdk?.getFeeTiers === 'function'
+            ? sdk
+            : (typeof sdk?.encoder?.getFeeTiers === 'function'
+                || typeof sdk?.encoder?.estimate_fee === 'function')
+                ? sdk.encoder
+                : null;
+        const read = owner === sdk
+            ? sdk.getFeeTiers
+            : (owner?.getFeeTiers ?? owner?.estimate_fee);
+        if (typeof read !== 'function') return null;
+        try {
+            const tiers = await read.call(owner);
+            if (!tiers || typeof tiers !== 'object') return null;
+            const tier = (rate) => Number.isFinite(rate) && rate > 0 ? { rate } : null;
+            const low = tier(tiers.low);
+            const normal = tier(tiers.medium ?? tiers.normal);
+            const fast = tier(tiers.high ?? tiers.fast);
+            if (!low && !normal && !fast) return null;
+            return {
+                ...(low ? { low } : {}),
+                ...(normal ? { normal } : {}),
+                ...(fast ? { fast } : {}),
+            };
+        } catch {
+            return null;
+        }
+    });
+
     // The chain's published fee schedule (the indexer's /feeschedule: gas
     // table, gas price, oracle prices), which useFeeSchedule reads so a form
     // can show a fee before the action is complete enough to quote. Display

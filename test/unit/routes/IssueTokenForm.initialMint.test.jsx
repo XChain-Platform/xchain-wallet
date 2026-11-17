@@ -258,7 +258,7 @@ describe('IssueTokenForm initial mint', () => {
         // Custom seeds from the new chain's Normal rate, not the old one.
         expect(screen.getByRole('slider', { name: 'Network fee' })).toHaveAttribute(
             'aria-valuetext',
-            'Custom: 1 DOGE/kB',
+            'Custom: 0.02 DOGE/kB',
         );
         expect(networkFeeEditor()).toBeInTheDocument();
     });

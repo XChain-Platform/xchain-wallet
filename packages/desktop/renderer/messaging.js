@@ -481,6 +481,11 @@ export function getFeeSchedule(opts) {
     return /** @type {any} */ (sendMessage('sdk.getFeeSchedule', opts));
 }
 
+/** Suggested network fee tiers from the chain encoder. @param {{ chainId: string }} opts */
+export function estimateFee(opts) {
+    return /** @type {any} */ (sendMessage('sdk.estimateFee', opts));
+}
+
 /**
  * §20 / Cluster W FOLLOWUP 5: generic watcher-mode encode-only helper
  * for the non-Send action surface.

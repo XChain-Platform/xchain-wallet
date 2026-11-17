@@ -286,11 +286,7 @@ const coreRoot = join(wsRoot, 'packages', 'core', 'src');
 
 // Hooks core probes on purpose before any shell implements them. Each entry
 // is reasoned, and stale entries fail below so the list cannot only grow.
-const CORE_PENDING = new Map([
-    // flows/feeEstimate.js: the shell-side fee estimator is a future hook;
-    // core falls back to its own fee table while no shell registers one.
-    ['estimateFee', 'future shell fee estimator; core uses its fee table meanwhile'],
-]);
+const CORE_PENDING = new Map();
 
 /** Blank out comments, keeping strings and line numbers, so prose never counts as a call. */
 function stripComments(src) {

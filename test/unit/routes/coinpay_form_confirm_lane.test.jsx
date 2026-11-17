@@ -369,7 +369,7 @@ describe('CoinpayForm shared confirmation', () => {
         expect(utils.getAllByText(/Insufficient DOGE balance/)[0].textContent)
             .toContain('This address has 5 DOGE');
         expect(utils.getAllByText(/Insufficient DOGE balance/)[0].textContent)
-            .toContain('payment and estimated network fee require 10.25 DOGE');
+            .toContain('payment and estimated network fee require 10.005 DOGE');
         expect(calls.some((call) => call.method === 'composeForConfirm')).toBe(false);
     });
 

@@ -137,8 +137,8 @@ describe('upload method sizes and fees', () => {
         const normal = estimateNativeSendFeeTiers({ chainId: 'dogecoin-mainnet', chainRegistry: registry }).normal;
         const fees = estimateUploadMethodFees({ compiledBytes: 1000, descriptor: DOGE, feeEstimate: normal });
         const bytes = uploadMethodSizes({ compiledBytes: 1000, descriptor: DOGE }).standard;
-        // 1 DOGE/kB is 100,000 koinu per byte.
-        expect(fees.standard.sats).toBe(bytes * 100_000);
+        // 0.02 DOGE/kB is 2,000 koinu per byte.
+        expect(fees.standard.sats).toBe(bytes * 2_000);
         expect(fees.taproot).toBeNull();
     });
 

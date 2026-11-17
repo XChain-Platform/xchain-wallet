@@ -534,6 +534,16 @@ export function getFeeSchedule(opts) {
 }
 
 /**
+ * Suggested network fee tiers from the chain encoder.
+ *
+ * @param {{ chainId: string }} opts
+ * @returns {Promise<{ low?: { rate: number }, normal?: { rate: number }, fast?: { rate: number } } | null>}
+ */
+export function estimateFee(opts) {
+    return /** @type {any} */ (sendMessage('sdk.estimateFee', opts));
+}
+
+/**
  * §20 / Cluster W FOLLOWUP 5: watcher-mode helper for the non-Send
  * action surface. Builds an unsigned PSBT for any XChain action without
  * unlocking the wallet, calling a signer, or broadcasting.

@@ -14,9 +14,9 @@
 // 'sat/vB'` and the converters branched on the literal 'DOGE/kB', so the
 // registry's validated unit was dead: a custom or remote-synced descriptor
 // declaring sats-per-kbyte under a non-dogecoin coin rendered as sat/vB and
-// misconverted custom rates by 100,000x. These pin the invariant that
-// Dogecoin's on-screen behaviour is byte-identical, and that the unit now
-// follows the descriptor.
+// misconverted custom rates by 100,000x. These pin the invariant that the
+// unit follows the descriptor while Dogecoin's fallback rates remain in its
+// natural DOGE/kB display unit.
 
 import { describe, it, expect } from 'vitest';
 import { ChainRegistry, BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/index.js';
@@ -27,6 +27,7 @@ import {
     estimateNativeSendFeeTiers,
     fetchNativeSendFeeTiers,
     customFeeEstimate,
+    customFeeRateBoundsError,
     settingsCustomToDisplayRate,
     displayRateToSettingsCustom,
     defaultCustomSettingsRate,
@@ -88,12 +89,12 @@ describe('resolveFeeUnit', () => {
         expect(seed).toBeGreaterThanOrEqual(displayRateToSettingsCustom(low.unit, low.rateValue));
     });
 
-    it('Dogecoin is unchanged: DOGE/kB display, per-kB conversion', () => {
+    it('uses Dogecoin fallback tiers below the stale one DOGE per kB rate', () => {
         const reg = new ChainRegistry();
         const est = estimateNativeSendFee({ chainId: 'dogecoin-mainnet', chainRegistry: reg, speed: 'normal' });
         expect(est.unit).toBe('DOGE/kB');
-        expect(est.rate).toBe('1 DOGE/kB');
-        expect(est.rateValue).toBe(1);
+        expect(est.rate).toBe('0.02 DOGE/kB');
+        expect(est.rateValue).toBe(0.02);
     });
 
     it('provides each chain family confirmation times and display-unit relay floor', () => {
@@ -105,9 +106,12 @@ describe('resolveFeeUnit', () => {
         expect([btc.low.etaMinutes, btc.normal.etaMinutes, btc.fast.etaMinutes]).toEqual([60, 30, 10]);
         expect([ltc.low.etaMinutes, ltc.normal.etaMinutes, ltc.fast.etaMinutes]).toEqual([5, 3, 2]);
         expect([doge.low.etaMinutes, doge.normal.etaMinutes, doge.fast.etaMinutes]).toEqual([5, 1, 1]);
-        expect([btc.minimumRate, ltc.minimumRate, doge.minimumRate]).toEqual([1, 1, 1]);
+        expect([btc.minimumRate, ltc.minimumRate, doge.minimumRate]).toEqual([1, 1, 0.001]);
         expect([btc.maximumRate, ltc.maximumRate, doge.maximumRate]).toEqual([1000, 1000, 10]);
         expect([btc.unit, ltc.unit, doge.unit]).toEqual(['sat/vB', 'sat/vB', 'DOGE/kB']);
+        expect(doge.low.rateValue).toBeLessThan(doge.normal.rateValue);
+        expect(doge.normal.rateValue).toBeLessThan(doge.fast.rateValue);
+        expect(customFeeRateBoundsError({ rate: 0.02, tiers: doge })).toBeNull();
     });
 
     it('converts an estimator relay floor from the internal rate to the display unit', async () => {

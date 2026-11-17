@@ -55,8 +55,8 @@ assert.equal(ltc.coinAmount, '0.0000025');
 
 const doge = estimateNativeSendFee({ chainId: 'dogecoin-mainnet', chainRegistry: registry });
 assert.ok(doge);
-assert.equal(doge.sats, 25_000_000);
-assert.equal(doge.coinAmount, '0.25');
+assert.equal(doge.sats, 500_000);
+assert.equal(doge.coinAmount, '0.005');
 
 // Unknown coin family → unavailable rather than a zero-fee estimate.
 const mystery = estimateNativeSendFee({ chainId: 'mystery-coin', chainRegistry: registry });

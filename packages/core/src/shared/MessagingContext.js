@@ -42,6 +42,7 @@ import { createContext } from 'react';
  * @property {(walletId: string, chainId: string, accountId?: string) => Promise<any>} [getNewestAddress]
  * @property {(chainId: string) => Promise<{ supported: string[]|null }>} [getSupportedAddressTypes]
  * @property {(walletId: string, accountId?: string) => Promise<any>} [getActiveAddresses]
+ * @property {(opts: { chainId: string }) => Promise<{ low?: { rate: number }, normal?: { rate: number }, fast?: { rate: number } } | null>} [estimateFee]
  * @property {(accountId: string, chainId: string, addressId: string) => Promise<any>} [setActiveAddress]
  * @property {(id: string, hidden: boolean) => Promise<any>} [setAddressHidden]
  * @property {(opts: any) => Promise<any>} [createWallet]

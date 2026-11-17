@@ -96,15 +96,15 @@ const PLACEHOLDER_FEE_TIERS = /** @type {const} */ ({
         },
     },
     dogecoin: {
-        // DOGE minrelayfee 1 DOGE/kB → 100_000_000 koinu/kB ≈
-        // 100_000 koinu/B. Tier rates are koinu per byte.
+        // Dogecoin Core's relay floor is 0.001 DOGE/kB, or 100 koinu/B.
+        // The recommended fallback is 0.01 DOGE/kB. Tier rates are koinu/B.
         txSize: 250,
-        minimumRate: 100_000,
+        minimumRate: 100,
         maximumRate: 1_000_000,
         tiers: {
-            low: { rate: 100_000, label: 'Slow', etaMinutes: 5 },
-            normal: { rate: 100_000, label: 'Normal', etaMinutes: 1 },
-            fast: { rate: 200_000, label: 'Fast', etaMinutes: 1 },
+            low: { rate: 1_000, label: 'Slow', etaMinutes: 5 },
+            normal: { rate: 2_000, label: 'Normal', etaMinutes: 1 },
+            fast: { rate: 5_000, label: 'Fast', etaMinutes: 1 },
         },
     },
 });
@@ -389,7 +389,7 @@ export function displayRateToSettingsCustom(unit, displayRate) {
  * Seed a Settings custom rate at one DISPLAY unit, stored as smallest-unit per KB.
  *
  * One unit is 1 sat/vB (1000) on a per-vbyte chain and 1 DOGE/kB (1e8) on a
- * per-kB chain, which is Dogecoin's relay floor; a fixed 1000 is 0.00001 there.
+ * per-kB chain. Bounds still come from the chain table or a live estimator.
  *
  * @param {string} unit   display unit from resolveFeeUnit
  * @returns {number}

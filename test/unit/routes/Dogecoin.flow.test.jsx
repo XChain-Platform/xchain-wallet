@@ -200,7 +200,7 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
             actionString: 'MINT|0|BARK|10',
             version: 0,
             chainId: CHAIN_ID,
-            networkFeeSats: 25_000_000,
+            networkFeeSats: 500_000,
             decoded: {
                 summary: 'Mint 10 BARK',
                 details: [
@@ -251,7 +251,7 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
 
         await waitFor(() => expect(composeForConfirm).toHaveBeenCalledWith(expect.objectContaining({
             chainId: CHAIN_ID,
-            encoderOpts: { feePerKb: 100_000_000 },
+            encoderOpts: { feePerKb: 2_000_000 },
         })));
         await screen.findByTestId('confirm-approve');
         expect(screen.queryByTestId('confirm-fee-protocol')).toBeNull();
@@ -260,7 +260,7 @@ describe('Dogecoin route flow with mocked SDK messaging', () => {
         fireEvent.click(screen.getByTestId('confirm-approve'));
         await waitFor(() => expect(mintToken).toHaveBeenCalledWith(expect.objectContaining({
             chainId: CHAIN_ID,
-            feePerKb: 100_000_000,
+            feePerKb: 2_000_000,
             prebuiltPsbt: expect.objectContaining({ psbtHex: PSBT }),
         })));
         expect(mintToken.mock.calls[0][0]).not.toHaveProperty('payFeeInNativeCoin');
