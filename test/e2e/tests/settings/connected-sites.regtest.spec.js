@@ -85,8 +85,8 @@ const PASSWORD = 'regtestpassword123';
 const ORIGIN = 'https://evil-e2e.example';
 const WILDCARD = '*.wild-e2e.example';
 
-// Block history is no longer shown on this page, so the audit-log reads that
-// used to back the blocklist assertions are gone.
+// This page shows no block history, so the blocklist assertions read no
+// audit log.
 
 /** Opens Settings and walks into the Connected Sites sub-page. */
 async function openConnectedSites(page) {

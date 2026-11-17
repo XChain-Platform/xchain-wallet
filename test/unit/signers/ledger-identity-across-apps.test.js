@@ -17,8 +17,8 @@
 // outside the open app's coin type fails with 0x6a82 as on a device. The
 // identifier read at pairing in the Bitcoin app (m/44'/0'/0') therefore
 // cannot be re-read with the Litecoin, Dogecoin or Bitcoin Test app open,
-// which is what used to make every reconnect for those chains demand the
-// Bitcoin app. The record now keeps one identity per chain (a hash of the
+// so a single Bitcoin-app identity would make every reconnect for those
+// chains demand the Bitcoin app. The record keeps one identity per chain (a hash of the
 // first address key the device gave there) and the reconnect checks it
 // through the open app.
 //

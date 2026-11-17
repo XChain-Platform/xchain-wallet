@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Swaps whose cancel this session has broadcast but the cancels feed may not
+// Swaps whose cancel the current app session has broadcast but the cancels feed may not
 // list yet. My Swaps and Swap Details are separate routes, so the
 // "Cancelling" state a broadcast sets on the details page has to outlive it:
 // the list remounts after Back and must not show the swap Open until the
@@ -37,7 +37,7 @@ export function markSwapCancelBroadcast(messaging, key) {
     marksFor(messaging).add(String(key));
 }
 
-/** Whether this session broadcast a cancel for the swap. */
+/** Whether the current app session broadcast a cancel for the swap. */
 export function hasSwapCancelBroadcast(messaging, key) {
     return marksFor(messaging).has(String(key));
 }

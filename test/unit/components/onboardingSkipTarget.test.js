@@ -8,9 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// The first onboarding screen's Skip used to sit alone in the top right as a
-// 24px text link. It is now one of three equal kit buttons (Back, Skip, Next)
-// under the progress dots, so it gets the kit button's size and hit area.
+// The first onboarding screen's Skip is one of three equal kit buttons
+// (Back, Skip, Next) under the progress dots, never a lone 24px text link in
+// the top right, so it gets the kit button's size and hit area.
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';

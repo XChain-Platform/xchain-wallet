@@ -180,7 +180,7 @@ export function makeHardwareSessionSigner(record, opts = {}) {
         liveGeneration = -1;
     }
 
-    // Keep an identity this session recorded when a newer record from the
+    // Keep an identity the current session recorded when a newer record from the
     // host does not carry it yet; the host's own entries win.
     function adoptRecord(next) {
         const identities = { ...(current.identities || {}), ...(next?.identities || {}) };

@@ -364,7 +364,7 @@ export class AutopaySession {
     }
 
     /**
-     * Start the watcher on this session. Only this class ever hands the
+     * Start the watcher on the current session. Only this class ever hands the
      * private vault to anything.
      *
      * @param {Object} deps   shell deps forwarded to CoinpayAutopayWatcher (notify, shellKind, ledger, ...)

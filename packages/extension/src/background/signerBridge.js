@@ -74,7 +74,7 @@ const transports = new Map();
 
 /**
  * Error code a host route throws when a hardware wallet's device has no live
- * transport here (never connected this session, or its window closed). The
+ * transport here (never connected in the current session, or its window closed). The
  * renderer reads it to offer reconnecting instead of a generic failure.
  */
 export const HW_NOT_CONNECTED = 'HW_NOT_CONNECTED';

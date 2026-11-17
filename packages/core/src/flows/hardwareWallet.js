@@ -285,7 +285,7 @@ export async function addHardwareWallet(input) {
         format: 'hardware',
         passphraseEnabled: false,
         encryptedSeed: '',
-        // Never used to open anything (there is nothing sealed); a valid
+        // Nothing ever opens with it (there is nothing sealed); a valid
         // shape keeps every reader of kdfParams on its normal path.
         kdfParams: makeFreshKdfParams(),
         walletMode: 'full',

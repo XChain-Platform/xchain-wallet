@@ -10,7 +10,7 @@
 
 // Smoke for the retired Cross-chain templates page (§42.8.4): the page,
 // its links and its template library are gone, while the Action queue
-// it used to prefill stays.
+// it prefilled stays.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';

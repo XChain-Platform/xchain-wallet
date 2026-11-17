@@ -101,7 +101,7 @@ test.describe('confirm -> broadcast on regtest', () => {
 
         // There is NO pre-flight panel here, and its absence is the
         // point. A plain native payment carries no XChain action, so there is
-        // nothing to dry-run; the panel used to render "Will likely fail"
+        // nothing to dry-run; a panel here would render "Will likely fail"
         // because the wallet was asking the indexer to validate a SEND for a
         // tick it has no ledger for. The page makes no network claim at all.
         await expect(page.getByTestId('confirm-status')).toHaveCount(0);

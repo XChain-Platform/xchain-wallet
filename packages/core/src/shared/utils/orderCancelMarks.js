@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Orders whose cancel this session has broadcast but the cancels feed may
+// Orders whose cancel the current app session has broadcast but the cancels feed may
 // not list yet. My Orders and the Order detail page are separate routes, so
 // the "Cancelling" state a broadcast sets on one has to outlive it: the list
 // remounts after Back and must not show the order Open (or offer Cancel

@@ -564,7 +564,7 @@ export function mainButton(page, name) {
  * Clicks a named Manage Token action after its owner check has settled.
  *
  * The actions are action list rows (G101) in collapsible groups, only Supply
- * open at first. A row's accessible name is its title plus its description
+ * open on arrival. A row's accessible name is its title plus its description
  * line, so the row is found by its exact title text. A closed group's header
  * lists its action titles, so the group holding the label is opened first.
  * An owner row stays aria-disabled until the owner read completes.

@@ -2079,7 +2079,7 @@ export async function importBackupLocal(req) {
  * extension/desktop pre-host `wallet.create.hardware`: the same persistence
  * path as `createWalletLocal`, with `addHardwareWallet` in place of the seed
  * flow. Nothing is pooled (the keys stay on the device); the pool is still
- * built so a software wallet added later in this session can join it.
+ * built so a software wallet added later in the current session can join it.
  *
  * @param {{ password: string, name?: string, device: object, accounts: object[] }} req
  * @returns {Promise<{ walletId: string, walletName: string, signer: object | null, accounts: object[], addresses: object[] }>}

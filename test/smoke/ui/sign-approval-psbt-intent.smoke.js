@@ -10,9 +10,9 @@
 
 // Smoke for §21.2 / §48: signPsbt approval intent cross-check.
 //
-// The dApp-bridge signPsbt approval used to show only a truncated raw hex
-// string (unverifiable), so a compromised dApp could swap in a drain PSBT
-// undetected. The approval now decodes the PSBT (via the psbt.parse host
+// A signPsbt approval that showed only a truncated raw hex string would be
+// unverifiable, so a compromised dApp could swap in a drain PSBT
+// undetected. The approval decodes the PSBT (via the psbt.parse host
 // route) and feeds the decoded action into Confirm Standard. A bare payment
 // becomes a native send after wallet-owned change is removed. Source-level
 // checks pin that wiring and ensure the raw lists stay gone.

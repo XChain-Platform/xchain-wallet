@@ -102,8 +102,8 @@ function amountField(page) {
 }
 
 /**
- * Multi's add-recipient form: Add Recipient opens it with the asset the last
- * row used, To and Amount are filled, and Add collapses it into a row.
+ * Multi's add-recipient form: Add Recipient opens it with the last row's
+ * asset, To and Amount are filled, and Add collapses it into a row.
  */
 async function addMultiRecipient(page, { address, amount }) {
     await page.getByRole('button', { name: 'Add Recipient' }).click();
