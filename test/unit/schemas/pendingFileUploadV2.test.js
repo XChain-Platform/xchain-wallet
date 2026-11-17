@@ -106,6 +106,17 @@ describe('pendingFileUpload v2 bounded persistence', () => {
         expect(validatePendingFileUpload(migrated)).toEqual({ ok: true, errors: [] });
     });
 
+    it('refuses a v2 record containing part digests', () => {
+        const record = {
+            ...createPendingFileUpload(input()),
+            partDigests: ['c'.repeat(64), 'd'.repeat(64)],
+        };
+        const validation = validatePendingFileUpload(record);
+
+        expect(validation.ok).toBe(false);
+        expect(validation.errors).toContain('partDigests: must be absent');
+    });
+
     it('refuses a wave containing 101 pieces', () => {
         const pieces = Array.from({ length: MAX_WAVE_PIECES + 1 }, (_, index) => piece(index));
         const record = createPendingFileUpload(input({

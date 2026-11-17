@@ -175,6 +175,7 @@ function validateIdentity(errors, record) {
 }
 
 function validatePlan(errors, record) {
+    check(errors, 'partDigests', !Object.hasOwn(record, 'partDigests'), 'must be absent');
     check(errors, 'meta', isPlainObject(record.meta), 'must be an object');
     check(errors, 'lane', record.lane === null || isOneOf(record.lane, ['envelope', 'standard']),
         'must be null, envelope, or standard');
