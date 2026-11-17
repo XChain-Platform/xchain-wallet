@@ -103,6 +103,14 @@ const pendingMultipart = {
 };
 
 describe('multipart completion waiting', () => {
+    // The wait reads the real clock beside its injected sleep, so a slow CI box
+    // could add a real 10 ms and change how many polls these counts expect.
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-11-15T12:00:00Z'));
+    });
+    afterEach(() => { vi.useRealTimers(); });
+
     it('polls pending state and returns the complete explorer shape', async () => {
         const complete = { ...pendingMultipart, parts_received: 2, status: 'complete' };
         const responses = [pendingMultipart, complete];
