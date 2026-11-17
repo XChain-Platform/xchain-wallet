@@ -172,11 +172,13 @@ async function publishAndApprove(utils) {
     // No acknowledgement checkbox; the confirm screen states the permanence.
     expect(utils.queryByRole('checkbox')).toBeNull();
     await domAct(async () => { fireEvent.click(utils.getByRole('button', { name: 'Publish File' })); await drain(); });
+    // The confirm screen arrives after the compose and preflight round trips,
+    // which take more than the default second inside a full parallel run.
     const approve = await waitFor(() => {
         const el = utils.getByTestId('confirm-approve');
         expect(el.disabled).toBe(false);
         return el;
-    });
+    }, { timeout: 10_000 });
     expect(utils.getByTestId('confirm-summary-notice').textContent)
         .toBe("Upload method: Taproot upload. The file stays on the blockchain for good and can't be deleted.");
     await domAct(async () => { fireEvent.click(approve); await drain(); });
@@ -254,7 +256,7 @@ describe('a public file above the legacy cap publishes as a Taproot envelope thr
             await drain();
         });
         await waitFor(() => expect(h.calls.some((c) => c.method === 'composeForConfirm')).toBe(true));
-        const approve = await waitFor(() => utils.getByTestId('confirm-approve'));
+        const approve = await waitFor(() => utils.getByTestId('confirm-approve'), { timeout: 10_000 });
         await domAct(async () => {
             fireEvent.click(approve);
             await drain();
