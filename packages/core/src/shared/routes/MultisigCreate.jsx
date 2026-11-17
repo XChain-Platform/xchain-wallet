@@ -22,7 +22,6 @@ import styles from './MultisigCreate.module.css';
 // Review and done facts as label-left value-right rows, never stacked uppercase labels.
 import facts from './FactRows.module.css';
 import { WarningCard, WarningLine } from '../components/WarningCard.jsx';
-import '../../i18n/locales/en/multisig.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 
