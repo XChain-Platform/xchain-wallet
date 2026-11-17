@@ -237,7 +237,7 @@ export function renderedTier(page) {
 export async function enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell }) {
     await page.goto('/');
     await dismissIntroCarousel(page);
-    await page.getByRole('button', { name: 'Try in demo mode' }).click();
+    await page.getByRole('button', { name: 'Try Demo' }).click();
     // Demo entry runs the real create-wallet path (Argon2id included), so
     // it is as slow as onboarding and needs the same budget. It said exactly
     // this and then hardcoded 90_000, which is HALF the budget CI computes -

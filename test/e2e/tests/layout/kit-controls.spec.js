@@ -25,7 +25,7 @@ const VALID_BTC = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 async function enterDemoWallet(page) {
     await page.goto('/');
     await dismissIntroCarousel(page);
-    await page.getByRole('button', { name: 'Try in demo mode' }).click();
+    await page.getByRole('button', { name: 'Try Demo' }).click();
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 }
 

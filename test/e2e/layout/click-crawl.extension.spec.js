@@ -96,7 +96,7 @@ for (let shard = 0; shard < SHARDS; shard += 1) {
                 }
                 await page.goto(`${origin}/${SURFACES[SURFACE].page}`);
                 const accept = page.getByRole('button', { name: 'Accept and continue' });
-                const past = page.getByRole('button', { name: 'Try in demo mode' })
+                const past = page.getByRole('button', { name: 'Try Demo' })
                     .or(page.getByRole('button', { name: 'Skip' }))
                     .or(page.getByRole('region').filter({
                         has: page.getByText(/^(?:Wallet value|Wallet balance)$/),

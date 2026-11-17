@@ -433,7 +433,7 @@ async function captureSize(browser, side, baseUrl, size, tree, entries, skips) {
         if (wantScreen('onboarding')) await shoot('onboarding-start');
         await dismissCarousel(page);
         if (wantScreen('onboarding')) await shoot('onboarding-welcome');
-        await page.getByRole('button', { name: 'Try in demo mode' }).click();
+        await page.getByRole('button', { name: 'Try Demo' }).click();
         await page.getByRole('region').filter({
             has: page.getByText(/^(?:Wallet value|Wallet balance)$/),
         }).first().waitFor({ state: 'visible', timeout: 180_000 });

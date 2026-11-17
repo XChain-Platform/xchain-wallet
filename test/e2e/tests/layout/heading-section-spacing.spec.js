@@ -41,7 +41,7 @@ const SETTINGS_SECTIONS = ['Display', 'Connected sites', 'Keyboard'];
 async function enterDemoWallet(page) {
     await page.goto('/');
     await dismissIntroCarousel(page);
-    await page.getByRole('button', { name: 'Try in demo mode' }).click();
+    await page.getByRole('button', { name: 'Try Demo' }).click();
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 }
 

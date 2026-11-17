@@ -102,7 +102,7 @@ test('desktop network round trip leaves Receive usable', async () => {
 
         await acceptLicense(page);
         await dismissIntroCarousel(page);
-        await page.getByRole('button', { name: 'Try in demo mode' }).click();
+        await page.getByRole('button', { name: 'Try Demo' }).click();
         await expect(unlockedShell(page)).toBeVisible({ timeout: 120_000 });
 
         await openSettings(page);

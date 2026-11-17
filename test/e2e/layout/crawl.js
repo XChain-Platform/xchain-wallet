@@ -399,7 +399,7 @@ export function createCrawl(page, {
     async function enterDemo() {
         if (start) await start();
         else await page.goto('/');
-        const demo = page.getByRole('button', { name: 'Try in demo mode' });
+        const demo = page.getByRole('button', { name: 'Try Demo' });
         await demo.or(unlockedShell(page)).or(page.getByRole('button', { name: 'Skip' })).first()
             .waitFor({ state: 'visible', timeout: 60_000 });
         if (await unlockedShell(page).isVisible().catch(() => false)) return;

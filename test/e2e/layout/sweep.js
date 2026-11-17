@@ -1018,7 +1018,7 @@ export function createSweep(page, {
         if (demo) {
             await restart();
             await dismissIntroCarousel(page);
-            await page.getByRole('button', { name: 'Try in demo mode' }).click();
+            await page.getByRole('button', { name: 'Try Demo' }).click();
             await unlockedShell(page).waitFor({ state: 'visible', timeout: 120_000 });
             await applyFontScale(page, fontScale);
             return;

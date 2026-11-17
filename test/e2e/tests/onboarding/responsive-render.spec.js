@@ -94,7 +94,7 @@ for (const viewport of VIEWPORTS) {
         await expectReachableLayout(
             page,
             `${viewport.name} demo`,
-            page.getByRole('button', { name: 'Try in demo mode' }),
+            page.getByRole('button', { name: 'Try Demo' }),
         );
 
         await page.getByRole('button', { name: 'Create new wallet' }).click();
