@@ -167,17 +167,13 @@ describe('onboarding and Home layout guards', () => {
         expect(balanceCss).toContain('background: var(--xc-surface);');
         // The unread badge left the Home tiles with the alerts overlay; Home keeps no raw white.
         expect(homeSource).not.toContain("color: '#FFFFFF'");
-        expect(portfolioCss).toContain('color: var(--xc-on-accent);');
-        // The balance card's frosted buttons and chart overlay sit on the brand
-        // gradient in every theme, so those translucent fills are fixed by design
-        // (approved Home-style hero); its gain and loss readouts use the brand
-        // card tokens. Nothing else may be raw.
+        expect(portfolioCss).toContain('color: var(--xc-hero-chip-text);');
+        expect(portfolioCss).toContain('color: var(--xc-hero-chip-selected-text);');
+        // Hero colors are scheme-owned tokens, so the component sheet carries
+        // no raw color literals of its own.
         const heroLiterals = new Set((totalBalanceCss.match(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)/gi) || [])
             .map((literal) => literal.toLowerCase()));
-        expect([...heroLiterals].sort()).toEqual([
-            'rgba(0, 0, 0, 0.55)',
-            'rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.3)',
-        ]);
+        expect([...heroLiterals]).toEqual([]);
         expect(homeTabsCss).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
     });
 

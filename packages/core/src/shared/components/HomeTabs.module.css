@@ -143,7 +143,7 @@
 
 .heroStack > section:first-child {
     position: relative;
-    z-index: 1;
+    z-index: 2;
     background: transparent;
     border: 0;
     box-shadow: none;

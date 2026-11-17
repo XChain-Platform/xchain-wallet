@@ -51,18 +51,17 @@ describe('PollDetail rendering', () => {
 
         // "Poll", as the bet page's header reads "Market".
         expect(await screen.findByRole('heading', { name: 'Poll' })).toBeInTheDocument();
-        // The shared outcome hero on its outlined surface (a poll has no
-        // history to chart, G16): status and time left (the token is a
-        // Details fact), the question, and, with no tally before the close,
-        // "Counted at close" where the share goes and no split bar; then the
-        // Vote | Activity | Details strip with Vote on.
+        // The shared outcome hero uses the fixed 0 to 100 probability chart:
+        // status and time left, the question, and "Counted at close" while
+        // the protocol has no frozen token-weighted tally.
         const hero = document.querySelector('[data-outcome-hero]');
-        expect(hero.hasAttribute('data-outcome-identity')).toBe(true);
+        expect(hero.hasAttribute('data-outcome-chart-hero')).toBe(true);
         expect([...hero.querySelectorAll('[data-outcome-chip]')].map((chip) => chip.textContent))
             .toEqual(['Open', 'Closes in 3 h']);
         expect(screen.getByRole('heading', { level: 2, name: 'Choose a release channel' })).toBeInTheDocument();
         expect(hero.querySelector('[data-outcome-lead]').textContent).toBe('Counted at close');
         expect(hero.querySelector('[data-outcome-bar]')).toBeNull();
+        expect(hero.querySelectorAll('[data-outcome-line]')).toHaveLength(2);
         const counts = hero.querySelector('[data-poll-hero-counts]');
         expect(counts.textContent.startsWith('0 votes · 0 voters')).toBe(true);
         // The votes and voters line is read-only: no help icon on it (G121).
@@ -182,16 +181,14 @@ describe('PollDetail rendering', () => {
             '1: Beta33%9,007,199,254,740,993 weight, 2 voters',
             '2: Gamma33%9,007,199,254,740,993 weight, 1 voter',
         ]);
-        // Votes keep no history, so the closed poll opens on the outlined
-        // surface, not a flat-line chart, yet with the bet hero's content:
-        // the winner's share marked Final, the legend and the stacked bar.
+        // Frozen token-weighted shares render as one flat line per answer on
+        // the same fixed probability chart as prediction markets.
         const hero = document.querySelector('[data-outcome-hero]');
-        expect(hero.hasAttribute('data-outcome-identity')).toBe(true);
+        expect(hero.hasAttribute('data-outcome-chart-hero')).toBe(true);
         expect(hero.querySelector('[data-outcome-lead]').textContent).toBe('34%AlphaFinal');
-        expect([...hero.querySelectorAll('[data-outcome-segment]')].map((s) => [s.getAttribute('data-outcome-segment'), s.style.width]))
-            .toEqual([['0', '34%'], ['1', '33%'], ['2', '33%']]);
         expect(within(hero).getByRole('list', { name: 'Share of each option' }).textContent).toBe('Alpha34%Beta33%Gamma33%');
-        expect(hero.querySelectorAll('[data-outcome-line]')).toHaveLength(0);
+        expect([...hero.querySelectorAll('[data-outcome-line]')].map((line) => line.getAttribute('data-outcome-line')))
+            .toEqual(['0', '1', '2']);
         expect(messaging.governancePollResults).toHaveBeenCalledWith({ chainId: CHAIN, pollIndex: 8 });
     });
 

@@ -10,11 +10,10 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { GovernancePolls } from '../../../packages/core/src/shared/routes/GovernancePolls.jsx';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import listPageStyles from '../../../packages/core/src/ui/ListPage.module.css';
-import listRowStyles from '../../../packages/core/src/ui/ListRow.module.css';
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = { address: 'bc1qexampleexampleexampleexampleexampleex' };
-const pollCss = readFileSync('packages/core/src/shared/routes/GovernancePolls.module.css', 'utf8');
+const questionListCss = readFileSync('packages/core/src/shared/components/QuestionList.module.css', 'utf8');
 
 function pending() {
     return new Promise(() => {});
@@ -100,7 +99,7 @@ describe('GovernancePolls states', () => {
         expect(screen.getByRole('menuitem', { name: 'Create poll' })).toBeInTheDocument();
     });
 
-    it('renders polls as one flush list with governance icons and ruled actions', async () => {
+    it('renders the shared question rows, answer shares, binding state and ruled actions', async () => {
         mount({
             getAddressesByChain: vi.fn().mockResolvedValue({ [CHAIN]: [ADDRESS] }),
             governancePolls: vi.fn().mockResolvedValue({
@@ -109,6 +108,7 @@ describe('GovernancePolls states', () => {
                         action_index: 11,
                         tick: 'VOTE',
                         question: 'Ship the release?',
+                        options: ['Ship', 'Wait'],
                         poll_status: 'open',
                         end_block: 500,
                     },
@@ -116,9 +116,17 @@ describe('GovernancePolls states', () => {
                         action_index: 12,
                         tick: 'VOTE',
                         question: 'Fund the next milestone?',
+                        options: ['Fund', 'Wait'],
                         poll_status: 'finalized',
                         end_block: 750,
+                        callback_contract_index: 9001,
                     },
+                ],
+            }),
+            governancePollResults: vi.fn().mockResolvedValue({
+                data: [
+                    { option_index: 0, total_weight: '75', voter_count: 3 },
+                    { option_index: 1, total_weight: '25', voter_count: 1 },
                 ],
             }),
         });
@@ -126,23 +134,22 @@ describe('GovernancePolls states', () => {
         await screen.findByText('Ship the release?');
         const list = screen.getByRole('list');
         expect(list.tagName).toBe('UL');
-        expect(pollCss).toMatch(/\.pollList\s*\{[^}]*composes:\s*flush from '\.\.\/\.\.\/ui\/Card\.module\.css'/s);
-        expect(pollCss).toMatch(/\.pollList > li \+ li\s*\{[^}]*border-top:\s*1px solid var\(--xc-border\)/s);
-        const pollCardRule = pollCss.match(/\.pollCard\s*\{([^}]*)\}/s)?.[1];
-        expect(pollCardRule).not.toContain('composes: card');
+        expect(list.closest('[data-question-list-panel]')).not.toBeNull();
+        expect(questionListCss).toMatch(/\.panel\s*\{[^}]*composes:\s*flush from '\.\.\/\.\.\/ui\/Card\.module\.css'/s);
+        expect(questionListCss).toMatch(/\.list > li \+ li\s*\{[^}]*border-top:\s*1px solid var\(--xc-border\)/s);
         const items = screen.getAllByRole('listitem');
         expect(items).toHaveLength(2);
         for (const item of items) {
             const row = item.querySelector('button');
             expect(row).not.toBeNull();
-            // The leading icon is the chain badge, named for the poll's network.
-            expect(item.querySelector('[aria-label="Bitcoin"]')).not.toBeNull();
-            // A drill-in row ends in the trailing chevron (G97).
-            expect(row.querySelector(`.${listRowStyles.chevron} svg`)).not.toBeNull();
+            expect(row).toHaveAttribute('data-question-list-row');
+            expect(row.querySelector('svg')).not.toBeNull();
         }
-        // The badge is the only network indicator: the line under the question is the token alone (U12, G61).
-        expect(screen.getAllByText('VOTE')).toHaveLength(2);
-        expect(screen.queryByText(/ on Bitcoin/)).toBeNull();
+        expect(screen.getByText('Binding')).toBeInTheDocument();
+        expect(await screen.findAllByText('75%')).toHaveLength(2);
+        expect(screen.getByText('Leading')).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'My votes' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'My polls' })).toBeInTheDocument();
 
         // Create poll and Delegate votes are plus-menu items, each with an icon, and no
         // success-styled button sits on the page.

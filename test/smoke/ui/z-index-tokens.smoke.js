@@ -14,9 +14,10 @@ const sourceRoot = join(root, 'packages', 'core', 'src');
 
 const expectedLocalDeclarations = new Map(Object.entries({
     'shared/components/LeftNav.module.css': ['1000'],
-    // The selected chart range fill sits behind its label inside the label's
-    // own isolated stacking context, so -1 never reaches the chart card.
-    'shared/components/PortfolioChart.module.css': ['-1', '2', '-1'],
+    // The range label and foot sit in local chart stacking contexts.
+    'shared/components/PortfolioChart.module.css': ['-1', '2'],
+    // Scale labels sit over the SVG plot inside the Sparkline's own root.
+    'shared/components/Sparkline.module.css': ['1'],
     // The filter badge sits above its button's corner inside the button's own box.
     'shared/components/HomeListFilterMenu.module.css': ['1'],
     // The flip button straddles the gap between the Give and Get cards.

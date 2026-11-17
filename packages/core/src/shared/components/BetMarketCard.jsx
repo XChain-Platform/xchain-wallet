@@ -3,17 +3,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The Bet Markets gauge card: one market per card, with a segmented donut of
-// the pools and what this wallet has on it. The whole card is one button that
-// opens the market's detail page.
+// Prediction markets adapt their wire rows to the same question row used by
+// governance. Money-specific wording stays in this adapter.
 
-import { useId } from 'react';
 import { Icon } from '@xchain-wallet/core/ui';
 import { safeOutcomeLabel, outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
+import { QuestionListRow } from './QuestionList.jsx';
 import styles from './BetMarketCard.module.css';
 
 // Segment colours in outcome order; the brand pair first, so Yes and No take
@@ -102,52 +101,28 @@ export function betSlices(market) {
     };
 }
 
-function pct(slice) {
-    return `${slice.percent}%`;
+const spanText = (seconds) => {
+    const absolute = Math.abs(seconds);
+    if (absolute < 3600) return `${Math.max(1, Math.round(absolute / 60))} min`;
+    if (absolute < 86400) return `${Math.round(absolute / 3600)} h`;
+    const days = Math.round(absolute / 86400);
+    return `${days} day${days === 1 ? '' : 's'}`;
+};
+
+function marketTiming(deadline, now = Date.now() / 1000) {
+    const end = Number(deadline);
+    if (!Number.isFinite(end) || end <= 0) return null;
+    return end > now ? `Closing in ${spanText(end - now)}` : `Closed ${spanText(now - end)} ago`;
 }
 
-function Donut({ slices, total, known }) {
-    // Drawn on an 84-unit box and shown at 64px (the compact card).
-    const R = 34;
-    const C = 2 * Math.PI * R;
-    const live = slices.filter((s) => s.share > 0);
-    const gap = live.length > 1 ? 2 : 0;
-    let offset = 0;
-    const leader = total > 0 ? [...slices].sort((a, b) => b.share - a.share)[0] : null;
-    return (
-        <span className={styles.donut} aria-hidden="true">
-            <svg viewBox="0 0 84 84">
-                <circle cx="42" cy="42" r={R} fill="none" stroke="var(--xc-bg-muted)" strokeWidth="10" />
-                {live.map((s) => {
-                    const len = Math.max(0, s.share * C - gap);
-                    const el = (
-                        <circle
-                            key={s.index}
-                            cx="42"
-                            cy="42"
-                            r={R}
-                            fill="none"
-                            stroke={s.color}
-                            strokeWidth="10"
-                            strokeDasharray={`${len} ${C - len}`}
-                            strokeDashoffset={-offset}
-                            transform="rotate(-90 42 42)"
-                        />
-                    );
-                    offset += s.share * C;
-                    return el;
-                })}
-            </svg>
-            <span className={styles.donutCenter}>
-                {leader ? (
-                    <>
-                        <span className={styles.donutPct}>{pct(leader)}</span>
-                        <span className={styles.donutLabel}>{leader.label}</span>
-                    </>
-                ) : <span className={styles.donutLabel}>{known ? t('components.betMarketCard.noBets') : t('components.betMarketCard.oddsInside')}</span>}
-            </span>
-        </span>
-    );
+function marketStatus(status) {
+    if (status === 'open') return 'Open';
+    if (status === 'closed') return 'Closed';
+    if (status === 'resolved') return 'Settled';
+    if (status === 'resolved_void') return 'Void';
+    if (status === 'cancelled') return 'Cancelled';
+    if (status === 'expired') return 'Expired';
+    return status ? String(status).replace(/_/g, ' ') : 'Unknown';
 }
 
 /**
@@ -160,8 +135,6 @@ function Donut({ slices, total, known }) {
  * @param {string} [props.className]
  */
 export function BetMarketCard({ market, onOpen, yourBet = null, yours = false, selected = false, className }) {
-    const questionId = useId();
-    const detailId = useId();
     // Market text is attacker-authored on-chain data. React escapes markup,
     // and the display pass also exposes bidi controls instead of letting them
     // reorder the card.
@@ -169,49 +142,29 @@ export function BetMarketCard({ market, onOpen, yourBet = null, yours = false, s
     const tick = neutralizeControlText(market?.tick, { maxLength: 24 }) || 'n/a';
     const { slices, total, known } = betSlices(market);
     const pool = betPoolTotal(market);
-    // Only the question, the odds and the pool line (operator ruling
-    // 2026-11-13): no tile, market number, ticker caption, clock or status
-    // pill. The button is named by the question; the odds and the pool line
-    // are its description.
     return (
-        <button
-            type="button"
+        <QuestionListRow
+            question={question}
+            status={marketStatus(market?.feed_status)}
+            timing={marketTiming(market?.deadline)}
+            answers={slices.map((slice) => ({ key: slice.index, label: slice.label, percent: slice.percent }))}
+            sharesKnown={known && total > 0}
+            onOpen={onOpen}
+            selected={selected}
             className={className ? `${styles.card} ${className}` : styles.card}
-            onClick={onOpen}
-            aria-current={selected ? 'true' : undefined}
-            aria-labelledby={questionId}
-            aria-describedby={detailId}
-            // The number is no longer drawn; scripts and specs find a market by it here.
             data-market-index={market?.action_index == null ? undefined : String(market.action_index)}
-        >
-            <span id={questionId} className={styles.question}>{question}</span>
-            <span id={detailId} className={styles.detail}>
-            <span className={styles.gauge}>
-                <Donut slices={slices} total={total} known={known} />
-                <span className={styles.legend}>
-                    {slices.map((s) => (
-                        <span key={s.index} className={styles.legendRow}>
-                            <span className={styles.swatch} style={{ background: s.color }} aria-hidden="true" />
-                            <span className={styles.legendLabel}>{s.label}</span>
-                            {known ? <span className={styles.legendPct}>{pct(s)}</span> : null}
-                        </span>
-                    ))}
-                </span>
-            </span>
-            <span className={styles.foot}>
-                <span className={styles.pool}>
+            footer={(
+                <>
+                    <span className={styles.pool}>
                     <span className={styles.poolIcon} aria-hidden="true"><Icon.CoinsIcon /></span>
                     {pool !== null ? (
                         <><strong>{formatDecimalAmount(pool)} {tick}</strong>&nbsp;{t('components.betMarketCard.pool')}</>
                     ) : <>{t('components.betMarketCard.poolOnPage')}</>}
-                </span>
-                {yours ? <span className={`${styles.chip} ${styles.chipYours}`}>{t('components.betMarketCard.yourMarket')}</span> : null}
-                <span className={styles.right}>
+                    </span>
+                    {yours ? <span className={`${styles.chip} ${styles.chipYours}`}>{t('components.betMarketCard.yourMarket')}</span> : null}
                     {yourBet ? <span className={styles.chip} data-testid="bet-market-your-bet">{yourBet}</span> : null}
-                    <span className={styles.chevron} aria-hidden="true"><Icon.ForwardIcon /></span>
-                </span>
-            </span>
-            </span>
-        </button>
+                </>
+            )}
+        />
     );
 }

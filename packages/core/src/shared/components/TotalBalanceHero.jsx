@@ -12,6 +12,7 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { Button, Icon } from '@xchain-wallet/core/ui';
 import { BalanceHeroMenu } from './BalanceHeroMenu.jsx';
 import { sumFiatValue } from './BalanceList.jsx';
+import { IdentityAvatar } from './WalletIdentity.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useBalanceUnit } from '../hooks/useBalanceUnit.js';
@@ -24,6 +25,7 @@ import {
 } from '../utils/fiatAmountFormat.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { isMainnetChainId } from '../utils/mainnetChain.js';
+import { readWalletTile, tileRadius, WALLET_TILE_EVENT, walletTileText } from '../utils/walletTile.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/balances.js';
 import '../../i18n/locales/en/components.js';
@@ -49,6 +51,7 @@ import '../../i18n/locales/en/components.js';
  */
 export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, walletId, networkFilter, onRefresh, refreshing = false, onCommandPalette, onOpenSettings, onLockWallet, nativePriceMap, onUnitChange }) {
     const labelId = useId();
+    const [, setWalletTileVersion] = useState(0);
     const source = useWalletSource(walletId);
     const { messaging } = source;
     const rowsWithChain = (rows || []).filter((row) => typeof row?.chainId === 'string' && row.chainId);
@@ -62,7 +65,17 @@ export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, wa
     const fiatLocale = settings?.language || 'en-US';
     const [hidden, toggleHidden] = useBalancesHidden();
     const [chartVisible, toggleChartVisible] = usePortfolioChartVisible();
-    const [coinPrimary, toggleCoinPrimary] = useBalanceUnit();
+    const [coinPrimary, toggleCoinPrimary] = useBalanceUnit('home');
+    useEffect(() => {
+        const handleWalletTile = (event) => {
+            if (!event.detail?.walletId || event.detail.walletId === walletId) {
+                setWalletTileVersion((version) => version + 1);
+            }
+        };
+        window.addEventListener(WALLET_TILE_EVENT, handleWalletTile);
+        return () => window.removeEventListener(WALLET_TILE_EVENT, handleWalletTile);
+    }, [walletId]);
+    const walletTile = readWalletTile(walletId);
 
     // Fetch 24h change for every native chain that has a row in the
     // balance list. Tokens without a published 24h delta are treated as
@@ -181,16 +194,19 @@ export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, wa
     // The hero's own toggles, the same rows a token's balance hero offers;
     // a checked row means the chart or the balance is on screen.
     const heroMenuItems = [
+        // Privacy first, the unit swap last, the same order on every hero.
+        {
+            id: 'privacy', label: hidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'), Icon: hidden ? Icon.EyeOffIcon : Icon.EyeIcon, onSelect: toggleHidden, checked: !hidden,
+        },
         !testCoinsOnly ? {
             id: 'swap',
-            label: t('components.totalBalanceHero.showIn', { unit: showInCoin ? fiatCurrency : (unitTick || 'BTC') }),
+            label: showInCoin
+                ? t('components.totalBalanceHero.showWalletValue', { unit: fiatCurrency })
+                : t('components.totalBalanceHero.showWalletBalance', { unit: unitTick || 'BTC' }),
             Icon: Icon.SwapIcon,
             onSelect: toggleCoinPrimary,
             disabled: !canShowInCoin,
         } : null,
-        {
-            id: 'privacy', label: hidden ? t('components.totalBalanceHero.showBalance') : t('components.totalBalanceHero.hideBalance'), Icon: hidden ? Icon.EyeOffIcon : Icon.EyeIcon, onSelect: toggleHidden, checked: !hidden,
-        },
     ].filter(Boolean);
     // Home-only rows. A shell with no header or nav passes the settings,
     // search and lock handlers, so the menu is where those live there.
@@ -221,11 +237,36 @@ export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, wa
         // figure is.
         <section className={styles.hero} aria-labelledby={labelId}>
             <div className={`${styles.row} ${styles.rowWithActions}`}>
-                {/* The caption is the wallet name alone (G11): a network filter
-                    never adds the network's name here (U12); the filter
-                    button's dot says a filter is on. */}
-                <span id={labelId} className={walletName ? `${styles.label} ${styles.walletLabel}` : styles.label}>
-                    {walletName || t('components.totalBalanceHero.activeAddressBalance')}
+                {/* A network filter never adds the network's name here (U12);
+                    the filter button's dot says a filter is on. */}
+                <span id={walletName ? undefined : labelId} className={walletName ? `${styles.label} ${styles.walletLabel}` : styles.label}>
+                    {walletName ? (
+                        <>
+                            <span
+                                className={styles.walletLabelIcon}
+                                aria-hidden="true"
+                                style={{ '--xc-avatar-shape': tileRadius(walletTile.shape) }}
+                            >
+                                <IdentityAvatar
+                                    name={walletName}
+                                    text={walletTileText(walletName)}
+                                    seed={walletId}
+                                    context="header"
+                                    variant="asset"
+                                    tone={walletTile.colour}
+                                    src={walletTile.image || null}
+                                />
+                            </span>
+                            <span className={styles.walletLabelCopy}>
+                                <span id={labelId} className={styles.walletLabelText}>{walletName}</span>
+                                <span className={styles.modeCaption}>
+                                    {showInCoin
+                                        ? t('components.totalBalanceHero.walletBalance')
+                                        : t('components.totalBalanceHero.walletValue')}
+                                </span>
+                            </span>
+                        </>
+                    ) : t('components.totalBalanceHero.activeAddressBalance')}
                 </span>
                 <div
                     className={`${styles.amount} ${balanceIsMessage ? styles.amountMessage : ''}`}

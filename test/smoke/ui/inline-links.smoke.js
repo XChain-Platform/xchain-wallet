@@ -13,13 +13,13 @@ const css = readFileSync(join(here, '../../../packages/core/src/ui/tokens.css'),
 const linkRule = /:where\(a\[href\]\)\s*\{([^}]*)\}/.exec(css);
 
 assert.ok(linkRule, 'tokens.css defines a shared anchor rule');
-assert.match(linkRule[1], /color:\s*var\(--xc-accent-text\)/,
-    'links use the accent text token in light and dark themes');
+assert.match(linkRule[1], /color:\s*var\(--xc-link\)/,
+    'links use the scheme-owned link token in light and dark themes');
 assert.match(linkRule[1], /text-decoration:\s*underline/,
     'links remain distinguishable without color');
 assert.match(linkRule[1], /text-underline-offset:\s*0\.15em/,
     'link underlines remain separated from their text');
-assert.match(css, /:where\(a\[href\]:visited\)\s*\{[^}]*color:\s*var\(--xc-accent-text\)/s,
+assert.match(css, /:where\(a\[href\]:visited\)\s*\{[^}]*color:\s*var\(--xc-link\)/s,
     'visited links retain the shared recognizable treatment');
 assert.match(css,
     /:where\([\s\S]*?a\[href\][\s\S]*?\):focus-visible\s*\{[^}]*outline:\s*2px solid var\(--xc-focus-ring\) !important/s,

@@ -14,6 +14,8 @@ import { t } from '../../i18n/index.js';
 import styles from './Sparkline.module.css';
 import '../../i18n/locales/en/components.js';
 
+export const HERO_SCALE_PLOT = Object.freeze({ left: 0, right: 100, top: 4, bottom: 96 });
+
 /**
  * Pure-SVG sparkline. Renders finite samples as a polyline inside a
  * padded 100×100 viewBox so endpoint strokes remain visible. Rising,
@@ -29,6 +31,10 @@ import '../../i18n/locales/en/components.js';
  * @param {boolean} [props.showScale=false]
  * @param {(value: number) => string} [props.formatScaleValue]
  * @param {boolean} [props.heroScale=false]
+ * @param {number[] | null | undefined} [props.secondarySeries]
+ * @param {string} [props.secondaryLabel]
+ * @param {boolean} [props.secondaryDashed=false]
+ * @param {boolean} [props.stepped=false]
  */
 export function Sparkline({
     series,
@@ -43,39 +49,64 @@ export function Sparkline({
     showScale = false,
     formatScaleValue = formatValue,
     heroScale = false,
+    secondarySeries,
+    secondaryLabel,
+    secondaryDashed = false,
+    stepped = false,
 }) {
     const gradientId = `hero-fill-${useId().replace(/:/g, '')}`;
     const values = useMemo(
         () => Array.isArray(series) ? series.filter(Number.isFinite) : [],
         [series],
     );
-    const scale = useMemo(() => chartScale(values), [values]);
-    // Scale marks are overlays. They must never change the line or area
-    // geometry, including the full-bleed plot used by chart heroes.
-    const plot = { left: edgeToEdge ? 0 : 1, right: edgeToEdge ? 100 : 99, top: 1, bottom: 99 };
-    const points = useMemo(() => {
-        if (values.length === 0) return null;
+    const secondaryValues = useMemo(
+        () => Array.isArray(secondarySeries) ? secondarySeries.filter(Number.isFinite) : [],
+        [secondarySeries],
+    );
+    const scaleValues = useMemo(() => [...values, ...secondaryValues], [values, secondaryValues]);
+    const scale = useMemo(() => chartScale(scaleValues), [scaleValues]);
+    const guides = useMemo(() => chartGuides(scale), [scale]);
+    const plot = heroScale
+        ? HERO_SCALE_PLOT
+        : { left: edgeToEdge ? 0 : 1, right: edgeToEdge ? 100 : 99, top: 1, bottom: 99 };
+    const bounds = useMemo(() => {
+        if (scaleValues.length === 0) return null;
+        return { low: Math.min(...scaleValues), high: Math.max(...scaleValues) };
+    }, [scaleValues]);
+    const pointsFor = (input) => {
+        if (input.length === 0 || !bounds) return null;
         const middleY = (plot.top + plot.bottom) / 2;
-        if (values.length === 1) {
+        if (input.length === 1) {
             const middleX = (plot.left + plot.right) / 2;
             return `${(middleX - 2).toFixed(2)},${middleY.toFixed(2)} ${(middleX + 2).toFixed(2)},${middleY.toFixed(2)}`;
         }
-        const min = Math.min(...values);
-        const max = Math.max(...values);
-        const flat = max === min;
-        const range = max - min;
-        const xStep = (plot.right - plot.left) / (values.length - 1);
-        return values
-            .map((v, i) => {
+        const flat = bounds.high === bounds.low;
+        const range = bounds.high - bounds.low;
+        const xStep = (plot.right - plot.left) / (input.length - 1);
+        const coords = input.map((v, i) => {
                 const x = plot.left + i * xStep;
-                const y = flat ? middleY : plot.bottom - ((v - min) / range) * (plot.bottom - plot.top);
-                return `${x.toFixed(2)},${y.toFixed(2)}`;
-            })
-            .join(' ');
-    }, [values, plot.left, plot.right, plot.top, plot.bottom]);
+                const y = flat ? middleY : plot.bottom - ((v - bounds.low) / range) * (plot.bottom - plot.top);
+                return { x, y };
+            });
+        if (!stepped) return coords.map(({ x, y }) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
+        const stair = [coords[0]];
+        for (let i = 1; i < coords.length; i += 1) {
+            stair.push({ x: coords[i].x, y: coords[i - 1].y }, coords[i]);
+        }
+        return stair.map(({ x, y }) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
+    };
+    const points = useMemo(
+        () => pointsFor(values),
+        [values, bounds, plot.left, plot.right, plot.top, plot.bottom, stepped], // eslint-disable-line react-hooks/exhaustive-deps
+    );
+    const secondaryPoints = useMemo(
+        () => pointsFor(secondaryValues),
+        [secondaryValues, bounds, plot.left, plot.right, plot.top, plot.bottom, stepped], // eslint-disable-line react-hooks/exhaustive-deps
+    );
     if (!points) return null;
-    const first = values[0];
-    const last = values[values.length - 1];
+    const toneValues = secondaryValues.length > 0 ? secondaryValues : values;
+    const first = toneValues[0];
+    const last = toneValues[toneValues.length - 1];
     const tone = last > first ? 'up' : last < first ? 'down' : 'unchanged';
     const heroStroke = tone === 'up'
         ? 'var(--xc-hero-chart-up)'
@@ -93,9 +124,15 @@ export function Sparkline({
         formatRangeValue: scaleFormatter,
         includeRangeExtrema: showScale,
     });
-    const scalePlot = heroScale
-        ? { left: plot.left, right: plot.right, top: 0, bottom: 100 }
-        : plot;
+    const secondarySummary = secondaryPoints ? describeChartSeries(secondaryValues, {
+        label: secondaryLabel || label,
+        rangeLabel,
+        formatValue: formatValue || scaleFormatter,
+        formatRangeValue: scaleFormatter,
+        includeRangeExtrema: false,
+    }) : '';
+    const chartSummary = secondarySummary ? `${summary} ${secondarySummary}` : summary;
+    const scalePlot = plot;
     return (
         <div className={styles.root} style={{ height }}>
             <svg
@@ -103,9 +140,9 @@ export function Sparkline({
                 preserveAspectRatio="none"
                 className={styles.plot}
                 role="img"
-                aria-label={summary}
+                aria-label={chartSummary}
             >
-                <title>{summary}</title>
+                <title>{chartSummary}</title>
                 {useHeroGradient ? (
                     <defs>
                         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1" data-chart-fill-tone={tone}>
@@ -115,19 +152,8 @@ export function Sparkline({
                     </defs>
                 ) : null}
                 {areaFill ? <polygon fill={useHeroGradient ? `url(#${gradientId})` : areaFill} stroke="none" points={`${plot.left},100 ${points} ${plot.right},100`} /> : null}
-                {showScale && !heroScale ? scale.map((mark) => (
-                    <line
-                        key={mark.kind}
-                        className={styles.guide}
-                        data-chart-guide={mark.kind}
-                        x1={plot.left}
-                        x2={plot.right}
-                        y1={scalePosition(mark, plot)}
-                        y2={scalePosition(mark, plot)}
-                        vectorEffect="non-scaling-stroke"
-                    />
-                )) : null}
                 <polyline
+                    data-chart-series="primary"
                     data-chart-tone={heroScale ? tone : undefined}
                     fill="none"
                     stroke={stroke}
@@ -135,50 +161,35 @@ export function Sparkline({
                     vectorEffect="non-scaling-stroke"
                     points={points}
                 />
-            </svg>
-            {showScale && heroScale ? (
-                <svg
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    className={`${styles.guidePlot} ${styles.heroBand}`}
-                    data-chart-scale-band="hero"
-                    aria-hidden="true"
-                >
-                    {scale.map((mark) => (
-                        <line
-                            key={mark.kind}
-                            className={`${styles.guide} ${styles.guideHero}`}
-                            data-chart-guide={mark.kind}
-                            x1={scalePlot.left}
-                            x2={scalePlot.right}
-                            y1={scalePosition(mark, scalePlot)}
-                            y2={scalePosition(mark, scalePlot)}
-                            vectorEffect="non-scaling-stroke"
-                        />
-                    ))}
-                </svg>
-            ) : null}
-            {showScale && heroScale ? (
-                <svg
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    className={styles.linePlot}
-                    data-chart-line-overlay="hero"
-                    aria-hidden="true"
-                >
+                {secondaryPoints ? (
                     <polyline
-                        data-chart-tone={tone}
+                        data-chart-series="secondary"
+                        data-chart-tone={heroScale ? tone : undefined}
                         fill="none"
                         stroke={stroke}
-                        strokeWidth={resolvedStrokeWidth}
+                        strokeWidth={heroScale ? 1.25 : Math.max(1, resolvedStrokeWidth - 0.5)}
+                        strokeDasharray={secondaryDashed ? '4 3' : undefined}
                         vectorEffect="non-scaling-stroke"
-                        points={points}
+                        points={secondaryPoints}
                     />
-                </svg>
-            ) : null}
+                ) : null}
+                {showScale ? guides.map((mark) => (
+                    <line
+                        key={mark.kind}
+                        className={`${styles.guide}${heroScale ? ` ${styles.guideHero}` : ''}${mark.labelled ? '' : ` ${styles.guideHalfway}`}`}
+                        data-chart-guide={mark.kind}
+                        data-chart-guide-kind={mark.labelled ? 'labelled' : 'halfway'}
+                        x1={plot.left}
+                        x2={plot.right}
+                        y1={scalePosition(mark, plot)}
+                        y2={scalePosition(mark, plot)}
+                        vectorEffect="non-scaling-stroke"
+                    />
+                )) : null}
+            </svg>
             {showScale ? (
                 <div
-                    className={`${styles.scale} ${heroScale ? `${styles.scaleHero} ${styles.heroBand}` : ''}`}
+                    className={`${styles.scale} ${heroScale ? styles.scaleHero : ''}`}
                     data-chart-scale-band={heroScale ? 'hero' : undefined}
                     aria-hidden="true"
                 >
@@ -214,12 +225,33 @@ export function chartScale(series) {
     ];
 }
 
+/** Add an unlabelled guide halfway between every adjacent labelled mark. */
+function chartGuides(scale) {
+    if (scale.length !== 5) return scale.map((mark) => ({ ...mark, labelled: true }));
+    const guides = [];
+    scale.forEach((mark, index) => {
+        guides.push({ ...mark, labelled: true });
+        if (index < scale.length - 1) {
+            guides.push({
+                kind: `${mark.kind}-${scale[index + 1].kind}-halfway`,
+                position: `${mark.position}-${scale[index + 1].position}-halfway`,
+                labelled: false,
+            });
+        }
+    });
+    return guides;
+}
+
 function scalePosition(mark, plot) {
     const ratio = {
         top: 0,
+        'top-upper-middle-halfway': 0.125,
         'upper-middle': 0.25,
+        'upper-middle-middle-halfway': 0.375,
         middle: 0.5,
+        'middle-lower-middle-halfway': 0.625,
         'lower-middle': 0.75,
+        'lower-middle-bottom-halfway': 0.875,
         bottom: 1,
     }[mark.position];
     return plot.top + ((plot.bottom - plot.top) * ratio);

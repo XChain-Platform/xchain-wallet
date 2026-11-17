@@ -199,7 +199,7 @@ describe('TotalBalanceHero refresh status', () => {
     });
 
     it('leaves refresh out of the balance card and prints no online freshness line', () => {
-        // The card has two buttons, Show in BTC and the eye; Refresh is not
+        // The card has two buttons, the eye and the wallet balance toggle; Refresh is not
         // among them, and a menu appears only where it holds other rows.
         const onRefresh = vi.fn();
         const lastSyncedAt = Date.now() - 2 * 60_000;
@@ -252,16 +252,16 @@ describe('TotalBalanceHero responsive layout', () => {
         expect(cssRule('amountValue')).toMatch(/overflow-wrap:\s*anywhere/);
     });
 
-    it('puts the unit swap and the eye in the card and the shell rows in one overflow menu', () => {
+    it('puts the eye and unit swap in the card and the shell rows in one overflow menu', () => {
         const onOpenSettings = vi.fn();
         const onCommandPalette = vi.fn();
         const onLockWallet = vi.fn();
         mount({ onOpenSettings, onCommandPalette, onLockWallet });
 
-        const swap = screen.getByRole('button', { name: 'Show in BTC' });
+        const swap = screen.getByRole('button', { name: 'Show wallet balance in BTC' });
         const eye = screen.getByRole('button', { name: 'Hide balance' });
         const trigger = screen.getByRole('button', { name: 'Balance actions' });
-        expect(screen.getAllByRole('button')).toEqual([swap, eye, trigger]);
+        expect(screen.getAllByRole('button')).toEqual([eye, swap, trigger]);
         expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
         fireEvent.click(trigger);

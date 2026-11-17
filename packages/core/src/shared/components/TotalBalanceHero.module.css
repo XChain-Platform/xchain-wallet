@@ -90,8 +90,8 @@
 
 .eye {
     appearance: none;
-    background: color-mix(in srgb, var(--xc-hero-chip-bg) 75%, transparent);
-    border: none;
+    background: var(--xc-hero-chip-bg);
+    border: 1px solid var(--xc-hero-border);
     color: var(--xc-hero-chip-text);
     width: var(--xc-control-h-sm);
     height: var(--xc-control-h-sm);
@@ -104,7 +104,7 @@
 }
 
 .eye:hover {
-    background: color-mix(in srgb, var(--xc-hero-chip-bg) 93.75%, var(--xc-hero-text));
+    background: var(--xc-hero-chip-bg);
 }
 
 .eye:focus-visible {
@@ -261,7 +261,7 @@
     margin-inline-start: 0;
 }
 
-/* The card's buttons are frosted white circles on the brand card. */
+/* The card's buttons use the solid hero control surface. */
 /* Compact card: the round buttons are 32px so the caption row is only as
    tall as the wallet name, and the rows sit closer together. */
 .eye.eye {
@@ -277,7 +277,7 @@
 }
 
 .eye.eye:hover {
-    background: color-mix(in srgb, var(--xc-hero-chip-bg) 87.5%, var(--xc-hero-text));
+    background: var(--xc-hero-chip-bg);
 }
 
 /* A switched-on card button looks the same as the others, with
@@ -285,20 +285,56 @@
 .eye.eye[aria-pressed='true'],
 .eye.eye[aria-pressed='true']:not(:disabled) {
     box-shadow: none;
-    border: 0;
+    border: 1px solid var(--xc-hero-border);
     background: var(--xc-hero-chip-bg);
 }
 
 /* The wallet's name as the card caption, at a readable size. */
 .label.walletLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-2);
     font-size: var(--xc-text-xl);
     font-weight: 700;
     line-height: 1.2;
     text-transform: none;
     letter-spacing: 0;
     color: var(--xc-hero-text);
+    overflow: visible;
+}
+
+/* The wallet look matches the token detail caption's 24px artwork, spacing and
+   alignment while reusing the same avatar primitive as the wallet switcher. */
+.walletLabelIcon {
+    --xc-avatar-size-header: 24px;
+    --xc-avatar-initials-header: 9px;
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+}
+
+.walletLabelCopy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.walletLabelText {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.modeCaption {
+    color: var(--xc-hero-text-muted);
+    font-size: var(--xc-text-xs);
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0;
+    text-transform: none;
     white-space: nowrap;
 }
 

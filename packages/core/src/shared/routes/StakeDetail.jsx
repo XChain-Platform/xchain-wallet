@@ -9,7 +9,6 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { AddressText, Button, EmptyState, Icon, ListPage, ListRow, PageHeader, Screen, StatusMessage, Tabs } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import {
@@ -60,11 +59,8 @@ const chainRegistry = registryLib.defaultRegistry();
 // The capability (validator) stake is always in the protocol token.
 const STAKING_TICK = 'XCHAIN';
 
-// The hero's range chips, in the approved order: Home's ranges without 24h,
-// since a stake moves in days, not hours.
-const STAKE_RANGES = ['1w', '1m', '3m', '6m', 'ytd', '1y', 'all']
-    .map((id) => CHART_RANGES.find((range) => range.id === id))
-    .filter(Boolean);
+// Stake history uses the exact Home hero range set and ordering.
+const STAKE_RANGES = CHART_RANGES;
 const CHART_SAMPLES = 60;
 const DAY_MS = 86_400_000;
 const REWARD_ROWS_SHOWN = 25;
@@ -107,8 +103,7 @@ const DEMO_TIP_HEIGHT = 12_500;
  * @param {() => void} [props.onBack]  the page header's Back; an embedded panel has no header
  * @param {boolean} [props.embedded] drawn as Staking's right panel beside the stake list
  *   (the DEX's embedded MarketView): no Screen or page header of its own, the card
- *   names the stake, and Share goes up onto Staking's header line through `headerSlot`
- * @param {HTMLElement | null} [props.headerSlot] embedded only: where Share portals to
+ *   names the stake, and Share stays with the selected stake's actions
  * @param {object | null} [props.preloaded] embedded only: what the stake list already read
  *   for this stake (StakingList's stakePreload), so those reads are not made again
  * @param {(el: HTMLElement | null) => void} [props.measureRef] the page's body box for a
@@ -130,7 +125,6 @@ export function StakeDetail({
     onOpenContract,
     onBack,
     embedded = false,
-    headerSlot = null,
     preloaded = null,
     measureRef,
 }) {
@@ -386,15 +380,29 @@ export function StakeDetail({
         : null;
     const fiatOf = (amount) => fiatText(amount, fiatRate, fiatCurrency, locale);
 
-    // The hero's line: the position's balance over time, stake events plus
-    // rewards earned less rewards claimed, so it rises as unclaimed rewards
-    // build up. The rows carry block heights, so each event is placed at its
-    // block's time projected from the indexed tip.
-    const events = useMemo(() => positionEvents({
-        kind, stakes, rewards, claims: rewardClaims, contractStakes, contractUnstakes, slashEvents, height, blockSeconds,
-    }), [kind, stakes, rewards, rewardClaims, contractStakes, contractUnstakes, slashEvents, height, blockSeconds]);
+    // The solid line is stake principal only. Validator reward accrual and
+    // valid COLLECT rows form the pending-reward balance for the dashed line.
+    const stakedEvents = useMemo(() => positionEvents({
+        kind, stakes, contractStakes, contractUnstakes, slashEvents, height, blockSeconds,
+    }), [kind, stakes, contractStakes, contractUnstakes, slashEvents, height, blockSeconds]);
+    const rewardEvents = useMemo(
+        () => pendingRewardEvents({ rewards, claims: rewardClaims, height, blockSeconds }),
+        [rewards, rewardClaims, height, blockSeconds],
+    );
     const range = STAKE_RANGES.find((item) => item.id === rangeId) || STAKE_RANGES[0];
-    const series = useMemo(() => balanceSeries(events, range, Date.now()), [events, range]);
+    const series = useMemo(() => {
+        const now = Date.now();
+        const staked = balanceSeries(stakedEvents, range, now);
+        const pendingRewards = isValidator && claimsKnown && rewardEvents.length > 0
+            ? balanceSeries(rewardEvents, range, now)
+            : null;
+        return {
+            staked,
+            stakedWithRewards: staked && pendingRewards
+                ? staked.map((amount, index) => amount + pendingRewards[index])
+                : null,
+        };
+    }, [stakedEvents, rewardEvents, range, isValidator, claimsKnown]);
 
     const shareUrl = explorerPageUrl({ chainId, kind: 'address', value: address, settings });
     const share = () => {
@@ -429,35 +437,11 @@ export function StakeDetail({
             ) : null}
         />
     );
-    // Embedded, the same Share button goes up onto Staking's header line, as
-    // the DEX's embedded market puts its explorer button on the DEX's.
-    const shareButton = shareUrl ? (
-        <Button
-            type="button"
-            size="md"
-            variant="secondary"
-            className={tokenDetailStyles.explorerButton}
-            icon={<Icon.UploadIcon />}
-            onClick={share}
-            aria-label="Share this stake"
-            title="Share this stake"
-        >
-            {null}
-        </Button>
-    ) : null;
     const wrap = (children) => {
         const page = <ListPage className={tokenDetailStyles.detailPage}>{children}</ListPage>;
         // Staking's right panel sits inside the stake list's Screen, which owns
-        // the page header, the scroller and the shell notices; Share goes up
-        // onto that header line, as the DEX's market tools do.
-        if (embedded) {
-            return (
-                <>
-                    {headerSlot && shareButton ? createPortal(shareButton, headerSlot) : null}
-                    {page}
-                </>
-            );
-        }
+        // the page header, the scroller and the shell notices.
+        if (embedded) return page;
         return (
             <Screen variant={variant} header={header}>
                 {measureRef ? (
@@ -472,7 +456,9 @@ export function StakeDetail({
     if (loading) return wrap(<StatusMessage variant="status">Loading staking position…</StatusMessage>);
     if (loadError) return wrap(<StatusMessage variant="error">{loadError}</StatusMessage>);
 
-    const change = rangeChangeLine(series, { tick, fiatRate, fiatCurrency, locale });
+    const change = rangeChangeLine(series.stakedWithRewards || series.staked, { tick, fiatRate, fiatCurrency, locale });
+    const chartTone = change?.direction === 'positive' ? 'up' : change?.direction === 'negative' ? 'down' : 'unchanged';
+    const formatChartAmount = (value) => `${new Intl.NumberFormat(locale, { maximumFractionDigits: 8 }).format(value)}${tick ? ` ${tick}` : ''}`;
     // An unreadable amount shows as "-", never as a guessed zero.
     const stakedText = hasPosition ? fmt(stakedAmount) : '0';
     const stakedFiat = hasPosition ? fiatOf(stakedAmount) : null;
@@ -495,7 +481,7 @@ export function StakeDetail({
             { id: 'details', label: tabLabel(Icon.InfoIcon, 'Details') },
         ];
 
-    const tiles = isValidator
+    const tiles = [...(isValidator
         ? validatorTiles({
             onStakeMore, onUnstake, onClaimRewards, onDelegate, onRevokeDelegation, onWithdraw, onStakeAgain,
             primaryStake, lockedStakes, primaryDelegation, claimsKnown, pending, ended, height, blockSeconds,
@@ -503,7 +489,14 @@ export function StakeDetail({
         : contractTiles({
             onStakeMore, onUnstake, onDelegate, onOpenContract, onStakeAgain, seed: contractPositionSeed,
             activeContractStakes, ended,
-        });
+        })), ...(shareUrl ? [{
+            id: 'share',
+            label: 'Share',
+            description: "Share this stake's explorer link",
+            Icon: Icon.ShareIcon,
+            onSelect: share,
+            reason: null,
+        }] : [])];
 
     return wrap(
         <>
@@ -522,13 +515,20 @@ export function StakeDetail({
                     names its pair beside the DEX list. */}
                 <section className={embedded ? heroStyles.hero : `${heroStyles.hero} ${tokenDetailStyles.cardNoCaption}`} aria-labelledby={captionId}>
                     <div className={heroStyles.row}>
-                        <span
-                            id={captionId}
-                            className={embedded
-                                ? `${heroStyles.label} ${heroStyles.walletLabel} ${tokenDetailStyles.cardCaption}`
-                                : `${heroStyles.label} ${tokenDetailStyles.cardCaption}`}
-                        >
-                            {title}
+                        <span id={captionId} className={`${heroStyles.label} ${local.chartLegend}`}>
+                            {embedded ? <span className={local.positionTitle}>{title}</span> : null}
+                            <span className={local.legendItem}>
+                                <span className={local.legendDot} data-chart-tone={chartTone} aria-hidden="true" />
+                                Staked
+                            </span>
+                            {series.stakedWithRewards ? (
+                                <span className={local.legendItem}>
+                                    <span className={local.legendDash} data-chart-tone={chartTone} aria-hidden="true" />
+                                    Staked + rewards
+                                </span>
+                            ) : isValidator && claimsKnown && compareDecimalStrings(pending, '0') === 1 && !balanceHidden ? (
+                                <span className={local.unclaimedCaption}>{`+${fmt(pending)} ${tick || STAKING_TICK} unclaimed`}</span>
+                            ) : null}
                         </span>
                         <div
                             className={heroStyles.amount}
@@ -574,15 +574,24 @@ export function StakeDetail({
                 >
                     <div id={chartPanelId} role="tabpanel" aria-labelledby={`${chartPanelId}-tab-${range.id}`}>
                         <div className={portfolioChartStyles.slot}>
-                            {series ? (
+                            {series.staked ? (
                                 <div className={portfolioChartStyles.chart}>
                                     <Sparkline
-                                        series={series}
+                                        series={series.staked}
+                                        secondarySeries={series.stakedWithRewards}
+                                        secondaryLabel="Staked + rewards"
+                                        secondaryDashed
+                                        stepped
                                         height="100%"
                                         strokeColor={BEHIND_CHART_STROKE}
                                         areaFill={BEHIND_CHART_FILL}
                                         edgeToEdge
+                                        heroScale
+                                        showScale
+                                        label="Staked"
                                         rangeLabel={range.label}
+                                        formatValue={formatChartAmount}
+                                        formatScaleValue={formatChartAmount}
                                     />
                                 </div>
                             ) : null}
@@ -594,7 +603,7 @@ export function StakeDetail({
                         ranges={STAKE_RANGES}
                         rangeId={range.id}
                         onSelect={setRangeId}
-                        className={series ? '' : tokenDetailStyles.rangesIdle}
+                        className={series.staked ? '' : tokenDetailStyles.rangesIdle}
                     />
                 </section>
             </div>
@@ -667,7 +676,7 @@ export function StakeDetail({
                                     <ListRow
                                         title={<span className={local.eventAmount}>{fmt(u.amount)} {detailText(u.tick)}</span>}
                                         subtitle={<span className={local.eventMeta}>
-                                            releasing, can still be penalized until block {fmt(u.cooldown_end_block)}
+                                            releasing, can still be penalized until block {rawNumber(u.cooldown_end_block)}
                                         </span>}
                                         trailing={<span className={local.eventWhen}>cooldown</span>}
                                     />
@@ -690,7 +699,7 @@ export function StakeDetail({
                                             to <AddressText address={detailText(ev.destination_address || ev.destination)} truncate={false} />
                                         </span>}
                                         trailing={<span className={local.eventWhen}>
-                                            {ev.block_index ? `block ${fmt(ev.block_index)}` : '-'}
+                                            {ev.block_index ? `block ${rawNumber(ev.block_index)}` : '-'}
                                         </span>}
                                     />
                                 </li>
@@ -794,7 +803,7 @@ function validatorTiles({
         : null;
     const activation = Number(lockedStakes[0]?.activation_block ?? lockedStakes[0]?.ACTIVATION_BLOCK);
     const activationReason = !primaryStake && lockedStakes.length > 0 && Number.isFinite(activation) && height != null
-        ? `the stake is locked until it activates at block ${fmt(activation)}${leftText(activation - height, blockSeconds)}.`
+        ? `the stake is locked until it activates at block ${rawNumber(activation)}${leftText(activation - height, blockSeconds)}.`
         : null;
     const noStakeReason = activationReason || (ended ? 'the stake has ended.' : 'nothing is staked.');
     const tile = (id, label, description, IconGlyph, onSelect, stateReason) => ({
@@ -922,11 +931,11 @@ function ValidatorPanel({ row, signingKey }) {
     return (
         <ul className={local.eventList} aria-label="Validator performance">
             <DetailRow label="Status">{active ? 'Active' : 'Not active yet'}</DetailRow>
-            {has('uptime') ? <DetailRow label="Uptime">{metricText(row.uptime)}</DetailRow> : null}
-            {has('score') ? <DetailRow label="Score">{metricText(row.score)}</DetailRow> : null}
-            {has('votes') ? <DetailRow label="Votes recorded">{metricText(row.votes)}</DetailRow> : null}
-            {has('missed') ? <DetailRow label="Missed">{metricText(row.missed)}</DetailRow> : null}
-            {has('last_seen_block') ? <DetailRow label="Last seen block">{blockText(metricText(row.last_seen_block))}</DetailRow> : null}
+            {has('uptime') ? <DetailRow label="Uptime">{metricAmountText(row.uptime)}</DetailRow> : null}
+            {has('score') ? <DetailRow label="Score">{metricAmountText(row.score)}</DetailRow> : null}
+            {has('votes') ? <DetailRow label="Votes recorded">{metricAmountText(row.votes)}</DetailRow> : null}
+            {has('missed') ? <DetailRow label="Missed">{metricAmountText(row.missed)}</DetailRow> : null}
+            {has('last_seen_block') ? <DetailRow label="Last seen block">{metricText(row.last_seen_block)}</DetailRow> : null}
             {signingKey ? (
                 <DetailRow label="Signing key">
                     <AddressText address={signingKey} />
@@ -944,9 +953,10 @@ function metricText(value) {
     return neutralizeControlText(value, { maxLength: 128 }) || '-';
 }
 
-// A block height groups its digits; any other text shows as given.
-function blockText(text) {
-    return /^\d+$/.test(text) ? fmt(text) : text;
+function metricAmountText(value) {
+    const text = metricText(value);
+    const match = /^(-?\d+(?:\.\d+)?)(.*)$/.exec(text);
+    return match ? `${formatWithThousands(match[1])}${match[2]}` : text;
 }
 
 function DetailRow({ label, children }) {
@@ -977,8 +987,8 @@ function ValidatorDetailRows({ shownStake, primaryStake, primaryDelegation, dele
             {stakedAt ? <DetailRow label="Staked on">{approxDate(stakedAt)}</DetailRow> : null}
             {activeDays != null ? <DetailRow label="Active days">{`about ${fmt(activeDays)}`}</DetailRow> : null}
             {valueNow ? <DetailRow label="Value now">{hidden ? '••••' : ltr(valueNow)}</DetailRow> : null}
-            {pendingActivation ? <DetailRow label="Lock terms">{`Locked until block ${fmt(activation)}`}</DetailRow> : null}
-            {unstaking ? <DetailRow label="Lock terms">{`Cooldown until block ${fmt(deactivation)}`}</DetailRow> : null}
+            {pendingActivation ? <DetailRow label="Lock terms">{`Locked until block ${rawNumber(activation)}`}</DetailRow> : null}
+            {unstaking ? <DetailRow label="Lock terms">{`Cooldown until block ${rawNumber(deactivation)}`}</DetailRow> : null}
             {unstaking ? (
                 <DetailRow label="Cooldown left">{cooldownLeft(deactivation - height, blockSeconds)}</DetailRow>
             ) : null}
@@ -1034,6 +1044,11 @@ function detailText(value) {
     if (value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value))) return '-';
     const text = String(value).trim();
     return !text || /^(?:undefined|null|nan)$/i.test(text) ? '-' : text;
+}
+
+// Block heights and indexes are identifiers, so they keep raw digits.
+function rawNumber(value) {
+    return detailText(value);
 }
 
 function positiveNumber(value) {
@@ -1101,7 +1116,7 @@ function whenText(row, height, blockSeconds, now) {
     }
     const date = blockDate(row?.block_index, height, blockSeconds, now);
     if (date) return approxDate(date);
-    return row?.block_index ? `Block ${fmt(row.block_index)}` : '-';
+    return row?.block_index ? `Block ${rawNumber(row.block_index)}` : '-';
 }
 
 // "about 1 day 6 hours" for a block count at the chain's target interval.
@@ -1129,11 +1144,11 @@ function cooldownLeft(blocks, blockSeconds) {
 }
 
 /**
- * Balance-changing events for the position, each at its block's projected
- * time: stakes in, deactivated stakes out, rewards earned in and valid claims
- * out (validator); stakes in, unstakes and penalties out (contract).
+ * Principal-changing events for the position at each block's projected time:
+ * stakes in and deactivated stakes out for validators; stakes in, unstakes and
+ * penalties out for contracts. Rewards never change stake principal.
  */
-function positionEvents({ kind, stakes, rewards, claims, contractStakes, contractUnstakes, slashEvents, height, blockSeconds }) {
+function positionEvents({ kind, stakes, contractStakes, contractUnstakes, slashEvents, height, blockSeconds }) {
     const now = Date.now();
     const out = [];
     const add = (block, amount, sign) => {
@@ -1151,13 +1166,26 @@ function positionEvents({ kind, stakes, rewards, claims, contractStakes, contrac
             const end = Number(s.deactivation_block ?? s.DEACTIVATION_BLOCK);
             if (Number.isFinite(end) && end > 0 && height != null && end <= height) add(end, amount, -1);
         }
-        for (const r of rewards) add(r.block_index, r.amount ?? r.reward, 1);
-        for (const c of claims) if (String(c?.status ?? '') === 'valid') add(c.block_index, c.amount, -1);
     } else {
         for (const s of contractStakes) if (!refused(s)) add(s.block_index, s.amount, 1);
         for (const u of contractUnstakes) if (!refused(u)) add(u.block_index, u.amount, -1);
         for (const ev of slashEvents) add(ev.block_index, ev.amount, -1);
     }
+    return out.sort((a, b) => a.ms - b.ms);
+}
+
+/** Pending reward history: accrual adds and only valid COLLECT rows subtract. */
+function pendingRewardEvents({ rewards, claims, height, blockSeconds }) {
+    const now = Date.now();
+    const out = [];
+    const add = (row, sign) => {
+        const ms = blockTimeMs(row?.block_index, height, blockSeconds, now);
+        const value = Number(row?.amount ?? row?.reward);
+        if (ms == null || !Number.isFinite(value) || value <= 0) return;
+        out.push({ ms, delta: sign * value });
+    };
+    for (const reward of rewards) add(reward, 1);
+    for (const claim of claims) if (String(claim?.status ?? '') === 'valid') add(claim, -1);
     return out.sort((a, b) => a.ms - b.ms);
 }
 

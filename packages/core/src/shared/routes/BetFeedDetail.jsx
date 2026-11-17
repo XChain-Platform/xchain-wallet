@@ -687,7 +687,7 @@ export function BetFeedDetail({
             nested={showPlace}
             onBack={showPlace ? backToMarket : onBack}
             backDisabled={showPlace && submitting}
-            title={showPlace ? 'Buy a position' : 'Market'}
+            title={showPlace ? 'Buy a Position' : 'Market'}
         />
     );
     const standalone = (page) => (

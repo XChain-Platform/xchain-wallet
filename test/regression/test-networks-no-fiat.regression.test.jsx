@@ -250,12 +250,14 @@ describe('regression/test-networks-no-fiat', () => {
 
             cleanup();
             const detail = renderTokenDetail(chainId, networkKind);
-            // The card leads with the coin amount; the unit button switches it to fiat.
-            const unitButton = screen.getByRole('button', { name: 'Show in USD' });
             if (showsFiat) {
-                fireEvent.click(unitButton);
+                // A priced mainnet asset leads with fiat and offers the coin balance.
                 expect(detail).toHaveTextContent('$50,000.00');
+                const unitButton = screen.getByRole('button', { name: 'Show in BTC' });
+                fireEvent.click(unitButton);
+                expect(detail).not.toHaveTextContent('$');
             } else {
+                const unitButton = screen.getByRole('button', { name: 'Show in USD' });
                 expect(unitButton).toBeDisabled();
                 expect(detail).not.toHaveTextContent('$');
             }

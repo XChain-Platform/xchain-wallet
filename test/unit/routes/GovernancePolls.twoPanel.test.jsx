@@ -138,4 +138,26 @@ describe('GovernancePolls narrow layout and filters', () => {
         expect(screen.queryByRole('button', { name: /Ship the release/ })).toBeNull();
         expect(screen.getByRole('button', { name: /Fund the next milestone/ })).toBeInTheDocument();
     });
+
+    it('mirrors prediction-market views with All, My votes and My polls', async () => {
+        layoutWidth = 640;
+        const api = messaging();
+        api.governancePolls.mockResolvedValue({
+            data: [
+                { ...POLLS[0], source: 'bc1qsomeoneelse' },
+                { ...POLLS[1], source: ADDRESS.address },
+            ],
+        });
+        api.governanceVotes.mockResolvedValue({ data: [{ poll_index: 11, source: ADDRESS.address }] });
+        mount(api);
+        await screen.findByRole('button', { name: /Ship the release/ });
+
+        fireEvent.click(screen.getByRole('tab', { name: 'My votes' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: /Ship the release/ })).toBeInTheDocument());
+        expect(screen.queryByRole('button', { name: /Fund the next milestone/ })).toBeNull();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'My polls' }));
+        expect(screen.queryByRole('button', { name: /Ship the release/ })).toBeNull();
+        expect(screen.getByRole('button', { name: /Fund the next milestone/ })).toBeInTheDocument();
+    });
 });

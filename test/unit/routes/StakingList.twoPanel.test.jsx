@@ -23,6 +23,7 @@ const ADDRESS = 'bc1qstakerstakerstakerstakerstakerxxx';
 const VALIDATOR = { kind: 'validator', chainId: CHAIN, address: ADDRESS, stakeId: 's1' };
 let layoutWidth = 0;
 const realRect = HTMLElement.prototype.getBoundingClientRect;
+const realShareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'share');
 
 beforeEach(() => {
     // jsdom has no layout: the split's measured box reports the width under test.
@@ -38,6 +39,8 @@ afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
     layoutWidth = 0;
+    if (realShareDescriptor) Object.defineProperty(navigator, 'share', realShareDescriptor);
+    else delete navigator.share;
     try { globalThis.localStorage?.clear(); } catch { /* no storage */ }
 });
 
@@ -74,7 +77,7 @@ function makeMessaging(contracts, validatorStakes) {
 // A shell as web, desktop and the extension wire it: the pick lives in the
 // shell's stakingRef, the right panel is the embedded Stake detail, and on the
 // stake-detail route the narrow page is the standalone Stake detail.
-function Shell({ route = 'staking-dashboard', initialRef = null, onOpenStake, onUnstake, onPick, onClaim }) {
+function Shell({ route = 'staking-dashboard', initialRef = null, onOpenStake, onNewStake, onUnstake, onPick, onClaim }) {
     const [stakingRef, setStakingRef] = useState(initialRef);
     const detailFor = (ref, extra) => (
         <StakeDetail
@@ -92,6 +95,7 @@ function Shell({ route = 'staking-dashboard', initialRef = null, onOpenStake, on
         <StakingList
             walletId="wallet-1"
             onOpenStake={onOpenStake}
+            onNewStake={onNewStake}
             onClaim={onClaim}
             onBack={() => {}}
             selectedStake={stakingRef}
@@ -99,7 +103,7 @@ function Shell({ route = 'staking-dashboard', initialRef = null, onOpenStake, on
                 onPick?.(ref);
                 setStakingRef(ref);
             }}
-            renderStake={(ref, panel) => detailFor(ref, { embedded: true, headerSlot: panel.toolsSlot, preloaded: panel.preloaded })}
+            renderStake={(ref, panel) => detailFor(ref, { embedded: true, preloaded: panel.preloaded })}
             renderStakePage={route === 'stake-detail'
                 ? (ref, page) => detailFor(ref, { onBack: () => {}, measureRef: page.measureRef })
                 : undefined}
@@ -124,7 +128,8 @@ describe('StakingList two panels on wide content', () => {
 
     it('shows the list beside the first stake, with one page header', async () => {
         layoutWidth = 1046; // Desktop 1280 beside its side menu
-        renderShell(makeMessaging(2));
+        const onNewStake = vi.fn();
+        renderShell(makeMessaging(2), { onNewStake });
 
         const panel = await screen.findByRole('region', { name: 'Validator stake' });
         const list = screen.getByRole('button', { name: /^Open Contract #1 stake/ }).closest('[role="list"]');
@@ -138,11 +143,36 @@ describe('StakingList two panels on wide content', () => {
         expect(await within(panel).findByText('Validator Stake')).toBeInTheDocument();
         expect(h1s()).toEqual(['Staking']);
         expect(document.querySelectorAll('main')).toHaveLength(1);
+        const pageHeader = screen.getByRole('heading', { level: 1, name: 'Staking' }).parentElement.parentElement;
+        const pageActions = within(pageHeader).getAllByRole('button')
+            .filter((button) => !button.getAttribute('aria-label')?.startsWith('Back'));
+        expect(pageActions).toHaveLength(2);
+        expect(pageActions.map((button) => button.getAttribute('aria-label'))).toEqual(['Filter staking', 'New Stake']);
+        expect(within(pageHeader).queryByRole('button', { name: 'Share this stake' })).toBeNull();
         // The first row (the newest stake) is the shown stake.
         const first = screen.getByRole('button', { name: /^Open Validator stake/ });
         expect(first).toHaveAttribute('aria-current', 'true');
         expect(first.closest('[role="listitem"]')).toHaveAttribute('data-selected', 'true');
         expect(screen.getByRole('button', { name: /^Open Contract #2 stake/ })).not.toHaveAttribute('aria-current');
+    });
+
+    it('shares the selected stake from its action list with the former header handler', async () => {
+        layoutWidth = 1046;
+        const share = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+        renderShell(makeMessaging(1), { onNewStake: vi.fn() });
+
+        const panel = await screen.findByRole('region', { name: 'Validator stake' });
+        const actions = await within(panel).findByRole('list', { name: 'Stake actions' });
+        const shareAction = within(actions).getByRole('button', { name: /^Share\b/ });
+        expect(shareAction.querySelector('svg')).toBeInTheDocument();
+        fireEvent.click(shareAction);
+
+        expect(share).toHaveBeenCalledOnce();
+        expect(share).toHaveBeenCalledWith(expect.objectContaining({
+            title: 'Stake',
+            url: expect.stringContaining(encodeURIComponent(ADDRESS)),
+        }));
     });
 
     it('remembers the dragged list width under the stable staking key', async () => {

@@ -71,7 +71,7 @@ describe('oracle dashboard audit', () => {
         const { container } = mount(OracleConsole, messaging);
 
         expect(await screen.findByText(/Market number: #42; Rain tomorrow/)).toBeTruthy();
-        expect(screen.getByText('Market status: Taking bets')).toBeTruthy();
+        expect(screen.getByText('Market status: Positions available')).toBeTruthy();
         expect(container.textContent).not.toContain('Market status: open');
 
         fireEvent.click(screen.getByRole('button', { name: 'Refresh Markets' }));

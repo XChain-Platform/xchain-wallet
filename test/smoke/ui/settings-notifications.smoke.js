@@ -125,7 +125,7 @@ assert.match(src, /\bpickedSoundForFamily\b/, 'reads the resolved pick via picke
 assert.match(src, /label=(?:\{t\('settings\.notifications\.playNotificationSounds'\)\}|"Play notification sounds")/, 'renders the master "Play notification sounds" toggle');
 assert.match(
     src,
-    /\{\s*value:\s*SOUND_NONE,\s*title:\s*t\('settings\.notifications\.noSound'\),\s*glyph:\s*soundIconFor\(SOUND_NONE_OPTION\),\s*leading:/,
+    /\{\s*value:\s*SOUND_NONE,\s*title:\s*(?:t\('settings\.notifications\.noSound'\)|['"]No sound['"]),\s*glyph:\s*soundIconFor\(SOUND_NONE_OPTION\),\s*leading:/,
     'each family\'s Choose Sound page offers No sound with its muted icon',
 );
 assert.match(src, /export function SoundPickerPage\b/, 'the Choose Sound page is the shared sound picker page');

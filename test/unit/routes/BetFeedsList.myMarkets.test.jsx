@@ -80,9 +80,7 @@ describe('My markets is the All card list and nothing else', () => {
         const list = screen.getByRole('list', { name: 'Prediction markets' });
         expect(list.querySelectorAll(':scope > li')).toHaveLength(1);
         expect(screen.queryByRole('button', { name: 'Will market 8 settle?' })).toBeNull();
-        // The same grid class as All.
-        const allCss = readFileSync('packages/core/src/shared/routes/BetFeedsList.module.css', 'utf8');
-        expect(allCss).toMatch(/\.marketList\s*\{/);
+        expect(list.closest('[data-question-list-panel]')).not.toBeNull();
     });
 
     it('opens a market from its card, as All does', async () => {
@@ -94,20 +92,21 @@ describe('My markets is the All card list and nothing else', () => {
 });
 
 describe('BetMarketCard', () => {
-    it('shows no market number, ticker caption, status pill, clock or icon tile', () => {
+    it('shows the question, status, timing and money-specific footer', () => {
         render(<BetMarketCard market={market(700124, 'open', { deadline: now() + 86400 * 3 })} onOpen={() => {}} yours />);
         const card = screen.getByRole('button', { name: 'Will market 700124 settle?' });
         const text = card.textContent;
 
         expect(text).not.toContain('#700124');
-        expect(text).not.toMatch(/Positions available|Purchases closed|Closes in|Closed .* ago/);
+        expect(text).toContain('Open');
+        expect(text).toMatch(/Closing in 3 days/);
         // The ticker appears only in the pool figure.
         expect(text.match(/XCHAIN/g)).toHaveLength(1);
         expect(text).toMatch(/15 XCHAIN\s*pool/);
         expect(text).toContain('Your market');
-        // One donut plus the pool coin and the chevron: no dollar tile.
         const source = readFileSync('packages/core/src/shared/components/BetMarketCard.jsx', 'utf8');
-        expect(source).not.toMatch(/DollarIcon|betStatusLabel|betWhenText|styles\.status|styles\.ref\b/);
+        expect(source).toContain('<QuestionListRow');
+        expect(source).not.toMatch(/DollarIcon|styles\.ref\b/);
     });
 
     it('is one button named by the question, its odds and pool line the description', () => {
@@ -119,13 +118,10 @@ describe('BetMarketCard', () => {
         expect(card.querySelectorAll('button')).toHaveLength(0);
     });
 
-    it('is compact: 8px insets and gaps and a smaller donut', () => {
-        const css = readFileSync('packages/core/src/shared/components/BetMarketCard.module.css', 'utf8');
-        const rule = (name) => css.match(new RegExp(`\\.${name}\\s*\\{[^}]*\\}`))?.[0] ?? '';
-        expect(rule('card')).toMatch(/padding:\s*var\(--xc-space-2\)/);
-        expect(rule('card')).toMatch(/gap:\s*var\(--xc-space-2\)/);
-        expect(rule('gauge')).toMatch(/gap:\s*var\(--xc-space-2\)/);
-        expect(rule('donut')).toMatch(/width:\s*64px/);
-        expect(css).not.toMatch(/\.(top|tile|topText|ref|when|status)\s*\{/);
+    it('uses the shared compact answer bars instead of a market-only donut', () => {
+        const css = readFileSync('packages/core/src/shared/components/QuestionList.module.css', 'utf8');
+        expect(css).toMatch(/\.row\s*\{[^}]*padding:\s*var\(--xc-space-3\)/s);
+        expect(css).toMatch(/\.track\s*\{[^}]*height:\s*4px/s);
+        expect(css).toMatch(/\.answerLabel\s*\{[^}]*overflow-wrap:\s*break-word/s);
     });
 });

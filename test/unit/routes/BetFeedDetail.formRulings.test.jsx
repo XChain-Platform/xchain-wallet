@@ -145,7 +145,7 @@ describe('Bet tab', () => {
         expect(utils.queryByRole('alert')).toBeNull();
 
         await openPlaceBet(utils, 'Yes');
-        expect(utils.getByRole('heading', { level: 1, name: 'Buy a position' })).toBeTruthy();
+        expect(utils.getByRole('heading', { level: 1, name: 'Buy a Position' })).toBeTruthy();
         expect(pressed(utils)).toEqual(['Yes']);
         expect(utils.queryByText(/Choose an outcome/i)).toBeNull();
         expect(utils.calls.compose).toHaveLength(0);
@@ -168,7 +168,7 @@ describe('Bet opens Buy a position', () => {
         const utils = await openMarket();
         const form = await openPlaceBet(utils, 'No');
 
-        expect(utils.getByRole('heading', { level: 1, name: 'Buy a position' })).toBeTruthy();
+        expect(utils.getByRole('heading', { level: 1, name: 'Buy a Position' })).toBeTruthy();
         expect(utils.queryByRole('tablist')).toBeNull();
         expect(sectionTitles(form)).toEqual(['From', 'Buy', 'Memo', 'Advanced', 'Speed and Fees']);
         expect(utils.getByRole('button', { name: /^Buy\b/, expanded: true })).toBeTruthy();
@@ -252,7 +252,7 @@ describe('Market header and the outcome dropdown', () => {
     it('opens Buy a position with the tapped outcome already chosen', async () => {
         const utils = await openMarket('full', { feed: MULTI });
         await openPlaceBet(utils, 'Harbor City');
-        expect(utils.getByRole('heading', { level: 1, name: 'Buy a position' })).toBeTruthy();
+        expect(utils.getByRole('heading', { level: 1, name: 'Buy a Position' })).toBeTruthy();
         expect(pressed(utils)).toEqual(['Harbor City']);
         expect(utils.calls.compose).toHaveLength(0);
     });
@@ -293,7 +293,7 @@ describe('Buy a position form rulings', () => {
         })();
         expect(row).toBeTruthy();
         await press(row);
-        expect(utils.getByRole('heading', { level: 1, name: 'Buy a position' })).toBeTruthy();
+        expect(utils.getByRole('heading', { level: 1, name: 'Buy a Position' })).toBeTruthy();
         expect(utils.getByDisplayValue(SECOND)).toBeTruthy();
         expect(await utils.findByText('0.789 EXAMPLE available')).toBeTruthy();
         fireEvent.click(utils.getByRole('button', { name: /max available amount/i }));

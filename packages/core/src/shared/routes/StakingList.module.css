@@ -4,12 +4,6 @@
 
 /* Search and network filtering live in the title-bar filter, not an in-page toolbar. */
 
-/* Two panels: the right panel's stake tools (Share) join the title line
-   between the filter and the plus, as the DEX's market tools do. */
-.headerSlot {
-    display: contents;
-}
-
 /* Per-row unclaimed-reward indicator (§42.7.4: claimable rewards stay
    visible on the staking root, on the validator rows they belong to). */
 .rewardChip {

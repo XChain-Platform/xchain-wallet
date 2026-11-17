@@ -1,14 +1,11 @@
-/* The allocation card (G115): a blue hero like the wallet value card beside
-   it, because it holds a chart (G10): the same app blue, border, shadow,
+/* The allocation card (G115): the same hero surface as the wallet value card beside
+   it, including its border, shadow,
    padding and title size. Its own content stays inside the height the top
    row already had (the donut and seven table lines fit in about 131px), so
    the wallet value card never grows to match it. Every gap and padding is a
    spacing token.
 
-   Every piece of text is the full on-accent white, which is the only white
-   that reaches 4.5:1 on the blue; levels are told apart by size and
-   weight, never by fading the white. Slice colours are lifted to 3:1 on the
-   blue in AllocationCard.jsx (liftForBlue). */
+   Text uses the hero foreground. Slice colours reach 3:1 on both hero surfaces. */
 .card {
     /* Sized so an eight-letter ticker fits beside a share bar on a 1280
        window (measured in Chromium with the app font: PEPECASH 70px,
@@ -26,11 +23,11 @@
     height: 100%;
     box-sizing: border-box;
     padding: var(--xc-card-pad);
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
-    border: 1px solid var(--xc-border-strong);
+    background: var(--xc-hero-bg);
+    color: var(--xc-hero-text);
+    border: 1px solid var(--xc-hero-border);
     border-radius: var(--xc-card-radius);
-    box-shadow: var(--xc-shadow-md);
+    box-shadow: var(--xc-hero-shadow);
 }
 
 @supports (container-type: inline-size) {
@@ -54,7 +51,7 @@
     font-size: var(--xc-text-xl);
     font-weight: 700;
     line-height: 1.2;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
 }
 
 .subtitle {
@@ -64,13 +61,13 @@
     white-space: nowrap;
     font-size: var(--xc-text-sm);
     font-weight: 600;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
 }
 
 .empty {
     margin: 0;
     font-size: var(--xc-text-sm);
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
 }
 
 .body {
@@ -96,7 +93,7 @@
 }
 
 .donutTrack {
-    stroke: rgba(255, 255, 255, 0.14);
+    stroke: var(--xc-hero-border);
 }
 
 .donutCenter {
@@ -108,7 +105,7 @@
     justify-content: center;
     text-align: center;
     line-height: 1.2;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
 }
 
 .donutCount {
@@ -141,13 +138,13 @@
     border-collapse: collapse;
     border-spacing: 0;
     font-size: var(--xc-text-sm);
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
 }
 
 .table th,
 .table td {
     padding: 0;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
     white-space: nowrap;
 }
 
@@ -160,7 +157,7 @@
    a header and not a first row. */
 .table thead th {
     padding-block-end: var(--xc-space-1);
-    border-block-end: 1px solid rgba(255, 255, 255, 0.5);
+    border-block-end: 1px solid var(--xc-hero-border);
     font-size: var(--xc-text-xs);
     font-weight: 700;
     line-height: var(--xc-allocation-head-h);
@@ -238,7 +235,7 @@
     display: block;
     height: 8px;
     border-radius: var(--xc-radius-pill);
-    background: rgba(255, 255, 255, 0.14);
+    background: var(--xc-hero-border);
     overflow: hidden;
 }
 
@@ -278,8 +275,8 @@
    as the wallet value card does. */
 @media (forced-colors: active) {
     .card {
-        background: var(--xc-accent-primary);
-        color: var(--xc-on-accent);
+        background: var(--xc-hero-bg);
+        color: var(--xc-hero-text);
     }
 
     .dot,

@@ -40,14 +40,15 @@ describe('LeftNav rows use the shared Button base', () => {
         const names = rows.map((row) => row.getAttribute('title'));
 
         expect(rows.length).toBeGreaterThan(5);
-        expect(names.slice(0, 6)).toEqual([
+        expect(names.slice(0, 5)).toEqual([
             'Home',
             'Send',
             'Receive',
             'My Tokens',
             'History',
-            'Prediction markets',
         ]);
+        expect(names).toContain('Prediction markets');
+        expect(names.join(' ')).not.toMatch(/\b(?:bet|betting|wager)\b/i);
         expect(names).toContain('Settings');
         for (const row of rows) {
             const classes = classesOf(row);

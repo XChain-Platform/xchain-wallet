@@ -164,7 +164,7 @@ describe('Network, Token and Checkbox field help on trading, contract and stakin
     it('Bet market: Network and Token tips', async () => {
         mount(CreateBetFeedForm, { chainId: CHAIN, presetTick: 'PEPECREATURE' });
         await expectTip('About Network', 'The chain the market is created on.');
-        await expectTip('About Token', 'Every bet and every payout is in this token.');
+        await expectTip('About Token', 'Every purchase and payout uses this token.');
     });
 
     // Batch (layout 1) picks each transaction's network with its From on the

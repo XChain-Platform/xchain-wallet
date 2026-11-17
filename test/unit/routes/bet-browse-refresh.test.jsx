@@ -217,10 +217,10 @@ describe('BetFeedsList refresh', () => {
         messaging.getAddressesByChain = () => Promise.resolve({});
         const { container } = await renderList(messaging);
 
-        expect(container.textContent).toContain('No betting address');
+        expect(container.textContent).toContain('No prediction market address');
         expect(container.textContent,
             'the no-chain state reads as a chain with no markets on it')
-            .not.toContain('No markets are taking bets');
+            .not.toContain('No markets yet');
         expect(calls.length,
             'the list was fetched with no chain to fetch it for').toBe(0);
     });
@@ -241,7 +241,7 @@ describe('BetFeedsList refresh', () => {
             ));
             await drain();
         });
-        expect(utils.container.textContent).toContain('No betting address');
+        expect(utils.container.textContent).toContain('No prediction market address');
 
         await domAct(async () => {
             utils.rerender(React.createElement(
@@ -253,7 +253,7 @@ describe('BetFeedsList refresh', () => {
             ));
             await drain();
         });
-        expect(utils.container.textContent).not.toContain('No betting address');
+        expect(utils.container.textContent).not.toContain('No prediction market address');
         expect(utils.container.textContent).toContain('Market 1248');
     });
 

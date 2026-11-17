@@ -2,10 +2,10 @@
    blue hero, the tab strip and its panels. Both routes draw from this one
    sheet so the two pages cannot drift. */
 
-/* No reserved band under the figures: the card is as tall as its text and
-   range chips, and the chart fills it from behind. */
+/* Match the Home chart hero's full-height minimum while the chart fills the
+   surface behind the content and range chips. */
 .heroStack {
-    min-height: 0;
+    min-height: 160px;
 }
 
 .hero {
@@ -14,7 +14,7 @@
     flex-direction: column;
     gap: var(--xc-space-2);
     padding: var(--xc-card-pad);
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
     min-width: 0;
 }
 
@@ -33,8 +33,8 @@
     max-width: 100%;
     padding: var(--xc-space-1) var(--xc-space-2);
     border-radius: var(--xc-radius-pill);
-    background: rgba(15, 23, 42, 0.32);
-    color: var(--xc-on-accent);
+    background: var(--xc-hero-chip-bg);
+    color: var(--xc-hero-text);
     font-size: var(--xc-text-xs);
     font-weight: 700;
     line-height: 1.2;
@@ -42,11 +42,11 @@
 }
 
 .chipOk {
-    color: #BBF7D0;
+    color: var(--xc-hero-text);
 }
 
 .chipBad {
-    color: #FECACA;
+    color: var(--xc-hero-text);
 }
 
 .chipDot {
@@ -58,7 +58,7 @@
 
 .dotOpen { background: var(--xc-brand-card-gain); }
 .dotClosed { background: #FFC94D; }
-.dotDone { background: rgba(255, 255, 255, 0.7); }
+.dotDone { background: var(--xc-hero-text-muted); }
 
 .chipIcon {
     --xc-icon-size: var(--xc-icon-sm);
@@ -71,7 +71,7 @@
     font-size: var(--xc-text-lg);
     font-weight: 800;
     line-height: 1.25;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
     overflow-wrap: break-word;
 }
 
@@ -91,7 +91,7 @@
     font-weight: 800;
     line-height: 1.1;
     letter-spacing: -0.01em;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
 }
 
 .bigMessage {
@@ -102,7 +102,7 @@
 .bigLabel {
     font-size: var(--xc-text-md);
     font-weight: 700;
-    color: color-mix(in srgb, var(--xc-on-accent) 92%, transparent);
+    color: var(--xc-hero-text-muted);
     overflow-wrap: break-word;
     min-width: 0;
 }
@@ -116,8 +116,8 @@
     display: inline-block;
     padding-inline: var(--xc-space-2);
     border-radius: var(--xc-radius-pill);
-    background: rgba(0, 0, 0, 0.55);
-    color: var(--xc-on-accent);
+    background: var(--xc-hero-chip-bg);
+    color: var(--xc-hero-text);
     font-size: var(--xc-text-md);
     font-weight: 800;
     line-height: 1.6;
@@ -165,7 +165,7 @@
     margin-top: auto;
     padding-top: var(--xc-space-2);
     font-size: var(--xc-text-xs);
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--xc-hero-text-muted);
     text-shadow: 0 1px 2px rgba(15, 23, 42, 0.45);
     min-width: 0;
 }
@@ -180,19 +180,19 @@
 }
 
 .footLine strong {
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
 }
 
 .footMet {
     display: inline-flex;
     align-items: center;
     gap: var(--xc-space-1);
-    color: #BBF7D0;
+    color: var(--xc-hero-text);
     font-weight: 700;
 }
 
 .footMissed {
-    color: #FECACA;
+    color: var(--xc-hero-text);
     font-weight: 700;
 }
 
@@ -218,7 +218,7 @@
     height: var(--xc-space-2);
     border-radius: var(--xc-radius-pill);
     overflow: hidden;
-    background: rgba(15, 23, 42, 0.32);
+    background: var(--xc-hero-chip-bg);
 }
 
 .barSegment {
@@ -233,7 +233,52 @@
     overflow: visible;
 }
 
-/* An item with no history to chart (every poll, a market with no bet rows)
+.probabilityChart {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.chartGuide {
+    stroke: var(--xc-hero-guide);
+    stroke-width: 1;
+    opacity: var(--xc-hero-guide-opacity);
+}
+
+.chartGuideHalfway {
+    opacity: calc(var(--xc-hero-guide-opacity) * 0.65);
+}
+
+.probabilityScale {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    color: var(--xc-hero-scale-text);
+    font-size: max(12px, var(--xc-text-xs));
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    text-shadow: 0 1px 2px color-mix(in srgb, var(--xc-hero-bg) 75%, transparent);
+}
+
+.probabilityScale > span {
+    position: absolute;
+    inset-inline-end: var(--xc-space-1);
+    transform: translateY(-50%);
+    white-space: nowrap;
+}
+
+@media (forced-colors: active) {
+    .chartGuide {
+        stroke: CanvasText;
+    }
+
+    .probabilityScale {
+        color: CanvasText;
+    }
+}
+
+/* An item with no history to chart (every poll, a market with no current split)
    opens with the identity card (G16): the one outlined card surface with no
    blue fill, the status pills, the question in bold and a muted line. */
 .identity {

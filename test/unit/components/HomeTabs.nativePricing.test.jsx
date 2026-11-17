@@ -208,7 +208,7 @@ describe('Home test-network fiat', () => {
 
         expect(within(hero()).getByText('$70,001.00')).toBeInTheDocument();
         expect(document.querySelector('[data-balance-key="bitcoin-regtest:BTC"]')).toHaveTextContent('$70,000.00');
-        const chart = await screen.findByRole('img', { name: /Portfolio performance chart/ });
+        const chart = await screen.findByRole('img', { name: /Wallet value over 1W/ });
         expect(chart).toHaveAccessibleName(expect.stringMatching(/End \$70,001\.00 USD\./));
 
         showHomeBalances('tokens');
@@ -532,7 +532,7 @@ describe('Home hidden-token totals', () => {
         });
 
         expect(within(hero()).getByText('$100.00')).toBeInTheDocument();
-        const chart = await screen.findByRole('img', { name: /Portfolio performance chart/ });
+        const chart = await screen.findByRole('img', { name: /Wallet value over 1W/ });
         expect(chart).toHaveAccessibleName(expect.stringMatching(/End \$100\.00 USD\./));
         expect(hero()).not.toHaveTextContent('$300.00');
 

@@ -15,7 +15,7 @@
     flex-direction: column;
     gap: var(--xc-space-1);
     padding: var(--xc-card-pad);
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
     min-width: 0;
 }
 
@@ -56,8 +56,8 @@
     min-width: 0;
     padding: 2px var(--xc-space-2);
     border-radius: 999px;
-    background: rgba(0, 0, 0, 0.3);
-    color: var(--xc-on-accent);
+    background: var(--xc-hero-chip-bg);
+    color: var(--xc-hero-text);
     font-size: var(--xc-text-xs);
     font-weight: 700;
     line-height: 1.4;
@@ -73,7 +73,7 @@
 
 .dotOpen { background: var(--xc-brand-card-gain); }
 .dotClosing { background: #FFC94D; }
-.dotDone { background: rgba(255, 255, 255, 0.7); }
+.dotDone { background: var(--xc-hero-text-muted); }
 
 .share.share {
     margin-inline-start: auto;
@@ -85,7 +85,7 @@
     font-size: var(--xc-text-xl);
     font-weight: 800;
     line-height: 1.2;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
     overflow-wrap: anywhere;
     direction: ltr;
     unicode-bidi: isolate;
@@ -102,7 +102,7 @@
     /* A paragraph's reading-width cap would stop the end fact mid-card. */
     max-width: none;
     font-size: var(--xc-text-xs);
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--xc-hero-text-muted);
     text-shadow: 0 1px 2px rgba(15, 23, 42, 0.45);
     min-width: 0;
 }
@@ -114,7 +114,7 @@
 
 .strong {
     font-weight: 700;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
 }
 
 .gauge {
@@ -128,7 +128,7 @@
     position: relative;
     height: 6px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.25);
+    background: var(--xc-hero-chip-bg);
     overflow: hidden;
 }
 
@@ -137,7 +137,7 @@
     inset-block: 0;
     inset-inline-start: 0;
     border-radius: inherit;
-    background: var(--xc-on-accent);
+    background: var(--xc-hero-text);
 }
 
 .chartCaption {

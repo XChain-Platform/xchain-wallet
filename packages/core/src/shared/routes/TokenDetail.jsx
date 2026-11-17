@@ -622,7 +622,7 @@ function TokenDetailContent({
     const [activeTab, setActiveTab] = useState('actions');
 
     const [balanceHidden, toggleBalanceHidden] = useBalancesHidden();
-    const [assetUnit, toggleAssetUnit] = useBalanceUnit();
+    const [assetUnit, toggleAssetUnit] = useBalanceUnit('asset');
 
     const fiatAvailable = fiat != null && isFinite(fiat);
     // Amount + unit code are kept separate so the unit can render as a
@@ -1080,9 +1080,10 @@ function TokenDetailContent({
                         so the card shows it (the asset's icon and name). */}
                     <section className={embedded ? heroStyles.hero : `${heroStyles.hero} ${styles.cardNoCaption}`} aria-labelledby={captionId}>
                         <div className={`${heroStyles.row} ${heroStyles.rowWithActions}`}>
-                            <span id={captionId} className={`${heroStyles.label} ${heroStyles.walletLabel} ${styles.cardCaption}`}>
-                                {headerIconUrl || metadataLoading ? (
-                                    <span className={styles.cardCaptionIconWrap}>
+                            <span className={`${heroStyles.label} ${heroStyles.walletLabel} ${styles.cardCaption}`}>
+                                <span id={captionId} className={styles.cardIdentity}>
+                                    {headerIconUrl || metadataLoading ? (
+                                        <span className={styles.cardCaptionIconWrap}>
                                         {headerIconUrl ? (
                                             <AssetArtwork
                                                 src={headerIconUrl}
@@ -1106,9 +1107,13 @@ function TokenDetailContent({
                                                 className={styles.cardCaptionChain}
                                             />
                                         ) : null}
-                                    </span>
-                                ) : null}
-                                <span className={styles.cardCaptionText} title={pageTitle}>{pageTitle}</span>
+                                        </span>
+                                    ) : null}
+                                    <span className={styles.cardCaptionText} title={pageTitle}>{pageTitle}</span>
+                                </span>
+                                <span className={heroStyles.modeCaption}>
+                                    {showFiatPrimary ? t('tokenDetail.hero.value') : t('tokenDetail.hero.balance')}
+                                </span>
                             </span>
                             <div
                                 className={heroStyles.amount}
@@ -1124,17 +1129,6 @@ function TokenDetailContent({
                                 )}
                             </div>
                             <div className={`${heroStyles.actions} ${heroStyles.inlineActions}`}>
-                                <Button
-                                    type="button"
-                                    className={heroStyles.eye}
-                                    onClick={toggleAssetUnit}
-                                    disabled={!fiatAvailable}
-                                    aria-label={t('components.totalBalanceHero.showIn', { unit: showFiatPrimary ? tick : fiatCurrency })}
-                                    title={t('components.totalBalanceHero.showIn', { unit: showFiatPrimary ? tick : fiatCurrency })}
-                                    icon={<Icon.SwapIcon />}
-                                >
-                                    {null}
-                                </Button>
                                 {!embedded ? (
                                     <Button
                                         type="button"
@@ -1148,6 +1142,21 @@ function TokenDetailContent({
                                         {null}
                                     </Button>
                                 ) : null}
+                                <Button
+                                    type="button"
+                                    className={heroStyles.eye}
+                                    onClick={toggleAssetUnit}
+                                    disabled={!fiatAvailable}
+                                    aria-label={showFiatPrimary
+                                        ? t('tokenDetail.hero.showBalance', { unit: tick })
+                                        : t('tokenDetail.hero.showValue', { unit: fiatCurrency })}
+                                    title={showFiatPrimary
+                                        ? t('tokenDetail.hero.showBalance', { unit: tick })
+                                        : t('tokenDetail.hero.showValue', { unit: fiatCurrency })}
+                                    icon={<Icon.SwapIcon />}
+                                >
+                                    {null}
+                                </Button>
                             </div>
                         </div>
                         <div className={heroStyles.meta} role="group" aria-label={t('components.totalBalanceHero.balanceSummary')}>
@@ -1924,9 +1933,9 @@ function MarketPanel({ market, hidden, showFiat, currency, unit, locale }) {
                                 formatScaleValue={formatChartAmount}
                                 showScale
                                 heroScale
-                                {...(seriesKind === 'balance'
-                                    ? { label: t('tokenDetail.chart.balanceTrend') }
-                                    : seriesKind === 'value' ? { label: t('tokenDetail.chart.valueTrend') } : {})}
+                                label={showFiat
+                                    ? t('tokenDetail.chart.valueOver', { range: range.label })
+                                    : t('tokenDetail.chart.balanceOver', { range: range.label })}
                             />
                         </div>
                     ) : null}

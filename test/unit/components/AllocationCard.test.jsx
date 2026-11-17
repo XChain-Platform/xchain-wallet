@@ -3,8 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Wide Home's allocation card (G115, the operator's pick of 2026-11-15):
-// a blue hero (G10, it holds a chart) with the donut on the left and a table
+// Wide Home's allocation card (G115) with the donut on the left and a table
 // of the top five assets plus Other on the right, each row a dot, the
 // ticker, a share bar, Share and Value, under headers that line up with
 // their columns and a thin divider.
@@ -20,14 +19,14 @@ import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import {
-    ALLOCATION_BLUE,
     ALLOCATION_DOT_CONTRAST,
+    ALLOCATION_HERO_SURFACES,
     ALLOCATION_OTHER_COLOR,
     AllocationCard,
     allocationSlices,
     contrastRatio,
     formatAllocationValue,
-    liftForBlue,
+    fitAllocationColor,
 } from '../../../packages/core/src/shared/components/AllocationCard.jsx';
 
 const CSS = readFileSync('packages/core/src/shared/components/AllocationCard.module.css', 'utf8');
@@ -224,31 +223,34 @@ describe('AllocationCard headers line up with their columns', () => {
     });
 });
 
-describe('AllocationCard on the blue', () => {
-    it('is the blue hero: the wallet value card surface and caption size', () => {
+describe('AllocationCard hero surface', () => {
+    it('uses the wallet value card surface tokens and caption size', () => {
         const card = rule(CSS, '.card');
-        expect(decl(card, 'background')).toBe('var(--xc-accent-primary)');
-        expect(decl(card, 'color')).toBe('var(--xc-on-accent)');
+        expect(decl(card, 'background')).toBe('var(--xc-hero-bg)');
+        expect(decl(card, 'color')).toBe('var(--xc-hero-text)');
+        expect(decl(card, 'border')).toBe('1px solid var(--xc-hero-border)');
         expect(decl(card, 'padding')).toBe('var(--xc-card-pad)');
-        expect(decl(card, 'box-shadow')).toBe('var(--xc-shadow-md)');
+        expect(decl(card, 'box-shadow')).toBe('var(--xc-hero-shadow)');
         expect(decl(rule(CSS, '.title'), 'font-size')).toBe(decl(rule(HERO_CSS, '.label.walletLabel'), 'font-size'));
     });
 
-    it('checks colours against the real app blue', () => {
-        const first = /--xc-accent-primary:\s*(#[0-9A-Fa-f]{6});/.exec(TOKENS);
-        expect(first?.[1].toUpperCase()).toBe(ALLOCATION_BLUE);
+    it('pins the light and dark ice hero surfaces', () => {
+        expect(ALLOCATION_HERO_SURFACES).toEqual(['#EEF6FC', '#10213A']);
+        for (const surface of ALLOCATION_HERO_SURFACES) {
+            expect(TOKENS).toContain(`--xc-hero-bg: ${surface};`);
+        }
     });
 
-    it('keeps every piece of text full white, at least 4.5:1 on the blue', () => {
-        expect(contrastRatio('#FFFFFF', ALLOCATION_BLUE)).toBeGreaterThanOrEqual(4.5);
+    it('routes every piece of text through the AA hero foreground', () => {
         const colors = [...CSS.matchAll(/(?:^|[\s;{])color:\s*([^;]+);/g)].map((m) => m[1].trim());
         expect(colors.length).toBeGreaterThan(3);
-        for (const c of colors) expect(['var(--xc-on-accent)']).toContain(c);
-        // No faded text: opacity is never set on the card's text.
+        for (const c of colors) expect(['var(--xc-hero-text)']).toContain(c);
+        expect(contrastRatio('#0F172A', '#EEF6FC')).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio('#E5EAF2', '#10213A')).toBeGreaterThanOrEqual(4.5);
         expect(CSS).not.toMatch(/opacity\s*:/);
     });
 
-    it('lifts every slice colour to at least 3:1 on the blue', () => {
+    it('fits every slice colour to at least 3:1 on both hero surfaces', () => {
         const many = [
             ...SAMPLE.slice(0, 5),
             row('dogecoin-mainnet', 'DOGE', 'native', 1100),
@@ -256,15 +258,16 @@ describe('AllocationCard on the blue', () => {
         ];
         const all = [
             ...allocationSlices(many, chainRegistry).slices.map((s) => s.color),
-            ...['#F7931A', '#345D9D', '#C2A633', '#000000', '#1A7BAC', '#123456'].map(liftForBlue),
+            ...['#F7931A', '#345D9D', '#C2A633', '#000000', '#1A7BAC', '#123456'].map(fitAllocationColor),
             ALLOCATION_OTHER_COLOR,
         ];
         for (const color of all) {
             expect(color).toMatch(/^#[0-9A-F]{6}$/);
-            expect(contrastRatio(color, ALLOCATION_BLUE)).toBeGreaterThanOrEqual(ALLOCATION_DOT_CONTRAST);
+            for (const surface of ALLOCATION_HERO_SURFACES) {
+                expect(contrastRatio(color, surface)).toBeGreaterThanOrEqual(ALLOCATION_DOT_CONTRAST);
+            }
         }
-        // Coins keep their chain's hue, only lighter: Bitcoin stays orange.
-        const btc = liftForBlue('#F7931A');
+        const btc = fitAllocationColor('#F7931A');
         const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(btc.slice(i, i + 2), 16));
         expect(r).toBeGreaterThan(g);
         expect(g).toBeGreaterThan(b);

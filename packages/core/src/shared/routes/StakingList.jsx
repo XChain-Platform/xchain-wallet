@@ -106,7 +106,7 @@ const VALIDATOR_COIN = 'bitcoin';
  *   the stake the right panel shows, held by the shell so it survives the stake's forms
  * @param {(ref: StakeRef) => void} [props.onSelectStake]  a row picked on wide content
  * @param {(ref: StakeRef) => void} [props.onClaim]  the "ready to claim" banner's Claim: opens the Claim form on that stake's address
- * @param {(ref: StakeRef, panel: { toolsSlot: HTMLElement | null, preloaded: object | null }) => import('react').ReactNode} [props.renderStake]
+ * @param {(ref: StakeRef, panel: { preloaded: object | null }) => import('react').ReactNode} [props.renderStake]
  *   the right panel's stake (an embedded StakeDetail); without it the list never splits
  * @param {(ref: StakeRef, page: { measureRef: (el: HTMLElement | null) => void }) => import('react').ReactNode} [props.renderStakePage]
  *   the stake-detail route's narrow page (a standalone StakeDetail that puts
@@ -136,8 +136,6 @@ export function StakingList({
     // and narrow it is the detail page alone, so the list's reads wait.
     const detailRoute = typeof renderStakePage === 'function' && Boolean(selectedStake);
     const listShown = !detailRoute || (measured && twoPanel);
-    // The header element the right panel's stake tools (Share) portal into.
-    const [headerSlot, setHeaderSlot] = useState(/** @type {HTMLElement | null} */ (null));
     // A pick made here, for a host that does not hold the selection itself.
     const [localPick, setLocalPick] = useState(/** @type {StakeRef | null} */ (null));
 
@@ -555,8 +553,6 @@ export function StakingList({
             trailing={(
                 <>
                     {filterMenu}
-                    {/* With two panels, the right panel's stake tools (Share) land here. */}
-                    {showPanel ? <span ref={setHeaderSlot} className={local.headerSlot} /> : null}
                     {onNewStake ? (
                         <Button variant="secondary" icon={<Icon.PlusIcon />} aria-label="New Stake" title="New Stake" onClick={() => onNewStake()}>
                             {null}
@@ -604,7 +600,7 @@ export function StakingList({
                     detail={shownStake && shownChainLoaded ? (
                         // Keyed on the stake alone, so the list re-rendering never reloads it.
                         <Fragment key={`${shownStake.kind}:${shownStake.chainId}:${shownStake.address}:${shownStake.contractActionIndex ?? ''}:${shownStake.stakeId ?? ''}`}>
-                            {renderStake(shownStake, { toolsSlot: headerSlot, preloaded })}
+                            {renderStake(shownStake, { preloaded })}
                         </Fragment>
                     ) : stakePanelSkeleton}
                 />

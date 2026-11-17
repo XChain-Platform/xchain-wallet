@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 const css = readFileSync('packages/core/src/shared/routes/BetFeedsList.module.css', 'utf8');
 const jsx = readFileSync('packages/core/src/shared/routes/BetFeedsList.jsx', 'utf8');
+const shared = readFileSync('packages/core/src/shared/components/QuestionList.module.css', 'utf8');
 
 describe('Prediction markets list spacing (8px between every block)', () => {
     it('takes the 8px gap from ListPage itself, with no local override', () => {
@@ -17,34 +18,26 @@ describe('Prediction markets list spacing (8px between every block)', () => {
         expect(jsx).not.toMatch(/<ListPage\s+className=/);
     });
 
-    it('spaces the market cards 8px apart', () => {
-        expect(css).toMatch(/\.marketList\s*\{[^}]*gap:\s*var\(--xc-space-2\)/s);
+    it('uses one framed list with full-width separators', () => {
+        expect(shared).toMatch(/\.panel\s*\{[^}]*composes:\s*flush/s);
+        expect(shared).toMatch(/\.list > li \+ li\s*\{[^}]*border-top:\s*1px solid var\(--xc-border\)/s);
     });
 
-    it('lays the cards in an auto-fill grid: one full-width card on a phone, side by side when wide', () => {
-        const rule = css.match(/\.marketList\s*\{[^}]*\}/s)?.[0] ?? '';
-        // min(100%, ...) keeps one card spanning a phone or the popup.
-        expect(rule).toMatch(/grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*\d+px\),\s*1fr\)\)/);
-        const floor = Number(rule.match(/min\(100%,\s*(\d+)px\)/)[1]);
-        // A card never grows past about 440px once two share a row: the widest
-        // two-column track is just before a third column fits.
-        const widestTwoColumn = ((3 * floor + 2 * 8 - 1) - 8) / 2;
-        expect(widestTwoColumn).toBeLessThanOrEqual(440);
-        expect(floor).toBeGreaterThanOrEqual(280);
-        expect(css).toMatch(/\.marketList > \*\s*\{[^}]*max-width:\s*440px/s);
+    it('keeps every question row full width at every viewport', () => {
+        expect(shared).toMatch(/\.row\s*\{[^}]*width:\s*100%/s);
+        expect(shared).not.toMatch(/grid-template-columns|@container/);
     });
 
-    it('gives My bets and My markets the same grid as All', () => {
+    it('gives My bets and My markets the same shared list as All', () => {
         // One list for every tab: the tabs filter the rows, never the markup.
-        const grids = jsx.match(/<ul className=\{local\.marketList\}[^>]*>/g) ?? [];
-        expect(grids).toEqual(['<ul className={local.marketList} aria-label="Prediction markets" data-xc-split-list={twoPanel ? \'\' : undefined}>']);
+        expect(jsx.match(/<QuestionList label="Prediction markets"/g)).toHaveLength(2);
         expect(jsx).not.toMatch(/listClassName=|aria-label="Your prediction markets"/);
         expect(jsx).not.toMatch(/<OracleConsole\b/);
     });
 
     it('adds no margin or larger gap between the tabs row and the list', () => {
         const rule = (name) => css.match(new RegExp(`\\.${name}\\s*\\{[^}]*\\}`, 's'))?.[0] ?? '';
-        for (const name of ['toolbarRow', 'cardArea', 'marketList']) {
+        for (const name of ['toolbarRow']) {
             expect(rule(name)).not.toMatch(/margin(-block|-top|-bottom)?:\s*[^0\s]/);
         }
     });

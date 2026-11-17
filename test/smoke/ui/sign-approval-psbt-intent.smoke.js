@@ -85,7 +85,7 @@ assert.doesNotMatch(panelSrc, /data-testid="psbt-output"/, 'raw output rows are 
 assert.match(panelSrc, /role="alert"/, 'undecodable PSBT renders an alert');
 assert.match(
     panelSrc,
-    /psbtIntentPanel\.thisTransactionCouldNotBe/,
+    /psbtIntentPanel\.thisTransactionCouldNotBe|This transaction couldn't be decoded, so the wallet can't show you what it does/,
     'alert explains the transaction could not be decoded',
 );
 

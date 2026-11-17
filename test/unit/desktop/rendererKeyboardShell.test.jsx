@@ -98,11 +98,20 @@ describe('desktop renderer keyboard shell', () => {
 
         const paletteTrigger = screen.getByRole('button', { name: 'Open the wallet menu' });
         const home = screen.getByRole('button', { name: 'Home' });
+        const send = screen.getByRole('button', { name: 'Send' });
+        const receive = screen.getByRole('button', { name: 'Receive' });
+        const myTokens = screen.getByRole('button', { name: 'My Tokens' });
         const history = screen.getByRole('button', { name: 'History' });
         paletteTrigger.focus();
         fireEvent.keyDown(paletteTrigger, { key: 'ArrowDown' });
         expect(home).toHaveFocus();
         fireEvent.keyDown(home, { key: 'ArrowDown' });
+        expect(send).toHaveFocus();
+        fireEvent.keyDown(send, { key: 'ArrowDown' });
+        expect(receive).toHaveFocus();
+        fireEvent.keyDown(receive, { key: 'ArrowDown' });
+        expect(myTokens).toHaveFocus();
+        fireEvent.keyDown(myTokens, { key: 'ArrowDown' });
         expect(history).toHaveFocus();
         pressEnter(history);
 

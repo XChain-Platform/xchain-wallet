@@ -72,6 +72,12 @@ const messages = {
     'tokenDetail.chart.balance': 'Balance chart',
     'tokenDetail.chart.balanceTrend': 'Balance trend',
     'tokenDetail.chart.valueTrend': 'Value trend',
+    'tokenDetail.hero.value': 'Value',
+    'tokenDetail.hero.balance': 'Balance',
+    'tokenDetail.hero.showBalance': 'Show balance in {unit}',
+    'tokenDetail.hero.showValue': 'Show value in {unit}',
+    'tokenDetail.chart.valueOver': 'Value over {range}',
+    'tokenDetail.chart.balanceOver': 'Balance over {range}',
     // The issuer's facts in the Details card.
     'tokenDetail.details.supplyCap': 'Supply cap',
     'tokenDetail.details.lockRow': '{name} lock',

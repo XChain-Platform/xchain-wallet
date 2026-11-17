@@ -91,18 +91,18 @@ describe('shared route dark-mode colors', () => {
         }
     });
 
-    it('uses the on-accent token for token hero controls and small text', () => {
+    it('uses scheme-owned hero tokens for token hero controls and small text', () => {
         const css = routeCss('TokenDetail');
         expect(css).not.toMatch(/rgba\(255,\s*255,\s*255/);
         const heroCss = readFileSync('packages/core/src/shared/components/TotalBalanceHero.module.css', 'utf8');
-        expect(heroCss).toMatch(/\.eye\s*\{[^}]*var\(--xc-on-accent\) 15%/);
+        expect(heroCss).toMatch(/\.eye\s*\{[^}]*background:\s*var\(--xc-hero-chip-bg\)[^}]*border:\s*1px solid var\(--xc-hero-border\)[^}]*color:\s*var\(--xc-hero-chip-text\)/s);
         // The balance hero's code, note and hidden classes were retired with
-        // the old hero; the card's icon fallback and secondary figures carry
-        // the on-accent token now.
+        // the old hero. The icon fallback and secondary figures now take the
+        // semantic hero roles selected by the active scheme.
         for (const selector of ['cardCaptionIconFallback']) {
-            expect(css).toMatch(new RegExp(`\\.${selector}\\s*\\{[^}]*color:\\s*var\\(--xc-on-accent\\)`, 's'));
+            expect(css).toMatch(new RegExp(`\\.${selector}\\s*\\{[^}]*color:\\s*var\\(--xc-hero-chip-text\\)`, 's'));
         }
-        expect(css).toMatch(/\.cardSecondary\s*\{[^}]*color:\s*color-mix\(in srgb, var\(--xc-on-accent\) 80%, transparent\)/s);
+        expect(css).toMatch(/\.cardSecondary\s*\{[^}]*color:\s*var\(--xc-hero-text-muted\)/s);
         expect(css).not.toMatch(/\.balanceHero/);
     });
 });

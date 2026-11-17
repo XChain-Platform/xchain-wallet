@@ -74,16 +74,13 @@ describe('governance screen narrow layout', () => {
         expect(rows.every((line) => line.includes("flexWrap: 'wrap'"))).toBe(true);
     });
 
-    it('keeps betting market card text shrinkable and its footer on one line', () => {
+    it('keeps shared question-row text and footers shrinkable', () => {
         const source = route('BetFeedsList.jsx');
-        const card = readFileSync(resolve(here, '../../../packages/core/src/shared/components/BetMarketCard.module.css'), 'utf8');
+        const card = readFileSync(resolve(here, '../../../packages/core/src/shared/components/QuestionList.module.css'), 'utf8');
         expect(source).toContain('<BetMarketCard');
-        // The card has no top row now; its question and detail block shrink.
-        expect(card).toMatch(/\.detail\s*\{[\s\S]*?min-width:\s*0/);
-        expect(card).toMatch(/\.question\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
-        // The footer is always one line: pool on the left, the stake summary and chevron on the right.
-        expect(card).toMatch(/\.foot\s*\{[\s\S]*?flex-wrap:\s*nowrap/);
-        expect(card).toMatch(/\.right\s*\{[\s\S]*?margin-inline-start:\s*auto/);
+        expect(card).toMatch(/\.detail,[\s\S]*?\.answer\s*\{[\s\S]*?min-width:\s*0/);
+        expect(card).toMatch(/\.question\s*\{[\s\S]*?overflow-wrap:\s*break-word/);
+        expect(card).toMatch(/\.footer\s*\{[\s\S]*?flex-wrap:\s*wrap/);
     });
 
     it('wraps Oracle Console market headers through its phone layout styles', () => {
@@ -112,12 +109,11 @@ describe('governance screen narrow layout', () => {
     });
 
     it('keeps governance cards, option rows, and result values shrinkable', () => {
-        const polls = route('GovernancePolls.module.css');
+        const polls = readFileSync(resolve(here, '../../../packages/core/src/shared/components/QuestionList.module.css'), 'utf8');
         const detail = route('PollDetail.module.css');
         const outcome = readFileSync(resolve(here, '../../../packages/core/src/shared/components/outcomeDetail/OutcomeDetail.module.css'), 'utf8');
-        // Poll cards are ListRows, whose content column shrinks beside the status pill.
-        expect(route('GovernancePolls.jsx')).toContain('<ListRow');
-        expect(polls).toMatch(/\.pollText\s*\{[\s\S]*?overflow-wrap:\s*break-word/);
+        expect(route('GovernancePolls.jsx')).toContain('<QuestionListRow');
+        expect(polls).toMatch(/\.answerLabel\s*\{[\s\S]*?overflow-wrap:\s*break-word/);
         // The poll page is the shared outcome page: the hero question, each
         // final result row (name, winner pill, share) and its figures wrap.
         expect(outcome).toMatch(/\.question\s*\{[\s\S]*?overflow-wrap:\s*break-word/);

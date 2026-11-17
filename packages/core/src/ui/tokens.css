@@ -299,7 +299,7 @@
     --xc-hero-chart-fill-opacity: 0.22;
     --xc-hero-guide: #7FA6C8;
     --xc-hero-guide-opacity: 0.55;
-    --xc-hero-chip-bg: rgba(15, 23, 42, 0.07);
+    --xc-hero-chip-bg: #FFFFFF;
     --xc-hero-chip-text: #0F172A;
     --xc-hero-chip-selected-bg: #1A7BAC;
     --xc-hero-chip-selected-text: #FFFFFF;
@@ -633,7 +633,7 @@
         --xc-hero-chart-fill-opacity: 0.22;
         --xc-hero-guide: #7FA6C8;
         --xc-hero-guide-opacity: 0.55;
-        --xc-hero-chip-bg: rgba(255, 255, 255, 0.10);
+        --xc-hero-chip-bg: var(--xc-surface);
         --xc-hero-chip-text: #E5EAF2;
         --xc-hero-chip-selected-bg: #1A7BAC;
         --xc-hero-chip-selected-text: #FFFFFF;
@@ -700,7 +700,7 @@
     --xc-hero-chart-fill-opacity: 0.22;
     --xc-hero-guide: #7FA6C8;
     --xc-hero-guide-opacity: 0.55;
-    --xc-hero-chip-bg: rgba(255, 255, 255, 0.10);
+    --xc-hero-chip-bg: var(--xc-surface);
     --xc-hero-chip-text: #E5EAF2;
     --xc-hero-chip-selected-bg: #1A7BAC;
     --xc-hero-chip-selected-text: #FFFFFF;
