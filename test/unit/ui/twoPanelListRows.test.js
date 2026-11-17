@@ -24,7 +24,7 @@ describe('wide two-panel list rows', () => {
         expect(cardCss).toMatch(/:root \[data-xc-split-list\]\s*\{[^}]*background:\s*var\(--xc-card-bg\);[^}]*border:\s*var\(--xc-card-border\);[^}]*border-radius:\s*var\(--xc-card-radius\);[^}]*overflow:\s*hidden;/s);
         expect(listRowCss).toMatch(/\.interactive\[data-xc-split-row\]\s*\{[^}]*width:\s*100%;[^}]*margin-inline:\s*0;[^}]*border-radius:\s*0;[^}]*box-shadow:\s*none;/s);
         expect(listRowCss).toMatch(/\.interactive\[data-xc-split-row\]:hover:not\(:disabled\)\s*\{[^}]*var\(--xc-row-hover-bg\)[^}]*box-shadow:\s*none;/s);
-        expect(listRowCss).toMatch(/\.interactive\[data-xc-split-row\]\[aria-current='true'\]\s*\{[^}]*var\(--xc-row-active-bg\)[^}]*box-shadow:\s*none[^}]*font-weight:\s*inherit;/s);
+        expect(listRowCss).toMatch(/\.interactive\[data-xc-split-row\]:is\([^}]+\)\s*\{[^}]*var\(--xc-row-active-bg\)[^}]*box-shadow:\s*none[^}]*font-weight:\s*inherit;/s);
         expect(listRowCss).toMatch(/\.interactive:focus-visible\s*\{[^}]*outline:\s*2px solid/s);
     });
 
@@ -71,19 +71,23 @@ describe('wide two-panel list rows', () => {
     });
 
     it('opts Contacts, Contracts, Governance, My Tokens and My Agents into the shared wide treatment', () => {
-        const routes = [
+        const routeEntries = [
             'ContactsList.jsx',
             'ContractsList.jsx',
             'GovernancePolls.jsx',
             'MyTokens.jsx',
             'CoSignerAccountList.jsx',
-        ].map((name) => read('shared', 'routes', name));
+        ].map((name) => [name, read('shared', 'routes', name)]);
 
-        for (const route of routes) {
+        for (const [name, route] of routeEntries) {
             expect(route).toContain('data-xc-split-list');
-            expect(route).toContain('data-xc-split-row');
+            if (name === 'GovernancePolls.jsx') {
+                expect(route).toContain('className={showPanel ? cardListStyles.splitRow');
+            } else {
+                expect(route).toContain('data-xc-split-row');
+            }
         }
-        expect(routes.join('\n')).not.toContain('listDetailStyles.selectedRow');
+        expect(routeEntries.map(([, route]) => route).join('\n')).not.toContain('listDetailStyles.selectedRow');
     });
 
     it('keeps custom History, Betting and Staking rows wide-only and rail-free', () => {
@@ -99,17 +103,17 @@ describe('wide two-panel list rows', () => {
         expect(history).toContain('data-xc-split-list={wideContent');
         expect(historyRow).toContain('data-xc-split-row={splitRow');
         expect(historyCss).toMatch(/\.row\.row\[data-xc-split-row\]\s*\{[^}]*width:\s*100%;[^}]*margin-inline:\s*0;[^}]*border-radius:\s*0;/s);
-        expect(historyCss).toMatch(/\[aria-current='true'\][^{]*\{[^}]*var\(--xc-accent-primary\) 20%[^}]*box-shadow:\s*none/s);
+        expect(historyCss).toMatch(/\[aria-current='true'\][^{]*\{[^}]*var\(--xc-row-active-bg\)[^}]*box-shadow:\s*none/s);
 
         expect(betting).toContain('data-xc-split-list={twoPanel');
         expect(betting).toContain('className={twoPanel ? local.splitRow');
         expect(bettingCss).toMatch(/\.splitRow\.splitRow\s*\{[^}]*width:\s*100%;[^}]*margin-inline:\s*0;[^}]*border:\s*0;[^}]*border-radius:\s*0;/s);
-        expect(bettingCss).toMatch(/\.splitRow\.splitRow\[aria-current='true'\][^{]*\{[^}]*var\(--xc-accent-primary\) 20%[^}]*box-shadow:\s*none/s);
+        expect(bettingCss).toMatch(/\.splitRow\.splitRow\[aria-current='true'\][^{]*\{[^}]*var\(--xc-row-active-bg\)[^}]*box-shadow:\s*none/s);
 
         expect(staking).toContain('data-xc-split-list={showPanel');
         expect(staking).toContain('data-xc-split-row={split');
         expect(stakingCss).toMatch(/\.rowItem\[data-xc-split-item\] > \.row\s*\{[^}]*width:\s*100%;[^}]*margin-inline:\s*0;[^}]*border:\s*0;[^}]*border-radius:\s*0;/s);
-        expect(stakingCss).toMatch(/\[aria-current='true'\][^{]*\{[^}]*var\(--xc-accent-primary\) 20%[^}]*box-shadow:\s*none/s);
+        expect(stakingCss).toMatch(/\[aria-current='true'\][^{]*\{[^}]*var\(--xc-row-active-bg\)[^}]*box-shadow:\s*none/s);
     });
 
     it('gives Marketplace an explicit split-row variant without changing wide Home', () => {
@@ -123,14 +127,15 @@ describe('wide two-panel list rows', () => {
         expect(balances).toContain('data-xc-split-list={splitRows');
         expect(balances).toContain('data-xc-split-row={splitRow');
         expect(balanceCss).toMatch(/\.row\[data-xc-split-row\]\s*\{[^}]*width:\s*100%;[^}]*margin-inline:\s*0;[^}]*border-top-color:\s*transparent;[^}]*border-radius:\s*0;/s);
-        expect(balanceCss).toMatch(/\[data-xc-split-row\]\[data-selected='true'\][^{]*\{[^}]*var\(--xc-accent-primary\) 20%[^}]*box-shadow:\s*none/s);
+        expect(balances).toContain('data-xc-row-state={clickable');
+        expect(balanceCss).not.toMatch(/\[data-selected=['"]true['"]\]/);
     });
 
     it('keeps Messaging framed with full-width hover and active fills', () => {
         const messagingCss = read('shared', 'routes', 'MessagingInbox.module.css');
         expect(messagingCss).toMatch(/\.convList\s*\{[^}]*composes:\s*flush from '\.\.\/\.\.\/ui\/Card\.module\.css';[^}]*overflow:\s*hidden;/s);
         expect(messagingCss).not.toMatch(/\.convList\[data-wide='true'\]\s*\{[^}]*(?:border:\s*0|border-radius:\s*0)/s);
-        expect(messagingCss).toMatch(/\.convList\[data-wide='true'\] \.convItem:hover\s*\{[^}]*var\(--xc-text\) 10%[^}]*box-shadow:\s*none/s);
-        expect(messagingCss).toMatch(/\.convList\[data-wide='true'\] \.convItem\[aria-current='true'\]\s*\{[^}]*width:\s*100%;[^}]*margin-inline:\s*0;[^}]*var\(--xc-accent-primary\) 20%[^}]*border-radius:\s*0;[^}]*box-shadow:\s*none[^}]*font-weight:\s*inherit/s);
+        expect(messagingCss).toMatch(/\.convList\[data-wide='true'\] \.convItem:hover\s*\{[^}]*var\(--xc-row-hover-bg\)[^}]*box-shadow:\s*none/s);
+        expect(messagingCss).toMatch(/\.convList\[data-wide='true'\] \.convItem\[aria-current='true'\]\s*\{[^}]*width:\s*100%;[^}]*margin-inline:\s*0;[^}]*var\(--xc-row-active-bg\)[^}]*border-radius:\s*0;[^}]*box-shadow:\s*none[^}]*font-weight:\s*inherit/s);
     });
 });

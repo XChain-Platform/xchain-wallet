@@ -210,20 +210,14 @@
     flex: 1 1 0;
 }
 
-/* The row whose detail the right panel shows reads like the side menu's
-   active item: a light brand tint and the brand bar on the leading edge, no
-   border (the DEX's selected market row). The token flips the bar on a
-   right-to-left page itself (tokens.css). */
+/* The row whose detail the right panel shows uses the shared active fill. */
 .selectedRow {
-    background: color-mix(in srgb, var(--xc-accent-primary) 10%, transparent);
-    box-shadow: var(--xc-shadow-nav-indicator);
+    background: var(--xc-row-active-bg);
+    box-shadow: none;
+    font-weight: inherit;
 }
 
 @media (forced-colors: active) {
-    .selectedRow {
-        border-inline-start: 3px solid Highlight;
-    }
-
     .divider {
         background: CanvasText;
     }

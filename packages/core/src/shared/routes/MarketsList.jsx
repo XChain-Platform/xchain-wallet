@@ -510,7 +510,7 @@ export function MarketsList({
                                 onAction={filtersHideAllMarkets ? resetFilters : undefined}
                             />
                         ) : (
-                        <div className={marketsStyles.marketsCard}>
+                        <div className={marketsStyles.marketsCard} data-xc-split-list>
                             <ul ref={marketResultsRef} aria-label="Markets" className={marketsStyles.marketsGrid}>
                                 {visibleMarkets.map((m, idx) => (
                                     <MarketRow
@@ -670,25 +670,11 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
     const hasDepth = typeof depth === 'number' && Number.isFinite(depth);
     const hasSeries = Array.isArray(series) && series.length >= 2;
     return (
-        <li className={marketsStyles.row} data-change-tone={tone} data-selected={selected ? 'true' : undefined}>
-            {/* A faint area chart fills the row behind its text. The fill stays
-                at a low alpha so the name and the muted Depth line keep AA
-                contrast on it; the figures sit on their own surface. */}
-            {hasSeries ? (
-                <div className={marketsStyles.rowChart} aria-hidden="true" data-row-chart={tone}>
-                    <Sparkline
-                        series={series}
-                        height="100%"
-                        edgeToEdge
-                        strokeWidth={1.5}
-                        strokeColor={`color-mix(in srgb, ${toneColor} ${ROW_CHART_STROKE_PCT}%, transparent)`}
-                        areaFill={`color-mix(in srgb, ${toneColor} ${ROW_CHART_FILL_PCT}%, transparent)`}
-                    />
-                </div>
-            ) : null}
+        <li className={marketsStyles.row} data-change-tone={tone}>
             <ListRow
                 type="button"
                 className={marketsStyles.marketButton}
+                data-xc-split-row
                 onClick={onOpen}
                 disabled={openDisabled}
                 aria-current={selected ? 'true' : undefined}
@@ -698,8 +684,26 @@ function MarketRow({ chainId, selectedTick, tick1, tick2, name1, name2, lastPric
                 chevron
                 contentClassName={marketsStyles.marketContent}
                 trailingClassName={marketsStyles.marketTrailing}
-                // Token icon with its small network badge, on every chain (operator 2026-11-13).
-                leading={<TickerIcon chainId={chainId} tick={otherTick} />}
+                // The chart comes first in the shared row so its tint stays
+                // behind the icon, text and figures. The token icon keeps its
+                // small network badge on every chain (operator 2026-11-13).
+                leading={(
+                    <>
+                        {hasSeries ? (
+                            <span className={marketsStyles.rowChart} aria-hidden="true" data-row-chart={tone}>
+                                <Sparkline
+                                    series={series}
+                                    height="100%"
+                                    edgeToEdge
+                                    strokeWidth={1.5}
+                                    strokeColor={`color-mix(in srgb, ${toneColor} ${ROW_CHART_STROKE_PCT}%, transparent)`}
+                                    areaFill={`color-mix(in srgb, ${toneColor} ${ROW_CHART_FILL_PCT}%, transparent)`}
+                                />
+                            </span>
+                        ) : null}
+                        <TickerIcon chainId={chainId} tick={otherTick} />
+                    </>
+                )}
                 // The token alone: every row on the page is quoted in the coin
                 // the picker above names, so a "/BTC" suffix repeats it.
                 title={<span className={marketsStyles.marketName} title={otherTick}>{otherTick}</span>}

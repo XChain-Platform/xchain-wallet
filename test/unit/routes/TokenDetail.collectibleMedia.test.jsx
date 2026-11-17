@@ -78,14 +78,12 @@ function renderDetail({ displayName = 'Collectible', tokenInfo = {} } = {}) {
     );
 }
 
-// The information items are link rows at the foot of the Details tab.
 function openDetails() {
     fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
 }
 
-async function openMore(label) {
-    openDetails();
-    fireEvent.click(await screen.findByRole('button', { name: label }));
+function openFiles() {
+    fireEvent.click(screen.getByRole('tab', { name: 'Files' }));
 }
 
 describe('TokenDetail collectible media', () => {
@@ -109,23 +107,22 @@ describe('TokenDetail collectible media', () => {
         expect(document.querySelectorAll(`img[src="${ICON_URL}"]`)).toHaveLength(0);
         expect(screen.getAllByText('CO').length).toBeGreaterThanOrEqual(1);
 
-        await openMore('Media');
+        openFiles();
         const media = await screen.findByRole('img', { name: MEDIA_NAME });
         fireEvent.error(media);
 
-        expect(screen.getByRole('img', { name: `${MEDIA_NAME} unavailable` })).toBeTruthy();
-        expect(screen.getByText('Image unavailable')).toBeTruthy();
+        expect(screen.queryByRole('img', { name: MEDIA_NAME })).toBeNull();
         expect(screen.getByText(MEDIA_NAME)).toBeTruthy();
     });
 
     it('names media links by the action even when an image has no title', async () => {
         renderDetail();
 
-        await openMore('Media');
+        openFiles();
 
-        expect(await screen.findByRole('link', { name: 'Open token image' }))
+        expect(await screen.findByRole('link', { name: 'Open unnamed.png' }))
             .toHaveAttribute('href', UNNAMED_MEDIA_URL);
-        expect(screen.getByRole('link', { name: `Open image ${MEDIA_NAME}` }))
+        expect(screen.getByRole('link', { name: `Open ${MEDIA_NAME}` }))
             .toHaveAttribute('href', MEDIA_URL);
     });
 
@@ -136,8 +133,8 @@ describe('TokenDetail collectible media', () => {
 
         openDetails();
         expect(await screen.findByText(description)).toBeInTheDocument();
-        // The name shows in the header, the hero and the Details Name row.
-        expect(screen.getAllByText(displayName)).toHaveLength(3);
+        // The name shows in the page identity and the information profile.
+        expect(screen.getAllByText(displayName).length).toBeGreaterThanOrEqual(2);
         expect(container.querySelector('script')).toBeNull();
         expect(container.querySelector('img[src="x"]')).toBeNull();
         expect(globalThis.tokenNameExecuted).toBeUndefined();
@@ -166,7 +163,7 @@ describe('TokenDetail collectible media', () => {
             ],
         } });
 
-        await openMore('About');
+        openDetails();
         expect(await screen.findByRole('link', { name: 'Website · issuer.example' }))
             .toHaveAttribute('href', 'https://issuer.example/');
         expect(screen.getByRole('link', { name: /safe\.example/ }))
@@ -177,9 +174,8 @@ describe('TokenDetail collectible media', () => {
         expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
         expect(document.querySelector('a[href^="data:"]')).toBeNull();
 
-        await openMore('Media');
-        fireEvent.click(await screen.findByRole('tab', { name: 'File' }));
-        expect(await screen.findByRole('link', { name: /Safe file/ }))
+        openFiles();
+        expect(await screen.findByRole('link', { name: 'Open Safe file' }))
             .toHaveAttribute('href', 'https://files.example/readme.txt');
         expect(screen.queryByText('Unsafe file')).toBeNull();
 

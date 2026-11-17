@@ -253,11 +253,11 @@ describe('regression/test-networks-no-fiat', () => {
             if (showsFiat) {
                 // A priced mainnet asset leads with fiat and offers the coin balance.
                 expect(detail).toHaveTextContent('$50,000.00');
-                const unitButton = screen.getByRole('button', { name: 'Show in BTC' });
+                const unitButton = screen.getByRole('button', { name: 'Show balance in BTC' });
                 fireEvent.click(unitButton);
                 expect(detail).not.toHaveTextContent('$');
             } else {
-                const unitButton = screen.getByRole('button', { name: 'Show in USD' });
+                const unitButton = screen.getByRole('button', { name: 'Show value in USD' });
                 expect(unitButton).toBeDisabled();
                 expect(detail).not.toHaveTextContent('$');
             }

@@ -36,16 +36,19 @@
     cursor: pointer;
 }
 
-.row:hover {
-    background: color-mix(in srgb, var(--xc-text) 6%, transparent);
+@media (hover: hover) and (pointer: fine) {
+    .row:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .row[aria-current='true'] {
-    background: color-mix(in srgb, var(--xc-accent-primary) 14%, transparent);
+    background: var(--xc-row-active-bg);
+    font-weight: inherit;
 }
 
 .row:active {
-    background: color-mix(in srgb, var(--xc-text) 12%, transparent);
+    background: var(--xc-row-hover-bg);
 }
 
 .row:focus-visible {
@@ -77,12 +80,13 @@
 }
 
 .chevron {
+    --xc-chevron-size: var(--xc-space-8);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 32px;
-    width: 32px;
-    height: 32px;
+    flex: 0 0 var(--xc-chevron-size);
+    width: var(--xc-chevron-size);
+    height: var(--xc-chevron-size);
     color: var(--xc-text-muted);
     overflow: hidden;
 }

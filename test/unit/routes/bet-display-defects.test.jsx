@@ -363,25 +363,28 @@ describe('(c) the My predictions tab names each bet\'s outcome on its market car
         const utils = await openMyBets(messaging, { onOpenMarket });
         expect(listed(utils)).toEqual(['1169']);
         // One short summary on the right of the row: amount and asset only.
-        const chips = utils.container.querySelectorAll('[data-testid="bet-market-your-bet"]');
+        const chips = utils.container.querySelectorAll('[data-testid="bet-market-your-position"]');
         expect(chips.length).toBe(1);
-        expect(chips[0].textContent).toBe('Your position: 100 XCHAIN on No');
+        expect(chips[0].textContent).toBe('100 XCHAIN');
+        expect(chips[0]).toHaveAccessibleName('Your position: 100 XCHAIN');
         expect(chips[0].closest('span[class*="right"]')).not.toBeNull();
-        expect(utils.container.textContent).toContain(' on No');
+        expect(utils.container.textContent).not.toContain('Your position:');
+        expect(utils.container.textContent).not.toContain(' on No');
         fireEvent.click(utils.container.querySelector('[data-market-index="1169"]'));
         expect(onOpenMarket).toHaveBeenCalledWith(CHAIN, '1169');
         // No market read per bet: the list's own read carries the labels.
         expect(calls.filter((c) => c.method === 'betFeed').length).toBe(0);
     });
 
-    it('sums several bets and assets into the one right-side summary', async () => {
+    it('sums positions across outcomes into the one right-side summary', async () => {
         const second = { ...BET_ROW, action_index: '6001', outcome: 0, amount: '50' };
-        const other = { ...BET_ROW, action_index: '6002', tick: 'PEPE', amount: '5' };
+        const other = { ...BET_ROW, action_index: '6002', outcome: 0, amount: '5' };
         const { messaging } = harness({ bets: () => Promise.resolve({ data: [BET_ROW, second, other] }), betFeeds: marketsRead });
         const utils = await openMyBets(messaging);
-        const chips = utils.container.querySelectorAll('[data-testid="bet-market-your-bet"]');
+        const chips = utils.container.querySelectorAll('[data-testid="bet-market-your-position"]');
         expect(chips.length).toBe(1);
-        expect(chips[0].textContent).toBe('Your position: 150 XCHAIN across 2 outcomes +1 more');
+        expect(chips[0].textContent).toBe('155 XCHAIN');
+        expect(chips[0]).toHaveAccessibleName('Your position: 155 XCHAIN');
     });
 
     it('reads no market per bet however many bets the wallet holds', async () => {
@@ -404,8 +407,7 @@ describe('(c) the My predictions tab names each bet\'s outcome on its market car
         const utils = await openMyBets(messaging);
         const text = utils.container.textContent;
 
-        expect(text).not.toContain('Your position: 100 XCHAIN');
-        expect(text).toContain('Your position was rejected by the network');
+        expect(utils.container.querySelector('[data-testid="bet-market-your-position"]')).toBeNull();
         // The market is still listed: the user paid fees for the bet and may
         // need to find it.
         expect(listed(utils)).toEqual(['1169']);

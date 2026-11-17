@@ -5,8 +5,8 @@
 
 // One card look across the wallet: every card composes ui/Card.module.css (or,
 // inline, uses the four card tokens), so each has the same solid 1px border,
-// corner radius, inner padding and fill. No product stylesheet draws a dashed
-// or dotted line except a drop zone while a file is dragged over it.
+// corner radius, inner padding and fill. Reviewed dashed or dotted indicators
+// are named exactly in the allowlist.
 //
 // Bordered or filled, rounded boxes that are not cards (controls, menus and
 // dialogs, tone notices, code and value boxes) are named one by one in
@@ -345,8 +345,12 @@ describe('card surfaces', () => {
         expect(inlineCardOverrides(tinted)).toEqual(['Tinted.jsx:2']);
     });
 
-    it('draws no dashed or dotted lines outside a drag-over drop zone', () => {
-        expect(dashedLines(allCss)).toEqual([]);
+    it('draws dashed or dotted lines only in reviewed places', () => {
+        const found = dashedLines(allCss);
+        const unlisted = found.filter((key) => !(key in allowlist.dashed));
+        const stale = Object.keys(allowlist.dashed).filter((key) => !found.includes(key));
+        expect(unlisted).toEqual([]);
+        expect(stale).toEqual([]);
         expect(inlineDashedLines(jsx)).toEqual([]);
     });
 

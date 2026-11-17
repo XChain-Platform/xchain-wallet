@@ -45,12 +45,12 @@ function ruleIn(body, selector) {
 }
 
 describe('left nav layout 5 highlight', () => {
-    it('draws the active row as an accent wash without a square edge', () => {
+    it('draws the active row with only the shared active fill', () => {
         const active = topLevelRule('.itemActive');
         expect(active).not.toBeNull();
         expect(active).toMatch(/background:\s*var\(--xc-row-active-bg\)\s*;/);
-        expect(active).toMatch(/border:\s*1px solid transparent\s*;/);
-        expect(active).not.toMatch(/box-shadow/);
+        expect(active).not.toMatch(/(?:^|\s)(?:border|outline|box-shadow)\s*:/);
+        expect(active).toMatch(/font-weight:\s*inherit\s*;/);
     });
 
     it('insets every row and gives it rounded corners', () => {
@@ -105,14 +105,13 @@ describe('left nav layout 5 highlight', () => {
         expect(focus).toMatch(/outline-offset:\s*-2px\s*;/);
     });
 
-    it('keeps idle rows edgeless and marks the active row in forced colors', () => {
+    it('keeps forced-colors edges independent of the active state', () => {
         // Forced colors paints a transparent border in CanvasText, so the
         // override has to come after the base rules to win the cascade.
         const itemRuleAt = css.search(/(^|\n)\.itemActive\s*\{/);
         const late = forcedColorsBlocks().filter((block) => block.start > itemRuleAt);
         const idle = late.map((block) => ruleIn(block.body, '.item')).find(Boolean);
-        const active = late.map((block) => ruleIn(block.body, '.itemActive')).find(Boolean);
         expect(idle).toMatch(/border-color:\s*Canvas\s*;/);
-        expect(active).toMatch(/border-color:\s*Highlight\s*;/);
+        expect(late.map((block) => ruleIn(block.body, '.itemActive')).find(Boolean)).toBeUndefined();
     });
 });

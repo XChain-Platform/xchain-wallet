@@ -65,8 +65,10 @@
     font-size: var(--xc-text-sm);
 }
 
-.addMenuItem:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .addMenuItem:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .addMenuItem > span {

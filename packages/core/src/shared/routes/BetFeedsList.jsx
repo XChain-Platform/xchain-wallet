@@ -18,7 +18,7 @@ import { outcomeLabelsOf } from '../utils/betOutcomeLabels.js';
 // The standard title-line filter, the gauge card and the wallet's bets loader.
 import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { BetMarketCard, betPoolTotal } from '../components/BetMarketCard.jsx';
-import { useWalletBets, yourBetText } from '../components/BetMyBetsPanel.jsx';
+import { useWalletBets, yourPositionText } from '../components/BetMyBetsPanel.jsx';
 import {
     LIST_DETAIL_MIN_WIDTH,
     ListDetailSplit,
@@ -475,7 +475,7 @@ export function BetFeedsList({
                 }}
                 selected={selected}
                 className={twoPanel ? local.splitRow : undefined}
-                yourBet={yourBetText(betsByMarket.get(marketKey(chainId, m)), m)}
+                yourPosition={yourPositionText(betsByMarket.get(marketKey(chainId, m)), m)}
                 yours={ownAddresses.has(String(m?.source || ''))}
             />
         </li>

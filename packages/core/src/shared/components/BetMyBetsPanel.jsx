@@ -11,7 +11,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { addDecimals } from './BetMarketCard.jsx';
-import { outcomeLabelsOf, safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
 
 function extractRows(resp) {
     if (!resp) return [];
@@ -94,39 +93,16 @@ export function useWalletBets({ byChain, messaging }) {
 }
 
 /**
- * The one short summary for this wallet's live stake in one market, or null:
- * "You bet 15 XCHAIN", the total staked, amount and asset only (operator
- * ruling 2026-11-13). Staked in more than one asset, it names the first and
- * adds "+1 more". Rejected bets staked nothing, so they never count as a
- * stake; a market holding only rejected bets says so, since the user paid
- * fees for them and may come looking. Sums only the bet rows already loaded.
+ * The one short summary for this wallet's accepted positions in one market,
+ * or null: "15 XCHAIN", the total amount and asset only. Positions on more
+ * than one outcome are summed into that total. Rejected rows hold no position
+ * and therefore draw no chip.
  */
-export function yourBetText(bets, market) {
+export function yourPositionText(bets, market) {
     if (!Array.isArray(bets) || bets.length === 0) return null;
     const mine = bets.filter((b) => b.bet_status !== 'invalid');
-    if (mine.length === 0) return 'Your position was rejected by the network';
-    const byTick = new Map();
-    for (const b of mine) {
-        const tick = b.tick || market?.tick || '';
-        if (!byTick.has(tick)) byTick.set(tick, []);
-        byTick.get(tick).push(b.amount);
-    }
-    // The market's own asset leads when the wallet staked in it.
-    const mainTick = byTick.has(market?.tick) ? market.tick : byTick.keys().next().value;
-    const tick = mainTick;
-    const amounts = byTick.get(mainTick);
-    const total = addDecimals(amounts);
-    const more = byTick.size > 1 ? ` +${byTick.size - 1} more` : '';
-    const outcomeIndexes = new Set(mine
-        .filter((row) => (row.tick || market?.tick || '') === mainTick)
-        .map((row) => Number(row.outcome))
-        .filter(Number.isInteger));
-    const outcomeIndex = outcomeIndexes.size === 1 ? [...outcomeIndexes][0] : null;
-    const outcomeLabel = outcomeIndex === null
-        ? ''
-        : safeOutcomeLabel(outcomeLabelsOf(market)[outcomeIndex]) || `Outcome ${outcomeIndex}`;
-    const outcomeText = outcomeLabel
-        ? ` on ${outcomeLabel}`
-        : outcomeIndexes.size > 1 ? ` across ${outcomeIndexes.size} outcomes` : '';
-    return `Your position: ${formatDecimalAmount(total)} ${tick}${outcomeText}${more}`.replace(/\s+/g, ' ').trim();
+    if (mine.length === 0) return null;
+    const total = addDecimals(mine.map((row) => row.amount));
+    const tick = market?.tick || mine.find((row) => row.tick)?.tick || '';
+    return `${formatDecimalAmount(total)} ${tick}`.replace(/\s+/g, ' ').trim();
 }

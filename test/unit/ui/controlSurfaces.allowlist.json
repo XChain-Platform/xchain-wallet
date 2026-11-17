@@ -72,6 +72,10 @@
             "count": 1,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
         },
+        "packages/core/src/shared/components/QuestionList.jsx": {
+            "count": 1,
+            "reason": "The shared question card is one whole-row target whose multi-line result layout cannot be wrapped by the kit Button."
+        },
         "packages/core/src/shared/components/ReachabilityLine.jsx": {
             "count": 1,
             "reason": "The control is the whole clickable row, tab, tile or icon target of its surface, so the kit Button cannot wrap it yet."
@@ -216,10 +220,6 @@
         },
         "packages/core/src/shared/routes/MarketActivity.module.css": {
             "count": 3,
-            "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
-        },
-        "packages/core/src/shared/routes/MarketsList.module.css": {
-            "count": 2,
             "reason": "Row, tab, tile, toast or icon-button surface painted by its own screen stylesheet; no kit primitive draws this shape yet."
         },
         "packages/core/src/shared/routes/MessagingInbox.module.css": {

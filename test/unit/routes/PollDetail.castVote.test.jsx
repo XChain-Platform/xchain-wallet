@@ -215,7 +215,7 @@ describe('Poll page tabs', () => {
             '1: No40%40 weight, 4 voters',
         ]);
         expect(within(results).queryAllByRole('button')).toHaveLength(0);
-        expect(within(results).getByText('You voted: 0: Yes')).toBeTruthy();
+        expect(within(screen.getByRole('region', { name: 'Your vote' })).getByText('You voted: 0: Yes')).toBeTruthy();
     });
 });
 
@@ -340,7 +340,7 @@ describe('Vote tab: the bet market outcome list', () => {
         expect(document.querySelector('form')).toBeNull();
     });
 
-    it('keeps the rows tappable after a vote, names it under the list, and a tap replaces it', async () => {
+    it('keeps the rows tappable after a vote, names it under the chart, and a tap replaces it', async () => {
         const { messaging, calls } = harness({
             poll: YES_NO_POLL,
             votes: [{ action_index: 50, source: ADDRESS.address, poll_index: 7, choice: 0, share: '1' }],
@@ -348,10 +348,10 @@ describe('Vote tab: the bet market outcome list', () => {
         await mountPoll(messaging);
 
         const panel = screen.getByRole('tabpanel', { name: 'Vote' });
-        expect(within(panel).getByText('You voted: 0: Yes')).toBeTruthy();
-        expect(within(panel).getByText(/You can change this address's vote until the poll closes/)).toBeTruthy();
-        expect(choiceList().compareDocumentPosition(within(panel).getByText('You voted: 0: Yes'))
-            & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        const yourVote = screen.getByRole('region', { name: 'Your vote' });
+        expect(within(yourVote).getByText('You voted: 0: Yes')).toBeTruthy();
+        expect(within(yourVote).getByRole('button', { name: 'Change Vote' })).toBeEnabled();
+        expect(within(panel).queryByText('You voted: 0: Yes')).toBeNull();
         // The earlier vote never seeds the ballot: the tapped choice is the one cast.
         await click(choiceRow('No'));
         await click(screen.getByRole('button', { name: 'Sign Vote' }));

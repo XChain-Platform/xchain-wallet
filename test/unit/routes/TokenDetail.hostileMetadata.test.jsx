@@ -52,21 +52,14 @@ function renderInfo(tokenInfo) {
 
 const hrefs = () => [...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href'));
 
-// The page opens on its Actions tab; the details, and the About and Media rows at their foot,
-// are on the Details tab, and only the chosen tab renders.
 async function openDetails() {
     fireEvent.click(await screen.findByRole('tab', { name: /Details/ }));
-}
-
-async function openMore(label) {
-    await openDetails();
-    fireEvent.click(await screen.findByRole('button', { name: label }));
 }
 
 describe('TokenDetail issuer metadata', () => {
     it('names the host a website link opens, so a look-alike domain is visible', async () => {
         renderInfo({ websites: ['https://xchain.io.evil.example/claim', 'https://xn--xchan-9ua.io/'] });
-        await openMore('About');
+        await openDetails();
         const links = await screen.findAllByRole('link', { name: /Website/ });
         expect(links).toHaveLength(2);
         expect(links[0].textContent).toContain('xchain.io.evil.example');
@@ -83,7 +76,7 @@ describe('TokenDetail issuer metadata', () => {
                 { type: 'url', value: 'https://contact.example/' },
             ],
         });
-        await openMore('About');
+        await openDetails();
         await screen.findByRole('link', { name: /Website/ });
         const found = hrefs();
         expect(found.filter((h) => /^(javascript|data|vbscript):/i.test(h))).toEqual([]);
@@ -99,7 +92,7 @@ describe('TokenDetail issuer metadata', () => {
                 { type: 'email', value: 'not an address' },
             ],
         });
-        await openMore('About');
+        await openDetails();
         await screen.findByText('help@issuer.example');
         expect(hrefs().filter((h) => h.startsWith('mailto:'))).toEqual(['mailto:help@issuer.example']);
         expect(screen.getByText(/bcc=thief@evil\.example/)).toBeTruthy();
@@ -110,27 +103,28 @@ describe('TokenDetail issuer metadata', () => {
         const description = markup + 'long text '.repeat(1100);
         renderInfo({ description });
         await openDetails();
-        await screen.findByText('Description');
-        const body = document.querySelector('[class*="descriptionValue"]');
+        await screen.findByLabelText('Token information profile');
+        const body = document.querySelector('[class*="profileDescription"]');
         expect(body).not.toBeNull();
         expect(body.textContent.length).toBeGreaterThan(10_000);
         expect(document.querySelector('script')).toBeNull();
         expect(document.querySelector('img[src="x"]')).toBeNull();
     });
 
-    it('offers About for a token whose only supplemental metadata is a websites list', async () => {
+    it('shows profile links for a token whose only supplemental metadata is a websites list', async () => {
         renderInfo({ websites: ['https://only-site.example/'] });
-        await openMore('About');
+        await openDetails();
         expect(await screen.findByRole('link', { name: 'Website · only-site.example' })).toBeTruthy();
         expect(screen.queryByText('No additional information')).toBeNull();
     });
 
-    it('hides About when files are the only supplemental metadata', async () => {
+    it('keeps files out of the profile when they are the only supplemental metadata', async () => {
         renderInfo({ files: [{ url: 'https://files.example/a.txt', name: 'A', type: 'text/plain' }] });
         await openDetails();
-        expect(await screen.findByRole('button', { name: 'Media' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'About' })).toBeNull();
+        expect(await screen.findByLabelText('Token information profile')).toBeTruthy();
         expect(screen.queryByText('Links')).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: 'Files' }));
+        expect(await screen.findByRole('link', { name: 'Open A' })).toBeTruthy();
     });
 
     it('does not load a script-scheme icon', async () => {

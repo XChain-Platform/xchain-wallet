@@ -15,13 +15,12 @@ import { describe, expect, it } from 'vitest';
 const read = (file) => readFileSync(join(process.cwd(), file), 'utf8');
 
 // Every list row hovers with the one shared fill, and a selected row in a
-// master-detail layout reads like the side menu's active item (brand tint and
-// leading bar, no border).
+// master-detail layout reads like the side menu's active item without a rail.
 describe('list row hover and selected styles', () => {
     it('hovers the kit row with the shared hover token only', () => {
         const css = read('packages/core/src/ui/ListRow.module.css');
         const hover = css.slice(css.indexOf('@media (hover: hover)'), css.indexOf('.interactive:active'));
-        expect(hover).toMatch(/background:\s*var\(--xc-control-bg-hover\)/);
+        expect(hover).toMatch(/background:\s*var\(--xc-row-hover-bg\)/);
         expect(hover).not.toMatch(/accent|box-shadow|border|outline/);
     });
 
@@ -30,23 +29,20 @@ describe('list row hover and selected styles', () => {
         expect(css).not.toMatch(/\.row(?:Content|Clickable|Pinned)?:hover/);
     });
 
-    it('hovers a DEX market row with the standard fill, not a ring', () => {
+    it('opts every DEX market row into the shared edge-to-edge states', () => {
+        const source = read('packages/core/src/shared/routes/MarketsList.jsx');
         const css = read('packages/core/src/shared/routes/MarketsList.module.css');
-        const rule = css.match(/\.row:not\(\[data-selected='true'\]\):has\(\.marketButton:hover:not\(:disabled\)\)\s*\{([^}]*)\}/);
-        expect(rule).not.toBeNull();
-        expect(rule[1]).toMatch(/background:\s*var\(--xc-control-bg-hover\)/);
-        expect(rule[1]).not.toMatch(/box-shadow/);
-        expect(css).toMatch(/\.row \.marketButton:is\(:hover, :active\):not\(:disabled\)\s*\{[^}]*box-shadow:\s*none/);
+        expect(source).toMatch(/className=\{marketsStyles\.marketsCard\}\s+data-xc-split-list/);
+        expect(source).toMatch(/<ListRow[\s\S]*?data-xc-split-row[\s\S]*?aria-current=\{selected \? 'true' : undefined\}/);
+        expect(css).not.toMatch(/\.marketButton[^{}]*(?:hover|active)|:has\(/);
     });
 
-    it('marks the selected DEX row like the side menu, with no border or ring', () => {
+    it('has no DEX-only selected style', () => {
+        const source = read('packages/core/src/shared/routes/MarketsList.jsx');
         const css = read('packages/core/src/shared/routes/MarketsList.module.css');
-        const rule = css.match(/\.row\[data-selected='true'\]\s*\{([^}]*)\}/);
-        expect(rule[1]).toMatch(/background:\s*var\(--xc-row-active-bg\)/);
-        expect(rule[1]).toMatch(/box-shadow:\s*var\(--xc-shadow-nav-indicator\)/);
-        expect(rule[1]).not.toMatch(/border|outline|0 0 0/);
-        const nav = read('packages/core/src/shared/components/LeftNav.module.css');
-        expect(nav).toMatch(/\.nav \.itemActive[\s\S]*background:\s*var\(--xc-row-active-bg\)/);
+        expect(source).not.toContain('data-selected={selected');
+        expect(css).not.toMatch(/\[data-selected=['"]true['"]\]|\[aria-current=['"]true['"]\]/);
+        expect(css).not.toMatch(/xc-row-(?:hover|active)-bg|xc-shadow-nav-indicator/);
     });
 
     it('keeps the focus ring to keyboard focus', () => {

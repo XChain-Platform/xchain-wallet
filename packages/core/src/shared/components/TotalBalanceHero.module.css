@@ -79,8 +79,10 @@
     text-align: start;
 }
 
-.actionRow:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .actionRow:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .actionRow:focus-visible {

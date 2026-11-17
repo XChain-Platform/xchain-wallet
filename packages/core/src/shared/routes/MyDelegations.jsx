@@ -190,17 +190,12 @@ export function MyDelegations({ walletId, chainId: initialChainId, onClear, onDe
                         return (
                             <li key={`${tick}:${String(row.action_index ?? delegate)}`}>
                                 <ListRow
-                                    className={local.pollCard}
                                     /* The token's icon with its network pip, as in the token picker (operator 2026-11-13). */
                                     leading={<span aria-hidden="true"><TickerIcon chainId={chainId} tick={tick} /></span>}
-                                    title={<span className={local.pollTitle}>{tick}</span>}
+                                    title={tick}
                                     /* Only the delegate's address, in full when it fits (G99); no "since"
                                        line (operator 2026-11-13). */
-                                    subtitle={(
-                                        <span className={local.pollText} style={{ display: 'block', minWidth: 0 }}>
-                                            <AddressText address={delegate} fit />
-                                        </span>
-                                    )}
+                                    subtitle={<AddressText address={delegate} fit />}
                                     /* The whole row opens Clear vote delegation; a chevron, no ✕ (operator 2026-11-13). */
                                     chevron
                                     tooltip={t('governance.delegations.clearLabel', { tick })}

@@ -154,7 +154,11 @@ describe.each(WIDTHS)('balance hero menu at %ipx', (width) => {
         await waitFor(() => expect(amountCodes(hero)).toEqual(['USD']));
 
         const buttons = within(hero).getAllByRole('button');
-        expect(within(hero).getByText('Value')).toBeInTheDocument();
+        const name = within(hero).getByTitle(TICK);
+        const caption = within(hero).getByText('Value');
+        expect(Array.from(name.parentElement.children)).toEqual([name, caption]);
+        expect(name.parentElement.previousElementSibling?.className).toContain('cardCaptionIconWrap');
+        expect(hero.className).not.toContain('cardNoCaption');
         expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['Hide balance', `Show balance in ${TICK}`]);
         expect(within(hero).queryByRole('button', { name: 'Balance actions' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Swap primary unit' })).toBeNull();

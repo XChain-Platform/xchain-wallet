@@ -346,6 +346,7 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
             className={`${styles.row} ${pinned ? styles.rowPinned : ''}`}
             role="listitem"
             data-balance-key={pinKey}
+            data-xc-row-state={clickable ? '' : undefined}
             data-selected={selected ? 'true' : undefined}
             data-xc-split-row={splitRow ? '' : undefined}
         >

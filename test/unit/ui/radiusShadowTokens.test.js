@@ -31,7 +31,6 @@ const expectedTokens = new Map([
     ['--xc-shadow-accent-ring', '0 0 0 1px var(--xc-accent-primary, var(--xc-border-strong))'],
     ['--xc-shadow-focus-ring', '0 0 0 3px var(--xc-focus-ring)'],
     ['--xc-shadow-danger-focus-ring', '0 0 0 3px rgba(220, 38, 38, 0.2)'],
-    ['--xc-shadow-nav-indicator', 'inset 3px 0 0 var(--xc-accent-primary, var(--xc-text))'],
 ]);
 
 const elevationAliases = new Map([

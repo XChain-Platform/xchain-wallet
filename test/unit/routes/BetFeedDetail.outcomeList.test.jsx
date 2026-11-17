@@ -126,6 +126,16 @@ describe('the Bet tab outcome list', () => {
     it('draws Yes and No as one list of two rows, each led by its thumb', async () => {
         await openMarket(YES_NO, YES_NO_BETS);
         const panel = screen.getByRole('tabpanel', { name: 'Buy' });
+        const position = screen.getByRole('region', { name: 'Your position' });
+
+        expect(position).toHaveTextContent('25 XCHAIN');
+        expect(position).toHaveTextContent('Yes');
+        expect(position).toHaveTextContent('Current share 58.3%');
+        expect(position).toHaveTextContent('Potential payout 42.27265475 XCHAIN');
+        expect(within(position).getByRole('button', { name: 'Buy More' })).toBeTruthy();
+        expect(within(position).queryByRole('button', { name: 'Cancel Position' })).toBeNull();
+        expect(document.querySelector('[data-outcome-hero]').compareDocumentPosition(position) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(position.compareDocumentPosition(screen.getByRole('tab', { name: 'Buy' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
         // One list card, one list item per outcome, no side-by-side boxes.
         expect(within(panel).getAllByRole('list')).toHaveLength(1);
@@ -152,6 +162,23 @@ describe('the Bet tab outcome list', () => {
         const held = within(panel).getByText((_, el) => el?.tagName === 'P' && /^You hold/.test(el.textContent));
         expect(held.textContent).toBe('You hold 25 XCHAIN on Yes');
         expect(outcomeList().compareDocumentPosition(held) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('shows the quiet empty position line and Buy action', async () => {
+        await openMarket(YES_NO, YES_NO_BETS.filter((row) => row.source !== OWN));
+        const position = screen.getByRole('region', { name: 'Your position' });
+
+        expect(position).toHaveTextContent('You have no position in this market');
+        expect(within(position).getByRole('button', { name: 'Buy' })).toBeTruthy();
+        expect(position.querySelector('ul')).toBeNull();
+    });
+
+    it('opens Buy More with the held outcome preset', async () => {
+        await openMarket(YES_NO, YES_NO_BETS);
+        await press(within(screen.getByRole('region', { name: 'Your position' })).getByRole('button', { name: 'Buy More' }));
+
+        const form = screen.getByRole('form', { name: 'Buy a position' });
+        expect(within(form).getByRole('button', { name: 'Outcome: Yes' })).toBeTruthy();
     });
 
     it('fills each row to its exact share of the pool, decoratively', async () => {

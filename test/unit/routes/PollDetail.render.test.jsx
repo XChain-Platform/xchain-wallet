@@ -66,6 +66,10 @@ describe('PollDetail rendering', () => {
         expect(counts.textContent.startsWith('0 votes · 0 voters')).toBe(true);
         // The votes and voters line is read-only: no help icon on it (G121).
         expect(within(counts).queryByRole('button', { name: 'About ballot choices' })).toBeNull();
+        await screen.findByText('No vote from this wallet.');
+        const yourVote = screen.getByRole('region', { name: 'Your vote' });
+        expect(yourVote).toHaveTextContent('No vote from this wallet.');
+        expect(within(yourVote).getByRole('button', { name: 'Vote' })).toBeEnabled();
         const follows = Node.DOCUMENT_POSITION_FOLLOWING;
         const toggle = screen.getByRole('tablist', { name: 'Poll sections' });
         expect(within(toggle).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Vote', 'Activity', 'Details']);
@@ -144,7 +148,7 @@ describe('PollDetail rendering', () => {
                     },
                     {
                         action_index: '9007199254740993', source: ADDRESS.address,
-                        poll_index: 8, choice: 1, share: '1',
+                        poll_index: 8, choice: 1, share: '1', weight: '1200',
                     },
                     {
                         action_index: '9007199254740994', source: 'bc1qdelegate',
@@ -170,6 +174,7 @@ describe('PollDetail rendering', () => {
         expect(screen.queryByRole('button', { name: /^(Vote|Change Vote)$/ })).toBeNull();
         // Result says what this wallet voted: its latest ballot.
         expect(await screen.findByText('You voted: 1: Beta')).toBeInTheDocument();
+        expect(screen.getByText('Voting weight: 1,200 VOTE')).toBeInTheDocument();
         // Result states the outcome and the winner with its share, then the
         // final results, the winner marked.
         const verdict = within(screen.getByRole('tabpanel', { name: 'Result' })).getByRole('note');

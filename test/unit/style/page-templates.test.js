@@ -282,7 +282,7 @@ describe('page templates', () => {
         // Retired pages: the operator retired the Shared lists page (its lists live on My Lists and
         // the list picker), so no shell mounts SharedListDirectory; the module stays only until its
         // own tests are retired with it.
-        const RETIRED_ROUTES = new Set(['SharedListDirectory.jsx']);
+        const RETIRED_ROUTES = new Set(['PollStatusPill.jsx', 'SharedListDirectory.jsx']);
         const leftovers = check.unaccounted(files, routeModules())
             .filter((file) => !RETIRED_ROUTES.has(basename(file)))
             .map((file) => relative(ROOT, file));

@@ -207,6 +207,7 @@ function CollectibleCard({ row, demo, large = false, pinned, hidden, onSelect, o
         <div
             className={`${styles.card} ${clickable ? styles.cardClickable : ''} ${pinned ? styles.cardPinned : ''} ${hidden ? styles.cardHidden : ''}`}
             role="listitem"
+            data-xc-row-state={clickable ? '' : undefined}
             data-selected={selected ? 'true' : undefined}
         >
             <CardContent

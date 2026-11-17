@@ -218,9 +218,7 @@ export const TOKEN_GROUPS = [
             token('--xc-shadow-accent-ring', 'Accent ring', 'shadow'),
             token('--xc-shadow-focus-ring', 'Focus ring shadow', 'shadow'),
             token('--xc-shadow-danger-focus-ring', 'Danger focus ring', 'shadow'),
-            token('--xc-shadow-nav-indicator', 'Active navigation indicator', 'shadow'),
             token('--xc-shadow-status-halo', 'Status dot halo', 'shadow'),
-            token('--xc-shadow-identity-ring', 'Active wallet identity ring', 'shadow'),
         ],
     },
     {
@@ -329,7 +327,6 @@ export const TOKEN_GROUPS = [
             color('--xc-badge-multisig-taproot-bg', 'Badge multisig taproot bg'),
             color('--xc-badge-multisig-taproot-fg', 'Badge multisig taproot fg'),
             color('--xc-badge-multisig-taproot-border', 'Badge multisig taproot border'),
-            token('--xc-shadow-selected-ring', 'Inset ring on a pressed collectible card', 'shadow'),
             // The brand colours behind the blue balance cards and their charts.
             color('--xc-brand-blue', 'Brand blue'),
             color('--xc-brand-purple', 'Brand purple'),

@@ -16,11 +16,17 @@ import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useGovernanceChainIds } from '../hooks/useGovernanceAddressesPresent.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/governance.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
-import { pollResultSummary, pollRowForDisplay } from './pollDisplay.js';
+import { formatDecimalAmount } from '../utils/amountFormat.js';
+import { latestBallotRows, pollResultSummary, pollRowForDisplay } from './pollDisplay.js';
 import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
-import { QuestionList, QuestionListRow } from '../components/QuestionList.jsx';
+import {
+    addDecimals,
+    QuestionCard,
+    questionCardSlices,
+} from '../components/BetMarketCard.jsx';
 import {
     LIST_DETAIL_MIN_WIDTH,
     ListDetailSplit,
@@ -30,6 +36,8 @@ import {
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { PollDetail } from './PollDetail.jsx';
 import addMenuStyles from './AddressList.module.css';
+import cardListStyles from './BetFeedsList.module.css';
+import cardStyles from '../components/BetMarketCard.module.css';
 import local from './GovernancePolls.module.css';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -53,6 +61,19 @@ function whenText(row) {
 
 const votePollRef = (vote) => vote?.poll_index ?? vote?.poll_action_index ?? vote?.poll_ref;
 const pollKeyFor = (chainId, pollIndex) => `${chainId}:${String(pollIndex ?? '')}`;
+
+function voteWeightText(rows, tick) {
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    const addresses = [...new Set(rows.map((row) => String(row?.source || '')))];
+    const weights = addresses.flatMap((address) => {
+        const latest = latestBallotRows(rows, address);
+        const value = latest.map((row) => row?.voting_weight ?? row?.vote_weight ?? row?.weight)
+            .find((weight) => /^\d+(?:\.\d+)?$/.test(String(weight ?? '').trim()));
+        return value === undefined ? [] : [String(value).trim()];
+    });
+    if (weights.length !== addresses.length) return 'Counted at close';
+    return `${formatDecimalAmount(addDecimals(weights))} ${String(tick || '').trim()}`.trim();
+}
 
 function listStatus(row) {
     if (row?.poll_status === 'pending') return 'Not started';
@@ -104,7 +125,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     // Home's network filter; 'all' lists polls from every chain.
     const [networkFilter, setNetworkFilter] = useState('all');
     const [view, setView] = useState('all');
-    const [votedPolls, setVotedPolls] = useState(/** @type {Set<string>} */ (new Set()));
+    const [votesByPoll, setVotesByPoll] = useState(/** @type {Map<string, any[]>} */ (new Map()));
     const [resultsByPoll, setResultsByPoll] = useState(/** @type {Map<string, any[]>} */ (new Map()));
     const [selectedPollKey, setSelectedPollKey] = useState(/** @type {string | null} */ (null));
     const [layoutRef, wideContent] = useWideContent(LIST_DETAIL_MIN_WIDTH, true);
@@ -150,16 +171,28 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     // polls on screen. The same vote rows already drive the poll detail.
     useEffect(() => {
         if (!governChains.length || typeof messaging.governanceVotes !== 'function') {
-            setVotedPolls(new Set());
+            setVotesByPoll(new Map());
             return undefined;
         }
         let cancelled = false;
         Promise.all(governChains.flatMap((cid) => (addressesByChain[cid] || []).map(({ address }) => (
             messaging.governanceVotes({ chainId: cid, query: address, type: 'address' })
-                .then((response) => extractRows(response).map((vote) => pollKeyFor(cid, votePollRef(vote))))
+                .then((response) => extractRows(response).map((vote) => ({
+                    ...vote,
+                    chainId: cid,
+                    source: vote?.source || address,
+                })))
                 .catch(() => [])
         )))).then((lists) => {
-            if (!cancelled) setVotedPolls(new Set(lists.flat().filter((key) => !key.endsWith(':'))));
+            if (cancelled) return;
+            const grouped = new Map();
+            for (const vote of lists.flat()) {
+                const key = pollKeyFor(vote.chainId, votePollRef(vote));
+                if (key.endsWith(':')) continue;
+                if (!grouped.has(key)) grouped.set(key, []);
+                grouped.get(key).push(vote);
+            }
+            setVotesByPoll(grouped);
         });
         return () => { cancelled = true; };
     }, [addressesByChain, governChains, messaging]);
@@ -215,7 +248,7 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     const rows = allRows?.filter((p) => {
         const key = pollKeyFor(p.chainId || chainId, p.action_index);
         const viewMatches = view === 'all'
-            || (view === 'votes' ? votedPolls.has(key) : ownAddresses.has(String(p.source || '')));
+            || (view === 'votes' ? votesByPoll.has(key) : ownAddresses.has(String(p.source || '')));
         const status = p.poll_status || 'open';
         const statusMatches = statusFilter === 'all'
             || (statusFilter === 'closed' ? status !== 'open' && status !== 'pending' : status === statusFilter);
@@ -308,11 +341,11 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
     const tabsToolbar = (
         <div className={`${local.toolbarRow} ${local.toolbarActions}`}>
             <Tabs
-                aria-label="Governance poll views"
+                aria-label={t('governance.views.label')}
                 items={[
-                    { id: 'all', label: <span className={local.tabLabel}><Icon.GridIcon />All</span> },
-                    { id: 'votes', label: <span className={local.tabLabel}><Icon.UserIcon />My votes</span> },
-                    { id: 'polls', label: <span className={local.tabLabel}><Icon.HandshakeIcon />My polls</span> },
+                    { id: 'all', label: <span className={local.tabLabel}><Icon.GridIcon />{t('components.listPickerScreen.tabAll')}</span> },
+                    { id: 'votes', label: <span className={local.tabLabel}><Icon.UserIcon />{t('governance.views.myVotes')}</span> },
+                    { id: 'polls', label: <span className={local.tabLabel}><Icon.HandshakeIcon />{t('governance.views.myPolls')}</span> },
                 ]}
                 value={view}
                 onChange={setView}
@@ -397,7 +430,12 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
         empty = <EmptyState title={copy.title} body={copy.body} />;
     }
     const questionList = rows && rows.length > 0 ? (
-        <QuestionList label="Governance polls" split={showPanel}>
+        <div className={cardListStyles.cardArea}>
+        <ul
+            className={cardListStyles.marketList}
+            aria-label={t('governance.title')}
+            data-xc-split-list={showPanel ? '' : undefined}
+        >
             {rows.map((p) => {
                 const id = p.action_index;
                 const label = p.question || (Array.isArray(p.options) ? p.options.join(' / ') : String(p.options || ''));
@@ -405,39 +443,68 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                 const summary = pollResultSummary(resultsByPoll.get(pollKey(p)) || p.poll_results || p.results, p.options || []);
                 const sharesKnown = summary.entries.length > 0;
                 const resultByOption = new Map(summary.entries.map((entry) => [entry.optionIndex, entry]));
-                const answers = (p.options || []).map((option, index) => ({
-                    key: index,
-                    label: String(option),
-                    percent: resultByOption.get(index)?.percent,
-                }));
+                const gauge = questionCardSlices(
+                    p.options || [],
+                    sharesKnown ? (p.options || []).map((_, index) => resultByOption.get(index)?.percent ?? 0) : null,
+                );
+                const totalWeight = summary.entries.length
+                    ? addDecimals(summary.entries.map((entry) => entry.weight))
+                    : /^\d+(?:\.\d+)?$/.test(String(p.total_weight ?? '').trim()) ? String(p.total_weight).trim() : null;
                 const callbackContract = p.callback_contract_index ?? p.callback_contract;
                 const binding = Boolean(p.binding) || (
                     callbackContract !== null
                     && callbackContract !== undefined
                     && String(callbackContract).trim() !== ''
                 );
+                const yourVote = voteWeightText(votesByPoll.get(pollKey(p)), p.tick);
                 return (
                     <li key={pollKey(p)}>
-                        <QuestionListRow
+                        <QuestionCard
                             question={label || t('governance.pollNumber', { id: String(id) })}
-                            status={listStatus(p)}
-                            timing={whenText(p)}
-                            badge={binding ? 'Binding' : null}
-                            answers={answers}
-                            sharesKnown={sharesKnown}
-                            footer={p.tick ? `${p.tick} voting weight` : 'Token voting weight'}
+                            meta={(
+                                <span className={local.pollMeta} data-governance-card-status="">
+                                    <span className={local.pollStatus}>{listStatus(p)}</span>
+                                    <span>{whenText(p)}</span>
+                                    {binding ? <span className={local.bindingBadge}>{t('governance.card.binding')}</span> : null}
+                                </span>
+                            )}
+                            slices={gauge.slices}
+                            total={gauge.total}
+                            known={gauge.known}
+                            emptyText={sharesKnown
+                                ? t('governance.card.noVotingWeight')
+                                : t('governance.detail.countedAtCloseShort')}
+                            footer={(
+                                <span className={cardStyles.pool} data-governance-card-weight="">
+                                    <span className={cardStyles.poolIcon} aria-hidden="true"><Icon.CoinsIcon /></span>
+                                    {totalWeight !== null ? (
+                                        <strong>{t('governance.card.weight', {
+                                            weight: formatDecimalAmount(totalWeight),
+                                            tick: p.tick || '',
+                                        })}</strong>
+                                    ) : <>{t('governance.card.weightCountedAtClose')}</>}
+                                </span>
+                            )}
+                            trailingChip={yourVote ? {
+                                text: yourVote,
+                                label: `Your vote: ${yourVote}`,
+                                testId: 'governance-poll-your-vote',
+                            } : null}
                             onOpen={() => {
                                 if (wideContent) setSelectedPollKey(pollKey(p));
                                 else onOpenPoll(p.chainId || chainId, id);
                             }}
                             selected={selected}
-                            data-poll-index={String(id)}
+                            className={showPanel ? cardListStyles.splitRow : undefined}
+                            dataAttribute="data-poll-index"
+                            dataValue={id}
                         />
                     </li>
                 );
             })}
-        </QuestionList>
-    ) : empty ? <QuestionList label="Governance polls" empty={empty} /> : null;
+        </ul>
+        </div>
+    ) : empty;
 
     return wrap(
         <ListPage

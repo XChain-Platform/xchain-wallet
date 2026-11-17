@@ -2,12 +2,40 @@
    shared outcome page sheet (components/outcomeDetail); these are the pieces
    only a ballot has. */
 
-/* What this wallet voted, the last lines of Result. */
-.receipt {
+/* What this wallet voted, directly under the chart. */
+.yourVote {
+    composes: card from '../../ui/Card.module.css';
     display: flex;
     flex-direction: column;
-    gap: var(--xc-space-1);
+    gap: var(--xc-space-2);
     min-width: 0;
+}
+
+.yourVoteHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.yourVoteHead h3,
+.yourVoteQuiet,
+.voteWeight {
+    margin: 0;
+}
+
+.yourVoteHead h3 {
+    min-width: 0;
+    font-size: var(--xc-text-md);
+    overflow-wrap: break-word;
+}
+
+.yourVoteQuiet,
+.voteWeight {
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+    overflow-wrap: break-word;
 }
 
 /* "You voted: ..." with a check, one line per voting address. */

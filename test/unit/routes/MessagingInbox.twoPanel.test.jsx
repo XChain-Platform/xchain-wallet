@@ -82,7 +82,7 @@ describe('MessagingInbox two panels', () => {
         expect(listBody[1]).toMatch(/padding-block-start:\s*var\(--xc-space-2\)/);
         expect(tokens).toMatch(/--xc-space-2:\s*8px/);
         expect(selectedRow).not.toBeNull();
-        expect(selectedRow[1]).toMatch(/background:\s*color-mix\([^;]*--xc-accent-primary[^;]*20%/);
+        expect(selectedRow[1]).toMatch(/background:\s*var\(--xc-row-active-bg\)/);
         expect(selectedRow[1]).toMatch(/width:\s*100%/);
         expect(selectedRow[1]).toMatch(/margin-inline:\s*0/);
         expect(selectedRow[1]).toMatch(/border-radius:\s*0/);

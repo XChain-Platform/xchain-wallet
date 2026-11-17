@@ -89,7 +89,8 @@ describe('control surfaces', () => {
         expect(keep[1]).toMatch(/border-radius:\s*var\(--xc-card-radius\)/);
         expect(keep[1]).toMatch(/background:\s*var\(--xc-card-bg\)/);
 
-        // The hover edge outranks the redrawn card surface, (0,3,0) over (0,2,0).
-        expect(menuCss).toMatch(/\.entry:hover:not\(\[aria-disabled="true"\]\)\s*\{[^}]*border-color:\s*var\(--xc-control-border-hover\)/);
+        expect(menuCss).toMatch(/\.entry:hover:not\(\[aria-disabled="true"\]\)\s*\{[^}]*background:\s*var\(--xc-row-hover-bg\)/);
+        expect(menuCss).toMatch(/\.entry\[aria-current='page'\]\s*\{[^}]*background:\s*var\(--xc-row-active-bg\)/);
+        expect(menuCss).not.toMatch(/\.entry[^,{]*\{[^}]*border-color:/);
     });
 });

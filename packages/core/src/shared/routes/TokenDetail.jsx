@@ -19,6 +19,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { getDemoGatedGroupsForTick, isDemoGatedActionIndex } from '../../flows/demoGatedContent.js';
 import { StalenessLabel } from '../components/StalenessLabel.jsx';
 import { GatedFileViewer } from '../components/GatedFileViewer.jsx';
+import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import { formatCompactChartValue, Sparkline, synthesizeTokenChart } from '../components/Sparkline.jsx';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { synthesizeDemoNativePrices } from '../../flows/demoFixtures.js';
@@ -77,14 +78,14 @@ import { readActiveAccount } from '../utils/activeAccountMemory.js';
 import { chainReadFailed, sumTickOnChain } from '../utils/walletBalanceShape.js';
 import styles from './TokenDetail.module.css';
 import { ActionList, ActionListItem } from '../components/ActionList.jsx';
-import { NftIdentityCard, nftArtUrl } from '../components/NftIdentityCard.jsx';
-import { TickerIcon } from '../components/TickerIcon.jsx';
 import { buildActionEntries } from '../actionEntries.js';
 import { ENTRY_ICON } from './ActionsMenu.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/balances.js';
+import '../../i18n/locales/en/addressList.js';
 import '../../i18n/locales/en/components.js';
+import '../../i18n/locales/en/home.js';
 import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/settings.js';
 import '../../i18n/locales/en/tokenDetail.js';
@@ -137,17 +138,16 @@ function callAsync(callback) {
  * @param {(entry: any) => void} [props.onSelectEntry] open one History row's detail (the History tab)
  * @param {boolean} [props.embedded] drawn as wide Home's detail panel beside the balances list (G115):
  *   Home's Screen owns the header, the scroller and the notices, so the page has no header or
- *   Back of its own, and an NFT opens with its outlined identity card (G16) instead of the blue card
+ *   Back of its own; every coin and token keeps the same value-chart hero in the panel
  * @param {Record<string, ((ctx?: { issuer?: string }) => void) | undefined>} [props.manageActions]
  *   the issuer's handlers (onMint, onLock, onIssueSubtoken, ... as the shells wire them), each
  *   opening its form with this token and its resolved issuer; when given, the issuer actions
  *   in grouped lists in the Actions tab and their facts in the Details card
- * @param {boolean} [props.ownerView] opened from My Tokens (the manage-token route): uses a plain
- *   identity card instead of the balance hero, and shows the issuer's groups
+ * @param {boolean} [props.ownerView] opened from My Tokens (the manage-token route): shows the
+ *   issuer's groups while keeping the shared coin-and-token hero
  * @param {(issuer: string | null) => void} [props.onIssuerResolved] told the token's issuer once read
  *
- * The browse page for a coin or token opens with the blue balance hero. The
- * Manage Token owner view replaces only that hero with its identity card;
+ * Every coin and token route opens with the shared blue value-chart hero.
  * Actions, Details and History stay shared.
  */
 export function TokenDetail(props) {
@@ -217,6 +217,7 @@ function TokenDetailContent({
     const networkActionsAvailable = !networkOffline;
     const variant = screenVariantFor(shell);
     const tabsId = useId();
+    const [filterQuery, setFilterQuery] = useState('');
     const [revealedExtra, setRevealedExtra] = useState(null);
     // The system Back from the Add Price Alert page returns to this page.
     useBackHandler(revealedExtra === 'price-alert' ? () => setRevealedExtra(null) : undefined, false, 'screen');
@@ -304,6 +305,23 @@ function TokenDetailContent({
     }, [messaging, chainId, tick, isNative, isDemo]);
     const loadFailed = !isNative && (readFailed || assetInfo?.loadError === true);
     const metadataLoading = !isNative && !assetInfo && !tokenMissing && !readFailed;
+    const [collectionChildren, setCollectionChildren] = useState(/** @type {any[] | null} */ (null));
+    useEffect(() => {
+        if (isNative || typeof messaging.getSubassetsForToken !== 'function') {
+            setCollectionChildren([]);
+            return undefined;
+        }
+        let cancelled = false;
+        setCollectionChildren(null);
+        callAsync(() => messaging.getSubassetsForToken({ chainId, tick, opts: { limit: 100 } }))
+            .then((response) => {
+                if (cancelled) return;
+                const rows = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
+                setCollectionChildren(rows);
+            })
+            .catch(() => { if (!cancelled) setCollectionChildren([]); });
+        return () => { cancelled = true; };
+    }, [messaging, chainId, tick, isNative]);
 
     // The issuer's groups open their forms for any wallet. Each form runs its
     // own preflight and refuses a source that cannot perform the action.
@@ -549,17 +567,23 @@ function TokenDetailContent({
         : explorerPageUrl({ chainId, kind: 'token', value: tick, settings });
     const explorerTitle = t('tokenDetail.actions.explorerTitle', { tick });
     const pageTitle = displayName || bridgeDisplayTick(tick, coinFromChainId(chainId)).label;
-    const tokenLongNameCandidate = assetInfo?.name || assetInfo?.displayName || displayName || '';
-    const tokenLongName = String(tokenLongNameCandidate).trim().toUpperCase() === String(tick).trim().toUpperCase()
-        ? ''
-        : String(tokenLongNameCandidate).trim();
     // The window title names the asset, as the page header does; wide Home's
     // panel leaves the window to Home.
     useDocumentTitleSection(embedded ? null : pageTitle);
+    const filterMenu = !isNative ? (
+        <ListFilterMenu
+            query={filterQuery}
+            onQueryChange={setFilterQuery}
+            searchPlaceholder="Search this token"
+            searchLabel="Search token details, files, and history"
+            label="Filter token content"
+            resultsId={`${tabsId}-panel`}
+        />
+    ) : null;
     const header = (
         <PageHeader
             onBack={handleBack}
-            trailing={explorerUrl ? (
+            trailing={filterMenu || explorerUrl ? (<>{filterMenu}{explorerUrl ? (
                 <Button
                     type="button"
                     size="md"
@@ -573,7 +597,7 @@ function TokenDetailContent({
                 >
                     {null}
                 </Button>
-            ) : null}
+            ) : null}</>) : null}
             // A bridged copy is titled by its bare name; the rooted wire form
             // and the origin chain are both on the Details panel below, so the
             // page never hides which asset this really is.
@@ -620,9 +644,14 @@ function TokenDetailContent({
     const tabs = [
         { id: 'actions', label: tabLabel(Icon.ZapIcon, t('tokenDetail.tabs.actions')) },
         { id: 'details', label: tabLabel(Icon.InfoIcon, t('tokenDetail.tabs.details')) },
+        !isNative ? { id: 'files', label: tabLabel(Icon.DocumentIcon, t('tokenDetail.tabs.files')) } : null,
         { id: 'history', label: tabLabel(Icon.HistoryIcon, t('tokenDetail.tabs.history')) },
-    ];
+    ].filter(Boolean);
     const [activeTab, setActiveTab] = useState('actions');
+    const chooseTab = useCallback((nextTab) => {
+        setActiveTab(nextTab);
+        if (nextTab === 'files') setGatedOpen(true);
+    }, []);
 
     const [balanceHidden, toggleBalanceHidden] = useBalancesHidden();
     const [assetUnit, toggleAssetUnit] = useBalanceUnit('asset');
@@ -853,7 +882,7 @@ function TokenDetailContent({
     ].filter(Boolean);
 
     // More's information items are links in the Details tab.
-    const DETAIL_LINK_IDS = ['supply-history', 'about', 'media', 'gated-content', 'holders'];
+    const DETAIL_LINK_IDS = ['supply-history', 'holders'];
     const infoItems = moreItems.filter((item) => DETAIL_LINK_IDS.includes(item.id));
 
     const actionGrid = buildAssetActionTiles({
@@ -1018,10 +1047,6 @@ function TokenDetailContent({
     // Embedded in wide Home's detail panel, Home's Screen is the page (its
     // header, scroller and notices), so this page adds none of its own.
     const PageFrame = embedded ? EmbeddedPageFrame : Screen;
-    // An NFT there opens with its outlined identity card (G16): it has no
-    // price history to draw behind a blue card.
-    const showNftIdentity = embedded && !isNative && resolvedDivisibility === 0
-        && assetInfo?.locks?.max_supply === true;
     // A blue hero always has its chart (G10): a coin's price line, or, where
     // there is no price (a token, a coin on a test network), its own balance.
     const showHeroChart = !isNative || fiatSupported || nativeBalanceChart;
@@ -1050,72 +1075,50 @@ function TokenDetailContent({
                 ) : null}
                 {/* No ownership pre-warning: an owner action that would fail is refused
                     by its preflight when the user tries it (operator 2026-11-16). */}
-                {/* Manage Token identifies the asset without showing browse-only
-                    balance or chart data. Other token and coin pages keep the
-                    Home-style balance hero, and wide Home keeps its NFT card. */}
-                {ownerView ? (
-                    <section className={styles.manageIdentityCard} aria-label="Token identity">
-                        <span className={styles.manageIdentityIcon}>
-                            <TickerIcon chainId={chainId} tick={tick} context="list" />
-                        </span>
-                        <div className={styles.manageIdentityText}>
-                            <h2 className={styles.manageIdentityTicker}>{tick}</h2>
-                            {tokenLongName ? <p className={styles.manageIdentityName}>{tokenLongName}</p> : null}
-                        </div>
-                    </section>
-                ) : showNftIdentity ? (
-                    <NftIdentityCard
-                        name={pageTitle}
-                        tick={tick}
-                        chainName={descriptor?.displayName || coinFromChainId(chainId)}
-                        artUrl={nftArtUrl(assetInfo) || headerIconUrl}
-                        quantity={quantity}
-                        supply={assetInfo?.totalSupply ?? assetInfo?.maxSupply ?? null}
-                        fiat={fiat}
-                        fiatCurrency={fiatCurrency}
-                        fiatFromSale={fiatRateSource === 'market'}
-                        hidden={balanceHidden}
-                    />
-                ) : (
+                {/* Every coin and token surface uses the same Home-style
+                    value-chart hero. */}
                 <div className={showHeroChart ? `${homeTabsStyles.heroStack} ${homeTabsStyles.heroStackWithChart}` : homeTabsStyles.heroStack}>
-                    {/* The page header names the asset, so its card hides the
-                        caption; in wide Home's panel there is no page header,
-                        so the card shows it (the asset's icon and name). */}
-                    <section className={embedded ? heroStyles.hero : `${heroStyles.hero} ${styles.cardNoCaption}`} aria-labelledby={captionId}>
+                    {/* Full-page and wide-Home asset heroes repeat Home's identity
+                        row: artwork, then the name with its active mode below. */}
+                    <section className={heroStyles.hero} aria-labelledby={captionId}>
                         <div className={`${heroStyles.row} ${heroStyles.rowWithActions}`}>
                             <span className={`${heroStyles.label} ${heroStyles.walletLabel} ${styles.cardCaption}`}>
-                                <span id={captionId} className={styles.cardIdentity}>
-                                    {headerIconUrl || metadataLoading ? (
-                                        <span className={styles.cardCaptionIconWrap}>
-                                        {headerIconUrl ? (
-                                            <AssetArtwork
-                                                src={headerIconUrl}
-                                                className={styles.cardCaptionIcon}
-                                                fallbackClassName={styles.cardCaptionIconFallback}
-                                                fallbackText={tick}
-                                            />
-                                        ) : (
-                                            <Skeleton
-                                                shape="card"
-                                                width="100%"
-                                                height="100%"
-                                                ariaLabel="Loading token artwork"
-                                            />
-                                        )}
-                                        {!isNative && chainId ? (
-                                            <img
-                                                src={branding.chainIconSmallUrl(chainId)}
-                                                alt=""
-                                                aria-hidden="true"
-                                                className={styles.cardCaptionChain}
-                                            />
-                                        ) : null}
+                                <span className={styles.cardCaptionIconWrap}>
+                                    {headerIconUrl ? (
+                                        <AssetArtwork
+                                            src={headerIconUrl}
+                                            className={styles.cardCaptionIcon}
+                                            fallbackClassName={styles.cardCaptionIconFallback}
+                                            fallbackText={tick}
+                                        />
+                                    ) : metadataLoading ? (
+                                        <Skeleton
+                                            shape="card"
+                                            width="100%"
+                                            height="100%"
+                                            ariaLabel="Loading token artwork"
+                                        />
+                                    ) : (
+                                        <span className={styles.cardCaptionIconFallback} aria-hidden="true">
+                                            {String(tick || '?').slice(0, 2)}
                                         </span>
+                                    )}
+                                    {!isNative && chainId ? (
+                                        <img
+                                            src={branding.chainIconSmallUrl(chainId)}
+                                            alt=""
+                                            aria-hidden="true"
+                                            className={styles.cardCaptionChain}
+                                        />
                                     ) : null}
-                                    <span className={styles.cardCaptionText} title={pageTitle}>{pageTitle}</span>
                                 </span>
-                                <span className={heroStyles.modeCaption}>
-                                    {showFiatPrimary ? t('tokenDetail.hero.value') : t('tokenDetail.hero.balance')}
+                                <span className={heroStyles.walletLabelCopy}>
+                                    <span id={captionId} className={`${heroStyles.walletLabelText} ${styles.cardCaptionText}`} title={pageTitle}>
+                                        {pageTitle}
+                                    </span>
+                                    <span className={heroStyles.modeCaption}>
+                                        {showFiatPrimary ? t('home.tabs.value') : t('addressList.detail.balance')}
+                                    </span>
                                 </span>
                             </span>
                             <div
@@ -1207,7 +1210,6 @@ function TokenDetailContent({
                         </RouteErrorBoundary>
                     ) : null}
                 </div>
-                )}
 
                 {/* The market figures are a Market group at the top of the Details tab. */}
 
@@ -1221,7 +1223,7 @@ function TokenDetailContent({
                     className={styles.detailTabs}
                     items={tabs}
                     value={activeTab}
-                    onChange={setActiveTab}
+                    onChange={chooseTab}
                     panelId={`${tabsId}-panel`}
                     aria-label={t('tokenDetail.tabs.label')}
                 />
@@ -1244,9 +1246,38 @@ function TokenDetailContent({
                                     isNative={isNative}
                                     history={readsOwnHistory ? tokenHistory : null}
                                     onSelectEntry={onSelectEntry}
+                                    query={filterQuery}
+                                />
+                            ) : activeTab === 'files' ? (
+                                <FilesPanel
+                                    walletId={walletId}
+                                    chainId={chainId}
+                                    tick={tick}
+                                    assetInfo={assetInfo}
+                                    loading={metadataLoading || gatedLoading}
+                                    error={gatedError}
+                                    groups={gatedGroups}
+                                    messaging={messaging}
+                                    quantity={quantity}
+                                    divisibility={resolvedDivisibility}
+                                    query={filterQuery}
+                                    displayName={displayName || tick}
                                 />
                             ) : (
                             <>
+                            {!isNative ? (
+                                <TokenProfile
+                                    assetInfo={assetInfo}
+                                    tick={tick}
+                                    chainId={chainId}
+                                    loading={metadataLoading}
+                                    loadFailed={loadFailed}
+                                    explorerUrl={explorerUrl}
+                                    settings={settings}
+                                    children={collectionChildren}
+                                    query={filterQuery}
+                                />
+                            ) : null}
                             {/* Details is one list in the standard card (Card.module.css),
                                 one detail per line, 8px under the tab row; the information
                                 items are rows at its foot that open under the card. */}
@@ -1265,6 +1296,7 @@ function TokenDetailContent({
                                     divisibility={resolvedDivisibility}
                                     fiat={fiat}
                                     fiatCurrency={fiatCurrency}
+                                    query={filterQuery}
                                     marketRows={(
                                         <TokenMarketRows
                                             walletId={walletId}
@@ -1309,41 +1341,6 @@ function TokenDetailContent({
                             titleAs="p"
                         />
                     )
-                ) : null}
-
-                {revealedExtra === 'about' && !isNative ? (
-                    <InfoPanel
-                        isNative={false}
-                        assetInfo={assetInfo}
-                        loading={metadataLoading}
-                        loadFailed={loadFailed}
-                    />
-                ) : null}
-
-                {revealedExtra === 'media' && !isNative ? (
-                    <MediaPanel
-                        isNative={false}
-                        assetInfo={assetInfo}
-                        loading={metadataLoading}
-                    />
-                ) : null}
-
-                {revealedExtra === 'gated-content' && !isNative ? (
-                    <GatedContentPanel
-                        walletId={walletId}
-                        chainId={chainId}
-                        tick={tick}
-                        groups={gatedGroups}
-                        loading={gatedLoading}
-                        error={gatedError}
-                        packsMeta={assetInfo?.packs || {}}
-                        messaging={messaging}
-                        ownsToken={(() => {
-                            try { return BigInt(String(quantity || '0')) > 0n; }
-                            catch { return false; }
-                        })()}
-                        displayName={displayName || tick}
-                    />
                 ) : null}
 
                 {revealedExtra === 'holders' && !isNative ? (
@@ -1978,8 +1975,15 @@ function DetailsPanel({
     marketRows = null,
     linkRows = [],
     extraRows = [],
+    query = '',
 }) {
     const [balanceHidden] = useBalancesHidden();
+    const factsMatch = matchesFilter(query, [
+        tick, displayName, kindLabel(kind), descriptor?.displayName, assetInfo?.description,
+        assetInfo?.creator, assetInfo?.totalSupply, assetInfo?.maxSupply, divisibility,
+        ...extraRows.flatMap((row) => [row.label, row.value]),
+    ]);
+    if (!factsMatch) return <EmptyState title="No matching details" body="Try another name, category, link, or fact." />;
     return (
         <div
             className={styles.infoStack}
@@ -1991,12 +1995,7 @@ function DetailsPanel({
                 {/* The market rows open the list (TokenMarketRows). They describe
                     the asset, not the holding, so privacy mode leaves them. */}
                 {marketRows}
-                {!isNative && detailText(assetInfo?.description) !== '-' ? (
-                    <DetailRow label="Description">
-                        <span className={styles.descriptionValue}>{detailText(assetInfo.description)}</span>
-                    </DetailRow>
-                ) : null}
-                <DetailRow label="Name">{displayName || tick}</DetailRow>
+                {isNative ? <DetailRow label="Name">{displayName || tick}</DetailRow> : null}
                 <DetailRow label="Ticker">
                     <BridgeOriginTick tick={tick} localCoin={coinFromChainId(chainId)} />
                 </DetailRow>
@@ -2049,9 +2048,6 @@ function DetailsPanel({
                             </span>
                         ) : '-'}
                     </DetailRow>
-                ) : null}
-                {!isNative && Array.isArray(assetInfo?.projects) && assetInfo.projects.length > 0 ? (
-                    <DetailRow label="Projects">{assetInfo.projects.join(', ')}</DetailRow>
                 ) : null}
                 {!isNative ? (
                     <DetailRow label={<span>Status</span>}>
@@ -2109,6 +2105,201 @@ function hasSupplementalTokenInfo(assetInfo) {
         || linkTargets.socials.length > 0
         || (Array.isArray(assetInfo.dns) && assetInfo.dns.length > 0)
         || assetInfo.pgpsig
+    );
+}
+
+function projectEntry(project) {
+    if (typeof project === 'string') return { project, linkActionIndex: null, rosterActionIndex: null };
+    return project && typeof project === 'object' ? project : null;
+}
+
+function tokenNameFromRow(row) {
+    return row?.tick || row?.info?.tick || row?.name || row?.ticker || null;
+}
+
+function TokenProfile({ assetInfo, tick, chainId, loading, loadFailed, explorerUrl, settings, children, query }) {
+    if (loading) {
+        return <div className={styles.profileCard} role="status" aria-label="Loading token profile"><Skeleton height={180} /></div>;
+    }
+    if (loadFailed && (!assetInfo || assetInfo.loadError)) return null;
+    const projects = (Array.isArray(assetInfo?.projects) ? assetInfo.projects : []).map(projectEntry).filter(Boolean);
+    const childTicks = (Array.isArray(children) ? children : []).map(tokenNameFromRow).filter(Boolean);
+    const parentTick = String(tick).includes('.') ? String(tick).split('.').slice(0, -1).join('.') : null;
+    const hasInfo = Boolean(assetInfo?.tisAvailable
+        || assetInfo?.name
+        || assetInfo?.description
+        || hasSupplementalTokenInfo(assetInfo)
+        || hasPublishedMedia(assetInfo)
+        || projects.length
+        || assetInfo?.registry
+        || parentTick
+        || childTicks.length);
+    if (!hasInfo) {
+        return matchesFilter(query, ['No token information']) ? (
+            <div className={styles.quietNote} role="note">
+                <Icon.InfoIcon aria-hidden="true" />
+                <span><strong>No token information</strong><small>The issuer has not published a token information document.</small></span>
+            </div>
+        ) : null;
+    }
+    const profileValues = [
+        assetInfo?.name, assetInfo?.description, assetInfo?.owner, assetInfo?.contacts,
+        assetInfo?.categories, assetInfo?.dns, tokenLinkTargets(assetInfo), projects,
+        assetInfo?.registry, parentTick, childTicks,
+    ];
+    if (!matchesFilter(query, profileValues)) return null;
+    const images = Array.isArray(assetInfo?.images) ? assetInfo.images : [];
+    const banner = images.find((image) => ['large', 'hires', 'hi-res', 'highres', 'standard'].includes(String(image?.type || '').toLowerCase()) && safeImageSrc(image?.url));
+    const logo = images.find((image) => String(image?.type || '').toLowerCase() === 'icon' && safeImageSrc(image?.url)) || images.find((image) => safeImageSrc(image?.url));
+    const hasOwner = Boolean(assetInfo?.owner && (assetInfo.owner.name || assetInfo.owner.title || assetInfo.owner.organization));
+    const hasContacts = Array.isArray(assetInfo?.contacts) && assetInfo.contacts.length > 0;
+    const hasLinks = tokenLinkTargets(assetInfo).websites.length > 0 || tokenLinkTargets(assetInfo).socials.length > 0;
+    return (
+        <section className={styles.profileCard} aria-label="Token information profile">
+            {banner ? <img className={styles.profileBanner} src={banner.url} alt="" /> : null}
+            <div className={styles.profileBody}>
+                <div className={styles.profileIdentity}>
+                    {logo ? <AssetArtwork src={logo.url} className={styles.profileLogo} fallbackClassName={styles.profileLogoFallback} fallbackText={tick} /> : null}
+                    <span><strong>{assetInfo?.name || tick}</strong><small>{tick}</small></span>
+                </div>
+                {projects.map((project) => {
+                    const proofAction = project.linkActionIndex ?? project.rosterActionIndex;
+                    const proofUrl = proofAction == null ? null : explorerPageUrl({ chainId, kind: 'action', value: proofAction, settings });
+                    if (!proofUrl) return null;
+                    return (
+                        <div className={styles.officialLine} key={`${project.project}:${project.linkActionIndex || ''}`}>
+                            <Icon.CheckIcon aria-hidden="true" />
+                            <span>Official: part of the <strong>{project.project}</strong> project</span>
+                            {proofUrl ? <a href={proofUrl} target="_blank" rel="noreferrer noopener">Proof</a> : null}
+                        </div>
+                    );
+                })}
+                {assetInfo?.description ? <p className={styles.profileDescription}>{assetInfo.description}</p> : null}
+                {Array.isArray(assetInfo?.categories) && assetInfo.categories.length > 0 ? (
+                    <div className={styles.categoryChips} aria-label="Token categories">
+                        {assetInfo.categories.map((category, index) => <span key={`${category.type}:${index}`}>{category.value}</span>)}
+                    </div>
+                ) : null}
+                {hasLinks ? <LinksAndFiles assetInfo={assetInfo} /> : null}
+                {hasOwner ? <OwnerBlock owner={assetInfo.owner} /> : null}
+                {hasContacts ? <ContactsBlock contacts={assetInfo.contacts} /> : null}
+                {Array.isArray(assetInfo?.dns) && assetInfo.dns.length > 0 ? <DnsBlock dns={assetInfo.dns} /> : null}
+                {assetInfo?.registry ? (
+                    <p className={styles.projectOwnership}>
+                        This token owns the <strong>{tick}</strong> project:{' '}
+                        {explorerUrl ? <a href={explorerUrl} target="_blank" rel="noreferrer noopener">view its {formatWithThousands(String(assetInfo.registry.total))} official tokens</a> : `view its ${formatWithThousands(String(assetInfo.registry.total))} official tokens`}.
+                    </p>
+                ) : null}
+                {parentTick ? (
+                    <p className={styles.collectionLine}>Parent token: <a href={explorerPageUrl({ chainId, kind: 'token', value: parentTick, settings }) || '#'} target="_blank" rel="noreferrer noopener">{parentTick}</a></p>
+                ) : null}
+                {childTicks.length > 0 ? (
+                    <div className={styles.collectionChildren}><strong>Child tokens</strong>{childTicks.map((child) => <a key={child} href={explorerPageUrl({ chainId, kind: 'token', value: child, settings }) || '#'} target="_blank" rel="noreferrer noopener">{child}</a>)}</div>
+                ) : null}
+                {assetInfo?.htmlAvailable && explorerUrl ? (
+                    <a className={styles.explorerInfoLink} href={explorerUrl} target="_blank" rel="noreferrer noopener">Open enhanced token information in explorer</a>
+                ) : null}
+            </div>
+        </section>
+    );
+}
+
+function fileDisplayName(file, fallback = 'Untitled file') {
+    if (file?.title || file?.name) return file.title || file.name;
+    try {
+        const path = new URL(file?.url || '').pathname.split('/').filter(Boolean);
+        return decodeURIComponent(path[path.length - 1] || fallback);
+    } catch {
+        return fallback;
+    }
+}
+
+function tokenFileEntries(assetInfo) {
+    const out = [];
+    const add = (kind, file, index) => {
+        if (!file || file.locked) return;
+        const url = safeHttpUrl(file.url) || safeImageSrc(file.url);
+        if (!url) return;
+        out.push({
+            ...file,
+            kind,
+            url,
+            id: `${kind}:${file.dataRef || file.actionIndex || url}:${index}`,
+            displayName: fileDisplayName(file, `${kind} file`),
+        });
+    };
+    for (const kind of ['images', 'audio', 'video', 'files']) {
+        for (const [index, file] of (Array.isArray(assetInfo?.[kind]) ? assetInfo[kind] : []).entries()) {
+            add(kind === 'images' ? 'image' : kind === 'files' ? 'file' : kind, file, index);
+        }
+    }
+    for (const [index, file] of (Array.isArray(assetInfo?.linkedFiles) ? assetInfo.linkedFiles : []).entries()) {
+        if (!file.gated) add(String(file.type || '').startsWith('image/') ? 'image' : 'file', file, index);
+    }
+    const seen = new Set();
+    return out.filter((file) => {
+        const key = file.dataRef || file.actionIndex || file.url;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+function PublicFileTile({ file }) {
+    const [imageFailed, setImageFailed] = useState(false);
+    const meta = [file.type || file.kind, file.size].filter(Boolean).join(', ');
+    return (
+        <a className={styles.fileTile} href={file.url} target="_blank" rel="noreferrer noopener" aria-label={`Open ${file.displayName}`}>
+            <span className={styles.fileTilePreview}>
+                {file.kind === 'image' && !imageFailed ? <img src={file.url} alt={file.displayName} loading="lazy" onError={() => setImageFailed(true)} /> : <Icon.FileTypeIcon type={file.type || file.kind} aria-label={imageFailed ? `${file.displayName} unavailable` : undefined} />}
+                {(file.kind === 'audio' || file.kind === 'video') ? <span className={styles.fileTilePlay}><Icon.PlayIcon /></span> : null}
+            </span>
+            <span className={styles.fileTileBody}><strong>{file.displayName}</strong><small>{meta || 'File, size unavailable'}</small>{file.hash ? <small className={styles.fileHash}>SHA-256 {file.hash}</small> : null}</span>
+        </a>
+    );
+}
+
+function FilesPanel({ walletId, chainId, tick, assetInfo, loading, error, groups, messaging, quantity, divisibility, query, displayName }) {
+    const viewTabsId = useId();
+    const [view, setView] = useState('all');
+    const publicFiles = tokenFileEntries(assetInfo).filter((file) => matchesFilter(query, [file.displayName, file.title, file.name, file.type, file.hash]));
+    const holderGroups = Array.isArray(groups) ? groups.map((group) => ({
+        ...group,
+        files: (Array.isArray(group.files) ? group.files : []).filter((file) => matchesFilter(query, [file.name, file.title, file.type])),
+    })).filter((group) => group.files.length > 0) : groups;
+    const holderCount = Array.isArray(holderGroups) ? holderGroups.reduce((count, group) => count + group.files.length, 0) : 0;
+    const totalCount = publicFiles.length + holderCount;
+    const tabs = [
+        { id: 'all', label: <><Icon.GridIcon aria-hidden="true" /> All</> },
+        { id: 'public', label: <><Icon.ExternalLinkIcon aria-hidden="true" /> Public</> },
+        { id: 'holders', label: <><Icon.LockIcon aria-hidden="true" /> Holders</> },
+    ];
+    if (loading && !assetInfo) return <Skeleton height={180} ariaLabel="Loading token files" />;
+    const showHolderSection = view === 'all' || view === 'holders';
+    return (
+        <div className={styles.filesPanel}>
+            <Tabs id={viewTabsId} className={styles.filesToggle} items={tabs} value={view} onChange={setView} panelId={`${viewTabsId}-panel`} aria-label="File visibility" />
+            <div id={`${viewTabsId}-panel`} role="tabpanel" aria-labelledby={`${viewTabsId}-tab-${view}`}>
+                {(view === 'all' || view === 'public') && publicFiles.length > 0 ? <div className={styles.fileGrid}>{publicFiles.map((file) => <PublicFileTile key={file.id} file={file} />)}</div> : null}
+                {showHolderSection && (holderCount > 0 || (loading && !groups) || error) ? (
+                    <GatedContentPanel
+                        walletId={walletId}
+                        chainId={chainId}
+                        tick={tick}
+                        groups={holderGroups}
+                        loading={loading && !groups}
+                        error={error}
+                        packsMeta={assetInfo?.packs || {}}
+                        messaging={messaging}
+                        ownsToken={(() => { try { return BigInt(String(quantity || '0')) > 0n; } catch { return false; } })()}
+                        displayName={displayName}
+                        heldLabel={amountWithUnit(quantity, divisibility, tick)}
+                        showSummary={view === 'holders'}
+                    />
+                ) : null}
+                {totalCount === 0 && !loading && !error ? <EmptyState title="No files yet" body={query ? 'No files match this filter.' : 'Media and files published or attached on chain appear here.'} titleAs="p" /> : null}
+            </div>
+        </div>
     );
 }
 
@@ -2777,6 +2968,21 @@ function detailText(value) {
     return !text || /^(?:undefined|null|nan)$/i.test(text) ? '-' : text;
 }
 
+function searchableText(value) {
+    if (value == null || value === false) return '';
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') return String(value);
+    if (Array.isArray(value)) return value.map(searchableText).join(' ');
+    if (typeof value === 'object' && value.props) return searchableText(value.props.children);
+    if (typeof value === 'object') return Object.values(value).map(searchableText).join(' ');
+    return '';
+}
+
+function matchesFilter(query, values) {
+    const wanted = String(query || '').trim().toLocaleLowerCase();
+    if (!wanted) return true;
+    return searchableText(values).toLocaleLowerCase().includes(wanted);
+}
+
 // Token-gated content panel: renders the list of gated FILEs published
 // for this token, grouped by KEY_HASH so packs (multi-file shares-one-key
 // drops) appear as a single header with member files underneath. Each
@@ -2784,7 +2990,7 @@ function detailText(value) {
 // enter password) and decrypts every file in the group; viewers render
 // inline for text / JSON / images and as a download link for everything
 // else. See xchain-documentation/protocol/token-gated-content.md.
-function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, packsMeta, messaging, ownsToken, displayName }) {
+function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, packsMeta, messaging, ownsToken, displayName, heldLabel = `0 ${tick}`, showSummary = false }) {
     const [addresses, setAddresses] = useState(/** @type {any[] | null} */ (null));
     const [addressesError, setAddressesError] = useState(/** @type {string | null} */ (null));
     const [addressesLoading, setAddressesLoading] = useState(false);
@@ -2814,7 +3020,7 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
     }, [addresses, addressesLoading, messaging, walletId, chainId]);
 
     if (loading) return <p className={styles.muted}>Loading gated content…</p>;
-    if (error) return <Notice tone="danger">{error}</Notice>;
+    if (error) return <Notice tone="danger" title="Files unavailable">{error}</Notice>;
     if (!groups || groups.length === 0) {
         return (
             <EmptyState
@@ -2824,17 +3030,31 @@ function GatedContentPanel({ walletId, chainId, tick, groups, loading, error, pa
             />
         );
     }
+    const thresholds = groups.flatMap((group) => group.files || []).map((file) => file.gateMinAmount || '1');
+    const orderedThresholds = [...new Set(thresholds)].sort((a, b) => Number(a) - Number(b));
+    const firstThreshold = orderedThresholds[0] || '1';
+    const lastThreshold = orderedThresholds[orderedThresholds.length - 1] || firstThreshold;
+    const firstCount = thresholds.filter((threshold) => Number(threshold) <= Number(firstThreshold)).length;
+    const allCount = thresholds.length;
     return (
-        <div className={styles.infoCard}>
+        <div className={styles.gatedContent}>
+            {showSummary ? (
+                <div className={styles.holdersSummary}>
+                    <strong>
+                        Hold {formatWithThousands(firstThreshold)} for {firstCount} {firstCount === 1 ? 'file' : 'files'}, {formatWithThousands(lastThreshold)} for all {allCount}
+                    </strong>
+                    <span>You hold {heldLabel.endsWith(` ${tick}`) ? heldLabel.slice(0, -tick.length - 1) : heldLabel}</span>
+                </div>
+            ) : null}
             {/* PC-26: the send-side constraints, stated where holders learn
                 the token is gated. Key handoff is Send-only and needs the
                 recipient's on-chain pubkey. */}
-            <p className={styles.muted}>
+            <Notice tone="info" title="Holder unlocks">
                 Sending {tick} hands the unlock key to the recipient automatically,
                 but only through a direct Send, and only to addresses that have made
                 at least one transaction. Tokens received via airdrops, dispensers,
                 trades, or dividends arrive without the key.
-            </p>
+            </Notice>
             {groups.map((g) => {
                 const isPack = g.files.length > 1;
                 const tisMeta = packsMeta && g.files[0]?.packId ? packsMeta[g.files[0].packId] : null;
@@ -3144,7 +3364,7 @@ function GatedGroupCard({
         <div className={styles.metaBlock}>
             <SectionHeader title={heading} description={description} />
             {/* The kit has no file-list primitive, so native list semantics group these file actions. */}
-            <ul className={styles.filesList}>
+            <ul className={styles.gatedGrid}>
                 {group.files.map((f) => {
                     const plain = unlocked.get(String(f.actionIndex));
                     if (plain) {
@@ -3164,7 +3384,7 @@ function GatedGroupCard({
                                 onClick={() => handleFileClick(f)}
                                 disabled={submitting}
                                 aria-busy={submitting}
-                                className={`${styles.fileLink} ${styles.fileButton}`}
+                                className={`${styles.gatedTile} ${styles.fileButton}`}
                                 style={{
                                     cursor: 'pointer',
                                     font: 'inherit',
@@ -3177,19 +3397,12 @@ function GatedGroupCard({
                                     : `Locked: purchase required to access ${f.name || 'gated file'}`}
                                 icon={null}
                             >
-                                <span className={styles.fileLinkContent}>
-                                    <span className={styles.fileLinkIcon} aria-hidden="true">
+                                <span className={styles.gatedTileContent}>
+                                    <span className={styles.gatedTilePreview} aria-hidden="true">
                                         <Icon.FileTypeIcon type={f.type} />
+                                        <span className={styles.gatedTileLock}><Icon.LockIcon /> Hold {formatWithThousands(f.gateMinAmount || '1')}</span>
                                     </span>
-                                    <span className={styles.fileLinkName}>{f.name || `Action #${f.actionIndex}`}</span>
-                                    {f.type ? (
-                                        <span className={styles.fileLinkType}>{f.type}</span>
-                                    ) : null}
-                                    {f.gateMinAmount ? (
-                                        <span className={styles.fileLinkType}>
-                                            hold ≥ {f.gateMinAmount} {tick} to unlock
-                                        </span>
-                                    ) : null}
+                                    <span className={styles.gatedTileBody}><strong>{f.title || f.name || `Action #${f.actionIndex}`}</strong><small>{[f.type, f.byteLength ? `${formatWithThousands(String(f.byteLength))} bytes` : null].filter(Boolean).join(', ') || 'File, size unavailable'}</small></span>
                                 </span>
                             </Button>
                         </li>
@@ -3262,7 +3475,7 @@ function UnlockedFileLink({ name, type, onOpen }) {
     return (
         <Button
             onClick={onOpen}
-            className={`${styles.fileLink} ${styles.fileButton}`}
+            className={`${styles.gatedTile} ${styles.fileButton} ${styles.gatedTileUnlocked}`}
             style={{
                 cursor: 'pointer',
                 font: 'inherit',
@@ -3272,14 +3485,12 @@ function UnlockedFileLink({ name, type, onOpen }) {
             aria-label={`Open unlocked file ${name}`}
             icon={null}
         >
-            <span className={styles.fileLinkContent}>
-                <span className={styles.fileLinkIcon} aria-hidden="true">
+            <span className={styles.gatedTileContent}>
+                <span className={styles.gatedTilePreview} aria-hidden="true">
                     <Icon.FileTypeIcon type={type} />
+                    <span className={styles.gatedTileOpen}><Icon.UnlockIcon /> Open</span>
                 </span>
-                <span className={styles.fileLinkName}>{name}</span>
-                {type ? (
-                    <span className={styles.fileLinkType}>{type}</span>
-                ) : null}
+                <span className={styles.gatedTileBody}><strong>{name}</strong><small>{type || 'File'}</small></span>
             </span>
         </Button>
     );

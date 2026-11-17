@@ -79,12 +79,16 @@ function openDetails() {
 }
 
 function openMore(label) {
+    if (label === 'Gated content') {
+        fireEvent.click(screen.getByRole('tab', { name: 'Files' }));
+        return;
+    }
     openDetails();
     fireEvent.click(screen.getByRole('button', { name: label }));
 }
 
 describe('TokenDetail holders', () => {
-    it('keeps Actions, Details and History as the tabs and lists the secondary token panels as Details rows', async () => {
+    it('keeps four token tabs and leaves supply and holders as Details rows', async () => {
         const description = 'A token description';
         mount({
             tokenInfoLookup: vi.fn().mockResolvedValue({
@@ -97,28 +101,23 @@ describe('TokenDetail holders', () => {
 
         // The page's own tab row; the hero's range buttons are a tab row too.
         expect(within(screen.getByRole('tablist', { name: 'Coin or token view' })).getAllByRole('tab')
-            .map((tab) => tab.textContent)).toEqual(['Actions', 'Details', 'History']);
+            .map((tab) => tab.textContent)).toEqual(['Actions', 'Details', 'Files', 'History']);
         openDetails();
         expect(await screen.findByText(description)).toBeTruthy();
         expect([...document.querySelectorAll('[data-detail-id]')].map((item) => item.textContent)).toEqual([
             'Supply over time',
-            'About',
-            'Media',
-            'Gated content',
             'Holders',
         ]);
         expect(screen.queryByRole('button', { name: /Price alert/ })).toBeNull();
     });
 
-    it('hides empty supplemental metadata entries but keeps discoverable lookups', async () => {
+    it('keeps holder lookup discoverable while supplemental content uses its tabs', async () => {
         mount();
         openDetails();
         await screen.findByRole('button', { name: 'Copy creator address' });
 
-        expect(screen.queryByRole('button', { name: 'About' })).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Media' })).toBeNull();
-        expect(screen.getByRole('button', { name: 'Gated content' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Holders' })).toBeTruthy();
+        expect(screen.getByRole('tab', { name: 'Files' })).toBeTruthy();
     });
 
     it('renders the explorer amount and copies the complete holder address', async () => {

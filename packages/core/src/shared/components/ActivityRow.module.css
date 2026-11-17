@@ -9,7 +9,7 @@
    under its own name). */
 .row.row,
 .row {
-    --xc-button-hover-bg: var(--xc-bg-muted);
+    --xc-button-hover-bg: var(--xc-row-hover-bg);
     --xc-button-hover-border: transparent;
     justify-content: normal;
     max-width: none;
@@ -42,18 +42,22 @@
     white-space: nowrap;
 }
 
-.row.row:hover {
-    background: var(--xc-bg-muted);
+@media (hover: hover) and (pointer: fine) {
+    .row.row:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
-/* Button's hover and press rules weigh three classes; these weigh four, so
-   the row keeps its own edge colour and does not dim or nudge when pressed. */
-.row.row:hover:not(:disabled),
+@media (hover: hover) and (pointer: fine) {
+    .row.row:hover:not(:disabled) {
+        background: var(--xc-row-hover-bg);
+        border-color: currentColor;
+    }
+}
+
 .row.row:active:not(:disabled) {
+    background: var(--xc-row-hover-bg);
     border-color: currentColor;
-}
-
-.row.row:active:not(:disabled) {
     filter: none;
     transform: none;
 }
@@ -65,7 +69,8 @@
 
 /* Doubled to stay ahead of the doubled row rule above. */
 .selected.selected {
-    background: var(--xc-bg-muted);
+    background: var(--xc-row-active-bg);
+    font-weight: inherit;
 }
 
 /* The icon sits a step further from its text than the other cells sit from

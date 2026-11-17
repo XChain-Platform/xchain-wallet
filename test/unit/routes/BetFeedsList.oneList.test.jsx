@@ -144,7 +144,7 @@ describe('Prediction markets: one list for All, My predictions and My markets', 
             expect(seen[view]).toEqual(seen.all.filter((id) => seen[view].includes(id)));
         }
         // The same per-user chips ride on the card wherever it is listed.
-        expect(screen.getByRole('button', { name: 'Market 1' })).toHaveTextContent('Your position: 10 XCHAIN on Yes');
+        expect(screen.getByRole('button', { name: 'Market 1' })).toHaveTextContent('10 XCHAIN');
     });
 
     it('keeps the same title-line filter on every tab', async () => {

@@ -259,6 +259,73 @@
     color: var(--xc-success);
 }
 
+.positionPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--xc-space-2);
+    min-width: 0;
+}
+
+.positionTitle {
+    margin: 0;
+    font-size: var(--xc-text-md);
+    font-weight: 700;
+}
+
+.positionList {
+    composes: flush from '../../ui/Card.module.css';
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.positionRow {
+    display: flex;
+    align-items: center;
+    gap: var(--xc-space-3);
+    min-width: 0;
+    padding: var(--xc-space-3);
+    border-top: 1px solid var(--xc-border);
+}
+
+.positionRow:first-child {
+    border-top: 0;
+}
+
+.positionValues {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px var(--xc-space-3);
+    min-width: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
+.positionAmount,
+.positionOutcome {
+    color: var(--xc-text);
+    overflow-wrap: break-word;
+}
+
+.positionAmount {
+    font-size: var(--xc-text-md);
+}
+
+.positionEmpty {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--xc-space-3);
+}
+
+.positionQuiet {
+    margin: 0;
+    color: var(--xc-text-muted);
+    font-size: var(--xc-text-sm);
+}
+
 /* The held line under Bet and the "You bet" lines on Result. */
 /* The Bet tab: the outcome list, the line under it, the status slot and
    what this wallet holds, 8px apart. */

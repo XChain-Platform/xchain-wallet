@@ -106,7 +106,7 @@ function pct(slice) {
     return `${slice.percent}%`;
 }
 
-function Donut({ slices, total, known }) {
+function Donut({ slices, total, known, emptyText }) {
     // Drawn on an 84-unit box and shown at 64px (the compact card).
     const R = 34;
     const C = 2 * Math.PI * R;
@@ -144,9 +144,114 @@ function Donut({ slices, total, known }) {
                         <span className={styles.donutPct}>{pct(leader)}</span>
                         <span className={styles.donutLabel}>{leader.label}</span>
                     </>
-                ) : <span className={styles.donutLabel}>{known ? t('components.betMarketCard.noBets') : t('components.betMarketCard.oddsInside')}</span>}
+                ) : <span className={styles.donutLabel}>{emptyText || (known ? t('components.betMarketCard.noBets') : t('components.betMarketCard.oddsInside'))}</span>}
             </span>
         </span>
+    );
+}
+
+/** Build the same folded, coloured slices from already-computed percentages. */
+export function questionCardSlices(labels, percentages) {
+    const known = Array.isArray(percentages);
+    let slices = (Array.isArray(labels) ? labels : []).map((label, index) => ({
+        index,
+        label: neutralizeControlText(label, { maxLength: 256 }) || `Outcome ${index}`,
+        percent: known && Number.isFinite(Number(percentages[index]))
+            ? Math.max(0, Number(percentages[index]))
+            : 0,
+    }));
+    if (slices.length > MAX_LEGEND) {
+        const byPercent = [...slices].sort((a, b) => b.percent - a.percent);
+        const keep = new Set(byPercent.slice(0, MAX_LEGEND - 1).map((slice) => slice.index));
+        const other = slices.filter((slice) => !keep.has(slice.index))
+            .reduce((sum, slice) => sum + slice.percent, 0);
+        slices = [
+            ...slices.filter((slice) => keep.has(slice.index)),
+            { index: -1, label: 'Other', percent: other },
+        ];
+    }
+    const total = slices.reduce((sum, slice) => sum + slice.percent, 0);
+    return {
+        known,
+        total,
+        slices: slices.map((slice, position) => ({
+            ...slice,
+            amount: slice.percent,
+            share: total > 0 ? slice.percent / total : 0,
+            color: slice.index === -1
+                ? 'var(--xc-border-strong)'
+                : SEGMENT_COLORS[position % SEGMENT_COLORS.length],
+        })),
+    };
+}
+
+/**
+ * The shared compact question card. Callers provide their own status line and
+ * footer copy while the card, gauge, legend, chip and chevron stay identical.
+ */
+export function QuestionCard({
+    question,
+    onOpen,
+    slices,
+    total,
+    known,
+    emptyText,
+    meta = null,
+    footer,
+    trailingChip = null,
+    selected = false,
+    className,
+    dataAttribute,
+    dataValue,
+}) {
+    const questionId = useId();
+    const detailId = useId();
+    const data = dataAttribute && dataValue !== null && dataValue !== undefined
+        ? { [dataAttribute]: String(dataValue) }
+        : {};
+    return (
+        <button
+            type="button"
+            className={className ? `${styles.card} ${className}` : styles.card}
+            onClick={onOpen}
+            aria-current={selected ? 'true' : undefined}
+            aria-labelledby={questionId}
+            aria-describedby={detailId}
+            {...data}
+        >
+            <span id={questionId} className={styles.question}>{question}</span>
+            {meta}
+            <span id={detailId} className={styles.detail}>
+            <span className={styles.gauge} data-question-card-gauge="">
+                <Donut slices={slices} total={total} known={known} emptyText={emptyText} />
+                <span className={styles.legend}>
+                    {slices.map((slice) => (
+                        <span key={slice.index} className={styles.legendRow}>
+                            <span className={styles.swatch} style={{ background: slice.color }} aria-hidden="true" />
+                            <span className={styles.legendLabel}>{slice.label}</span>
+                            {known ? <span className={styles.legendPct}>{pct(slice)}</span> : null}
+                        </span>
+                    ))}
+                </span>
+            </span>
+            <span className={styles.foot}>
+                {footer}
+                <span className={styles.right}>
+                    {trailingChip ? (
+                        <span
+                            className={styles.chip}
+                            data-testid={trailingChip.testId}
+                            title={trailingChip.label}
+                            aria-label={trailingChip.label}
+                        >
+                            {trailingChip.text}
+                        </span>
+                    ) : null}
+                    <span className={styles.chevron} aria-hidden="true"><Icon.ForwardIcon /></span>
+                </span>
+            </span>
+            </span>
+        </button>
     );
 }
 
@@ -154,14 +259,12 @@ function Donut({ slices, total, known }) {
  * @param {object} props
  * @param {any} props.market                 a bet_feeds row
  * @param {() => void} props.onOpen
- * @param {string | null} [props.yourBet]    e.g. "You bet 10 XCHAIN on Yes"
+ * @param {string | null} [props.yourPosition] amount and asset, e.g. "10 XCHAIN"
  * @param {boolean} [props.yours]            this wallet runs the market
  * @param {boolean} [props.selected]         shown in Bet Markets' wide detail panel
  * @param {string} [props.className]
  */
-export function BetMarketCard({ market, onOpen, yourBet = null, yours = false, selected = false, className }) {
-    const questionId = useId();
-    const detailId = useId();
+export function BetMarketCard({ market, onOpen, yourPosition = null, yours = false, selected = false, className }) {
     // Market text is attacker-authored on-chain data. React escapes markup,
     // and the display pass also exposes bidi controls instead of letting them
     // reorder the card.
@@ -174,31 +277,18 @@ export function BetMarketCard({ market, onOpen, yourBet = null, yours = false, s
     // pill. The button is named by the question; the odds and the pool line
     // are its description.
     return (
-        <button
-            type="button"
-            className={className ? `${styles.card} ${className}` : styles.card}
-            onClick={onOpen}
-            aria-current={selected ? 'true' : undefined}
-            aria-labelledby={questionId}
-            aria-describedby={detailId}
-            // The number is no longer drawn; scripts and specs find a market by it here.
-            data-market-index={market?.action_index == null ? undefined : String(market.action_index)}
-        >
-            <span id={questionId} className={styles.question}>{question}</span>
-            <span id={detailId} className={styles.detail}>
-            <span className={styles.gauge}>
-                <Donut slices={slices} total={total} known={known} />
-                <span className={styles.legend}>
-                    {slices.map((s) => (
-                        <span key={s.index} className={styles.legendRow}>
-                            <span className={styles.swatch} style={{ background: s.color }} aria-hidden="true" />
-                            <span className={styles.legendLabel}>{s.label}</span>
-                            {known ? <span className={styles.legendPct}>{pct(s)}</span> : null}
-                        </span>
-                    ))}
-                </span>
-            </span>
-            <span className={styles.foot}>
+        <QuestionCard
+            question={question}
+            onOpen={onOpen}
+            slices={slices}
+            total={total}
+            known={known}
+            selected={selected}
+            className={className}
+            dataAttribute="data-market-index"
+            dataValue={market?.action_index}
+            footer={(
+                <>
                 <span className={styles.pool}>
                     <span className={styles.poolIcon} aria-hidden="true"><Icon.CoinsIcon /></span>
                     {pool !== null ? (
@@ -206,12 +296,13 @@ export function BetMarketCard({ market, onOpen, yourBet = null, yours = false, s
                     ) : <>{t('components.betMarketCard.poolOnPage')}</>}
                 </span>
                 {yours ? <span className={`${styles.chip} ${styles.chipYours}`}>{t('components.betMarketCard.yourMarket')}</span> : null}
-                <span className={styles.right}>
-                    {yourBet ? <span className={styles.chip} data-testid="bet-market-your-bet">{yourBet}</span> : null}
-                    <span className={styles.chevron} aria-hidden="true"><Icon.ForwardIcon /></span>
-                </span>
-            </span>
-            </span>
-        </button>
+                </>
+            )}
+            trailingChip={yourPosition ? {
+                text: yourPosition,
+                label: `Your position: ${yourPosition}`,
+                testId: 'bet-market-your-position',
+            } : null}
+        />
     );
 }

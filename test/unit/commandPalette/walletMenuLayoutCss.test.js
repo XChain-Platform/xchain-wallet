@@ -167,13 +167,11 @@ describe('wallet menu CSS layout contracts', () => {
         );
     });
 
-    it('preserves row, current-row, and keyboard-focus edges in forced colors', () => {
+    it('preserves row and keyboard-focus edges in forced colors without an active border', () => {
         expect(source).toMatch(
             /@media \(forced-colors: active\)\s*\{[\s\S]*?\.walletGroupList \.walletRow\s*\{[^}]*border-color:\s*Canvas;/,
         );
-        expect(source).toMatch(
-            /@media \(forced-colors: active\)\s*\{[\s\S]*?\.walletGroupList \.walletRowActive\s*\{[^}]*border-color:\s*Highlight;/,
-        );
+        expect(source).not.toMatch(/\.walletGroupList \.walletRowActive\s*\{[^}]*border-color:/s);
         expect(source).toMatch(
             /@media \(forced-colors: active\)\s*\{[\s\S]*?\.walletGroupList \.walletRow\[data-wallet-menu-focused\]\s*\{[^}]*outline:\s*2px solid Highlight;/,
         );

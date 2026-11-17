@@ -115,11 +115,12 @@
     border-radius: var(--xc-radius-sm);
 }
 
-.chainPickerOption:hover { background: var(--xc-bg-muted); }
+@media (hover: hover) and (pointer: fine) {
+    .chainPickerOption:hover { background: var(--xc-row-hover-bg); }
+}
 .chainPickerOptionActive {
-    background: color-mix(in srgb, var(--xc-accent-primary) 12%, transparent);
-    color: var(--xc-accent-text);
-    font-weight: 600;
+    background: var(--xc-row-active-bg);
+    font-weight: inherit;
 }
 
 .checkboxOptionIcon {
@@ -142,10 +143,6 @@
     border-bottom: 1px solid var(--xc-border);
     margin-bottom: var(--xc-space-1);
     list-style: none;
-}
-
-.chainPickerOptionActive .checkboxOptionIcon {
-    color: var(--xc-accent-text);
 }
 
 /* The toolbar keeps every control intact as the row wraps. */
@@ -281,8 +278,10 @@
     height: var(--xc-icon-size);
 }
 
-.row:hover {
-    background: var(--xc-control-bg-hover);
+@media (hover: hover) and (pointer: fine) {
+    .row:hover {
+        background: var(--xc-row-hover-bg);
+    }
 }
 
 .row:focus-visible {
@@ -299,7 +298,7 @@
 
 @media (hover: hover) and (pointer: fine) {
     .row.row[data-xc-split-row]:hover {
-        background: color-mix(in srgb, var(--xc-text) 10%, transparent);
+        background: var(--xc-row-hover-bg);
         box-shadow: none;
     }
 }
@@ -709,9 +708,11 @@
     background: transparent;
 }
 
-.groupCardWrap > .groupCard:hover {
-    background: var(--xc-bg-muted);
-    border-color: transparent;
+@media (hover: hover) and (pointer: fine) {
+    .groupCardWrap > .groupCard:hover {
+        background: var(--xc-row-hover-bg);
+        border-color: transparent;
+    }
 }
 
 /* When expanded, draw a divider beneath the header to separate it
@@ -729,9 +730,11 @@
     background: transparent;
 }
 
-.groupCardWrap > .groupMembers > li > .row:hover {
-    background: var(--xc-bg-muted);
-    border-color: transparent;
+@media (hover: hover) and (pointer: fine) {
+    .groupCardWrap > .groupMembers > li > .row:hover {
+        background: var(--xc-row-hover-bg);
+        border-color: transparent;
+    }
 }
 
 .groupCardWrap > .groupMembers > li + li > .row {
@@ -958,7 +961,7 @@
 }
 
 .headerMoreItem:hover:not(:disabled) {
-    background: var(--xc-bg-muted);
+    background: var(--xc-row-hover-bg);
 }
 
 .headerMoreItem > span {

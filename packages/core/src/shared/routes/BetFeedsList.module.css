@@ -93,12 +93,12 @@
 @media (hover: hover) and (pointer: fine) {
     .splitRow.splitRow:hover {
         border-color: transparent;
-        background: color-mix(in srgb, var(--xc-text) 10%, transparent);
+        background: var(--xc-row-hover-bg);
     }
 }
 
 .splitRow.splitRow[aria-current='true'] {
-    background: color-mix(in srgb, var(--xc-accent-primary) 20%, transparent);
+    background: var(--xc-row-active-bg);
     box-shadow: none;
     font-weight: inherit;
 }

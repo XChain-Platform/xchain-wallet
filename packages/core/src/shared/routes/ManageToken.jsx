@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // The `manage-token` route, opened from My Tokens. It reuses TokenDetail's
-// tabs and issuer groups, but ownerView replaces the browse page's balance
-// hero with the token identity card used for this management surface.
+// tabs and issuer groups while keeping the shared coin-and-token value-chart
+// hero used on every token surface.
 
 import { TokenDetail } from './TokenDetail.jsx';
 
@@ -44,9 +44,9 @@ export const MANAGE_TOKEN_HANDLER_NAMES = [
 ];
 
 /**
- * The management page for one token, opened from My Tokens: a plain token
- * identity card, then Actions, Details and History, with the issuer's action
- * groups in Actions and their facts in Details.
+ * The management page for one token, opened from My Tokens: the shared token
+ * hero, then Actions, Details and History, with the issuer's action groups in
+ * Actions and their facts in Details.
  *
  * Takes TokenDetail's props plus the issuer handlers named above (onMint,
  * onLock, ...), each called with `{ issuer }`.

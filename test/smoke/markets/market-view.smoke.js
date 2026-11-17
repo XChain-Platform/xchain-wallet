@@ -42,11 +42,15 @@ assert.ok(/messaging\.getMarket\(/.test(src),
 
 // Chart panel (§41.3.1): Step 3 landed MarketChart; asserted here by
 // import, not by stub text.
-// The chart now sits behind the pair's blue card, built from the shared
-// price-chart pieces.
+// The chart now sits behind the pair's Hero 2 card, built from the shared
+// price-chart pieces with the five-value scale and halfway guides.
 assert.ok(
-    /import \{ Sparkline \}/.test(src) && /ChartRangeTabs/.test(src),
-    'MarketView draws the chart behind its card from the shared Sparkline and range tabs',
+    /import \{ formatCompactChartValue, Sparkline \}/.test(src)
+        && /ChartRangeTabs/.test(src)
+        && /formatScaleValue=/.test(src)
+        && /showScale/.test(src)
+        && /heroScale/.test(src),
+    'MarketView draws the shared Hero 2 chart with scale, halfway guides and range tabs',
 );
 
 // Orderbook panel (§41.3.2): Step 4 landed OrderbookPanel.

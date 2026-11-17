@@ -74,13 +74,13 @@ describe('governance screen narrow layout', () => {
         expect(rows.every((line) => line.includes("flexWrap: 'wrap'"))).toBe(true);
     });
 
-    it('keeps shared question-row text and footers shrinkable', () => {
+    it('keeps shared question-card text and footers shrinkable', () => {
         const source = route('BetFeedsList.jsx');
-        const card = readFileSync(resolve(here, '../../../packages/core/src/shared/components/QuestionList.module.css'), 'utf8');
+        const card = readFileSync(resolve(here, '../../../packages/core/src/shared/components/BetMarketCard.module.css'), 'utf8');
         expect(source).toContain('<BetMarketCard');
-        expect(card).toMatch(/\.detail,[\s\S]*?\.answer\s*\{[\s\S]*?min-width:\s*0/);
-        expect(card).toMatch(/\.question\s*\{[\s\S]*?overflow-wrap:\s*break-word/);
-        expect(card).toMatch(/\.footer\s*\{[\s\S]*?flex-wrap:\s*wrap/);
+        expect(card).toMatch(/\.detail\s*\{[\s\S]*?min-width:\s*0/);
+        expect(card).toMatch(/\.question\s*\{[\s\S]*?overflow-wrap:\s*anywhere/);
+        expect(card).toMatch(/\.right \.chip\s*\{[\s\S]*?text-overflow:\s*ellipsis/);
     });
 
     it('wraps Oracle Console market headers through its phone layout styles', () => {
@@ -112,7 +112,7 @@ describe('governance screen narrow layout', () => {
         const polls = readFileSync(resolve(here, '../../../packages/core/src/shared/components/QuestionList.module.css'), 'utf8');
         const detail = route('PollDetail.module.css');
         const outcome = readFileSync(resolve(here, '../../../packages/core/src/shared/components/outcomeDetail/OutcomeDetail.module.css'), 'utf8');
-        expect(route('GovernancePolls.jsx')).toContain('<QuestionListRow');
+        expect(route('GovernancePolls.jsx')).toContain('<QuestionCard');
         expect(polls).toMatch(/\.answerLabel\s*\{[\s\S]*?overflow-wrap:\s*break-word/);
         // The poll page is the shared outcome page: the hero question, each
         // final result row (name, winner pill, share) and its figures wrap.
