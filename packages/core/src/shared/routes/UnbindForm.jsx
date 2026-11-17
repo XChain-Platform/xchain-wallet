@@ -16,6 +16,7 @@ import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
 import { useActionConfirmFlow, useConfirmSubmit, isUserRejection } from '../hooks/useActionConfirmFlow.js';
 import { ActionConfirmScreen } from '../components/ActionConfirmScreen.jsx';
 import { submitFailureMessage } from '../utils/submitFailureMessage.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { SignCredentials } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
@@ -209,7 +210,7 @@ export function UnbindForm({
                 setFromAddressId(preferredSourceId(addrs, active?.[cid]) || addrs[0].id);
             })
             .catch((err) => {
-                if (!cancelled) setLoadError(err?.message || t('unbindForm.loadFailed'));
+                if (!cancelled) setLoadError(userFacingMessage(err, t('unbindForm.loadFailed')));
             });
         return () => { cancelled = true; };
     }, [walletId, chainId, messaging, isWatcherMode]);

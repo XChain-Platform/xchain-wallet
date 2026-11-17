@@ -115,7 +115,7 @@ export function BiometricInlineRow({ row = EMPTY_ROW, leading }) {
             if (readRegistered()) throw new Error(t('settings.security.biometricTurnOffFailed'));
             setRegistered(false);
         } catch (err) {
-            setError(err?.message || t('settings.security.biometricTurnOffFailed'));
+            setError(userFacingMessage(err, t('settings.security.biometricTurnOffFailed')));
         } finally {
             setBusy(false);
         }

@@ -293,6 +293,7 @@ const messages = {
     'settings.testNetworks.form.colorInvalid': 'Enter a color code such as #7C3AED.',
     'settings.testNetworks.form.tickerInvalid': 'Use 12 characters or fewer for the ticker.',
     'settings.testNetworks.form.jsonInvalid': "That isn't valid JSON: {error}",
+    'settings.testNetworks.form.jsonCheck': 'check its brackets, quotes and commas',
     'settings.testNetworks.form.jsonTooLarge': 'That text is too large to be a network descriptor.',
     'settings.testNetworks.form.addUnwired': "Adding a custom network isn't available in this shell yet.",
     'settings.testNetworks.form.addFailed': 'Failed to add the network.',

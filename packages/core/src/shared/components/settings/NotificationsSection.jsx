@@ -69,6 +69,7 @@ import {
 } from '../../../notifications/customSounds.js';
 import { ROW, ROW_HINT, STACK, SettingsLoadError, Status } from './_settingsPrimitives.jsx';
 import { t } from '../../../i18n/index.js';
+import { userFacingMessage } from '../../utils/userFacingMessage.js';
 import '../../../i18n/locales/en/settings.js';
 import '../../../i18n/locales/en/alerts.js';
 
@@ -489,7 +490,7 @@ function useCustomSounds() {
             setCustomSoundsError(null);
         } catch (error) {
             setCustomSounds([]);
-            setCustomSoundsError(error?.message || 'Could not load custom sounds.');
+            setCustomSoundsError(userFacingMessage(error, 'Could not load custom sounds.'));
         }
     };
     useEffect(() => { void refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -625,7 +626,7 @@ export function AddSoundPage({
         try {
             setAudio(await validateCustomSoundFile(file));
         } catch (error) {
-            setFileError(error?.message || 'Could not read this audio file.');
+            setFileError(userFacingMessage(error, 'Could not read this audio file.'));
         } finally {
             setChecking(false);
         }

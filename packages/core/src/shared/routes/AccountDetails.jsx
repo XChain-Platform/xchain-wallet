@@ -41,6 +41,7 @@ import { AssetMark } from '../../ui/AssetMark.jsx';
 import { IdentityAvatar } from '../components/WalletIdentity.jsx';
 import { readWalletTile, tileRadius, walletTileText } from '../utils/walletTile.js';
 import { t } from '../../i18n/index.js';
+import { userFacingMessage } from '../utils/userFacingMessage.js';
 import '../../i18n/locales/en/accountPicker.js';
 import '../../i18n/locales/en/coSigner.js';
 import '../../i18n/locales/en/common.js';
@@ -68,7 +69,7 @@ export function AccountDetails({ walletId, accountId, activeAccountId, onBack, o
         let cancelled = false;
         Promise.resolve(messaging.listAccounts(walletId))
             .then((list) => { if (!cancelled) setAccount((Array.isArray(list) ? list : []).find((a) => a.id === accountId) || null); })
-            .catch((err) => { if (!cancelled) setError(err?.message || t('accountPicker.details.loadFailed')); });
+            .catch((err) => { if (!cancelled) setError(userFacingMessage(err, t('accountPicker.details.loadFailed'))); });
         if (typeof messaging.listWallets === 'function') {
             Promise.resolve(messaging.listWallets())
                 .then((wallets) => {

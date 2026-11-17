@@ -979,7 +979,9 @@ function CustomNetworkForm({ editChainId, onReturnTo, settings }) {
             try {
                 return JSON.parse(json);
             } catch (err) {
-                throw new Error(t('settings.testNetworks.form.jsonInvalid', { error: err?.message || '' }));
+                throw new Error(t('settings.testNetworks.form.jsonInvalid', {
+                    error: userFacingMessage(err, t('settings.testNetworks.form.jsonCheck')),
+                }));
             }
         }
         return buildCustomDescriptor(base, {
