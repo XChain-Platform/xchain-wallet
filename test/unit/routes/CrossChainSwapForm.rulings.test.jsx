@@ -218,7 +218,7 @@ describe('CrossChainSwapForm UI rulings', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
 
-        const reject = await screen.findByRole('button', { name: 'Reject' }, { timeout: 10_000 });
+        const reject = await screen.findByRole('button', { name: 'Reject' });
         const back = screen.getByRole('button', { name: 'Back to previous screen' });
         const submit = screen.getByRole('button', { name: 'Approve' });
         expectIcon(reject);
@@ -266,8 +266,7 @@ describe('CrossChainSwapForm UI rulings', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Clear block list' }));
 
         fireEvent.click(screen.getByRole('button', { name: 'Create Cross-Chain Swap' }));
-        // The confirm screen composes first; a loaded venue takes over a second.
-        await screen.findByRole('button', { name: 'Reject' }, { timeout: 10_000 });
+        await screen.findByRole('button', { name: 'Reject' });
         const expirationLabel = screen.getByText('Expiration', { selector: 'dt' });
         expect(expirationLabel.nextElementSibling).toHaveTextContent('3 months');
     });
