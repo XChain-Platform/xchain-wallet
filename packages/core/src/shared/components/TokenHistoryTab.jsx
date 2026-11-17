@@ -24,7 +24,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, Skeleton } from '@xchain-wallet/core/ui';
-import { useMessaging } from '../useMessaging.js';
+import { useWalletSource } from '../hooks/useDemoGuard.jsx';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { readActiveAccount } from '../utils/activeAccountMemory.js';
@@ -128,7 +128,7 @@ export function useTokenHistory({ messaging, walletId, chainId, tick, isNative, 
  * @param {(entry: any) => void} [props.onSelectEntry] opens one row's detail
  */
 export function TokenHistoryTab({ walletId, chainId, tick, isNative = false, history: suppliedHistory = null, onSelectEntry }) {
-    const { messaging } = useMessaging();
+    const { messaging } = useWalletSource(walletId);
     const tokenInfo = useTokenInfo({ chainId, tick, skip: isNative, demo: isDemoWallet(walletId) });
     const ownHistory = useTokenHistory({ messaging, walletId, chainId, tick, isNative, enabled: !suppliedHistory });
     const history = suppliedHistory || ownHistory;

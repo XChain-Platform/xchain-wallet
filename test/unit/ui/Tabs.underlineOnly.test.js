@@ -67,7 +67,7 @@ describe('the one view-toggle look (Option B)', () => {
     });
 
     it('fills the active item blue, or green and red for the Buy and Sell tones', () => {
-        expect(ruleBody(`.segment${ACTIVE}`)).toMatch(/background:\s*var\(--xc-control-selected\)\s*;/);
+        expect(ruleBody(`.segment${ACTIVE}`)).toMatch(/background:\s*var\(--xc-toggle-selected-bg\)\s*;/);
         expect(ruleBody(`.segment[data-tone='success']${ACTIVE}`))
             .toMatch(/background:\s*var\(--xc-success-fill\)\s*;/);
         expect(ruleBody(`.segment[data-tone='danger']${ACTIVE}`))

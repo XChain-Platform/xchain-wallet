@@ -195,7 +195,7 @@ for (const viewport of VIEWPORTS) {
         await test.step('market list', async () => {
             await gotoPalette(page, 'Betting');
             await expect(page.getByText(MARKET_TITLE, { exact: false }).first()).toBeVisible({ timeout: 30_000 });
-            await expectScreenLayout(page, 'Bet Markets', `${viewport.name} market list`);
+            await expectScreenLayout(page, 'Prediction markets', `${viewport.name} market list`);
         });
 
         await test.step('oracle record', async () => {

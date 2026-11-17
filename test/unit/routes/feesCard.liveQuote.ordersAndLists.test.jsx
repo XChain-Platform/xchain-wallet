@@ -342,11 +342,11 @@ describe('Fees card live quotes for orders and lists', () => {
         // Betting is the Bet tab: its outcome list (one row per outcome), where
         // tapping a row opens the Place Bet step with that outcome, and the
         // stake is there.
-        fireEvent.click(await screen.findByRole('tab', { name: /^Bet/ }));
-        const home = await screen.findByRole('button', { name: /^Bet on Home,/ });
+        fireEvent.click(await screen.findByRole('tab', { name: /^Buy/ }));
+        const home = await screen.findByRole('button', { name: /^Buy Home,/ });
         await waitFor(() => expect(home).toBeEnabled());
         fireEvent.click(home);
-        fireEvent.change(await screen.findByLabelText('Stake (XCHAIN)'), { target: { value: '5' } });
+        fireEvent.change(await screen.findByLabelText('Amount (XCHAIN)'), { target: { value: '5' } });
 
         await expectLiveQuote(messaging, {
             action: 'BET',

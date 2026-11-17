@@ -53,7 +53,7 @@ describe('governance and staking screen theme colors', () => {
 describe('governance screen narrow layout', () => {
     // My bets is the All list narrowed (ruling 2026-11-13): the bets file
     // holds the loader and the card chip only, and draws no rows of its own.
-    it('the My bets tab draws no rows of its own, only the Bet Markets cards', () => {
+    it('the My bets tab draws no rows of its own, only the Prediction markets cards', () => {
         const source = route('../components/BetMyBetsPanel.jsx');
         expect(source).not.toContain('<ListRow');
         expect(source).not.toMatch(/export function BetMyBetsPanel\b/);

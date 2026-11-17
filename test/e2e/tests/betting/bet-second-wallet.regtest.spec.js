@@ -193,10 +193,10 @@ test.describe('BET across two wallets', () => {
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('What is being bet on', { exact: true }).fill(`Two wallets ${RUN_TAG}`);
+            await main.getByLabel('Question', { exact: true }).fill(`Two wallets ${RUN_TAG}`);
             await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
             await main.getByLabel('Outcome 1', { exact: true }).fill('No');
-            await main.getByLabel('Betting closes', { exact: true })
+            await main.getByLabel('Purchases Close', { exact: true })
                 .fill(toLocalDateTimeInput((await chainTime()) + DEADLINE_LEAD_SEC));
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Open market', exact: true }).click();
@@ -254,14 +254,14 @@ test.describe('BET across two wallets', () => {
             const main = page.getByRole('main');
             // The outcome buttons are on the Bet tab; tapping one opens the
             // Place Bet step with that outcome preselected, where the stake is.
-            await main.getByRole('tab', { name: 'Bet', exact: true }).click();
+            await main.getByRole('tab', { name: 'Buy', exact: true }).click();
             await expect(main.getByRole('list', { name: 'Outcome to back' })).toBeVisible({ timeout: 30_000 });
             await main.getByRole('list', { name: 'Outcome to back' })
-                .getByRole('button', { name: /^Bet on Yes,/ }).click();
-            await expect(main.getByRole('form', { name: 'Place Bet' })).toBeVisible({ timeout: 30_000 });
+                .getByRole('button', { name: /^Buy Yes,/ }).click();
+            await expect(main.getByRole('form', { name: 'Buy a position' })).toBeVisible({ timeout: 30_000 });
             await main.getByLabel(/^Stake/).fill(STAKE);
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Place Bet', exact: true }).click();
+            await main.locator('button[type="submit"]').click();
             // On Bitcoin a bet pays its protocol fee in XCHAIN, out of the same
             // balance the stake leaves, so the debit below is stake plus this
             // fee. Read off the screen the user approved rather than hardcoded:
@@ -328,7 +328,7 @@ test.describe('BET across two wallets', () => {
             // opens Bet Markets on its My bets tab.
             // My bets is the All list narrowed to the markets bet in (ruling
             // 2026-11-13), so the market's card is what it lists.
-            await openPaletteCommand(page, 'My bets');
+            await openPaletteCommand(page, 'My predictions');
             await expect(page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`),
                 'wallet B does not list a bet it placed').toBeVisible({ timeout: 30_000 });
 
@@ -336,7 +336,7 @@ test.describe('BET across two wallets', () => {
             // chain rather than the wallet would show every bet on the venue.
             await switchToWallet(page, 'Oracle Wallet');
 
-            await openPaletteCommand(page, 'My bets');
+            await openPaletteCommand(page, 'My predictions');
             await expect(page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`),
                 'wallet A lists a bet placed by a different wallet')
                 .toBeHidden({ timeout: 30_000 });

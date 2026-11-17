@@ -325,9 +325,12 @@ describe('pseudo-long narrow layouts', () => {
         expect(rule(buttonCss, '.btn')).toMatch(/flex-shrink:\s*1/);
         expect(rule(buttonCss, '.btn')).toMatch(/min-width:\s*auto/);
         expect(rule(buttonCss, '.btn')).toMatch(/white-space:\s*normal/);
-        for (const listCss of [dispensersCss, stakingCss]) {
+        for (const [listCss, bodySelector] of [
+            [dispensersCss, '.rowSummary'],
+            [stakingCss, '.body'],
+        ]) {
             expect(rule(listCss, '.row')).toMatch(/min-width:\s*0/);
-            expect(rule(listCss, '.body')).toMatch(/min-width:\s*0/);
+            expect(rule(listCss, bodySelector)).toMatch(/min-width:\s*0/);
             expect(rule(listCss, '.status')).toMatch(/white-space:\s*nowrap/);
         }
         expect(rule(stakingCss, '.claimable > :first-child'))

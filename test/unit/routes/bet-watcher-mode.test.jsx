@@ -105,7 +105,7 @@ async function renderRoute(messaging, element) {
 // form shows after the Bet tab is picked.
 async function openBetTab(utils) {
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('tab', { name: 'Bet' }));
+        fireEvent.click(utils.getByRole('tab', { name: 'Buy' }));
         await drain();
     });
 }
@@ -121,16 +121,12 @@ describe('BetFeedDetail in watcher mode', () => {
         const utils = await renderRoute(messaging, detailRoute);
         await openBetTab(utils);
         fireEvent.click(utils.getByRole('list', { name: 'Outcome to back' }).querySelector('button'));
-        // Bet opens the Place Bet step, whose action builds the unsigned stake.
-        await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Bet' }));
-            await drain();
-        });
-        expect(utils.getByRole('form', { name: 'Place Bet' })).toBeTruthy();
+        // Bet opens the Buy a position step, whose action builds the unsigned stake.
+        expect(utils.getByRole('form', { name: 'Buy a position' })).toBeTruthy();
         expect(utils.getByRole('button', { name: 'Create Unsigned Transaction' })).toBeTruthy();
         expect(utils.queryByLabelText('Password')).toBeNull();
 
-        fireEvent.change(utils.getByLabelText('Stake (XCHAIN)'), { target: { value: '1' } });
+        fireEvent.change(utils.getByLabelText('Amount (XCHAIN)'), { target: { value: '1' } });
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Create Unsigned Transaction' }));
             await drain();
@@ -147,15 +143,11 @@ describe('BetFeedDetail in watcher mode', () => {
         const utils = await renderRoute(harness({ walletMode: 'full' }), detailRoute);
         await openBetTab(utils);
         fireEvent.click(utils.getByRole('list', { name: 'Outcome to back' }).querySelector('button'));
-        await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: 'Bet' }));
-            await drain();
-        });
 
-        // The Place Bet step signs; the shared confirm screen asks for the
+        // The Buy a position step signs; the shared confirm screen asks for the
         // password, so the form itself carries none.
-        expect(utils.getByRole('form', { name: 'Place Bet' })).toBeTruthy();
-        expect(utils.getByRole('button', { name: 'Place Bet' })).toBeTruthy();
+        expect(utils.getByRole('form', { name: 'Buy a position' })).toBeTruthy();
+        expect(utils.container.querySelector('button[type="submit"]')).toHaveAccessibleName('Buy Yes');
         expect(utils.queryByRole('button', { name: 'Create Unsigned Transaction' })).toBeNull();
         expect(utils.queryByLabelText('Password')).toBeNull();
     });
@@ -244,9 +236,9 @@ describe('betting outcome pickers announce the selected outcome', () => {
         const utils = await renderRoute(harness({ walletMode: 'full' }), detailRoute);
         await openBetTab(utils);
         // The Bet tab's outcome rows are actions, not a selection: tapping
-        // No opens Place Bet, whose outcome dropdown shows No.
+        // No opens Buy a position, whose outcome dropdown shows No.
         const outcomeButtons = Array.from(utils.container.querySelectorAll('[data-outcome-list] button'));
-        expect(outcomeButtons.map((b) => b.getAttribute('aria-label').split(',')[0])).toEqual(['Bet on Yes', 'Bet on No']);
+        expect(outcomeButtons.map((b) => b.getAttribute('aria-label').split(',')[0])).toEqual(['Buy Yes', 'Buy No']);
         for (const b of outcomeButtons) expect(b.hasAttribute('aria-pressed')).toBe(false);
         await domAct(async () => { outcomeButtons[1].click(); await drain(); });
         const picker = () => utils.container.querySelector('form button[aria-label^="Outcome: "]');

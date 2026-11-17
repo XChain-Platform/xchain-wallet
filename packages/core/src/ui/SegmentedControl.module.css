@@ -104,8 +104,8 @@
 }
 
 .segment:is([aria-checked='true'], [aria-selected='true']) {
-    background: var(--xc-control-selected);
-    color: var(--xc-control-selected-text);
+    background: var(--xc-toggle-selected-bg);
+    color: var(--xc-toggle-selected-text);
 }
 
 /* No divider touches the fill: the active item and the item after it keep

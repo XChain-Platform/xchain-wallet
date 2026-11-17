@@ -108,7 +108,7 @@ describe('async route parameter races', () => {
         await act(async () => newRequest.resolve([]));
     });
 
-    // My bets is a tab of Bet Markets; its bet reads follow the page's
+    // My bets is a tab of Prediction markets; its bet reads follow the page's
     // address read, so an old wallet's late addresses must start none.
     it('does not let an old wallet start stale bets reads on the My bets tab', async () => {
         const oldRequest = deferred();
@@ -130,14 +130,14 @@ describe('async route parameter races', () => {
         view.rerender(route(BetFeedsList, messaging, { ...props, walletId: 'new-wallet' }));
         await waitFor(() => expect(addresses).toHaveBeenCalledWith('new-wallet'));
 
-        await waitFor(() => expect(screen.getByText('No bets yet')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('No predictions yet')).toBeInTheDocument());
         await act(async () => {
             oldRequest.resolve({ 'bitcoin-mainnet': [{ address: 'old-address' }] });
             await oldRequest.promise;
         });
 
         expect(bets).not.toHaveBeenCalledWith(expect.objectContaining({ query: 'old-address' }));
-        expect(screen.getByText('No bets yet')).toBeInTheDocument();
+        expect(screen.getByText('No predictions yet')).toBeInTheDocument();
     });
 
     it.each([

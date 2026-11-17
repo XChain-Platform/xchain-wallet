@@ -17,7 +17,7 @@
 
 import { createContext } from 'react';
 import { assetKeyOf } from '../utils/portfolioValueHistory.js';
-import { valueSeriesFor } from '../utils/portfolioValuation.js';
+import { balanceSeriesFor, valueSeriesFor } from '../utils/portfolioValuation.js';
 
 /**
  * @typedef {object} HoldingValueSource
@@ -63,4 +63,16 @@ export function holdingValueSeries(source, { chainId, tick, range, priceEntry = 
     // A holding with no price at any earlier point has no history to draw.
     const priced = Array.isArray(values) && result.pricedKeys.includes(key);
     return { series: priced ? values : null, noPriceHistory: !priced };
+}
+
+/** One asset's balance history in its own unit, from the same Home history read. */
+export function holdingBalanceSeries(source, { chainId, tick, range, nowMs }) {
+    if (!source?.prepared) return null;
+    const key = assetKeyOf(chainId, tick);
+    if (!source.prepared.assets.some((asset) => asset.key === key)) return null;
+    const result = balanceSeriesFor(source.prepared, { chainId, tick, range, nowMs });
+    if (typeof source.requestRange === 'function' && result.grid.length > 0) {
+        source.requestRange({ source: range.source, sinceMs: result.grid[0] });
+    }
+    return { series: result.series, noPriceHistory: false };
 }

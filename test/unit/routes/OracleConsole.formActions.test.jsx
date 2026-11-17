@@ -90,8 +90,8 @@ describe('OracleConsole inline form actions', () => {
         expect(main.querySelector('svg')).toBeTruthy();
         expect(utils.queryByText(/Leave a field blank/)).toBeNull();
         const tips = [...utils.container.querySelectorAll('[role="tooltip"]')].map((t) => t.textContent);
-        expect(tips.some((t) => /may bet/.test(t))).toBe(true);
-        expect(tips.some((t) => /may not bet/.test(t))).toBe(true);
+        expect(tips.some((t) => /may buy positions/.test(t))).toBe(true);
+        expect(tips.some((t) => /may not buy positions/.test(t))).toBe(true);
         expect(utils.queryByRole('button', { name: 'Review list edit' })).toBeNull();
         expect([...utils.container.querySelectorAll('button')].filter(isSuccess)).toHaveLength(1);
         expect(main).toBeEnabled();
@@ -143,7 +143,7 @@ describe('OracleConsole inline form actions', () => {
                 "You can't undo this",
             );
             expect(utils.getByTestId('confirm-action-warnings')).toHaveTextContent(
-                'Every open bet is refunded in full and the market ends.',
+                'Every open position is refunded in full and the market ends.',
             );
         } finally {
             resetWalletModes();

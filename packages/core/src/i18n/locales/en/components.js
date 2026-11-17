@@ -181,7 +181,7 @@ const messages = {
     'components.confirmSummary.verbPauseToken': 'Pause Token',
     'components.confirmSummary.verbPay': 'Pay',
     'components.confirmSummary.verbPayDividend': 'Pay Dividend',
-    'components.confirmSummary.verbPlaceBet': 'Place Bet',
+    'components.confirmSummary.verbPlaceBet': 'Buy',
     'components.confirmSummary.verbPlaceOrder': 'Place Order',
     'components.confirmSummary.verbPublishPrice': 'Publish Price',
     'components.confirmSummary.verbRefillDispenser': 'Refill Dispenser',
@@ -534,7 +534,7 @@ const messages = {
     'components.placeOrderPanel.helpCustomExpiration': 'The date and time any unmatched part of the order closes. It must be in the future.',
     'components.placeOrderPanel.helpAutopay':
         'Auto pay sends that payment for you before the window closes. Even if the service that reports matches were fully compromised, it could send no more than this order gives. Turn it off any time from the open-orders list.',
-    'components.betMarketCard.noBets': 'No bets yet',
+    'components.betMarketCard.noBets': 'No positions yet',
     'components.betMarketCard.oddsInside': 'Odds inside',
     'components.betMarketCard.pool': 'pool',
     'components.betMarketCard.poolOnPage': 'Pool on the market page',

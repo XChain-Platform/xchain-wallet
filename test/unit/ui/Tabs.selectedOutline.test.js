@@ -89,7 +89,7 @@ describe('one view-toggle look for Tabs and SegmentedControl', () => {
     it('fills only the active item: blue by default, green or red by tone, with no divider against the fill', () => {
         const css = read('SegmentedControl.module.css').replace(/\/\*[\s\S]*?\*\//g, '');
         const active = ":is([aria-checked='true'], [aria-selected='true'])";
-        expect(css).toContain(`.segment${active} {\n    background: var(--xc-control-selected);`);
+        expect(css).toContain(`.segment${active} {\n    background: var(--xc-toggle-selected-bg);`);
         expect(css).toContain(`.segment[data-tone='success']${active} {\n    background: var(--xc-success-fill);`);
         expect(css).toContain(`.segment[data-tone='danger']${active} {\n    background: var(--xc-danger);`);
         expect(css).toMatch(/\.segment \+ \.segment \{\s*border-inline-start: 1px solid var\(--xc-control-border\);/);

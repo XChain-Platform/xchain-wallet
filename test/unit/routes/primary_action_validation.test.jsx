@@ -76,16 +76,16 @@ describe('primary actions explain missing form input', () => {
     it('BetFeedDetail needs no outcome prompt: each outcome is its own enabled action', async () => {
         mount(BetFeedDetail, { walletId: 'wallet-1', chainId: BTC, feedIndex: '123', onBack() {} });
         // The outcome rows are on the Bet tab.
-        fireEvent.click(await screen.findByRole('tab', { name: 'Bet' }));
+        fireEvent.click(await screen.findByRole('tab', { name: 'Buy' }));
         const group = await screen.findByRole('list', { name: 'Outcome to back' });
         const sides = within(group).getAllByRole('button');
 
         expect(sides.length).toBeGreaterThan(0);
         sides.forEach((side) => expect(side).toBeEnabled());
-        expect(screen.queryByRole('button', { name: 'Bet' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Buy' })).toBeNull();
         fireEvent.click(sides[0]);
 
-        expect(await screen.findByRole('form', { name: 'Place Bet' })).toBeTruthy();
+        expect(await screen.findByRole('form', { name: 'Buy a position' })).toBeTruthy();
         expect(screen.queryByText('Choose an outcome.')).toBeNull();
     });
 

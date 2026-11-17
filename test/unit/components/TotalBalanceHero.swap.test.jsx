@@ -68,6 +68,17 @@ describe('TotalBalanceHero currency swap', () => {
         expect(screen.getByText('USD')).toBeTruthy();
     });
 
+    it('remembers the selected unit on this device', async () => {
+        const first = mount({ nativePriceMap: { 'bitcoin-mainnet': { priceFiat: 50000, change24hPct: 0 } } });
+        fireEvent.click(screen.getByRole('button', { name: 'Show in BTC' }));
+        await waitFor(() => expect(window.localStorage.getItem('xc:balanceUnit')).toBe('asset'));
+        first.unmount();
+
+        mount({ nativePriceMap: { 'bitcoin-mainnet': { priceFiat: 50000, change24hPct: 0 } } });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Show in USD' })).toBeTruthy());
+        expect(screen.getByText('2')).toBeTruthy();
+    });
+
     it('disables the swap when the coin has no price', () => {
         mount({ nativePriceMap: {} });
         expect(screen.getByRole('button', { name: 'Show in BTC' })).toBeDisabled();

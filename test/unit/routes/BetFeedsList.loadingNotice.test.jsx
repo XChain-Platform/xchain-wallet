@@ -10,7 +10,7 @@ import { BetFeedsList } from '../../../packages/core/src/shared/routes/BetFeedsL
 
 const CHAIN = 'bitcoin-mainnet';
 const ADDRESS = { address: 'bc1qexampleexampleexampleexampleexampleex' };
-const LOADING = { name: 'Loading betting markets' };
+const LOADING = { name: 'Loading prediction markets' };
 
 function mount(betFeeds) {
     render(
@@ -42,12 +42,12 @@ describe('BetFeedsList loading notice', () => {
 
         // The Network, Status and Sort choices sit behind the title bar's filter
         // button; the page holds only the view tabs after the notice.
-        expect(screen.getByRole('button', { name: 'Filter bet markets' })).toBeTruthy();
-        expect(within(page).queryByRole('tab', { name: 'Taking bets' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Filter prediction markets' })).toBeTruthy();
+        expect(within(page).queryByRole('tab', { name: 'Positions available' })).toBeNull();
         expect(within(page).queryByLabelText('Network')).toBeNull();
 
         const all = screen.getByRole('tab', { name: 'All' });
-        const myBets = screen.getByRole('tab', { name: 'My bets' });
+        const myBets = screen.getByRole('tab', { name: 'My predictions' });
         const myMarkets = screen.getByRole('tab', { name: 'My markets' });
         expect(follows(status, all)).toBe(true);
         expect(follows(status, myBets)).toBe(true);

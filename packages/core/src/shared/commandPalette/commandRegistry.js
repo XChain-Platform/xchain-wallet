@@ -153,7 +153,7 @@ const CATALOGUE_COMMAND_META = {
     messaging: { subtitleKey: 'palette.navMessaging.subtitle', keywords: ['inbox', 'messages', 'chat'] },
     contacts: { subtitleKey: 'palette.navContacts.subtitle', keywords: ['address book', 'people'] },
     alerts: { keywords: ['notifications', 'notify'] },
-    'bet-markets': { subtitleKey: 'palette.navBetting.subtitle', keywords: ['bet', 'market', 'odds', 'wager', 'oracle', 'parimutuel'] },
+    'bet-markets': { subtitleKey: 'palette.navBetting.subtitle', keywords: ['bet', 'betting', 'market', 'odds', 'oracle', 'parimutuel'] },
     wizard: { subtitleKey: 'palette.createToken.subtitle', keywords: ['issue', 'new token', 'mint', 'launch'] },
     'publish-file': { subtitleKey: 'palette.createPublishFile.subtitle', keywords: ['file', 'upload', 'publish', 'gated', 'encrypted', 'content'] },
     'sign-message': { subtitleKey: 'palette.signMessage.subtitle', keywords: ['sign', 'message', 'attest'] },
@@ -364,18 +364,18 @@ export function buildCommands(ctx) {
     if (ctx.hasGovernanceAddress) {
         list.push({ id: 'nav-governance', category: 'Navigate', title: t('governance.title'), subtitle: t('palette.navGovernance.subtitle'), keywords: ['vote', 'poll', 'proposal'], Icon: Icon.HandshakeIcon, run: go('governance-polls') });
     }
-    // Betting, on the DEX pattern: the browse hub plus the two views a user comes
+    // Prediction markets, on the DEX pattern: the browse hub plus the two views a user comes
     // back to rather than browses to. Ungated like the actions-menu entry it
     // mirrors, because the hub itself reports when no chain in this wallet
     // supports BET; gating here would make the destination silently unfindable
-    // instead of explaining itself. My bets and My markets are Bet Markets tabs,
+    // instead of explaining itself. My bets and My markets are Prediction markets tabs,
     // so a shell without a tab opener lands on the hub.
     const betTab = (tab) => (typeof ctx.openBetTab === 'function'
         ? () => ctx.openBetTab(tab)
         : go('bet-markets'));
     list.push(
-        { id: 'nav-betting', category: 'Navigate', title: t('palette.navBetting.title'), subtitle: t('palette.navBetting.subtitle'), keywords: ['bet', 'market', 'odds', 'wager', 'oracle', 'parimutuel'], Icon: Icon.DollarIcon, run: go('bet-markets') },
-        { id: 'nav-my-bets', category: 'Navigate', title: t('palette.navMyBets.title'), subtitle: t('palette.navMyBets.subtitle'), keywords: ['bet', 'stake', 'wager', 'payout', 'winnings'], Icon: Icon.DollarIcon, run: betTab('bets') },
+        { id: 'nav-betting', category: 'Navigate', title: t('palette.navBetting.title'), subtitle: t('palette.navBetting.subtitle'), keywords: ['bet', 'betting', 'market', 'odds', 'oracle', 'parimutuel'], Icon: Icon.DollarIcon, run: go('bet-markets') },
+        { id: 'nav-my-bets', category: 'Navigate', title: t('palette.navMyBets.title'), subtitle: t('palette.navMyBets.subtitle'), keywords: ['bet', 'betting', 'prediction', 'position', 'stake', 'payout', 'winnings'], Icon: Icon.DollarIcon, run: betTab('bets') },
         { id: 'nav-bet-oracle-console', category: 'Navigate', title: t('palette.navBetOracleConsole.title'), subtitle: t('palette.navBetOracleConsole.subtitle'), keywords: ['bet', 'oracle', 'resolve', 'market', 'settle', 'publish'], Icon: Icon.DollarIcon, run: betTab('markets') },
     );
 

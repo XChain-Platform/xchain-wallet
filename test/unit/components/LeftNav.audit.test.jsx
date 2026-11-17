@@ -73,7 +73,7 @@ describe('LeftNav route state', () => {
         ['manage-token', 'My Tokens'],
         ['governance-poll-detail', 'Governance'],
         ['stake-detail', 'Staking'],
-        ['bet-market-detail', 'Betting markets'],
+        ['bet-market-detail', 'Prediction markets'],
         ['cosigner-detail', 'My Agents'],
         ['connected-sites', 'Settings'],
     ])('highlights %s under %s', (currentView, label) => {
@@ -132,8 +132,10 @@ describe('LeftNav rail interaction', () => {
             .querySelectorAll('button');
         const names = (group) => [...labels(group)].map((button) => button.textContent.trim());
 
-        expect(names('Wallet')).toEqual(['Home', 'History', 'Send', 'Receive', 'My Tokens']);
-        expect(names('Trade')).toEqual(['Exchange (DEX)', 'Marketplace', 'Dispensers', 'Betting markets']);
+        expect(names('Wallet')).toEqual([
+            'Home', 'Send', 'Receive', 'My Tokens', 'History',
+        ]);
+        expect(names('Trade')).toEqual(['Exchange (DEX)', 'Marketplace', 'Dispensers', 'Prediction markets']);
         expect(names('Network')).toEqual(['Governance', 'Staking']);
         expect(names('Build')).toEqual(['Contracts', 'My Agents']);
         expect(names('Social')).toEqual(['Messaging', 'Contacts']);
@@ -145,13 +147,13 @@ describe('LeftNav rail interaction', () => {
     it('moves focus with arrows and Home or End without activating a route', () => {
         render(<LeftNav {...baseProps} />);
         const home = screen.getByRole('button', { name: 'Home' });
-        const history = screen.getByRole('button', { name: 'History' });
+        const send = screen.getByRole('button', { name: 'Send' });
         const lock = screen.getByRole('button', { name: 'Lock wallet' });
 
         home.focus();
         fireEvent.keyDown(home, { key: 'ArrowDown' });
-        expect(history).toHaveFocus();
-        fireEvent.keyDown(history, { key: 'ArrowUp' });
+        expect(send).toHaveFocus();
+        fireEvent.keyDown(send, { key: 'ArrowUp' });
         expect(home).toHaveFocus();
         fireEvent.keyDown(home, { key: 'End' });
         expect(lock).toHaveFocus();

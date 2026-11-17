@@ -676,7 +676,7 @@ function componentNamesAThroughL() {
         .filter((name) => /^[A-L]/.test(name))
         .filter((name) => name !== 'HeaderSettingsButton')
         // Holds only the wallet's bets loader and the card chip text; My bets
-        // draws the Bet Markets cards (ruling 2026-11-13), covered by BetMarketCard.
+        // draws the Prediction markets cards (ruling 2026-11-13), covered by BetMarketCard.
         .filter((name) => name !== 'BetMyBetsPanel')
         .sort();
 }

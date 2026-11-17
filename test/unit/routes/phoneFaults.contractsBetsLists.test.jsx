@@ -109,10 +109,10 @@ describe('BetFeedsList market cards', () => {
             </MessagingProvider>,
         );
         // The Status choice sits in the title-line filter menu, where its value is plain text.
-        fireEvent.click(await screen.findByRole('button', { name: 'Filter bet markets' }, { timeout: 10_000 }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Filter prediction markets' }, { timeout: 10_000 }));
         const status = screen.getByRole('combobox', { name: 'Status' });
         expect(status).toHaveValue('open');
-        expect(selectOptionDetails(status).find((o) => o.label === 'Taking bets').selected).toBe(true);
+        expect(selectOptionDetails(status).find((o) => o.label === 'Positions available').selected).toBe(true);
         selectOption(status, 'all');
         expect(status).toHaveValue('all');
         expect(selectOptionDetails(status).find((o) => o.label === 'All markets').selected).toBe(true);
@@ -205,7 +205,7 @@ describe('bet screens at phone widths', () => {
             <BetFeedDetail walletId="w1" chainId={chainId} feedIndex="7" onBack={() => {}} />
         ));
         // The Bet tab is one list card with a row per outcome.
-        fireEvent.click(await screen.findByRole('tab', { name: 'Bet' }));
+        fireEvent.click(await screen.findByRole('tab', { name: 'Buy' }));
         expect(await screen.findByRole('list', { name: 'Outcome to back' }))
             .toHaveClass(outcomeListStyles.list);
         // The facts sit on the Details tab, one per wrapping row.

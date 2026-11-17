@@ -14,6 +14,7 @@ import { BalanceHeroMenu } from './BalanceHeroMenu.jsx';
 import { sumFiatValue } from './BalanceList.jsx';
 import { useSettings } from '../hooks/useSettings.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { useBalanceUnit } from '../hooks/useBalanceUnit.js';
 import { usePortfolioChartVisible } from '../hooks/usePortfolioChartVisible.js';
 import { useWalletSource } from '../hooks/useDemoGuard.jsx';
 import styles from './TotalBalanceHero.module.css';
@@ -61,7 +62,7 @@ export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, wa
     const fiatLocale = settings?.language || 'en-US';
     const [hidden, toggleHidden] = useBalancesHidden();
     const [chartVisible, toggleChartVisible] = usePortfolioChartVisible();
-    const [coinPrimary, setCoinPrimary] = useState(false);
+    const [coinPrimary, toggleCoinPrimary] = useBalanceUnit();
 
     // Fetch 24h change for every native chain that has a row in the
     // balance list. Tokens without a published 24h delta are treated as
@@ -184,7 +185,7 @@ export function TotalBalanceHero({ walletName = '', rangeChange = null, rows, wa
             id: 'swap',
             label: t('components.totalBalanceHero.showIn', { unit: showInCoin ? fiatCurrency : (unitTick || 'BTC') }),
             Icon: Icon.SwapIcon,
-            onSelect: () => setCoinPrimary((value) => !value),
+            onSelect: toggleCoinPrimary,
             disabled: !canShowInCoin,
         } : null,
         {

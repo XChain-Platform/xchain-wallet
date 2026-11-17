@@ -401,13 +401,13 @@ test.describe('BET deadline race', () => {
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('What is being bet on', { exact: true }).fill(`Deadline race ${RUN_TAG}`);
+            await main.getByLabel('Question', { exact: true }).fill(`Deadline race ${RUN_TAG}`);
             await main.getByLabel('Outcome 0', { exact: true }).fill(OUTCOME.label);
             await main.getByLabel('Outcome 1', { exact: true }).fill(OUTCOME_OTHER);
 
             // From the CHAIN's clock, not the browser's.
             deadlineSec = (await chainTime()) + DEADLINE_LEAD_SEC;
-            await main.getByLabel('Betting closes', { exact: true }).fill(toLocalDateTimeInput(deadlineSec));
+            await main.getByLabel('Purchases Close', { exact: true }).fill(toLocalDateTimeInput(deadlineSec));
 
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Open market', exact: true }).click();
@@ -447,11 +447,11 @@ test.describe('BET deadline race', () => {
             const main = page.getByRole('main');
             // The outcome rows are on the Bet tab; tapping one opens the
             // Place Bet step with that outcome preselected, where the stake is.
-            await main.getByRole('tab', { name: 'Bet', exact: true }).click();
+            await main.getByRole('tab', { name: 'Buy', exact: true }).click();
             await expect(main.getByRole('list', { name: 'Outcome to back' })).toBeVisible({ timeout: 30_000 });
             await main.getByRole('list', { name: 'Outcome to back' })
-                .getByRole('button', { name: new RegExp(`^Bet on ${OUTCOME.label},`) }).click();
-            await expect(main.getByRole('form', { name: 'Place Bet' })).toBeVisible({ timeout: 30_000 });
+                .getByRole('button', { name: new RegExp(`^Buy ${OUTCOME.label},`) }).click();
+            await expect(main.getByRole('form', { name: 'Buy a position' })).toBeVisible({ timeout: 30_000 });
             await main.getByLabel(/^Stake/).fill(STAKE);
             await fillPasswordIfPresent(main);
 
@@ -460,7 +460,7 @@ test.describe('BET deadline race', () => {
             // well as on demand, so anything slotted in between can put the
             // wallet's own call back on the cold path.
             await warmBet(punter, feedIndex, true);
-            await main.getByRole('button', { name: 'Place Bet', exact: true }).click();
+            await main.locator('button[type="submit"]').click();
 
             // The dry run must not be REFUSING here. A confirm that is already
             // failing would make the degradation below unobservable.

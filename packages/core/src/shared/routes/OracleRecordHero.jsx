@@ -47,7 +47,7 @@ export function OracleRecordHero({ chainId, address, name, record, markets }) {
     // G99: an unnamed oracle is titled by its address, whole when it fits,
     // and then needs no second address line.
     const safeName = neutralizeControlText(name, { maxLength: 80 });
-    const kind = descriptor?.displayName ? `Betting oracle on ${descriptor.displayName}` : 'Betting oracle';
+    const kind = descriptor?.displayName ? `Prediction market oracle on ${descriptor.displayName}` : 'Prediction market oracle';
     const count = `${total} market${total === 1 ? '' : 's'}${since ? ` since ${since}` : ''}`;
 
     return (

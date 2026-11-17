@@ -134,14 +134,14 @@ describe('BetFeedDetail owner Actions tab', () => {
     it('keeps Bet first and chosen for a wallet that does not run an open market', async () => {
         const { utils } = await openMarket(feed('open', { source: ORACLE, deadline: now() + 3600 }));
         const tabs = utils.getAllByRole('tab');
-        expect(tabs.map((tab) => tab.textContent.trim())).toEqual(['Bet', 'Activity', 'Details']);
+        expect(tabs.map((tab) => tab.textContent.trim())).toEqual(['Buy', 'Activity', 'Details']);
         expect(tabs[0].getAttribute('aria-selected')).toBe('true');
     });
 
     it('puts Actions first and chosen for the owner, before Bet, Activity and Details', async () => {
         const { utils } = await openMarket(feed('open', { deadline: now() + 3600 }));
         const tabs = utils.getAllByRole('tab');
-        expect(tabs.map((tab) => tab.textContent.trim())).toEqual(['Actions', 'Bet', 'Activity', 'Details']);
+        expect(tabs.map((tab) => tab.textContent.trim())).toEqual(['Actions', 'Buy', 'Activity', 'Details']);
         expect(tabs[0].getAttribute('aria-selected')).toBe('true');
         // The panel shown on open is the owner's action list.
         const panel = utils.container.querySelector('[data-outcome-owner-actions]');

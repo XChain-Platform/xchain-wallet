@@ -96,9 +96,9 @@ const DISPLAY_MAP = /** @type {Record<string, string>} */ ({
     // the wallet itself composed (ORDER -> ORDER_CANCEL in xchain-indexer
     // actions/order.js, and the dispenser/swap equivalents), so an owner who
     // cancels their own order reads the result in their own History.
-    BET: 'Bet',
-    BET_EXPIRE: 'Bet expired',
-    BET_EDIT: 'Bet updated',
+    BET: 'Buy prediction',
+    BET_EXPIRE: 'Prediction refunded',
+    BET_EDIT: 'Prediction updated',
     COINPAY_EXPIRE: 'Coin payment expired',
     DISPENSER_CANCEL: 'Dispenser cancelled',
     DISPENSER_CLOSE: 'Dispenser closed',

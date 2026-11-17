@@ -163,8 +163,8 @@ export function poolRowsForOutcomes(rows, outcomeCount) {
 const SETTLED_BET_LIMIT = 500;
 
 function statusLabel(status) {
-    if (status === 'open') return 'Taking bets';
-    if (status === 'closed') return 'Betting closed, waiting on the result';
+    if (status === 'open') return 'Positions available';
+    if (status === 'closed') return 'Purchases closed, waiting on the result';
     if (status === 'resolved') return 'Settled';
     if (status === 'resolved_void') return 'Void, everyone refunded';
     if (status === 'cancelled') return 'Cancelled, everyone refunded';
@@ -184,13 +184,13 @@ function betAmountError(value, minimum) {
     const stake = String(value ?? '').trim();
     const match = /^(\d+)(?:\.(\d+))?$/.exec(stake);
     if (!match) {
-        return 'Enter a positive bet amount using digits and an optional decimal point.';
+        return 'Enter a positive position amount using digits and an optional decimal point.';
     }
-    if ((match[2] || '').length > 18) return 'A bet amount can have at most 18 decimal places.';
+    if ((match[2] || '').length > 18) return 'A position amount can have at most 18 decimal places.';
     const wholeDigits = match[1].replace(/^0+/, '').length || 1;
-    if (wholeDigits > 47) return 'This bet amount is too large.';
+    if (wholeDigits > 47) return 'This position amount is too large.';
     if (!/[1-9]/.test(`${match[1]}${match[2] || ''}`)) {
-        return 'Enter a positive bet amount using digits and an optional decimal point.';
+        return 'Enter a positive position amount using digits and an optional decimal point.';
     }
     const min = String(minimum ?? '').trim();
     if (min) {
@@ -200,11 +200,11 @@ function betAmountError(value, minimum) {
             : 0;
         if (!minimumMatch || (minimumMatch[2] || '').length > 18 || minimumWholeDigits > 47
             || !/[1-9]/.test(`${minimumMatch[1]}${minimumMatch[2] || ''}`)) {
-            return 'This market reports an invalid minimum bet amount.';
+            return 'This market reports an invalid minimum purchase amount.';
         }
     }
     if (min && compareDecimalStrings(stake, min) === -1) {
-        return `This market requires a minimum bet of ${min}.`;
+        return `This market requires a minimum purchase of ${min}.`;
     }
     return null;
 }
@@ -544,7 +544,7 @@ export function BetFeedDetail({
         if (!fresh || String(fresh.action_index) !== String(feedIndex)) return null;
         if (!fresh.feed_status || fresh.feed_status === 'open') return null;
         setFeed(fresh);
-        return `This market no longer takes bets (${statusLabel(fresh.feed_status).toLowerCase()}). Nothing was sent.`;
+        return `This market no longer accepts purchases (${statusLabel(fresh.feed_status).toLowerCase()}). Nothing was sent.`;
     }
 
     // Compose through the SDK's own placeBetParams builder, host-side. A
@@ -555,7 +555,7 @@ export function BetFeedDetail({
         const amountProblem = betAmountError(amount, feed?.min_amount);
         const memoError = memoLengthError(memo.trim());
         if (!formErrors.validate({
-            'bet-from-address': !fromAddress ? 'No address on this network to bet from.' : null,
+            'bet-from-address': !fromAddress ? 'No address on this network to buy from.' : null,
             'bet-outcome': outcome === null ? 'Choose an outcome.' : null,
             'bet-stake': amountPrecisionError || amountProblem,
             'bet-memo': memoError,
@@ -620,7 +620,7 @@ export function BetFeedDetail({
                 coinTicker, mandatory: nativeFee.mandatory,
                 // The raw message stays the fallback (the in-repo convention): a node
                 // rejection reason is worth showing verbatim when nothing recognises it.
-                fallback: err?.message || 'Bet failed.',
+                fallback: err?.message || 'Purchase failed.',
             }));
         } finally {
             submitLockRef.current = false;
@@ -687,7 +687,7 @@ export function BetFeedDetail({
             nested={showPlace}
             onBack={showPlace ? backToMarket : onBack}
             backDisabled={showPlace && submitting}
-            title={showPlace ? 'Place Bet' : 'Market'}
+            title={showPlace ? 'Buy a position' : 'Market'}
         />
     );
     const standalone = (page) => (
@@ -760,7 +760,7 @@ export function BetFeedDetail({
                 chainId={chainId}
                 lockNetwork
                 unavailableReason={(a) => (feed && String(a.address) === String(feed.source)
-                    ? 'This address runs this market, so it cannot bet on it.'
+                    ? 'This address runs this market, so it cannot buy a position in it.'
                     : null)}
                 onPick={(a) => { setFromAddressId(a.id); setSourcePickerOpen(false); }}
                 onBack={() => setSourcePickerOpen(false)}
@@ -857,12 +857,12 @@ export function BetFeedDetail({
                 {/* leg (a): a queued result is SIGNED and not broadcast, so
                     "Bet placed" would claim the one thing that has not happened. */}
                 {result?.queued
-                    ? 'Signed, but your bet could not reach the network just now. It is waiting in '
+                    ? 'Signed, but your purchase could not reach the network just now. It is waiting in '
                       + 'the queued-transactions banner and only goes out when you broadcast it from '
-                      + 'there; the wallet reminds you when the network is back. Do not place it again.'
+                      + 'there; the wallet reminds you when the network is back. Do not buy it again.'
                     : feed.feed_status === 'open'
-                        ? 'Bet placed.'
-                        : 'Bet sent, but betting closed while you were confirming it. A bet is judged '
+                        ? 'Position bought.'
+                        : 'Purchase sent, but purchases closed while you were confirming it. A purchase is judged '
                           + 'by the block it lands in, so the network will most likely reject this one. '
                           + 'The network fee and the protocol fee are spent either way.'}
             </p>
@@ -899,7 +899,7 @@ export function BetFeedDetail({
             onChange={() => {}}
             onIconClick={() => setSourcePickerOpen(true)}
             iconLabel="Choose source address"
-            help="The address that places this bet and receives any payout. It must hold the stake in this market's token, and it cannot be the address that runs the market."
+            help="The address that buys this position and receives any payout. It must hold the purchase amount in this market's token, and it cannot be the address that runs the market."
         />
     ) : null;
 
@@ -946,7 +946,7 @@ export function BetFeedDetail({
         // Only the market's own oracle sees its actions (G13: Actions is Zap).
         ...(showsActions ? [{ id: 'actions', label: 'Actions', icon: <Icon.ZapIcon /> }] : []),
         takingBets
-            ? { id: 'bet', label: 'Bet', icon: <Icon.ZapIcon /> }
+            ? { id: 'bet', label: 'Buy', icon: <Icon.ZapIcon /> }
             : { id: 'result', label: 'Result', icon: <Icon.VerifyIcon /> },
         { id: 'activity', label: 'Activity', icon: <Icon.HistoryIcon /> },
         { id: 'details', label: 'Details', icon: <Icon.InfoIcon /> },
@@ -979,7 +979,7 @@ export function BetFeedDetail({
         .sort((a, b) => Number(b?.action_index || 0) - Number(a?.action_index || 0));
     const betsPartialNote = Array.isArray(feedBets) && feedBets.length >= SETTLED_BET_LIMIT ? (
         <p className={styles.hint}>
-            This market took more than {SETTLED_BET_LIMIT} bets; only {SETTLED_BET_LIMIT} were read.
+            This market has more than {SETTLED_BET_LIMIT} positions; only {SETTLED_BET_LIMIT} were read.
         </p>
     ) : null;
     // What this wallet holds on each side, under the Place bet button.
@@ -999,7 +999,7 @@ export function BetFeedDetail({
             <OutcomeFacts
                 label="Market details"
                 rows={[
-                    { key: 'closes', label: 'Betting closes', value: fmtTime(feed.deadline) },
+                    { key: 'closes', label: 'Purchases close', value: fmtTime(feed.deadline) },
                     { key: 'source', label: 'Resolution source', value: 'Reported by the market oracle' },
                     ...(feed.source ? [{
                         key: 'runBy',
@@ -1018,8 +1018,8 @@ export function BetFeedDetail({
                         ) : <span className={local.factAddress}>{feed.source}</span>,
                     }] : []),
                     { key: 'pool', label: 'Pool', value: withTick(total) },
-                    { key: 'bets', label: 'Bets placed', value: String(betCount) },
-                    ...(feed.min_amount ? [{ key: 'min', label: 'Minimum bet', value: withTick(String(feed.min_amount)) }] : []),
+                    { key: 'bets', label: 'Positions', value: String(betCount) },
+                    ...(feed.min_amount ? [{ key: 'min', label: 'Minimum purchase', value: withTick(String(feed.min_amount)) }] : []),
                     { key: 'fee', label: 'Oracle fee', value: `${feed.fee ?? '0'}% of the pot` },
                     { key: 'refund', label: 'Refunds if unresolved by', value: fmtTime(feed.expire_at) },
                     { key: 'market', label: 'Market', value: `#${String(feed.action_index)}` },
@@ -1036,15 +1036,15 @@ export function BetFeedDetail({
                 <WarningCard data-bet-details-note="">
                     {(feed.allow_list || feed.block_list) ? (
                         <WarningLine>
-                            This market is restricted to a list of addresses. If you are blocked, your bet is
+                            This market is restricted to a list of addresses. If you are blocked, your purchase is
                             rejected and nothing is taken from your balance.
                         </WarningLine>
                     ) : null}
                     {live ? (
                         <WarningLine data-bet-parimutuel-note="">
                             This is a parimutuel market: everyone backing the winning outcome shares the whole
-                            pot, so the split is only how things stand right now and every later bet
-                            changes it. Bets are final once placed, and payouts round down, so a very small
+                            pot, so the split is only how things stand right now and every later purchase
+                            changes it. Purchases are final once confirmed, and payouts round down, so a very small
                             stake can win and still pay nothing.
                         </WarningLine>
                     ) : null}
@@ -1062,8 +1062,8 @@ export function BetFeedDetail({
             tone: 'info',
             testId: 'bet-settlement',
             body: resolveWindowOpen
-                ? 'The market oracle must publish the winning outcome before the refund window ends. Payouts settle automatically when the result is recorded; bettors do not submit a claim.'
-                : 'The resolution window has ended. The protocol refunds every bet automatically when the network records the expiry; bettors do not submit a claim.',
+                ? 'The market oracle must publish the winning outcome before the refund window ends. Payouts settle automatically when the result is recorded; participants do not submit a claim.'
+                : 'The resolution window has ended. The protocol refunds every position automatically when the network records the expiry; participants do not submit a claim.',
             // The owner settles from this page's own Actions tab.
             action: resolveWindowOpen && ownsMarket && showsActions ? (
                 <Button variant="primary" icon={<Icon.CheckIcon />} onClick={() => setTab('actions')}>Settle This Market</Button>
@@ -1074,21 +1074,21 @@ export function BetFeedDetail({
             title: `Winning outcome: ${winningLabel || 'recorded by the oracle'}`,
             tone: 'success',
             testId: 'bet-settlement',
-            body: 'Winning bets settled as won and losing bets lost their stakes. The protocol credited any payout automatically; bettors have nothing to claim.',
+            body: 'Winning positions settled as won and losing positions lost their purchase amounts. The protocol credited any payout automatically; participants have nothing to claim.',
         };
     } else if (feed.feed_status === 'resolved_void') {
         verdict = {
-            title: `Market voided${winningLabel ? `: ${winningLabel} had no bets` : ''}`,
+            title: `Market voided${winningLabel ? `: ${winningLabel} had no positions` : ''}`,
             tone: 'info',
             testId: 'bet-settlement',
-            body: 'Every bet was refunded automatically because no bet backed the reported winner. Bettors have nothing to claim.',
+            body: 'Every position was refunded automatically because nobody backed the reported winner. Participants have nothing to claim.',
         };
     } else if (feed.feed_status === 'cancelled' || feed.feed_status === 'expired') {
         verdict = {
-            title: feed.feed_status === 'cancelled' ? 'All bets refunded' : 'Expired without a result',
+            title: feed.feed_status === 'cancelled' ? 'All positions refunded' : 'Expired without a result',
             tone: 'info',
             testId: 'bet-settlement',
-            body: 'The protocol refunded every bet automatically. Bettors have nothing to claim.',
+            body: 'The protocol refunded every position automatically. Participants have nothing to claim.',
         };
     }
     const splitRows = outcomes.map((label, i) => {
@@ -1104,13 +1104,13 @@ export function BetFeedDetail({
         return {
             key: i,
             label: `${i}: ${safeOutcomeLabel(label) || `Outcome ${i}`}`,
-            sub: `${withTick(p.pool ?? 0)}, ${bets} bet${bets === 1 ? '' : 's'}`,
+            sub: `Total in ${safeOutcomeLabel(label) || `Outcome ${i}`}: ${withTick(p.pool ?? 0)}, ${bets} position${bets === 1 ? '' : 's'}`,
             percent: percentText === null ? null : Number(percentText),
             // "no bets yet" only reads as true while betting can still
             // happen; on a market that is over it asserts that nobody ever
             // bet, which may be false and is never something this screen
             // can promise.
-            value: percentText === null ? (live ? 'no bets yet' : 'no bets') : `${percentText}%`,
+            value: percentText === null ? (live ? 'no positions yet' : 'no positions') : `${percentText}%`,
             winner: feed.feed_status === 'resolved' && winningOutcome === i,
         };
     });
@@ -1124,25 +1124,25 @@ export function BetFeedDetail({
         betByOutcome.set(i, sumDecimalStrings([betByOutcome.get(i) || '0', amountText]));
     }
     const youBet = feedBets === null ? (
-        <p className={styles.hint}>Loading your bets…</p>
+        <p className={styles.hint}>Loading your positions…</p>
     ) : feedBetsFailed ? (
-        <p className={styles.hint}>Your bets on this market could not be loaded.</p>
+        <p className={styles.hint}>Your positions in this market could not be loaded.</p>
     ) : betByOutcome.size ? (
         [...betByOutcome.entries()].map(([i, staked]) => (
             <p key={i} className={local.heldLine} data-bet-you-bet="">
                 <span className={local.heldIcon} aria-hidden="true"><Icon.CheckIcon /></span>
-                <span>You bet <strong>{withTick(staked)}</strong> on {safeOutcomeLabel(outcomes[i]) || `Outcome ${i}`}</span>
+                <span>Your position: <strong>{withTick(staked)}</strong> on {safeOutcomeLabel(outcomes[i]) || `Outcome ${i}`}</span>
             </p>
         ))
     ) : (
-        <p className={styles.hint}>No bets from this wallet.</p>
+        <p className={styles.hint}>No positions from this wallet.</p>
     );
     const resultPanel = (
         <OutcomeResult
             verdict={verdict}
             icon={<Icon.VerifyIcon />}
             title={live ? 'Current split' : 'Final split'}
-            aside={`${betCount} bet${betCount === 1 ? '' : 's'}`}
+            aside={`${betCount} position${betCount === 1 ? '' : 's'}`}
             rows={splitRows}
             winnerLabel="Winner"
             empty={<EmptyState title="No outcomes recorded" body="Settled market outcomes appear here." titleAs="p" />}
@@ -1151,7 +1151,7 @@ export function BetFeedDetail({
                     {youBet}
                     {!live && settledPartial ? (
                         <p className={styles.hint}>
-                            This market took more than {SETTLED_BET_LIMIT} bets, so the split above covers the
+                            This market has more than {SETTLED_BET_LIMIT} positions, so the split above covers the
                             most recent {SETTLED_BET_LIMIT} rather than all of them.
                         </p>
                     ) : null}
@@ -1196,8 +1196,8 @@ export function BetFeedDetail({
         <>
                     <AmountField
                         id="bet-stake"
-                        label="Stake"
-                        help="How much to bet. A stake buys a share of the pot that every later bet re-divides, and payouts round down. Once confirmed, a bet cannot be cancelled or moved to another outcome."
+                        label="Amount"
+                        help="How much of this outcome to buy. The amount buys a share of the pot that every later purchase re-divides, and payouts round down. Once confirmed, a position cannot be cancelled or moved to another outcome."
                         amount={amount}
                         tick={feed.tick || ''}
                         divisibility={stakeDivisibility}
@@ -1207,7 +1207,7 @@ export function BetFeedDetail({
                         }}
                         onValidationError={(fieldError) => {
                             setAmountPrecisionError(fieldError?.startsWith('Enter a valid decimal amount')
-                                ? 'Enter a positive bet amount using digits and an optional decimal point.'
+                                ? 'Enter a positive position amount using digits and an optional decimal point.'
                                 : fieldError);
                         }}
                         onMax={stakeBalance !== null
@@ -1288,7 +1288,7 @@ export function BetFeedDetail({
                             )}
                             <p className={styles.hint}>
                                 That is the split as it stands right now, not a locked-in price: every
-                                later bet moves it, in either direction.
+                                later purchase moves it, in either direction.
                             </p>
                         </div>
                     ) : null}
@@ -1327,7 +1327,7 @@ export function BetFeedDetail({
     const hasPool = compareDecimalStrings(total, '0') === 1;
     const outcomeOptions = outcomes.map((label, i) => {
         const name = safeOutcomeLabel(label) || `Outcome ${i}`;
-        const staked = `${withTick(byOutcome[i]?.pool || '0')} staked`;
+        const staked = `${withTick(byOutcome[i]?.pool || '0')} total`;
         const exact = hasPool
             ? Number(divideDecimalStrings(multiplyDecimalStrings(byOutcome[i]?.pool || '0', '100'), total, 4))
             : null;
@@ -1340,7 +1340,7 @@ export function BetFeedDetail({
             staked,
             chance: whole === null ? null : `${whole}%`,
             percent,
-            name: whole === null ? `Bet on ${name}, ${staked}` : `Bet on ${name}, ${whole} percent, ${staked}`,
+            name: whole === null ? `Buy ${name}, ${staked}` : `Buy ${name}, ${whole} percent, ${staked}`,
             disabled: !fromAddress,
             onSelect: () => openPlaceBet(i),
         };
@@ -1351,18 +1351,18 @@ export function BetFeedDetail({
                 address that does not run this market. */}
             {fromField}
             <p className={styles.hint}>
-                You run this market, so you cannot bet on it. That rule exists because an oracle
-                who could bet on its own result would decide the result.
+                You run this market, so you cannot buy a position in it. That rule exists because an oracle
+                who could buy its own outcome would decide the result.
             </p>
         </>
     ) : (
         <div className={local.betPanel} data-bet-panel="">
             <OutcomeList label="Outcome to back" options={outcomeOptions} />
             {outcomes.length === 0 ? (
-                <p className={styles.hint} data-bet-no-outcomes="">This market lists no outcomes, so there is nothing to bet on.</p>
+                <p className={styles.hint} data-bet-no-outcomes="">This market lists no outcomes, so there is nothing to buy.</p>
             ) : addressesByChain && !fromAddress ? (
                 // The outcome rows stay disabled with no address here, so the page says why.
-                <p className={styles.hint} data-bet-no-address="">No address on this network. Use Receive to generate one, then bet.</p>
+                <p className={styles.hint} data-bet-no-address="">No address on this network. Use Receive to generate one, then buy a position.</p>
             ) : null}
             {/* No tap hint under the rows: the chevron rows say it. Carried over
                 from the operator's ruling on the poll Vote tab (2026-11-15);
@@ -1412,7 +1412,7 @@ export function BetFeedDetail({
                     ...(legality.canCancel ? [{
                         id: 'cancel',
                         title: 'Cancel and refund',
-                        description: 'End the market and refund every bet',
+                        description: 'End the market and refund every position',
                         icon: <Icon.XIcon />,
                         tone: 'danger',
                         open: openMode === 'cancel',
@@ -1421,7 +1421,7 @@ export function BetFeedDetail({
                     ...(legality.canEdit ? [{
                         id: 'edit',
                         title: 'Edit lists',
-                        description: 'Change the allow and block lists for bettors',
+                        description: 'Change the allow and block lists for participants',
                         icon: <Icon.PencilIcon />,
                         open: openMode === 'edit',
                         onClick: () => oracle.begin(ownerFeed, 'edit'),
@@ -1447,15 +1447,15 @@ export function BetFeedDetail({
     // what the list is missing.
     const activityPanel = (
         <>
-            {feedBets === null ? <p className={styles.hint}>Loading bets…</p> : null}
-            {feedBetsFailed ? <StatusMessage variant="error">Could not load this market's bets.</StatusMessage> : null}
+            {feedBets === null ? <p className={styles.hint}>Loading positions…</p> : null}
+            {feedBetsFailed ? <StatusMessage variant="error">Could not load this market's positions.</StatusMessage> : null}
             {feedBets !== null && !feedBetsFailed && recentBets.length === 0 ? (
                 betCount > 0 ? (
                     // The pools count bets the bet read did not list, so the
                     // empty list says that instead of claiming none exist.
-                    <EmptyState title="No bet rows returned" body={`The market counts ${betCount} bet${betCount === 1 ? '' : 's'}, but the explorer listed none of them.`} titleAs="p" />
+                    <EmptyState title="No position rows returned" body={`The market counts ${betCount} position${betCount === 1 ? '' : 's'}, but the explorer listed none of them.`} titleAs="p" />
                 ) : (
-                    <EmptyState title={live ? 'No bets yet' : 'No bets'} body="Bets on this market appear here as they are placed." titleAs="p" />
+                    <EmptyState title={live ? 'No positions yet' : 'No positions'} body="Positions in this market appear here as they are bought." titleAs="p" />
                 )
             ) : null}
             {recentBets.length > 0 ? <OutcomeActivity rows={recentBets.map(betActivityRow)} /> : null}
@@ -1480,7 +1480,7 @@ export function BetFeedDetail({
         const placeForm = (
             <FormFrame
                     demoGuard={demoGuard}
-                    label="Place Bet"
+                    label="Buy a position"
                     onSubmit={handlePlaceBet}
                     errors={formErrors}
                     status={formError ? <StatusMessage variant="error">{formError}</StatusMessage> : null}
@@ -1492,7 +1492,7 @@ export function BetFeedDetail({
                         >
                             {actionConfirm.composing
                                 ? 'Preparing Review…'
-                                : isWatcherMode ? 'Create Unsigned Transaction' : 'Place Bet'}
+                                : isWatcherMode ? 'Create Unsigned Transaction' : chosenOutcome ? `Buy ${chosenOutcome}` : 'Buy'}
                         </FormAction>
                     )}
                     from={(
@@ -1501,15 +1501,15 @@ export function BetFeedDetail({
                             chainId={chainId}
                             chainRegistry={chainRegistry}
                             lockNetwork
-                            networkHelp="The market fixes the network: bets are placed in its token on this chain."
+                            networkHelp="The market fixes the network: positions are bought with its token on this chain."
                             address={fromAddress?.address || null}
                             addressId="bet-from-address"
                             formErrorKey="bet-from-address"
                             onOpenPicker={() => setSourcePickerOpen(true)}
                             pickerLabel="Choose source address"
-                            addressHelp="The address that places this bet and receives any payout. It must hold the stake in this market's token, and it cannot be the address that runs the market."
+                            addressHelp="The address that buys this position and receives any payout. It must hold the purchase amount in this market's token, and it cannot be the address that runs the market."
                             missing={addressesByChain ? (
-                                <p className={styles.hint}>No address on this network. Use Receive to generate one, then bet.</p>
+                                <p className={styles.hint}>No address on this network. Use Receive to generate one, then buy a position.</p>
                             ) : null}
                             revealKey={sectionErrorKey('from')}
                         />
@@ -1536,7 +1536,7 @@ export function BetFeedDetail({
                         here), then the stake. */}
                     <FormSection
                         id="bet"
-                        title="Bet"
+                        title="Buy"
                         icon={Icon.ZapIcon}
                         {...sections.bind('bet')}
                         revealKey={sectionErrorKey('bet')}

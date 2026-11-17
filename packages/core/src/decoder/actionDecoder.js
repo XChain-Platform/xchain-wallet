@@ -937,7 +937,7 @@ function decodeBet(p, chainSuffix) {
             ],
             warnings: [
                 'Only the market creator can make this edit, and only while the market is open.',
-                'The new membership lists affect future bets only. Existing bets are unchanged.',
+                'The new membership lists affect future purchases only. Existing positions are unchanged.',
                 ...memoWarn,
             ],
         };
@@ -947,7 +947,7 @@ function decodeBet(p, chainSuffix) {
     if (version === '2') {
         const amount = pick('amount', 'AMOUNT');
         return {
-            summary: `Bet ${amount || '?'} on outcome ${outcome || '?'} of market ${feedRef || '?'}${chainSuffix}`,
+            summary: `Buy ${amount || '?'} of outcome ${outcome || '?'} in market ${feedRef || '?'}${chainSuffix}`,
             details: [
                 { label: 'Market', value: feedRef },
                 { label: 'Outcome', value: outcome },
@@ -955,8 +955,8 @@ function decodeBet(p, chainSuffix) {
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
             warnings: [
-                'Bets are final. There is no cancel and no way to change your outcome once this is signed.',
-                'This is a parimutuel market, so your share is not fixed now: later bets change what a win pays.',
+                'Purchases are final. There is no cancel and no way to change your outcome once this is signed.',
+                'This is a parimutuel market, so your share is not fixed now: later purchases change what a win pays.',
                 ...(!isPositiveDecimal(amount) ? ['Stake is not positive.'] : []),
                 ...memoWarn,
             ],
@@ -983,13 +983,13 @@ function decodeBet(p, chainSuffix) {
     // v1 cancel a market
     if (version === '1') {
         return {
-            summary: `Cancel market ${feedRef || '?'} and refund every bet${chainSuffix}`,
+            summary: `Cancel market ${feedRef || '?'} and refund every position${chainSuffix}`,
             details: [
                 { label: 'Market', value: feedRef },
                 ...(memo ? [{ label: 'Memo', value: memo }] : []),
             ],
             warnings: [
-                'Every open bet is refunded in full and the market is over. This cannot be undone.',
+                'Every open position is refunded in full and the market is over. This cannot be undone.',
                 ...memoWarn,
             ],
         };
@@ -1009,24 +1009,24 @@ function decodeBet(p, chainSuffix) {
     const outcomeList = outcomes ? outcomes.split(',') : [];
 
     return {
-        summary: `Open a betting market on ${tick || '?'}${chainSuffix}: ${label || '(untitled)'}`,
+        summary: `Open a prediction market on ${tick || '?'}${chainSuffix}: ${label || '(untitled)'}`,
         details: [
             { label: 'Market', value: label },
             { label: 'Outcomes', value: outcomeList.join(' / ') },
-            { label: 'Wager token', value: tick },
+            { label: 'Position token', value: tick },
             // Named to keep it distinct from the protocol's market duration fee,
             // which is a different charge paid to a different party.
             { label: 'Oracle fee (percent of pot)', value: fee ? `${fee}%` : '0%' },
-            { label: 'Betting closes', value: deadline },
+            { label: 'Purchases close', value: deadline },
             { label: 'Refund window (seconds)', value: refundWindow },
-            ...(minAmount ? [{ label: 'Minimum bet', value: minAmount }] : []),
+            ...(minAmount ? [{ label: 'Minimum purchase', value: minAmount }] : []),
             ...(allowList ? [{ label: 'Allow list', value: allowList }] : []),
             ...(blockList ? [{ label: 'Block list', value: blockList }] : []),
             ...(memo ? [{ label: 'Memo', value: memo }] : []),
         ],
         warnings: [
             'Market terms cannot be edited after this. Only allow and block list references can change while the market is open.',
-            'You are the oracle: if you never resolve it, bettors are refunded after the refund window, and your address carries that record publicly.',
+            'You are the oracle: if you never resolve it, participants are refunded after the refund window, and your address carries that record publicly.',
             ...(outcomeList.length < 2 ? ['A market needs at least two outcomes.'] : []),
             ...memoWarn,
         ],

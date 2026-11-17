@@ -196,4 +196,10 @@ describe('CreateBetFeedForm lays out every page state through a template', () =>
         expect(roots.filter(({ name }) => name !== 'FormPage' && name !== 'FormFrame' && name !== 'ListPage')
             .map(({ line, name }) => `CreateBetFeedForm.jsx:${line} wrap(${name})`)).toEqual([]);
     });
+
+    it('uses prediction market copy when a selected network is unsupported', () => {
+        const source = readFileSync(SOURCE_PATH, 'utf8');
+        expect(source).toContain('Prediction markets are not open on that network yet. Pick a token on another network.');
+        expect(source).not.toContain('Betting markets are not open on that network yet.');
+    });
 });

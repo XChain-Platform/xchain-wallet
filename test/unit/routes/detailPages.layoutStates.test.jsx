@@ -556,12 +556,12 @@ describe('412px protocol detail layouts', () => {
         // The market opens on Bet: each outcome is a list row. A long name
         // stays on one line, cut with an ellipsis by the shared stylesheet
         // (not inline styles), and the row's accessible name carries it whole.
-        const outcomeAction = screen.getByRole('button', { name: new RegExp(`^Bet on ${outcome}, `) });
+        const outcomeAction = screen.getByRole('button', { name: new RegExp(`^Buy ${outcome}, `) });
         expect(outcomeAction).toHaveClass(outcomeListStyles.row);
         expect(outcomeAction.textContent).toContain(outcome);
         const outcomeCss = readFileSync('packages/core/src/shared/routes/OutcomeList.module.css', 'utf8');
         expect(outcomeCss).toMatch(/\.content > :first-child\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
-        expect(screen.queryByRole('button', { name: 'Bet' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Buy' })).toBeNull();
         // The pool is a Details fact, its value wrapping.
         fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
         expectWrappingValue(detailValue('Pool'), LARGE_AMOUNT);

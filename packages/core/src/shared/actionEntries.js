@@ -235,8 +235,8 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
     {
         id: 'bet-markets',
         handler: 'onBetting',
-        label: 'Betting',
-        description: 'Browse betting markets and place a bet, track your bets, or run a market of your own as its oracle.',
+        label: 'Prediction markets',
+        description: 'Browse prediction markets, buy and track positions, or run a market of your own as its oracle.',
     },
     {
         id: 'cosigner-accounts',

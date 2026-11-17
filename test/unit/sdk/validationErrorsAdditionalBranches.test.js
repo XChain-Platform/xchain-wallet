@@ -14,9 +14,9 @@ function validationError(message) {
 describe('validationErrorMessage additional mappings', () => {
     it.each([
         ['label is required', 'Give the market a question - this is what people see when they browse.'],
-        ['tick is required', 'Choose the token bets are placed in.'],
-        ['deadline is required', 'Choose when betting closes.'],
-        ['deadline must be a positive integer Unix timestamp', 'Choose a valid date and time for betting to close.'],
+        ['tick is required', 'Choose the token used to buy positions.'],
+        ['deadline is required', 'Choose when purchases close.'],
+        ['deadline must be a positive integer Unix timestamp', 'Choose a valid date and time for purchases to close.'],
         ['outcome labels may not be empty', 'Every outcome needs a name.'],
         ['outcome is out of range', 'Choose one of the outcomes listed for this market.'],
     ])('maps "%s"', (body, expected) => {

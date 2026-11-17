@@ -487,8 +487,8 @@ export function PortfolioChart({ rows, walletId, nativePriceMap, nativePricesLoa
 
 // The chart drawn behind a balance card (Home's and a coin or token's) takes
 // the logo purple: a light line over a deep area fill.
-export const BEHIND_CHART_STROKE = '#E7A6EB';
-export const BEHIND_CHART_FILL = 'rgba(138, 40, 143, 0.55)';
+export const BEHIND_CHART_STROKE = 'var(--xc-hero-chart-line)';
+export const BEHIND_CHART_FILL = 'var(--xc-hero-chart-fill)';
 
 /**
  * The chart's range buttons, one equal slot per range along the card's foot.

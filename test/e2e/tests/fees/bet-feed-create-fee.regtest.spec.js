@@ -186,12 +186,12 @@ async function composeMarket(page, { label, daysOut }) {
     await tokenField.click();
     await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-    await main.getByLabel('What is being bet on', { exact: true }).fill(label);
+    await main.getByLabel('Question', { exact: true }).fill(label);
     await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
     await main.getByLabel('Outcome 1', { exact: true }).fill('No');
 
     const now = await chainTime();
-    await main.getByLabel('Betting closes', { exact: true }).fill(toLocalDateTimeInput(now + daysOut * 86_400));
+    await main.getByLabel('Purchases Close', { exact: true }).fill(toLocalDateTimeInput(now + daysOut * 86_400));
 
     // The form's OWN projection, the first of the three numbers. Read before
     // submitting, because it is a property of the form rather than of the

@@ -90,11 +90,11 @@ describe('Market page notices', () => {
         // The outcome rows are on the Bet tab.
         await domAct(async () => {
             Array.from(utils.container.querySelectorAll('[role="tab"]'))
-                .find((tab) => /^Bet$/.test((tab.textContent || '').trim()))
+                .find((tab) => /^Buy$/.test((tab.textContent || '').trim()))
                 .click();
             await drain();
         });
-        expect(utils.queryByRole('button', { name: 'Bet' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Buy' })).toBeNull();
         expect(utils.container.querySelectorAll('[role="alert"]')).toHaveLength(0);
         expect(utils.container.textContent).not.toMatch(/Choose an outcome/);
         const slot = utils.container.querySelector('[data-form-status]');
@@ -109,7 +109,7 @@ describe('Market page notices', () => {
         expect(utils.container.textContent).not.toMatch(/Demo wallets can.t move funds/);
         await domAct(async () => {
             Array.from(utils.container.querySelectorAll('[role="tab"]'))
-                .find((tab) => /^Bet$/.test((tab.textContent || '').trim()))
+                .find((tab) => /^Buy$/.test((tab.textContent || '').trim()))
                 .click();
             await drain();
         });

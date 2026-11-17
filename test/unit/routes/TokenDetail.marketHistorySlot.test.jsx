@@ -11,7 +11,7 @@
 
 import React from 'react';
 import { readFileSync } from 'node:fs';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 vi.mock('../../../packages/core/src/flows/demoMode.js', async (importOriginal) => {
@@ -37,6 +37,8 @@ beforeAll(() => {
     globalThis.ResizeObserver = globalThis.ResizeObserver || StubObserver;
 });
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
+
+beforeEach(() => window.localStorage.removeItem('xc:balanceUnit'));
 
 afterEach(() => {
     cleanup();
@@ -115,9 +117,9 @@ describe('token market history slot', () => {
         expect(await screen.findByText('No DEX trades yet')).toBeTruthy();
     });
 
-    it('draws the chart in the same slot when a price series loads', async () => {
+    it('draws the selected asset-unit series in the same slot when market data loads', async () => {
         renderToken('demo-wallet', { creator: 'bcrt1qx', marketPrice: '0.5', totalSupply: '1000' });
-        const chart = await screen.findByRole('img', { name: /^Price trend/ });
+        const chart = await screen.findByRole('img', { name: /^Balance trend/ });
         const slot = chartSlot();
         expect(slot.contains(chart)).toBe(true);
         expect(slot.textContent).not.toContain('No price history yet');

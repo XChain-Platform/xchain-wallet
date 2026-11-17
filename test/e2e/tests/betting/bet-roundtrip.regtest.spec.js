@@ -369,7 +369,7 @@ test.describe('BET round trip on regtest', () => {
             // by their stable data key rather than by role.
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('What is being bet on', { exact: true }).fill(`Round trip ${RUN_TAG}`);
+            await main.getByLabel('Question', { exact: true }).fill(`Round trip ${RUN_TAG}`);
             await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
             await main.getByLabel('Outcome 1', { exact: true }).fill('No');
 
@@ -378,7 +378,7 @@ test.describe('BET round trip on regtest', () => {
             // close step's wall-clock wait stays small (see DEADLINE_LEAD_SEC).
             const now = await chainTime();
             deadlineSec = now + DEADLINE_LEAD_SEC;
-            await main.getByLabel('Betting closes', { exact: true }).fill(toLocalDateTimeInput(deadlineSec));
+            await main.getByLabel('Purchases Close', { exact: true }).fill(toLocalDateTimeInput(deadlineSec));
 
             await main.getByLabel('Your fee', { exact: true }).fill(FEE_PCT);
             await fillPasswordIfPresent(main);
@@ -582,17 +582,17 @@ test.describe('BET round trip on regtest', () => {
             // SWEEP spec recorded, hit again here.
             // The market opens on Details; the outcome buttons are on the Bet
             // tab, and tapping one opens the Place Bet step with the stake.
-            await main.getByRole('tab', { name: 'Bet', exact: true }).click();
+            await main.getByRole('tab', { name: 'Buy', exact: true }).click();
             const yes = main.getByRole('list', { name: 'Outcome to back' })
-                .getByRole('button', { name: /^Bet on Yes,/ });
+                .getByRole('button', { name: /^Buy Yes,/ });
             await expect(yes, 'the place-bet surface did not open').toBeVisible({ timeout: 30_000 });
 
             await yes.click();
-            await expect(main.getByRole('form', { name: 'Place Bet' }), 'tapping the outcome did not open Place Bet')
+            await expect(main.getByRole('form', { name: 'Buy a position' }), 'tapping the outcome did not open Place Bet')
                 .toBeVisible({ timeout: 30_000 });
             await main.getByLabel(/^Stake/).fill(STAKE);
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Place Bet', exact: true }).click();
+            await main.locator('button[type="submit"]').click();
             await approveConfirm(page);
 
             // The pool is the settlement predicate itself (§7 sums only
@@ -666,7 +666,7 @@ test.describe('BET round trip on regtest', () => {
             // My markets is the All list narrowed to this wallet's markets
             // (ruling 2026-11-13), so it keeps All's Status filter, which
             // opens on Taking bets; this market has closed.
-            await page.getByRole('button', { name: 'Filter bet markets' }).click();
+            await page.getByRole('button', { name: 'Filter prediction markets' }).click();
             await page.getByRole('combobox', { name: 'Status' }).click();
             await page.getByRole('option', { name: 'All markets' }).click();
 

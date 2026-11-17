@@ -43,12 +43,12 @@ function hourlyCalls(messaging) {
     return messaging.getNativePricesRequest.mock.calls.filter(([request]) => !request.includeHistory);
 }
 
-function mount(historyResponse, chartProps = {}) {
+function mount(historyResponse, chartProps = {}, sparkline = SPARKLINE) {
     const messaging = {
         getSettings: vi.fn(async () => ({ fiatCurrency: 'USD' })),
         getNativePricesRequest: vi.fn((request) => (request.includeHistory
             ? historyResponse()
-            : Promise.resolve({ prices: { [CHAIN_ID]: { priceFiat: 80_000, sparkline: SPARKLINE } } }))),
+            : Promise.resolve({ prices: { [CHAIN_ID]: { priceFiat: 80_000, sparkline } } }))),
     };
     render(
         <MessagingProvider shell="web" messaging={messaging}>
@@ -81,6 +81,39 @@ afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
 afterEach(() => cleanup());
 
 describe('PortfolioChart range switching', () => {
+    it('shows five matching labels and guides on a non-flat hero chart', async () => {
+        mount(async () => ({ prices: {} }), { behind: true });
+
+        const chart = await screen.findByRole('img', { name: /Range high .*, low .*/ });
+        const labels = [...chart.parentElement.querySelectorAll('[data-chart-scale]')];
+        const guides = [...chart.parentElement.querySelectorAll('[data-chart-guide]')];
+        expect(labels).toHaveLength(5);
+        expect(guides).toHaveLength(labels.length);
+        expect(labels[0].parentElement).toHaveAttribute('data-chart-scale-band', 'hero');
+        expect(guides[0].ownerSVGElement).toHaveAttribute('data-chart-scale-band', 'hero');
+    });
+
+    it('uses a 2px directional line and matching 22 percent gradient', async () => {
+        mount(async () => ({ prices: {} }), { behind: true });
+        const up = await screen.findByRole('img', { name: /Range high .*, low .*/ });
+        const upLines = [...up.parentElement.querySelectorAll('polyline[data-chart-tone="up"]')];
+        const upGradient = up.querySelector('linearGradient[data-chart-fill-tone="up"]');
+        expect(upLines).not.toHaveLength(0);
+        expect(upLines.every((line) => line.getAttribute('stroke') === 'var(--xc-hero-chart-up)')).toBe(true);
+        expect(upLines.every((line) => line.getAttribute('stroke-width') === '2')).toBe(true);
+        expect(upGradient.querySelector('stop').getAttribute('stop-opacity')).toBe('var(--xc-hero-chart-fill-opacity)');
+        expect([...upGradient.querySelectorAll('stop')].every((stop) => stop.getAttribute('stop-color') === 'var(--xc-hero-chart-up)')).toBe(true);
+
+        cleanup();
+        mount(async () => ({ prices: {} }), { behind: true }, [...SPARKLINE].reverse());
+        const down = await screen.findByRole('img', { name: /Range high .*, low .*/ });
+        const downLines = [...down.parentElement.querySelectorAll('polyline[data-chart-tone="down"]')];
+        const downGradient = down.querySelector('linearGradient[data-chart-fill-tone="down"]');
+        expect(downLines).not.toHaveLength(0);
+        expect(downLines.every((line) => line.getAttribute('stroke') === 'var(--xc-hero-chart-down)')).toBe(true);
+        expect([...downGradient.querySelectorAll('stop')].every((stop) => stop.getAttribute('stop-color') === 'var(--xc-hero-chart-down)')).toBe(true);
+    });
+
     it('labels the portfolio range in the selected coin unit', async () => {
         mount(async () => ({ prices: {} }), {
             behind: true,

@@ -104,7 +104,7 @@ describe('navigation route highlighting', () => {
             markets: 'Exchange (DEX)',
             'market-activity': 'Marketplace',
             'dispensers-list': 'Dispensers',
-            'bet-markets': 'Betting markets',
+            'bet-markets': 'Prediction markets',
             'governance-polls': 'Governance',
             'staking-dashboard': 'Staking',
             'contracts-list': 'Contracts',
@@ -331,8 +331,8 @@ describe('navigation Tab order', () => {
         screen.getByRole('button', { name: 'Before navigation' }).focus();
 
         const order = [
-            'Open the wallet menu', 'Home', 'History', 'Send', 'Receive',
-            'My Tokens', 'Exchange (DEX)', 'Marketplace', 'Dispensers', 'Betting markets',
+            'Open the wallet menu', 'Home', 'Send', 'Receive', 'My Tokens', 'History',
+            'Exchange (DEX)', 'Marketplace', 'Dispensers', 'Prediction markets',
             'Governance', 'Staking', 'Contracts', 'My Agents', 'Messaging', 'Contacts',
             'Settings', 'Lock wallet',
             'After navigation',

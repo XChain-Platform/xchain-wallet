@@ -385,7 +385,7 @@ export function formatDisplayAmount(value, locale) {
 const DECODED_QUANTITY_LABEL = new RegExp([
     'amount', 'quantity', 'supply', 'price', 'escrow', 'pool', 'fee\\b',
     '^stake$', '^value$', '^items$', '^give$', '^get$', '^(?:burn|drop) \\d+$',
-    '^minimum bet$', '^mint now$', '^initial mint$', '^max mint per', '^estimated fills$',
+    '^minimum purchase$', '^mint now$', '^initial mint$', '^max mint per', '^estimated fills$',
     '^gas limit$', '^cooldown blocks$', '^refill escrow by$', '^buyer pays',
 ].join('|'), 'i');
 

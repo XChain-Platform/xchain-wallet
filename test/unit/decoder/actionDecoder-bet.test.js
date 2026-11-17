@@ -31,10 +31,10 @@ describe('decodeAction BET', () => {
 
         it('summarises the stake, outcome and market', () => {
             const d = decode(params);
-            expect(d.summary).toBe('Bet 10.5 on outcome 1 of market 2343');
+            expect(d.summary).toBe('Buy 10.5 of outcome 1 in market 2343');
         });
 
-        it('warns that bets are final and that odds are not fixed', () => {
+        it('warns that purchases are final and that odds are not fixed', () => {
             const w = decode(params).warnings.join(' ');
             expect(w).toContain('final');
             expect(w).toContain('parimutuel');
@@ -62,14 +62,14 @@ describe('decodeAction BET', () => {
             const bet = decode({ version: '2', feedActionIndex: '77', outcome: '0', amount: '5' });
             expect(resolve.summary).not.toBe(bet.summary);
             expect(resolve.summary.startsWith('Resolve')).toBe(true);
-            expect(bet.summary.startsWith('Bet')).toBe(true);
+            expect(bet.summary.startsWith('Buy')).toBe(true);
         });
     });
 
     describe('v1 cancel', () => {
-        it('says every bet is refunded and the market ends', () => {
+        it('says every position is refunded and the market ends', () => {
             const d = decode({ version: '1', feedActionIndex: '99' });
-            expect(d.summary).toBe('Cancel market 99 and refund every bet');
+            expect(d.summary).toBe('Cancel market 99 and refund every position');
             expect(d.warnings.join(' ')).toContain('refunded in full');
         });
     });
@@ -80,8 +80,8 @@ describe('decodeAction BET', () => {
             fee: '2.00', deadline: '1800000000', refundWindow: '3600',
         };
 
-        it('summarises the market and its wager token', () => {
-            expect(decode(params).summary).toBe('Open a betting market on XCHAIN: Will it rain?');
+        it('summarises the market and its position token', () => {
+            expect(decode(params).summary).toBe('Open a prediction market on XCHAIN: Will it rain?');
         });
 
         it('labels FEE as the ORACLE percent, keeping it distinct from the market duration fee', () => {
@@ -102,13 +102,13 @@ describe('decodeAction BET', () => {
 
         it('treats a version-less params object as a create (only creates carry a label)', () => {
             const d = decode({ label: 'No version field', outcomes: 'A,B', tick: 'T' });
-            expect(d.summary).toContain('Open a betting market');
+            expect(d.summary).toContain('Open a prediction market');
         });
     });
 
     it('reads the uppercase wire spelling too, for pasted or imported raw actions', () => {
         const d = decode({ VERSION: '2', FEED_ACTION_INDEX: '2343', OUTCOME: '1', AMOUNT: '4' });
-        expect(d.summary).toBe('Bet 4 on outcome 1 of market 2343');
+        expect(d.summary).toBe('Buy 4 of outcome 1 in market 2343');
     });
 
     it('flags a memo carrying the protocol field separators', () => {
@@ -120,6 +120,6 @@ describe('decodeAction BET', () => {
         // With no registry the chainId itself is the fallback label, matching every
         // other decoder branch.
         const d = decodeAction({ action: 'BET', params: { version: '1', feedActionIndex: '5' }, chainId: 'bitcoin-regtest', chainRegistry: null });
-        expect(d.summary).toBe('Cancel market 5 and refund every bet on bitcoin-regtest');
+        expect(d.summary).toBe('Cancel market 5 and refund every position on bitcoin-regtest');
     });
 });

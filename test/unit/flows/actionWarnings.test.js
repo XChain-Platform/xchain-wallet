@@ -158,7 +158,7 @@ describe('ACTION_WARNINGS registry', () => {
             'New XChain actions with this token are rejected until the resume block.',
         ]);
         expect(actionWarningLines(['MARKET_CREATE']).map((item) => item.text)).toEqual([
-            "You're the oracle: resolve or cancel it, or bettors are refunded on your public record.",
+            "You're the oracle: resolve or cancel it, or participants are refunded on your record.",
         ]);
     });
 

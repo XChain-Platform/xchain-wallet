@@ -66,11 +66,11 @@ function emptyViewState(view, openOnly, hasBets) {
     const behindFilter = openOnly ? ' Set Status to All markets to see settled ones.' : '';
     if (view === 'bets') {
         if (hasBets) {
-            return { title: 'No bets on these markets', body: `Your bets are on markets outside this network or filter.${behindFilter}` };
+            return { title: 'No positions in these markets', body: `Your positions are in markets outside this network or filter.${behindFilter}` };
         }
-        return { title: 'No bets yet', body: `Markets this wallet has bet on appear here.${behindFilter}` };
+        return { title: 'No predictions yet', body: `Markets where this wallet buys a position appear here.${behindFilter}` };
     }
-    return { title: 'No markets yet', body: `Betting markets created by this wallet appear here.${behindFilter}` };
+    return { title: 'No markets yet', body: `Prediction markets created by this wallet appear here.${behindFilter}` };
 }
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -213,7 +213,7 @@ export function BetFeedsList({
                 else setNoChain(true);
             })
             .catch((err) => {
-                if (!cancelled) setError(userFacingMessage(err, 'Could not load betting addresses. Try again.'));
+                if (!cancelled) setError(userFacingMessage(err, 'Could not load prediction market addresses. Try again.'));
             });
         return () => { cancelled = true; };
     }, [walletId, messaging, betChainIds, addressesReload, listShown]);
@@ -284,7 +284,7 @@ export function BetFeedsList({
                     // are still the best thing known about the chain, and
                     // replacing them with an error would punish a momentary blip.
                     if (cancelled || requestId !== latestRequestId) return;
-                    if (clear) setError(userFacingMessage(err, 'Could not load betting markets. Try again.'));
+                    if (clear) setError(userFacingMessage(err, 'Could not load prediction markets. Try again.'));
                 });
         };
 
@@ -353,22 +353,22 @@ export function BetFeedsList({
     const header = (
         <PageHeader
             onBack={onBack}
-            title="Bet Markets"
+            title="Prediction markets"
             trailing={chainId ? (
                 <>
                     <ListFilterMenu
                         query={query}
                         onQueryChange={setQuery}
                         active={filterOn}
-                        label="Filter bet markets"
+                        label="Filter prediction markets"
                         searchPlaceholder="Search"
-                        searchLabel="Search bet markets"
+                        searchLabel="Search prediction markets"
                     >
                         {/* The standard Network field opens the full-screen
                             network list (operator ruling 2026-11-13). */}
                         <NetworkField
                             label="Network"
-                            help="Shows the bet markets on the network you pick."
+                            help="Shows the prediction markets on the network you pick."
                             size="md"
                             value={chainId}
                             onChange={setChainId}
@@ -378,12 +378,12 @@ export function BetFeedsList({
                         />
                         <Select
                             label="Status"
-                            help="Shows only the markets still taking bets, or every market."
+                            help="Shows only markets where positions are available, or every market."
                             size="md"
                             value={statusFilter}
                             onChange={(event) => setStatusFilter(event.target.value)}
                         >
-                            <Select.Option value="open" icon={<Icon.PlayIcon />}>Taking bets</Select.Option>
+                            <Select.Option value="open" icon={<Icon.PlayIcon />}>Positions available</Select.Option>
                             <Select.Option value="all" icon={<Icon.ListIcon />}>All markets</Select.Option>
                         </Select>
                         <Select
@@ -427,8 +427,8 @@ export function BetFeedsList({
         return wrap(
             <ListPage>
                 <EmptyState
-                    title="No betting address"
-                    body="Betting requires an address on a supported network."
+                    title="No prediction market address"
+                    body="Prediction markets require an address on a supported network."
                 />
             </ListPage>,
         );
@@ -436,8 +436,8 @@ export function BetFeedsList({
     if (!chainId && !error) {
         return wrap(
             <ListPage>
-                <div role="status" aria-label="Loading betting addresses" aria-busy="true">
-                    Loading betting addresses…
+                <div role="status" aria-label="Loading prediction market addresses" aria-busy="true">
+                    Loading prediction market addresses…
                 </div>
             </ListPage>,
         );
@@ -486,7 +486,7 @@ export function BetFeedsList({
         emptyState = (
             <EmptyState
                 title="No markets"
-                body={openOnly ? 'No markets are taking bets on this network right now.' : 'Markets created on this network appear here.'}
+                body={openOnly ? 'No markets offer positions on this network right now.' : 'Markets created on this network appear here.'}
             />
         );
     } else if (inView && inView.length === 0) {
@@ -500,7 +500,7 @@ export function BetFeedsList({
             {emptyState}
             {shown && shown.length > 0 ? (
                 <div className={local.cardArea}>
-                    <ul className={local.marketList} aria-label="Bet markets" data-xc-split-list={twoPanel ? '' : undefined}>
+                    <ul className={local.marketList} aria-label="Prediction markets" data-xc-split-list={twoPanel ? '' : undefined}>
                         {shown.map(card)}
                     </ul>
                 </div>
@@ -520,8 +520,8 @@ export function BetFeedsList({
         );
     } else if (!liveRows || betsPending) {
         notice = (
-            <div role="status" aria-label="Loading betting markets" aria-busy="true">
-                Loading betting markets…
+            <div role="status" aria-label="Loading prediction markets" aria-busy="true">
+                Loading prediction markets…
             </div>
         );
     } else if (view === 'bets' && walletBets.error) {
@@ -535,10 +535,10 @@ export function BetFeedsList({
     const tabsToolbar = (
         <div className={`${local.toolbarRow} ${local.toolbarActions}`}>
             <Tabs
-                aria-label="Bet market views"
+                aria-label="Prediction market views"
                 items={[
                     { id: 'all', label: <span className={local.tabLabel}><Icon.GridIcon />All</span> },
-                    { id: 'bets', label: <span className={local.tabLabel}><Icon.UserIcon />My bets</span> },
+                    { id: 'bets', label: <span className={local.tabLabel}><Icon.UserIcon />My predictions</span> },
                     { id: 'markets', label: <span className={local.tabLabel}><Icon.MarketIcon />My markets</span> },
                 ]}
                 value={view}
@@ -563,13 +563,13 @@ export function BetFeedsList({
                 <ListDetailSplit
                     measureRef={layoutRef}
                     storageKey="bets"
-                    resizeLabel="Resize the bet markets list"
-                    resizeHint="Drag to resize the bet markets list, or press Enter to reset."
+                    resizeLabel="Resize the prediction markets list"
+                    resizeHint="Drag to resize the prediction markets list, or press Enter to reset."
                     layoutName="two-panel"
                     listHeader={tabsToolbar}
                     list={listPage}
-                    listLabel="Bet markets"
-                    detailLabel={shownMarket?.label || 'Bet market'}
+                    listLabel="Prediction markets"
+                    detailLabel={shownMarket?.label || 'Prediction market'}
                     detailBusy={!shownRef}
                     detailFallback={fallback}
                     detail={shownRef ? (

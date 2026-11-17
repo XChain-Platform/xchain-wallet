@@ -41,7 +41,7 @@ const VERB_MAP = /** @type {Record<string, string>} */ ({
     // BET is the whole market lifecycle, not just wagering: v0 opens a
     // market, v2 places a bet, v3 resolves one to an outcome, v4 cancels
     // and refunds. A bare "place bets" would understate the grant.
-    BET: 'open betting markets and place bets',
+    BET: 'open prediction markets and buy positions',
     BROADCAST: 'publish broadcasts',
     CALLBACK: 'run callbacks',
     COINPAY: 'take coin payments',

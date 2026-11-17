@@ -95,7 +95,7 @@ const messages = {
     'components.leftNav.exchangeDex': 'Exchange (DEX)',
     'components.leftNav.myTokens': 'My Tokens',
     'components.leftNav.governance': 'Governance',
-    'components.leftNav.bettingMarkets': 'Betting markets',
+    'components.leftNav.bettingMarkets': 'Prediction markets',
     'components.leftNav.footerActions': 'Wallet controls',
     'components.leftNav.openCommandPalette': 'Open the wallet menu',
     'components.leftNav.searchCmdCtrlK': 'Search the wallet menu (Cmd/Ctrl+K)',

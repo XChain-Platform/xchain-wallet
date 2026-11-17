@@ -56,13 +56,13 @@
 
 @media (hover: hover) and (pointer: fine) {
     .interactive[data-xc-split-row]:hover:not(:disabled) {
-        background: color-mix(in srgb, var(--xc-text) 10%, transparent);
+        background: var(--xc-row-hover-bg);
         box-shadow: none;
     }
 }
 
 .interactive[data-xc-split-row][aria-current='true'] {
-    background: color-mix(in srgb, var(--xc-accent-primary) 20%, transparent);
+    background: var(--xc-row-active-bg);
     box-shadow: none;
     font-weight: inherit;
 }

@@ -219,7 +219,7 @@ try {
     await win.reload();
 
     await dismissIntroCarousel(win);
-    await win.getByRole('button', { name: 'Try in demo mode' }).click();
+    await win.getByRole('button', { name: 'Try Demo' }).click();
     await unlockedShell(win).waitFor({ state: 'visible', timeout: 120_000 });
 
     await openSettings(win);

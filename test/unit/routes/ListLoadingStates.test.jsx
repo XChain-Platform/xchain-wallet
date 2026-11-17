@@ -182,7 +182,7 @@ describe('list first-load states', () => {
         expect(document.body.textContent).not.toContain('transport detail');
     });
 
-    // My bets is a tab of Bet Markets (view 'bets').
+    // My bets is a tab of Prediction markets (view 'bets').
     it('shows a busy state and retries a plain My bets failure', async () => {
         const firstLoad = deferred();
         const bets = vi.fn()
@@ -197,14 +197,14 @@ describe('list first-load states', () => {
         }, { view: 'bets', onOpenMarket: () => {} });
 
         // My bets waits on the wallet's bets under the list's own loading line.
-        expect(await screen.findByRole('status', { name: 'Loading betting markets' })).toBeInTheDocument();
+        expect(await screen.findByRole('status', { name: 'Loading prediction markets' })).toBeInTheDocument();
         await act(async () => firstLoad.reject(new Error('private transport detail')));
-        expect(await screen.findByText('Could not load bets for any of your addresses.')).toBeInTheDocument();
+        expect(await screen.findByText('Could not load positions for any of your addresses.')).toBeInTheDocument();
         expect(document.body).not.toHaveTextContent('private transport detail');
 
         fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
         await waitFor(() => expect(bets).toHaveBeenCalledTimes(2));
-        expect(await screen.findByText('No bets yet')).toBeInTheDocument();
+        expect(await screen.findByText('No predictions yet')).toBeInTheDocument();
     });
 
     // G91: a failed read shows the plain empty state; the reachability

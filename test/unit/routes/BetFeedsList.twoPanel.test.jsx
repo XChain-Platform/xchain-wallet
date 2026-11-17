@@ -84,8 +84,8 @@ describe('BetFeedsList wide split', () => {
         expect(screen.getByRole('button', { name: 'First market' })).toHaveAttribute('aria-current', 'true');
         expect(screen.getByRole('button', { name: 'First market' }).closest('li')).toHaveAttribute('data-selected', 'true');
         expect(screen.getByRole('button', { name: 'Second market' })).not.toHaveAttribute('aria-current');
-        expect(screen.getByRole('region', { name: 'Bet markets' })).toContainElement(screen.getByRole('list', { name: 'Bet markets' }));
-        expect(screen.getByRole('region', { name: 'Bet markets' })).not.toContainElement(screen.getByRole('tablist', { name: 'Bet market views' }));
+        expect(screen.getByRole('region', { name: 'Prediction markets' })).toContainElement(screen.getByRole('list', { name: 'Prediction markets' }));
+        expect(screen.getByRole('region', { name: 'Prediction markets' })).not.toContainElement(screen.getByRole('tablist', { name: 'Prediction market views' }));
         await waitFor(() => expect(onSelectMarket).toHaveBeenCalledWith({ chainId: CHAIN, feedIndex: 7 }));
     });
 
@@ -101,7 +101,7 @@ describe('BetFeedsList wide split', () => {
         expect(onOpenMarket).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: 'Second market' })).toHaveAttribute('aria-current', 'true');
 
-        fireEvent.keyDown(screen.getByRole('separator', { name: 'Resize the bet markets list' }), { key: 'ArrowLeft' });
+        fireEvent.keyDown(screen.getByRole('separator', { name: 'Resize the prediction markets list' }), { key: 'ArrowLeft' });
         const prefs = JSON.parse(localStorage.getItem('xc:displayPrefs'));
         expect(prefs.panelSplits.bets).toBeGreaterThan(0);
     });
@@ -114,8 +114,9 @@ describe('BetFeedsList wide split', () => {
         fireEvent.click(screen.getByRole('tab', { name: 'My markets' }));
 
         expect(await screen.findByRole('heading', { name: 'No markets yet' })).toBeInTheDocument();
-        expect(screen.getByRole('tablist', { name: 'Bet market views' })).toBeInTheDocument();
-        expect(screen.getByRole('separator', { name: 'Resize the bet markets list' })).toBeInTheDocument();
+        expect(screen.getByText(/^Prediction markets created by this wallet appear here\./)).toBeInTheDocument();
+        expect(screen.getByRole('tablist', { name: 'Prediction market views' })).toBeInTheDocument();
+        expect(screen.getByRole('separator', { name: 'Resize the prediction markets list' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'Detail 7' })).toBeInTheDocument();
         expect(screen.queryByRole('heading', { name: 'Detail 8' })).toBeNull();
 
@@ -171,7 +172,7 @@ describe('BetFeedsList narrow behavior', () => {
         });
 
         expect(await screen.findByRole('heading', { name: 'Market 8' })).toBeInTheDocument();
-        expect(screen.queryByRole('list', { name: 'Bet markets' })).toBeNull();
+        expect(screen.queryByRole('list', { name: 'Prediction markets' })).toBeNull();
         expect(screen.queryByRole('separator')).toBeNull();
         expect(messaging.getAddressesByChain).not.toHaveBeenCalled();
         expect(messaging.betFeeds).not.toHaveBeenCalled();

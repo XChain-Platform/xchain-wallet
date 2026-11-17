@@ -52,6 +52,7 @@ import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetai
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 beforeEach(() => {
+    window.localStorage.removeItem('xc:balanceUnit');
     tickFiatRate.current = null;
     consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     window.addEventListener('error', preventExpectedError);
@@ -108,6 +109,8 @@ function renderDetail(walletId, { assetInfo, tokenProps } = {}) {
 }
 
 function renderNativeDetail(walletId = 'real-wallet') {
+    const mine = 'bc1qmine';
+    const other = 'bc1qother';
     const messaging = {
         getSettings: vi.fn().mockResolvedValue({ fiatCurrency: 'EUR' }),
         getNativePricesRequest: vi.fn().mockImplementation(async (request) => ({
@@ -121,7 +124,14 @@ function renderNativeDetail(walletId = 'real-wallet') {
                 },
             },
         })),
-        getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [] }),
+        getAddressesByChain: vi.fn().mockResolvedValue({ [MAINNET_CHAIN]: [{ address: mine }] }),
+        getAddressHistory: vi.fn().mockResolvedValue([
+            {
+                action_index: '500.1', action: 'SEND', tick: 'BTC', amount: '0.5',
+                source: other, destination: mine, timestamp: Math.floor(Date.now() / 1000) - 2 * 86_400,
+                block_index: 500,
+            },
+        ]),
     };
     render(React.createElement(
         MessagingProvider,
@@ -347,24 +357,42 @@ describe('TokenDetail price history', () => {
         expect(estimate).toHaveTextContent(/€80,000\.00/);
         expect(estimate).not.toHaveTextContent(/€100\.00/);
         // The hero's swap button shows the same live value in fiat.
-        fireEvent.click(within(hero).getByRole('button', { name: 'Show in EUR' }));
+        const showFiat = within(hero).queryByRole('button', { name: 'Show in EUR' });
+        if (showFiat) fireEvent.click(showFiat);
         expect(hero).toHaveTextContent(/80,000\.00/);
         expect(within(hero).queryByText(/100\.00/)).toBeNull();
     });
 
-    it('updates the chart scale with the balance hero unit', async () => {
+    it('switches the hero, chart series, range, pill, and scale with the selected unit', async () => {
         renderNativeDetail();
         const hero = await screen.findByRole('region', { name: 'BTC' });
         const chart = await chartFor('1W');
         const scaleLabels = () => [...chart.parentElement.querySelectorAll('[data-chart-scale]')]
             .map((label) => label.textContent);
 
-        expect(scaleLabels()).toEqual(['2 BTC', '1.98 BTC', '1.95 BTC']);
-        expect(chart).toHaveAccessibleName(/Range high 2 BTC, low 1\.95 BTC/);
+        expect(hero).toHaveTextContent('80,000.00');
+        expect(screen.getByRole('region', { name: 'Value chart' })).toBeTruthy();
+        expect(scaleLabels()).toHaveLength(5);
+        expect(scaleLabels().every((label) => label.startsWith('€'))).toBe(true);
+        expect(chart.parentElement.querySelectorAll('[data-chart-scale-band="hero"]')).toHaveLength(2);
+        expect(chart.parentElement.querySelector('svg[data-chart-scale-band="hero"] [data-chart-guide]')).toBeTruthy();
+        expect(chart.querySelector('polyline[data-chart-tone="up"]')).toHaveAttribute('stroke', 'var(--xc-hero-chart-up)');
+        expect(chart.querySelector('linearGradient[data-chart-fill-tone="up"] stop')).toHaveAttribute('stop-opacity', 'var(--xc-hero-chart-fill-opacity)');
+        expect(within(hero).getByLabelText(/^1W change\./)).toBeTruthy();
 
+        fireEvent.click(within(hero).getByRole('button', { name: 'Show in BTC' }));
+        await vi.waitFor(() => expect(screen.getByRole('region', { name: 'Balance chart' })).toBeTruthy());
+        expect(within(hero).getByLabelText('2.00000000 BTC')).toBeTruthy();
+        expect(scaleLabels()).toEqual(['2 BTC', '1.88 BTC', '1.75 BTC', '1.63 BTC', '1.5 BTC']);
+        expect(chart).toHaveAccessibleName(/Range high 2 BTC, low 1\.5 BTC/);
+        expect(within(hero).queryByLabelText(/^1W change\./)).toBeNull();
+
+        fireEvent.click(screen.getByRole('tab', { name: '1M' }));
+        expect(await chartFor('1M')).toHaveAccessibleName(/Range high 2 BTC, low 1\.5 BTC/);
         fireEvent.click(within(hero).getByRole('button', { name: 'Show in EUR' }));
-        await vi.waitFor(() => expect(scaleLabels()).toEqual(['€80K', '€79K', '€78K']));
-        expect(chart).toHaveAccessibleName(/Range high €80K, low €78K/);
+        expect(within(screen.getByRole('tablist', { name: 'Chart range' })).getByRole('tab', { name: '1M' }))
+            .toHaveAttribute('aria-selected', 'true');
+        await vi.waitFor(() => expect(scaleLabels().every((label) => label.startsWith('€'))).toBe(true));
     });
 
     it('loads a real native daily range lazily and draws its recorded history', async () => {
@@ -448,7 +476,7 @@ describe('TokenDetail price history', () => {
 
     it('draws selectable synthesized ranges only for the demo wallet', async () => {
         renderDetail('demo-wallet');
-        const chart = await screen.findByRole('img', { name: /^Price trend/ });
+        const chart = await screen.findByRole('img', { name: /^Balance trend/ });
         expect(chart.querySelector('polyline').getAttribute('points').length).toBeGreaterThan(10);
         const ranges = screen.getByRole('tablist', { name: 'Chart range' });
         expect(ranges).toBeTruthy();
@@ -533,7 +561,7 @@ describe('TokenDetail price history', () => {
 
         widgetFailure.current = null;
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-        expect(await screen.findByRole('img', { name: /^Price trend/ })).toBeInTheDocument();
+        expect(await screen.findByRole('img', { name: /^Balance trend/ })).toBeInTheDocument();
     });
 
     it('offers and saves a token alert when the token has a market price', async () => {

@@ -57,7 +57,7 @@ const PALETTE_ROUTES = [
     'Trade at the price you set', 'Settle a matched order', 'Swap across chains',
     'Limit order across chains', 'Check a signed message',
     'Guided issuance wizard', 'Your saved addresses', 'Manage your addresses', 'Your staking positions',
-    'Polls and voting', 'Browse betting markets', 'Smart contracts', 'Encrypted inbox', 'Markets and orders',
+    'Polls and voting', 'Browse prediction markets', 'Smart contracts', 'Encrypted inbox', 'Markets and orders',
     'Address and token lists', 'Coin payments you still owe', 'Find open dispensers',
 ];
 

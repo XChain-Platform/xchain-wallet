@@ -162,7 +162,7 @@ describe('OracleRecord (P8)', () => {
         expect(details).toMatch(/Left to expire with no result/);
     });
 
-    it('shows fees earned per wager token', async () => {
+    it('shows fees earned per position token', async () => {
         const { messaging } = harness();
         const utils = await mount(OracleRecord, messaging, { chainId: CHAIN, address: ORACLE });
         const body = await openTab(utils, 'Details');
@@ -288,7 +288,7 @@ describe('OracleRecord layout: identity card, three tabs, one market list', () =
         const { utils } = await mountAll();
         const card = utils.container.querySelector('[data-oracle-identity]');
         expect(card).not.toBeNull();
-        expect(card.textContent).toMatch(/Betting oracle on Bitcoin/);
+        expect(card.textContent).toMatch(/Prediction market oracle on Bitcoin/);
         expect(card.textContent).toMatch(/6 markets/);
         // The chart, its range chips and the resolved-count figure are gone.
         expect(utils.container.querySelector('svg[role="img"]')).toBeNull();
@@ -317,6 +317,7 @@ describe('OracleRecord layout: identity card, three tabs, one market list', () =
         expect(utils.queryByRole('button', { name: 'Filter markets' })).toBeNull();
         await openTab(utils, 'Details');
         expect(utils.queryByRole('button', { name: 'Filter markets' })).toBeNull();
+        expect(text(utils)).toMatch(/Nothing is staked behind a prediction market/);
         await openTab(utils, 'Markets');
         const filter = utils.getByRole('button', { name: 'Filter markets' });
         // It sits in the page header's toolbar, not in the panel.

@@ -87,7 +87,7 @@ export const TOKEN_GROUPS = [
     {
         // A bet market's outcome marks and share fills: one palette for both
         // themes, each hue holding a white letter at 4.5:1.
-        title: 'Bet outcomes',
+        title: 'Prediction outcomes',
         tokens: [
             color('--xc-outcome-yes', 'Yes outcome mark (thumbs up)'),
             color('--xc-outcome-no', 'No outcome mark (thumbs down)'),

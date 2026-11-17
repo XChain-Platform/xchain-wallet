@@ -101,7 +101,7 @@ describe('Open a market form rulings', () => {
         for (const el of utils.container.querySelectorAll('label, button')) {
             expect(el.textContent).not.toMatch(/\(optional\)/i);
         }
-        for (const lbl of ['Your Fee', 'Smallest Bet Allowed', 'Description', 'Category']) {
+        for (const lbl of ['Your Fee', 'Minimum Purchase', 'Description', 'Category']) {
             const label = [...utils.container.querySelectorAll('label')].find((l) => l.textContent.trim().startsWith(lbl));
             expect(label?.parentElement?.querySelector('[data-optional-pill]'), `${lbl} Optional pill`).toBeTruthy();
         }
@@ -116,7 +116,7 @@ describe('Open a market form rulings', () => {
         expect(tipFor(utils, 'From address')).toMatch(/only one that can publish the result/);
         // Field help only; that the terms are permanent is the confirm
         // screen's warnings card (actionWarnings MARKET_CREATE).
-        expect(tipFor(utils, 'Question')).toBe('The question bettors back an outcome of, such as who wins a match.');
+        expect(tipFor(utils, 'Question')).toBe('The question participants choose an outcome for, such as who wins a match.');
         const outcomesLabel = [...utils.container.querySelectorAll('span')].find((s) => s.textContent.trim() === 'Outcomes');
         expect(outcomesLabel?.parentElement?.querySelector('[role="tooltip"]')?.textContent || '').toMatch(/Exactly one outcome can win/);
         expect(tipFor(utils, 'Closes')).toBeTruthy();

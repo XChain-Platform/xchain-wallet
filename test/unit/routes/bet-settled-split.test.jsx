@@ -139,7 +139,7 @@ describe('splitFromBets', () => {
 
     // Session 25,. Market #1198 was resolved `resolved_void` because it
     // held no accepted bets at all, and its page still read "0: Yes 100
-    // (100.0%, 1 bet)" - the rejected bet from the deadline race, counted as a
+    // (100.0%, 1 position)" - the rejected bet from the deadline race, counted as a
     // stake. A rejected BET is a real transaction that paid real fees and
     // staked nothing.
     it('leaves out bets the chain rejected, which staked nothing', () => {
@@ -201,7 +201,7 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         const settlement = utils.getByTestId('bet-settlement');
 
         expect(settlement.textContent).toContain('Winning outcome: "Yes" (outcome 0)');
-        expect(settlement.textContent).toContain('Winning bets settled as won');
+        expect(settlement.textContent).toContain('Winning positions settled as won');
         expect(settlement.textContent).toContain('nothing to claim');
         // Activity is the bet rows alone; the winner is named in the
         // settlement above, not in a status-history footer.
@@ -246,12 +246,12 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         expect(text).toContain('Final split');
         expect(text).not.toContain('Current split');
         // The claim the defect made, in the exact words a bettor read.
-        expect(text).not.toContain('no bets yet');
+        expect(text).not.toContain('no positions yet');
         expect(text).toContain('300');
         expect(text).toContain('100');
         // Result's final split: each row names its pool and its bets.
         const rows = [...utils.container.querySelectorAll('[data-outcome-results] li')].map((li) => li.textContent);
-        expect(rows.some((row) => /\b1 bet(?!s)/.test(row))).toBe(true);
+        expect(rows.some((row) => /\b1 position(?!s)/.test(row))).toBe(true);
 
         const betsCall = calls.find((c) => c.method === 'bets');
         expect(betsCall?.args).toMatchObject({ chainId: CHAIN, query: '1268', type: 'feed' });
@@ -278,11 +278,11 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         // share, then "pool, bets".
         const rows = [...utils.container.querySelectorAll('[data-outcome-results] li')].map((li) => li.textContent);
         expect(rows).toEqual([
-            '0: YesWinner90.0%900 XCHAIN, 9 bets',
-            '1: No10.0%100 XCHAIN, 1 bet',
+            '0: YesWinner90.0%Total in Yes: 900 XCHAIN, 9 positions',
+            '1: No10.0%Total in No: 100 XCHAIN, 1 position',
         ]);
         // The market's bet rows are now read for every market (the card's chart, Activity
-        // and My Bets draw from them); the harness bets total 400, so the explorer's
+        // and My Predictions draw from them); the harness bets total 400, so the explorer's
         // 900 / 100 aggregate staying on screen is what proves it was not replaced.
         expect(text).not.toContain('(75.0%');
         expect(calls.some((call) => call.method === 'bets' && call.args?.type === 'feed')).toBe(true);
@@ -299,15 +299,15 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
 
         // A live market opens on its outcome list, each row with its staked pool.
         expect(text).not.toContain('Final split');
-        const yes = utils.getByRole('button', { name: 'Bet on Yes, 100 percent, 300 XCHAIN staked' });
-        expect(yes.textContent).toBe('Yes300 XCHAIN staked100%');
+        const yes = utils.getByRole('button', { name: 'Buy Yes, 100 percent, 300 XCHAIN total' });
+        expect(yes.textContent).toBe('Yes300 XCHAIN total100%');
         // The feed read now serves the card's chart on a live market too, but it
         // never replaces the split: the explorer's 300 pool is the one on screen.
         expect(text).not.toContain('(75.0%');
         expect(calls.some((c) => c.method === 'bets' && c.args?.type === 'feed')).toBe(true);
     });
 
-    it('says "no bets" rather than "no bets yet" on a market that really took none', async () => {
+    it('says "no positions" rather than "no positions yet" on a market that really took none', async () => {
         const { messaging } = harness({
             betFeed: () => Promise.resolve({ data: [feed('resolved_void')] }),
             bets: () => Promise.resolve({ data: [] }),
@@ -315,12 +315,12 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         const utils = await openMarket(messaging);
         const text = utils.container.textContent;
 
-        expect(text).toContain('no bets');
-        expect(text).not.toContain('no bets yet');
+        expect(text).toContain('no positions');
+        expect(text).not.toContain('no positions yet');
     });
 
     // Same family, other surface: the oracle's own console kept counting down
-    // on a market that was over. Session 23 read "Betting closes in 1h 12m ·
+    // on a market that was over. Session 23 read "Purchases close in 1h 12m ·
     // refunds everyone in 1d 1h if unresolved" on the line under the word
     // `cancelled`, minutes after the refunds had already landed.
     it('OracleConsole drops the countdown once the market is terminal', async () => {
@@ -346,10 +346,10 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         const cancelled = cards.find((d) => /#1268/.test(d.textContent));
         const closed = cards.find((d) => /#1193/.test(d.textContent));
 
-        expect(cancelled.textContent).not.toContain('Betting closes');
+        expect(cancelled.textContent).not.toContain('Purchases close');
         expect(cancelled.textContent).not.toContain('if unresolved');
         // The live one still needs both clocks: acting inside them is the job.
-        expect(closed.textContent).toContain('Betting closes');
+        expect(closed.textContent).toContain('Purchases close');
         expect(closed.textContent).toContain('if unresolved');
     });
 
@@ -362,14 +362,14 @@ describe('BetFeedDetail: a settled market reports what happened', () => {
         const utils = await openMarket(messaging);
         const text = utils.container.textContent;
 
-        expect(text).toContain('more than 500 bets');
-        expect(text).toContain('250 bets');   // the split it could see, still shown
+        expect(text).toContain('more than 500 positions');
+        expect(text).toContain('250 positions');   // the split it could see, still shown
     });
 
     it('says nothing about a cap when the whole market fits in one read', async () => {
         const { messaging } = harness();
         const utils = await openMarket(messaging);
-        expect(utils.container.textContent).not.toContain('more than 500 bets');
+        expect(utils.container.textContent).not.toContain('more than 500 positions');
     });
 
     it('falls back to the live rows if the bet read fails, rather than blanking the screen', async () => {

@@ -247,7 +247,13 @@ export const CONFIRM_KINDS = Object.freeze({
     bet: {
         icon: 'target',
         address: 'source',
-        name: ({ decoded }) => (/^open a betting market\b/i.test(String(decoded?.summary || '')) ? detailOf(decoded, /^market$/i) : ''),
+        name: ({ decoded }) => (/^open a prediction market\b/i.test(String(decoded?.summary || '')) ? detailOf(decoded, /^market$/i) : ''),
+        sentence: ({ summary }) => {
+            const amount = summary.amount ? formatDisplayAmount(String(summary.amount)) : '';
+            const tick = String(summary.ticker || '').trim().toUpperCase();
+            const target = neutralizeControlText(String(summary.target || '').trim(), { maxLength: 80 });
+            return amount && tick && target ? `Buy ${amount} ${tick} of ${target}` : null;
+        },
     },
     bridge: { icon: 'migrate', address: 'recipient' },
     batch: { icon: 'grid', address: 'source' },

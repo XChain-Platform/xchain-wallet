@@ -193,7 +193,7 @@
 }
 
 .statusClosing {
-    color: var(--xc-warning-fg);
+    color: var(--xc-warning-text);
     background: color-mix(in srgb, var(--xc-warning) 14%, transparent);
 }
 

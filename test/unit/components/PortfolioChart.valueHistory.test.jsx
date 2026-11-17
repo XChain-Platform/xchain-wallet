@@ -9,7 +9,7 @@
 // holding line.
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
 vi.mock('../../../packages/core/src/flows/demoMode.js', async (importOriginal) => {
@@ -480,10 +480,16 @@ describe('wide Home detail panel', () => {
             getNativePricesRequest: vi.fn(async () => ({ prices: PRICES })),
         };
         renderEmbeddedBtc({ source, messaging });
-        const chart = await screen.findByRole('img', { name: /Range 1W\./ });
-        const label = chart.getAttribute('aria-label');
+        let chart = await screen.findByRole('img', { name: /Range 1W\./ });
+        let label = chart.getAttribute('aria-label');
         // The coin arrived two days ago: the week opens at nothing held and
-        // the coin-denominated hero keeps its unit in the accessible summary.
+        // the fiat hero values that balance at each point's price.
+        expect(label).toMatch(/Start \$0\./);
+        expect(label).toMatch(/End \$[\d.]+K\./);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show in BTC' }));
+        chart = await screen.findByRole('img', { name: /^Balance trend/ });
+        label = chart.getAttribute('aria-label');
         expect(label).toMatch(/Start 0 BTC\./);
         expect(label).toContain('End 1 BTC.');
         expect(messaging.getAddressHistory).not.toHaveBeenCalled();

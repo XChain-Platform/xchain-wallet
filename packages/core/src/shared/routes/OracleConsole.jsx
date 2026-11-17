@@ -55,8 +55,8 @@ function countdown(targetSec, nowSec) {
 }
 
 function marketStatusLabel(status) {
-    if (status === 'open') return 'Taking bets';
-    if (status === 'closed') return 'Betting closed, waiting for your result';
+    if (status === 'open') return 'Positions available';
+    if (status === 'closed') return 'Purchases closed, waiting for your result';
     if (status === 'resolved') return 'Settled';
     if (status === 'resolved_void') return 'Void, everyone refunded';
     if (status === 'cancelled') return 'Cancelled, everyone refunded';
@@ -109,7 +109,7 @@ export function oracleTimingText(feed, nowSec, { waiting = false } = {}) {
             ? `Waiting for your result; refunds everyone ${countdownLabel(feed.expire_at, nowSec)} if unresolved`
             : 'Waiting for your result; the refund window has ended';
     }
-    return `Betting closes ${countdownLabel(feed.deadline, nowSec)}; refunds everyone ${countdownLabel(feed.expire_at, nowSec)} if unresolved`;
+    return `Purchases close ${countdownLabel(feed.deadline, nowSec)}; refunds everyone ${countdownLabel(feed.expire_at, nowSec)} if unresolved`;
 }
 
 /**
@@ -465,10 +465,10 @@ export function useOracleMarketActions({ walletId, demoGuard, onDone }) {
                       + 'queued-transactions banner and only goes out when you broadcast it from there; '
                       + 'the wallet reminds you when the network is back. Do not submit it again.'
                     : result.mode === 'cancel'
-                        ? `Cancel sent for market #${result.feedIndex}. Once the network records it, every open bet is refunded in full.`
+                        ? `Cancel sent for market #${result.feedIndex}. Once the network records it, every open position is refunded in full.`
                         : result.mode === 'edit'
-                            ? `List edit sent for market #${result.feedIndex}. Once the network records it, the new lists apply to future bets.`
-                        : `Result sent for market #${result.feedIndex}. Once the network records it, the pot is paid out and the bets settle.`}
+                            ? `List edit sent for market #${result.feedIndex}. Once the network records it, the new lists apply to future purchases.`
+                            : `Result sent for market #${result.feedIndex}. Once the network records it, the pot is paid out and the positions settle.`}
             </p>
             {result.queued ? null : (
                 <dl className={styles.detailsList}>
@@ -511,7 +511,7 @@ export function useOracleMarketActions({ walletId, demoGuard, onDone }) {
                     <ListField
                         id="oracle-allow-list"
                         label="Allow list"
-                        help="The address list whose members may bet. Leave it to keep the current list, or clear it to remove it. Changes affect future bets only."
+                        help="The address list whose members may buy positions. Leave it to keep the current list, or clear it to remove it. Changes affect future purchases only."
                         placeholder="None set"
                         valueText={editListText(allowList, allowPick, f.allow_list)}
                         onOpenPicker={() => setListPickerFor('allow')}
@@ -521,7 +521,7 @@ export function useOracleMarketActions({ walletId, demoGuard, onDone }) {
                     <ListField
                         id="oracle-block-list"
                         label="Block list"
-                        help="The address list whose members may not bet. Leave it to keep the current list, or clear it to remove it. Changes affect future bets only."
+                        help="The address list whose members may not buy positions. Leave it to keep the current list, or clear it to remove it. Changes affect future purchases only."
                         placeholder="None set"
                         valueText={editListText(blockList, blockPick, f.block_list)}
                         onOpenPicker={() => setListPickerFor('block')}
@@ -707,7 +707,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
             {rows && rows.length === 0 && !error ? (
                 <EmptyState
                     title="No markets yet"
-                    body="Betting markets created by this wallet appear here."
+                    body="Prediction markets created by this wallet appear here."
                 />
             ) : null}
             {actions.receipt}
@@ -729,7 +729,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                             ...(onOpenMarket ? [{
                                 id: 'view',
                                 title: 'View market',
-                                description: 'Open the market page with its bets and result',
+                                description: 'Open the market page with its positions and result',
                                 icon: <Icon.EyeIcon />,
                                 onClick: () => onOpenMarket(f.chainId, f.action_index),
                             }] : []),
@@ -744,7 +744,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                             ...(canCancel ? [{
                                 id: 'cancel',
                                 title: 'Cancel and refund',
-                                description: 'End the market and refund every bet',
+                                description: 'End the market and refund every position',
                                 icon: <Icon.XIcon />,
                                 tone: 'danger',
                                 'aria-expanded': openMode === 'cancel',
@@ -753,7 +753,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
                             ...(canEdit ? [{
                                 id: 'edit',
                                 title: 'Edit lists',
-                                description: 'Change the allow and block lists for bettors',
+                                description: 'Change the allow and block lists for participants',
                                 icon: <Icon.PencilIcon />,
                                 'aria-expanded': openMode === 'edit',
                                 onClick: () => actions.begin(f, 'edit'),
@@ -790,7 +790,7 @@ export function OracleConsole({ walletId, accountId, onOpenMarket, onDuplicate, 
             ) : null}
             {rows && rows.length > 0 ? <p className={styles.hint}>
                 Your record as an oracle is public and tied to this address. Leaving a market unresolved
-                refunds everyone, but it stays visible to anyone deciding whether to bet with you again.
+                refunds everyone, but it stays visible to anyone deciding whether to buy a position with you again.
             </p> : null}
         </ListPage>,
     );

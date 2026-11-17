@@ -77,6 +77,7 @@ const SITES = {
     'shared/routes/DispenserForm.jsx#TokenPicker#1': 'asset',
     'shared/routes/DispenserForm.jsx#TokenField#0': 'token',
     'shared/routes/DispenserForm.jsx#TokenField#1': 'asset',
+    'shared/routes/DispensersList.jsx#QuickSide#0': 'asset',
     'shared/routes/DividendForm.jsx#TokenPicker#0': 'token',
     'shared/routes/DividendForm.jsx#TokenPicker#1': 'token',
     'shared/routes/DividendForm.jsx#TokenField#0': 'token',

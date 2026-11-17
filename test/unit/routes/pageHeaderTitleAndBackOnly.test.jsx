@@ -195,7 +195,7 @@ describe('My dispensers', () => {
 });
 
 // The operator's Messaging header: the filter icon, then New message as a
-// plain plus at the far right (Bet Markets' order); the search spans the
+// plain plus at the far right (Prediction markets' order); the search spans the
 // toolbar row alone and the empty inbox is text only.
 describe('Messaging', () => {
     const inboxMessaging = (overrides = {}) => ({
@@ -227,7 +227,7 @@ describe('Messaging', () => {
         await screen.findByText('No messages yet');
         const compose = screen.getByRole('button', { name: 'New message' });
         const filter = screen.getByRole('button', { name: 'Filter conversations' });
-        // Same order as Bet Markets: filter first, the plus rightmost.
+        // Same order as Prediction markets: filter first, the plus rightmost.
         expect(headerActions('Messaging')).toEqual([filter, compose]);
         expect(compose.textContent.trim()).toBe('');
         expect(compose.title).toBe('New message');

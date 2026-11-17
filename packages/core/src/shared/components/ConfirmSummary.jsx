@@ -62,7 +62,7 @@ const TARGET_MAX = 120;
  */
 
 const IN_VERBS = /^(mint|issue|receive|claim|unstake|redeem|withdraw)$/i;
-const OUT_VERBS = /^(send|destroy|burn|sweep|pay|bet|stake|give|airdrop|dividend|transfer)$/i;
+const OUT_VERBS = /^(send|destroy|burn|sweep|pay|buy|bet|stake|give|airdrop|dividend|transfer)$/i;
 
 /** @param {string} verb */
 export function directionForVerb(verb) {

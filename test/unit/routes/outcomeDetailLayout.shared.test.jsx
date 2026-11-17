@@ -162,7 +162,7 @@ describe('the shared outcome hero', () => {
         expect(screen.getByRole('heading', { level: 2, name: 'Will BTC close above $100k on Dec 31?' })).toBeTruthy();
         expect(lead()).toBe('62%Yes▲ 4 pts 1W');
         // No oracle or its address in the header (walk note on screen 97).
-        expect(hero().querySelector('[data-bet-hero-stats]').textContent).toBe('Pool 100 EXAMPLE · 2 bets');
+        expect(hero().querySelector('[data-bet-hero-stats]').textContent).toBe('Total 100 EXAMPLE · 2 positions');
         // A two-sided market draws the leading side alone, filled.
         expect(hero().querySelectorAll('[data-outcome-line]')).toHaveLength(1);
         expect(hero().querySelector('polygon')).not.toBeNull();
@@ -262,7 +262,7 @@ describe('the shared outcome hero', () => {
         await openBet(OPEN_BET, []);
         expectIdentityCard();
         expect(chips()).toEqual(['Open', 'Closes in 12 days']);
-        expect(hero().querySelector('[data-bet-hero-stats]').textContent).toBe('Pool 100 EXAMPLE · 2 bets');
+        expect(hero().querySelector('[data-bet-hero-stats]').textContent).toBe('Total 100 EXAMPLE · 2 positions');
     });
 
     it('counts an open poll\'s votes and voters from accepted ballots only, and drops the counts when the read is a full page', async () => {
@@ -332,8 +332,8 @@ describe('the 8px rhythm around the tab row (G13)', () => {
 describe('the shared tab strip', () => {
     it('reads Bet | Activity | Details on an open market and Result | Activity | Details once settled', async () => {
         await openBet();
-        expect(sectionTabs('Market sections').map((tab) => tab.textContent)).toEqual(['Bet', 'Activity', 'Details']);
-        expect(screen.getByRole('tab', { name: 'Bet' })).toHaveAttribute('aria-selected', 'true');
+        expect(sectionTabs('Market sections').map((tab) => tab.textContent)).toEqual(['Buy', 'Activity', 'Details']);
+        expect(screen.getByRole('tab', { name: 'Buy' })).toHaveAttribute('aria-selected', 'true');
         expect(panel()).toHaveAttribute('data-outcome-panel', 'bet');
         cleanup();
 
@@ -344,10 +344,10 @@ describe('the shared tab strip', () => {
         expect(within(result).getByTestId('bet-settlement')).toHaveTextContent('Winning outcome: "Yes" (outcome 0)');
         const rows = within(screen.getByRole('region', { name: 'Final split' })).getAllByRole('listitem');
         expect(rows.map((row) => row.textContent)).toEqual([
-            '0: YesWinner62.0%62 EXAMPLE, 1 bet',
-            '1: No38.0%38 EXAMPLE, 1 bet',
+            '0: YesWinner62.0%Total in Yes: 62 EXAMPLE, 1 position',
+            '1: No38.0%Total in No: 38 EXAMPLE, 1 position',
         ]);
-        expect(within(result).getByText((_, el) => el?.getAttribute('data-bet-you-bet') === '' && el.textContent === 'You bet 29 EXAMPLE on Yes')).toBeTruthy();
+        expect(within(result).getByText((_, el) => el?.getAttribute('data-bet-you-bet') === '' && el.textContent === 'Your position: 29 EXAMPLE on Yes')).toBeTruthy();
     });
 
     it('reads Vote | Activity | Details on an open poll and Result | Activity | Details once closed', async () => {
@@ -406,7 +406,7 @@ describe('the shared tab strip', () => {
         await press(screen.getByRole('tab', { name: 'Details' }));
         const details = screen.getByRole('tabpanel', { name: 'Details' });
         expect([...details.querySelectorAll('dt')].map((dt) => dt.textContent)).toEqual([
-            'Betting closes', 'Resolution source', 'Run by', 'Pool', 'Bets placed', 'Oracle fee', 'Refunds if unresolved by', 'Market',
+            'Purchases close', 'Resolution source', 'Run by', 'Pool', 'Positions', 'Oracle fee', 'Refunds if unresolved by', 'Market',
         ]);
     });
 });
@@ -414,22 +414,22 @@ describe('the shared tab strip', () => {
 describe('the pick and its one green button', () => {
     it('bet: one list row per outcome with its stake and chance, and no pick list, Bet button or pick prompt', async () => {
         await openBet();
-        const betPanel = screen.getByRole('tabpanel', { name: 'Bet' });
+        const betPanel = screen.getByRole('tabpanel', { name: 'Buy' });
         const list = within(betPanel).getByRole('list', { name: 'Outcome to back' });
         expect(list.hasAttribute('data-outcome-list')).toBe(true);
         const sides = within(list).getAllByRole('button');
         expect(sides.map((b) => b.getAttribute('aria-label'))).toEqual([
-            'Bet on Yes, 62 percent, 62 EXAMPLE staked',
-            'Bet on No, 38 percent, 38 EXAMPLE staked',
+            'Buy Yes, 62 percent, 62 EXAMPLE total',
+            'Buy No, 38 percent, 38 EXAMPLE total',
         ]);
-        expect(sides.map((b) => b.textContent)).toEqual(['Yes62 EXAMPLE staked62%', 'No38 EXAMPLE staked38%']);
+        expect(sides.map((b) => b.textContent)).toEqual(['Yes62 EXAMPLE total62%', 'No38 EXAMPLE total38%']);
         // Each row leads with its thumb and is tinted to its share.
         expect(sides.map((b) => b.querySelector('[data-outcome-mark]').getAttribute('data-outcome-mark'))).toEqual(['thumbs-up', 'thumbs-down']);
         expect([...list.querySelectorAll('[data-outcome-fill]')].map((f) => f.style.width)).toEqual(['62%', '38%']);
         // No radio or toggle pick, no Bet button, no "choose an outcome" text.
         expect(within(betPanel).queryAllByRole('radio')).toHaveLength(0);
         expect(sides.map((b) => b.getAttribute('aria-pressed'))).toEqual([null, null]);
-        expect(within(betPanel).queryByRole('button', { name: 'Bet' })).toBeNull();
+        expect(within(betPanel).queryByRole('button', { name: 'Buy' })).toBeNull();
         expect(betPanel.textContent).not.toMatch(/Your Pick|Pick a side|Choose an outcome/i);
         // No tap hint either: the chevron rows say it (2026-11-15, as on a poll).
         expect(betPanel.textContent).not.toContain('Tap an outcome');
@@ -437,8 +437,8 @@ describe('the pick and its one green button', () => {
 
     it('bet: tapping Yes opens Place Bet with Yes chosen, and Back returns to the market', async () => {
         await openBet();
-        await press(within(screen.getByRole('list', { name: 'Outcome to back' })).getByRole('button', { name: /^Bet on Yes,/ }));
-        const form = screen.getByRole('form', { name: 'Place Bet' });
+        await press(within(screen.getByRole('list', { name: 'Outcome to back' })).getByRole('button', { name: /^Buy Yes,/ }));
+        const form = screen.getByRole('form', { name: 'Buy a position' });
         expect(screen.queryByRole('tablist', { name: 'Market sections' })).toBeNull();
         // Outcome is the themed dropdown field (G119, walk note on screen 97),
         // arriving with the tapped outcome chosen.
@@ -446,14 +446,14 @@ describe('the pick and its one green button', () => {
         expect(screen.queryByText('Choose an outcome.')).toBeNull();
 
         await press(screen.getByRole('button', { name: 'Back to previous screen' }));
-        expect(screen.queryByRole('form', { name: 'Place Bet' })).toBeNull();
+        expect(screen.queryByRole('form', { name: 'Buy a position' })).toBeNull();
         expect(screen.getByRole('tablist', { name: 'Market sections' })).toBeTruthy();
-        expect(within(screen.getByRole('tabpanel', { name: 'Bet' })).getAllByRole('button').map((b) => b.getAttribute('aria-label').split(',')[0])).toEqual(['Bet on Yes', 'Bet on No']);
+        expect(within(screen.getByRole('tabpanel', { name: 'Buy' })).getAllByRole('button').map((b) => b.getAttribute('aria-label').split(',')[0])).toEqual(['Buy Yes', 'Buy No']);
     });
 
     it('bet: keeps "You hold ..." under the outcome list', async () => {
         await openBet();
-        const betPanel = screen.getByRole('tabpanel', { name: 'Bet' });
+        const betPanel = screen.getByRole('tabpanel', { name: 'Buy' });
         const held = within(betPanel).getByText((_, el) => el?.tagName === 'P' && /^You hold/.test(el.textContent));
         expect(held.textContent).toBe('You hold 29 EXAMPLE on Yes');
         const group = within(betPanel).getByRole('list', { name: 'Outcome to back' });

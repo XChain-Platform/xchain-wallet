@@ -223,7 +223,7 @@ async function main() {
         await popup.goto(`chrome-extension://${extensionId}/popup.html`);
 
         await dismissIntroCarousel(popup);
-        await popup.getByRole('button', { name: 'Try in demo mode' }).click();
+        await popup.getByRole('button', { name: 'Try Demo' }).click();
         await unlockedShell(popup).waitFor({ state: 'visible', timeout: 90_000 });
         log('demo wallet created and unlocked (popup)');
 

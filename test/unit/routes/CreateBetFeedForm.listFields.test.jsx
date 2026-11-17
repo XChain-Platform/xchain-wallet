@@ -82,22 +82,22 @@ describe('Open a market form list fields', () => {
         const utils = await mount();
         expect(utils.container.querySelector('input[inputmode="numeric"][aria-label*="Addresses"]')).toBeNull();
 
-        const allow = field(utils, 'Only These Addresses May Bet: None set');
-        const block = field(utils, 'These Addresses May Not Bet: None set');
+        const allow = field(utils, 'Only These Addresses May Buy: None set');
+        const block = field(utils, 'These Addresses May Not Buy: None set');
         expect(allow, 'allow list is a picker field reading None set').toBeTruthy();
         expect(block, 'block list is a picker field reading None set').toBeTruthy();
         expect(allow.querySelector('svg')).toBeTruthy();
 
         await click(allow);
         await click(byText(utils, 'List row Choose Allow-List'));
-        expect(field(utils, 'Only These Addresses May Bet: Team wallets (List #7)'), 'the picked list shows by name').toBeTruthy();
+        expect(field(utils, 'Only These Addresses May Buy: Team wallets (List #7)'), 'the picked list shows by name').toBeTruthy();
 
-        await click(field(utils, 'These Addresses May Not Bet: None set'));
+        await click(field(utils, 'These Addresses May Not Buy: None set'));
         await click(byText(utils, 'List row Choose Block-List'));
-        expect(field(utils, 'These Addresses May Not Bet: List #7'), 'an unnamed list reads List #N').toBeTruthy();
+        expect(field(utils, 'These Addresses May Not Buy: List #7'), 'an unnamed list reads List #N').toBeTruthy();
 
         const clear = [...utils.container.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Clear allow list');
         await click(clear);
-        expect(field(utils, 'Only These Addresses May Bet: None set')).toBeTruthy();
+        expect(field(utils, 'Only These Addresses May Buy: None set')).toBeTruthy();
     });
 });

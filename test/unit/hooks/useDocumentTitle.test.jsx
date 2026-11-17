@@ -43,7 +43,7 @@ it('titles a route with its heading in Title Case', () => {
     expect(titleOf('multisig-share')).toBe('XChain Wallet - Share Wallet as Cosigner');
     expect(titleOf('cosigner-accounts')).toBe('XChain Wallet - Agent Accounts');
     expect(titleOf('governance-polls')).toBe('XChain Wallet - Governance Polls');
-    expect(titleOf('bet-markets')).toBe('XChain Wallet - Betting');
+    expect(titleOf('bet-markets')).toBe('XChain Wallet - Prediction markets');
 });
 
 it('titles an onboarding step with the heading the step shows', () => {

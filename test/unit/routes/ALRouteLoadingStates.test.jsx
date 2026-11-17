@@ -87,7 +87,7 @@ describe('A-L route load failures', () => {
             },
         );
 
-        expect(await screen.findByText('Could not load betting markets. Try again.')).toBeInTheDocument();
+        expect(await screen.findByText('Could not load prediction markets. Try again.')).toBeInTheDocument();
         expect(screen.queryByText(TECHNICAL_ERROR)).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
 
@@ -104,7 +104,7 @@ describe('A-L route load failures', () => {
             },
         );
 
-        await waitFor(() => expectBusy('Loading betting markets'));
+        await waitFor(() => expectBusy('Loading prediction markets'));
     });
 
     it('retries GovernancePolls with a plain failure sentence', async () => {

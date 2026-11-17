@@ -82,7 +82,7 @@ describe('OracleRecord action list', () => {
     it('Place bet opens the one market taking bets', async () => {
         const onOpenMarket = vi.fn();
         await mount({ onOpenMarket });
-        fireEvent.click(screen.getByRole('button', { name: /^Place bet/ }));
+        fireEvent.click(screen.getByRole('button', { name: /^Buy a position/ }));
         expect(onOpenMarket).toHaveBeenCalledWith(CHAIN, '2308');
     });
 
@@ -91,7 +91,7 @@ describe('OracleRecord action list', () => {
         await mount({ onOpenMarket }, {
             markets: [...TWO_OPEN, { action_index: '2310', label: 'Settled one', tick: 'XCHAIN', feed_status: 'resolved' }],
         });
-        await domAct(async () => { fireEvent.click(screen.getByRole('button', { name: /^Place bet/ })); });
+        await domAct(async () => { fireEvent.click(screen.getByRole('button', { name: /^Buy a position/ })); });
         expect(onOpenMarket).not.toHaveBeenCalled();
         expect(screen.getByRole('tab', { name: /Markets/ }).getAttribute('aria-selected')).toBe('true');
         const list = screen.getByRole('list', { name: 'Oracle markets' });

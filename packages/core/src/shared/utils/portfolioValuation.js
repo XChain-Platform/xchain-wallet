@@ -23,6 +23,7 @@ import {
     chartGridTimes,
     priceToleranceFor,
     readDeltas,
+    replayBalances,
     timedPriceSeries,
     tokenFiatSeries,
     walletAssetDeltas,
@@ -51,6 +52,23 @@ export function rangeWindowStart(rangeId, now) {
         return Number.NaN;
     }
     return Date.UTC(year, month, day);
+}
+
+/** One asset's replayed whole-unit balance on the portfolio chart grid. */
+export function balanceSeriesFor(prepared, { chainId, tick, range, nowMs = Date.now() }) {
+    const asset = prepared?.assets?.find((candidate) => candidate.key === assetKeyOf(chainId, tick));
+    if (!asset || !(range?.points >= 2)) return { series: null, grid: [] };
+    const grid = chartGridTimes(range, nowMs, { windowStart: rangeWindowStart });
+    const { balances } = replayBalances({
+        currentAtomic: asset.currentAtomic,
+        deltas: prepared.deltasByKey?.get(asset.key) || [],
+        grid,
+        coverageStartMs: Number.isFinite(asset.coverageStartMs)
+            ? Math.max(asset.coverageStartMs, prepared.coverageStartMs)
+            : prepared.coverageStartMs,
+    });
+    const scale = 10 ** asset.divisibility;
+    return { series: balances.map((balance) => Number(balance) / scale), grid };
 }
 
 /**

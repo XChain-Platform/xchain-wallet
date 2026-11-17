@@ -40,7 +40,14 @@ describe('LeftNav rows use the shared Button base', () => {
         const names = rows.map((row) => row.getAttribute('title'));
 
         expect(rows.length).toBeGreaterThan(5);
-        expect(names).toContain('Home');
+        expect(names.slice(0, 6)).toEqual([
+            'Home',
+            'Send',
+            'Receive',
+            'My Tokens',
+            'History',
+            'Prediction markets',
+        ]);
         expect(names).toContain('Settings');
         for (const row of rows) {
             const classes = classesOf(row);
@@ -93,9 +100,9 @@ describe('LeftNav rows use the shared Button base', () => {
         expect(item).toMatch(/font-weight:\s*400\s*;/);
         expect(item).toMatch(/font-size:\s*var\(--xc-text-sm\)\s*;/);
         expect(item).toMatch(/padding:\s*var\(--xc-space-2\) var\(--xc-space-3\)\s*;/);
-        expect(item).toMatch(/--xc-button-hover-bg:\s*color-mix\(in srgb, var\(--xc-text\) 10%, transparent\)\s*;/);
+        expect(item).toMatch(/--xc-button-hover-bg:\s*var\(--xc-row-hover-bg\)\s*;/);
         expect(item).toMatch(/--xc-button-hover-border:\s*transparent\s*;/);
-        expect(item).toMatch(/border-radius:\s*10px\s*;/);
+        expect(item).toMatch(/border-radius:\s*calc\(var\(--xc-radius-md\) \+ var\(--xc-radius-xs\)\)\s*;/);
         expect(css).not.toMatch(/composes:[^;]*Button\.module\.css/);
 
         const source = readFileSync(

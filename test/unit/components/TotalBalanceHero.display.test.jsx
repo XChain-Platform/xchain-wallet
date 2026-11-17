@@ -281,16 +281,28 @@ describe('TotalBalanceHero responsive layout', () => {
 });
 
 describe('TotalBalanceHero card surface', () => {
-    it('paints the card flat app blue with no gradient, on the hero and on Home\'s card stack', () => {
+    it('gives the solid hero surface one pronounced border, soft shadow, and chart height', () => {
         const homeStyles = readFileSync(join(
             process.cwd(),
             'packages/core/src/shared/components/HomeTabs.module.css',
         ), 'utf8');
         const heroStack = homeStyles.match(/\.heroStack\s*\{([^}]*)\}/)?.[1] || '';
+        const chartStack = homeStyles.match(/\.heroStackWithChart\s*\{([^}]*)\}/)?.[1] || '';
 
-        expect(cssRule('hero')).toMatch(/background:\s*var\(--xc-accent-primary\);/);
-        expect(heroStack).toMatch(/background:\s*var\(--xc-accent-primary\);/);
+        expect(cssRule('hero')).toMatch(/background:\s*var\(--xc-hero-bg\);/);
+        expect(cssRule('hero')).toMatch(/border:\s*1px solid var\(--xc-hero-border\);/);
+        expect(cssRule('hero')).toMatch(/box-shadow:\s*var\(--xc-hero-shadow\);/);
+        expect(heroStack).toMatch(/background:\s*var\(--xc-hero-bg\);/);
+        expect(heroStack).toMatch(/border:\s*1px solid var\(--xc-hero-border\);/);
+        expect(heroStack).toMatch(/box-shadow:\s*var\(--xc-hero-shadow\);/);
+        expect(heroStack).toMatch(/overflow:\s*hidden/);
+        expect(chartStack).toMatch(/min-height:\s*160px/);
         expect(STYLES).not.toMatch(/-gradient\(/);
         expect(heroStack).not.toMatch(/-gradient\(/);
+    });
+
+    it('tints the range pill to match its direction', () => {
+        expect(STYLES).toMatch(/\.changePositive\.changePositive\s*\{[^}]*background:\s*var\(--xc-hero-pill-up-bg\)[^}]*color:\s*var\(--xc-hero-pill-up-text\)/s);
+        expect(STYLES).toMatch(/\.changeNegative\.changeNegative\s*\{[^}]*background:\s*var\(--xc-hero-pill-down-bg\)[^}]*color:\s*var\(--xc-hero-pill-down-text\)/s);
     });
 });

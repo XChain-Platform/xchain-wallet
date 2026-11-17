@@ -2043,7 +2043,6 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
 
     const listPage = (
         <ListPage
-            className={styles.historyListPage}
             notices={(!browserOnline || showingCachedHistory) && !offlineWithoutHistory ? (
                 <StatusMessage
                     variant="warning"
