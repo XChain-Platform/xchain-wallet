@@ -25,6 +25,16 @@ const messages = {
     'parallelComposer.statusPrefix': 'Status',
     'parallelComposer.rowStatusPrefix': 'Row {row} status',
     'parallelComposer.rowEmpty': 'No action yet',
+    'parallelComposer.fileLabel': 'File contents',
+    'parallelComposer.fileHelp': 'Choose the file whose bytes this FILE action publishes.',
+    'parallelComposer.fileHint': 'A non-empty file is required before Review or signing.',
+    'parallelComposer.fileLoading': 'Loading {name}…',
+    'parallelComposer.fileSelected': 'Selected: {name}',
+    'parallelComposer.fileFallbackName': 'file',
+    'parallelComposer.fileRequired': 'choose a non-empty file to publish.',
+    'parallelComposer.fileEmpty': 'the selected file is empty. Choose a non-empty file.',
+    'parallelComposer.fileUnreadable': 'the wallet was unable to read the selected file. Choose it again or use another file.',
+    'parallelComposer.fileReading': 'wait for the selected file to finish loading.',
 };
 
 addEnglish(messages);

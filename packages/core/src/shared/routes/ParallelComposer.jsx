@@ -9,7 +9,7 @@
 // contact legal@dankest.llc.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AddressField, AddressText, Button, ChainBadge, FieldNote, FormPage, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea, useFormErrors } from '@xchain-wallet/core/ui';
+import { AddressField, AddressText, Button, ChainBadge, FieldNote, FormPage, Input, ListPage, NetworkField, PageHeader, Screen, Select, StatusMessage, Textarea, useFormErrors } from '@xchain-wallet/core/ui';
 // The Wallet Form Standard frame. Its FormSection is the collapsible one,
 // not the settings block of the same name in core/ui.
 import { FeeSection, FormAction, FormFrame, FormSection, SummaryAddress, joinSummaryParts, useFormSections } from '../components/formStandard/index.js';
@@ -113,6 +113,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     const composeFormErrors = useFormErrors();
     const signFormErrors = useFormErrors();
     const validationRunRef = useRef(0);
+    const fileReadRunRef = useRef(new Map());
     // Rows the user has edited, or every row once Review was pressed. A row
     // still missing its chain, address or action only says so after one of those.
     const [touchedRows, setTouchedRows] = useState(/** @type {Record<string, boolean>} */ ({}));
@@ -213,6 +214,10 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                         fromAddressId: pickDefaultAddressId(byChain[r.chainId] || [], active?.[r.chainId]),
                         action: r.action,
                         paramsJson: JSON.stringify(r.params || {}, null, 2),
+                        fileName: null,
+                        fileBytes: null,
+                        fileReading: false,
+                        fileError: null,
                         status: 'pending',
                         txid: null,
                         error: null,
@@ -230,6 +235,10 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                                 : pickDefaultAddressId(byChain[r.chainId] || [], active?.[r.chainId]),
                             action: r.action,
                             paramsJson: r.paramsJson,
+                            fileName: null,
+                            fileBytes: null,
+                            fileReading: false,
+                            fileError: null,
                             status: 'pending',
                             txid: null,
                             error: null,
@@ -270,11 +279,49 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
             if (Object.prototype.hasOwnProperty.call(patch, 'fromAddressId')) composeFormErrors.clear(`parallel-from-${id}`);
             if (Object.prototype.hasOwnProperty.call(patch, 'action')) composeFormErrors.clear(`parallel-action-${id}`);
             if (Object.prototype.hasOwnProperty.call(patch, 'paramsJson')) composeFormErrors.clear(`parallel-params-${id}`);
+            if (Object.prototype.hasOwnProperty.call(patch, 'fileBytes')) composeFormErrors.clear(`parallel-file-${id}`);
         }
         validationRunRef.current += 1;
         setValidating(false);
         setValidationError(null);
         setRows((rs) => rs.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+    };
+
+    const pickRowFile = async (index, file) => {
+        const row = rows[index];
+        if (!row || !file) return;
+        const token = Symbol('file-read');
+        fileReadRunRef.current.set(row.id, token);
+        setTouchedRows((current) => ({ ...current, [row.id]: true }));
+        composeFormErrors.clear(`parallel-file-${row.id}`);
+        setRows((current) => current.map((entry) => (entry.id === row.id ? {
+            ...entry,
+            fileName: file.name || t('parallelComposer.fileFallbackName'),
+            fileBytes: null,
+            fileReading: file.size > 0,
+            fileError: file.size === 0 ? t('parallelComposer.fileEmpty') : null,
+        } : entry)));
+        if (file.size === 0) return;
+        try {
+            const bytes = await readPickedFile(file);
+            if (fileReadRunRef.current.get(row.id) !== token) return;
+            composeFormErrors.clear(`parallel-file-${row.id}`);
+            setRows((current) => current.map((entry) => (entry.id === row.id ? {
+                ...entry,
+                fileBytes: bytes,
+                fileReading: false,
+                fileError: bytes.length === 0 ? t('parallelComposer.fileEmpty') : null,
+            } : entry)));
+        } catch {
+            if (fileReadRunRef.current.get(row.id) !== token) return;
+            composeFormErrors.clear(`parallel-file-${row.id}`);
+            setRows((current) => current.map((entry) => (entry.id === row.id ? {
+                ...entry,
+                fileBytes: null,
+                fileReading: false,
+                fileError: t('parallelComposer.fileUnreadable'),
+            } : entry)));
+        }
     };
 
     const updateRowNetwork = (index, nextChainId) => {
@@ -319,6 +366,13 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         if (!isActionOfferedInBuild(r.action, { hasDexSurface })) {
             return problem(`Row ${i + 1}: ${actionDisplayLabel(r.action)} is not available in this build.`);
         }
+        if (r.action === 'FILE') {
+            if (r.fileError) return problem(`Row ${i + 1}: ${r.fileError}`);
+            if (r.fileReading) return problem(`Row ${i + 1}: ${t('parallelComposer.fileReading')}`);
+            if (!(r.fileBytes instanceof Uint8Array) || r.fileBytes.length === 0) {
+                return missing(`Row ${i + 1}: ${t('parallelComposer.fileRequired')}`);
+            }
+        }
         const parseErr = parseParamsJson(r.paramsJson);
         if (parseErr) return problem(`Row ${i + 1}: ${parseErr}`);
         // A BATCH row carries its legs in params, which no picker filtered.
@@ -347,7 +401,11 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                 : !row.fromAddressId || !(addressesByChain?.[row.chainId] || []).some((address) => address.id === row.fromAddressId) ? 'from'
                     : !row.action || !isActionOfferedOnChain(chainRegistry, row.chainId, row.action)
                         || !isActionOfferedInBuild(row.action, { hasDexSurface }) ? 'action' : 'params';
-            problems[`parallel-${field}-${row.id}`] = issue.message;
+            const resolvedField = row.action === 'FILE'
+                && (row.fileError || row.fileReading || !(row.fileBytes instanceof Uint8Array) || row.fileBytes.length === 0)
+                ? 'file'
+                : field;
+            problems[`parallel-${resolvedField}-${row.id}`] = issue.message;
         });
         if (!composeFormErrors.validate(problems)) return;
         const runId = ++validationRunRef.current;
@@ -450,6 +508,13 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
             'parallel-sign-from': !activeFromAddress
                 ? 'Choose an available From address before signing this action.' : null,
         })) return;
+        if (activeRow.action === 'FILE'
+            && (!(activeRow.fileBytes instanceof Uint8Array) || activeRow.fileBytes.length === 0)) {
+            const message = `Row ${activeRowIndex + 1}: ${t('parallelComposer.fileRequired')}`;
+            composeFormErrors.fail(message, `parallel-file-${activeRow.id}`);
+            setStage('compose');
+            return;
+        }
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
         if (feeStop) {
             if (feeStop.formError) signFormErrors.fail(feeStop.formError, 'form:fee');
@@ -491,12 +556,14 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
         // such a chain is composed with it; without it a fee-bearing row
         // broadcasts and the indexer refuses it after the miner fee is spent.
         const rowNativeFeeMandatory = isNativeFeeMandatory(activeRow.chainId);
+        const rawData = activeRow.action === 'FILE' ? latin1Of(activeRow.fileBytes) : null;
         try {
             const result = await activeLane.run({
                 actionData: { action: activeRow.action, params },
                 encoderOpts: {
                     ...(feePerKb != null ? { feePerKb } : {}),
                     ...(rowNativeFeeMandatory ? { payFeeInNativeCoin: true } : {}),
+                    ...(rawData != null ? { rawData } : {}),
                 },
                 submitExtra: { action: activeRow.action, params },
             });
@@ -840,6 +907,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
                     addressesByChain={addressesByChain}
                     actionsList={actionsList}
                     onChange={(patch) => updateRow(i, patch)}
+                    onFilePick={(file) => pickRowFile(i, file)}
                     onNetworkChange={(nextChainId) => updateRowNetwork(i, nextChainId)}
                     onOpenSourcePicker={() => setSourcePickerRowId(row.id)}
                     onRemove={() => removeRow(i)}
@@ -856,7 +924,7 @@ export function ParallelComposer({ walletId, onBack, initialRows, hasDexSurface 
     );
 }
 
-function RowEditor({ index, row, open, onOpenChange, revealKey, chainIds, addressesByChain, actionsList, onChange, onNetworkChange, onOpenSourcePicker, onRemove, canRemove }) {
+function RowEditor({ index, row, open, onOpenChange, revealKey, chainIds, addressesByChain, actionsList, onChange, onNetworkChange, onOpenSourcePicker, onFilePick, onRemove, canRemove }) {
     const addrs = (addressesByChain && row.chainId) ? (addressesByChain[row.chainId] || []) : [];
     const pickedAddress = addrs.find((address) => address.id === row.fromAddressId) || null;
     const network = row.chainId ? (chainRegistry.get(row.chainId)?.displayName || row.chainId) : null;
@@ -910,11 +978,37 @@ function RowEditor({ index, row, open, onOpenChange, revealKey, chainIds, addres
                 label="Action"
                 help="The raw action this row sends. Each row is its own transaction, signed and broadcast one after another; the queue is not atomic, so a later failure does not undo an earlier transaction."
                 value={row.action || ''}
-                onChange={(e) => onChange({ action: e.target.value })}
+                onChange={(e) => onChange({
+                    action: e.target.value,
+                    fileName: null,
+                    fileBytes: null,
+                    fileReading: false,
+                    fileError: null,
+                })}
             >
                 {/* One SDK list serves every row; drop what this row's chain refuses at every version. */}
                 {actionSelectOptions(actionsList.filter((a) => isActionOfferedOnChain(chainRegistry, row.chainId, a)), 'Select action')}
             </Select>
+
+            {row.action === 'FILE' ? (
+                <Input
+                    id={`parallel-file-${row.id}`}
+                    type="file"
+                    label={t('parallelComposer.fileLabel')}
+                    help={t('parallelComposer.fileHelp')}
+                    hint={row.fileReading
+                        ? t('parallelComposer.fileLoading', { name: row.fileName })
+                        : row.fileName
+                        ? t('parallelComposer.fileSelected', { name: row.fileName })
+                        : t('parallelComposer.fileHint')}
+                    error={row.fileError}
+                    onChange={(event) => {
+                        const file = event.target.files?.[0] || null;
+                        event.target.value = '';
+                        onFilePick(file);
+                    }}
+                />
+            ) : null}
 
             <Textarea
                 id={`parallel-params-${row.id}`}
@@ -971,6 +1065,12 @@ function RowDetail({ row, addressesByChain }) {
             <dd className={facts.value} style={{ fontFamily: 'var(--xc-font-mono, monospace)', fontSize: 'var(--xc-text-xs)' }}>
                 {row.paramsJson}
             </dd>
+            {row.action === 'FILE' && row.fileName ? (
+                <>
+                    <dt className={facts.label}>{t('parallelComposer.fileLabel')}</dt>
+                    <dd className={facts.value}>{row.fileName}</dd>
+                </>
+            ) : null}
         </dl>
     );
 }
@@ -1038,6 +1138,10 @@ function StatusPill({ status, labelPrefix = t('parallelComposer.statusPrefix') }
  *   fromAddressId: string | null,
  *   action: string,
  *   paramsJson: string,
+ *   fileName: string | null,
+ *   fileBytes: Uint8Array | null,
+ *   fileReading: boolean,
+ *   fileError: string | null,
  *   status: 'pending' | 'submitting' | 'success' | 'failed' | 'skipped',
  *   txid: string | null,
  *   error: string | null,
@@ -1052,10 +1156,34 @@ function blankRow(chainId, addressesByChain, activeByChain) {
         fromAddressId: pickDefaultAddressId(addrs, activeByChain?.[chainId]),
         action: '',
         paramsJson: '{\n  "VERSION": "0"\n}',
+        fileName: null,
+        fileBytes: null,
+        fileReading: false,
+        fileError: null,
         status: 'pending',
         txid: null,
         error: null,
     };
+}
+
+function latin1Of(bytes) {
+    let value = '';
+    for (let i = 0; i < bytes.length; i += 1) value += String.fromCharCode(bytes[i]);
+    return value;
+}
+
+async function readPickedFile(file) {
+    if (typeof file.arrayBuffer === 'function') {
+        return new Uint8Array(await file.arrayBuffer());
+    }
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error || new Error('Could not read that file.'));
+        reader.onload = () => reader.result instanceof ArrayBuffer
+            ? resolve(new Uint8Array(reader.result))
+            : reject(new Error('Could not read that file.'));
+        reader.readAsArrayBuffer(file);
+    });
 }
 
 // Default from-address for a chain: the same resolution Send uses (active

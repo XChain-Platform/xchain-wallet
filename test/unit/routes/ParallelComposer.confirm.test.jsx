@@ -71,6 +71,59 @@ function mount({ walletMode = 'full', messagingOverrides = {}, initialRows, onBa
 }
 
 describe('ParallelComposer confirmation', () => {
+    it('blocks a FILE row without contents before Review', async () => {
+        const messaging = mount({
+            messagingOverrides: { listActions: vi.fn(async () => ['FILE']) },
+            initialRows: [{
+                chainId: CHAIN_ID,
+                action: 'FILE',
+                params: { VERSION: '0', NAME: 'metadata.json', TYPE: 'application/json' },
+            }],
+        });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign and Send Queue' }));
+
+        expect(await screen.findAllByText('Row 1: choose a non-empty file to publish.')).toHaveLength(2);
+        expect(screen.getByLabelText('File contents')).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.queryByRole('form', { name: 'Review parallel actions' })).toBeNull();
+        expect(messaging.validateAction).not.toHaveBeenCalled();
+        expect(messaging.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    it('passes selected FILE bytes through confirmation and signing', async () => {
+        const messaging = mount({
+            messagingOverrides: { listActions: vi.fn(async () => ['FILE']) },
+            initialRows: [{
+                chainId: CHAIN_ID,
+                action: 'FILE',
+                params: { VERSION: '0', NAME: 'metadata.json', TYPE: 'application/json' },
+            }],
+        });
+        const file = new File([new Uint8Array([0, 127, 128, 255])], 'metadata.json', {
+            type: 'application/json',
+        });
+        fireEvent.change(await screen.findByLabelText('File contents'), { target: { files: [file] } });
+        expect(await screen.findByText('Selected: metadata.json')).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Sign and Send Queue' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign all' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Sign' }));
+
+        const rawData = String.fromCharCode(0, 127, 128, 255);
+        await waitFor(() => expect(messaging.composeForConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            actionData: {
+                action: 'FILE',
+                params: { VERSION: '0', NAME: 'metadata.json', TYPE: 'application/json' },
+            },
+            encoderOpts: expect.objectContaining({ rawData }),
+        })));
+        fireEvent.click(await screen.findByTestId('confirm-approve'));
+        await waitFor(() => expect(messaging.advancedAction).toHaveBeenCalledWith(expect.objectContaining({
+            action: 'FILE',
+            rawData,
+        })));
+    });
+
     it.each([
         ['empty required fields', 'AMOUNT is required'],
         ['zero amounts', 'AMOUNT must be greater than zero'],
