@@ -225,10 +225,12 @@
 }
 
 /* Tablet and wide windows: the logo sat 8px under the card's top edge, which read as
-   cramped. A larger gap above it only where the card has room (operator
-   2026-11-17). Doubled class to outrank the shared form card padding. */
-@media (min-width: 768px) {
+   cramped. A 40px gap above it from 768px up, iPad and desktop (operator
+   2026-11-17). 48rem is that 768px on the documented breakpoint scale, since
+   media-query rem resolves against the 16px initial size. Doubled class to
+   outrank the shared form card padding. */
+@media (min-width: 48rem) {
     .unlockForm.unlockForm {
-        padding-block-start: var(--xc-space-10, 40px);
+        padding-block-start: calc(var(--xc-space-8) + var(--xc-space-2));
     }
 }
