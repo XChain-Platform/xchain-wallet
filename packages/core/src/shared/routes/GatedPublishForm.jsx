@@ -12,11 +12,11 @@ import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 // Network, From and the fee selector render inside the standard FromSection
 // and FeeSection.
-import { Button, ChainBadge, FieldNote, FormPage, IconSelect, Input, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
+import { AddressText, Button, ChainBadge, FieldNote, FormPage, IconSelect, Input, PageHeader, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { useDemoGuard } from '../hooks/useDemoGuard.jsx';
-import { isHwSource } from '../components/SignCredentials.jsx';
+import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { ResultScreen } from '../components/ResultScreen.jsx';
 import { useWalletMode } from '../hooks/useWalletMode.js';
@@ -39,7 +39,7 @@ import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
 import { FileField } from '../components/FileField.jsx';
-import { UploadMethodField, useUploadMethod } from '../components/UploadMethodField.jsx';
+import { UploadMethodField, UploadMethodReviewRows, useUploadMethod } from '../components/UploadMethodField.jsx';
 import {
     gatedFileCompiledBytes,
     standardUnavailableReason,
@@ -73,6 +73,7 @@ import { t } from '../../i18n/index.js';
 import { titleCase } from '../utils/titleCase.js';
 import '../../i18n/locales/en/gatedPublish.js';
 import '../../i18n/locales/en/palette.js';
+import '../../i18n/locales/en/publishFile.js';
 import '../../i18n/locales/en/send.js';
 
 const chainRegistry = registryLib.defaultRegistry();
@@ -237,11 +238,14 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         setFormErrorSection(section);
     };
     const [stage, setStage] = useState(
-        /** @type {'form' | 'submitting' | 'done'} */ ('form'),
+        /** @type {'form' | 'review' | 'submitting' | 'done'} */ ('form'),
     );
+    const [pendingMultipart, setPendingMultipart] = useState(false);
     const [password, setPassword] = useState('');
+    const reviewErrors = useFormErrors();
     const [hwStatus, setHwStatus] = useState('idle');
     const [result, setResult] = useState(/** @type {any | null} */ (null));
+    const credentialRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     const fileReadIdRef = useRef(0);
 
     useEffect(() => {
@@ -606,75 +610,54 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         // title re-judges it.
     }, [carriedTooLarge, fileMeta, carriedCap]);
 
-    async function handleReview(event) {
-        event.preventDefault();
-        // Each attempt may reopen the section holding the refusal;
-        // failIn names that section (From, File, Memo, Access or the fee).
-        setReviewAttempt((n) => n + 1);
-        if (!gateTick) {
-            setTokenMissing(true);
-            setFormErrorSection('file');
-            return;
-        }
+    function formReviewProblem(thresholdValue) {
         if (issuerEligibility.pending) {
-            failIn('from', `Wait for the wallet to verify the current owner of ${gateTick}.`);
-            return;
+            return ['from', `Wait for the wallet to verify the current owner of ${gateTick}.`];
         }
-        if (issuerEligibility.error) {
-            failIn('from', issuerEligibility.error);
-            return;
-        }
-        if (!fileMeta) { failIn('file', 'Pick a file first.'); return; }
+        if (issuerEligibility.error) return ['from', issuerEligibility.error];
+        if (!fileMeta) return ['file', 'Pick a file first.'];
         if (!fromAddress) {
-            failIn('from', ownerMissing
+            return ['from', ownerMissing
                 ? `This wallet does not hold the owner address for ${gateTick}; only the token owner can publish gated files.`
-                : 'No signing address available on this network.');
-            return;
+                : 'No signing address available on this network.'];
         }
         if ((title && /[|;]/.test(title)) || (memo && /[|;]/.test(memo)) || /[|;]/.test(fileMeta.name)) {
-            failIn(memo && /[|;]/.test(memo) ? 'memo' : 'file', 'File name, title, and memo cannot contain | or ; characters.');
-            return;
+            return [memo && /[|;]/.test(memo) ? 'memo' : 'file', 'File name, title, and memo cannot contain | or ; characters.'];
         }
         const unsafeMetadata = actionTextSafetyError(fileMeta.name, 'File name')
             || actionTextSafetyError(title, 'Title');
-        if (unsafeMetadata) { failIn('file', unsafeMetadata); return; }
+        if (unsafeMetadata) return ['file', unsafeMetadata];
         const memoError = memoLengthError(memo.trim());
-        if (memoError) { failIn('memo', memoError); return; }
+        if (memoError) return ['memo', memoError];
         const feeStop = customFeeReviewStop({ feePick, tiers: feeTiers, estimate: feeCustomEstimate });
-        if (feeStop) { failIn('fee', feeStop.formError); return; }
-        const thresholdValue = thresholdActive ? gateMinAmount.trim() : '';
+        if (feeStop) return ['fee', feeStop.formError];
         const thresholdError = thresholdValue
             ? flowsLib.gateMinAmountValidationError(thresholdValue)
             : null;
-        if (thresholdError) {
-            failIn('access', thresholdError);
-            return;
-        }
-        const singleCap = plainCapFor(fileMeta.name, fileMeta.type);
+        if (thresholdError) return ['access', thresholdError];
         const reviewCap = uploadCapFor(fileMeta.name, fileMeta.type);
         if (fileMeta.bytes.length > reviewCap) {
-            failIn(
-                'file',
+            return ['file',
                 `This publish lane supports up to ${formatBytes(reviewCap, { limit: true })} `
                 + `and the file is ${formatBytes(fileMeta.bytes.length)}.`,
-            );
-            return;
+            ];
         }
+        return null;
+    }
+
+    async function refreshedGateProblem(thresholdValue) {
         let tokenInfo = null;
         if (typeof messaging.getTokenInfo === 'function') {
             try {
                 tokenInfo = await messaging.getTokenInfo({ chainId: selectedChainId, tick: gateTick });
             } catch {
-                failIn('from', 'Could not refresh token ownership. Check your connection and try again.');
-                return;
+                return ['from', 'Could not refresh token ownership. Check your connection and try again.'];
             }
             if (!tokenInfo?.creator) {
-                failIn('file', `Could not verify that ${gateTick} still exists. Reopen this screen and try again.`);
-                return;
+                return ['file', `Could not verify that ${gateTick} still exists. Reopen this screen and try again.`];
             }
             if (tokenInfo.creator !== fromAddress.address) {
-                failIn('from', `This wallet no longer owns ${gateTick}. Reopen this screen to refresh your tokens.`);
-                return;
+                return ['from', `This wallet no longer owns ${gateTick}. Reopen this screen to refresh your tokens.`];
             }
         }
         if (thresholdValue) {
@@ -686,23 +669,36 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 thresholdValue,
                 maxDecimals,
             );
-            if (divisibilityError) { failIn('access', divisibilityError); return; }
+            if (divisibilityError) return ['access', divisibilityError];
             if (typeof messaging.getIndexerWatermark !== 'function') {
-                failIn('access', 'Could not verify that unlock thresholds are active. Try again later.');
-                return;
+                return ['access', 'Could not verify that unlock thresholds are active. Try again later.'];
             }
             try {
                 const current = await messaging.getIndexerWatermark({ chainId: selectedChainId });
                 const height = Number(current?.watermark);
                 if (!Number.isFinite(height) || height < thresholdScheduledHeight) {
-                    failIn('access', 'Unlock thresholds are not active on this network right now. Remove the threshold to continue.');
-                    return;
+                    return ['access', 'Unlock thresholds are not active on this network right now. Remove the threshold to continue.'];
                 }
             } catch {
-                failIn('access', 'Could not verify that unlock thresholds are active. Try again later.');
-                return;
+                return ['access', 'Could not verify that unlock thresholds are active. Try again later.'];
             }
         }
+        return null;
+    }
+
+    async function handleReview(event) {
+        event.preventDefault();
+        setReviewAttempt((n) => n + 1);
+        if (!gateTick) {
+            setTokenMissing(true);
+            setFormErrorSection('file');
+            return;
+        }
+        const thresholdValue = thresholdActive ? gateMinAmount.trim() : '';
+        const problem = formReviewProblem(thresholdValue)
+            || await refreshedGateProblem(thresholdValue);
+        if (problem) { failIn(...problem); return; }
+        const singleCap = plainCapFor(fileMeta.name, fileMeta.type);
         setFormError(null);
         setFormErrorSection(null);
         await publishSelected(singleCap);
@@ -742,6 +738,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             return;
         }
         if (start.path === 'single') {
+            setPendingMultipart(false);
             await publish();
             return;
         }
@@ -753,8 +750,19 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             setFormError('Wait for the multipart fee estimate, then try again.');
             return;
         }
-        setStage('submitting');
+        setPendingMultipart(true);
+        setStage('review');
+    }
+
+    async function startApprovedMultipart() {
+        setPendingMultipart(false);
+        setStage('form');
         try {
+            const singleCap = plainCapFor(fileMeta.name, fileMeta.type);
+            const start = multipartStart(singleCap);
+            if (start.path !== 'multipart') {
+                throw new Error('This file no longer needs a multi-part upload.');
+            }
             const reply = await multipartUpload.start(start.request, start.match);
             setResult(completedMultipart(reply));
             setStage('done');
@@ -762,6 +770,18 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
             setStage('form');
             setFormError(userFacingMessage(error, 'Multipart publish failed.'));
         }
+    }
+
+    async function handleMultipartSubmit(event) {
+        event.preventDefault();
+        if (!pendingMultipart || !fileMeta || !fromAddress || multipartUpload.running) return;
+        if (!hw && !signerReady && password.length === 0) {
+            reviewErrors.validate({ 'gated-publish-password': 'Enter your wallet password.' });
+            return;
+        }
+        if (hw && hwStatus !== 'available') return;
+        reviewErrors.reset();
+        await startApprovedMultipart();
     }
 
     function publishRequest() {
@@ -933,6 +953,81 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 getSignerStatus={messaging.getSignerStatus}
                 hintClassName={styles.hint}
             />
+        );
+    }
+
+    if (stage === 'review' && pendingMultipart) {
+        const minimum = gateMinAmount.trim() || '1';
+        return wrap(
+            <FormPage
+                demoGuard={demoGuard}
+                label={t('publishFile.reviewLabel')}
+                onSubmit={handleMultipartSubmit}
+                errors={reviewErrors}
+                actions={(
+                    <>
+                        <Button
+                            variant="secondary"
+                            type="button"
+                            onClick={() => {
+                                reviewErrors.reset();
+                                setPendingMultipart(false);
+                                setStage('form');
+                            }}
+                        >
+                            {t('common.back')}
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="success"
+                            icon={<UploadIcon />}
+                            aria-disabled={hw && hwStatus !== 'available' ? 'true' : undefined}
+                        >
+                            {t('publishFile.review.signAndPublish')}
+                        </Button>
+                    </>
+                )}
+            >
+                <dl className={styles.detailsList}>
+                    {descriptor ? (
+                        <>
+                            <dt className={styles.detailsLabel}>{t('send.fields.chain')}</dt>
+                            <dd className={styles.detailsValue}><ChainBadge descriptor={descriptor} size="sm" showName={false} /></dd>
+                        </>
+                    ) : null}
+                    <dt className={styles.detailsLabel}>{t('gatedPublish.sectionFile')}</dt>
+                    <dd className={styles.detailsValue}>
+                        {t('gatedPublish.fileMetadata', {
+                            name: fileMeta.name,
+                            bytes: formatBytes(fileMeta.bytes.length),
+                            type: fileMeta.type,
+                        })}
+                    </dd>
+                    <dt className={styles.detailsLabel}>{t('publishFile.review.from')}</dt>
+                    <dd className={styles.detailsValue}><AddressText address={fromAddress.address} /></dd>
+                    <dt className={styles.detailsLabel}>{t('send.fields.token')}</dt>
+                    <dd className={styles.detailsValue}>{gateTick}</dd>
+                    <dt className={styles.detailsLabel}>{t('gatedPublish.unlockThreshold')}</dt>
+                    <dd className={styles.detailsValue}>{minimum} {gateTick}</dd>
+                    <UploadMethodReviewRows
+                        upload={upload}
+                        labelClassName={styles.detailsLabel}
+                        valueClassName={styles.detailsValue}
+                    />
+                </dl>
+                <p className={styles.hint} role="note">{t('gatedPublish.permanentHint')}</p>
+                <SignCredentials
+                    unlocked={signerReady}
+                    fromAddress={fromAddress}
+                    chainId={selectedChainId}
+                    password={password}
+                    onPasswordChange={setPassword}
+                    onStatusChange={({ status }) => setHwStatus(status)}
+                    passwordRef={credentialRef}
+                    passwordFieldId="gated-publish-password"
+                    getSignerStatus={messaging.getSignerStatus}
+                />
+            </FormPage>,
         );
     }
 
