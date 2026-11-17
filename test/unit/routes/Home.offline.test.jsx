@@ -207,4 +207,37 @@ describe('Home offline behavior', () => {
         await screen.findByText('You are offline. Connect to load balances and use network actions.');
         expect(screen.queryByText(/Couldn't load balances/)).toBeNull();
     });
+
+    it('identifies an SDK load failure instead of calling the wallet offline', async () => {
+        setNavigatorOnline(true);
+        const messaging = {
+            listWallets: vi.fn().mockResolvedValue([WALLET]),
+            listAccounts: vi.fn().mockResolvedValue([]),
+            getWalletBalances: vi.fn().mockResolvedValue({
+                'bitcoin-mainnet': [{
+                    address: 'bc1qsdkfailed',
+                    balances: null,
+                    error: '[xchain-wallet/web] xchain-sdk is not loaded yet (or failed to load)',
+                }],
+            }),
+            getActiveAddresses: vi.fn().mockResolvedValue({}),
+            getSettings: vi.fn().mockResolvedValue({}),
+            getAddressesByChain: vi.fn().mockResolvedValue({}),
+        };
+        const view = mountHome(messaging, vi.fn());
+
+        await screen.findByText('Part of the wallet did not load. Reload to try again.');
+
+        reachability.overall = 'offline';
+        view.rerender(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <ToastHost>
+                    <Home activeWalletId={WALLET.id} onSend={() => {}} onReceive={() => {}} />
+                </ToastHost>
+            </MessagingProvider>,
+        );
+
+        expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy();
+        expect(screen.queryByText(/You are offline/)).toBeNull();
+    });
 });

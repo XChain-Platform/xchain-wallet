@@ -73,6 +73,11 @@ const chainRegistry = registryLib.defaultRegistry();
 // to open with the same words or the banner changes voice as it ticks.
 const BALANCES_VERB = 'load balances';
 
+function isSdkLoadFailure(error) {
+    const message = String(error?.message || error || '');
+    return /xchain-sdk (?:is not loaded yet|failed to load)/i.test(message);
+}
+
 // What to wait when a 429 arrives with no `Retry-After` to read (an origin that
 // sent none, or the pinned SDK 0.15.1, which carries no seconds at all). One
 // poll interval's worth of patience: long enough that the re-load is not
@@ -311,6 +316,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     const [cachedBalancesUpdating, setCachedBalancesUpdating] = useState(
         Boolean(initialBalanceCache) && isNavigatorOnline(),
     );
+    const [sdkLoadFailed, setSdkLoadFailed] = useState(false);
     const balanceScopeRef = useRef({
         walletId: activeWalletId,
         accountId: activeAccountId || null,
@@ -813,6 +819,10 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                     Array.isArray(rows) && rows.some((entry) => entry?.error)
                 ));
                 if (hasBalanceFailure) {
+                    const sdkFailed = Object.values(b || {}).some((rows) => (
+                        Array.isArray(rows) && rows.some((entry) => isSdkLoadFailure(entry?.error))
+                    ));
+                    if (sdkFailed) setSdkLoadFailed(true);
                     pollThrottleRef.current.fail();
                     setBalanceLoadFailed(true);
                     if (wait) beginRateLimitWait(wait.seconds);
@@ -827,6 +837,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                     }
                 } else {
                     freshBalancesCacheable = true;
+                    setSdkLoadFailed(false);
                     // Fresh balances restart the re-poll window, whichever
                     // path asks for them.
                     pollThrottleRef.current.succeed();
@@ -857,6 +868,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
             if (!isCancelled()) {
                 setCachedBalancesUpdating(false);
                 setBalanceLoadFailed(true);
+                if (isSdkLoadFailure(err)) setSdkLoadFailed(true);
                 // The raw SDK message used to go straight on screen here, URL
                 // and all ("Explorer returned HTTP 429 for /RLTC/api/balances/
                 // bcrt1q..."). humanizeError owns the wording for every shape
@@ -1284,7 +1296,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
     // Offline, the offline message above is the one message: a read that
     // failed before the offline verdict arrived says the same thing again.
     let balanceStatusText = loadErrorText;
-    if (offline) balanceStatusText = null;
+    if (offline || sdkLoadFailed) balanceStatusText = null;
     else if (balanceLoadFailed && balances && loadErrorText) {
         balanceStatusText = `${loadErrorText} Showing saved balances from the last successful sync.`;
     }
@@ -1370,8 +1382,19 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                 ) : null}
                 {/* The offline message already covers stale balances, so the
                     shell notice steps aside rather than saying it twice. */}
-                {offline ? <HideReachabilityNotice /> : null}
-                {offline ? (
+                {offline || sdkLoadFailed ? <HideReachabilityNotice /> : null}
+                {sdkLoadFailed ? (
+                    <StatusMessage
+                        variant="error"
+                        recovery={{
+                            label: t('home.sdkLoadFailure.reload'),
+                            onAction: () => window.location.reload(),
+                        }}
+                    >
+                        {t('home.sdkLoadFailure')}
+                    </StatusMessage>
+                ) : null}
+                {offline && !sdkLoadFailed ? (
                     <StatusMessage variant="warning">
                         {balances
                             ? t('home.offline.cached')
@@ -1518,7 +1541,7 @@ export function Home({ onLocked, onSend, onReceive, onSwap, onExchange, onCreate
                         // empty tab does not add "Fund your wallet" or a
                         // second "could not be checked" from balances that
                         // are only the last good load.
-                        balanceNoticeShown={offline || Boolean(balanceStatusText) || cachedBalancesUpdating}
+                        balanceNoticeShown={offline || sdkLoadFailed || Boolean(balanceStatusText) || cachedBalancesUpdating}
                         onRecheckBalances={recheckBalances}
                         onCommandPalette={onCommandPalette}
                         // Only shells without a nav surface pass this;

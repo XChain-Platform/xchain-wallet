@@ -25,3 +25,31 @@ export function memoizeRetryablePromise(loader) {
         return cached;
     };
 }
+
+export const CHUNK_RETRY_DELAYS_MS = Object.freeze([1000, 2000, 4000]);
+
+const waitFor = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs));
+
+/**
+ * Run transient asynchronous work again after each bounded backoff. The
+ * initial call happens immediately; every entry in `delays` permits one more
+ * attempt after that delay.
+ *
+ * @template T
+ * @param {() => Promise<T>} loader
+ * @param {{ delays?: readonly number[], wait?: (delayMs: number) => Promise<void> }} [opts]
+ * @returns {Promise<T>}
+ */
+export async function retryPromise(loader, {
+    delays = CHUNK_RETRY_DELAYS_MS,
+    wait = waitFor,
+} = {}) {
+    for (let attempt = 0; ; attempt += 1) {
+        try {
+            return await loader();
+        } catch (error) {
+            if (attempt >= delays.length) throw error;
+            await wait(delays[attempt]);
+        }
+    }
+}

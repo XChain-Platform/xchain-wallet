@@ -20,6 +20,8 @@ const messages = {
     'home.offline.cached':
         'You are offline. Showing cached balances and their last synced time. Network actions will be available when your connection returns.',
     'home.offline.empty': 'You are offline. Connect to load balances and use network actions.',
+    'home.sdkLoadFailure': 'Part of the wallet did not load. Reload to try again.',
+    'home.sdkLoadFailure.reload': 'Reload',
     'home.updatingBalances': 'Updating balances…',
     'home.interruptedAction':
         'A {action} was interrupted. Nothing was submitted automatically. Check Activity before trying again.',

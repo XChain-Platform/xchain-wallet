@@ -485,6 +485,8 @@ describe('translations', () => {
             ['desktopUpdate.retry', 'home.retryBalances'],
             // Every action form's From field (U60): Execute contract and Send.
             ['execute.caller', 'send.fields.from'],
+            // Both shell recovery paths use the same concise reload action.
+            ['extension.connection.reload', 'home.sdkLoadFailure.reload'],
             // The governance page title and the settings notification label.
             ['governance.title', 'settings.notifications.governancePolls'],
             // The History status filter header and the parallel composer's status-pill label prefix.
