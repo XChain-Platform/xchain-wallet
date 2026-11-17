@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('../../../packages/core/src/shared/hooks/useFeeFiat.js', () => ({
     useFeeFiat: () => ({
@@ -145,9 +145,15 @@ describe('SignApproval Confirm Standard', () => {
         expect(screen.queryByText('Requesting site')).toBeNull();
 
         // The status notice is first on the page.
-        const status = await screen.findByTestId('confirm-status');
+        // The notice first renders as the info "checking" state and turns
+        // danger when the network check's verdict lands, so wait for the
+        // verdict instead of reading whichever state renders first.
+        await waitFor(
+            () => expect(screen.getByTestId('confirm-status').getAttribute('data-tone')).toBe('danger'),
+            { timeout: 10_000 },
+        );
+        const status = screen.getByTestId('confirm-status');
         expect(screen.getByTestId('confirm-modal').firstElementChild).toBe(screen.getByTestId('confirm-status-slot'));
-        expect(status.getAttribute('data-tone')).toBe('danger');
         const password = screen.getByLabelText('Password');
         const buttons = screen.getByTestId('confirm-buttons');
         expect(status.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

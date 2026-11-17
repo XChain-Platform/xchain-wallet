@@ -75,7 +75,15 @@ function messaging() {
         }),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         getNewestAddress: vi.fn().mockResolvedValue(OWN_BTC_ADDRESS),
-        getWalletBalances: vi.fn().mockResolvedValue({}),
+        // The give balance loads after a short delay; with none on record it
+        // settles at zero and refuses the give amount, so a slow run would
+        // fail on timing alone. 10 ALPHA covers every amount these tests use.
+        getWalletBalances: vi.fn().mockResolvedValue({
+            [DOGE]: [{
+                address: DOGE_ADDRESS.address,
+                balances: { tokens: [{ tick: 'ALPHA', quantity: '1000000000', divisibility: 8 }] },
+            }],
+        }),
         getSettings: vi.fn().mockResolvedValue({}),
         listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode: 'watcher' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
