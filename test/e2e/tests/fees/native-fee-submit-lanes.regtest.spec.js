@@ -71,7 +71,9 @@ import {
     waitForValidAction,
     warmFeeQuote,
     selectPickerAsset,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 100;
@@ -127,22 +129,20 @@ async function setNativeFee(scope, enabled = true) {
 async function fillIssueForm(page, tick, { nativeFee, initialMint = null }) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     await readIssueSource(main);
-    await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Max supply', { exact: true }).fill(SUPPLY);
+    await fieldByLabel(main, 'Ticker').fill(tick);
+    await fieldByLabel(main, 'Max supply').fill(SUPPLY);
     if (initialMint !== null) {
         await openIssueSection(main, 'Initial mint');
-        await main.getByLabel('Initial mint', { exact: true }).fill(String(initialMint));
+        await fieldByLabel(main, 'Initial mint').fill(String(initialMint));
     }
     await setNativeFee(main, nativeFee);
     return main;
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -170,7 +170,7 @@ async function setupFundedWallet(page, name) {
     await switchToRegtest(page, PASSWORD);
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
@@ -228,7 +228,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(main);
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
@@ -256,7 +256,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
 
         await test.step('LANE 1: the confirm path pays the fee in coin, on chain', async () => {
             const main = await fillIssueForm(page, ISSUE_TICK, { nativeFee: true });
-            const password = main.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(main, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             // In full mode this form is SINGLE-ENCODE: the form button
             // composes and opens the confirm screen directly, with no review
@@ -361,9 +361,9 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
 
         await openPaletteCommand(page, 'Advanced action');
         const main = page.getByRole('main');
-        await expect(main.getByLabel('Action', { exact: true })).toBeVisible({ timeout: 30_000 });
+        await expect(fieldByLabel(main, 'Action')).toBeVisible({ timeout: 30_000 });
         await selectVenueChain(main);
-        await pickOption(main.getByLabel('Action', { exact: true }), 'SEND');
+        await pickOption(fieldByLabel(main, 'Action'), 'SEND');
         await main.getByRole('textbox', { name: 'TICK', exact: true }).fill(SEND_TICK);
         await main.getByRole('textbox', { name: 'AMOUNT', exact: true })
             .fill(String(SEND_AMOUNT));

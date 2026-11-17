@@ -101,6 +101,7 @@ import {
     waitForTokenBalance,
     waitForValidAction,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Native coin for the payer, to pay miner fees for its mint and its send. */
@@ -230,7 +231,7 @@ async function payTheSubject(browser, page, { beforePayment } = {}) {
     await test.step(`the payer sends ${PAY_AMOUNT} ${TICK} to the subject`, async () => {
         await gotoSection(payer.page, 'Send');
         await pickAssetByChainAndTick(payer.page, TICK, REGTEST_CHAIN_ID, TICK);
-        await payer.page.getByLabel('To', { exact: true }).fill(subject);
+        await fieldByLabel(payer.page, 'To').fill(subject);
         await payer.page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(PAY_AMOUNT);
         await mainButton(payer.page, 'Send').click();
 

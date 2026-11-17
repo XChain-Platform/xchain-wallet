@@ -79,7 +79,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** One ISSUE, paying a real coin fee. */
@@ -212,9 +214,7 @@ async function expectConfirmScreen(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // Success screens may draw the id truncated; waitForShownTxid reads the
     // full id from its accessible name, and from the text where it is whole.
     return waitForShownTxid(page.getByRole('main'), {
@@ -236,14 +236,14 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
             // The network and the signer sit in the From section, closed until opened.
             await openIssueSection(probe, 'From');
             await selectVenueChain(probe);
-            await expect.poll(async () => probe.getByLabel('From address').inputValue().catch(() => ''),
+            await expect.poll(async () => fieldByLabel(probe, 'From address').inputValue().catch(() => ''),
                 { timeout: 30_000, message: 'the Issue Token form names no signing address' })
                 .toMatch(REGTEST_ADDRESS_RE);
-            owner = await probe.getByLabel('From address').inputValue();
+            owner = await fieldByLabel(probe, 'From address').inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -264,20 +264,20 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
             // The network and the signer sit in the From section, closed until opened.
             await openIssueSection(main, 'From');
             await selectVenueChain(main);
-            await expect.poll(async () => main.getByLabel('From address').inputValue().catch(() => ''),
+            await expect.poll(async () => fieldByLabel(main, 'From address').inputValue().catch(() => ''),
                 { timeout: 30_000, message: 'the Issue Token form names no signing address' })
                 .toMatch(REGTEST_ADDRESS_RE);
 
             // The template fills every number and the locks itself; the user
             // adds a name and a picture. The form shows the filled supply and
             // indivisibility, and the chain record is checked field by field below.
-            await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Ticker', { exact: true }).fill(TICK);
-            await expect(main.getByLabel('Max supply', { exact: true }),
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'Ticker').fill(TICK);
+            await expect(fieldByLabel(main, 'Max supply'),
                 'the Collectible template did not fill a supply of exactly 1')
                 .toHaveValue('1');
             await openIssueSection(main, 'Description');
-            await main.getByLabel('Image URL').fill(IMAGE_URL);
+            await fieldByLabel(main, 'Image URL').fill(IMAGE_URL);
             await submitTokenWizard(page);
 
             await expectConfirmScreen(page);

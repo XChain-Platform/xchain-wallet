@@ -76,7 +76,9 @@ import {
     tokenBalance,
     unlockAfterReload,
     expectConfirmModal as sharedConfirmModal,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Three ISSUEs plus a refused one, each paying a real coin fee. */
@@ -213,9 +215,7 @@ async function expectConfirmScreen(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // Success screens may draw the id truncated; waitForShownTxid reads the
     // full id from its accessible name, and from the text where it is whole.
     return waitForShownTxid(page.getByRole('main'), {
@@ -259,7 +259,7 @@ async function onboardAndIssueParent(page, walletName) {
 
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
@@ -271,7 +271,7 @@ async function onboardAndIssueParent(page, walletName) {
 
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
-    await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
     expect(await readIssueSource(form),
         'the Issue form changed its From address between the two visits')
         .toBe(source);
@@ -311,7 +311,7 @@ async function fillSubtoken(page, { parent, child, supply }) {
     // catches the render before it and returns "" (§3.5, Session 39).
     let feePaidBy = '';
     await expect.poll(async () => {
-        feePaidBy = await main.getByLabel('From address').inputValue().catch(() => '');
+        feePaidBy = await fieldByLabel(main, 'From address').inputValue().catch(() => '');
         return feePaidBy;
     }, {
         timeout: 30_000,
@@ -319,8 +319,8 @@ async function fillSubtoken(page, { parent, child, supply }) {
     }).toMatch(REGTEST_ADDRESS_RE);
 
     await pickIssueParent(main, parent);
-    await main.getByLabel('Subtoken name').fill(child);
-    await main.getByLabel('Max supply', { exact: true }).fill(String(supply));
+    await fieldByLabel(main, 'Subtoken name').fill(child);
+    await fieldByLabel(main, 'Max supply').fill(String(supply));
     // The coin lane: the screen's native fee line and the payer's coin delta
     // are what this spec measures.
     await payProtocolFeeInCoin(main);

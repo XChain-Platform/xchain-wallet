@@ -13,6 +13,7 @@
 // a local proof, so the user keeps the final say on every chain.
 
 import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
+import { searchTokenPicker } from '../../fixtures/fields.js';
 
 const VALID_LTC = 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9';
 
@@ -33,7 +34,7 @@ test('an unaffordable Litecoin token send offers Sign anyway behind the same war
     await createWallet(page);
     await gotoSection(page, 'Send');
     await page.getByRole('button', { name: /Change asset/ }).click();
-    await page.getByLabel('Search coins or tokens').fill('LITEGEM');
+    await searchTokenPicker(page, 'LITEGEM');
     await page.getByRole('button', { name: /^Select Lite Gem/ }).first().click();
     const main = page.getByRole('main');
     await expect(main.getByRole('textbox', { name: /^Amount \(LITEGEM\)/ })).toBeVisible();

@@ -14,12 +14,13 @@
 
 import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
 import { showHomeBalances } from '../../fixtures/homeBalances.js';
+import { searchTokenPicker } from '../../fixtures/fields.js';
 
 test('a search typed in the Send picker does not filter the Home Tokens tab', async ({ page }) => {
     await createWallet(page);
     await gotoSection(page, 'Send');
     await page.getByRole('button', { name: /Change asset/ }).click();
-    await page.getByLabel('Search coins or tokens').fill('LTC');
+    await searchTokenPicker(page, 'LTC');
     // Picker rows select the asset ("Select <name> on <chain>"); only Home's
     // balance rows open token details.
     await page.getByRole('button', { name: /^Select .*Litecoin/ }).first().click();

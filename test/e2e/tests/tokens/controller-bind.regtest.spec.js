@@ -98,7 +98,9 @@ import {
     waitForTokenBalance,
     REGTEST_CHAIN_ID,
     openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** ISSUE, DEPLOY and the two ISSUE v6 binds each pay a real coin fee here. */
@@ -353,9 +355,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // The Send success screen draws the id truncated; waitForShownTxid reads
     // the full id from its accessible name, and from the text on screens
     // that print it whole.
@@ -442,7 +442,7 @@ async function issueToken(page, tick, source) {
     await seedPrices();
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
-    await expect(form.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
     expect(await readIssueSource(form),
         'the Issue form is not signing with the funded address')
         .toBe(source);
@@ -463,7 +463,7 @@ async function onboardAndIssue(page, ticks = [TICK, CONTROL_TICK], walletName = 
 
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
@@ -497,18 +497,18 @@ async function deployGuard(page, source, guardSource = GUARD_SOURCE) {
     await deploy.click();
 
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Code source', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Code source')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
     expect(await (await openFromAddress(main)).inputValue(),
         'the deploy would be signed by an address this spec never funded')
         .toBe(source);
 
-    await main.getByLabel('Code source', { exact: true }).fill(guardSource);
+    await fieldByLabel(main, 'Code source').fill(guardSource);
     // A source the validator rejects can never deploy, so a green validation is
     // the cheap precondition that keeps a later failure meaningful. The form
     // validates by itself once typing pauses.
     await expect(main.getByTestId('deploy-code-status')).toContainText(/^✓Valid, .+ of 64 KB/, { timeout: 30_000 });
-    await main.getByLabel('Gas limit', { exact: true }).fill(DEPLOY_GAS);
+    await fieldByLabel(main, 'Gas limit').fill(DEPLOY_GAS);
     await main.getByRole('button', { name: 'Publish', exact: true }).click();
 
     await expectConfirmModal(page);
@@ -535,7 +535,7 @@ async function generateExtraAddresses(page, count) {
     await page.getByTestId('address-add-menu').click();
     await page.getByTestId('address-add-address').click();
     await selectVenueChain(page, 'Coin');
-    await page.getByLabel('Number of addresses', { exact: true }).fill(String(count));
+    await fieldByLabel(page, 'Number of addresses').fill(String(count));
     await page.getByTestId('add-address-generate').click();
     // The modal closes only once the last address is stored; a reload before
     // that cuts generation short.
@@ -563,7 +563,7 @@ async function gotoControllerForm(page, tick) {
     await clickManageTokenAction(page.getByRole('main'), 'Controller');
 
     const form = page.getByRole('main');
-    await expect(form.getByLabel('Guard contract', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(form, 'Guard contract')).toBeVisible({ timeout: 30_000 });
     return form;
 }
 
@@ -586,7 +586,7 @@ async function bindController(page, source, contractIndex, { tick = TICK, action
     // the signing address. The two are different actions on the wire (ISSUE v6
     // vs ADDRESS v1) and an address-scoped bind would gate this wallet's whole
     // account instead of this token, so the default is worth pinning.
-    await expect(form.getByLabel('What to protect', { exact: true }),
+    await expect(fieldByLabel(form, 'What to protect'),
         'the form opened from a token but did not default to protecting it')
         .toHaveValue('token');
 
@@ -598,7 +598,7 @@ async function bindController(page, source, contractIndex, { tick = TICK, action
         'the bind would be signed by an address that does not own the token')
         .toBe(source);
 
-    await form.getByLabel('Guard contract', { exact: true }).fill(contractIndex);
+    await fieldByLabel(form, 'Guard contract').fill(contractIndex);
     // A missing checkbox fails chooseActionClass, so this line is also the
     // browser-side proof of D-150: before the fix the picker carried five of the
     // chain's seven bindable classes and `all` was simply not there to choose.
@@ -660,7 +660,7 @@ async function unbindController(page, source, tick = TICK) {
 
     // The form opens on the token, which it signs from as the token's owner, so
     // there is no source to pick; the chain's verdict below proves the owner signed.
-    await expect(form.getByLabel('What to unbind', { exact: true }),
+    await expect(fieldByLabel(form, 'What to unbind'),
         'opened from Manage Token, the Unbind form does not default to the token')
         .toHaveValue('token');
     // The cooldown field belongs to a bind and must not be offered on a drop:
@@ -701,13 +701,13 @@ async function gotoAddressControllerForm(page, source) {
     await seedPrices();
     await openPaletteCommand(page, 'Bind a controller');
     const form = page.getByRole('main');
-    await expect(form.getByLabel('What to protect', { exact: true }), 'the palette did not open the controller form')
+    await expect(fieldByLabel(form, 'What to protect'), 'the palette did not open the controller form')
         .toBeVisible({ timeout: 30_000 });
 
     // No token was passed, so the address subject must be the only one offered -
     // a form that defaulted to a token here would build an ISSUE v6 with an
     // empty TICK.
-    await expect(form.getByLabel('What to protect', { exact: true }),
+    await expect(fieldByLabel(form, 'What to protect'),
         'opened without a token, the form still defaults to protecting one')
         .toHaveValue('address');
 
@@ -741,7 +741,7 @@ async function chooseActionClass(form, actionClass) {
 /** Binds `contractIndex` to `source` itself (ADDRESS v1) and waits for the chain. */
 async function bindAddressController(page, source, contractIndex) {
     const form = await gotoAddressControllerForm(page, source);
-    await form.getByLabel('Guard contract', { exact: true }).fill(contractIndex);
+    await fieldByLabel(form, 'Guard contract').fill(contractIndex);
     await chooseActionClass(form, 'transfer');
     await form.getByLabel(/^Cooldown blocks/).fill('0');
     await form.getByRole('button', { name: 'Bind', exact: true }).click();
@@ -788,9 +788,9 @@ async function unbindAddressController(page, source) {
     // Opened from the palette with no token context, so the form unbinds an address.
     await openPaletteCommand(page, 'Unbind a controller');
     const form = page.getByRole('main');
-    await expect(form.getByLabel('What to unbind', { exact: true }), 'the palette did not open the Unbind form')
+    await expect(fieldByLabel(form, 'What to unbind'), 'the palette did not open the Unbind form')
         .toBeVisible({ timeout: 30_000 });
-    await expect(form.getByLabel('What to unbind', { exact: true }),
+    await expect(fieldByLabel(form, 'What to unbind'),
         'opened without a token, the Unbind form still defaults to a token')
         .toHaveValue('address');
     await selectVenueChain(form);
@@ -870,7 +870,7 @@ async function composeSend(page, tick, destination, amount) {
     await expect(main, `the Send form is not sourcing from the address that holds ${tick}`)
         .toContainText(new RegExp(`[\\d,]+\\s*${tick} available`), { timeout: 60_000 });
 
-    await page.getByLabel('To', { exact: true }).fill(destination);
+    await fieldByLabel(page, 'To').fill(destination);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(String(amount));
     await main.getByRole('button', { name: 'Send', exact: true }).click();
     await expectConfirmModal(page);

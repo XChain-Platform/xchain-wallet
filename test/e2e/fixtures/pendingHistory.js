@@ -33,6 +33,7 @@ import {
     readReceiveAddress,
 } from './regtest.js';
 import { expect } from './wallet.js';
+import { fieldByLabel, searchTokenPicker } from './fields.js';
 
 /** The venue's native ticker, e.g. RLTC -> LTC. */
 export const NATIVE_COIN = REGTEST_COIN.replace(/^R/, '');
@@ -254,7 +255,7 @@ export async function pickAssetByChainAndTick(page, searchText, chainId, tick) {
             + 'sees no balance on this network yet. Fund the address and reload first.');
     }
     await trigger.click();
-    await page.getByLabel('Search coins or tokens').fill(searchText);
+    await searchTokenPicker(page, searchText);
     const row = page.locator(`[data-balance-key="${chainId}:${tick}"]`).first();
     await expect(row, `the Send picker offered no ${tick} row on ${chainId} for "${searchText}"`)
         .toBeVisible({ timeout: 30_000 });
@@ -363,7 +364,7 @@ export function confirmedRowFor(page, actionIndex, address) {
  * what these specs are asserting.
  */
 export async function searchForTx(page, txid) {
-    const search = page.getByLabel('Search history');
+    const search = fieldByLabel(page, 'Search history');
     await expect(search, 'History did not render its filter bar').toBeVisible({ timeout: 60_000 });
     await search.fill(txid);
     return search;

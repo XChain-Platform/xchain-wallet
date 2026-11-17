@@ -59,7 +59,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     selectPickerAsset,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Seven fee-bearing broadcasts ride on this address (coin fees). */
@@ -143,7 +145,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -156,7 +158,7 @@ async function approveAndGetTxid(page) {
  */
 async function signedTxid(page) {
     await expectConfirmModal(page);
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main.getByTestId('result-screen-notice').filter({ hasText: 'Refill submitted' }),
         'the refill never reached its own success screen')
@@ -203,7 +205,7 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             owner = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
@@ -218,13 +220,13 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await main.getByRole('button', { name: /^Token/ }).click();
             await selectPickerAsset(page, TICK);
-            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
-            await main.getByLabel('Escrow amount').fill(String(ESCROW));
-            await main.getByLabel(/Trigger price/).fill(TRIGGER);
+            await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
+            await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
+            await fieldByLabel(main, /^Trigger price/).fill(TRIGGER);
 
             await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
             await expectConfirmModal(page);
@@ -250,7 +252,7 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
                     + 'are already gone')
                     .toContainText(/of 5 refills used/, { timeout: 60_000 });
 
-                await main.getByLabel('Refill amount').fill(String(REFILL));
+                await fieldByLabel(main, 'Refill amount').fill(String(REFILL));
                 await main.getByRole('button', { name: 'Refill Dispenser' }).click();
 
                 const done = await waitForIndexedAction(await signedTxid(page));
@@ -302,7 +304,7 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
             console.log('[note] this venue serves no per-edit give_escrow, so the refill count is '
                 + 'inferred and the sixth is warned about rather than blocked; the confirm page dry run '
                 + 'is asked for the verdict instead');
-            await main.getByLabel('Refill amount').fill(String(REFILL));
+            await fieldByLabel(main, 'Refill amount').fill(String(REFILL));
             await signButton.click();
 
             await expect(page.getByTestId('confirm-status'),

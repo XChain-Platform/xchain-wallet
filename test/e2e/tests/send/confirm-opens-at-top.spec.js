@@ -9,6 +9,7 @@
 // contact legal@dankest.llc.
 
 import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
+import { fieldByLabel, searchTokenPicker } from '../../fixtures/fields.js';
 
 const PASSWORD = 'confirm-top-password';
 const VALID_BTC = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -63,18 +64,16 @@ async function openSendConfirm(page) {
 }
 
 async function openIssueConfirm(page) {
-    // Issue token opens the template wizard; Custom is the full Issue form
-    // (ruling U79), whose optional fields sit in sections under Ticker (U80).
+    // Issue token opens the one-page Issue Token form, its template a
+    // picker inside the Token section, which starts open and holds Ticker
+    // and Max supply. Each field's 'About ...' help tip (U57) carries its
+    // label too, so fields are found through the shared field lookup.
     await gotoPalette(page, 'Issue token');
     const main = page.getByRole('main');
-    await main.getByRole('button', { name: /^Custom\b/ }).click();
-    // By role: each field's 'About ...' help tip (U57) carries its label too.
-    const ticker = main.getByRole('textbox', { name: 'Ticker', exact: true });
+    const ticker = fieldByLabel(main, 'Ticker');
     await expect(ticker).toBeVisible();
     await ticker.fill('TOPVIEW');
-    const supply = main.getByRole('button', { name: /^Supply\b/ });
-    if (await supply.getAttribute('aria-expanded') !== 'true') await supply.click();
-    await main.getByRole('textbox', { name: 'Max supply', exact: true }).fill('100');
+    await fieldByLabel(main, 'Max supply').fill('100');
     // The availability lookup starts after a 350 ms debounce.
     await page.waitForTimeout(500);
     await scrollFormToBottom(page);
@@ -86,7 +85,7 @@ async function openDispenserConfirm(page) {
     let main = page.getByRole('main');
     await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible();
     await main.getByRole('button', { name: /^Token:/ }).click();
-    await page.getByLabel('Search coins or tokens').fill('RAREPEPE');
+    await searchTokenPicker(page, 'RAREPEPE');
     await page.getByRole('button', { name: /^Select Rare Pepe/ }).click();
 
     main = page.getByRole('main');

@@ -43,7 +43,9 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForConfirmedUtxo,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -52,7 +54,7 @@ const SEND_BTC = '0.01';
 const INTENT_WORDS = `Send ${SEND_BTC} ${REGTEST_TICKER} on ${REGTEST_CHAIN_LABEL} to `;
 
 function toField(page) {
-    return page.getByLabel('To', { exact: true });
+    return fieldByLabel(page, 'To');
 }
 
 function amountField(page) {
@@ -116,8 +118,7 @@ test.describe('confirm -> broadcast on regtest', () => {
         // failure to override. This is what regressed users' most common
         // operation before.
         await expect(page.getByTestId('ack-DRYRUN_INVALID')).toHaveCount(0);
-        await expect(page.getByTestId('confirm-approve')).toBeEnabled();
-        await page.getByTestId('confirm-approve').click();
+        await approveConfirm(page);
 
         // The terminal state. `Broadcast pending` means the node ACCEPTED the
         // transaction; "Signed. Not broadcast yet." is the queued path and
@@ -236,7 +237,7 @@ test.describe('broadcast permanence on regtest', () => {
         await amountField(page).fill(SEND_BTC);
         await mainButton(page, 'Send').click();
         await expectConfirmModal(page, 'this action', 30_000);
-        await page.getByTestId('confirm-approve').click();
+        await approveConfirm(page);
     }
 
     test('a transient failure ends in "signed, not broadcast yet" and refuses to re-send', async ({ page }) => {

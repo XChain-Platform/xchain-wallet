@@ -56,6 +56,7 @@
 //       --config=playwright.regtest.config.js tests/settings/wallet-mode.regtest.spec.js
 
 import { createWallet, expect, openSettings, openWalletPicker, test } from '../../fixtures/wallet.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -91,7 +92,7 @@ test.describe('Wallet mode', () => {
                 await page.reload();
                 const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
                 await unlock.waitFor({ state: 'visible', timeout: 60_000 });
-                await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+                await fieldByLabel(page, 'Password').fill(PASSWORD);
                 await unlock.click();
                 await expect(page.getByRole('button', { name: 'Sign a transaction' }),
                     'the wallet did not come back unlocked into the signer surface')

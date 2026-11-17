@@ -82,7 +82,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     selectPickerAsset,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** The publish and the mint both pay a real coin protocol fee here. */
@@ -257,10 +259,9 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             // The password box only renders when the signer is locked. An
             // in-session wallet is already unlocked here, so waiting for it
             // times out on a screen that is perfectly ready to sign.
-            const pw = review.getByLabel('Password', { exact: true });
+            const pw = fieldByLabel(review, 'Password');
             if (await pw.count() > 0) await pw.fill(PASSWORD);
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             const done = page.getByRole('main');
             await expect(done, 'no transaction id ever appeared after approving the publish')
                 .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -380,13 +381,13 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             await main.getByRole('button', { name: /^Token/ }).click();
             await selectPickerAsset(page, TICK);
-            await main.getByLabel('Give amount per fill', { exact: true }).fill(String(GIVE_PER_FILL));
-            await main.getByLabel('Escrow amount', { exact: true }).fill(String(ESCROW));
+            await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
+            await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
 
             await main.getByRole('button', { name: /Advanced options/ }).click();
             await pickFiatCurrency(main, FIAT);

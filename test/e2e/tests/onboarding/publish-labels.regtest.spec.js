@@ -77,6 +77,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Two FILE publishes; FILE carries no protocol fee, so this is miner fees only. */
@@ -190,7 +191,7 @@ async function publishLabels(page) {
     await pickOption(chain, REGTEST_CHAIN_ID);
     // An unlocked session publishes with its pooled signer and asks no
     // password (2026-11-14); fill it only when the form shows it.
-    const password = page.getByLabel('Wallet password');
+    const password = fieldByLabel(page, 'Wallet password');
     if (await password.count()) await password.fill(PASSWORD);
     await page.getByRole('button', { name: 'Publish', exact: true }).click();
 
@@ -244,7 +245,7 @@ test.describe(`on-chain label publish on ${REGTEST_CHAIN_LABEL}`, () => {
             // identified by its prefix.
             await openPaletteCommand(page, 'Create dispenser');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             owner = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
@@ -276,7 +277,7 @@ test.describe(`on-chain label publish on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(row, 'the funded address is not in the address list').toBeVisible({ timeout: 30_000 });
             await row.click();
 
-            const labelInput = page.getByLabel('Address label');
+            const labelInput = fieldByLabel(page, 'Address label');
             await expect(labelInput, 'the address detail has no label field').toBeVisible({ timeout: 30_000 });
             await labelInput.fill(LABEL_CANARY);
             const saveLabel = page.getByRole('button', { name: 'Save', exact: true });

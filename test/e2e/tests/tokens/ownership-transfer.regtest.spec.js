@@ -37,7 +37,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -53,13 +55,11 @@ async function reloadToHome(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
         await password.fill(PASSWORD);
     }
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
 
     const main = page.getByRole('main');
     await expect(main, 'no transaction id appeared after Approve')
@@ -143,7 +143,7 @@ test.describe(`token ownership transfer on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             expect(await readIssueSource(main)).toBe(owner);
             await issuePlainToken(main, { ticker: TICK, supply: SUPPLY });
 
@@ -162,7 +162,7 @@ test.describe(`token ownership transfer on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openTokenAdmin(page, 'Transfer', TICK);
             const main = page.getByRole('main');
-            const destination = main.getByLabel('New owner address');
+            const destination = fieldByLabel(main, 'New owner address');
             await expect(destination).toBeVisible({ timeout: 30_000 });
             await destination.fill(newOwner);
             await main.getByRole('button', { name: 'Transfer Ownership', exact: true }).click();

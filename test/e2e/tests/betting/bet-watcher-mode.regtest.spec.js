@@ -45,7 +45,9 @@ import {
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -135,7 +137,7 @@ async function gotoBettingHub(page) {
 }
 
 async function fillPasswordIfPresent(scope) {
-    const field = scope.getByLabel('Password', { exact: true });
+    const field = fieldByLabel(scope, 'Password');
     if (await field.count() > 0 && await field.isVisible()) await field.fill(PASSWORD);
 }
 
@@ -158,7 +160,7 @@ async function signingAddress(page) {
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     const main = page.getByRole('main');
     await selectVenueChain(main);
-    return main.getByLabel('Your oracle address', { exact: true }).inputValue();
+    return fieldByLabel(main, 'Your oracle address').inputValue();
 }
 
 /** Generates one address on the venue chain, identified by difference (§3.5). */
@@ -237,16 +239,15 @@ test.describe('BET in watcher mode', () => {
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('Question', { exact: true }).fill(`Mode gate ${RUN_TAG}`);
-            await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
-            await main.getByLabel('Outcome 1', { exact: true }).fill('No');
-            await main.getByLabel('Purchases Close', { exact: true })
+            await fieldByLabel(main, 'Question').fill(`Mode gate ${RUN_TAG}`);
+            await fieldByLabel(main, 'Outcome 0').fill('Yes');
+            await fieldByLabel(main, 'Outcome 1').fill('No');
+            await fieldByLabel(main, 'Purchases Close')
                 .fill(toLocalDateTimeInput(await deadlineUnix(DEADLINE_LEAD_SEC)));
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Open market', exact: true }).click();
             await expectConfirmModal(page, 'this action', 60_000);
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
 
             const until = Date.now() + 180_000;
             let feed = null;
@@ -306,7 +307,7 @@ test.describe('BET in watcher mode', () => {
             await expect(main.locator('button[type="submit"]'),
                 'a watcher-mode wallet is still offered a signing review it cannot complete')
                 .toBeHidden({ timeout: 30_000 });
-            await expect(main.getByLabel('Password', { exact: true }),
+            await expect(fieldByLabel(main, 'Password'),
                 'a watcher-mode wallet asks for a password to sign nothing')
                 .toHaveCount(0);
         });
@@ -331,7 +332,7 @@ test.describe('BET in watcher mode', () => {
             await expect(main.getByRole('button', { name: 'Cancel Market', exact: true }),
                 'the oracle console still offers a signing review to a wallet that cannot sign')
                 .toBeHidden({ timeout: 30_000 });
-            await expect(main.getByLabel('Password', { exact: true }),
+            await expect(fieldByLabel(main, 'Password'),
                 'the oracle console asks a watcher-mode wallet for a password')
                 .toHaveCount(0);
         });

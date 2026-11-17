@@ -63,7 +63,9 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -186,12 +188,12 @@ async function composeMarket(page, { label, daysOut }) {
     await tokenField.click();
     await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-    await main.getByLabel('Question', { exact: true }).fill(label);
-    await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
-    await main.getByLabel('Outcome 1', { exact: true }).fill('No');
+    await fieldByLabel(main, 'Question').fill(label);
+    await fieldByLabel(main, 'Outcome 0').fill('Yes');
+    await fieldByLabel(main, 'Outcome 1').fill('No');
 
     const now = await chainTime();
-    await main.getByLabel('Purchases Close', { exact: true }).fill(toLocalDateTimeInput(now + daysOut * 86_400));
+    await fieldByLabel(main, 'Purchases Close').fill(toLocalDateTimeInput(now + daysOut * 86_400));
 
     // The form's OWN projection, the first of the three numbers. Read before
     // submitting, because it is a property of the form rather than of the
@@ -199,7 +201,7 @@ async function composeMarket(page, { label, daysOut }) {
     const quoteText = await main.getByText(/Opening this market (is free|costs about)/)
         .first().innerText();
 
-    const password = main.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(main, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
     await main.getByRole('button', { name: 'Open market', exact: true }).click();
 
@@ -209,7 +211,7 @@ async function composeMarket(page, { label, daysOut }) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -239,7 +241,7 @@ test.describe(`what opening a market costs on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            oracle = await main.getByLabel('Your oracle address', { exact: true }).inputValue();
+            oracle = await fieldByLabel(main, 'Your oracle address').inputValue();
             expect(oracle, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 

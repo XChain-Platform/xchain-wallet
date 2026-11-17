@@ -35,6 +35,7 @@
 
 import { expect } from '@playwright/test';
 import { revealChainPicker } from './wallet.js';
+import { searchTokenPicker } from './fields.js';
 
 /**
  * Picks a named chain in a `NetworkField`, on a named network, and proves the
@@ -130,13 +131,11 @@ export async function selectNamedToken(page, field, {
 
     await trigger().click();
 
-    const search = page.getByLabel('Search coins or tokens');
-    await expect(search, `the "${field}" field did not open the asset picker`)
-        .toBeVisible({ timeout: 30_000 });
     // Filtering is not cosmetic here: the held list is cross-chain, and on the
     // get side the "On the platform" section only appears AT ALL once a tick
-    // has been typed, because discovery is a search.
-    await search.fill(tick);
+    // has been typed, because discovery is a search. The search sits behind
+    // the picker's Filter button.
+    await searchTokenPicker(page, tick);
 
     const row = page.locator(`[data-balance-key="${chainId}:${tick}"]`).first();
     await expect(row, `the asset picker lists no ${tick} on ${chainLabel}. On the GIVE side that `

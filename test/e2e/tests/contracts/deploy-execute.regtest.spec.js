@@ -69,7 +69,9 @@ import {
     waitForTokenBalance,
     waitForValidAction,
     openFromAddress,
+    approveConfirm as approveWhenReady,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -107,10 +109,9 @@ async function explorerJson(path) {
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
 async function gotoDeployForm(page) {
@@ -118,7 +119,7 @@ async function gotoDeployForm(page) {
     const deploy = page.getByRole('button', { name: 'Publish contract' });
     await expect(deploy).toBeVisible({ timeout: 30_000 });
     await deploy.click();
-    await expect(page.getByRole('main').getByLabel('Code source')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(page.getByRole('main'), 'Code source')).toBeVisible({ timeout: 30_000 });
 }
 
 /**
@@ -252,9 +253,9 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
 
             // No Name field any more: the form shows what the chain is about
             // to record, parsed read-only out of the pasted source.
-            await expect(main.getByLabel('Name', { exact: true }),
+            await expect(fieldByLabel(main, 'Name'),
                 'the deploy form carries no on-device Name field').toHaveCount(0);
-            await main.getByLabel('Code source').fill(CONTRACT_SOURCE);
+            await fieldByLabel(main, 'Code source').fill(CONTRACT_SOURCE);
             const identity = main.locator('dl[aria-label="Contract identity"]');
             await expect(identity, 'the parsed contract identity is shown').toBeVisible({ timeout: 30_000 });
             await expect(identity).toContainText(META_NAME);
@@ -266,7 +267,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // precondition that keeps a later failure meaningful.
             await expect(main.getByTestId('deploy-code-status')).toContainText(/^✓Valid, .+ of 64 KB/, { timeout: 30_000 });
 
-            await main.getByLabel('Gas limit').fill(DEPLOY_GAS);
+            await fieldByLabel(main, 'Gas limit').fill(DEPLOY_GAS);
             await main.getByRole('button', { name: 'Publish', exact: true }).click();
             await approveConfirm(page);
 
@@ -365,7 +366,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
 
             // No ABI is declared, so the form is in its manual lane: a free-text
             // method name and pipe-delimited params. `inc` takes none.
-            await main.getByLabel('Method', { exact: true }).fill('inc');
+            await fieldByLabel(main, 'Method').fill('inc');
             // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
             await main.getByRole('button', { name: 'Call Contract', exact: true }).click();
             await approveConfirm(page);

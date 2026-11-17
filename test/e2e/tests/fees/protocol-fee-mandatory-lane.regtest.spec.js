@@ -64,7 +64,9 @@ import {
     switchToRegtest,
     tokenBalance,
     unlockAfterReload,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 // The fee is 6,666,667 sats here, so 1 coin is a comfortable multiple of it
@@ -143,7 +145,7 @@ async function projectedProtocolFeeSats(page) {
 
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     // No \b anchors: this screen renders the id with no separators around it.
     await expect(main, 'no transaction id ever appeared after Approve')
@@ -177,7 +179,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             // Every form has its OWN chain picker and they all default to
             // Bitcoin (§3.5): without this the run would compose on the wrong
             // chain and the address funded below would never be the payer.
@@ -206,10 +208,10 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('LEG 1: the priced action, screen against chain', async () => {
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await readIssueSource(main);
-            await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Max supply', { exact: true }).fill(SUPPLY);
+            await fieldByLabel(main, 'Ticker').fill(TICK);
+            await fieldByLabel(main, 'Max supply').fill(SUPPLY);
             // The fee row sits in the Fees section, closed until opened,
             // so the absence check below reads the open section.
             await openIssueSection(main, 'Speed and Fees');
@@ -223,7 +225,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 `${COIN} offers a fee-lane choice, so mandatory rule is not in force here`)
                 .toHaveCount(0);
 
-            const password = main.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(main, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
@@ -283,10 +285,10 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Post an announcement');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            await main.getByLabel('Message').fill(`mandatory lane zero check ${STAMP}`);
-            const password = main.getByLabel('Password', { exact: true });
+            await fieldByLabel(main, 'Message').fill(`mandatory lane zero check ${STAMP}`);
+            const password = fieldByLabel(main, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await main.getByRole('button', { name: 'Announce', exact: true }).click();
 

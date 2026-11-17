@@ -48,7 +48,9 @@ import {
     tokenBalance,
     unlockAfterReload,
     selectPickerAsset,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel, searchTokenPicker } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** ISSUE pays a real coin fee on this chain. */
@@ -166,7 +168,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -178,7 +180,7 @@ async function issueToken(page, tick, supply) {
     await seedPrices();
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     await readIssueSource(main);
     await issuePlainToken(main, { ticker: tick, supply });
     await expectConfirmModal(page);
@@ -212,7 +214,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             buyer = await readIssueSource(main);
             expect(buyer, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
@@ -234,7 +236,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             seller = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(seller, 'the seller wallet derived the buyer\'s address').not.toBe(buyer);
@@ -248,20 +250,26 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await seedPrices();
             await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             // The token being SOLD comes from a picker over real balances.
             await main.getByRole('button', { name: /^Token/ }).click();
             await selectPickerAsset(page, 'XCHAIN');
 
-            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
-            await main.getByLabel('Escrow amount').fill(String(ESCROW));
+            await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
+            await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
 
             // The lane under test: buyers pay in a TOKEN, not the native coin.
-            await main.getByRole('radio', { name: 'A token' }).check();
-            await main.getByLabel('Payment token').fill(PAY_TICK);
-            await main.getByLabel('Payment amount per fill').fill(String(PRICE_PER_FILL));
+            // Buyers pay with is an asset picker (a token field), so the
+            // payment token is picked on it, never typed.
+            await main.getByRole('button', { name: /^Buyers pay with:/ }).click();
+            await searchTokenPicker(page, PAY_TICK);
+            await page.getByRole('button', { name: new RegExp(`^Select ${PAY_TICK} on `) }).first()
+                .click({ timeout: 30_000 });
+            await expect(main.getByRole('button', { name: new RegExp(`^Buyers pay with: ${PAY_TICK} on `) }))
+                .toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'Payment amount per fill').fill(String(PRICE_PER_FILL));
 
             await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
             await expectConfirmModal(page);
@@ -293,8 +301,8 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.getByRole('main').getByText('Browse dispensers', { exact: true })
                 .first().click();
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Token ticker')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Token ticker').fill('XCHAIN');
+            await expect(fieldByLabel(main, 'Token ticker')).toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'Token ticker').fill('XCHAIN');
             await main.getByRole('button', { name: 'Search', exact: true }).click();
 
             // An explorer result row is named "<TICK> @ <dispenser address>
@@ -328,7 +336,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
 
             const buySection = page.getByRole('main');
-            await expect(buySection.getByLabel('Fills', { exact: true }),
+            await expect(fieldByLabel(buySection, 'Fills'),
                 'the buy panel never rendered for a dispenser this wallet does not own')
                 .toBeVisible({ timeout: 30_000 });
             // The panel must know what the buyer holds of the PAYMENT token;
@@ -339,7 +347,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             // The buyer already holds XCHAIN (the gas mint, less the ISSUE
             // fee), so the fill is measured as a delta from this figure.
             buyerXchainBefore = await tokenBalance(buyer, 'XCHAIN');
-            await buySection.getByLabel('Fills', { exact: true }).fill('1');
+            await fieldByLabel(buySection, 'Fills').fill('1');
             const buyButton = buySection.getByRole('button', { name: /^Buy 1 fill$/ });
             await expect(buyButton, 'the Buy button is disabled for a funded buyer').toBeEnabled();
             await buyButton.click();
@@ -351,7 +359,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             // right address that the screen did not recognise as a buy is the
             // case where a buyer pays and nothing dispenses.
             await sharedConfirmModal(page, 'the dispenser buy', 60_000);
-            const password = page.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await expectConfirmModal(page);
             await expect(page.getByTestId('confirm-modal'),
@@ -363,7 +371,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 buyFeeXchain = Number(said.match(/([\d.]+)\s*XCHAIN\b/)?.[1]);
                 expect(Number.isFinite(buyFeeXchain), `unparseable protocol-fee line: ${said}`).toBe(true);
             }
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             await expect(page.getByText('Buy submitted'), 'the buy never reported being submitted')
                 .toBeVisible({ timeout: 180_000 });
         });

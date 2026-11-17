@@ -50,6 +50,7 @@
 
 import { createWallet, expect, openSettings, test } from '../../fixtures/wallet.js';
 import { unlockAfterReload } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -117,7 +118,7 @@ async function openPasteForm(page) {
     await page.getByRole('button', { name: /^Add Network/ }).click();
     await page.getByRole('button', { name: 'Add Custom Network', exact: true }).click();
     await page.getByRole('button', { name: /^Descriptor JSON/ }).click();
-    return page.getByLabel('Descriptor JSON', { exact: true });
+    return fieldByLabel(page, 'Descriptor JSON');
 }
 
 /**
@@ -159,7 +160,7 @@ test.describe('Settings: custom chains', () => {
             });
 
             await test.step('a valid descriptor is added and enters the live registry', async () => {
-                const json = page.getByLabel('Descriptor JSON', { exact: true });
+                const json = fieldByLabel(page, 'Descriptor JSON');
                 await json.fill(JSON.stringify(DESCRIPTOR));
                 await page.getByRole('button', { name: 'Add Network', exact: true }).click();
 

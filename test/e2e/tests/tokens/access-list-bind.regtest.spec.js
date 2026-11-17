@@ -93,7 +93,9 @@ import {
     warmPreflight,
     selectVenueSendAsset,
     openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** ISSUE, LIST and the ISSUE v5 edit each pay a real coin fee on this chain. */
@@ -200,9 +202,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // The Send success screen draws the id truncated; waitForShownTxid reads
     // the full id from its accessible name, and from the text on screens
     // that print it whole.
@@ -282,7 +282,7 @@ async function onboardAndIssue(page, tick, walletName) {
 
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
@@ -300,7 +300,7 @@ async function onboardAndIssue(page, tick, walletName) {
     await seedPrices();
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
-    await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
     expect(await readIssueSource(form),
         'the Issue form changed its From address between the two visits')
         .toBe(source);
@@ -322,7 +322,7 @@ async function generateExtraAddresses(page, count) {
     await page.getByTestId('address-add-menu').click();
     await page.getByTestId('address-add-address').click();
     await selectVenueChain(page, 'Coin');
-    await page.getByLabel('Number of addresses').fill(String(count));
+    await fieldByLabel(page, 'Number of addresses').fill(String(count));
     await page.getByTestId('add-address-generate').click();
     // The modal derives the addresses one at a time and closes only after the
     // last one is stored; navigating or reloading before that drops the rest.
@@ -371,7 +371,7 @@ async function publishAddressList(page, source, chooseMembers) {
     // List type is the themed dropdown: open it, then pick Addresses.
     await main.getByRole('button', { name: /^List type:/ }).click();
     await main.getByRole('option', { name: 'Addresses', exact: true }).click();
-    await main.getByLabel('Addresses', { exact: true }).fill(members.join('\n'));
+    await fieldByLabel(main, 'Addresses').fill(members.join('\n'));
 
     // The parser's own count, before anything is composed. A list silently short
     // of a member would make the gate below pass or fail for the wrong reason.
@@ -526,7 +526,7 @@ async function composeTokenSend(page, tick, destination) {
     await expect(main, `the Send form is not sourcing from the address that holds ${tick}`)
         .toContainText(new RegExp(`[\\d,]+\\s*${tick} available`), { timeout: 60_000 });
 
-    await page.getByLabel('To', { exact: true }).fill(destination);
+    await fieldByLabel(page, 'To').fill(destination);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(String(SEND_AMOUNT));
     await main.getByRole('button', { name: 'Send', exact: true }).click();
     await expectConfirmModal(page);

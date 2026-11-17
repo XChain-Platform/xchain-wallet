@@ -68,7 +68,9 @@ import {
     switchToRegtest,
     unlockAfterReload,
     warmPreflight,
+    approveConfirm as approveWhenReady,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -210,7 +212,7 @@ async function useAddress(page, address) {
 }
 
 async function fillPasswordIfPresent(scope) {
-    const field = scope.getByLabel('Password', { exact: true });
+    const field = fieldByLabel(scope, 'Password');
     if (await field.count() > 0 && await field.isVisible()) await field.fill(PASSWORD);
 }
 
@@ -257,8 +259,7 @@ async function warmBet(source, feedIndex, expected) {
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
 test.describe('BET deadline race', () => {
@@ -286,7 +287,7 @@ test.describe('BET deadline race', () => {
             await gotoBettingHub(page);
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             await selectVenueChain(page.getByRole('main'));
-            oracle = await page.getByRole('main').getByLabel('Your oracle address', { exact: true }).inputValue();
+            oracle = await fieldByLabel(page.getByRole('main'), 'Your oracle address').inputValue();
             expect(oracle, `the create form names a ${REGTEST_COIN} address`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -363,7 +364,7 @@ test.describe('BET deadline race', () => {
             await gotoBettingHub(page);
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             await selectVenueChain(page.getByRole('main'));
-            punter = await page.getByRole('main').getByLabel('Your oracle address', { exact: true }).inputValue();
+            punter = await fieldByLabel(page.getByRole('main'), 'Your oracle address').inputValue();
             expect(punter, 'the wallet now signs as some other address').not.toBe(oracle);
 
             await fundAddress(punter, FUNDING);
@@ -393,7 +394,7 @@ test.describe('BET deadline race', () => {
 
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            expect(await main.getByLabel('Your oracle address', { exact: true }).inputValue(),
+            expect(await fieldByLabel(main, 'Your oracle address').inputValue(),
                 'the form signs with the funded oracle address').toBe(oracle);
 
             const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
@@ -401,13 +402,13 @@ test.describe('BET deadline race', () => {
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('Question', { exact: true }).fill(`Deadline race ${RUN_TAG}`);
-            await main.getByLabel('Outcome 0', { exact: true }).fill(OUTCOME.label);
-            await main.getByLabel('Outcome 1', { exact: true }).fill(OUTCOME_OTHER);
+            await fieldByLabel(main, 'Question').fill(`Deadline race ${RUN_TAG}`);
+            await fieldByLabel(main, 'Outcome 0').fill(OUTCOME.label);
+            await fieldByLabel(main, 'Outcome 1').fill(OUTCOME_OTHER);
 
             // From the CHAIN's clock, not the browser's.
             deadlineSec = (await chainTime()) + DEADLINE_LEAD_SEC;
-            await main.getByLabel('Purchases Close', { exact: true }).fill(toLocalDateTimeInput(deadlineSec));
+            await fieldByLabel(main, 'Purchases Close').fill(toLocalDateTimeInput(deadlineSec));
 
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Open market', exact: true }).click();
@@ -534,8 +535,7 @@ test.describe('BET deadline race', () => {
         await test.step('the preflight override still stops before signing and reports the refusal', async () => {
             const ack = page.locator('[data-testid^="ack-"]').first();
             await ack.check();
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 30_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveWhenReady(page);
 
             // The earlier acknowledgement belongs only to the preflight report.
             // The form's fresh market read is a final safety gate and cannot be

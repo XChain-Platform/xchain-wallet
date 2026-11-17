@@ -39,6 +39,7 @@
 
 import { createWallet, expect, openPaletteCommand, revealChainPicker, test } from '../../fixtures/wallet.js';
 import { switchToRegtest } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -86,7 +87,7 @@ test.describe('the native-fee rule when the chain changes under an open form', (
 
         await openPaletteCommand(page, 'Issue token');
         const main = page.getByRole('main');
-        await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+        await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
 
         await test.step('on Bitcoin the fee row is a choice, and it starts off', async () => {
             await switchFormChain(main, 'Bitcoin');

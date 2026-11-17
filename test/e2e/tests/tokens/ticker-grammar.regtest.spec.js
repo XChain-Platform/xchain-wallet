@@ -95,7 +95,9 @@ import {
     waitForTokenBalance,
     waitForValidAction,
     warmFeeQuote,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** One leg here pays a real protocol fee on top of the miner fees. */
@@ -316,7 +318,7 @@ async function openWizardDetails(page) {
     const main = page.getByRole('main');
     await openIssueSection(main, 'From');
     await selectVenueChain(main);
-    await expect(main.getByLabel('Ticker', { exact: true }),
+    await expect(fieldByLabel(main, 'Ticker'),
         'the Issue Token form never showed its ticker field')
         .toBeVisible({ timeout: 30_000 });
     return main;
@@ -330,10 +332,10 @@ async function openWizardDetails(page) {
 async function readIssueSource(probe) {
     await openIssueSection(probe, 'From');
     await selectVenueChain(probe);
-    await expect.poll(async () => probe.getByLabel('From address').inputValue().catch(() => ''),
+    await expect.poll(async () => fieldByLabel(probe, 'From address').inputValue().catch(() => ''),
         { timeout: 30_000, message: 'the Issue Token form names no signing address' })
         .toMatch(REGTEST_ADDRESS_RE);
-    return probe.getByLabel('From address').inputValue();
+    return fieldByLabel(probe, 'From address').inputValue();
 }
 
 /**
@@ -374,10 +376,10 @@ async function confirmOrSkipOnRateLimit(page, what = 'this action', timeoutMs = 
 
 async function submitWizardName(page, tick) {
     const main = await openWizardDetails(page);
-    const field = main.getByLabel('Ticker', { exact: true });
+    const field = fieldByLabel(main, 'Ticker');
     await field.fill(tick);
     const held = await field.inputValue();
-    await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+    await fieldByLabel(main, 'Max supply').fill(String(SUPPLY));
     const grammar = page.getByRole('alert')
         .filter({ hasText: /Ticker (?:cannot|can only use|is required)/ });
     await submitTokenWizard(page);
@@ -446,7 +448,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             // Read off the Issue Token form's From section.
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(probe);
             expect(source, `the wallet has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
@@ -527,8 +529,8 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the venue will not price the tick this step issues').toBe('valid');
 
             const main = await openWizardDetails(page);
-            await main.getByLabel('Ticker', { exact: true }).fill(ISSUED_TICK);
-            await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+            await fieldByLabel(main, 'Ticker').fill(ISSUED_TICK);
+            await fieldByLabel(main, 'Max supply').fill(String(SUPPLY));
             // The coin lane: FUNDING carries this leg's protocol fee, and the
             // wallet holds no XCHAIN, so the Bitcoin default (XCHAIN) would be
             // refused for insufficient funds before the ticker is ever tested.
@@ -538,9 +540,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             await submitTokenWizard(page);
 
             await confirmOrSkipOnRateLimit(page, 'this action', 90_000);
-            const approve = page.getByTestId('confirm-approve');
-            await expect(approve).toBeEnabled({ timeout: 120_000 });
-            await approve.click();
+            await approveConfirm(page);
             // Success screens may draw the id truncated; waitForShownTxid reads
             // the full id from its accessible name, and from the text where it
             // is whole.
@@ -723,10 +723,10 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             await reloadToHome(page);
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await openIssueSection(main, 'From');
             await selectVenueChain(main);
-            const field = main.getByLabel('Ticker', { exact: true });
+            const field = fieldByLabel(main, 'Ticker');
             await field.fill(tick.toLowerCase());
             expect(await field.inputValue(),
                 'the direct form still uppercases what is typed, so the two surfaces have drifted '
@@ -734,7 +734,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(tick.toLowerCase());
 
             await field.fill(tick);
-            await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+            await fieldByLabel(main, 'Max supply').fill(String(SUPPLY));
             await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
             await expect(page.getByTestId('confirm-modal'),
@@ -747,11 +747,11 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             await reloadToHome(page);
             await openPaletteCommand(page, 'Issue token');
             const second = page.getByRole('main');
-            await expect(second.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(second, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await openIssueSection(second, 'From');
             await selectVenueChain(second);
-            await second.getByLabel('Ticker', { exact: true }).fill(CARET_TICK);
-            await second.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+            await fieldByLabel(second, 'Ticker').fill(CARET_TICK);
+            await fieldByLabel(second, 'Max supply').fill(String(SUPPLY));
             await second.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
             const alert = page.getByRole('alert').filter({ hasText: /Ticker cannot contain \^/ });
@@ -851,7 +851,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(probe);
             expect(source).toMatch(REGTEST_ADDRESS_RE);
 
@@ -894,14 +894,12 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             // The switch sits in the Fees section, closed until opened.
             await openIssueSection(main, 'Speed and Fees');
             await expect(main.getByRole('switch', { name: /instead of XCHAIN/ })).not.toBeChecked();
-            await main.getByLabel('Ticker', { exact: true }).fill(TICK);
-            await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+            await fieldByLabel(main, 'Ticker').fill(TICK);
+            await fieldByLabel(main, 'Max supply').fill(String(SUPPLY));
             await submitTokenWizard(page);
 
             await confirmOrSkipOnRateLimit(page, 'this action', 90_000);
-            const approve = page.getByTestId('confirm-approve');
-            await expect(approve).toBeEnabled({ timeout: 120_000 });
-            await approve.click();
+            await approveConfirm(page);
             // Success screens may draw the id truncated; waitForShownTxid reads
             // the full id from its accessible name, and from the text where it
             // is whole.

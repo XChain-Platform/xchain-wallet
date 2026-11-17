@@ -47,6 +47,7 @@ import {
 import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import { encodeXcwChunks } from '../../../../packages/core/src/uri/psbtQr.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183}`;
@@ -80,7 +81,7 @@ async function signPanelFacing(frames) {
     // format types.
     await openPaletteCommand(page, 'psbt', { option: /^Sign a transaction/ });
 
-    const box = page.getByLabel('Unsigned transaction code');
+    const box = fieldByLabel(page, 'Unsigned transaction code');
     await expect(box, 'the Sign panel did not open').toBeVisible({ timeout: 30_000 });
     return { page, box, close: () => browser.close() };
 }

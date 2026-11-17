@@ -72,7 +72,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     selectPickerAsset,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** One create plus two edits, one of them paying a real coin fee. */
@@ -255,7 +257,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -295,7 +297,7 @@ async function submitExpirationEdit(page, index, targetUnix, { coinFee = false }
     const main = await openDispenserDetail(page, index);
     await main.getByRole('button', { name: /^Change expiration/ }).click();
 
-    const field = main.getByLabel('New expiration');
+    const field = fieldByLabel(main, 'New expiration');
     await expect(field, 'the edit form has no expiration field').toBeVisible({ timeout: 30_000 });
     await field.fill(unixToLocalInput(targetUnix));
 
@@ -314,7 +316,7 @@ async function submitExpirationEdit(page, index, targetUnix, { coinFee = false }
     await main.getByRole('button', { name: 'Update Dispenser' }).click();
     await expectConfirmModal(page);
     await waitForIndexerAtTip();
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     await expect(main.getByTestId('result-screen-notice').filter({ hasText: 'Edit submitted' }),
         'the edit never reached its own success screen')
         .toBeVisible({ timeout: 180_000 });
@@ -343,7 +345,7 @@ test.describe(`dispenser expiration-edit fee on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             owner = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
@@ -358,13 +360,13 @@ test.describe(`dispenser expiration-edit fee on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await main.getByRole('button', { name: /^Token/ }).click();
             await selectPickerAsset(page, TICK);
-            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
-            await main.getByLabel('Escrow amount').fill(String(ESCROW));
-            await main.getByLabel(/Trigger price/).fill(TRIGGER);
+            await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
+            await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
+            await fieldByLabel(main, /^Trigger price/).fill(TRIGGER);
 
             // A custom expiration, deliberately SHORT of the free window. The
             // default window is exactly 90 days, which leaves no room for an
@@ -374,7 +376,7 @@ test.describe(`dispenser expiration-edit fee on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('combobox', { name: /Expiration/ }).click();
             await page.getByRole('option', { name: /Expire at a specific time/ }).click();
             const nowSec = Math.floor(Date.now() / 1000);
-            await main.getByLabel('Expires').fill(
+            await fieldByLabel(main, 'Expires').fill(
                 unixToLocalInput(toMinute(nowSec + (CREATE_DAYS * 86_400) + MINUTE_MARGIN)),
             );
 

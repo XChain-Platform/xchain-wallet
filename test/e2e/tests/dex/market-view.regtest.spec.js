@@ -55,7 +55,9 @@ import {
     waitForTokenBalance,
     selectPickerAsset,
     openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** ISSUE pays a real coin fee on this chain, so fund generously. */
@@ -113,7 +115,7 @@ async function waitForBookAsk(tick1, tick2, timeoutMs = 180_000) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -133,7 +135,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(main);
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
@@ -149,7 +151,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const form = page.getByRole('main');
-            await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await readIssueSource(form);
             await issuePlainToken(form, { ticker: TICK, supply: SUPPLY, password: PASSWORD });
 
@@ -171,17 +173,17 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             // Both sides are tokens here, so each SideEditor renders its own
             // Ticker + Amount: first() is "You give", last() is "You get".
             await main.getByRole('radio', { name: 'A token' }).last().check();
-            await main.getByLabel('Ticker', { exact: true }).first().fill(TICK);
-            await main.getByLabel('Amount', { exact: true }).first().fill(String(GIVE));
-            await main.getByLabel('Ticker', { exact: true }).last().fill('XCHAIN');
-            await main.getByLabel('Amount', { exact: true }).last().fill(String(GET));
+            await fieldByLabel(main, 'Ticker').first().fill(TICK);
+            await fieldByLabel(main, 'Amount').first().fill(String(GIVE));
+            await fieldByLabel(main, 'Ticker').last().fill('XCHAIN');
+            await fieldByLabel(main, 'Amount').last().fill(String(GET));
 
             // The memo is load-bearing on a venue that has not taken the
             // D-136 fix: without it the book drops the order. Set here so
             // this test pins the market path itself rather than re-failing on a
             // defect its sibling below already owns.
             await main.getByRole('button', { name: /Advanced options/ }).click();
-            await main.getByLabel('Memo', { exact: true }).fill(`book ${STAMP}`);
+            await fieldByLabel(main, 'Memo').fill(`book ${STAMP}`);
 
             await main.getByRole('button', { name: /^Place order/ }).click();
             await expectConfirmModal(page, 'this action', 60_000);
@@ -264,7 +266,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             const source = await readIssueSource(main);
             await fundAddress(source, FUNDING);
             await page.reload();
@@ -275,7 +277,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await readIssueSource(main);
             await issuePlainToken(main, { ticker: noMemoTick, supply: SUPPLY });
             await expectConfirmModal(page, 'this action', 60_000);
@@ -288,10 +290,10 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(await openFromAddress(main)).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await main.getByRole('radio', { name: 'A token' }).last().check();
-            await main.getByLabel('Ticker', { exact: true }).first().fill(noMemoTick);
-            await main.getByLabel('Amount', { exact: true }).first().fill(String(GIVE));
-            await main.getByLabel('Ticker', { exact: true }).last().fill('XCHAIN');
-            await main.getByLabel('Amount', { exact: true }).last().fill(String(GET));
+            await fieldByLabel(main, 'Ticker').first().fill(noMemoTick);
+            await fieldByLabel(main, 'Amount').first().fill(String(GIVE));
+            await fieldByLabel(main, 'Ticker').last().fill('XCHAIN');
+            await fieldByLabel(main, 'Amount').last().fill(String(GET));
             // No memo: the field is never opened.
             await main.getByRole('button', { name: /^Place order/ }).click();
             await expectConfirmModal(page, 'this action', 60_000);

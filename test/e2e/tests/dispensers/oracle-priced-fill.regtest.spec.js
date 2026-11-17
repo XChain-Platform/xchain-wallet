@@ -62,7 +62,9 @@ import {
     selectDispenserOnSource,
     selectPickerAsset,
     openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Covers the coin protocol fee, the oracle usage fee, and network fees. */
@@ -183,7 +185,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     // The Send success screen draws the id truncated; waitForShownTxid reads
     // the full id from its accessible name, and from the text on screens
     // that print it whole.
@@ -299,7 +301,7 @@ test.describe(`user-oracle dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             seller = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(seller, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
@@ -318,7 +320,7 @@ test.describe(`user-oracle dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
             // The dispenser opens on the Source, the address the buyer pays below.
@@ -327,8 +329,8 @@ test.describe(`user-oracle dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('button', { name: /^Token/ }).click();
             await selectPickerAsset(page, 'XCHAIN');
 
-            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
-            await main.getByLabel('Escrow amount').fill(String(ESCROW));
+            await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
+            await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
 
             // The lane under test. Fiat code AND an oracle address, with the
             // fiat amount left EMPTY: that combination is what selects the
@@ -396,7 +398,7 @@ test.describe(`user-oracle dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // lists first, which is Bitcoin on a Litecoin run.
             await openPaletteCommand(page, 'Issue token');
             const form = page.getByRole('main');
-            await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(form);
             buyer = await (await openFromAddress(form)).inputValue();
             expect(buyer, `the buyer wallet has no ${REGTEST_CHAIN_LABEL} address`)
@@ -415,11 +417,11 @@ test.describe(`user-oracle dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
                 `the Send form is composing on the wrong chain: no ${coin} amount field`)
                 .toBeVisible({ timeout: 30_000 });
 
-            await page.getByLabel('To', { exact: true }).fill(seller);
+            await fieldByLabel(page, 'To').fill(seller);
             await page.getByRole('textbox', { name: /^Amount/ }).fill(payPerFill);
             await main.getByRole('button', { name: 'Send', exact: true }).click();
             await expectConfirmModal(page, 'this action', 60_000);
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
                 .toBeVisible({ timeout: 180_000 });
         });

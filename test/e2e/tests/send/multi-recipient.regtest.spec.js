@@ -57,7 +57,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -89,7 +91,7 @@ const RECIPIENTS = [
 const TOTAL_SENT = 11;
 
 function toField(page) {
-    return page.getByLabel('To', { exact: true });
+    return fieldByLabel(page, 'To');
 }
 
 /**
@@ -267,8 +269,7 @@ test.describe('multi-recipient SEND on regtest', () => {
             // the legs, so a leg dropped from the composed action shows here too.
             const approve = page.getByTestId('confirm-approve');
             await expect(approve).toHaveText(`Send ${TOTAL_SENT} XCHAIN`);
-            await expect(approve).toBeEnabled();
-            await approve.click();
+            await approveConfirm(page);
 
             await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
                 .toBeVisible({ timeout: 180_000 });

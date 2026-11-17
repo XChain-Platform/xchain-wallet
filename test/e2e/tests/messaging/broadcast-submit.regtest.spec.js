@@ -31,7 +31,9 @@ import {
     unlockAfterReload,
     waitForValidAction,
     openFromAddress,
+    approveConfirm as approveWhenReady,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -48,7 +50,7 @@ async function onboardOntoBroadcastForm(page, walletName) {
 
     await openPaletteCommand(page, 'Post an announcement');
     let main = page.getByRole('main');
-    await expect(main.getByLabel('Message', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
     const address = await (await openFromAddress(main)).inputValue();
     expect(address, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`).toMatch(REGTEST_ADDRESS_RE);
@@ -59,7 +61,7 @@ async function onboardOntoBroadcastForm(page, walletName) {
 
     await openPaletteCommand(page, 'Post an announcement');
     main = page.getByRole('main');
-    await expect(main.getByLabel('Message', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
     expect(await (await openFromAddress(main)).inputValue(), 'still signing with the funded address').toBe(address);
     return { main, address };
@@ -68,11 +70,9 @@ async function onboardOntoBroadcastForm(page, walletName) {
 /** Fills the password when the confirm screen asks for one and approves. */
 async function approveConfirm(page, what = 'this action') {
     await expectConfirmModal(page, what, 90_000);
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve, 'Approve never became enabled on the confirm screen').toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveWhenReady(page);
 }
 
 /** Reads the 64-hex-char transaction id printed on a form's done screen. */
@@ -102,7 +102,7 @@ test.describe(`Broadcast submit path on ${REGTEST_CHAIN_LABEL}`, () => {
             address = opened.address;
             const main = opened.main;
 
-            await main.getByLabel('Message', { exact: true }).fill(text);
+            await fieldByLabel(main, 'Message').fill(text);
             await main.getByRole('button', { name: 'Announce', exact: true }).click();
 
             await approveConfirm(page, 'the plain broadcast');

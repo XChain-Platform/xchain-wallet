@@ -99,7 +99,9 @@ import {
     waitForTokenBalance,
     REGTEST_CHAIN_ID,
     openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** ISSUE, LIST, SEND and AIRDROP each pay a real coin fee on this chain. */
@@ -304,7 +306,7 @@ async function expectConfirmModal(page, retrySubmit) {
 
 async function waitForHolderCount(page, tick, expected) {
     const holderLine = page.getByRole('main').getByText(/1 token · /);
-    const tickInput = page.getByLabel('Tokens (one per line)', { exact: true });
+    const tickInput = fieldByLabel(page, 'Tokens (one per line)');
     const deadline = Date.now() + SLOW_INDEXER_TIMEOUT;
     let last = '';
 
@@ -337,9 +339,7 @@ async function waitForHolderCount(page, tick, expected) {
  * third run.
  */
 async function approveAndGetTxid(page, not = null) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     // Send draws the id truncated and keeps the full 64 characters in an
     // accessible name; the airdrop screens print it whole. Read both.
@@ -413,7 +413,7 @@ async function issueToken(page, tick, supply, source) {
     await reloadToHome(page);
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
-    await expect(form.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
     expect(await readIssueSource(form),
         'the Issue form is not signing with the funded address')
         .toBe(source);
@@ -457,7 +457,7 @@ async function onboardAndIssue(page, ticks = [[TICK, SUPPLY]], walletName = 'Air
 
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     const source = await readIssueSource(main);
     expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
@@ -497,7 +497,7 @@ async function sendToken(page, tick, destination, amount, destinationAfter) {
     await expect(main, `the Send form is not sourcing from the address that holds ${tick}`)
         .toContainText(new RegExp(`[\\d,]+\\s*${tick} available`), { timeout: 60_000 });
 
-    await page.getByLabel('To', { exact: true }).fill(destination);
+    await fieldByLabel(page, 'To').fill(destination);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(String(amount));
     const submit = main.getByRole('button', { name: 'Send', exact: true });
     await submit.click();
@@ -571,7 +571,7 @@ async function publishAddressList(page, source, members) {
     // List type is the themed dropdown: open it, then pick Addresses.
     await main.getByRole('button', { name: /^List type:/ }).click();
     await main.getByRole('option', { name: 'Addresses', exact: true }).click();
-    await main.getByLabel('Addresses', { exact: true }).fill(members.join('\n'));
+    await fieldByLabel(main, 'Addresses').fill(members.join('\n'));
     const plural = members.length === 1 ? 'address' : 'addresses';
     await expect(main, `the list form did not accept all ${members.length} addresses for this chain`)
         .toContainText(`${members.length} valid ${plural}`);
@@ -591,7 +591,7 @@ async function generateExtraAddresses(page, count) {
     await page.getByTestId('address-add-menu').click();
     await page.getByTestId('address-add-address').click();
     await selectVenueChain(page, 'Coin');
-    await page.getByLabel('Number of addresses', { exact: true }).fill(String(count));
+    await fieldByLabel(page, 'Number of addresses').fill(String(count));
     await page.getByTestId('add-address-generate').click();
     // The modal derives the addresses one at a time and closes only after the
     // last one is stored; navigating or reloading before that drops the rest.
@@ -679,7 +679,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             // composes the real drop: a well-formed address for another network
             // used to count as valid all the way through review, dry-run and
             // broadcast, and only the chain dropped it - after it was paid for.
-            await page.getByLabel('Recipients', { exact: true }).fill([...recipients, MAINNET_ADDRESS].join('\n'));
+            await fieldByLabel(page, 'Recipients').fill([...recipients, MAINNET_ADDRESS].join('\n'));
             await expect(main, 'the form counted the mainnet address among the payable recipients')
                 .toContainText(`${recipients.length} valid addresses · 1 invalid skipped`);
             const skipped = main.getByRole('alert');
@@ -690,7 +690,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // Now the real list: two addresses, no debris, and the control
             // deliberately absent.
-            await page.getByLabel('Recipients', { exact: true }).fill(recipients.join('\n'));
+            await fieldByLabel(page, 'Recipients').fill(recipients.join('\n'));
             await expect(main).toContainText(`${recipients.length} valid addresses`);
             await expect(main, 'the form did not project the total this drop pays out')
                 .toContainText(`total ~${AMOUNT * recipients.length} ${TICK}`);
@@ -928,8 +928,8 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBe(issuer);
 
             await page.getByRole('textbox', { name: /^Per-recipient amount/ }).fill(String(AMOUNT));
-            await pickOption(main.getByLabel('Airdrop to', { exact: true }), 'holders');
-            await page.getByLabel('Tokens (one per line)', { exact: true }).fill(MEMB_TICK);
+            await pickOption(fieldByLabel(main, 'Airdrop to'), 'holders');
+            await fieldByLabel(page, 'Tokens (one per line)').fill(MEMB_TICK);
 
             // TWO holders right now: the issuer, which kept most of the supply,
             // and the address it just paid. This figure is the one the test is
@@ -1103,7 +1103,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             expect(others.length).toBe(2);
             [member, heldOut] = others;
 
-            await pickOption(main.getByLabel('Airdrop to', { exact: true }), 'existing');
+            await pickOption(fieldByLabel(main, 'Airdrop to'), 'existing');
             await main.getByRole('button', { name: /^List:/ }).click();
             await expect(page.getByText('No published lists yet', { exact: true }))
                 .toBeVisible({ timeout: 30_000 });
@@ -1126,7 +1126,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await readChainAddresses(page, issuer);
 
             await page.getByRole('textbox', { name: /^Per-recipient amount/ }).fill(String(AMOUNT));
-            await pickOption(main.getByLabel('Airdrop to', { exact: true }), 'existing');
+            await pickOption(fieldByLabel(main, 'Airdrop to'), 'existing');
             await main.getByRole('button', { name: /^List:/ }).click();
             const row = page.getByRole('button', { name: `Address list #${listIndex}` });
             await expect(row, `the list picker does not offer list #${listIndex}, which this wallet `

@@ -56,7 +56,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 // Off Bitcoin the protocol fee is paid in the native coin: about 20 DOGE per
@@ -70,7 +72,7 @@ const STAMP = Date.now().toString().slice(-6);
 
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     return waitForShownTxid(page.getByRole('main'), { message: 'no transaction id ever appeared after Approve' });
 }
 
@@ -82,7 +84,7 @@ async function approveAndGetTxid(page) {
  * the done heading and reads the labelled hash instead.
  */
 async function approveAndReadTxid(page, doneHeading, label = 'Link transaction') {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     return readLabelledTxid(page, doneHeading, label);
 }
 
@@ -135,7 +137,7 @@ async function issueToken(page, source, tick) {
     await openPaletteCommand(page, 'My tokens');
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     expect(await readIssueSource(main),
         `the Issue token form defaulted away from ${source}, so the issued token would not be owned `
         + 'by the address this test funded')
@@ -166,7 +168,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const issueMain = page.getByRole('main');
-            await expect(issueMain.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(issueMain, 'Ticker')).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(issueMain);
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
@@ -196,7 +198,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const fileMain = page.getByRole('main');
             await expect(fileMain.getByRole('button', { name: 'Upload File', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
-            const filePassword = fileMain.getByLabel('Password', { exact: true });
+            const filePassword = fieldByLabel(fileMain, 'Password');
             if (await filePassword.count() > 0 && await filePassword.isVisible()) await filePassword.fill(PASSWORD);
             await fileMain.getByRole('button', { name: 'Upload File', exact: true }).click();
 
@@ -206,7 +208,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             // until its own index poll clears, which on a quiet chain can happen
             // before a check for it runs. So nothing is read here: the wait is on
             // the LINK leg's button, and both txids come off the done screen.
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             const linkButton = page.getByRole('button', { name: `Link Artwork to ${TICK}`, exact: true });
             const deadline = Date.now() + 300_000;
             while (Date.now() < deadline) {
@@ -219,7 +221,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'broadcast or the wait-index poll never saw it indexed')
                 .toBeVisible({ timeout: 60_000 });
 
-            const linkPassword = page.getByRole('main').getByLabel('Password', { exact: true });
+            const linkPassword = fieldByLabel(page.getByRole('main'), 'Password');
             if (await linkPassword.count() > 0 && await linkPassword.isVisible()) await linkPassword.fill(PASSWORD);
             await linkButton.click();
 
@@ -253,7 +255,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await panelB.getByLabel('Action to reference').fill(fileActionIndex);
 
             const main = page.getByRole('main');
-            const password = main.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(main, 'Password');
             const linkAction = main.getByRole('button', { name: 'Link', exact: true });
             await linkAction.click();
             if (await password.count() > 0 && await password.isVisible()) {
@@ -313,12 +315,12 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             // The fork adds a member the parent does not already hold: the List form's Fork
             // drops additions that are already on the list, so re-adding `source`
             // would leave nothing to publish and Publish Fork disabled.
-            await forkMain.getByLabel('Addresses', { exact: true }).fill(REGTEST_DESTINATION);
+            await fieldByLabel(forkMain, 'Addresses').fill(REGTEST_DESTINATION);
             await forkMain.getByRole('button', { name: 'Publish Fork', exact: true }).click();
 
             const publishAdd = forkMain.getByRole('button', { name: 'Publish Add', exact: true });
             await expect(publishAdd).toBeVisible({ timeout: 30_000 });
-            const forkPassword = forkMain.getByLabel('Password', { exact: true });
+            const forkPassword = fieldByLabel(forkMain, 'Password');
             if (await forkPassword.count() > 0 && await forkPassword.isVisible()) await forkPassword.fill(PASSWORD);
             await publishAdd.click();
 
@@ -363,9 +365,9 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.getByRole('button', { name: 'Edit', exact: true }).click({ timeout: 90_000 });
             const renameMain = page.getByRole('main');
             await openFormSection(renameMain, 'Details');
-            await renameMain.getByLabel('Name', { exact: true }).fill(NAME);
+            await fieldByLabel(renameMain, 'Name').fill(NAME);
             await renameMain.getByRole('button', { name: 'Publish Edit', exact: true }).click();
-            const renamePassword = renameMain.getByLabel('Password', { exact: true });
+            const renamePassword = fieldByLabel(renameMain, 'Password');
             if (await renamePassword.count() > 0 && await renamePassword.isVisible()) await renamePassword.fill(PASSWORD);
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -384,10 +386,10 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await page.getByRole('button', { name: 'Transfer List', exact: true }).click();
             const transferMain = page.getByRole('main');
-            await transferMain.getByLabel('New owner', { exact: true }).fill(REGTEST_DESTINATION);
+            await fieldByLabel(transferMain, 'New owner').fill(REGTEST_DESTINATION);
             await transferMain.getByLabel('Type TRANSFER to confirm').fill('TRANSFER');
             await transferMain.getByRole('button', { name: 'Transfer List', exact: true }).click();
-            const transferPassword = transferMain.getByLabel('Password', { exact: true });
+            const transferPassword = fieldByLabel(transferMain, 'Password');
             if (await transferPassword.count() > 0 && await transferPassword.isVisible()) await transferPassword.fill(PASSWORD);
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -427,12 +429,11 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await expect(rosterMain.getByRole('button', { name: 'Publish List', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
-            const listPassword = rosterMain.getByLabel('Password', { exact: true });
+            const listPassword = fieldByLabel(rosterMain, 'Password');
             if (await listPassword.count() > 0 && await listPassword.isVisible()) await listPassword.fill(PASSWORD);
             await rosterMain.getByRole('button', { name: 'Publish List', exact: true }).click();
 
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
 
             // After Approve the form shows "List is on its way", which the index
             // poll can clear before a check for it runs, so the wait is on the next
@@ -449,11 +450,10 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
                 + 'broadcast or the wait-index poll never saw it indexed')
                 .toBeVisible({ timeout: 60_000 });
 
-            const linkPassword = page.getByRole('main').getByLabel('Password', { exact: true });
+            const linkPassword = fieldByLabel(page.getByRole('main'), 'Password');
             if (await linkPassword.count() > 0 && await linkPassword.isVisible()) await linkPassword.fill(PASSWORD);
             await officialButton.click();
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
 
             const rosterLinkTxid = await readLabelledTxid(page, 'Official list published');
             const listTxid = await readLabelledTxid(page, 'Official list published', 'List transaction');

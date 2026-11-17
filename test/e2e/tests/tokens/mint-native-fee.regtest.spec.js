@@ -23,7 +23,9 @@ import {
     waitForTokenBalance,
     waitForValidAction,
     selectPickerAsset,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const XCHAIN_AMOUNT = 20;
@@ -33,8 +35,7 @@ const INITIAL_MINT = 100;
 const MINT_AMOUNT = 25;
 
 async function approveAndReadTxid(page) {
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main).toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
     const txid = (await main.innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
@@ -67,14 +68,14 @@ test.describe(`MINT native-fee payment on ${REGTEST_CHAIN_LABEL} regtest`, () =>
         await test.step('issue a mintable token through the real form', async () => {
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await readIssueSource(main);
-            await main.getByLabel('Ticker', { exact: true }).fill(TICK);
-            await main.getByLabel('Max supply', { exact: true }).fill('1000');
+            await fieldByLabel(main, 'Ticker').fill(TICK);
+            await fieldByLabel(main, 'Max supply').fill('1000');
             await openIssueSection(main, 'Initial mint');
-            await main.getByLabel('Initial mint', { exact: true }).fill(String(INITIAL_MINT));
+            await fieldByLabel(main, 'Initial mint').fill(String(INITIAL_MINT));
             await openIssueSection(main, 'Public minting');
-            await main.getByLabel('Max per transaction', { exact: true }).fill('100');
+            await fieldByLabel(main, 'Max per transaction').fill('100');
             await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
             await expectConfirmModal(page, 'the ISSUE');

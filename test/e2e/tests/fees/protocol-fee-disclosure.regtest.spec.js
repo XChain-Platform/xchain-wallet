@@ -69,7 +69,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -216,12 +218,12 @@ async function composeIssue(page, tick, { nativeFee }) {
     await openPaletteCommand(page, 'Home');
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Max supply', { exact: true }).fill(SUPPLY);
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await fieldByLabel(main, 'Ticker').fill(tick);
+    await fieldByLabel(main, 'Max supply').fill(SUPPLY);
     await setFeeLane(main, nativeFee);
 
-    const password = main.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(main, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
     // Full mode is SINGLE-ENCODE: this button composes and opens the
     // confirm screen directly, with no review stage in between.
@@ -234,7 +236,7 @@ async function composeIssue(page, tick, { nativeFee }) {
 
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     // The Send success screen draws the id truncated; waitForShownTxid reads
     // the full id from its accessible name, and from the text on screens
     // that print it whole.
@@ -272,7 +274,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(main);
             expect(source, 'the form has no Bitcoin address to sign with').toMatch(REGTEST_ADDRESS_RE);
 
@@ -445,7 +447,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             const source = await readIssueSource(main);
             expect(source).toMatch(REGTEST_ADDRESS_RE);
             await fundAddress(source, FUNDING);
@@ -497,7 +499,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
 
             await openPaletteCommand(page, 'Post an announcement');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
             source = await (await openFromAddress(main)).inputValue();
             expect(source, 'the form has no Bitcoin address to sign with').toMatch(REGTEST_ADDRESS_RE);
 
@@ -520,10 +522,10 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
         const composeBroadcast = async (message) => {
             await openPaletteCommand(page, 'Post an announcement');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Message')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Message').fill(message);
+            await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'Message').fill(message);
             await expect(feeToggle(main), 'BROADCAST exposes a protocol-fee switch').toHaveCount(0);
-            const password = main.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(main, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await main.getByRole('button', { name: 'Announce', exact: true }).click();
             await expectConfirmModal(page, 'this action', 60_000);
@@ -570,7 +572,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
 
         await test.step('a plain payment has no protocol fee to state', async () => {
             await gotoSection(page, 'Send');
-            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await fieldByLabel(page, 'To').fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: /^Amount/ }).fill('0.01');
             await mainButton(page, 'Send').click();
             await expectConfirmModal(page, 'this action', 60_000);

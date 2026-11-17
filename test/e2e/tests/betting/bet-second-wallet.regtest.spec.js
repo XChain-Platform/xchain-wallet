@@ -59,7 +59,9 @@ import {
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    approveConfirm as approveWhenReady,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -129,14 +131,13 @@ async function gotoBettingHub(page) {
 }
 
 async function fillPasswordIfPresent(scope) {
-    const field = scope.getByLabel('Password', { exact: true });
+    const field = fieldByLabel(scope, 'Password');
     if (await field.count() > 0 && await field.isVisible()) await field.fill(PASSWORD);
 }
 
 async function approveConfirm(page) {
     await expectConfirmModal(page, 'this action', 60_000);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
 /**
@@ -151,7 +152,7 @@ async function signingAddress(page) {
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     const main = page.getByRole('main');
     await selectVenueChain(main);
-    return main.getByLabel('Your oracle address', { exact: true }).inputValue();
+    return fieldByLabel(main, 'Your oracle address').inputValue();
 }
 
 test.describe('BET across two wallets', () => {
@@ -186,17 +187,17 @@ test.describe('BET across two wallets', () => {
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            expect(await main.getByLabel('Your oracle address', { exact: true }).inputValue()).toBe(oracle);
+            expect(await fieldByLabel(main, 'Your oracle address').inputValue()).toBe(oracle);
 
             const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
             await expect(tokenField).toBeVisible({ timeout: 30_000 });
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('Question', { exact: true }).fill(`Two wallets ${RUN_TAG}`);
-            await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
-            await main.getByLabel('Outcome 1', { exact: true }).fill('No');
-            await main.getByLabel('Purchases Close', { exact: true })
+            await fieldByLabel(main, 'Question').fill(`Two wallets ${RUN_TAG}`);
+            await fieldByLabel(main, 'Outcome 0').fill('Yes');
+            await fieldByLabel(main, 'Outcome 1').fill('No');
+            await fieldByLabel(main, 'Purchases Close')
                 .fill(toLocalDateTimeInput((await chainTime()) + DEADLINE_LEAD_SEC));
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Open market', exact: true }).click();
@@ -274,7 +275,7 @@ test.describe('BET across two wallets', () => {
                 betFeeXchain = Number(said.match(/([\d.]+)\s*XCHAIN/)?.[1]);
                 expect(Number.isFinite(betFeeXchain), `unparseable protocol-fee line: ${said}`).toBe(true);
             }
-            await page.getByTestId('confirm-approve').click();
+            await approveWhenReady(page);
 
             await expect(page.getByTestId('bet-result'), 'no receipt after placing the bet')
                 .toBeVisible({ timeout: 120_000 });

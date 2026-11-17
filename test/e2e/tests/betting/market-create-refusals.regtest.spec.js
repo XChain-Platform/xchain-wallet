@@ -60,8 +60,10 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
 import { freshMempoolSize } from '../../fixtures/venueHealth.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -151,12 +153,12 @@ async function openValidForm(page, { label, pickToken = true, deadlineOffsetSec 
         await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
     }
 
-    await main.getByLabel('Question', { exact: true }).fill(label);
-    await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
-    await main.getByLabel('Outcome 1', { exact: true }).fill('No');
+    await fieldByLabel(main, 'Question').fill(label);
+    await fieldByLabel(main, 'Outcome 0').fill('Yes');
+    await fieldByLabel(main, 'Outcome 1').fill('No');
     const now = await chainTime();
-    await main.getByLabel('Purchases Close', { exact: true }).fill(toLocalDateTimeInput(now + deadlineOffsetSec));
-    const password = main.getByLabel('Password', { exact: true });
+    await fieldByLabel(main, 'Purchases Close').fill(toLocalDateTimeInput(now + deadlineOffsetSec));
+    const password = fieldByLabel(main, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
     return main;
 }
@@ -202,7 +204,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            oracle = await main.getByLabel('Your oracle address', { exact: true }).inputValue();
+            oracle = await fieldByLabel(main, 'Your oracle address').inputValue();
             expect(oracle, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -222,7 +224,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
 
         await test.step('no title', async () => {
             const main = await openValidForm(page, { label: `${RUN_TAG} notitle` });
-            await main.getByLabel('Question', { exact: true }).fill('');
+            await fieldByLabel(main, 'Question').fill('');
             await expectRefusal(page, main, 'Give the market a question or title.',
                 'an untitled market was not refused');
         });
@@ -248,14 +250,14 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             await expect(main.getByRole('button', { name: 'Remove', exact: true }),
                 'the form offers to remove an outcome below two')
                 .toHaveCount(0);
-            await main.getByLabel('Outcome 1', { exact: true }).fill('');
+            await fieldByLabel(main, 'Outcome 1').fill('');
             await expectRefusal(page, main, 'Fill in every outcome, or remove the empty one.',
                 'a one-outcome market was not refused');
         });
 
         await test.step('two outcomes with the same label', async () => {
             const main = await openValidForm(page, { label: `${RUN_TAG} dupes` });
-            await main.getByLabel('Outcome 1', { exact: true }).fill('Yes');
+            await fieldByLabel(main, 'Outcome 1').fill('Yes');
             await expectRefusal(page, main, 'Two outcomes have the same label.',
                 'a market with duplicate outcomes was not refused');
         });
@@ -266,7 +268,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             // built from, so a label containing one is a corrupt encoding, and a
             // market is immutable once it is on the chain.
             const main = await openValidForm(page, { label: `${RUN_TAG} pipe` });
-            await main.getByLabel('Outcome 1', { exact: true }).fill('No|Maybe');
+            await fieldByLabel(main, 'Outcome 1').fill('No|Maybe');
             await expectRefusal(page, main,
                 'Outcome labels cannot contain a comma, a semicolon or a vertical bar.',
                 'an outcome label containing a vertical bar was not refused');
@@ -305,8 +307,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
                 'a valid market did not reach the confirm screen, which would make every absence '
                 + 'assertion in this spec meaningless')
                 .toBeVisible({ timeout: 60_000 });
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
 
             const feed = await waitForFeed(oracle, label);
             expect(feed.source, 'the market is owned by the funded oracle address').toBe(oracle);

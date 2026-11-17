@@ -67,7 +67,9 @@ import {
     selectDispenserOnSource,
     selectPickerAsset,
     openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 2;
@@ -208,7 +210,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     // The Send success screen draws the id truncated; waitForShownTxid reads
     // the full id from its accessible name, and from the text on screens
     // that print it whole.
@@ -230,7 +232,7 @@ async function addWalletAndReadAddress(page, name) {
 
     await openPaletteCommand(page, 'Issue token');
     const form = page.getByRole('main');
-    await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(form);
     const address = await (await openFromAddress(form)).inputValue();
     expect(address, `${name} has no ${REGTEST_CHAIN_LABEL} address`).toMatch(REGTEST_ADDRESS_RE);
@@ -259,11 +261,11 @@ async function payCoin(page, to, amount) {
         `the Send form is composing on the wrong chain: no ${coin} amount field`)
         .toBeVisible({ timeout: 30_000 });
 
-    await page.getByLabel('To', { exact: true }).fill(to);
+    await fieldByLabel(page, 'To').fill(to);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(amount);
     await main.getByRole('button', { name: 'Send', exact: true }).click();
     await expectConfirmModal(page, 'this action', 60_000);
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
         .toBeVisible({ timeout: 180_000 });
 }
@@ -286,7 +288,7 @@ async function publishList(page, members) {
     // List type is the themed dropdown: open it, then pick Addresses.
     await main.getByRole('button', { name: /^List type:/ }).click();
     await main.getByRole('option', { name: 'Addresses', exact: true }).click();
-    await main.getByLabel('Addresses', { exact: true }).fill(members.join('\n'));
+    await fieldByLabel(main, 'Addresses').fill(members.join('\n'));
     await expect(main, 'the list form did not accept these addresses for this chain')
         .toContainText(`${members.length} valid address`);
 
@@ -315,7 +317,7 @@ async function publishList(page, members) {
 async function openDispenser(page, listIndex, { expectSelfWarning }) {
     await openPaletteCommand(page, 'Create dispenser');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
 
     // The dispenser opens on its SOURCE (D-15), so its GET_ADDRESS is the
@@ -324,9 +326,9 @@ async function openDispenser(page, listIndex, { expectSelfWarning }) {
 
     await main.getByRole('button', { name: /^Token/ }).click();
     await selectPickerAsset(page, TICK);
-    await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
-    await main.getByLabel('Escrow amount').fill(String(ESCROW));
-    await main.getByLabel(/Trigger price/).fill(TRIGGER);
+    await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
+    await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
+    await fieldByLabel(main, /^Trigger price/).fill(TRIGGER);
 
     // The allow and block lists live in their own closed Lists section.
     await openFormSection(main, 'Lists');
@@ -396,7 +398,7 @@ test.describe(`a dispenser owner off its own allow list, on ${REGTEST_CHAIN_LABE
                 // gate checks, and the one an owner forgets to list.
                 await openPaletteCommand(page, 'Create dispenser');
                 const main = page.getByRole('main');
-                await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+                await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(main);
                 trapSeller = await main.getByRole('textbox', { name: 'Source' }).inputValue();
                 expect(trapSeller, `the form has no ${REGTEST_CHAIN_LABEL} address`)
@@ -511,8 +513,8 @@ test.describe(`a dispenser owner off its own allow list, on ${REGTEST_CHAIN_LABE
                     await page.getByRole('main').getByText('Browse dispensers', { exact: true })
                         .first().click();
                     const main = page.getByRole('main');
-                    await expect(main.getByLabel('Token ticker')).toBeVisible({ timeout: 30_000 });
-                    await main.getByLabel('Token ticker').fill(TICK);
+                    await expect(fieldByLabel(main, 'Token ticker')).toBeVisible({ timeout: 30_000 });
+                    await fieldByLabel(main, 'Token ticker').fill(TICK);
                     await main.getByRole('button', { name: 'Search', exact: true }).click();
                     const row = main.getByRole('button').filter({ hasText: `#${index} ` });
                     await expect(row, `dispenser #${index} is on chain but a buyer searching the `

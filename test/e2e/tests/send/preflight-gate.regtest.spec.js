@@ -47,6 +47,7 @@ import {
     waitForValidAction,
     warmPreflight,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -107,10 +108,10 @@ async function setFeeLane(scope, nativeFee) {
 async function composeIssue(page, { nativeFee, reuseForm = false }) {
     if (!reuseForm) await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     if (!reuseForm) {
-        await main.getByLabel('Ticker').fill(ISSUE_TICK);
-        await main.getByLabel('Max supply', { exact: true }).fill(ISSUE_SUPPLY);
+        await fieldByLabel(main, 'Ticker').fill(ISSUE_TICK);
+        await fieldByLabel(main, 'Max supply').fill(ISSUE_SUPPLY);
     }
     await setFeeLane(main, nativeFee);
     await main.getByRole('button', { name: 'Issue Token', exact: true }).click();

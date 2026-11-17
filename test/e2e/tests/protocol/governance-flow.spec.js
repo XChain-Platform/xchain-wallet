@@ -13,6 +13,7 @@ import {
     documentOverflow,
     overflowingElements,
 } from '../../fixtures/responsive.js';
+import { searchTokenPicker } from '../../fixtures/fields.js';
 
 const VIEWPORTS = [
     { name: 'phone', width: 412, height: 869 },
@@ -187,7 +188,7 @@ async function expectScreen(page, label, heading) {
 async function chooseGovernanceToken(page) {
     await page.getByRole('main').getByRole('button', { name: /^Governance token:/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Select token' })).toBeVisible();
-    await page.getByLabel('Search coins or tokens').fill('XCP');
+    await searchTokenPicker(page, 'XCP');
     await page.getByRole('button', { name: /^Select Counterparty on Bitcoin\b/ }).click();
     await expect(page.getByRole('button', { name: /^Governance token: XCP on Bitcoin\b/ }))
         .toBeVisible();

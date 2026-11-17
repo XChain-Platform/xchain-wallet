@@ -44,6 +44,7 @@ import {
     REGTEST_DESTINATION, fundAddress, minerRpc, mintXchain, readReceiveAddress,
     switchToRegtest, unlockAfterReload, waitForTokenBalance,
 } from '../../fixtures/regtest.js';
+import { searchTokenPicker } from '../../fixtures/fields.js';
 
 const PASSWORD = 'extpassword1234';
 const FUNDING_BTC = 1;
@@ -62,7 +63,7 @@ const SEND_XCHAIN = '600';
 async function composeTokenSend(page) {
     await gotoSection(page, 'Send');
     await page.getByRole('button', { name: /Change asset/ }).click();
-    await page.getByLabel('Search coins or tokens').fill('XCHAIN');
+    await searchTokenPicker(page, 'XCHAIN');
     await page.getByLabel(/Open XCHAIN details/i).click();
     await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(SEND_XCHAIN);

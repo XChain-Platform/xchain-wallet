@@ -49,7 +49,9 @@ import {
     waitForTokenBalance,
     waitForValidAction,
     selectPickerAsset,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -126,17 +128,16 @@ test.describe('DESTROY on regtest', () => {
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await readIssueSource(main);
             await issuePlainToken(main, { ticker: TICK, supply: SUPPLY, password: PASSWORD });
 
             await expectConfirmModal(page, 'the ISSUE');
-            const issuePassword = page.getByLabel('Password', { exact: true });
+            const issuePassword = fieldByLabel(page, 'Password');
             if (await issuePassword.count() > 0 && await issuePassword.isVisible().catch(() => false)) {
                 await issuePassword.fill(PASSWORD);
             }
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
 
             await expect(page.getByRole('main')).toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
             const issueTxid = (await page.getByRole('main').innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
@@ -172,11 +173,11 @@ test.describe('DESTROY on regtest', () => {
         });
 
         await test.step('the typed "DESTROY" gate stays closed until the word is right', async () => {
-            const password = page.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
                 await password.fill(PASSWORD);
             }
-            const typed = page.getByLabel('Type "DESTROY" to confirm');
+            const typed = fieldByLabel(page, 'Type "DESTROY" to confirm');
             const approve = page.getByTestId('confirm-approve');
 
             await expect(approve, 'Approve is enabled with no typed confirmation at all').toBeDisabled();
@@ -194,7 +195,7 @@ test.describe('DESTROY on regtest', () => {
             expect(before, 'the ISSUE balance was not what the Destroy form is about to spend from')
                 .toBe(SUPPLY);
 
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             await expect(page.getByRole('main')).toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
             const txid = (await page.getByRole('main').innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
             expect(txid, 'success screen showed no transaction id').toBeTruthy();

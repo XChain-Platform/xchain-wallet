@@ -14,6 +14,7 @@ import {
     overflowingElements,
 } from '../../fixtures/responsive.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const VIEWPORTS = [
     { name: 'phone', width: 412, height: 869 },
@@ -195,32 +196,29 @@ for (const viewport of VIEWPORTS) {
         const issueTick = `FLOW${run}`;
 
         await test.step('Issue token', async () => {
-            // Issue token opens the template wizard; its Custom template is the
-            // full Issue token form (ruling U79).
+            // Issue token opens the one-page Issue Token form; its template is a
+            // picker inside the Token section, not a page of its own.
             await gotoPalette(page, 'Issue token');
-            await expectScreenLayout(page, 'Issue a token', `${viewport.name} token templates`);
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: /^Custom\b/ }).click();
-            await expectScreenLayout(page, 'Issue token', `${viewport.name} Issue token`);
+            await expectScreenLayout(page, 'Issue Token', `${viewport.name} Issue token`);
 
-            // Optional fields sit in collapsed sections under Ticker (ruling U80),
-            // and each label carries a help tip button named after it, so fields
-            // are found by role.
-            const field = (name) => main.getByRole('textbox', { name, exact: true });
+            // The Token section starts open with Ticker and Max supply; the
+            // optional sections below it start closed. Each label carries a help
+            // tip button named after it, so fields go through the shared lookup.
             const openSection = async (title) => {
                 const header = main.getByRole('button', { name: new RegExp(`^${title}\\b`) });
-                // Supply starts open; the other sections start closed.
+                // Token starts open; the other sections start closed.
                 if (await header.getAttribute('aria-expanded') !== 'true') await header.click();
                 await expect(header).toHaveAttribute('aria-expanded', 'true');
             };
-            await field('Ticker').fill(issueTick);
-            await openSection('Supply');
-            await field('Max supply').fill('1000');
-            await field('Initial mint').fill('250');
+            await fieldByLabel(main, 'Ticker').fill(issueTick);
+            await fieldByLabel(main, 'Max supply').fill('1000');
+            await openSection('Initial mint');
+            await fieldByLabel(main, 'Initial mint').fill('250');
             await openSection('Public minting');
-            await field('Max per transaction').fill('50');
+            await fieldByLabel(main, 'Max per transaction').fill('50');
             await openSection('Description');
-            await field('Token description').fill('Responsive token admin fixture');
+            await fieldByLabel(main, 'Token description').fill('Responsive token admin fixture');
             await expectScreenLayout(page, 'Issue token', `${viewport.name} Issue token with sections open`);
             await page.waitForTimeout(450);
             await scrollFormToBottom(page);

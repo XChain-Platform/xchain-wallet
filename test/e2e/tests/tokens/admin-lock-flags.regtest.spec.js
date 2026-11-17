@@ -39,7 +39,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 2;
@@ -61,13 +63,11 @@ async function reloadToHome(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
         await password.fill(PASSWORD);
     }
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
 
     const main = page.getByRole('main');
     await expect(main, 'no transaction id appeared after Approve')
@@ -143,17 +143,17 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // The network sits in the From section, closed until opened.
             await openIssueSection(main, 'From');
             await selectVenueChain(main);
-            await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Ticker', { exact: true }).fill(TICK);
-            await main.getByLabel('Max supply', { exact: true }).fill(String(EDITION_SIZE));
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'Ticker').fill(TICK);
+            await fieldByLabel(main, 'Max supply').fill(String(EDITION_SIZE));
             // The edition preset caps each address at one copy, and the form
             // refuses a per-address cap below the per-transaction one, so the
             // per-address cap is raised to match.
             await openIssueSection(main, 'Public minting');
-            await main.getByLabel('Max per transaction', { exact: true }).fill(String(MAX_MINT));
-            await main.getByLabel('Max per address', { exact: true }).fill(String(MAX_MINT));
+            await fieldByLabel(main, 'Max per transaction').fill(String(MAX_MINT));
+            await fieldByLabel(main, 'Max per address').fill(String(MAX_MINT));
             await openIssueSection(main, 'Description');
-            await main.getByLabel('Image URL').fill(IMAGE_URL);
+            await fieldByLabel(main, 'Image URL').fill(IMAGE_URL);
             await submitTokenWizard(page);
 
             await expectConfirmModal(page, 'the edition ISSUE');
@@ -191,7 +191,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await expect(submit, 'the irreversible lock update bypassed its typed gate')
                 .toBeDisabled();
-            await main.getByLabel('Type LOCK to confirm').fill('LOCK');
+            await fieldByLabel(main, 'Type LOCK to confirm').fill('LOCK');
             await expect(submit).toBeEnabled();
             await submit.click();
 
@@ -232,8 +232,8 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 30_000 });
             await expect(main.getByRole('alert').filter({ hasText: /Mint supply is permanently locked/ }))
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.getByLabel('Max mint per transaction', { exact: true })).toBeDisabled();
-            await expect(main.getByLabel('Mint supply now', { exact: true })).toBeDisabled();
+            await expect(fieldByLabel(main, 'Max mint per transaction')).toBeDisabled();
+            await expect(fieldByLabel(main, 'Mint supply now')).toBeDisabled();
             await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
         });
 
@@ -252,9 +252,9 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = page.getByRole('main');
             await expect(main.getByRole('alert').filter({ hasText: /Callback is permanently locked/ }))
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.getByLabel('Callback token')).toBeDisabled();
-            await expect(main.getByLabel('Payout per unit')).toBeDisabled();
-            await expect(main.getByLabel('Callback allowed from block')).toBeDisabled();
+            await expect(main.getByRole('button', { name: /^Callback token:/ })).toBeDisabled();
+            await expect(fieldByLabel(main, 'Payout per unit')).toBeDisabled();
+            await expect(fieldByLabel(main, 'Callback allowed from block')).toBeDisabled();
             await expect(main.getByRole('button', { name: 'Update callback settings', exact: true }))
                 .toBeDisabled();
             await expect(page.getByTestId('confirm-modal')).toHaveCount(0);

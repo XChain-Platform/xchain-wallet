@@ -19,7 +19,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const XCHAIN_AMOUNT = 20;
@@ -69,7 +71,7 @@ test.describe('ADDRESS v0 preferences on regtest', () => {
             await main.getByRole('option', { name: 'Yes' }).click();
             await main.getByRole('button', { name: /^Who may open dispensers: / }).click();
             await main.getByRole('option', { name: 'Anyone' }).click();
-            await main.getByLabel('Memo', { exact: true }).fill(MEMO);
+            await fieldByLabel(main, 'Memo').fill(MEMO);
             await main.getByRole('button', { name: 'Update preferences', exact: true }).click();
 
             await expect(main).toContainText('Destroy the fee (reduces supply) - CHANGED');
@@ -77,13 +79,11 @@ test.describe('ADDRESS v0 preferences on regtest', () => {
             await expect(main).toContainText('Anyone may open a dispenser here - CHANGED');
             await main.getByRole('button', { name: 'Continue to Confirmation', exact: true }).click();
             await expectConfirmModal(page, 'address preferences');
-            const password = page.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
                 await password.fill(PASSWORD);
             }
-            const approve = page.getByTestId('confirm-approve');
-            await expect(approve).toBeEnabled({ timeout: 120_000 });
-            await approve.click();
+            await approveConfirm(page);
         });
 
         await test.step('read the exact ADDRESS row back from the explorer', async () => {

@@ -26,6 +26,7 @@ import {
 } from '../../fixtures/regtest.js';
 import { multipartPartCapacity } from '../../../../packages/core/src/flows/fileSizeLimits.js';
 import { formatBytes } from '../../../../packages/core/src/shared/utils/formatBytes.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const UNLOCK_VALUE = ['multipart', 'waves', 'word123'].join('');
 // 101 parts reach a three-digit part index, which leaves each full part one
@@ -148,7 +149,7 @@ test.describe(`Publish a multipart file in funding waves on ${REGTEST_CHAIN_LABE
             await publishAs.click();
             await main.getByRole('option', { name: /^Public/ }).click();
             await selectVenueChain(main, 'Network');
-            await main.getByLabel('File to publish').setInputFiles({
+            await fieldByLabel(main, 'File to publish').setInputFiles({
                 name: FILE_NAME,
                 mimeType: 'application/octet-stream',
                 buffer: bytes,

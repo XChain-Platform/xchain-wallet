@@ -38,8 +38,10 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const UNLOCK_VALUE = 'regtestpassword123';
 const FUNDING = 3;
@@ -70,19 +72,16 @@ async function newDevice(browser) {
 async function approveAndReadTxid(page, what, { typedCallback = false } = {}) {
     await expectConfirmModal(page, what, 90_000);
     if (typedCallback) {
-        const typed = page.getByLabel('Type "RECALL" to confirm', { exact: true });
+        const typed = fieldByLabel(page, 'Type "RECALL" to confirm');
         await expect(typed, 'the RECALL confirmation field is missing')
             .toBeVisible({ timeout: 30_000 });
         await typed.fill('RECALL');
     }
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
         await password.fill(UNLOCK_VALUE);
     }
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve, `Approve never became enabled for ${what}`)
-        .toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
 
     return waitForShownTxid(page.getByRole('main'), {
         timeout: 180_000,
@@ -93,7 +92,7 @@ async function approveAndReadTxid(page, what, { typedCallback = false } = {}) {
 async function openManageToken(page) {
     await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
-    const search = main.getByLabel('Search your tokens by ticker or description', { exact: true });
+    const search = fieldByLabel(main, 'Search your tokens by ticker or description');
     await expect(search, 'My Tokens did not render').toBeVisible({ timeout: 30_000 });
     await search.fill(TICK);
     const row = main.getByRole('button', { name: `Open ${TICK} token details`, exact: true }).first();
@@ -262,7 +261,7 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('issue the token and configure its holder payout', async () => {
             await openPaletteCommand(ownerPage, 'Issue token');
             let main = ownerPage.getByRole('main');
-            await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             expect(await readIssueSource(main)).toBe(owner);
             await issuePlainToken(main, { ticker: TICK, supply: SUPPLY });
 
@@ -289,8 +288,8 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             main = ownerPage.getByRole('main');
             await expect(main.getByRole('button', { name: new RegExp(`^Callback token: ${PAYOUT_TICK} on `) }))
                 .toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Payout per unit', { exact: true }).fill(String(PAYOUT_AMOUNT));
-            await main.getByLabel('Callback allowed from block', { exact: true }).fill(String(callbackBlock));
+            await fieldByLabel(main, 'Payout per unit').fill(String(PAYOUT_AMOUNT));
+            await fieldByLabel(main, 'Callback allowed from block').fill(String(callbackBlock));
             await main.getByRole('button', { name: 'Update callback settings', exact: true }).click();
 
             const update = await waitForValidAction(
@@ -310,7 +309,7 @@ test.describe(`holder-payout callback on ${REGTEST_CHAIN_LABEL}`, () => {
             await unlockAfterReload(ownerPage, UNLOCK_VALUE);
             await gotoSection(ownerPage, 'Send');
             await selectVenueSendAsset(ownerPage, TICK);
-            await ownerPage.getByLabel('To', { exact: true }).fill(holder);
+            await fieldByLabel(ownerPage, 'To').fill(holder);
             await ownerPage.getByRole('textbox', { name: /^Amount/ }).fill(String(HOLDER_UNITS));
             await mainButton(ownerPage, 'Send').click();
 
