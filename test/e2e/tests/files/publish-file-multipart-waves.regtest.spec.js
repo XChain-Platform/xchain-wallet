@@ -16,9 +16,7 @@ import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
-    approveConfirm,
     explorerJson,
-    expectConfirmModal,
     fundAddress,
     minerRpc,
     readReceiveAddress,
@@ -169,9 +167,9 @@ test.describe(`Publish a multipart file in funding waves on ${REGTEST_CHAIN_LABE
         let manifest;
         await test.step('approve once and mine both waves through assembly', async () => {
             await startProgressCapture(page);
+            // Publish File is the one approval (Q6): the Upload method field above
+            // quoted the whole file, and no prompt follows while both waves send.
             await main.getByRole('button', { name: 'Publish File', exact: true }).click();
-            await expectConfirmModal(page, 'the 101-part multipart upload', 300_000);
-            await approveConfirm(page, 'the 101-part multipart upload', 300_000);
             manifest = await waitForCompleteManifest(page, source);
             expect(Number(manifest.multipart.total_parts)).toBe(EXPECTED_PARTS);
             expect(manifest.multipart.status).toBe('complete');
