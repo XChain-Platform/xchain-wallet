@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 function createState() {
     return {
         calls: [],
+        mempoolHighWater: 0,
         pieces: [],
         terminals: new Map(),
         nextActionIndex: 0,
@@ -228,11 +229,16 @@ function findPiece(state, txid) {
     return state.pieces.find((piece) => piece.txid === txid);
 }
 
+function countMempoolPieces(state) {
+    return state.pieces.filter((piece) => piece.state === 'mempool').length;
+}
+
 function addStateMethods(api, state) {
     api.addPiece = (input) => {
         recordCall(state, 'addPiece', [input]);
         const piece = normalizePiece(state, input);
         state.pieces.push(piece);
+        state.mempoolHighWater = Math.max(state.mempoolHighWater, countMempoolPieces(state));
         if (piece.state === 'confirmed') indexPiece(state, piece);
         return { txid: piece.txid, actionIndex: piece.actionIndex };
     };
@@ -255,6 +261,14 @@ function addStateMethods(api, state) {
 }
 
 function addQueryMethods(api, state, sdk) {
+    api.mempoolCount = () => {
+        recordCall(state, 'mempoolCount', []);
+        return countMempoolPieces(state);
+    };
+    api.mempoolHighWater = () => {
+        recordCall(state, 'mempoolHighWater', []);
+        return state.mempoolHighWater;
+    };
     api.txState = (txid) => {
         recordCall(state, 'txState', [txid]);
         return findPiece(state, txid)?.state ?? null;
