@@ -120,6 +120,8 @@ for (const size of SIZES) {
             await backToSettings.click();
             await page.getByRole('button', { name: /^Network and Fees\b/ }).click();
             await page.getByRole('button', { name: /^Network endpoints\b/ }).click();
+            // Endpoints is a list of networks; each network's page holds its fields.
+            await page.getByRole('main').getByRole('button', { name: /^Bitcoin\b/ }).first().click();
             await expect(page.getByLabel('Explorer URL').first()).toBeVisible();
 
             await expectBorderedLabelledFields(page.getByRole('main'), `${size.name} Network & endpoints`);
