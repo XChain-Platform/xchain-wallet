@@ -434,6 +434,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         : null;
     const multipartMethod = useMultipartUploadMethod({
         bytes: fileMeta?.bytes ?? null,
+        // Artwork over one transaction is held by reference, so bytes is null.
+        size: fileMeta?.size ?? null,
         meta: uploadMeta,
         rate: multipartRate,
         descriptor,

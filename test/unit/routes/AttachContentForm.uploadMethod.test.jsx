@@ -111,6 +111,19 @@ function expectedFees(chainId, { title = '', tier = 'normal' } = {}) {
 }
 
 describe('AttachContentForm upload method', () => {
+    // Artwork over one Taproot transaction is held by reference (no bytes), so
+    // its multipart quote is priced from the file size.
+    it('quotes multi-part artwork held by reference with its parts and transactions', async () => {
+        const client = messagingFor({ overrides: {
+            fileMultipart: vi.fn().mockResolvedValue({}),
+            listPendingFileUploads: vi.fn().mockResolvedValue({ uploads: [] }),
+        } });
+        mount(client);
+        await ready(client);
+        await pickFile(900_000);
+        await waitFor(() => expect(trigger()).toHaveTextContent(/\d+ parts, \d+ transactions/), { timeout: 15_000 });
+    });
+
     it('offers Taproot upload first, marked Cheapest and picked by default, then Standard, each with its fee', async () => {
         const client = messagingFor();
         mount(client);
