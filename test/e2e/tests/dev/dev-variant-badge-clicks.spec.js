@@ -53,6 +53,9 @@ async function showBadge(page) {
         await developerMode.click();
         await expect(developerMode).toBeChecked();
     }
+    // The popover switch lives on the Developer options page, which Advanced
+    // only offers once Developer mode is on.
+    await page.getByRole('main').getByRole('button', { name: /^Developer options\b/ }).click();
     const popover = popoverSwitch(page);
     if (!(await popover.isChecked())) await popover.click();
     await expect(popover).toBeChecked();
@@ -110,6 +113,9 @@ async function expectNavClickable(page, { name, width, height, nav }, label) {
     expect(count, `${label}: nav targets at ${name}`).toBeGreaterThan(0);
     for (let i = 0; i < count; i += 1) {
         const target = targets.nth(i);
+        // The side nav is one scroll area, so at 800px tall Lock sits below
+        // the fold; bring it into view before asking what is on top of it.
+        await target.scrollIntoViewIfNeeded();
         await expect.poll(() => takesItsOwnClick(target), `${label}: ${nav} target ${i} at ${name}`).toBe(true);
         await target.click({ trial: true, timeout: 5_000 });
     }
