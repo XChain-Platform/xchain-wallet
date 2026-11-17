@@ -626,6 +626,8 @@ describe('translations', () => {
             ['extension.connect.aboutField', 'ui.field.about'],
             // The dApp connect page's network list and the hardware connect Networks tab and list.
             ['extension.connect.chains', 'hardwareConnect.accounts.networksLabel', 'hardwareConnect.accounts.networksTab'],
+            // Both shell recovery paths use the same concise reload action.
+            ['extension.connection.reload', 'home.sdkLoadFailure.reload'],
             // The empty token list on Gated publish and on the unbind form.
             ['gatedPublish.tokens.noneTitle', 'unbindForm.noTokensTitle'],
             // The wallet menu reuses the label the same destination carries elsewhere.

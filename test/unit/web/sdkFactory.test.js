@@ -88,6 +88,25 @@ describe('resolveSdkFactory', () => {
         expect(typeof result.factory).toBe('function');
     });
 
+    it('retries a rejected SDK import twice before it resolves', async () => {
+        const importSdk = vi.fn()
+            .mockRejectedValueOnce(new Error('HTTP 429'))
+            .mockRejectedValueOnce(new Error('HTTP 429'))
+            .mockResolvedValue({ XChainSDK: FakeXChainSDK });
+        const wait = vi.fn().mockResolvedValue(undefined);
+
+        const result = await resolveSdkFactory({
+            devMockFactory: devMock,
+            venue: 'real',
+            importSdk,
+            wait,
+        });
+
+        expect(result.source).toBe('real');
+        expect(importSdk).toHaveBeenCalledTimes(3);
+        expect(wait.mock.calls).toEqual([[1000], [2000]]);
+    });
+
     it('accepts a default export shaped module', async () => {
         const result = await resolveSdkFactory({
             devMockFactory: devMock,
@@ -104,6 +123,7 @@ describe('resolveSdkFactory', () => {
             devMockFactory: devMock,
             venue: 'real',
             importSdk: async () => { throw new Error('bundle broke'); },
+            retryDelays: [],
         })).rejects.toThrow(/refusing to fall back to the dev-mock SDK.*bundle broke/s);
     });
 
@@ -112,6 +132,7 @@ describe('resolveSdkFactory', () => {
             devMockFactory: devMock,
             venue: 'real',
             importSdk: async () => ({ nothing: true }),
+            retryDelays: [],
         })).rejects.toThrow(/did not expose an `XChainSDK` class/);
     });
 

@@ -39,6 +39,7 @@
 // failure in every build: nothing silently degrades to fake data.
 
 import { sdk as sdkLib } from '@xchain-wallet/core';
+import { retryPromise } from './retryablePromise.js';
 
 let warned = false;
 
@@ -70,12 +71,16 @@ export function selectSdkVenue(env = import.meta.env) {
  * @param {import('@xchain-wallet/core').sdk.SDKFactory | null} [opts.devMockFactory]
  * @param {'real' | 'dev-mock'} [opts.venue] override for tests; defaults to `selectSdkVenue()`
  * @param {() => Promise<any>} [opts.importSdk] override for tests; defaults to importing `xchain-sdk`
+ * @param {readonly number[]} [opts.retryDelays] import retry delays; defaults to 1 s, 2 s, 4 s
+ * @param {(delayMs: number) => Promise<void>} [opts.wait] override for tests
  * @returns {Promise<{ factory: import('@xchain-wallet/core').sdk.SDKFactory, source: 'real' | 'dev-mock' }>}
  */
 export async function resolveSdkFactory({
     devMockFactory,
     venue = selectSdkVenue(),
     importSdk = () => import('xchain-sdk'),
+    retryDelays,
+    wait,
 } = {}) {
     if (venue !== 'real' && venue !== 'dev-mock') {
         throw new Error(`resolveSdkFactory: unknown SDK venue "${venue}"`);
@@ -107,11 +112,17 @@ export async function resolveSdkFactory({
         return { factory: devMockFactory, source: 'dev-mock' };
     }
     try {
-        const module = await importSdk();
-        const XChainSDK = module?.XChainSDK ?? module?.default?.XChainSDK ?? module?.default;
-        if (typeof XChainSDK !== 'function') {
-            throw new Error('xchain-sdk did not expose an `XChainSDK` class');
-        }
+        const XChainSDK = await retryPromise(async () => {
+            const module = await importSdk();
+            const LoadedSdk = module?.XChainSDK ?? module?.default?.XChainSDK ?? module?.default;
+            if (typeof LoadedSdk !== 'function') {
+                throw new Error('xchain-sdk did not expose an `XChainSDK` class');
+            }
+            return LoadedSdk;
+        }, {
+            ...(retryDelays ? { delays: retryDelays } : {}),
+            ...(wait ? { wait } : {}),
+        });
         return {
             factory: sdkLib.adaptXChainSDK(XChainSDK),
             source: 'real',

@@ -80,6 +80,35 @@ beforeEach(() => {
 });
 
 describe('web application boot', () => {
+    it('retries a failed Vite preload after 1 s, 2 s, and 4 s before showing an error', async () => {
+        vi.useFakeTimers();
+        const retryFetch = vi.fn().mockRejectedValue(new Error('HTTP 429'));
+        vi.stubGlobal('fetch', retryFetch);
+
+        try {
+            await runBoot();
+            const event = new Event('vite:preloadError', { cancelable: true });
+            event.payload = new Error('Unable to preload CSS for /assets/home.css');
+            window.dispatchEvent(event);
+
+            expect(event.defaultPrevented).toBe(true);
+            await vi.advanceTimersByTimeAsync(999);
+            expect(retryFetch).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(1);
+            expect(retryFetch).toHaveBeenCalledTimes(1);
+            await vi.advanceTimersByTimeAsync(2000);
+            expect(retryFetch).toHaveBeenCalledTimes(2);
+            await vi.advanceTimersByTimeAsync(4000);
+            expect(retryFetch).toHaveBeenCalledTimes(3);
+
+            expect(document.querySelector('[role="alert"] h1')?.textContent)
+                .toBe('XChain Wallet could not finish loading');
+        } finally {
+            vi.useRealTimers();
+            vi.unstubAllGlobals();
+        }
+    });
+
     it('mounts React before deferred registry work can run', async () => {
         await runBoot();
         const container = document.getElementById('xchain-web-root');
