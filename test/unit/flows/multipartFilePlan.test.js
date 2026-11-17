@@ -3,6 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { sha256 } from '@noble/hashes/sha2';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
@@ -11,6 +12,7 @@ import {
     fileHashOf,
     planMultipartFile,
     quoteMultipartFile,
+    planMultipartFileBySize,
 } from '../../../packages/core/src/flows/multipartFilePlan.js';
 import {
     FILE_MULTIPART_ACTIVATION_TIME,
@@ -204,5 +206,18 @@ describe('multipart funding quotes', () => {
         expect(quote.fee).toBe(3_435);
         expect(quote.fundingTotal).toBe(7_435);
         expect(quote.transactions).toBe(5);
+    });
+});
+
+// A file held by reference is quoted from its size; its part lengths must be
+// the split the byte planner makes, at every index width boundary.
+describe('planMultipartFileBySize', () => {
+    it.each([390_001, 779_841, 779_842, 39_391_920])('matches the byte planner for %i bytes', async (size) => {
+        const bytes = new Uint8Array(randomBytes(size));
+        const byBytes = await planMultipartFile(bytes, {}, { carrier: 'envelope' });
+        expect(byBytes.compressed).toBe(false);
+        const bySize = planMultipartFileBySize(size, {}, { carrier: 'envelope' });
+        expect(bySize.partCapacity).toBe(byBytes.partCapacity);
+        expect(bySize.parts.map((part) => part.byteLength)).toEqual(byBytes.parts.map((part) => part.bytes.length));
     });
 });

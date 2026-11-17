@@ -10,6 +10,7 @@
 
 import {
     planMultipartFile,
+    planMultipartFileBySize,
     quoteMultipartFile,
 } from './multipartFilePlan.js';
 
@@ -24,8 +25,9 @@ function invalid(field) {
     return error;
 }
 
-function validateInput({ bytes, rate, methods, lanes }) {
-    if (!(bytes instanceof Uint8Array) || bytes.length === 0) throw invalid('bytes');
+function validateInput({ bytes, size, rate, methods, lanes }) {
+    const sized = bytes == null && Number.isSafeInteger(size) && size > 0;
+    if (!sized && (!(bytes instanceof Uint8Array) || bytes.length === 0)) throw invalid('bytes');
     if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) {
         throw invalid('rate');
     }
@@ -52,9 +54,11 @@ function emptyResult() {
     };
 }
 
-async function planOption({ method, bytes, meta, gate, planner }) {
+async function planOption({ method, bytes, size, meta, gate, planner }) {
     const carrier = CARRIER_BY_METHOD[method];
     try {
+        // A file held by reference is quoted from its size (see planMultipartFileBySize).
+        if (bytes == null) return planMultipartFileBySize(size, meta, { carrier, gate });
         return await planner(bytes, meta, { carrier, gate });
     } catch (error) {
         if (error instanceof RangeError && typeof error.code === 'string') return error;
@@ -64,6 +68,7 @@ async function planOption({ method, bytes, meta, gate, planner }) {
 
 export async function previewMultipartQuotes({
     bytes,
+    size,
     meta,
     gate,
     rate,
@@ -73,11 +78,11 @@ export async function previewMultipartQuotes({
     planner = planMultipartFile,
     quoter = quoteMultipartFile,
 }) {
-    validateInput({ bytes, rate, methods, lanes });
+    validateInput({ bytes, size, rate, methods, lanes });
     const result = emptyResult();
     for (const method of methods) {
         const carrier = CARRIER_BY_METHOD[method];
-        const plan = await planOption({ method, bytes, meta, gate, planner });
+        const plan = await planOption({ method, bytes, size, meta, gate, planner });
         if (plan instanceof RangeError) {
             result.reasons[method] = plan.code;
         } else if (plan.parts.length < 2) {

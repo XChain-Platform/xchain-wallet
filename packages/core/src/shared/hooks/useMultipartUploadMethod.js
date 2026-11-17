@@ -51,7 +51,7 @@ function fieldState(input, supportError, previewState) {
 }
 
 export function useMultipartUploadMethod({
-    bytes, meta, gated = false, gate = null, rate,
+    bytes, size = null, meta, gated = false, gate = null, rate,
     descriptor, addressRecord, addressType, isWatcherMode = false,
     singleReasons, singleFits, lanes, sizes, preview,
 }) {
@@ -62,7 +62,7 @@ export function useMultipartUploadMethod({
         singleReasons, singleFits, supportState.support,
     ), [singleReasons, singleFits, supportState]);
     const previewState = useMultipartQuotePreview({
-        bytes, meta, gated, gate, rate, methods, lanes, sizes, preview,
+        bytes, size, meta, gated, gate, rate, methods, lanes, sizes, preview,
     });
     const state = fieldState({
         singleReasons, singleFits, support: supportState.support,

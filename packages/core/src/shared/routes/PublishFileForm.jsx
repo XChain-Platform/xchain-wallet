@@ -42,7 +42,7 @@ import {
     displayRateToSettingsCustom,
 } from '../../flows/feeEstimate.js';
 import { customFeeReviewStop } from '../../flows/feeEstimate.js';
-import { publicFileCompiledBytes } from '../../flows/uploadMethod.js';
+import { multipartPairSizes, publicFileCompiledBytes } from '../../flows/uploadMethod.js';
 import { UploadMethodField, useUploadMethod } from '../components/UploadMethodField.jsx';
 import styles from './IssueTokenForm.module.css';
 import publishStyles from './PublishFileForm.module.css';
@@ -138,8 +138,13 @@ function usePublicMultipartMethod({
     const rate = feeEstimate?.unit
         ? displayRateToPerByte(feeEstimate.unit, Number(feeEstimate.rateValue))
         : null;
+    // The quote prices every part pair and the manifest slot; without these
+    // estimators it throws and the field waits forever.
+    const sizes = useMemo(() => multipartPairSizes(descriptor), [descriptor]);
     return useMultipartUploadMethod({
         bytes: file?.bytes || null,
+        // A file over one transaction is held by reference, so bytes is null.
+        size: file?.size ?? null,
         meta,
         rate: Number.isFinite(rate) && rate > 0 ? rate : null,
         descriptor,
@@ -149,6 +154,7 @@ function usePublicMultipartMethod({
         singleReasons,
         singleFits,
         lanes: safeMultipartLanes(descriptor),
+        sizes,
     });
 }
 

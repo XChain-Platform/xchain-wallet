@@ -101,6 +101,30 @@ function expectedFees(chainId, { title = '', memo = '', tier = 'normal' } = {}) 
 }
 
 describe('PublishFileForm upload method', () => {
+    // A file over one Taproot transaction goes multipart; its quote prices
+    // every part pair, so the form must hand it the pair-size estimators.
+    it('quotes a multi-part file with its parts and transactions', async () => {
+        mount(messagingFor({ overrides: {
+            fileMultipart: vi.fn().mockResolvedValue({}),
+            listPendingFileUploads: vi.fn().mockResolvedValue({ uploads: [] }),
+        } }));
+        await pickFile(900_000);
+        await waitFor(() => expect(trigger()).toHaveTextContent(/\d+ parts, \d+ transactions/), { timeout: 15_000 });
+        expect(trigger()).not.toHaveTextContent('Working out the parts and the fee.');
+    });
+
+    // A read file that fits one Taproot transaction is still multipart on
+    // Standard; that quote needs the pair-size estimators too.
+    it('quotes Standard as multipart for a file that fits one Taproot transaction', async () => {
+        mount(messagingFor({ overrides: {
+            fileMultipart: vi.fn().mockResolvedValue({}),
+            listPendingFileUploads: vi.fn().mockResolvedValue({ uploads: [] }),
+        } }));
+        await pickFile(20_000);
+        fireEvent.click(trigger());
+        await waitFor(() => expect(screen.getAllByRole('option')[1]).toHaveTextContent(/\d+ parts, \d+ transactions/), { timeout: 15_000 });
+    });
+
     it('offers Taproot upload first, marked Cheapest and picked by default, then Standard, each with its fee', async () => {
         mount(messagingFor());
         await pickFile();

@@ -36,6 +36,7 @@ function previewOptions(result) {
 
 export function useMultipartQuotePreview({
     bytes,
+    size = null,
     meta,
     gated = false,
     gate = null,
@@ -47,13 +48,16 @@ export function useMultipartQuotePreview({
 }) {
     const [state, setState] = useState({ loading: false, options: null, error: null });
     const contextRef = useRef(null);
-    contextRef.current = { bytes, meta, gated, gate, rate, methods, lanes, sizes, preview };
+    contextRef.current = { bytes, size, meta, gated, gate, rate, methods, lanes, sizes, preview };
     const methodsKey = Array.isArray(methods) ? methods.join(',') : '';
 
     useEffect(() => {
         let active = true;
         const context = contextRef.current;
-        if (context.bytes == null || context.bytes.length === 0
+        // A large file is held by reference: its size alone prices it.
+        const hasBytes = context.bytes != null && context.bytes.length > 0;
+        const hasSize = Number.isSafeInteger(context.size) && context.size > 0;
+        if ((!hasBytes && !hasSize)
             || context.rate === null || context.methods.length === 0) {
             setState({ loading: false, options: null, error: null });
             return () => { active = false; };
@@ -62,7 +66,8 @@ export function useMultipartQuotePreview({
         let pending;
         try {
             pending = context.preview({
-                bytes: context.bytes,
+                bytes: hasBytes ? context.bytes : null,
+                size: hasBytes ? context.bytes.length : context.size,
                 meta: context.meta,
                 gate: previewGate(context.gated, context.gate),
                 rate: context.rate,
@@ -88,7 +93,7 @@ export function useMultipartQuotePreview({
             },
         );
         return () => { active = false; };
-    }, [bytes, gated, methodsKey, rate]);
+    }, [bytes, size, gated, methodsKey, rate]);
 
     return state;
 }

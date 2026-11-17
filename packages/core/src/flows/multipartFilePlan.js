@@ -240,6 +240,34 @@ export async function planMultipartFile(bytes, meta = {}, options = {}) {
     };
 }
 
+/**
+ * The part lengths of a file held by reference, from its size alone, so a
+ * quote never reads a file the form keeps as a File. They are the split of
+ * the file stored uncompressed; a file that compresses splits into fewer
+ * parts, so the quote is the most the upload can cost.
+ */
+export function planMultipartFileBySize(size, meta = {}, options = {}) {
+    if (!Number.isSafeInteger(size) || size <= 0) {
+        throw rangeError('EMPTY_FILE', 'multipart files must not be empty');
+    }
+    assertOriginalBounds(size, options.gate || null, options.carrier);
+    const { capacity, totalParts } = capacityForStoredLength(options.carrier, size);
+    const lengths = Array.from({ length: totalParts }, (_, partIndex) => (
+        partIndex < totalParts - 1 ? capacity : size - capacity * (totalParts - 1)
+    ));
+    // splitStoredBytes never leaves a one-byte last part.
+    if (lengths.length > 1 && lengths.at(-1) === 1) {
+        lengths[lengths.length - 2] -= 1;
+        lengths[lengths.length - 1] += 1;
+    }
+    return {
+        parts: lengths.map((byteLength, partIndex) => ({ partIndex, byteLength })),
+        totalParts,
+        partCapacity: capacity,
+        sizeOnly: true,
+    };
+}
+
 function quoteLane(lane, sizes) {
     const value = typeof lane === 'string' ? lane : lane?.type ?? lane?.kind ?? lane?.encoding;
     const normalized = String(value || '').trim().toUpperCase();
