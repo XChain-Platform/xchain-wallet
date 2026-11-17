@@ -85,7 +85,7 @@ describe('<Tabs>', () => {
         expect(css).toMatch(/\.segmented\s*\{[^}]*overflow-x:\s*auto/s);
         expect(css).toMatch(/\.segmented::-webkit-scrollbar\s*\{[^}]*display:\s*none/s);
         expect(css).toMatch(/\.segment:focus-visible\s*\{[^}]*outline:\s*2px solid/s);
-        expect(css).toMatch(/\.segment:is\(\[aria-checked='true'\], \[aria-selected='true'\]\)\s*\{[^}]*var\(--xc-control-selected\)/s);
+        expect(css).toMatch(/\.segment:is\(\[aria-checked='true'\], \[aria-selected='true'\]\)\s*\{[^}]*var\(--xc-toggle-selected-bg\)/s);
         // Labels never wrap: items share the row evenly but never shrink
         // below their own label; narrow rows give up side padding first.
         expect(css).toMatch(/\.segment\s*\{[^}]*flex:\s*1 1 0;[^}]*min-width:\s*max-content;[^}]*white-space:\s*nowrap;/s);

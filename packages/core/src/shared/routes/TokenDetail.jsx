@@ -10,7 +10,7 @@
 
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { HoldingValueContext, holdingValueSeries } from '../components/holdingValueContext.js';
+import { HoldingValueContext, holdingBalanceSeries, holdingValueSeries } from '../components/holdingValueContext.js';
 import { assetKeyOf } from '../utils/portfolioValueHistory.js';
 import { AddressText, Button, ChainBadge, CopyButton, EmptyState, FormErrorSummary, Icon, Input, ListPage, ListRow, Notice, PageHeader, Screen, SectionHeader, Skeleton, StatusMessage, Tabs, useFormErrors } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -40,6 +40,7 @@ import { TokenMarketRows } from '../components/TokenMarketTab.jsx';
 import listRowStyles from '../../ui/ListRow.module.css';
 import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { useNativePrice } from '../hooks/useNativePrice.js';
+import { useWalletHistory } from '../hooks/useWalletHistory.js';
 import { useTickFiatRate } from '../hooks/useFiatRate.js';
 import { PriceAlertEditorPage } from '../components/settings/PriceAlertsSection.jsx';
 import { useBackHandler } from '../../ui/backStack.js';
@@ -48,7 +49,10 @@ import { useSettings } from '../hooks/useSettings.js';
 import { pinnedTokensForWallet, pinnedTokensPatchForWallet } from '../../schemas/settings.js';
 import { explorerChainUrl, explorerPageUrl } from '../utils/explorerLinks.js';
 import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
+import { useBalanceUnit } from '../hooks/useBalanceUnit.js';
 import { useNetworkOffline } from '../hooks/useNetworkOffline.js';
+import { useWalletSource } from '../hooks/useDemoGuard.jsx';
+import { prepareValuation } from '../utils/portfolioValuation.js';
 import { coinFromChainId, formatFiat } from '../components/BalanceList.jsx';
 import { BridgeOriginTick } from './BridgeOriginBadge.jsx';
 import { parseBridgedTick, bridgeDisplayTick, coinDisplay } from './BridgeTick.js';
@@ -320,10 +324,32 @@ function TokenDetailContent({
     const holdingSource = useContext(HoldingValueContext);
     const holdingDrawn = embedded
         && Boolean(holdingSource?.prepared?.assets?.some((asset) => asset.key === assetKeyOf(chainId, tick)));
-    const readsOwnHistory = (!isNative || nativeBalanceChart) && !holdingDrawn;
+    const readsOwnHistory = !holdingDrawn;
+    const historySource = useWalletSource(walletId);
     // This wallet's own rows: one read feeds the hero's balance line and the
     // History tab. A coin with a price line leaves its tab to read its own.
-    const tokenHistory = useTokenHistory({ messaging, walletId, chainId, tick, isNative, enabled: readsOwnHistory });
+    const tokenHistory = useTokenHistory({ messaging: historySource.messaging, walletId, chainId, tick, isNative, enabled: readsOwnHistory });
+    const chartAddressesByChain = useMemo(() => ({
+        [chainId]: Array.isArray(tokenHistory.addresses) ? tokenHistory.addresses : [],
+    }), [chainId, tokenHistory.addresses]);
+    const chartTicksByChain = useMemo(
+        () => (isNative ? {} : { [chainId]: [tick] }),
+        [chainId, isNative, tick],
+    );
+    const canReadValueHistory = readsOwnHistory && !isDemo
+        && chartAddressesByChain[chainId].length > 0
+        && (isNative
+            ? typeof messaging?.getNativeHistoryBatch === 'function'
+            : typeof messaging?.getWalletHistoryBatch === 'function');
+    const detailWalletHistory = useWalletHistory({
+        walletId,
+        activeNetwork: settings?.activeNetwork || 'mainnet',
+        messaging: historySource.messaging,
+        addressesByChain: chartAddressesByChain,
+        chainIds: [chainId],
+        tokenTicksByChain: chartTicksByChain,
+        enabled: canReadValueHistory,
+    });
 
     // Native-coin price oracle (BTC / LTC / DOGE mainnet). Gated by
     // settings.privacy.priceDataEnabled; the hook surfaces a `disabled`
@@ -599,11 +625,7 @@ function TokenDetailContent({
     const [activeTab, setActiveTab] = useState('actions');
 
     const [balanceHidden, toggleBalanceHidden] = useBalancesHidden();
-    // Tap the amount to swap primary / secondary. Default: tick units
-    // (matches the BalanceList convention; users opening Bitcoin expect
-    // to see how much BTC they hold first, USD second). Fiat-as-primary
-    // is one tap away for users who think in USD.
-    const [primaryUnit, setPrimaryUnit] = useState('tick');
+    const [assetUnit, toggleAssetUnit] = useBalanceUnit();
 
     const fiatAvailable = fiat != null && isFinite(fiat);
     // Amount + unit code are kept separate so the unit can render as a
@@ -612,10 +634,14 @@ function TokenDetailContent({
     // for fiat the code is the wallet's preferred currency.
     const assetAmount = formatAmount(quantity, resolvedDivisibility);
     const fiatAmount = fiatAvailable ? formatFiatNumber(fiat, fiatCurrency) : '-';
-    const showFiatPrimary = primaryUnit === 'fiat' && fiatAvailable;
+    const showFiatPrimary = !assetUnit && fiatAvailable;
     const primaryAmount = showFiatPrimary ? fiatAmount : assetAmount;
     const primaryCode = showFiatPrimary ? fiatCurrency : tick;
     const atomicQuantity = parseAtomicQuantity(quantity);
+    const holdingUnits = atomicQuantity != null && resolvedDivisibility != null
+        ? Number(decimalFromBaseUnits(atomicQuantity, resolvedDivisibility))
+        : NaN;
+    const unitPrice = fiatAvailable ? Number(holdingFiatRate) : 1;
 
     // A token has no recorded price history (nor a coin on a test network), so
     // its hero draws what this wallet's own rows prove: the balance over the
@@ -623,7 +649,6 @@ function TokenDetailContent({
     // synthesized walk).
     const tokenHistoryEntries = tokenHistory.entries;
     const tokenHistoryAddresses = tokenHistory.addresses;
-    const tokenUnitPrice = !isNative && fiatAvailable ? Number(holdingFiatRate) : null;
     // A coin row may arrive without its divisibility; the chain names it.
     const seriesDivisibility = resolvedDivisibility ?? (isNative ? nativeDecimalsFor(descriptor || chainId) : null);
     const tokenSeriesFor = useCallback((range) => {
@@ -644,9 +669,35 @@ function TokenDetailContent({
             windowStart: balanceWindowStart(range, nowMs, rangeWindowStart),
             nowMs,
         });
-        if (!units) return null;
-        return Number.isFinite(tokenUnitPrice) && tokenUnitPrice > 0 ? units.map((value) => value * tokenUnitPrice) : units;
-    }, [readsOwnHistory, tokenHistoryEntries, tokenHistoryAddresses, atomicQuantity, tick, seriesDivisibility, tokenUnitPrice]);
+        return units;
+    }, [readsOwnHistory, tokenHistoryEntries, tokenHistoryAddresses, atomicQuantity, tick, seriesDivisibility]);
+
+    const localHoldingSource = useMemo(() => {
+        if (!readsOwnHistory || !fiatAvailable || tokenHistoryEntries === null || atomicQuantity === null) return null;
+        const fallbackHistory = {
+            entries: tokenHistoryEntries,
+            addressesByChain: chartAddressesByChain,
+            tokenPrices: detailWalletHistory.tokenPrices,
+        };
+        const history = detailWalletHistory.reads instanceof Map ? detailWalletHistory : fallbackHistory;
+        return {
+            prepared: prepareValuation({
+                rows: [{
+                    chainId,
+                    tick,
+                    kind: isNative ? 'native' : 'token',
+                    quantity: String(atomicQuantity),
+                    divisibility: seriesDivisibility,
+                    fiatRate: unitPrice,
+                }],
+                history,
+            }),
+            priceMap: {},
+            seedId: walletId,
+            synthesize: isDemo,
+            requestRange: detailWalletHistory.requestRange,
+        };
+    }, [readsOwnHistory, fiatAvailable, tokenHistoryEntries, atomicQuantity, chartAddressesByChain, detailWalletHistory, chainId, tick, isNative, seriesDivisibility, unitPrice, walletId, isDemo]);
 
     // The price chart behind the balance card, its range buttons and
     // the stats row under the card all read one market state.
@@ -654,14 +705,17 @@ function TokenDetailContent({
     // wallet's balance of the asset at each point times its price then), the
     // asset's share of Home's portfolio chart from the same valuation and the
     // same one history read. The page opened on its own keeps its price line.
-    const holdingSeriesFor = useMemo(() => (holdingDrawn
-        ? (range, priceEntry) => holdingValueSeries(holdingSource, { chainId, tick, range, priceEntry })
-        : null), [holdingDrawn, holdingSource, chainId, tick]);
+    const selectedHoldingSource = holdingDrawn ? holdingSource : localHoldingSource;
+    const holdingSeriesFor = useMemo(() => (selectedHoldingSource
+        ? (range, priceEntry) => (showFiatPrimary
+            ? holdingValueSeries(selectedHoldingSource, { chainId, tick, range, priceEntry })
+            : holdingBalanceSeries(selectedHoldingSource, { chainId, tick, range }))
+        : null), [selectedHoldingSource, chainId, tick, showFiatPrimary]);
     const market = useMarketData({
         holdingSeriesFor,
         tokenSeriesFor,
         tokenSeriesLoading: readsOwnHistory && (tokenHistoryEntries === null || (atomicQuantity == null && !balanceFailed)),
-        tokenSeriesKind: tokenUnitPrice ? 'value' : 'balance',
+        showFiat: showFiatPrimary,
         nativeBalanceChart,
         enabled: fiatSupported,
         isNative,
@@ -682,14 +736,10 @@ function TokenDetailContent({
     // Without a fiat value the change is counted in the coin itself. A
     // balance line (or its value at today's price) has no pill: a receive is
     // not a gain, so only a price line says how the holding moved.
-    const holdingUnits = atomicQuantity != null && resolvedDivisibility != null
-        ? Number(decimalFromBaseUnits(atomicQuantity, resolvedDivisibility))
-        : NaN;
-    const unitPrice = fiatAvailable ? Number(holdingFiatRate) : 1;
     const rangeChange = useMemo(() => {
         const series = market.sparkline;
-        // A holding line is already the holding's fiat value over the range.
-        if (market.holding) {
+        // A value line is already the holding's fiat value over the range.
+        if (market.seriesKind === 'value') {
             if (market.chartBusy || !Array.isArray(series) || series.length < 2) return null;
             return rangeChangeFor(series, market.range.label, (value) => formatFiatAmount(String(value), fiatCurrency));
         }
@@ -702,7 +752,7 @@ function TokenDetailContent({
         return rangeChangeFor(scaled, market.range.label, (value) => (fiatAvailable
             ? formatFiatAmount(String(value), fiatCurrency)
             : `${new Intl.NumberFormat(fiatLocale, { maximumFractionDigits: 8 }).format(value)} ${tick}`));
-    }, [market.sparkline, market.seriesKind, market.holding, market.chartBusy, market.range.label, fiatAvailable, fiat, holdingUnits, fiatCurrency, fiatLocale, tick]);
+    }, [market.sparkline, market.seriesKind, market.chartBusy, market.range.label, fiatAvailable, fiat, holdingUnits, fiatCurrency, fiatLocale, tick]);
     const changeInCoin = !showFiatPrimary;
     // The figure measures the selected range, so it names that period for
     // screen readers as the Home balance does with 24h.
@@ -1080,7 +1130,7 @@ function TokenDetailContent({
                                 <Button
                                     type="button"
                                     className={heroStyles.eye}
-                                    onClick={() => setPrimaryUnit((p) => (p === 'tick' ? 'fiat' : 'tick'))}
+                                    onClick={toggleAssetUnit}
                                     disabled={!fiatAvailable}
                                     aria-label={t('components.totalBalanceHero.showIn', { unit: showFiatPrimary ? tick : fiatCurrency })}
                                     title={t('components.totalBalanceHero.showIn', { unit: showFiatPrimary ? tick : fiatCurrency })}
@@ -1141,9 +1191,6 @@ function TokenDetailContent({
                                 market={market}
                                 hidden={balanceHidden}
                                 showFiat={showFiatPrimary}
-                                fiatValue={Number(fiat)}
-                                coinValue={holdingUnits}
-                                unitPrice={unitPrice}
                                 currency={fiatCurrency}
                                 unit={tick}
                                 locale={fiatLocale}
@@ -1616,7 +1663,7 @@ const NO_PRICE_HISTORY = 'No price history yet';
  * then lazily request daily history for longer ranges. Demo wallets
  * synthesize every range without requesting history.
  */
-function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading, loadFailed = false, tokenSeriesFor = null, tokenSeriesLoading = false, tokenSeriesKind = 'balance', nativeBalanceChart = false, holdingSeriesFor = null }) {
+function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick, chainId, fiatRate, fiatRateSource, fiatCurrency, loading, loadFailed = false, tokenSeriesFor = null, tokenSeriesLoading = false, showFiat = true, nativeBalanceChart = false, holdingSeriesFor = null }) {
     const [rangeId, setRangeId] = useState(defaultRangeId());
     const range = CHART_RANGES.find((item) => item.id === rangeId) || CHART_RANGES[0];
     // Once a daily range has been picked the daily request stays armed, so
@@ -1757,17 +1804,28 @@ function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick
         }
         chartBusy = loading;
         showRanges = Boolean(sparkline) && isDemo;
-        // No price line: the hero draws the holding from this wallet's own
-        // rows, the balance (or its value at today's price) over the range.
-        if (!sparkline && typeof tokenSeriesFor === 'function') {
-            chartBusy = loading || tokenSeriesLoading;
-            sparkline = chartBusy ? null : tokenSeriesFor(range);
-            if (sparkline) seriesKind = tokenSeriesKind;
-            showRanges = Boolean(sparkline);
-        }
         if (!chartBusy && !sparkline) {
             note = loadFailed ? (hint || 'Market data is unavailable.') : NO_PRICE_HISTORY;
         }
+    }
+
+    // The selected unit owns the series, not only its labels. Asset mode is
+    // the replayed balance. Fiat mode multiplies that balance by the price at
+    // each matching point, so receives and sends affect the value line too.
+    const balanceLine = !tokenSeriesLoading && typeof tokenSeriesFor === 'function'
+        ? tokenSeriesFor(range)
+        : null;
+    if (!showFiat && balanceLine) {
+        sparkline = balanceLine;
+        seriesKind = 'balance';
+        chartBusy = false;
+        note = null;
+        showRanges = true;
+    } else if (showFiat && balanceLine && seriesKind === 'price' && sparkline) {
+        sparkline = multiplyAlignedSeries(balanceLine, sparkline);
+        seriesKind = 'value';
+        note = null;
+        showRanges = Boolean(sparkline);
     }
 
     // Wide Home's panel: the holding's value line replaces the price or
@@ -1790,7 +1848,7 @@ function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick
             holding = true;
             chartBusy = false;
             sparkline = result.series;
-            seriesKind = 'value';
+            seriesKind = showFiat ? 'value' : 'balance';
             note = result.series ? null : NO_PRICE_HISTORY;
             showRanges = Boolean(result.series) || (isNative && showRanges);
         }
@@ -1809,21 +1867,29 @@ function useMarketData({ enabled, isNative, nativePrice, isDemo, assetInfo, tick
     };
 }
 
+function multiplyAlignedSeries(balances, prices) {
+    if (!Array.isArray(balances) || balances.length === 0 || !Array.isArray(prices) || prices.length === 0) return null;
+    if (prices.length === 1) return balances.map((balance) => balance * prices[0]);
+    const lastBalance = Math.max(1, balances.length - 1);
+    const lastPrice = prices.length - 1;
+    return balances.map((balance, index) => {
+        const at = (index / lastBalance) * lastPrice;
+        const left = Math.floor(at);
+        const right = Math.min(lastPrice, left + 1);
+        const price = prices[left] + ((prices[right] - prices[left]) * (at - left));
+        return balance * price;
+    });
+}
+
 /**
  * The coin or token's price chart drawn behind its balance card, as Home
  * draws the portfolio chart (PortfolioChart's `behind` mode): the range
  * buttons sit along the card's foot. Privacy mode hides the line and the
  * buttons but keeps their room.
  */
-function MarketPanel({ market, hidden, showFiat, fiatValue, coinValue, unitPrice, currency, unit, locale }) {
+function MarketPanel({ market, hidden, showFiat, currency, unit, locale }) {
     const panelId = useId();
     const { range, setRangeId, sparkline, chartBusy, showRanges, seriesKind = 'price', holding = false, note = null } = market;
-    const displaySeries = useMemo(
-        () => marketSeriesInHeroUnit(sparkline, seriesKind, {
-            showFiat, fiatValue, coinValue, unitPrice,
-        }),
-        [sparkline, seriesKind, showFiat, fiatValue, coinValue, unitPrice],
-    );
     const formatChartAmount = (value) => formatCompactChartValue(value, showFiat
         ? { locale, currency }
         : { locale, unit });
@@ -1851,15 +1917,15 @@ function MarketPanel({ market, hidden, showFiat, fiatValue, coinValue, unitPrice
                     {sparkline && !chartBusy && !(hidden && seriesKind !== 'price') ? (
                         <div className={portfolioChartStyles.chart}>
                             <Sparkline
-                                series={displaySeries || sparkline}
+                                series={sparkline}
                                 height="100%"
                                 strokeColor={BEHIND_CHART_STROKE}
                                 areaFill={BEHIND_CHART_FILL}
                                 edgeToEdge
                                 rangeLabel={range.label}
-                                formatValue={displaySeries ? formatChartAmount : undefined}
+                                formatValue={formatChartAmount}
                                 formatScaleValue={formatChartAmount}
-                                showScale={Boolean(displaySeries)}
+                                showScale
                                 heroScale
                                 {...(seriesKind === 'balance'
                                     ? { label: t('tokenDetail.chart.balanceTrend') }
@@ -1885,31 +1951,6 @@ function MarketPanel({ market, hidden, showFiat, fiatValue, coinValue, unitPrice
             </div>
         </section>
     );
-}
-
-// Keep the chart's shape while expressing its scale in the balance hero's
-// current unit. Price lines are rebased to the current holding, value lines
-// convert through the current unit price, and balance lines use that price
-// only while fiat is selected.
-function marketSeriesInHeroUnit(series, seriesKind, { showFiat, fiatValue, coinValue, unitPrice }) {
-    if (!Array.isArray(series) || series.length === 0) return null;
-    if (seriesKind === 'price') {
-        const last = series[series.length - 1];
-        const target = showFiat ? fiatValue : coinValue;
-        if (!(last > 0) || !Number.isFinite(target)) return null;
-        return series.map((value) => (value / last) * target);
-    }
-    if (seriesKind === 'balance') {
-        if (!showFiat) return series;
-        if (!(unitPrice > 0)) return null;
-        return series.map((value) => value * unitPrice);
-    }
-    if (seriesKind === 'value') {
-        if (showFiat) return series;
-        if (!(unitPrice > 0)) return null;
-        return series.map((value) => value / unitPrice);
-    }
-    return null;
 }
 
 function DetailsPanel({

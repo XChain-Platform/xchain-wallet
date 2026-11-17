@@ -87,7 +87,7 @@ describe('route control row alignment', () => {
         expect(screen.getByRole('button', { name: /Publish contract/ })).toHaveClass(buttonStyles.md);
     });
 
-    it('keeps the betting network field and status tabs on one control contract', async () => {
+    it('keeps the prediction market network field and status tabs on one control contract', async () => {
         mount(
             <BetFeedsList
                 walletId="wallet-1"
@@ -101,7 +101,7 @@ describe('route control row alignment', () => {
 
         // Network, Status and Sort are md fields in the title-bar filter panel; the views are
         // icon tabs above the list.
-        fireEvent.click(await screen.findByRole('button', { name: 'Filter bet markets' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Filter prediction markets' }));
         // Network is the standard Network field (it opens the full-screen
         // network list, operator ruling 2026-11-13), drawn at md.
         const network = await screen.findByRole('button', { name: /^Network: / });
@@ -110,7 +110,7 @@ describe('route control row alignment', () => {
             expectMediumInput(await screen.findByLabelText(label));
         }
         // Tabs draw the shared view-toggle frame.
-        expect(screen.getByRole('tablist', { name: 'Bet market views' })).toHaveClass(toggleStyles.segmented);
+        expect(screen.getByRole('tablist', { name: 'Prediction market views' })).toHaveClass(toggleStyles.segmented);
     });
 
     it('keeps staking search and network filter on the md size', async () => {

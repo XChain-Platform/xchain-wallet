@@ -68,8 +68,8 @@
         },
         "packages/core/src/shared/routes/DispenserDetail.jsx": {
             "heading": {
-                "count": 1,
-                "reason": "The Dispenser Details card title inside the blue-card detail page's own card: the title of a card's subject, not a page group title."
+                "count": 5,
+                "reason": "The amount heading identifies the detail hero, three headings label the embedded Buy, Details and Recent dispenses panels, and the Dispenser Details heading titles its fact card. None is a page group title."
             }
         },
         "packages/core/src/shared/routes/DispenserForm.jsx": {

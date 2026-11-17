@@ -291,7 +291,7 @@
    corners, regular weight and the nav padding. The hover tokens keep the
    Button hover and press fill on the nav row colours. */
 .item {
-    --xc-button-hover-bg: color-mix(in srgb, var(--xc-text) 10%, transparent);
+    --xc-button-hover-bg: var(--xc-row-hover-bg);
     --xc-button-hover-border: transparent;
     display: flex;
     align-items: center;
@@ -343,7 +343,7 @@
 }
 
 .nav .item:hover {
-    background: color-mix(in srgb, var(--xc-text) 10%, transparent);
+    background: var(--xc-row-hover-bg);
 }
 
 .nav .item:focus-visible {
@@ -374,10 +374,10 @@
 /* Layout 5: the active row is an inset rounded accent wash. */
 .nav .itemActive,
 .itemActive {
-    --xc-button-hover-bg: color-mix(in srgb, var(--xc-accent-primary) 20%, transparent);
+    --xc-button-hover-bg: var(--xc-row-active-bg);
     --xc-button-hover-border: transparent;
     border: 1px solid transparent;
-    background: color-mix(in srgb, var(--xc-accent-primary) 20%, transparent);
+    background: var(--xc-row-active-bg);
     font-weight: 600;
     color: var(--xc-accent-text, var(--xc-text));
 }

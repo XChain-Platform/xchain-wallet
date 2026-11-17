@@ -94,14 +94,14 @@ describe('protocol form accessibility', () => {
             host,
         );
         // The Bet tab holds one list row per outcome, and tapping one opens
-        // the Place Bet form with it.
-        fireEvent.click(await screen.findByRole('tab', { name: 'Bet' }));
+        // the Buy a position form with it.
+        fireEvent.click(await screen.findByRole('tab', { name: 'Buy' }));
         const outcomes = await screen.findByRole('list', { name: 'Outcome to back' });
         await expectNoSeriousAxeViolations(container);
-        const yes = within(outcomes).getByRole('button', { name: /^Bet on Yes,/ });
+        const yes = within(outcomes).getByRole('button', { name: /^Buy Yes,/ });
         await waitFor(() => expect(yes).toBeEnabled());
         fireEvent.click(yes);
-        await screen.findByRole('form', { name: 'Place Bet' });
+        await screen.findByRole('form', { name: 'Buy a position' });
         await expectNoSeriousAxeViolations(container);
     });
 
@@ -132,7 +132,7 @@ describe('protocol form accessibility', () => {
         );
         const list = await screen.findByRole('list', { name: 'Outcome to back' });
         expect(within(list).getAllByRole('listitem')).toHaveLength(5);
-        expect(within(list).getByRole('button', { name: /^Bet on 70 to 75°F, \d+ percent, 200 A11Y staked$/ })).toBeTruthy();
+        expect(within(list).getByRole('button', { name: /^Buy 70 to 75°F, \d+ percent, 200 A11Y total$/ })).toBeTruthy();
         await expectNoSeriousAxeViolations(container);
         fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
         await waitFor(() => expect(container.querySelectorAll('[data-outcome-activity] [data-outcome-mark]')).toHaveLength(5));

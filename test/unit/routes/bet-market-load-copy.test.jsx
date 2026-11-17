@@ -135,7 +135,7 @@ describe('BetFeedDetail: a failed market load', () => {
         const shown = utils.container.textContent || '';
 
         // Details rows render the label and its value as two cells, so the text has no colon.
-        expect(shown).toContain(`Betting closes${formatLocalDateTime(FEED.deadline)}`);
+        expect(shown).toContain(`Purchases close${formatLocalDateTime(FEED.deadline)}`);
         expect(shown).toContain(`Refunds if unresolved by${formatLocalDateTime(FEED.expire_at)}`);
     });
 

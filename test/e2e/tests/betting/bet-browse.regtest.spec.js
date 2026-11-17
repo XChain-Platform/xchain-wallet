@@ -261,10 +261,10 @@ test.describe('BET browse', () => {
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('What is being bet on', { exact: true }).fill(`Browse pills ${RUN_TAG}`);
+            await main.getByLabel('Question', { exact: true }).fill(`Browse pills ${RUN_TAG}`);
             await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
             await main.getByLabel('Outcome 1', { exact: true }).fill('No');
-            await main.getByLabel('Betting closes', { exact: true })
+            await main.getByLabel('Purchases Close', { exact: true })
                 .fill(toLocalDateTimeInput((await chainTime()) + DEADLINE_LEAD_SEC));
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Open market', exact: true }).click();

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { getFormatLocale, t } from '../../i18n/index.js';
 import styles from './Sparkline.module.css';
@@ -44,14 +44,15 @@ export function Sparkline({
     formatScaleValue = formatValue,
     heroScale = false,
 }) {
+    const gradientId = `hero-fill-${useId().replace(/:/g, '')}`;
     const values = useMemo(
         () => Array.isArray(series) ? series.filter(Number.isFinite) : [],
         [series],
     );
     const scale = useMemo(() => chartScale(values), [values]);
-    const plot = showScale
-        ? { left: 1, right: 76, top: heroScale ? 22 : 8, bottom: heroScale ? 62 : 92 }
-        : { left: edgeToEdge ? 0 : 1, right: edgeToEdge ? 100 : 99, top: 1, bottom: 99 };
+    // Scale marks are overlays. They must never change the line or area
+    // geometry, including the full-bleed plot used by chart heroes.
+    const plot = { left: edgeToEdge ? 0 : 1, right: edgeToEdge ? 100 : 99, top: 1, bottom: 99 };
     const points = useMemo(() => {
         if (values.length === 0) return null;
         const middleY = (plot.top + plot.bottom) / 2;
@@ -76,9 +77,14 @@ export function Sparkline({
     const first = values[0];
     const last = values[values.length - 1];
     const tone = last > first ? 'up' : last < first ? 'down' : 'unchanged';
-    const stroke = strokeColor || (tone === 'up'
+    const heroStroke = tone === 'up'
+        ? 'var(--xc-hero-chart-up)'
+        : tone === 'down' ? 'var(--xc-hero-chart-down)' : 'var(--xc-hero-scale-text)';
+    const stroke = heroScale ? heroStroke : (strokeColor || (tone === 'up'
         ? 'var(--xc-success)'
-        : tone === 'down' ? 'var(--xc-danger)' : 'var(--xc-text-muted)');
+        : tone === 'down' ? 'var(--xc-danger)' : 'var(--xc-text-muted)'));
+    const resolvedStrokeWidth = heroScale ? 2 : strokeWidth;
+    const useHeroGradient = heroScale && Boolean(areaFill);
     const scaleFormatter = formatScaleValue || formatChartValue;
     const summary = describeChartSeries(values, {
         label,
@@ -87,6 +93,9 @@ export function Sparkline({
         formatRangeValue: scaleFormatter,
         includeRangeExtrema: showScale,
     });
+    const scalePlot = heroScale
+        ? { left: plot.left, right: plot.right, top: 0, bottom: 100 }
+        : plot;
     return (
         <div className={styles.root} style={{ height }}>
             <svg
@@ -97,34 +106,88 @@ export function Sparkline({
                 aria-label={summary}
             >
                 <title>{summary}</title>
-                {showScale ? scale.map((mark) => (
+                {useHeroGradient ? (
+                    <defs>
+                        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1" data-chart-fill-tone={tone}>
+                            <stop offset="0%" stopColor={heroStroke} stopOpacity="var(--xc-hero-chart-fill-opacity)" />
+                            <stop offset="100%" stopColor={heroStroke} stopOpacity="0" />
+                        </linearGradient>
+                    </defs>
+                ) : null}
+                {areaFill ? <polygon fill={useHeroGradient ? `url(#${gradientId})` : areaFill} stroke="none" points={`${plot.left},100 ${points} ${plot.right},100`} /> : null}
+                {showScale && !heroScale ? scale.map((mark) => (
                     <line
                         key={mark.kind}
                         className={styles.guide}
                         data-chart-guide={mark.kind}
                         x1={plot.left}
                         x2={plot.right}
-                        y1={mark.position === 'top' ? plot.top : mark.position === 'bottom' ? plot.bottom : (plot.top + plot.bottom) / 2}
-                        y2={mark.position === 'top' ? plot.top : mark.position === 'bottom' ? plot.bottom : (plot.top + plot.bottom) / 2}
+                        y1={scalePosition(mark, plot)}
+                        y2={scalePosition(mark, plot)}
                         vectorEffect="non-scaling-stroke"
                     />
                 )) : null}
-                {areaFill ? <polygon fill={areaFill} stroke="none" points={`${plot.left},${showScale ? plot.bottom : 100} ${points} ${plot.right},${showScale ? plot.bottom : 100}`} /> : null}
                 <polyline
+                    data-chart-tone={heroScale ? tone : undefined}
                     fill="none"
                     stroke={stroke}
-                    strokeWidth={strokeWidth}
+                    strokeWidth={resolvedStrokeWidth}
                     vectorEffect="non-scaling-stroke"
                     points={points}
                 />
             </svg>
+            {showScale && heroScale ? (
+                <svg
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    className={`${styles.guidePlot} ${styles.heroBand}`}
+                    data-chart-scale-band="hero"
+                    aria-hidden="true"
+                >
+                    {scale.map((mark) => (
+                        <line
+                            key={mark.kind}
+                            className={`${styles.guide} ${styles.guideHero}`}
+                            data-chart-guide={mark.kind}
+                            x1={scalePlot.left}
+                            x2={scalePlot.right}
+                            y1={scalePosition(mark, scalePlot)}
+                            y2={scalePosition(mark, scalePlot)}
+                            vectorEffect="non-scaling-stroke"
+                        />
+                    ))}
+                </svg>
+            ) : null}
+            {showScale && heroScale ? (
+                <svg
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    className={styles.linePlot}
+                    data-chart-line-overlay="hero"
+                    aria-hidden="true"
+                >
+                    <polyline
+                        data-chart-tone={tone}
+                        fill="none"
+                        stroke={stroke}
+                        strokeWidth={resolvedStrokeWidth}
+                        vectorEffect="non-scaling-stroke"
+                        points={points}
+                    />
+                </svg>
+            ) : null}
             {showScale ? (
-                <div className={`${styles.scale} ${heroScale ? styles.scaleHero : ''}`} aria-hidden="true">
+                <div
+                    className={`${styles.scale} ${heroScale ? `${styles.scaleHero} ${styles.heroBand}` : ''}`}
+                    data-chart-scale-band={heroScale ? 'hero' : undefined}
+                    aria-hidden="true"
+                >
                     {scale.map((mark) => (
                         <span
                             key={mark.kind}
                             data-chart-scale={mark.kind}
-                            style={{ top: `${mark.position === 'top' ? plot.top : mark.position === 'bottom' ? plot.bottom : (plot.top + plot.bottom) / 2}%` }}
+                            data-scale-position={mark.position}
+                            style={{ top: `${scalePosition(mark, scalePlot)}%` }}
                         >
                             {scaleFormatter(mark.value)}
                         </span>
@@ -135,7 +198,7 @@ export function Sparkline({
     );
 }
 
-/** Return the high, middle and low marks, or one middle mark for a flat line. */
+/** Return five evenly spaced marks, or one middle mark for a flat line. */
 export function chartScale(series) {
     const values = Array.isArray(series) ? series.filter(Number.isFinite) : [];
     if (values.length === 0) return [];
@@ -144,9 +207,22 @@ export function chartScale(series) {
     if (high === low) return [{ kind: 'flat', value: high, position: 'middle' }];
     return [
         { kind: 'high', value: high, position: 'top' },
+        { kind: 'upper-middle', value: low + ((high - low) * 0.75), position: 'upper-middle' },
         { kind: 'middle', value: low + ((high - low) / 2), position: 'middle' },
+        { kind: 'lower-middle', value: low + ((high - low) * 0.25), position: 'lower-middle' },
         { kind: 'low', value: low, position: 'bottom' },
     ];
+}
+
+function scalePosition(mark, plot) {
+    const ratio = {
+        top: 0,
+        'upper-middle': 0.25,
+        middle: 0.5,
+        'lower-middle': 0.75,
+        bottom: 1,
+    }[mark.position];
+    return plot.top + ((plot.bottom - plot.top) * ratio);
 }
 
 /** Compact locale-aware chart label in fiat or coin units. */

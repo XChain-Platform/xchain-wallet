@@ -97,7 +97,7 @@ describe('permissionsToVerbs', () => {
 
     it('spells out the two actions that had silently drifted', () => {
         expect(permissionsToVerbs(['BET']))
-            .toEqual(['open betting markets and place bets']);
+            .toEqual(['open prediction markets and buy positions']);
         expect(permissionsToVerbs(['ADDRESS']))
             .toEqual(['change this address\'s settings and controller']);
     });

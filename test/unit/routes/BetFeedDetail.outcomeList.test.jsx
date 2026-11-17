@@ -6,7 +6,7 @@
 // The bet market's Bet tab as one outcome list (operator ruling 2026-11-13):
 // every outcome a row in one list card, led by a thumb (Yes, No) or a letter
 // on its own colour, with its amount staked, a share fill, its chance and a
-// chevron; the row opens Place Bet for that outcome. Activity leads each bet
+// chevron; the row opens Buy a position for that outcome. Activity leads each bet
 // with the same mark, round. The list is drawn from the market's OUTCOMES,
 // so any number of outcomes works, and it adds no reads.
 
@@ -125,7 +125,7 @@ const marks = (root) => [...root.querySelectorAll('[data-outcome-mark]')].map((m
 describe('the Bet tab outcome list', () => {
     it('draws Yes and No as one list of two rows, each led by its thumb', async () => {
         await openMarket(YES_NO, YES_NO_BETS);
-        const panel = screen.getByRole('tabpanel', { name: 'Bet' });
+        const panel = screen.getByRole('tabpanel', { name: 'Buy' });
 
         // One list card, one list item per outcome, no side-by-side boxes.
         expect(within(panel).getAllByRole('list')).toHaveLength(1);
@@ -142,7 +142,7 @@ describe('the Bet tab outcome list', () => {
             expect(m.textContent).toBe('');
         }
         // The name, its stake under it, the whole-percent chance and a chevron.
-        expect(rows().map((r) => r.textContent)).toEqual(['Yes783.5 XCHAIN staked58%', 'No561.5 XCHAIN staked42%']);
+        expect(rows().map((r) => r.textContent)).toEqual(['Yes783.5 XCHAIN total58%', 'No561.5 XCHAIN total42%']);
         for (const r of rows()) expect(r.querySelectorAll('svg')).toHaveLength(2);
 
         // No tap hint under the list (as on a poll's Vote tab, 2026-11-15); the
@@ -177,11 +177,11 @@ describe('the Bet tab outcome list', () => {
         ]);
         expect(rows().map((r) => r.querySelector('[data-outcome-mark]').textContent)).toEqual(['A', 'B', 'C', 'D', 'E']);
         expect(rows().map((r) => r.textContent)).toEqual([
-            'AUnder 65°F107 XCHAIN staked8%',
-            'B65 to 70°F295 XCHAIN staked22%',
-            'C70 to 75°F549 XCHAIN staked41%',
-            'D75 to 80°F281 XCHAIN staked21%',
-            'E80°F or more107 XCHAIN staked8%',
+            'AUnder 65°F107 XCHAIN total8%',
+            'B65 to 70°F295 XCHAIN total22%',
+            'C70 to 75°F549 XCHAIN total41%',
+            'D75 to 80°F281 XCHAIN total21%',
+            'E80°F or more107 XCHAIN total8%',
         ]);
     });
 
@@ -190,21 +190,21 @@ describe('the Bet tab outcome list', () => {
         for (let i = 0; i < TEMPERATURES.length; i += 1) {
             expect(rows()[i]).toBeEnabled();
             await press(rows()[i]);
-            const form = screen.getByRole('form', { name: 'Place Bet' });
+            const form = screen.getByRole('form', { name: 'Buy a position' });
             const picker = within(form).getByRole('button', { name: /^Outcome: / });
             expect(picker.getAttribute('aria-label')).toBe(`Outcome: ${TEMPERATURES[i]}`);
             await press(screen.getByRole('button', { name: 'Back to previous screen' }));
-            expect(screen.queryByRole('form', { name: 'Place Bet' })).toBeNull();
+            expect(screen.queryByRole('form', { name: 'Buy a position' })).toBeNull();
         }
     });
 
     it('names each row by its outcome, chance and stake', async () => {
         await openMarket(YES_NO, YES_NO_BETS);
         expect(rows().map((r) => r.getAttribute('aria-label'))).toEqual([
-            'Bet on Yes, 58 percent, 783.5 XCHAIN staked',
-            'Bet on No, 42 percent, 561.5 XCHAIN staked',
+            'Buy Yes, 58 percent, 783.5 XCHAIN total',
+            'Buy No, 42 percent, 561.5 XCHAIN total',
         ]);
-        expect(screen.getByRole('button', { name: 'Bet on Yes, 58 percent, 783.5 XCHAIN staked' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Buy Yes, 58 percent, 783.5 XCHAIN total' })).toBeTruthy();
         // The mark and the chevron add nothing to the name.
         for (const r of rows()) {
             expect(r.querySelector('[data-outcome-mark]').getAttribute('aria-hidden')).toBe('true');
@@ -213,21 +213,21 @@ describe('the Bet tab outcome list', () => {
 
         await openMarket(LA_HIGH, LA_BETS);
         expect(rows().map((r) => r.getAttribute('aria-label'))).toEqual([
-            'Bet on Under 65°F, 8 percent, 107 XCHAIN staked',
-            'Bet on 65 to 70°F, 22 percent, 295 XCHAIN staked',
-            'Bet on 70 to 75°F, 41 percent, 549 XCHAIN staked',
-            'Bet on 75 to 80°F, 21 percent, 281 XCHAIN staked',
-            'Bet on 80°F or more, 8 percent, 107 XCHAIN staked',
+            'Buy Under 65°F, 8 percent, 107 XCHAIN total',
+            'Buy 65 to 70°F, 22 percent, 295 XCHAIN total',
+            'Buy 70 to 75°F, 41 percent, 549 XCHAIN total',
+            'Buy 75 to 80°F, 21 percent, 281 XCHAIN total',
+            'Buy 80°F or more, 8 percent, 107 XCHAIN total',
         ]);
     });
 
     it('shows no chance and no fill on a market nothing has been staked on yet', async () => {
         await openMarket({ ...YES_NO, pools: [] }, []);
         expect(rows().map((r) => r.getAttribute('aria-label'))).toEqual([
-            'Bet on Yes, 0 XCHAIN staked',
-            'Bet on No, 0 XCHAIN staked',
+            'Buy Yes, 0 XCHAIN total',
+            'Buy No, 0 XCHAIN total',
         ]);
-        expect(rows().map((r) => r.textContent)).toEqual(['Yes0 XCHAIN staked', 'No0 XCHAIN staked']);
+        expect(rows().map((r) => r.textContent)).toEqual(['Yes0 XCHAIN total', 'No0 XCHAIN total']);
         expect([...outcomeList().querySelectorAll('[data-outcome-fill]')].map((f) => f.style.width)).toEqual(['0%', '0%']);
     });
 

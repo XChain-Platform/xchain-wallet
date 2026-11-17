@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { addDecimals } from './BetMarketCard.jsx';
+import { outcomeLabelsOf, safeOutcomeLabel } from '../utils/betOutcomeLabels.js';
 
 function extractRows(resp) {
     if (!resp) return [];
@@ -73,13 +74,13 @@ export function useWalletBets({ byChain, messaging }) {
             const failures = results.filter((r) => r.failed).length;
             if (failures > 0) {
                 setError(failures === results.length
-                    ? 'Could not load bets for any of your addresses.'
-                    : `Could not load bets for ${failures} of your addresses. The list may be incomplete.`);
+                    ? 'Could not load positions for any of your addresses.'
+                    : `Could not load positions for ${failures} of your addresses. The list may be incomplete.`);
             }
             setRows(all);
         } catch {
             if (requestId !== loadRequestId.current) return;
-            setError('Could not load your bets. Try again.');
+            setError('Could not load your positions. Try again.');
             setRows([]);
         }
     }, [byChain, messaging]);
@@ -103,7 +104,7 @@ export function useWalletBets({ byChain, messaging }) {
 export function yourBetText(bets, market) {
     if (!Array.isArray(bets) || bets.length === 0) return null;
     const mine = bets.filter((b) => b.bet_status !== 'invalid');
-    if (mine.length === 0) return 'Your bet was rejected by the network';
+    if (mine.length === 0) return 'Your position was rejected by the network';
     const byTick = new Map();
     for (const b of mine) {
         const tick = b.tick || market?.tick || '';
@@ -116,5 +117,16 @@ export function yourBetText(bets, market) {
     const amounts = byTick.get(mainTick);
     const total = addDecimals(amounts);
     const more = byTick.size > 1 ? ` +${byTick.size - 1} more` : '';
-    return `You bet ${formatDecimalAmount(total)} ${tick}${more}`.replace(/\s+/g, ' ').trim();
+    const outcomeIndexes = new Set(mine
+        .filter((row) => (row.tick || market?.tick || '') === mainTick)
+        .map((row) => Number(row.outcome))
+        .filter(Number.isInteger));
+    const outcomeIndex = outcomeIndexes.size === 1 ? [...outcomeIndexes][0] : null;
+    const outcomeLabel = outcomeIndex === null
+        ? ''
+        : safeOutcomeLabel(outcomeLabelsOf(market)[outcomeIndex]) || `Outcome ${outcomeIndex}`;
+    const outcomeText = outcomeLabel
+        ? ` on ${outcomeLabel}`
+        : outcomeIndexes.size > 1 ? ` across ${outcomeIndexes.size} outcomes` : '';
+    return `Your position: ${formatDecimalAmount(total)} ${tick}${outcomeText}${more}`.replace(/\s+/g, ' ').trim();
 }

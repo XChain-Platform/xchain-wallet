@@ -66,7 +66,7 @@ const KINDS = {
     addressLock: ['SLEEP', 'Lock address until block 900000 on Bitcoin', [['Resume block', '900000']]],
     addressSettings: ['ADDRESS', 'Set address options on Bitcoin', [['Fee preference', 'XCHAIN']]],
     price: ['PRICE', 'Publish oracle price 1 BTC = 95000 USD on Bitcoin', [['Coin', 'BTC'], ['Currency', 'USD'], ['Value', '95000']]],
-    bet: ['BET', 'Bet 10 on outcome 1 of market 4 on Bitcoin', [['Market', '4'], ['Outcome', '1'], ['Stake', '10']]],
+    bet: ['BET', 'Buy 10 of outcome 1 in market 4 on Bitcoin', [['Market', '4'], ['Outcome', '1'], ['Stake', '10']]],
     bridge: ['XBRIDGE', 'Move 10 ABC from Bitcoin to Litecoin', [['Token', 'ABC'], ['Amount', '10'], ['Destination chain', 'Litecoin'], ['Credit to', ADDR]]],
     batch: ['BATCH', 'Batch of 2 actions on Bitcoin:\n1. Mint 1 ABC\n2. Mint 2 ABC', [['Step 1', 'Mint 1 ABC'], ['Step 2', 'Mint 2 ABC']]],
     other: ['FUTURE_THING', 'Do a future thing on Bitcoin', [['Widget', 'blue']]],
@@ -554,7 +554,7 @@ describe('Confirm Standard, list transfer', () => {
         const { getByTestId } = render(<ActionWarningsCard ids={['MARKET_CANCEL']} />);
         const card = getByTestId('confirm-action-warnings');
         expect(card.textContent).toContain("You can't undo this");
-        expect(card.textContent).toContain('Every open bet is refunded in full and the market ends.');
+        expect(card.textContent).toContain('Every open position is refunded in full and the market ends.');
     });
 });
 

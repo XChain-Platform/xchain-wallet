@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 const css = readFileSync('packages/core/src/shared/routes/BetFeedsList.module.css', 'utf8');
 const jsx = readFileSync('packages/core/src/shared/routes/BetFeedsList.jsx', 'utf8');
 
-describe('Bet markets list spacing (8px between every block)', () => {
+describe('Prediction markets list spacing (8px between every block)', () => {
     it('takes the 8px gap from ListPage itself, with no local override', () => {
         const listPage = readFileSync('packages/core/src/ui/ListPage.module.css', 'utf8');
         expect(listPage).toMatch(/\.page\s*\{[^}]*--xc-list-page-gap:\s*var\(--xc-space-2\)[^}]*gap:\s*var\(--xc-list-page-gap\)/s);
@@ -37,8 +37,8 @@ describe('Bet markets list spacing (8px between every block)', () => {
     it('gives My bets and My markets the same grid as All', () => {
         // One list for every tab: the tabs filter the rows, never the markup.
         const grids = jsx.match(/<ul className=\{local\.marketList\}[^>]*>/g) ?? [];
-        expect(grids).toEqual(['<ul className={local.marketList} aria-label="Bet markets" data-xc-split-list={twoPanel ? \'\' : undefined}>']);
-        expect(jsx).not.toMatch(/listClassName=|aria-label="Your bet markets"/);
+        expect(grids).toEqual(['<ul className={local.marketList} aria-label="Prediction markets" data-xc-split-list={twoPanel ? \'\' : undefined}>']);
+        expect(jsx).not.toMatch(/listClassName=|aria-label="Your prediction markets"/);
         expect(jsx).not.toMatch(/<OracleConsole\b/);
     });
 

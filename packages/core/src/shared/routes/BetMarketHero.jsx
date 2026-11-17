@@ -56,7 +56,7 @@ function betClosingText(deadline, now = Math.floor(Date.now() / 1000)) {
 /** The status chip's short word and dot for each market status. */
 function betStatusChip(status) {
     if (status === 'open') return { text: 'Open', dot: 'open' };
-    if (status === 'closed') return { text: 'Betting closed', dot: 'closed' };
+    if (status === 'closed') return { text: 'Purchases closed', dot: 'closed' };
     if (status === 'resolved') return { text: 'Settled', dot: 'done' };
     if (status === 'resolved_void') return { text: 'Void', dot: 'done' };
     if (status === 'cancelled') return { text: 'Cancelled', dot: 'done' };
@@ -114,10 +114,10 @@ export function BetMarketHero({ feed = null, outcomes: outcomesProp, pools = [],
     ];
     const tick = feed?.tick ? String(feed.tick).toUpperCase() : '';
     const chartLabel = !current
-        ? 'No bets to chart yet'
+        ? 'No positions to chart yet'
         : series.fromBets
-            ? `Chance of ${count <= 2 ? leadingLabel : 'each outcome'} over ${range.label}, rebuilt from the market's bets`
-            : `Current split of ${leadingLabel} ${pctText(current[leading])}; no bet history to draw`;
+            ? `Chance of ${count <= 2 ? leadingLabel : 'each outcome'} over ${range.label}, rebuilt from market positions`
+            : `Current split of ${leadingLabel} ${pctText(current[leading])}; no position history to draw`;
 
     // Only a market with bet rows to rebuild has a history to chart (G10);
     // one with none opens with the outlined identity card (G16). While the
@@ -140,7 +140,7 @@ export function BetMarketHero({ feed = null, outcomes: outcomesProp, pools = [],
                     label: `${leadingLabel} moved ${changeRounded} points over ${range.label}`,
                 },
             } : null}
-            leadMessage={live ? 'No bets yet' : 'No bets'}
+            leadMessage={live ? 'No positions yet' : 'No positions'}
             lines={series.lines.map((line) => ({ key: line.outcome, values: line.values }))}
             leading={leading}
             chartLabel={chartLabel}
@@ -157,8 +157,8 @@ export function BetMarketHero({ feed = null, outcomes: outcomesProp, pools = [],
             foot={(
                 <p className={outcomeStyles.footLine} data-bet-hero-stats="">
                     <span>
-                        Pool <strong>{formatWithThousands(trimAmountTail(total) || '0')}{tick ? ` ${tick}` : ''}</strong>
-                        {' · '}<strong>{betCount}</strong> bet{betCount === 1 ? '' : 's'}
+                        Total <strong>{formatWithThousands(trimAmountTail(total) || '0')}{tick ? ` ${tick}` : ''}</strong>
+                        {' · '}<strong>{betCount}</strong> position{betCount === 1 ? '' : 's'}
                     </span>
                 </p>
             )}

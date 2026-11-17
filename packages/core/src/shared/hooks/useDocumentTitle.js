@@ -79,7 +79,7 @@ const ROUTE_LABELS = {
     'governance-polls': 'Governance Polls',
     'governance-delegations': 'My Delegations',
     'governance-clear-delegation': 'Clear Vote Delegation',
-    'bet-markets': 'Betting',
+    'bet-markets': 'Prediction markets',
     // The window title names the page header's title (U25).
     wizard: 'Issue Token',
     issue: 'Issue Token',

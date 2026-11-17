@@ -66,7 +66,7 @@ const messages = {
     'walletMenu.row.staking': 'Staking',
     'walletMenu.row.multisig': 'Multisig',
     'walletMenu.row.lists': 'Lists',
-    'walletMenu.row.betting': 'Betting',
+    'walletMenu.row.betting': 'Prediction markets',
     'walletMenu.row.createToken': 'Create a token',
     'walletMenu.row.publishFile': 'Publish file',
     'walletMenu.row.signMessage': 'Sign message',

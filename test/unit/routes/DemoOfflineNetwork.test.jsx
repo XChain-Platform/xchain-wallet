@@ -110,7 +110,9 @@ describe('demo session offline boundary', () => {
         render(provider(messaging, (
             <DispensersList walletId={WALLET} onOpenDispenser={() => {}} onBack={() => {}} />
         )));
-        expect(await screen.findByText('EXAMPLE')).toBeInTheDocument();
+        expect(await screen.findByRole('button', {
+            name: 'Open EXAMPLE dispenser #4198220',
+        })).toBeInTheDocument();
         cleanup();
 
         render(provider(messaging, (

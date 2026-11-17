@@ -101,6 +101,13 @@ function usedPairs() {
         solidPair('hovered primary button label', '--xc-on-accent', '--xc-accent-primary-hover', BODY_TEXT_MINIMUM),
         solidPair('neutral banner text', '--xc-text', '--xc-bg-muted', BODY_TEXT_MINIMUM),
         solidPair('error banner text', '--xc-on-danger', '--xc-danger', BODY_TEXT_MINIMUM),
+        solidPair('hero text', '--xc-hero-text', '--xc-hero-bg', BODY_TEXT_MINIMUM),
+        solidPair('hero scale text', '--xc-hero-scale-text', '--xc-hero-bg', BODY_TEXT_MINIMUM),
+        solidPair('hero up line', '--xc-hero-chart-up', '--xc-hero-bg', LARGE_TEXT_AND_CONTROL_MINIMUM),
+        solidPair('hero down line', '--xc-hero-chart-down', '--xc-hero-bg', LARGE_TEXT_AND_CONTROL_MINIMUM),
+        solidPair('selected hero chip text', '--xc-hero-chip-selected-text', '--xc-hero-chip-selected-bg', BODY_TEXT_MINIMUM),
+        tintedPair('hero up pill text', '--xc-hero-pill-up-text', '--xc-hero-pill-up-bg', '--xc-hero-bg', BODY_TEXT_MINIMUM),
+        tintedPair('hero down pill text', '--xc-hero-pill-down-text', '--xc-hero-pill-down-bg', '--xc-hero-bg', BODY_TEXT_MINIMUM),
     );
 
     const bannerTokens = [

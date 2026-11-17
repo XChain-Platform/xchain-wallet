@@ -48,7 +48,7 @@ describe('left nav layout 5 highlight', () => {
     it('draws the active row as an accent wash without a square edge', () => {
         const active = topLevelRule('.itemActive');
         expect(active).not.toBeNull();
-        expect(active).toMatch(/background:\s*color-mix\(in srgb, var\(--xc-accent-primary\) 20%, transparent\)\s*;/);
+        expect(active).toMatch(/background:\s*var\(--xc-row-active-bg\)\s*;/);
         expect(active).toMatch(/border:\s*1px solid transparent\s*;/);
         expect(active).not.toMatch(/box-shadow/);
     });
@@ -58,14 +58,20 @@ describe('left nav layout 5 highlight', () => {
         expect(item).not.toBeNull();
         expect(item).toMatch(/width:\s*calc\(100% - \(2 \* var\(--xc-side-menu-row-inset\)\)\)\s*;/);
         expect(item).toMatch(/margin-inline:\s*var\(--xc-side-menu-row-inset\)\s*;/);
-        expect(item).toMatch(/border-radius:\s*10px\s*;/);
+        expect(item).toMatch(/border-radius:\s*calc\(var\(--xc-radius-md\) \+ var\(--xc-radius-xs\)\)\s*;/);
         expect(item).toMatch(/padding:\s*var\(--xc-space-2\)\s+var\(--xc-space-3\)\s*;/);
     });
 
-    it('pins one 64px icon rail and one centred row geometry at every wide width', () => {
+    it('pins fixed 44px rows and centred 47px row geometry at every wide width', () => {
         const layout = topLevelRule('.layout');
+        const nav = topLevelRule('.nav');
+        const navItem = topLevelRule('.nav .item');
         expect(layout).toMatch(/--xc-side-menu-icons-width:\s*64px\s*;/);
         expect(layout).toMatch(/--xc-side-menu-row-inset:\s*var\(--xc-space-2\)\s*;/);
+        expect(nav).toMatch(/border-inline-end:\s*1px solid var\(--xc-border\)\s*;/);
+        expect(navItem).toMatch(/min-height:\s*44px\s*;/);
+        expect(navItem).toMatch(/block-size:\s*44px\s*;/);
+        expect(css).toMatch(/\.nav\.nav\s*\{[^}]*scrollbar-width:\s*none\s*;/s);
 
         expect(css).toMatch(
             /\.layout\[data-xc-side-menu='icons'\] \.sidebar,\s*\.layout\[data-xc-tier='rail'\] \.sidebar\s*\{[^}]*flex:\s*0 0 64px\s*;[^}]*inline-size:\s*var\(--xc-side-menu-icons-width\)\s*;[^}]*min-inline-size:\s*var\(--xc-side-menu-icons-width\)\s*;[^}]*max-inline-size:\s*var\(--xc-side-menu-icons-width\)\s*;/s,
@@ -94,7 +100,7 @@ describe('left nav layout 5 highlight', () => {
     it('uses the neutral hover wash and preserves the keyboard focus ring', () => {
         const hover = topLevelRule('.nav .item:hover');
         const focus = topLevelRule('.nav .item:focus-visible');
-        expect(hover).toMatch(/background:\s*color-mix\(in srgb, var\(--xc-text\) 10%, transparent\)\s*;/);
+        expect(hover).toMatch(/background:\s*var\(--xc-row-hover-bg\)\s*;/);
         expect(focus).toMatch(/outline:\s*2px solid var\(--xc-accent-primary, var\(--xc-text\)\)\s*;/);
         expect(focus).toMatch(/outline-offset:\s*-2px\s*;/);
     });

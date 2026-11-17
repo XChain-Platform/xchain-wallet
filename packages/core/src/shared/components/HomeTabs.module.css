@@ -114,16 +114,17 @@
 }
 
 
-/* The balance card and the chart behind it, stacked in one cell on the
-   flat app blue (no gradient). */
+/* The balance content and its full-bleed chart share one clipped surface. */
 .heroStack {
     display: grid;
     position: relative;
+    box-sizing: border-box;
+    border: 1px solid var(--xc-hero-border);
     border-radius: var(--xc-card-radius);
-    background: var(--xc-accent-primary);
-    box-shadow: var(--xc-shadow-md);
+    background: var(--xc-hero-bg);
+    box-shadow: var(--xc-hero-shadow);
     overflow: hidden;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
 }
 
 /* Forced-colors mode drops the app blue, so the card pins both halves. */
@@ -144,6 +145,7 @@
     position: relative;
     z-index: 1;
     background: transparent;
+    border: 0;
     box-shadow: none;
     pointer-events: none;
 }
@@ -157,6 +159,10 @@
    has no :has()), so the range chips at the foot clear the figures. */
 .heroStackWithChart > section:first-child {
     padding-bottom: calc(var(--xc-space-6) + var(--xc-space-1) + var(--xc-space-2));
+}
+
+.heroStackWithChart {
+    min-height: 160px;
 }
 
 /* The Home tabs take the shared view-toggle look (SegmentedControl.module.css). */

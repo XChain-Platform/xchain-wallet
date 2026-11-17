@@ -397,7 +397,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
             <div role="note" className={local.note}>
                 <strong>This record is not a guarantee.</strong>
                 <p>
-                    Nothing is staked behind a betting market. This history belongs to one address, and
+                    Nothing is staked behind a prediction market. This history belongs to one address, and
                     anyone can start again from a new one, so an empty or short record means
                     <em> unknown</em>, not <em>safe</em>. If an oracle never publishes a result you get
                     your stake back once the refund window passes, but who wins is the oracle&apos;s
@@ -432,10 +432,10 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
             {openRows.length > 0 && onOpenMarket ? (
                 <ActionListItem
                     icon={<Icon.ZapIcon />}
-                    title="Place bet"
+                    title="Buy a position"
                     description={openRows.length === 1
-                        ? 'Open the market taking bets'
-                        : `Choose one of ${openRows.length} markets taking bets`}
+                        ? 'Open the market offering positions'
+                        : `Choose one of ${openRows.length} markets offering positions`}
                     onClick={onPlaceBet}
                 />
             ) : null}

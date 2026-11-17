@@ -62,6 +62,12 @@ describe('ACTION_ENTRY_DEFS', () => {
         expect(broadcast.description).toMatch(/publish/i);
     });
 
+    it('names the prediction markets destination with buy wording', () => {
+        const markets = ACTION_ENTRY_DEFS.find((entry) => entry.id === 'bet-markets');
+        expect(markets.label).toBe('Prediction markets');
+        expect(markets.description).toBe('Browse prediction markets, buy and track positions, or run a market of your own as its oracle.');
+    });
+
     it('leaves developer tools out of All actions and lists Multisig signing for multisig sends', () => {
         const ids = ACTION_ENTRY_DEFS.map((entry) => entry.id);
         expect(ids).not.toContain('parallel');

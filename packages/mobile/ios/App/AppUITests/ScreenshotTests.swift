@@ -243,7 +243,7 @@ final class ScreenshotTests: XCTestCase {
     /// Demo mode is the app's own affordance, reached from the onboarding
     /// choice screen. See constraint 2 for why the harness uses it.
     private func enterDemoMode() {
-        guard let demo = button(anyOf: ["Try in demo mode", "demo mode", "Setting up demo"]) else {
+        guard let demo = button(anyOf: ["Try Demo", "Try in demo mode", "demo mode", "Setting up demo"]) else {
             missed.append("demo-mode entry")
             print("MISSED: demo-mode entry - no matching button")
             return

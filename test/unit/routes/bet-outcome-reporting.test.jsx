@@ -152,24 +152,20 @@ function button(utils, re) {
 async function placeBet(utils) {
     // Details is the default tab; the bet form shows only on the Bet tab.
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('tab', { name: /^Bet$/ }));
+        fireEvent.click(utils.getByRole('tab', { name: /^Buy$/ }));
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: /^Bet on Yes,/ }));
+        fireEvent.click(utils.getByRole('button', { name: /^Buy Yes,/ }));
         await drain();
     });
-    // Bet opens the Place Bet step, where the stake is.
+    // Bet opens the Buy a position step, where the stake is.
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('button', { name: 'Bet' }));
-        await drain();
-    });
-    await domAct(async () => {
-        fireEvent.change(utils.getByLabelText('Stake (XCHAIN)'), { target: { value: '100' } });
+        fireEvent.change(utils.getByLabelText('Amount (XCHAIN)'), { target: { value: '100' } });
         await drain();
     });
     await domAct(async () => {
-        fireEvent.click(button(utils, /Place bet/i));
+        fireEvent.click(utils.container.querySelector('button[type="submit"]'));
         await drain();
     });
     await domAct(async () => {
@@ -192,14 +188,14 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
         await placeBet(utils);
 
         expect(calls.find((c) => c.method === 'placeBetAction')).toBeTruthy();
-        // The Place Bet step the receipt used to live in is correctly gone,
+        // The Buy a position step the receipt used to live in is correctly gone,
         // and so is the Bet button of a market that no longer takes bets.
-        expect(utils.queryByRole('form', { name: 'Place Bet' })).toBeNull();
-        expect(utils.queryByRole('button', { name: 'Bet' })).toBeNull();
+        expect(utils.queryByRole('form', { name: 'Buy a position' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Buy' })).toBeNull();
         // The receipt is not.
         const receipt = utils.getByTestId('bet-result');
         expect(receipt.textContent).toContain('cafebabe');
-        expect(receipt.textContent).toMatch(/betting closed while you were confirming/i);
+        expect(receipt.textContent).toMatch(/purchases closed while you were confirming/i);
     });
 
     it('says plainly that a bet placed on a still-open market went through', async () => {
@@ -212,9 +208,9 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
         await placeBet(utils);
 
         const receipt = utils.getByTestId('bet-result');
-        expect(receipt.textContent).toContain('Bet placed.');
+        expect(receipt.textContent).toContain('Position bought.');
         expect(receipt.textContent).toContain('cafebabe');
-        expect(receipt.textContent).not.toMatch(/betting closed while you were confirming/i);
+        expect(receipt.textContent).not.toMatch(/purchases closed while you were confirming/i);
     });
 
     // leg (a), applied to the receipt this file introduced. useConfirmAction
@@ -235,7 +231,7 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
         await placeBet(utils);
 
         const receipt = utils.getByTestId('bet-result');
-        expect(receipt.textContent).not.toContain('Bet placed.');
+        expect(receipt.textContent).not.toContain('Position bought.');
         // the receipt promises a reminder, never an automatic send.
         expect(receipt.textContent).toMatch(/waiting in the queued-transactions banner/i);
         expect(receipt.textContent).not.toMatch(/automatically/i);
@@ -244,7 +240,7 @@ describe('BetFeedDetail reports the outcome of a bet the market has outlived', (
         expect(receipt.textContent).not.toContain('Transaction ID');
     });
 
-    it('shows a failed submit even when the market has stopped taking bets', async () => {
+    it('shows a failed submit even when the market has stopped offering positions', async () => {
         const { messaging } = harness({
             feedStatuses: ['open', 'open', 'open', 'closed'],
             submitThrows: Object.assign(new Error('Encoder RPC error: Broadcast refused by the node.'), {

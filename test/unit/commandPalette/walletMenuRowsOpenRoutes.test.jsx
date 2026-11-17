@@ -54,7 +54,7 @@ const COMMON_TASKS = [
     ['My orders', 'trade', 'my-orders'],
     ['My swaps', 'trade', 'my-swaps'],
     ['Payments due', 'trade', 'obligations'],
-    ['Bet markets', 'trade', 'bet-markets'],
+    ['Prediction markets', 'trade', 'bet-markets'],
     ['Governance polls', 'governance', 'governance-polls'],
     ['My delegations', 'governance', 'governance-delegations'],
     ['Staking', 'earn', 'staking-dashboard'],

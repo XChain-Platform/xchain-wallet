@@ -12,7 +12,7 @@
 //   (a) a market denominated in a 0-decimal token showed its pool as
 //       "300.000000000000000000", because the indexer sums in DECIMAL(65,18)
 //       and only the pool line lacked the trim every other amount gets;
-//   (b) counts read "1 bets" and "about 1 days";
+//   (b) counts read "1 positions" and "about 1 days";
 //   (c) three surfaces named the outcome by INDEX while the market itself
 //       carries the labels - including both BET confirm screens, whose whole
 //       job is letting someone check they are backing the side they meant.
@@ -76,13 +76,13 @@ const OWN_CLOSED_FEED = Object.freeze({
 // What sdk.decoder.describe hands back for a place-bet and for a resolve: the
 // outcome is an index, because that is all the composed bytes carry.
 const BET_DECODED = Object.freeze({
-    summary: 'Bet 300 on outcome 0 of market 1169 on Bitcoin',
+    summary: 'Buy 300 of outcome 0 in market 1169 on Bitcoin',
     details: [
         { label: 'Market', value: '1169' },
         { label: 'Outcome', value: '0' },
         { label: 'Stake', value: '300' },
     ],
-    warnings: ['Bets are final.'],
+    warnings: ['Purchases are final.'],
 });
 const RESOLVE_DECODED = Object.freeze({
     summary: 'Resolve market 2343 to outcome 0 on Bitcoin',
@@ -189,7 +189,7 @@ async function openMarket(messaging, feedIndex = '1169') {
 // content; choosing Bet again keeps it there.
 async function chooseBetTab(utils) {
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('tab', { name: 'Bet' }));
+        fireEvent.click(utils.getByRole('tab', { name: 'Buy' }));
         await drain();
     });
 }
@@ -201,9 +201,9 @@ describe('(a) BetFeedDetail: the pool respects the token, not the sum column', (
         const shown = utils.container.textContent;
         expect(shown).not.toContain('300.000000000000000000');
         // The hero's pool line, and the Yes outcome row with its stake and chance.
-        expect(shown).toContain('Pool 300 XCHAIN');
-        const yes = utils.getByRole('button', { name: 'Bet on Yes, 100 percent, 300 XCHAIN staked' });
-        expect(yes.textContent).toBe('Yes300 XCHAIN staked100%');
+        expect(shown).toContain('Total 300 XCHAIN');
+        const yes = utils.getByRole('button', { name: 'Buy Yes, 100 percent, 300 XCHAIN total' });
+        expect(yes.textContent).toBe('Yes300 XCHAIN total100%');
     });
 
     it('does not trim a figure that has significant decimals', async () => {
@@ -213,20 +213,20 @@ describe('(a) BetFeedDetail: the pool respects the token, not the sum column', (
             }),
         });
         const utils = await openMarket(messaging);
-        expect(utils.container.textContent).toContain('Pool 0.175 XCHAIN');
-        const yes = utils.getByRole('button', { name: 'Bet on Yes, 100 percent, 0.175 XCHAIN staked' });
-        expect(yes.textContent).toBe('Yes0.175 XCHAIN staked100%');
+        expect(utils.container.textContent).toContain('Total 0.175 XCHAIN');
+        const yes = utils.getByRole('button', { name: 'Buy Yes, 100 percent, 0.175 XCHAIN total' });
+        expect(yes.textContent).toBe('Yes0.175 XCHAIN total100%');
     });
 });
 
 describe('(b) counts are pluralized', () => {
-    it('one bet is "1 bet", two are "2 bets"', async () => {
+    it('one bet is "1 position", two are "2 positions"', async () => {
         const { messaging } = harness();
         const utils = await openMarket(messaging);
-        // The hero's standing line: "Pool 300 XCHAIN · 1 bet".
+        // The hero's standing line: "Pool 300 XCHAIN · 1 position".
         const stats = () => utils.container.querySelector('[data-bet-hero-stats]').textContent;
-        expect(stats()).toContain('· 1 bet');
-        expect(utils.container.textContent).not.toContain('1 bets');
+        expect(stats()).toContain('· 1 position');
+        expect(utils.container.textContent).not.toContain('1 positions');
 
         const two = harness({
             betFeed: () => Promise.resolve({
@@ -234,7 +234,7 @@ describe('(b) counts are pluralized', () => {
             }),
         });
         const utils2 = await openMarket(two.messaging);
-        expect(utils2.container.querySelector('[data-bet-hero-stats]').textContent).toContain('· 2 bets');
+        expect(utils2.container.querySelector('[data-bet-hero-stats]').textContent).toContain('· 2 positions');
     });
 
     it('a one-day market costs "about 1 day", never "about 1 days"', async () => {
@@ -263,26 +263,26 @@ describe('(c) the confirm screens name the outcome the market names', () => {
         const { messaging } = harness();
         const utils = await openMarket(messaging);
         await chooseBetTab(utils);
-        // Tapping Yes opens the Place Bet step, where the stake is.
+        // Tapping Yes opens the Buy a position step, where the stake is.
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: /^Bet on Yes,/ }));
+            fireEvent.click(utils.getByRole('button', { name: /^Buy Yes,/ }));
             await drain();
         });
         await domAct(async () => {
-            typeIn(utils, 'Stake (XCHAIN)', '300');
+            typeIn(utils, 'Amount (XCHAIN)', '300');
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Place bet/i));
+            fireEvent.click(utils.container.querySelector('button[type="submit"]'));
             await drain();
         });
 
         // The confirm page's sentence and facts (G127) carry the decoded intent.
         const intent = utils.getByTestId('confirm-modal').textContent;
-        expect(intent).toContain('"Yes" (outcome 0)');
+        expect(intent).toContain('Buy 300 XCHAIN of Yes');
         // The index is what the bytes carry: it must still be on the screen.
-        expect(intent).toContain('outcome 0');
-        expect(intent).toContain('market 1169');
+        expect(intent).toContain('Outcome0 ("Yes")');
+        expect(intent).toContain('Market1169');
     });
 
     it('OracleConsole: the resolve intent names the side about to be paid', async () => {
@@ -322,14 +322,14 @@ describe('(c) the confirm screens name the outcome the market names', () => {
         expect(utils.queryByRole('list', { name: 'Outcome to back' })).toBeNull();
         expect(utils.getByRole('heading', { level: 2, name: 'Will it ship?' })).toBeTruthy();
         // No outcome rows and no Bet button: the tab says why instead.
-        expect(utils.queryByRole('button', { name: 'Bet' })).toBeNull();
-        expect(utils.getByText('This market lists no outcomes, so there is nothing to bet on.')).toBeTruthy();
-        expect(utils.queryByRole('form', { name: 'Place Bet' })).toBeNull();
+        expect(utils.queryByRole('button', { name: 'Buy' })).toBeNull();
+        expect(utils.getByText('This market lists no outcomes, so there is nothing to buy.')).toBeTruthy();
+        expect(utils.queryByRole('form', { name: 'Buy a position' })).toBeNull();
     });
 });
 
-// My bets is a tab of Bet Markets (view 'bets').
-describe('(c) the My bets tab names each bet\'s outcome on its market card', () => {
+// My predictions is a tab of Prediction markets (view 'bets').
+describe('(c) the My predictions tab names each bet\'s outcome on its market card', () => {
     const BET_ROW = Object.freeze({
         action_index: '5001',
         feed_action_index: '1169',
@@ -350,7 +350,7 @@ describe('(c) the My bets tab names each bet\'s outcome on its market card', () 
         return utils;
     }
 
-    // My bets is the All list narrowed to the markets the wallet bet in
+    // My predictions is the All list narrowed to the markets the wallet bet in
     // (operator ruling 2026-11-13): the market names its outcomes, so the
     // card's chip names the backed side with no read per bet.
     const listed = (utils) => Array.from(utils.container.querySelectorAll('[data-market-index]'))
@@ -365,9 +365,9 @@ describe('(c) the My bets tab names each bet\'s outcome on its market card', () 
         // One short summary on the right of the row: amount and asset only.
         const chips = utils.container.querySelectorAll('[data-testid="bet-market-your-bet"]');
         expect(chips.length).toBe(1);
-        expect(chips[0].textContent).toBe('You bet 100 XCHAIN');
+        expect(chips[0].textContent).toBe('Your position: 100 XCHAIN on No');
         expect(chips[0].closest('span[class*="right"]')).not.toBeNull();
-        expect(utils.container.textContent).not.toContain(' on No');
+        expect(utils.container.textContent).toContain(' on No');
         fireEvent.click(utils.container.querySelector('[data-market-index="1169"]'));
         expect(onOpenMarket).toHaveBeenCalledWith(CHAIN, '1169');
         // No market read per bet: the list's own read carries the labels.
@@ -381,7 +381,7 @@ describe('(c) the My bets tab names each bet\'s outcome on its market card', () 
         const utils = await openMyBets(messaging);
         const chips = utils.container.querySelectorAll('[data-testid="bet-market-your-bet"]');
         expect(chips.length).toBe(1);
-        expect(chips[0].textContent).toBe('You bet 150 XCHAIN +1 more');
+        expect(chips[0].textContent).toBe('Your position: 150 XCHAIN across 2 outcomes +1 more');
     });
 
     it('reads no market per bet however many bets the wallet holds', async () => {
@@ -404,8 +404,8 @@ describe('(c) the My bets tab names each bet\'s outcome on its market card', () 
         const utils = await openMyBets(messaging);
         const text = utils.container.textContent;
 
-        expect(text).not.toContain('You bet 100 XCHAIN');
-        expect(text).toContain('Your bet was rejected by the network');
+        expect(text).not.toContain('Your position: 100 XCHAIN');
+        expect(text).toContain('Your position was rejected by the network');
         // The market is still listed: the user paid fees for the bet and may
         // need to find it.
         expect(listed(utils)).toEqual(['1169']);

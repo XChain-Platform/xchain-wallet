@@ -262,7 +262,7 @@ describe('buildCommands', () => {
 
         findById(commands, 'nav-betting').run();
         expect(navigate).toHaveBeenCalledWith('bet-markets');
-        // My bets and My markets are Bet Markets tabs, not routes of their own:
+        // My predictions and My markets are Prediction markets tabs, not routes of their own:
         // without a tab opener they land on the hub.
         navigate.mockClear();
         findById(commands, 'nav-my-bets').run();
@@ -270,7 +270,7 @@ describe('buildCommands', () => {
         expect(navigate.mock.calls).toEqual([['bet-markets'], ['bet-markets']]);
     });
 
-    it('opens Bet Markets on the My bets and My markets tabs through the shell tab opener', () => {
+    it('opens Prediction markets on the My predictions and My markets tabs through the shell tab opener', () => {
         const navigate = vi.fn();
         const openBetTab = vi.fn();
         const commands = buildCommands({ navigate, openBetTab });
@@ -284,12 +284,12 @@ describe('buildCommands', () => {
     });
 
     it('finds betting by the words users actually type', () => {
-        // The titles are "Betting" / "My bets" / "My markets", so a search for
-        // "wager", "odds" or "oracle" only lands via keywords. Those are the
+        // The titles are "Prediction markets" / "My predictions" / "My markets", so
+        // old and specialist vocabulary only lands via keywords. Those are the
         // words a Counterparty-era user brings with them.
         const commands = buildCommands({ navigate() {} });
         const hub = findById(commands, 'nav-betting');
-        for (const word of ['bet', 'wager', 'odds', 'oracle']) {
+        for (const word of ['bet', 'betting', 'odds', 'oracle']) {
             expect(hub.keywords, `"${word}" should find the betting hub`).toContain(word);
         }
         expect(findById(commands, 'nav-bet-oracle-console').keywords).toContain('resolve');
@@ -331,7 +331,7 @@ describe('buildCommands', () => {
             hasGovernanceAddress: true,
         });
         expect(findById(commands, 'nav-my-tokens').searchTitle).toBe('My Tokens');
-        expect(findById(commands, 'nav-betting').searchTitle).toBe('Betting markets');
+        expect(findById(commands, 'nav-betting').searchTitle).toBe('Prediction markets');
         expect(findById(commands, 'nav-governance').searchTitle).toBe('Governance');
         expect(findById(commands, 'nav-staking').searchTitle).toBeUndefined();
     });

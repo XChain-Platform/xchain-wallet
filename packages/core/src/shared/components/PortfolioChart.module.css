@@ -161,8 +161,8 @@
 }
 
 .rangeActive {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
+    background: var(--xc-toggle-selected-bg);
+    color: var(--xc-toggle-selected-text);
 }
 
 .rangeSlot.rangeActive {
@@ -183,11 +183,11 @@
     inset: 0;
     z-index: -1;
     border-radius: inherit;
-    background: var(--xc-accent-primary);
+    background: var(--xc-toggle-selected-bg);
 }
 
 .rangeActive:hover {
-    color: var(--xc-on-accent);
+    color: var(--xc-toggle-selected-text);
 }
 
 /* The chart drawn behind the balance card. The plot fills the whole
@@ -254,21 +254,21 @@
     inset-inline: 0;
     bottom: 100%;
     margin: 0 0 var(--xc-space-1);
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
     opacity: 0.85;
     pointer-events: none;
 }
 
 .behind .range {
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-chip-text);
 }
 
 .behind .range:hover {
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-chip-text);
 }
 
 .behind .rangeSlot.rangeActive {
-    color: var(--xc-brand-purple);
+    color: var(--xc-hero-chip-selected-text);
 }
 
 .behind .rangeSlot.rangeActive .rangeLabel {
@@ -276,11 +276,11 @@
 }
 
 .behind .rangeSlot.rangeActive .rangeLabel::after {
-    background: var(--xc-on-accent);
+    background: var(--xc-hero-chip-selected-bg);
 }
 
 .behind .range:focus-visible {
-    outline-color: var(--xc-on-accent);
+    outline-color: var(--xc-hero-text);
 }
 
 /* Every range is a frosted pill like the card's other buttons, so
@@ -295,16 +295,16 @@
     inset: 0;
     z-index: -1;
     border-radius: inherit;
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--xc-hero-chip-bg);
 }
 
 .behind .rangeSlot:hover .rangeLabel::after {
-    background: rgba(255, 255, 255, 0.3);
+    background: color-mix(in srgb, var(--xc-hero-chip-bg) 87.5%, var(--xc-hero-text));
 }
 
 .behind .rangeSlot.rangeActive .rangeLabel::after,
 .behind .rangeSlot.rangeActive:hover .rangeLabel::after {
-    background: var(--xc-on-accent);
+    background: var(--xc-hero-chip-selected-bg);
 }
 
 /* Privacy mode (balance hidden) shows no trend: the chart and its ranges

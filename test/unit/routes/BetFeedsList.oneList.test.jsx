@@ -3,9 +3,9 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Operator ruling 2026-11-13: Bet Markets' All view is the page. My bets and
+// Operator ruling 2026-11-13: Prediction markets' All view is the page. My predictions and
 // My markets are the same list (same cards, layout, sorting and controls)
-// and differ only in which markets are listed: My bets keeps the markets the
+// and differ only in which markets are listed: My predictions keeps the markets the
 // wallet has bet in, My markets the markets the wallet created. The page's
 // reads stay bounded: they never grow with the markets on screen, and a tab
 // switch reads nothing.
@@ -76,7 +76,7 @@ async function mount(messaging, view = 'all') {
     return utils;
 }
 
-const TAB_NAME = { all: 'All', bets: 'My bets', markets: 'My markets' };
+const TAB_NAME = { all: 'All', bets: 'My predictions', markets: 'My markets' };
 
 async function pick(view) {
     await act(async () => {
@@ -90,7 +90,7 @@ function listed(container) {
 }
 
 function list(container) {
-    return container.querySelector('ul[aria-label="Bet markets"]');
+    return container.querySelector('ul[aria-label="Prediction markets"]');
 }
 
 // The list's markup with React's generated ids blanked: My markets re-reads
@@ -99,7 +99,7 @@ function markup(container) {
     return list(container).outerHTML.replace(/:r[0-9a-z]+:/g, ':id:');
 }
 
-describe('Bet Markets: one list for All, My bets and My markets', () => {
+describe('Prediction markets: one list for All, My predictions and My markets', () => {
     it('draws the exact same list on all three tabs when every market is the wallet\'s', async () => {
         const markets = [market(1, OWN), market(2, OWN), market(3, OWN)];
         const { messaging } = harness({ markets, bets: markets.map(bet) });
@@ -144,7 +144,7 @@ describe('Bet Markets: one list for All, My bets and My markets', () => {
             expect(seen[view]).toEqual(seen.all.filter((id) => seen[view].includes(id)));
         }
         // The same per-user chips ride on the card wherever it is listed.
-        expect(screen.getByRole('button', { name: 'Market 1' })).toHaveTextContent('You bet 10 XCHAIN');
+        expect(screen.getByRole('button', { name: 'Market 1' })).toHaveTextContent('Your position: 10 XCHAIN on Yes');
     });
 
     it('keeps the same title-line filter on every tab', async () => {
@@ -153,7 +153,7 @@ describe('Bet Markets: one list for All, My bets and My markets', () => {
         await mount(messaging);
         for (const view of ['all', 'bets', 'markets']) {
             await pick(view);
-            expect(screen.getByRole('button', { name: 'Filter bet markets' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Filter prediction markets' })).toBeInTheDocument();
             expect(screen.getByRole('tab', { name: TAB_NAME[view] })).toHaveAttribute('aria-selected', 'true');
         }
     });
@@ -171,7 +171,7 @@ describe('Bet Markets: one list for All, My bets and My markets', () => {
     });
 });
 
-describe('Bet Markets page reads stay bounded', () => {
+describe('Prediction markets page reads stay bounded', () => {
     async function readsAt(rowCount) {
         // Every market bet in and created by the wallet, so every tab lists
         // all of them: the most rows each tab can carry.
@@ -196,7 +196,7 @@ describe('Bet Markets page reads stay bounded', () => {
 
         expect(few.onLoad).toEqual({ getAddressesByChain: 1, betFeeds: 1, bets: 1 });
         expect(many.onLoad).toEqual(few.onLoad);
-        // My bets narrows the rows in hand; it reads nothing.
+        // My predictions narrows the rows in hand; it reads nothing.
         expect(few.onBets).toEqual(few.onLoad);
         expect(many.onBets).toEqual(many.onLoad);
         // My markets asks once per wallet address on the network (one here),

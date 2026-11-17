@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Bet Markets walk 2026-11-13 (wall screens 94 and 171): My markets looks
+// Prediction markets walk 2026-11-13 (wall screens 94 and 171): My markets looks
 // exactly like All, the same card list and nothing else; the card holds only
 // the question, the odds and the pool line; and the cards sit side by side
 // on a wide screen in an auto-fill grid.
@@ -74,10 +74,10 @@ describe('My markets is the All card list and nothing else', () => {
         expect(text).not.toMatch(/Waiting for your result/);
         expect(text).not.toMatch(/Your record as an oracle is public/);
 
-        // Bet markets is one list: My markets is the All list filtered to this
+        // Prediction markets is one list: My markets is the All list filtered to this
         // wallet's markets, under the same Status filter (open by default), so
         // the settled market waits behind Status.
-        const list = screen.getByRole('list', { name: 'Bet markets' });
+        const list = screen.getByRole('list', { name: 'Prediction markets' });
         expect(list.querySelectorAll(':scope > li')).toHaveLength(1);
         expect(screen.queryByRole('button', { name: 'Will market 8 settle?' })).toBeNull();
         // The same grid class as All.
@@ -100,7 +100,7 @@ describe('BetMarketCard', () => {
         const text = card.textContent;
 
         expect(text).not.toContain('#700124');
-        expect(text).not.toMatch(/Taking bets|Betting closed|Closes in|Closed .* ago/);
+        expect(text).not.toMatch(/Positions available|Purchases closed|Closes in|Closed .* ago/);
         // The ticker appears only in the pool figure.
         expect(text.match(/XCHAIN/g)).toHaveLength(1);
         expect(text).toMatch(/15 XCHAIN\s*pool/);
@@ -111,11 +111,11 @@ describe('BetMarketCard', () => {
     });
 
     it('is one button named by the question, its odds and pool line the description', () => {
-        render(<BetMarketCard market={market(9, 'open')} onOpen={() => {}} yourBet="You bet 15 XCHAIN on No" />);
+        render(<BetMarketCard market={market(9, 'open')} onOpen={() => {}} yourBet="Your position: 15 XCHAIN on No" />);
         const card = screen.getByRole('button', { name: 'Will market 9 settle?' });
         const described = document.getElementById(card.getAttribute('aria-describedby'));
         expect(described.textContent).toContain('pool');
-        expect(described.textContent).toContain('You bet 15 XCHAIN on No');
+        expect(described.textContent).toContain('Your position: 15 XCHAIN on No');
         expect(card.querySelectorAll('button')).toHaveLength(0);
     });
 

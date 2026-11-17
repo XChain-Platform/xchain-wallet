@@ -551,6 +551,8 @@ describe('translations', () => {
             ['components.confirmSummary.verbBatch', 'walletMenu.row.batch'],
             // The confirm summary verb and wallet menu row name the same action.
             ['components.confirmSummary.verbCreatePoll', 'walletMenu.row.createPoll'],
+            // The prediction purchase and order purchase buttons share the short action label.
+            ['components.confirmSummary.verbPlaceBet', 'components.placeOrderPanel.buy'],
             // The confirm summary's verb names the same action as the Trade page's one button.
             ['components.confirmSummary.verbPlaceOrder', 'market.trade.placeOrder'],
             // The confirm summary's verb names the token page's Sell Ownership action (operator 2026-11-15 rename).
@@ -561,6 +563,8 @@ describe('translations', () => {
             ['components.draftNotice.restore', 'send.draft.restore'],
             // The trade forms' shared Expiration field and the Place order panel's.
             ['components.expiration.label', 'components.placeOrderPanel.expiration'],
+            // The side menu, command palette and wallet menu share the prediction markets label.
+            ['components.leftNav.bettingMarkets', 'palette.navBetting.title', 'walletMenu.row.betting'],
             // The side-menu destination and full-menu group use the same short governance label.
             ['components.leftNav.governance', 'walletMenu.group.governance'],
             // The side menu, command palette and menu model share the Trade group label.
@@ -718,7 +722,6 @@ describe('translations', () => {
             // The wallet menu row, the palette entry it replaces in search and the Publish File form's label.
             ['palette.createPublishFile.title', 'publishFile.formLabel', 'walletMenu.row.publishFile'],
             ['palette.createToken.title', 'walletMenu.row.createToken'],
-            ['palette.navBetting.title', 'walletMenu.row.betting'],
             // The wallet menu reuses the label the same destination carries elsewhere.
             ['palette.navBrowseDispensers.title', 'walletMenu.row.browseDispensers'],
             ['palette.navMySwaps.title', 'walletMenu.row.mySwaps'],

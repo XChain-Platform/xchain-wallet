@@ -43,9 +43,9 @@ const messages = {
     'actionWarnings.delegationClear.stops': 'Once this confirms, your delegate no longer votes with your token weight.',
     'actionWarnings.callback.recallsAll': 'This recalls every unit from all holders at the callback terms.',
     'actionWarnings.marketCreate.title': 'Market terms are final',
-    'actionWarnings.marketCreate.oracleDuty': "You're the oracle: resolve or cancel it, or bettors are refunded on your public record.",
+    'actionWarnings.marketCreate.oracleDuty': "You're the oracle: resolve or cancel it, or participants are refunded on your record.",
     'actionWarnings.marketResolve.paysOut': 'Backers of this outcome split the pot, and everyone else loses their stake.',
-    'actionWarnings.marketCancel.refundsAll': 'Every open bet is refunded in full and the market ends.',
+    'actionWarnings.marketCancel.refundsAll': 'Every open position is refunded in full and the market ends.',
     'actionWarnings.bridgeMove.noUndo': "It can't be redirected once it applies, so check the address and chain.",
     // The Cancel Order and Cancel Swap notes their forms used to show (G105).
     'actionWarnings.orderCancel.title': 'Cancelling closes the order',

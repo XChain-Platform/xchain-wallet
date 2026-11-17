@@ -144,8 +144,8 @@ describe('StakeNew render', () => {
     });
 });
 
-// My bets is a tab of Bet Markets (the my-bets route opens the list on it).
-describe('Bet Markets My bets tab render', () => {
+// My bets is a tab of Prediction markets (the my-bets route opens the list on it).
+describe('Prediction markets My bets tab render', () => {
     const props = {
         walletId: 'wallet-1',
         view: 'bets',
@@ -175,17 +175,17 @@ describe('Bet Markets My bets tab render', () => {
             }]),
         }, props);
 
-        expect(screen.getByRole('status', { name: 'Loading betting addresses' })).toBeInTheDocument();
+        expect(screen.getByRole('status', { name: 'Loading prediction market addresses' })).toBeInTheDocument();
 
         await act(async () => {
             addresses.resolve({ 'bitcoin-mainnet': [{ address: 'bc1qbettor' }] });
             await addresses.promise;
         });
 
-        expect(screen.getByRole('tab', { name: 'My bets' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('tab', { name: 'My predictions' })).toHaveAttribute('aria-selected', 'true');
         const card = await screen.findByRole('button', { name: 'Will it rain?' });
         expect(screen.queryByRole('button', { name: 'Will it snow?' })).toBeNull();
-        expect(card).toHaveTextContent('You bet 12 XCHAIN');
+        expect(card).toHaveTextContent('Your position: 12 XCHAIN on Yes');
         fireEvent.click(card);
         expect(props.onOpenMarket).toHaveBeenCalledWith('bitcoin-mainnet', 7);
     });
@@ -197,7 +197,7 @@ describe('Bet Markets My bets tab render', () => {
             bets: vi.fn().mockResolvedValue([]),
         }, props);
 
-        expect(await screen.findByText('No bets yet')).toBeInTheDocument();
+        expect(await screen.findByText('No predictions yet')).toBeInTheDocument();
         unmount();
 
         renderRoute(BetFeedsList, {
@@ -207,7 +207,7 @@ describe('Bet Markets My bets tab render', () => {
         }, props);
 
         // Raw load errors are replaced with plain recovery copy and a retry action.
-        expect(await screen.findByText('Could not load bets for any of your addresses.')).toBeInTheDocument();
+        expect(await screen.findByText('Could not load positions for any of your addresses.')).toBeInTheDocument();
         expect(screen.queryByText('Bet history unavailable.')).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
     });

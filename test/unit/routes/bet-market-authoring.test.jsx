@@ -239,24 +239,26 @@ function button(utils, re) {
         .find((b) => re.test(b.textContent || ''));
 }
 
+const submitButton = (utils) => utils.container.querySelector('button[type="submit"]');
+
 // The market page opens on its Details tab and only the chosen tab renders, so
 // the bet form is behind the Bet tab.
 async function openBetTab(utils) {
     await domAct(async () => {
-        fireEvent.click(utils.getByRole('tab', { name: /^Bet$/ }));
+        fireEvent.click(utils.getByRole('tab', { name: /^Buy$/ }));
         await drain();
     });
 }
 
-// The Bet tab lists every outcome as one row button ("Bet on Home, ...");
-// tapping one opens the Place Bet step with it chosen, where the stake and
-// Place Bet are. Already on Place Bet, its own outcome picker is used.
+// The Bet tab lists every outcome as one row button ("Buy Home, ...");
+// tapping one opens the Buy a position step with it chosen, where the stake and
+// Buy a position are. Already on Buy a position, its own outcome picker is used.
 async function openPlaceBet(utils, outcomeLabel) {
     await domAct(async () => {
         const list = utils.queryByRole('list', { name: 'Outcome to back' });
         if (list) {
             const rows = within(list).getAllByRole('button');
-            fireEvent.click(rows.find((row) => row.getAttribute('aria-label').startsWith(`Bet on ${outcomeLabel},`)));
+            fireEvent.click(rows.find((row) => row.getAttribute('aria-label').startsWith(`Buy ${outcomeLabel},`)));
         } else {
             selectOption(utils.getByRole('button', { name: /^Outcome: / }), { label: new RegExp(`^${outcomeLabel}`) });
         }
@@ -602,7 +604,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
     it.each([
         ['1.0000000000000000001', /at most 18 decimal places/i],
         ['1'.repeat(48), /too large/i],
-    ])('refuses an unsupported minimum bet %s before composing', async (minimum, message) => {
+    ])('refuses an unsupported minimum purchase %s before composing', async (minimum, message) => {
         const { messaging, calls } = harness();
         let utils;
         await domAct(async () => {
@@ -611,7 +613,7 @@ describe('CreateBetFeedForm: compose and submit', () => {
         });
         await fillMarket(utils);
         await domAct(async () => {
-            typeIn(utils, 'Smallest Bet Allowed', minimum);
+            typeIn(utils, 'Minimum Purchase', minimum);
             fireEvent.click(button(utils, /Open Market/));
             await drain();
         });
@@ -657,7 +659,7 @@ describe('BetFeedDetail states what a win would pay', () => {
     async function stakeOn(utils, outcomeLabel, amount) {
         await openPlaceBet(utils, outcomeLabel);
         await domAct(async () => {
-            typeIn(utils, 'Stake (PEPECREATURE)', amount);
+            typeIn(utils, 'Amount (PEPECREATURE)', amount);
             await drain();
         });
     }
@@ -720,7 +722,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(utils.queryByTestId('bet-projection')).toBeNull();
 
         await domAct(async () => {
-            fireEvent.click(utils.getByRole('button', { name: /^Bet on Away,/ }));
+            fireEvent.click(utils.getByRole('button', { name: /^Buy Away,/ }));
             await drain();
         });
         expect(utils.queryByTestId('bet-projection')).toBeNull();
@@ -732,7 +734,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         // Clearing the stake retracts the number rather than leaving a stale one
         // on screen next to an empty field.
         await domAct(async () => {
-            typeIn(utils, 'Stake (PEPECREATURE)', '');
+            typeIn(utils, 'Amount (PEPECREATURE)', '');
             await drain();
         });
         expect(utils.queryByTestId('bet-projection')).toBeNull();
@@ -755,7 +757,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         const utils = await openMarket(messaging);
         await stakeOn(utils, 'Away', '5');
         expect(utils.queryByTestId('bet-projection')).toBeNull();
-        expect(button(utils, /Place bet/i)).toBeTruthy();
+        expect(submitButton(utils)).toHaveAccessibleName('Buy Away');
     });
 
     it('starts only one unsigned wager build when submit is pressed twice', async () => {
@@ -792,11 +794,11 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(calls.some((c) => c.method === 'betProjectPayout')).toBe(false);
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Place bet/i));
+            fireEvent.click(submitButton(utils));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
-        expect(utils.container.textContent).toMatch(/minimum bet of 10/i);
+        expect(utils.container.textContent).toMatch(/minimum purchase of 10/i);
     });
 
     it('does not trust a malformed minimum amount from the explorer', async () => {
@@ -808,11 +810,11 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(calls.some((c) => c.method === 'betProjectPayout')).toBe(false);
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Place bet/i));
+            fireEvent.click(submitButton(utils));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
-        expect(utils.container.textContent).toMatch(/invalid minimum bet amount/i);
+        expect(utils.container.textContent).toMatch(/invalid minimum purchase amount/i);
     });
 
     it('refuses exponent notation before projection or compose', async () => {
@@ -823,7 +825,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(calls.some((c) => c.method === 'betProjectPayout')).toBe(false);
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Place bet/i));
+            fireEvent.click(submitButton(utils));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -841,7 +843,7 @@ describe('BetFeedDetail states what a win would pay', () => {
         expect(calls.some((c) => c.method === 'betProjectPayout')).toBe(false);
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Place bet/i));
+            fireEvent.click(submitButton(utils));
             await drain();
         });
         expect(calls.some((c) => c.method === 'composeBetForConfirm')).toBe(false);
@@ -860,11 +862,11 @@ describe('every BET surface renders the confirm page it opens', () => {
         await openBetTab(utils);
         await openPlaceBet(utils, 'Home');
         await domAct(async () => {
-            typeIn(utils, 'Stake (PEPECREATURE)', '5');
+            typeIn(utils, 'Amount (PEPECREATURE)', '5');
             await drain();
         });
         await domAct(async () => {
-            fireEvent.click(button(utils, /Place bet/i));
+            fireEvent.click(submitButton(utils));
             await drain();
         });
         expect(calls.find((c) => c.method === 'composeBetForConfirm').args.builder).toBe('placeBetParams');
@@ -1041,7 +1043,7 @@ describe('BET carries the native-coin fee lane', () => {
         await openBetTab(utils);
         await openPlaceBet(utils, 'Home');
         await domAct(async () => {
-            typeIn(utils, 'Stake (PEPECREATURE)', '5');
+            typeIn(utils, 'Amount (PEPECREATURE)', '5');
             await drain();
         });
         expect(utils.container.textContent).toContain('Calculating');
@@ -1050,7 +1052,7 @@ describe('BET carries the native-coin fee lane', () => {
         expect(feeSwitch.disabled).toBe(true);
 
         await domAct(async () => {
-            fireEvent.click(button(utils, /Place bet/i));
+            fireEvent.click(submitButton(utils));
             await drain();
         });
         const compose = calls.find((c) => c.method === 'composeBetForConfirm');

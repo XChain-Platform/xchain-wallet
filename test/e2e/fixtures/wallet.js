@@ -189,7 +189,7 @@ export function nav(page) {
 /**
  * The unlocked shell's signal that onboarding finished, in ANY shell.
  *
- * Anchored on Home's `<section aria-label="Active address balance">` (core's
+ * Anchored on Home's balance hero `<section>` (labelled by the wallet name, or "Active address balance" when unnamed; core's
  * `TotalBalanceHero`, rendered via `HomeTabs` by every shell) rather than on
  * navigation, because the three shells do not agree on navigation at all:
  * web/desktop render the rail or the bottom bar, and the MV3 popup renders
@@ -201,7 +201,15 @@ export function nav(page) {
  * rail is absent and Lock lives inside the closed wallet menu.
  */
 export function unlockedShell(page) {
-    return page.getByRole('region', { name: 'Active address balance' }).first();
+    // The hero is captioned with the wallet name once a wallet is active (G11),
+    // and only falls back to "Active address balance" when it has no name, so
+    // the name cannot be the anchor. The balance-visibility toggle is the
+    // hero card's own control, present under either caption.
+    return page.getByRole('region', { name: 'Active address balance' })
+        .or(page.getByRole('region').filter({
+            has: page.getByRole('button', { name: /^(?:Show|Hide) balance$/ }),
+        }))
+        .first();
 }
 
 /**

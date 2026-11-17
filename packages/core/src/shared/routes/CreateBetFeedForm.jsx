@@ -483,16 +483,16 @@ export function CreateBetFeedForm({
         ].find(([message]) => Boolean(message));
         if (safety) return fail(safety[0], safety[1]);
         if (label.trim().length > MAX_LABEL) return fail(`The title is ${label.trim().length} characters; the limit is ${MAX_LABEL}.`, 'label');
-        if (!tick.trim()) return fail('Choose the token bets are placed in. Betting is token-only: the network coin cannot be wagered.', 'tick');
+        if (!tick.trim()) return fail('Choose the token used to buy positions. Prediction markets are token-only: the network coin cannot be used.', 'tick');
         if (cleanOutcomes.length !== outcomes.length) return fail('Fill in every outcome, or remove the empty one.', 'outcomes');
         if (cleanOutcomes.length < 2) return fail('A market needs at least two outcomes.', 'outcomes');
         if (cleanOutcomes.length > MAX_OUTCOMES) return fail(`A market can have at most ${MAX_OUTCOMES} outcomes.`, 'outcomes');
         if (cleanOutcomes.some((o) => o.length > MAX_OUTCOME_LABEL)) return fail(`Each outcome label must be ${MAX_OUTCOME_LABEL} characters or fewer.`, 'outcomes');
         if (cleanOutcomes.some((o) => OUTCOME_BAD_CHARS.test(o))) return fail('Outcome labels cannot contain a comma, a semicolon or a vertical bar.', 'outcomes');
         if (new Set(cleanOutcomes).size !== cleanOutcomes.length) return fail('Two outcomes have the same label. Each one must be distinct.', 'outcomes');
-        if (!deadlineUnix) return fail('Pick when betting closes.', 'deadline');
-        if (deadlineUnix <= nowSec) return fail('Betting must close in the future.', 'deadline');
-        if (deadlineUnix - nowSec > MAX_DEADLINE_HORIZON) return fail('Betting must close within one year.', 'deadline');
+        if (!deadlineUnix) return fail('Pick when purchases close.', 'deadline');
+        if (deadlineUnix <= nowSec) return fail('Purchases must close in the future.', 'deadline');
+        if (deadlineUnix - nowSec > MAX_DEADLINE_HORIZON) return fail('Purchases must close within one year.', 'deadline');
         if (!refundSeconds) return fail('Set how long you have to publish the result.', 'refund');
         if (refundSeconds < MIN_REFUND_WINDOW || refundSeconds > MAX_REFUND_WINDOW) {
             return fail('Time to publish the result must be between one hour and one year.', 'refund');
@@ -503,15 +503,15 @@ export function CreateBetFeedForm({
         }
         if (minAmount.trim()) {
             const min = /^(\d+)(?:\.(\d+))?$/.exec(minAmount.trim());
-            if (!min) return fail('The minimum bet must be a positive amount.', 'min');
-            if ((min[2] || '').length > 18) return fail('The minimum bet can have at most 18 decimal places.', 'min');
-            if ((min[1].replace(/^0+/, '').length || 1) > 47) return fail('The minimum bet is too large.', 'min');
-            if (!/[1-9]/.test(`${min[1]}${min[2] || ''}`)) return fail('The minimum bet must be a positive amount.', 'min');
+            if (!min) return fail('The minimum purchase must be a positive amount.', 'min');
+            if ((min[2] || '').length > 18) return fail('The minimum purchase can have at most 18 decimal places.', 'min');
+            if ((min[1].replace(/^0+/, '').length || 1) > 47) return fail('The minimum purchase is too large.', 'min');
+            if (!/[1-9]/.test(`${min[1]}${min[2] || ''}`)) return fail('The minimum purchase must be a positive amount.', 'min');
         }
         if (allowList.trim() && !/^\d+$/.test(allowList.trim())) return fail('The allowed-addresses list must be a list number.', 'lists');
         if (blockList.trim() && !/^\d+$/.test(blockList.trim())) return fail('The blocked-addresses list must be a list number.', 'lists');
         if (allowList.trim() && allowList.trim() === blockList.trim()) {
-            return fail('The same list is set as both allowed and blocked, so nobody could ever bet. Pick one.', 'lists');
+            return fail('The same list is set as both allowed and blocked, so nobody could ever buy a position. Pick one.', 'lists');
         }
         if (description.trim().length > MAX_DESCRIPTION) return fail(`The description must be ${MAX_DESCRIPTION} characters or fewer.`, 'description');
         if (resolutionCriteria.trim().length > MAX_RESOLUTION_CRITERIA) return fail(`The settlement rule must be ${MAX_RESOLUTION_CRITERIA} characters or fewer.`, 'criteria');
@@ -683,7 +683,7 @@ export function CreateBetFeedForm({
                     // half-switched.
                     if (sel.chainId && sel.chainId !== chainId) {
                         if (betChainIds.length > 0 && !betChainIds.includes(sel.chainId)) {
-                            setFormError('Betting markets are not open on that network yet. Pick a token on another network.');
+                            setFormError('Prediction markets are not open on that network yet. Pick a token on another network.');
                             setTokenPickerOpen(false);
                             return;
                         }
@@ -746,7 +746,7 @@ export function CreateBetFeedForm({
                 <ResultScreen
                     state="success"
                     title="Market submitted."
-                    message={`Once the network records it, anyone holding ${tick} can bet on it, and it is yours to resolve after betting closes.`}
+                    message={`Once the network records it, anyone holding ${tick} can buy a position, and it is yours to resolve after purchases close.`}
                     onDone={onCreated || onBack}
                 >
                     <ul className={bet.resultFacts}>
@@ -804,7 +804,7 @@ export function CreateBetFeedForm({
                 {' '}It stays on the network for
                 about {dayWord(days)}: {freeDays} of those {freeDays === 1 ? 'is' : 'are'} free
                 and {billableDays} {billableDays === 1 ? 'is' : 'are'} charged.
-                {' '}The charge is measured to the refund deadline, not to when betting closes, so a longer
+                {' '}The charge is measured to the refund deadline, not to when purchases close, so a longer
                 window to publish the result costs more.
             </p>
         );
@@ -824,7 +824,7 @@ export function CreateBetFeedForm({
     const questionField = (
         <Input
             label="Question"
-            help="The question bettors back an outcome of, such as who wins a match."
+            help="The question participants choose an outcome for, such as who wins a match."
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             autoComplete="off"
@@ -878,7 +878,7 @@ export function CreateBetFeedForm({
     const deadlineField = (fieldLabel) => (
         <Input
             label={fieldLabel}
-            help="Bets are taken until this time. After it, you publish the winning outcome."
+            help="Positions can be bought until this time. After it, you publish the winning outcome."
             type="datetime-local"
             value={deadlineInput}
             onChange={(e) => setDeadlineInput(e.target.value)}
@@ -889,7 +889,7 @@ export function CreateBetFeedForm({
         <TokenField
             // Token, not Asset: the network coin cannot be wagered.
             label="Token"
-            help="The token bettors stake on this market. Every bet and every payout is in this token. Betting is token-only: the network coin cannot be wagered."
+            help="The token used to buy positions in this market. Every purchase and payout uses this token. Prediction markets are token-only: the network coin cannot be used."
             value={tick && chainId ? { chainId, tick } : null}
             onOpenPicker={() => setTokenPickerOpen(true)}
         />
@@ -899,7 +899,7 @@ export function CreateBetFeedForm({
     const termChips = [
         refundUnix ? `Refund by ${shortDate(refundUnix)}` : `${windowText} to publish`,
         feePct.trim() ? `Oracle fee ${feePct.trim()}%` : 'No oracle fee',
-        minAmount.trim() ? `Min bet ${formatWithThousands(minAmount.trim())}${tickUpper ? ` ${tickUpper}` : ''}` : 'No minimum bet',
+        minAmount.trim() ? `Min purchase ${formatWithThousands(minAmount.trim())}${tickUpper ? ` ${tickUpper}` : ''}` : 'No minimum purchase',
         'You are the oracle',
         // No network chip; the network shows only in the From section.
     ];
@@ -973,7 +973,7 @@ export function CreateBetFeedForm({
                 <Textarea
                     label="Description"
                     optional
-                    help="This rides on the chain with the market, so bettors and every explorer see the same text. Write the settlement rule you will actually follow: it is what people will hold you to, and you cannot change it later."
+                    help="This rides on the chain with the market, so participants and every explorer see the same text. Write the settlement rule you will actually follow: it is what people will hold you to, and you cannot change it later."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     rows={3}
@@ -1002,7 +1002,7 @@ export function CreateBetFeedForm({
                             <Input
                                 key={i}
                                 label={o}
-                                help="A note bettors see beside this outcome, such as what counts as this result."
+                                help="A note participants see beside this outcome, such as what counts as this result."
                                 value={outcomeNotes[i] || ''}
                                 onChange={(e) => setOutcomeNoteAt(i, e.target.value)}
                                 autoComplete="off"
@@ -1018,10 +1018,10 @@ export function CreateBetFeedForm({
                 summary={deadlineUnix ? `Closes ${shortDate(deadlineUnix)}` : 'Not set'}
                 {...bind('timing')}
             >
-                {deadlineField('Betting Closes')}
+                {deadlineField('Purchases Close')}
                 <Select
                     label="Time to Publish the Result"
-                    help="How long after betting closes you have to publish the winning outcome. If you publish nothing in this window, everyone is refunded. A longer window costs more, because the cost is measured to this deadline."
+                    help="How long after purchases close you have to publish the winning outcome. If you publish nothing in this window, everyone is refunded. A longer window costs more, because the cost is measured to this deadline."
                     hint={refundUnix ? `Past this window everyone is refunded. Refund by ${shortDate(refundUnix)}.` : undefined}
                     value={windowPreset}
                     onChange={(e) => setWindowPreset(e.target.value)}
@@ -1031,7 +1031,7 @@ export function CreateBetFeedForm({
                 {windowPreset === 'custom' ? (
                     <Input
                         label="Days to Publish the Result"
-                        help="The number of days after betting closes that you have to publish the winning outcome."
+                        help="The number of days after purchases close that you have to publish the winning outcome."
                         value={windowCustomDays}
                         onChange={(e) => setWindowCustomDays(e.target.value)}
                         inputMode="decimal"
@@ -1048,7 +1048,7 @@ export function CreateBetFeedForm({
             >
                 {assetField}
                 <Input
-                    label="Smallest Bet Allowed"
+                    label="Minimum Purchase"
                     optional
                     help="Leave empty for no minimum. Useful because payouts round down: a tiny stake can win and still pay nothing."
                     value={formatWithThousands(minAmount)}
@@ -1084,7 +1084,7 @@ export function CreateBetFeedForm({
                 <Input
                     label="Where the Result Comes From"
                     optional
-                    help="A name or address people can check. Nothing here is fetched automatically; it is a note to bettors, not a data feed."
+                    help="A name or address people can check. Nothing here is fetched automatically; it is a note to participants, not a data feed."
                     value={source}
                     onChange={(e) => setSource(e.target.value)}
                     autoComplete="off"
@@ -1098,9 +1098,9 @@ export function CreateBetFeedForm({
                     rows={3}
                 />
                 <ListField
-                    label="Only These Addresses May Bet"
+                    label="Only These Addresses May Buy"
                     optional
-                    help="An address list you published in My Lists. Membership is checked when each bet is placed, so later removals do not cancel existing bets."
+                    help="An address list you published in My Lists. Membership is checked when each position is bought, so later removals do not cancel existing positions."
                     placeholder="None set"
                     valueText={pickedListText(allowList, allowPick)}
                     onOpenPicker={() => setListPickerFor('allow')}
@@ -1108,7 +1108,7 @@ export function CreateBetFeedForm({
                     clearLabel="Clear allow list"
                 />
                 <ListField
-                    label="These Addresses May Not Bet"
+                    label="These Addresses May Not Buy"
                     optional
                     help="An address list you published in My Lists. If an address is on both lists, it is blocked."
                     placeholder="None set"
@@ -1195,11 +1195,11 @@ export function CreateBetFeedForm({
                     chainRegistry={chainRegistry}
                     onNetworkChange={changeChain}
                     lockNetwork={Boolean(tick.trim())}
-                    networkHelp="The chain the market is created on. It follows the asset bets are placed in; your oracle address and the fees are on this network."
+                    networkHelp="The chain the market is created on. It follows the token used to buy positions; your oracle address and the fees are on this network."
                     address={fromAddress?.address}
                     onOpenPicker={() => setSourcePickerOpen(true)}
                     pickerLabel="Choose oracle address"
-                    addressHelp="This address is the market: it is the only one that can publish the result or cancel, it collects your fee, and its record as an oracle is public. It cannot bet on its own market, because an oracle who could bet on the result would decide the result."
+                    addressHelp="This address is the market: it is the only one that can publish the result or cancel, it collects your fee, and its record as an oracle is public. It cannot buy a position in its own market, because an oracle who could buy the result would decide the result."
                 />
             )}
             fee={(

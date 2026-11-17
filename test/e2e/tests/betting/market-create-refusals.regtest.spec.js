@@ -151,11 +151,11 @@ async function openValidForm(page, { label, pickToken = true, deadlineOffsetSec 
         await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
     }
 
-    await main.getByLabel('What is being bet on', { exact: true }).fill(label);
+    await main.getByLabel('Question', { exact: true }).fill(label);
     await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
     await main.getByLabel('Outcome 1', { exact: true }).fill('No');
     const now = await chainTime();
-    await main.getByLabel('Betting closes', { exact: true }).fill(toLocalDateTimeInput(now + deadlineOffsetSec));
+    await main.getByLabel('Purchases Close', { exact: true }).fill(toLocalDateTimeInput(now + deadlineOffsetSec));
     const password = main.getByLabel('Password', { exact: true });
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
     return main;
@@ -222,7 +222,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
 
         await test.step('no title', async () => {
             const main = await openValidForm(page, { label: `${RUN_TAG} notitle` });
-            await main.getByLabel('What is being bet on', { exact: true }).fill('');
+            await main.getByLabel('Question', { exact: true }).fill('');
             await expectRefusal(page, main, 'Give the market a question or title.',
                 'an untitled market was not refused');
         });
@@ -352,7 +352,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
                 '"Edit lists" did not open the list editor, so this is not the control it claims to be')
                 .toBeVisible({ timeout: 30_000 });
             await expect(console_.getByRole('button', { name: /^Block list:/ })).toBeVisible();
-            for (const term of ['What is being bet on', /^Outcome \d+$/, 'Betting closes']) {
+            for (const term of ['Question', /^Outcome \d+$/, 'Purchases Close']) {
                 await expect(console_.getByLabel(term),
                     `the list editor offers a "${term}" field, so it can change a market term`)
                     .toHaveCount(0);

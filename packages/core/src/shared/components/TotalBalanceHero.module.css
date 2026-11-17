@@ -1,15 +1,15 @@
-/* Flat app blue: the card carries no gradient. */
+/* The outer surface stays solid while the chart supplies its own fade. */
 .hero {
-    background: var(--xc-accent-primary);
-    color: var(--xc-on-accent);
-    border: 1px solid var(--xc-border-strong);
+    background: var(--xc-hero-bg);
+    color: var(--xc-hero-text);
+    border: 1px solid var(--xc-hero-border);
     border-radius: var(--xc-card-radius);
     padding: var(--xc-card-pad);
     display: flex;
     flex-direction: column;
     /* Preserve the untokenized 2px optical separation within the hero. */
     gap: 2px;
-    box-shadow: var(--xc-shadow-md);
+    box-shadow: var(--xc-hero-shadow);
 }
 
 .row {
@@ -32,7 +32,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: color-mix(in srgb, var(--xc-on-accent) 85%, transparent);
+    color: var(--xc-hero-text-muted);
 }
 
 
@@ -90,9 +90,9 @@
 
 .eye {
     appearance: none;
-    background: color-mix(in srgb, var(--xc-on-accent) 15%, transparent);
+    background: color-mix(in srgb, var(--xc-hero-chip-bg) 75%, transparent);
     border: none;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-chip-text);
     width: var(--xc-control-h-sm);
     height: var(--xc-control-h-sm);
     border-radius: var(--xc-control-radius);
@@ -104,11 +104,11 @@
 }
 
 .eye:hover {
-    background: color-mix(in srgb, var(--xc-on-accent) 25%, transparent);
+    background: color-mix(in srgb, var(--xc-hero-chip-bg) 93.75%, var(--xc-hero-text));
 }
 
 .eye:focus-visible {
-    outline: 2px solid var(--xc-on-accent);
+    outline: 2px solid var(--xc-hero-text);
     outline-offset: 2px;
 }
 
@@ -143,7 +143,7 @@
     font-weight: 800;
     line-height: 1.1;
     letter-spacing: -0.01em;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
 }
 
 .amountMessage {
@@ -170,7 +170,7 @@
 .amountCode {
     font-size: var(--xc-text-lg);
     font-weight: 600;
-    color: color-mix(in srgb, var(--xc-on-accent) 75%, transparent);
+    color: color-mix(in srgb, var(--xc-hero-text) 75%, transparent);
     letter-spacing: 0;
     white-space: nowrap;
     vertical-align: baseline;
@@ -178,7 +178,7 @@
 
 .hidden {
     letter-spacing: 0.15em;
-    color: color-mix(in srgb, var(--xc-on-accent) 55%, transparent);
+    color: color-mix(in srgb, var(--xc-hero-text) 55%, transparent);
 }
 
 /* The summary and its individual facts wrap independently on phone widths. */
@@ -215,15 +215,15 @@
 }
 
 .changePositive {
-    color: color-mix(in srgb, var(--xc-success) 45%, var(--xc-on-accent));
+    color: color-mix(in srgb, var(--xc-success) 45%, var(--xc-hero-text));
 }
 
 .changeNegative {
-    color: color-mix(in srgb, var(--xc-danger) 45%, var(--xc-on-accent));
+    color: color-mix(in srgb, var(--xc-danger) 45%, var(--xc-hero-text));
 }
 
 .changeNeutral {
-    color: color-mix(in srgb, var(--xc-on-accent) 70%, transparent);
+    color: color-mix(in srgb, var(--xc-hero-text) 70%, transparent);
 }
 
 @media not all and (min-width: 480px) {
@@ -236,8 +236,8 @@
  * instead of guessing how the engine maps the app blue. */
 @media (forced-colors: active) {
     .hero {
-        background: var(--xc-accent-primary);
-        color: var(--xc-on-accent);
+        background: var(--xc-hero-bg);
+        color: var(--xc-hero-text);
     }
 }
 
@@ -272,12 +272,12 @@
     min-height: 32px;
     --xc-icon-size: var(--xc-icon-sm);
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
-    color: var(--xc-on-accent);
+    background: var(--xc-hero-chip-bg);
+    color: var(--xc-hero-chip-text);
 }
 
 .eye.eye:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: color-mix(in srgb, var(--xc-hero-chip-bg) 87.5%, var(--xc-hero-text));
 }
 
 /* A switched-on card button looks the same as the others, with
@@ -286,7 +286,7 @@
 .eye.eye[aria-pressed='true']:not(:disabled) {
     box-shadow: none;
     border: 0;
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--xc-hero-chip-bg);
 }
 
 /* The wallet's name as the card caption, at a readable size. */
@@ -296,33 +296,31 @@
     line-height: 1.2;
     text-transform: none;
     letter-spacing: 0;
-    color: var(--xc-on-accent);
+    color: var(--xc-hero-text);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-/* The change sits on a small dark pill in full-strength green or red, so it
-   stays bright and readable over the blue and the chart. The figures are
-   larger and heavier so the bright green and red reach full strength on
-   screen instead of being thinned by small-text smoothing. */
+/* The selected range controls both the chart direction and its matching pill. */
 .changePositive.changePositive,
 .changeNegative.changeNegative {
     display: inline-block;
     padding: 2px var(--xc-space-2);
     border-radius: var(--xc-radius-pill);
-    background: rgba(0, 0, 0, 0.55);
     text-shadow: none;
     font-size: var(--xc-text-md);
     font-weight: 800;
 }
 
 .changePositive.changePositive {
-    color: var(--xc-brand-card-gain);
+    background: var(--xc-hero-pill-up-bg);
+    color: var(--xc-hero-pill-up-text);
 }
 
 .changeNegative.changeNegative {
-    color: var(--xc-brand-card-loss);
+    background: var(--xc-hero-pill-down-bg);
+    color: var(--xc-hero-pill-down-text);
 }
 
 /* The masked change takes the same pill box as the figure, so
@@ -331,7 +329,7 @@
     display: inline-block;
     padding: 2px var(--xc-space-2);
     border-radius: var(--xc-radius-pill);
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--xc-hero-chip-bg);
     font-size: var(--xc-text-md);
     font-weight: 800;
 }

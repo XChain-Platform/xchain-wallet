@@ -158,7 +158,7 @@ const DECODER_LINES_COVERED = Object.freeze({
     CALLBACK: [/^Callback redeems ALL holders' tokens/],
     MARKET_CREATE: [/^Market terms cannot be edited after this\./, /^You are the oracle: /],
     MARKET_RESOLVE: [/^This pays out the market\./, /^Resolving cannot be undone/],
-    MARKET_CANCEL: [/^Every open bet is refunded in full and the market is over\./],
+    MARKET_CANCEL: [/^Every open (?:position|bet) is refunded in full and the market is over\./],
     BRIDGE_MOVE: [/^This (locks|burns) the tokens here and (credits|releases) them on (another|the other) chain\. /],
 });
 

@@ -155,8 +155,8 @@ describe('BET list edit edges', () => {
 
 describe('BET signed summary edges', () => {
     it.each([
-        [createMarketAction, { label: 'Market', tick: 'UNIT' }, 'Open UNIT betting market "Market"'],
-        [placeBetAction, { feedActionIndex: 0 }, 'Bet on market 0'],
+        [createMarketAction, { label: 'Market', tick: 'UNIT' }, 'Open UNIT prediction market "Market"'],
+        [placeBetAction, { feedActionIndex: 0 }, 'Buy position in market 0'],
         [resolveMarketAction, { feedActionIndex: 0 }, 'Resolve market 0'],
         [cancelMarketAction, { feedActionIndex: 0 }, 'Cancel market 0'],
     ])('submits the exact builder output with summary %s', async (action, params, actionSummary) => {

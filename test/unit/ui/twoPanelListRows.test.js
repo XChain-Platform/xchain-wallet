@@ -23,8 +23,8 @@ describe('wide two-panel list rows', () => {
     it('keeps the opted-in list frame and matches the side-menu row colours', () => {
         expect(cardCss).toMatch(/:root \[data-xc-split-list\]\s*\{[^}]*background:\s*var\(--xc-card-bg\);[^}]*border:\s*var\(--xc-card-border\);[^}]*border-radius:\s*var\(--xc-card-radius\);[^}]*overflow:\s*hidden;/s);
         expect(listRowCss).toMatch(/\.interactive\[data-xc-split-row\]\s*\{[^}]*width:\s*100%;[^}]*margin-inline:\s*0;[^}]*border-radius:\s*0;[^}]*box-shadow:\s*none;/s);
-        expect(listRowCss).toMatch(/\.interactive\[data-xc-split-row\]:hover:not\(:disabled\)\s*\{[^}]*var\(--xc-text\) 10%[^}]*box-shadow:\s*none;/s);
-        expect(listRowCss).toMatch(/\.interactive\[data-xc-split-row\]\[aria-current='true'\]\s*\{[^}]*var\(--xc-accent-primary\) 20%[^}]*box-shadow:\s*none[^}]*font-weight:\s*inherit;/s);
+        expect(listRowCss).toMatch(/\.interactive\[data-xc-split-row\]:hover:not\(:disabled\)\s*\{[^}]*var\(--xc-row-hover-bg\)[^}]*box-shadow:\s*none;/s);
+        expect(listRowCss).toMatch(/\.interactive\[data-xc-split-row\]\[aria-current='true'\]\s*\{[^}]*var\(--xc-row-active-bg\)[^}]*box-shadow:\s*none[^}]*font-weight:\s*inherit;/s);
         expect(listRowCss).toMatch(/\.interactive:focus-visible\s*\{[^}]*outline:\s*2px solid/s);
     });
 

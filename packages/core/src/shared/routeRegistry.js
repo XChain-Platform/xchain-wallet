@@ -311,7 +311,8 @@ export const SIDEBAR_NAV_GROUPS = Object.freeze([
         id: 'wallet',
         labelKey: 'components.leftNav.groupWallet',
         // Scan stays a main-menu route only; it is off the side menu (operator 2026-11-16).
-        destinations: Object.freeze(['home', 'history', 'send', 'receive', 'my-tokens']),
+        // Order ruled by the operator 2026-11-16.
+        destinations: Object.freeze(['home', 'send', 'receive', 'my-tokens', 'history']),
     }),
     Object.freeze({
         id: 'trade',

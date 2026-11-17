@@ -19,7 +19,7 @@
 //   * both route ids are titled with the asset's name, else "Token".
 
 import React from 'react';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 vi.mock('../../../packages/core/src/flows/demoMode.js', async (importOriginal) => {
@@ -54,6 +54,8 @@ beforeAll(() => {
     globalThis.ResizeObserver = globalThis.ResizeObserver || StubObserver;
 });
 afterAll(() => { globalThis.ResizeObserver = savedResizeObserver; });
+
+beforeEach(() => window.localStorage.removeItem('xc:balanceUnit'));
 
 afterEach(() => {
     cleanup();
@@ -146,6 +148,8 @@ describe('a coin on a test network', () => {
         const line = await within(chart).findByRole('img', { name: /^Balance trend/ });
         expect(line.getAttribute('aria-label') || line.textContent).toMatch(/End 1\.5\b/);
         expect(line.getAttribute('aria-label') || line.textContent).toMatch(/Start 1 BTC\. End 1\.5 BTC\./);
+        expect(line.querySelector('polyline[data-chart-tone="up"]')).toHaveAttribute('stroke', 'var(--xc-hero-chart-up)');
+        expect(line.querySelector('linearGradient[data-chart-fill-tone="up"]')).toBeTruthy();
         const ranges = screen.getByRole('tablist', { name: 'Chart range' });
         expect(ranges.className).not.toMatch(/rangesIdle/);
         // No price is asked for on a test network.
@@ -203,14 +207,16 @@ describe('the change pill', () => {
         expect(screen.queryByLabelText(CHANGE_PILL)).toBeNull();
     });
 
-    it('is left off a value line (the balance at today\'s price)', async () => {
+    it('does not invent a fiat value line without price history', async () => {
         render(
             <MessagingProvider shell="web" messaging={tokenMessaging({ chainId: MAINNET, network: 'mainnet' })}>
                 <TokenDetail walletId="w1" chainId={MAINNET} tick="MYTOKEN" quantity="5" divisibility={0} fiatRate={2} onBack={() => {}} />
             </MessagingProvider>,
         );
-        const chart = await screen.findByRole('region', { name: 'Value chart' });
-        await within(chart).findByRole('img', { name: /^Value trend/ });
+        await screen.findByRole('button', { name: 'Show in MYTOKEN' });
+        const chart = screen.getByRole('region', { name: 'Value chart' });
+        expect(within(chart).queryByRole('img')).toBeNull();
+        expect(within(chart).getByText('No price history yet')).toBeTruthy();
         expect(screen.queryByLabelText(CHANGE_PILL)).toBeNull();
     });
 
