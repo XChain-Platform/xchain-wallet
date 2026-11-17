@@ -247,7 +247,7 @@ function DelegateVoteFormState({ mode = 'delegate', walletId, chainId: initialCh
                     walletId,
                     chainId,
                     from,
-                    builder: isClear ? 'clearVoteDelegationParams' : 'delegateVoteParams',
+                    builder: isClear ? 'clearDelegationParams' : 'delegateParams',
                     params: voteParams,
                     ...(feePerKb != null ? { feePerKb } : {}),
                 })),

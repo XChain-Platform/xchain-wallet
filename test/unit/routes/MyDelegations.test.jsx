@@ -162,7 +162,7 @@ describe('Delegate votes and the clear form', () => {
             await Promise.resolve();
         });
         expect(messaging.composeVoteForConfirm).toHaveBeenCalledWith(expect.objectContaining({
-            builder: 'clearVoteDelegationParams',
+            builder: 'clearDelegationParams',
             chainId: CHAIN,
             from: expect.objectContaining({ address: OTHER.address }),
             params: { tick: 'TOK0' },

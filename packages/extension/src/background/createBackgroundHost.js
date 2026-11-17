@@ -3617,7 +3617,7 @@ export function createBackgroundHost(deps) {
         const builder = req?.builder;
         // Allow-listed: `builder` crosses the messaging boundary, so it must
         // never be able to name an arbitrary sdk.voting method.
-        const VOTE_BUILDERS = ['createPollParams', 'castBallotParams', 'delegateVoteParams', 'clearVoteDelegationParams'];
+        const VOTE_BUILDERS = ['createPollParams', 'castBallotParams', 'delegateParams', 'clearDelegationParams'];
         if (!VOTE_BUILDERS.includes(builder)) {
             throw new Error(`action.vote.composeForConfirm: unknown builder "${builder}"`);
         }

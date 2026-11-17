@@ -577,7 +577,7 @@ describe('Action forms confirm via the single-encode pipeline', () => {
         });
         const compose = calls.find((c) => c.method === 'composeVoteForConfirm');
         expect(compose, 'composed through the VOTE builder route').toBeTruthy();
-        expect(compose.args.builder).toBe('delegateVoteParams');
+        expect(compose.args.builder).toBe('delegateParams');
         expect(compose.args.params).toMatchObject({ tick: 'JDOG', delegateTo: VOTE_DELEGATE });
         expect(calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
         const submit = calls.find((c) => c.method === 'delegateVoteAction');

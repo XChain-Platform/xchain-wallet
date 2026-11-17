@@ -52,7 +52,7 @@ assert.match(hostSrc, /voteParams: params/,
     const routeIdx = hostSrc.indexOf("host.register('action.vote.composeForConfirm'");
     const route = hostSrc.slice(routeIdx, routeIdx + 3000);
     assert.match(route, /VOTE_BUILDERS\s*=\s*\[/, 'the builder name is allow-listed');
-    for (const b of ['createPollParams', 'castBallotParams', 'delegateVoteParams', 'clearVoteDelegationParams']) {
+    for (const b of ['createPollParams', 'castBallotParams', 'delegateParams', 'clearDelegationParams']) {
         assert.ok(route.includes(`'${b}'`), `allow-list covers ${b}`);
     }
     assert.match(route, /VOTE_BUILDERS\.includes\(builder\)/, 'an unlisted builder is rejected');
@@ -76,7 +76,7 @@ for (const [shell, ...p] of [
 
 const VOTE_FORMS = [
     ['CreatePollForm.jsx', 'createPollParams'],
-    ['DelegateVoteForm.jsx', 'delegateVoteParams'],
+    ['DelegateVoteForm.jsx', 'delegateParams'],
     ['PollDetail.jsx', 'castBallotParams'],
 ];
 for (const [file, builder] of VOTE_FORMS) {
