@@ -129,12 +129,12 @@ function savedStandardRecord() {
         })),
         linkTarget: null,
     });
-    record.fundingTxid = txid(90);
+    record.wave.fundingTxid = txid(90);
     record.stage = 'sending';
-    record.pieces[1] = {
+    record.wave.pieces[1] = {
         index: 0, signedTxids: [txid(11)], txid: txid(11), actionIndex: '31',
     };
-    record.pieces[2] = {
+    record.wave.pieces[2] = {
         index: 1, signedTxids: [txid(12)], txid: txid(12), actionIndex: '32',
     };
     return record;
@@ -158,7 +158,7 @@ describe('saved multipart run configuration', () => {
         const record = savedStandardRecord();
         const h = harness(record);
         h.encoder.getUTXOs.mockResolvedValue({ utxos: [
-            { txid: record.fundingTxid, vout: 0, confirmations: 1 },
+            { txid: record.wave.fundingTxid, vout: 0, confirmations: 1 },
         ] });
         const planner = vi.fn(async (_bytes, meta) => fakePlan(meta));
         const envelopePairVbytes = vi.fn(() => 8);
@@ -187,41 +187,16 @@ describe('saved multipart run configuration', () => {
     });
 });
 
-describe('legacy multipart resume configuration', () => {
-    it('uses the request lane when the saved record has no lane', async () => {
-        const record = savedStandardRecord();
-        delete record.lane;
-        delete record.buildMode;
-        const h = harness(record);
-        h.encoder.getUTXOs.mockResolvedValue({ utxos: [
-            { txid: record.fundingTxid, vout: 0, confirmations: 1 },
-        ] });
-        const planner = vi.fn(async (_bytes, meta) => fakePlan(meta));
-
-        await publishMultipartFile(options(h, {
-            resumeId: record.id, lane: 'envelope', buildMode: 'one_call',
-            planMultipartFile: planner,
-        }));
-
-        expect(planner).toHaveBeenCalledWith(BYTES, {
-            name: 'picked.bin', type: 'application/picked',
-        }, { carrier: 'envelope', gate: null });
-        expect(h.encoder.spendP2sh).not.toHaveBeenCalled();
-    });
-});
-
 describe('pending upload lane and build mode validation', () => {
-    it.each([undefined, null, 'envelope', 'standard'])('accepts lane %#', (lane) => {
+    it.each([null, 'envelope', 'standard'])('accepts lane %#', (lane) => {
         const record = savedStandardRecord();
-        if (lane === undefined) delete record.lane;
-        else record.lane = lane;
+        record.lane = lane;
         expect(validatePendingFileUpload(record).ok).toBe(true);
     });
 
-    it.each([undefined, null, 'one_call', 'custom-mode'])('accepts buildMode %#', (buildMode) => {
+    it.each([null, 'one_call', 'custom-mode'])('accepts buildMode %#', (buildMode) => {
         const record = savedStandardRecord();
-        if (buildMode === undefined) delete record.buildMode;
-        else record.buildMode = buildMode;
+        record.buildMode = buildMode;
         expect(validatePendingFileUpload(record).ok).toBe(true);
     });
 

@@ -24,12 +24,32 @@ function requireBytes(bytes) {
 }
 
 function uploadCounts(record) {
-    const sent = Array.isArray(record?.pieces)
-        ? record.pieces.filter((piece) => piece?.txid)
-        : [];
+    const wavePieces = Array.isArray(record?.wave?.pieces) ? record.wave.pieces : [];
+    const currentSent = wavePieces.filter((piece) => piece?.txid);
+    const finishedPositions = Math.min(
+        Number(record?.wavesDone || 0) * 100,
+        Number(record?.totalParts || 0) + 1,
+    );
+    const finishedParts = Math.max(0, finishedPositions - (finishedPositions > 0 ? 1 : 0));
+    const currentIsFinished = record?.wave?.index < Number(record?.wavesDone || 0);
+    const currentParts = currentIsFinished
+        ? 0
+        : currentSent.filter((piece) => piece.index !== -1).length;
+    const sentPieces = finishedPositions + (currentIsFinished ? 0 : currentSent.length);
+    const fundedWaves = Number(record?.wavesDone || 0)
+        + (record?.wave?.fundingTxid && !currentIsFinished ? 1 : 0);
+    if (!record?.wave && !Object.hasOwn(record || {}, 'wavesDone')) {
+        const sent = Array.isArray(record?.pieces)
+            ? record.pieces.filter((piece) => piece?.txid)
+            : [];
+        return {
+            partsSent: sent.filter((piece) => piece.index !== -1).length,
+            paidTransactions: (record?.fundingTxid ? 1 : 0) + (2 * sent.length),
+        };
+    }
     return {
-        partsSent: sent.filter((piece) => piece.index !== -1).length,
-        paidTransactions: (record?.fundingTxid ? 1 : 0) + (2 * sent.length),
+        partsSent: finishedParts + currentParts,
+        paidTransactions: fundedWaves + (2 * sentPieces),
     };
 }
 

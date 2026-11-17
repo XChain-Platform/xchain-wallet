@@ -406,6 +406,8 @@ export const ALL_OS_TRIGGER_PATHS = [
     'packages/core/src/storage/',
     'packages/core/src/crypto/',
     'packages/core/src/schemas/',
+    // The stored upload record validates its size against this ceiling.
+    'packages/core/src/flows/fileSizeLimits.js',
     'packages/core/src/registry/coinTicker.js',
     'packages/core/src/shared/utils/textHardening.js',
     'packages/core/src/util/display_name.js',

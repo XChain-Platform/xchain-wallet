@@ -11,7 +11,7 @@ import { handleListPendingFileUploads } from '../../../packages/core/src/flows/f
 import { validatePendingFileUpload } from '../../../packages/core/src/schemas/pendingFileUpload.js';
 
 function withPieceTxid(record, position, txid) {
-    return record.pieces.map((piece) => (
+    return record.wave.pieces.map((piece) => (
         piece.index === position ? { ...piece, txid } : piece
     ));
 }
@@ -21,10 +21,10 @@ describe('multipart record fixture', () => {
         const record = multipartRecordFixture({ id: 'fixture-upload' });
         expect(validatePendingFileUpload(record)).toEqual({ ok: true, errors: [] });
         expect(record).toMatchObject({
-            id: 'fixture-upload', schemaVersion: 1, gate: null,
-            totalParts: 2, stage: 'funding', fundingTxid: null,
+            id: 'fixture-upload', schemaVersion: 2, gate: null,
+            totalParts: 2, stage: 'funding', wave: { fundingTxid: null },
         });
-        expect(record.pieces.map(({ txid }) => txid)).toEqual([null, null, null]);
+        expect(record.wave.pieces.map(({ txid }) => txid)).toEqual([null, null, null]);
     });
 });
 
@@ -49,7 +49,9 @@ describe('multipart progress advancement', () => {
         await expect(stub.messaging.listPendingFileUploads(request)).resolves.toMatchObject({
             uploads: [{ partsSent: 0, paidTransactions: 0 }],
         });
-        await stub.advance(record.id, { pieces: withPieceTxid(record, 0, 'piece-txid') });
+        await stub.advance(record.id, {
+            wave: { ...record.wave, pieces: withPieceTxid(record, 0, 'piece-txid') },
+        });
         await expect(stub.messaging.listPendingFileUploads(request)).resolves.toMatchObject({
             uploads: [{ partsSent: 1, paidTransactions: 2 }],
         });
@@ -60,6 +62,30 @@ describe('multipart progress advancement', () => {
         expect(() => stub.advance('missing-upload', { stage: 'sending' }))
             .toThrow('Unknown pending file upload: missing-upload');
     });
+
+    it('counts completed waves and only the sent pieces in the current wave', async () => {
+        const record = multipartRecordFixture({ id: 'wave-progress-upload' });
+        record.totalParts = 250;
+        record.wavesDone = 1;
+        record.stage = 'sending';
+        record.wave = {
+            index: 1,
+            fundingTxid: 'wave-two-funding',
+            fundingOutputs: [],
+            pieces: [{
+                index: 99,
+                signedTxids: [],
+                txid: 'wave-two-piece',
+                actionIndex: null,
+            }],
+        };
+        const stub = createMultipartShellStub({ records: [record] });
+
+        await expect(stub.messaging.listPendingFileUploads({ walletId: record.walletId }))
+            .resolves.toMatchObject({
+                uploads: [{ partsSent: 100, paidTransactions: 204 }],
+            });
+    });
 });
 
 describe('multipart record discard', () => {
@@ -67,8 +93,11 @@ describe('multipart record discard', () => {
         const record = multipartRecordFixture({ id: 'discard-upload' });
         const stub = createMultipartShellStub({ records: [record] });
         await stub.advance(record.id, {
-            fundingTxid: 'funding-txid',
-            pieces: withPieceTxid(record, -1, 'manifest-txid'),
+            wave: {
+                ...record.wave,
+                fundingTxid: 'funding-txid',
+                pieces: withPieceTxid(record, -1, 'manifest-txid'),
+            },
         });
         await expect(stub.messaging.discardPendingFileUpload({
             walletId: record.walletId, id: record.id,
@@ -111,7 +140,7 @@ describe('multipart seed isolation', () => {
         const record = multipartRecordFixture({ id: 'copied-upload' });
         const stub = createMultipartShellStub({ records: [record] });
         record.meta.name = 'changed.txt';
-        record.pieces[0].txid = 'changed-txid';
+        record.wave.pieces[0].txid = 'changed-txid';
         const result = await stub.messaging.listPendingFileUploads({ walletId: record.walletId });
         expect(result.uploads[0]).toMatchObject({
             name: 'multipart.txt', partsSent: 0, paidTransactions: 0,
