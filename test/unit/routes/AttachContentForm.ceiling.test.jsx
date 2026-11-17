@@ -123,9 +123,12 @@ describe('AttachContentForm artwork ceiling matches Publish file', () => {
         mount(BTC, owner, messagingFor(BTC, owner));
         await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(owner.address));
 
+        // Past the multi-part ceiling a software Bitcoin source offers. The
+        // ceiling is far too large to allocate, so the File reports the size.
+        const huge = new File([new Uint8Array(8)], 'huge.png', { type: 'image/png' });
+        Object.defineProperty(huge, 'size', { value: MULTIPART_FILE_MAX_BYTES + 1 });
         fireEvent.change(screen.getByLabelText('Choose file to attach'), {
-            // Past the multi-part ceiling a software Bitcoin source offers.
-            target: { files: [new File([new Uint8Array(MULTIPART_FILE_MAX_BYTES + 1)], 'huge.png', { type: 'image/png' })] },
+            target: { files: [huge] },
         });
         const refusal = await screen.findByText(/That file is [\d.,]+ MB; with this title and memo the on-chain ceiling is/);
         expect(refusal.textContent).not.toMatch(/image URL/);

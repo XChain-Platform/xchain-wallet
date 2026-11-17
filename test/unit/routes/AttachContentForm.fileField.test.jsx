@@ -60,7 +60,10 @@ function mount() {
 
 function oversizePng() {
     // Past every ceiling the form offers on Bitcoin, the multi-part one included.
-    return new File([new Uint8Array(MULTIPART_FILE_MAX_BYTES + 1)], 'huge.png', { type: 'image/png' });
+    // The ceiling is far too large to allocate, so the File reports the size.
+    const file = new File([new Uint8Array(8)], 'huge.png', { type: 'image/png' });
+    Object.defineProperty(file, 'size', { value: MULTIPART_FILE_MAX_BYTES + 1 });
+    return file;
 }
 
 beforeEach(() => {
