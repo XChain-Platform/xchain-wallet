@@ -51,14 +51,14 @@ describe('multipart funding encoder request', () => {
 });
 
 describe('multipart funding piece count bounds', () => {
-    it('accepts 3 and 33 entries', () => {
-        expect(multipartFundingEncoderOpts(opts({ pieceValues: [1, 2, 3] })).customOutputs).toHaveLength(3);
-        expect(multipartFundingEncoderOpts(opts({ pieceValues: Array(33).fill(1) })).customOutputs).toHaveLength(33);
+    it('accepts 1 and 100 entries', () => {
+        expect(multipartFundingEncoderOpts(opts({ pieceValues: [1] })).customOutputs).toHaveLength(1);
+        expect(multipartFundingEncoderOpts(opts({ pieceValues: Array(100).fill(1) })).customOutputs).toHaveLength(100);
     });
 
-    it('refuses 2 and 34 entries', () => {
-        expectInvalid(opts({ pieceValues: [1, 2] }), 'pieceValues');
-        expectInvalid(opts({ pieceValues: Array(34).fill(1) }), 'pieceValues');
+    it('refuses 0 and 101 entries', () => {
+        expectInvalid(opts({ pieceValues: [] }), 'pieceValues');
+        expectInvalid(opts({ pieceValues: Array(101).fill(1) }), 'pieceValues');
     });
 });
 

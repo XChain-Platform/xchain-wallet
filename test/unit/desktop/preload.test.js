@@ -49,7 +49,7 @@ function loadPreload() {
 }
 
 const expectedSurface = {
-    xchainWalletBridge: ['saveBackupFile', 'sendMessage', 'wipeStorage'],
+    xchainWalletBridge: ['filePathOf', 'saveBackupFile', 'sendMessage', 'wipeStorage'],
     xchainWalletDeepLink: ['onUri', 'takePending'],
     xchainWalletRegistry: ['getRemoteDescriptors'],
     xchainWalletSignerBridge: ['onMessage', 'postMessage'],
