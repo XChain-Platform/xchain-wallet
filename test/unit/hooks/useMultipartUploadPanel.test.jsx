@@ -233,7 +233,12 @@ describe('matching resume pick', () => {
         expect(buildResumeRequest).toHaveBeenCalledTimes(1);
         expect(buildResumeRequest).toHaveBeenCalledWith({
             entry: expect.objectContaining({ id: 'upload-1' }),
-            bytes: FILE_BYTES,
+            // Continue carries the picked File and its slice-read digest, never its bytes.
+            bytes: expect.objectContaining({
+                file: expect.any(File),
+                fileRef: expect.objectContaining({ kind: 'inline' }),
+                originalSha256: DIGEST,
+            }),
             resumeId: 'upload-1',
         });
         expect(messaging.fileMultipart).toHaveBeenCalledWith(built.request);
