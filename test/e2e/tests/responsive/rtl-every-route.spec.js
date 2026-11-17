@@ -15,7 +15,6 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
-import { expectDropdownValue, pickOption } from '../../fixtures/pickOption.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -65,11 +64,9 @@ async function enablePseudoRtl(page) {
     // Language is a row on the Appearance group page.
     await page.getByRole('main').getByRole('button', { name: /^Appearance\b/ }).click();
     await page.getByRole('main').getByRole('button', { name: /^Language\b/ }).click();
-    await pickOption(page.getByLabel('Language', { exact: true }), 'pseudo-rtl');
+    // Language is a list of choices; a pick saves and returns.
+    await page.getByRole('main').getByRole('list', { name: 'Languages' }).getByRole('button', { name: 'pseudo-rtl', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-    // The field's own label is localized too, so in the pseudo locale it reads
-    // as the wrapped pseudo string rather than "Language".
-    await expectDropdownValue(page.getByLabel(/^\u200F?⟦Language⟧$/), 'pseudo-rtl');
 }
 
 // The pseudo locale wraps every translated string, the navigation and the

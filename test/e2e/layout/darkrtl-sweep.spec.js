@@ -13,7 +13,6 @@ import {
     dismissIntroCarousel, expect, gotoSection, nav, test, unlockedShell,
 } from '../fixtures/wallet.js';
 import { enterDemoWallet } from '../fixtures/responsive.js';
-import { pickOption } from '../fixtures/pickOption.js';
 import { createSweep, measureRulings } from './sweep.js';
 
 const OUT_ROOT = process.env.SWEEP_OUT
@@ -128,7 +127,8 @@ async function enablePseudoRtl(page) {
     // Language is a row on the Appearance group page.
     await page.getByRole('main').getByRole('button', { name: /^Appearance\b/ }).click();
     await page.getByRole('main').getByRole('button', { name: /^Language\b/ }).click();
-    await pickOption(page.getByLabel('Language', { exact: true }), 'pseudo-rtl');
+    // Language is a list of choices; a pick saves and returns.
+    await page.getByRole('main').getByRole('list', { name: 'Languages' }).getByRole('button', { name: 'pseudo-rtl', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 }
 
