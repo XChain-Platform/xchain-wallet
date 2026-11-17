@@ -10,7 +10,7 @@
 
 import { signerSupportsTapscript } from './signerCapability.js';
 
-const MULTIPART_FILE_MAX_BYTES = 12_000_000;
+const MULTIPART_FILE_MAX_BYTES = 262_140_000_000;
 const ENVELOPE_ONE_CALL_TYPES = new Set(['p2wpkh', 'p2tr']);
 const STANDARD_ONE_CALL_TYPES = new Set(['p2pkh', 'p2wpkh', 'p2sh-p2wpkh']);
 

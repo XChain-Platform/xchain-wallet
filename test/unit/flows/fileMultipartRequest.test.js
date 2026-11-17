@@ -15,7 +15,10 @@ function input(overrides = {}) {
         from: { address: 'bcrt1source', publicKey: PUBLIC_KEY, type: 'p2wpkh' },
         bytes: Uint8Array.of(0, 127, 128, 255),
         meta: { name: 'photo.png', type: 'image/png', title: 'Photo', memo: 'A file' },
-        path: { path: 'multipart', lane: 'envelope', buildMode: 'one_call', maxBytes: 12_000_000 },
+        path: {
+            path: 'multipart', lane: 'envelope', buildMode: 'one_call',
+            maxBytes: 262_140_000_000,
+        },
         linkTarget: null,
         gate: null,
         ...overrides,

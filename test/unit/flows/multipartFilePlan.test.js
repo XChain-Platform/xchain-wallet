@@ -26,8 +26,8 @@ const partsOf = (vector) => vector.parts.map((part) => hexToBytes(part.hex));
 
 describe('multipart FILE protocol constants', () => {
     it('pins caps, capacities, and chain-id activation segments', () => {
-        expect(MULTIPART_FILE_MAX_PARTS).toBe(32);
-        expect(MULTIPART_FILE_MAX_BYTES).toBe(12_000_000);
+        expect(MULTIPART_FILE_MAX_PARTS).toBe(65_535);
+        expect(MULTIPART_FILE_MAX_BYTES).toBe(262_140_000_000);
         expect(MULTIPART_ENVELOPE_PART_CAPACITY).toBe(389_920);
         expect(MULTIPART_STANDARD_PART_CAPACITY).toBe(8_114);
         expect(FILE_MULTIPART_ACTIVATION_TIME).toEqual({
@@ -70,6 +70,20 @@ describe('documentation multipart vectors', () => {
 });
 
 describe('multipart planning', () => {
+    it('refuses an original that exceeds the Standard part ceiling before copying it', async () => {
+        const maxBytes = MULTIPART_STANDARD_PART_CAPACITY * MULTIPART_FILE_MAX_PARTS;
+        class LengthStub extends Uint8Array {
+            get byteLength() { return maxBytes + 1; }
+        }
+        await expect(planMultipartFile(new LengthStub(1), {}, { carrier: 'standard' }))
+            .rejects.toMatchObject({
+                code: 'TOO_MANY_PARTS',
+                totalParts: MULTIPART_FILE_MAX_PARTS + 1,
+                maxParts: MULTIPART_FILE_MAX_PARTS,
+                capacity: MULTIPART_STANDARD_PART_CAPACITY,
+            });
+    });
+
     it('uses exact capacities and rebalances a one-byte final slice', async () => {
         const envelope = await planMultipartFile(new Uint8Array(389_921));
         const standard = await planMultipartFile(new Uint8Array(8_115), {}, { carrier: 'STANDARD' });

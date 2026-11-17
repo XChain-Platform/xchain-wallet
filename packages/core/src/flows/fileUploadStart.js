@@ -19,6 +19,7 @@ export function fileUploadStart({
         byteLength: bytes.byteLength,
         singleTransactionCap,
         support,
+        gated: gate !== null,
     });
     if (path.path !== 'multipart') return { ...path };
     const optionalKeyHash = existingKeyHash === undefined ? {} : { existingKeyHash };

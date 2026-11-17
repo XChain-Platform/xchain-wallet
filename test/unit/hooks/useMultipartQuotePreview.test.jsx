@@ -13,6 +13,12 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useMultipartQuotePreview } from '../../../packages/core/src/shared/hooks/useMultipartQuotePreview.js';
 
+const STANDARD_MAX_BYTES = 531_750_990;
+
+class LengthStub extends Uint8Array {
+    get byteLength() { return STANDARD_MAX_BYTES + 1; }
+}
+
 const methods = ['taproot', 'standard'];
 const lanes = {
     envelope: { type: 'envelope', outputFloor: 546, revealPad: false },
@@ -62,12 +68,13 @@ async function expectSettled(result) {
 
 describe('real multipart quote previews', () => {
     it('maps a large file to a taproot summary and Standard cap', async () => {
-        const { result } = mount(props({ bytes: Uint8Array.from(randomBytes(400_000)) }));
+        const bytes = new LengthStub(randomBytes(400_000));
+        const { result } = mount(props({ bytes }));
         await expectSettled(result);
         expect(result.current.options.taproot.summary).toBe('2 parts, 7 transactions');
         expect(result.current.options.taproot.fee).toEqual(expect.any(Number));
         expect(result.current.options.standard).toMatchObject({
-            summary: null, fee: null, reason: 'tooLarge', cap: 259_648, single: false,
+            summary: null, fee: null, reason: 'tooLarge', cap: STANDARD_MAX_BYTES, single: false,
         });
     });
 

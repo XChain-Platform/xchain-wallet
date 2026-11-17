@@ -8,7 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { MULTIPART_FILE_MAX_BYTES } from './fileSizeLimits.js';
+import {
+    GATED_MULTIPART_MAX_BYTES,
+    MULTIPART_FILE_MAX_BYTES,
+} from './fileSizeLimits.js';
 
 function invalid(field) {
     const error = new TypeError(`${field} is invalid`);
@@ -33,21 +36,27 @@ function validateSupport(support) {
     }
 }
 
-export function chooseFileUploadPath({ byteLength, singleTransactionCap, support } = {}) {
+export function chooseFileUploadPath({
+    byteLength, singleTransactionCap, support, gated = false,
+} = {}) {
     if (!Number.isSafeInteger(byteLength) || byteLength <= 0) throw invalid('byteLength');
     if (!Number.isSafeInteger(singleTransactionCap) || singleTransactionCap <= 0) {
         throw invalid('singleTransactionCap');
     }
     validateSupport(support);
 
+    const multipartMaxBytes = gated ? GATED_MULTIPART_MAX_BYTES : MULTIPART_FILE_MAX_BYTES;
     const maxBytes = support.supported
-        ? Math.max(singleTransactionCap, MULTIPART_FILE_MAX_BYTES)
+        ? (gated ? multipartMaxBytes : Math.max(singleTransactionCap, multipartMaxBytes))
         : singleTransactionCap;
+    if (gated && byteLength > multipartMaxBytes) {
+        return { path: 'refused', reason: 'too_large', maxBytes };
+    }
     if (byteLength <= singleTransactionCap) return { path: 'single', maxBytes };
     if (!support.supported) {
         return { path: 'refused', reason: support.reason, maxBytes };
     }
-    if (byteLength > MULTIPART_FILE_MAX_BYTES) {
+    if (byteLength > multipartMaxBytes) {
         return { path: 'refused', reason: 'too_large', maxBytes };
     }
     return {

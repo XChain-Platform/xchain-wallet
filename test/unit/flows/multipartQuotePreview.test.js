@@ -12,6 +12,12 @@ import { randomBytes } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { previewMultipartQuotes } from '../../../packages/core/src/flows/multipartQuotePreview.js';
 
+const STANDARD_MAX_BYTES = 531_750_990;
+
+class LengthStub extends Uint8Array {
+    get byteLength() { return STANDARD_MAX_BYTES + 1; }
+}
+
 const lanes = Object.freeze({
     envelope: Object.freeze({ type: 'envelope', outputFloor: 546, revealPad: false }),
     standard: Object.freeze({ type: 'standard', outputFloor: 546 }),
@@ -44,8 +50,9 @@ function multipartPlan(carrier) {
 
 describe('multipart quote preview with the real planner and quoter', () => {
     it('quotes a two-part envelope while isolating the Standard part cap', async () => {
+        const bytes = new LengthStub(randomBytes(400_000));
         const result = await previewMultipartQuotes({
-            bytes: Uint8Array.from(randomBytes(400_000)), meta: {}, gate: null, rate: 2,
+            bytes, meta: {}, gate: null, rate: 2,
             methods: ['taproot', 'standard'], lanes, sizes,
         });
         expect(result.quotes.taproot).toMatchObject({ parts: 2, transactions: 7 });

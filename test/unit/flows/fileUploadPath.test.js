@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import { chooseFileUploadPath } from '../../../packages/core/src/flows/fileUploadPath.js';
 
-const MAX_BYTES = 12_000_000;
+const MAX_BYTES = 262_140_000_000;
 const ENVELOPE = Object.freeze({ supported: true, lane: 'envelope', buildMode: 'one_call' });
 const STANDARD = Object.freeze({ supported: true, lane: 'standard', buildMode: 'two_step' });
 
@@ -51,7 +51,7 @@ describe('chooseFileUploadPath multipart boundary', () => {
     it.each([
         [ENVELOPE, 'envelope', 'one_call'],
         [STANDARD, 'standard', 'two_step'],
-    ])('accepts 12,000,000 bytes on the %s lane', (support, lane, buildMode) => {
+    ])('accepts the public maximum on the %s lane', (support, lane, buildMode) => {
         expect(choose(MAX_BYTES, support)).toEqual({
             path: 'multipart', lane, buildMode, maxBytes: MAX_BYTES,
         });

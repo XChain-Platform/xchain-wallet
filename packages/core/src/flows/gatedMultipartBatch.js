@@ -8,8 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-const MULTIPART_FILE_MAX_PARTS = 32;
-const MULTIPART_FILE_MAX_BYTES = 12000000;
+const MULTIPART_FILE_MAX_PARTS = 65535;
+const MULTIPART_FILE_MAX_BYTES = 262140000000;
 const LOWERCASE_SHA256 = /^[0-9a-f]{64}$/;
 const RESERVED_TEXT = /[|;]/;
 
