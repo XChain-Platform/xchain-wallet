@@ -17,7 +17,7 @@ import {
 
 const ACTIVATION_TIMES = {
     mainnet: 'UNARMED',
-    testnet: 1796083200,
+    testnet: 1794787200,
     regtest: 0,
 };
 
@@ -31,8 +31,8 @@ describe('multipart activation decision', () => {
     });
 
     it('activates testnet at its protocol time inclusively', () => {
-        expect(active('litecoin-testnet', { protocolTime: 1796083199 })).toBe(false);
-        expect(active('litecoin-testnet', { protocolTime: 1796083200 })).toBe(true);
+        expect(active('litecoin-testnet', { protocolTime: 1794787199 })).toBe(false);
+        expect(active('litecoin-testnet', { protocolTime: 1794787200 })).toBe(true);
     });
 
     it('keeps a time-zero regtest active without a tip', () => {
@@ -40,7 +40,7 @@ describe('multipart activation decision', () => {
     });
 
     it('does not fall back to block time when protocol time is unavailable', () => {
-        expect(active('bitcoin-testnet', { blockTime: 1796083200, protocolTime: null })).toBe(false);
+        expect(active('bitcoin-testnet', { blockTime: 1794787200, protocolTime: null })).toBe(false);
         expect(active('bitcoin-testnet', null)).toBe(false);
     });
 
@@ -59,7 +59,7 @@ describe('multipart activation assertion', () => {
     );
 
     it('passes once multipart files are active', () => {
-        expect(() => assertAt('bitcoin-testnet', { protocolTime: 1796083200 })).not.toThrow();
+        expect(() => assertAt('bitcoin-testnet', { protocolTime: 1794787200 })).not.toThrow();
     });
 
     it('throws the typed refusal whenever multipart files are inactive', () => {
