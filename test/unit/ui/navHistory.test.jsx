@@ -8,7 +8,7 @@
 // and nav picks start over on a root page. Back with nothing left lands on Home.
 
 import React, { useState } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import {
     NAV_HISTORY_LIMIT,
@@ -331,6 +331,26 @@ describe('useNavHistory', () => {
         expect(screen.getByRole('status').textContent).toBe('token-detail:A');
         fireEvent.click(screen.getByRole('button', { name: 'Back' }));
         expect(screen.getByRole('status').textContent).toBe('home:A');
+    });
+
+    it('skips a token detail from the previous network on Back', () => {
+        const restore = vi.fn();
+        const { result, rerender } = renderHook(
+            ({ network }) => useNavHistory({
+                network,
+                capture: () => ({ tokenDetailRef: { chainId: 'bitcoin-mainnet', tick: 'BTC' } }),
+                restore,
+            }),
+            { initialProps: { network: 'mainnet' } },
+        );
+
+        act(() => result.current.navigate('token-detail'));
+        act(() => result.current.navigate('send'));
+        rerender({ network: 'testnet' });
+        act(() => result.current.back());
+
+        expect(result.current.view).toBe('home');
+        expect(restore).not.toHaveBeenCalled();
     });
 
     it('counts only a Back and a landing that unwound as Back steps', () => {
