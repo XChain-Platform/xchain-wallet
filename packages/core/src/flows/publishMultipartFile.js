@@ -29,7 +29,7 @@ import { planMultipartFile, quoteMultipartFile } from './multipartFilePlan.js';
 import { planMultipartStream, readPlannedParts } from './multipartStreamPlan.js';
 import { bytesPartSource } from './filePartSource.js';
 import { multipartQuoteLanes } from './multipartQuoteLanes.js';
-import { multipartWaveCount, multipartWaveRanges } from './multipartWaves.js';
+import { MULTIPART_WAVE_PIECES, multipartWaveCount } from './multipartWaves.js';
 import { multipartFileActionString } from './multipartFileAction.js';
 import { confirmResumePick } from './multipartResumeMatch.js';
 import { advanceUploadStage, withFunding } from './multipartUploadRecord.js';
@@ -516,6 +516,7 @@ async function initialRecord(opts, source, plan, quote, rate, originalSha256, co
         partCapacity: plan.partCapacity,
         approvedRate: rate,
         fundingOutputs: quote.outputs,
+        wave: waveFor(plan, quote, 0),
         linkTarget: opts.linkTarget || null,
     });
     await opts.vault.pendingFileUploads.put(record);
@@ -564,10 +565,14 @@ function partSourceFor(opts) {
 }
 
 function waveFor(plan, quote, index) {
-    const range = multipartWaveRanges(plan.totalParts)[index];
-    if (!range) return null;
-    const pieces = Array.from({ length: range.to - range.from + 1 }, (_unused, offset) => ({
-        index: range.from + offset - 1,
+    const from = index * MULTIPART_WAVE_PIECES;
+    const indexes = [
+        ...Array.from({ length: plan.totalParts }, (_unused, partIndex) => partIndex),
+        -1,
+    ].slice(from, from + MULTIPART_WAVE_PIECES);
+    if (indexes.length === 0) return null;
+    const pieces = indexes.map((pieceIndex) => ({
+        index: pieceIndex,
         signedTxids: [],
         txid: null,
         actionIndex: null,
@@ -575,7 +580,7 @@ function waveFor(plan, quote, index) {
     return {
         index,
         fundingTxid: null,
-        fundingOutputs: quote.outputs.slice(range.from, range.to + 1),
+        fundingOutputs: indexes.map((pieceIndex) => quote.outputs[pieceIndex + 1]),
         pieces,
     };
 }
@@ -692,10 +697,8 @@ export async function publishMultipartFile(opts) {
             await ctx.save(ctx.record);
         }
         if (!ctx.record.wave.fundingTxid) {
-            const values = quote.outputs.slice(
-                multipartWaveRanges(plan.totalParts)[waveIndex].from,
-                multipartWaveRanges(plan.totalParts)[waveIndex].to + 1,
-            );
+            const values = ctx.record.wave.pieces
+                .map((piece) => quote.outputs[piece.index + 1]);
             await fundUpload(ctx, values);
         }
         const hasProgress = ctx.record.wave.pieces.some((piece) => (

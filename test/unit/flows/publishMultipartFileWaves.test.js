@@ -79,6 +79,7 @@ function harness({
     signedStart = 0,
 } = {}) {
     const funding = [];
+    const builtPieces = [];
     const revealPieces = new Map();
     let signed = signedStart;
     let pieceBuild = 0;
@@ -106,6 +107,7 @@ function harness({
             const fields = String(request.data).split('|');
             const manifest = fields[1] === '1';
             const partIndex = manifest ? null : Number(fields[3]);
+            builtPieces.push(manifest ? -1 : partIndex);
             const revealPsbt = `reveal-${pieceBuild}`;
             revealPieces.set(revealPsbt, {
                 kind: manifest ? 'manifest' : 'part',
@@ -141,7 +143,7 @@ function harness({
             return { txid: id, txHex: `${signed.toString(16).padStart(2, '0')}aa` };
         }),
     };
-    return { chain, encoder, funding, sdk, signer, vault };
+    return { builtPieces, chain, encoder, funding, sdk, signer, vault };
 }
 
 function options(run, partSource, overrides = {}) {
@@ -176,6 +178,10 @@ describe('multipart publish waves', () => {
 
         expect(run.funding.map((request) => request.customOutputs.length)).toEqual([100, 100, 51]);
         expect(run.funding.every((request) => request.feePerKb === 2000)).toBe(true);
+        expect(run.builtPieces).toEqual([
+            ...Array.from({ length: PARTS }, (_unused, index) => index),
+            -1,
+        ]);
         expect(run.chain.mempoolHighWater()).toBeLessThanOrEqual(100);
         expect(result.quote.transactions).toBe(505);
         expect(result.quote.fundingFees).toHaveLength(3);
@@ -203,8 +209,12 @@ describe('multipart publish waves', () => {
 
         expect(resumed.funding.map((request) => request.customOutputs.length)).toEqual([100, 51]);
         expect(resumed.funding.every((request) => request.feePerKb === 2000)).toBe(true);
-        expect(source.reads()).toHaveLength(PARTS + 151);
-        expect(source.bytesRead()).toBe((PARTS + 151) * PART_BYTES);
+        expect(resumed.builtPieces).toEqual([
+            ...Array.from({ length: 150 }, (_unused, index) => index + 100),
+            -1,
+        ]);
+        expect(source.reads()).toHaveLength(PARTS + 150);
+        expect(source.bytesRead()).toBe((PARTS + 150) * PART_BYTES);
         expect(source.readWhole()).toBe(false);
         expect(result.record).toMatchObject({ stage: 'complete', wavesDone: 3, wave: null });
     });
