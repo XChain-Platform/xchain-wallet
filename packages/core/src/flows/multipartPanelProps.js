@@ -94,6 +94,31 @@ function createdAtMillis(entry) {
     return Number.isNaN(value) ? Number.NEGATIVE_INFINITY : value;
 }
 
+const SHA256_RE = /^[0-9a-f]{64}$/i;
+const INLINE_KEY_PREFIX = 'inline:';
+// A record written moments before the start's clock reading still counts.
+const START_SKEW_MS = 5000;
+
+/**
+ * Whether an upload record is the one a start match names. A file held by
+ * reference starts before its digest is known: its match carries the stored
+ * blob key, which the route makes the record id, or an inline placeholder,
+ * which matches any upload from that source created since the start.
+ */
+export function uploadMatchesKey(entry, match) {
+    const key = match?.originalSha256;
+    if (typeof key !== 'string' || !entry) return false;
+    if (SHA256_RE.test(key)) {
+        return typeof entry.originalSha256 === 'string'
+            && entry.originalSha256.toLowerCase() === key.toLowerCase();
+    }
+    if (key.startsWith(INLINE_KEY_PREFIX)) {
+        return !Number.isFinite(match.startedAt)
+            || createdAtMillis(entry) >= match.startedAt - START_SKEW_MS;
+    }
+    return entry.id === key;
+}
+
 export function findActiveUpload(uploads, match) {
     if (!Array.isArray(uploads)) throw invalidMatch('uploads');
     const { chainId, sourceAddress, originalSha256 } = match ?? {};
@@ -101,13 +126,11 @@ export function findActiveUpload(uploads, match) {
     requireMatchField(sourceAddress, 'sourceAddress');
     requireMatchField(originalSha256, 'originalSha256');
 
-    const digest = originalSha256.toLowerCase();
     let newest = null;
     for (const entry of uploads) {
         const matches = entry?.chainId === chainId
             && entry.sourceAddress === sourceAddress
-            && typeof entry.originalSha256 === 'string'
-            && entry.originalSha256.toLowerCase() === digest
+            && uploadMatchesKey(entry, match)
             && ACTIVE_STAGES.has(entry.stage);
         if (matches && (newest === null || createdAtMillis(entry) > createdAtMillis(newest))) {
             newest = entry;
