@@ -169,7 +169,7 @@ test.describe(`Publish a multipart file in funding waves on ${REGTEST_CHAIN_LABE
         let manifest;
         await test.step('approve once and mine both waves through assembly', async () => {
             await startProgressCapture(page);
-            await main.getByRole('button', { name: 'Publish file', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish File', exact: true }).click();
             await expectConfirmModal(page, 'the 101-part multipart upload', 300_000);
             await approveConfirm(page, 'the 101-part multipart upload', 300_000);
             manifest = await waitForCompleteManifest(page, source);
