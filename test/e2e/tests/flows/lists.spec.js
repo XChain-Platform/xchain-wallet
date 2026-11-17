@@ -242,7 +242,7 @@ for (const viewport of VIEWPORTS) {
             exact: true,
         });
         await expect(listRow).toBeVisible();
-        await expectListScreen(page, 'My lists', 'My lists');
+        await expectListScreen(page, 'My Lists','My lists');
 
         await page.getByRole('button', { name: 'Create list', exact: true }).first().click();
         await expect(page.getByLabel('Addresses', { exact: true })).toBeVisible();
@@ -264,7 +264,7 @@ for (const viewport of VIEWPORTS) {
         await goBack(page);
 
         await expect(listRow).toBeVisible();
-        await expectListScreen(page, 'My lists', 'My lists after create');
+        await expectListScreen(page, 'My Lists','My lists after create');
         await listRow.click();
         await expect(page.getByRole('list', { name: 'List actions' }).getByRole('button', { name: /^Edit(?! look)\b/ })).toBeVisible();
         await expectListScreen(page, 'Address list', 'List detail');
