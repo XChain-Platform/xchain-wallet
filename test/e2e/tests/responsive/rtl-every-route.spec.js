@@ -24,23 +24,24 @@ import {
 
 const VIEWPORT = { width: 360, height: 800 };
 
-// Root destinations mirror the wallet-menu catalogue. `tab` marks the five
-// bottom-bar tabs, whose headers show no Back control at this width.
+// Root destinations mirror the wallet-menu catalogue. The bottom bar or the
+// wallet menu opens each one as a navigation root, so none shows Back (U17,
+// G06); the mirrored Back is checked on a pushed page after the walk.
 const ROUTES = [
-    { name: 'Home', id: 'home', tab: true },
-    { name: 'History', id: 'history', tab: true },
-    { name: 'Send', id: 'send', tab: true },
-    { name: 'Receive', id: 'receive', tab: true },
-    { name: 'Scan', id: 'scan', back: true },
-    { name: 'DEX', id: 'markets', back: true },
-    { name: 'Marketplace', id: 'market-activity', back: true },
-    { name: 'Dispensers', id: 'dispensers-list', back: true },
-    { name: 'Contracts', id: 'contracts-list', back: true },
-    { name: 'Messaging', id: 'messaging', back: true },
-    { name: 'Contacts', id: 'contacts', back: true },
-    { name: 'Lists', id: 'lists', back: true },
-    { name: 'Payments due', id: 'obligations', back: true },
-    { name: 'Settings', id: 'settings', tab: true },
+    { name: 'Home', id: 'home' },
+    { name: 'History', id: 'history' },
+    { name: 'Send', id: 'send' },
+    { name: 'Receive', id: 'receive' },
+    { name: 'Scan', id: 'scan' },
+    { name: 'DEX', id: 'markets' },
+    { name: 'Marketplace', id: 'market-activity' },
+    { name: 'Dispensers', id: 'dispensers-list' },
+    { name: 'Contracts', id: 'contracts-list' },
+    { name: 'Messaging', id: 'messaging' },
+    { name: 'Contacts', id: 'contacts' },
+    { name: 'Lists', id: 'lists' },
+    { name: 'Payments due', id: 'obligations' },
+    { name: 'Settings', id: 'settings' },
 ];
 
 async function settle(page) {
@@ -67,6 +68,14 @@ async function enablePseudoRtl(page) {
     // Language is a list of choices; a pick saves and returns.
     await page.getByRole('main').getByRole('list', { name: 'Languages' }).getByRole('button', { name: 'pseudo-rtl', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    // The Appearance rows are not all in the catalogue yet, so the row may
+    // read in plain English under the pseudo locale.
+    await page.getByRole('main').getByRole('button', { name: /^‏?⟦?Language⟧?\b/ }).click();
+    await expect(
+        page.locator('[data-settings-choice="pseudo-rtl"] button'),
+        'the language list marks pseudo-RTL as the saved choice',
+    ).toHaveAttribute('aria-current', 'true');
+    await page.locator('button:has(svg[data-xc-directional]):visible').first().click();
 }
 
 // The pseudo locale wraps every translated string, the navigation and the
@@ -163,22 +172,23 @@ test.describe('responsive RTL route sweep', () => {
                 await gotoRoute(page, route);
                 await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 
-                if (route.back) {
-                    await expectBackAtStartWithMirroredChevrons(page, route.name);
-                } else if (route.tab) {
-                    await expect(page.getByRole('heading', { level: 1 }).first()).toBeAttached();
-                    // Home has no PageHeader and its Send and Receive actions
-                    // carry directional icons, so look for the Back control by name.
-                    await expect(
-                        page.getByRole('main').getByRole('button', { name: /^\u200F?⟦Back⟧/ }),
-                        `${route.name}: a bottom-bar tab shows a redundant back control`,
-                    ).toHaveCount(0);
-                } else {
-                    await expect(unlockedShell(page)).toBeVisible();
-                }
+                await expect(page.getByRole('heading', { level: 1 }).first()).toBeAttached();
+                // Home has no PageHeader and its Send and Receive actions
+                // carry directional icons, so look for the Back control by name.
+                await expect(
+                    page.getByRole('main').getByRole('button', { name: /^\u200F?⟦Back⟧/ }),
+                    `${route.name}: a navigation root shows a back control`,
+                ).toHaveCount(0);
 
                 await expectNoHorizontalOverflow(page, `${route.name} at ${VIEWPORT.width}px RTL`);
             });
         }
+
+        await test.step('a pushed page mirrors its Back', async () => {
+            await gotoPseudoSection(page, 'Settings', 'settings');
+            await page.getByRole('main').getByRole('button', { name: /^‏?⟦?Appearance⟧?\b/ }).click();
+            await expectBackAtStartWithMirroredChevrons(page, 'Settings, Appearance');
+            await expectNoHorizontalOverflow(page, `Settings, Appearance at ${VIEWPORT.width}px RTL`);
+        });
     });
 });

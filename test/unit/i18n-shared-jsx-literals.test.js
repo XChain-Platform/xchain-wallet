@@ -136,6 +136,7 @@ const PARTIAL_COPY_FILES = [
     '/routes/CoSignerPolicyEditor.jsx',
     '/routes/CoSignerProvision.jsx',
     '/routes/ContractFundsForm.jsx',
+    '/routes/ContractsList.jsx',
     '/routes/ControllerBindForm.jsx',
     '/routes/CreateBetFeedForm.jsx',
     '/routes/CreateOrderForm.jsx',
@@ -148,6 +149,7 @@ const PARTIAL_COPY_FILES = [
     '/routes/DispenserDetail.jsx',
     '/routes/DispenserExplorer.jsx',
     '/routes/DispenserForm.jsx',
+    '/routes/DispensersList.jsx',
     '/routes/DividendForm.jsx',
     '/routes/LinkForm.jsx',
     // The one List form; its Edit, Share, Transfer and Fork bodies came from
@@ -161,6 +163,7 @@ const PARTIAL_COPY_FILES = [
     '/routes/ParallelComposer.jsx',
     '/routes/SellOwnershipForm.jsx',
     '/routes/SleepForm.jsx',
+    '/routes/StakeDetail.jsx',
     // The one Staking form (contract and validator staking).
     '/routes/StakingForm.jsx',
     '/routes/SwapForm.jsx',

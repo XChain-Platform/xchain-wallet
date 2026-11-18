@@ -34,6 +34,8 @@ import { startVisibleInterval } from '../utils/visibleInterval.js';
 import {
     LIST_DETAIL_MIN_WIDTH, ListDetailSplit, listDetailStyles, useWideContent,
 } from '../components/PanelSplit.jsx';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
 import styles from './ActionsMenu.module.css';
 import local from './DispensersList.module.css';
 
@@ -515,7 +517,7 @@ export function DispensersList({
             }}
             items={[
                 { id: 'all', disabled: !marketReadSupported, label: <><Icon.GridIcon aria-hidden="true" /><span>All</span></> },
-                { id: 'mine', label: <><Icon.WalletIcon aria-hidden="true" /><span>My Dispensers</span></> },
+                { id: 'mine', label: <><Icon.WalletIcon aria-hidden="true" /><span>{t('routes.dispensersList.myDispensers')}</span></> },
             ]}
         />
     );

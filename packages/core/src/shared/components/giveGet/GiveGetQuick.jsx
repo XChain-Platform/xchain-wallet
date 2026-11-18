@@ -8,7 +8,9 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { useState } from 'react';
 import { registry as registryLib } from '../../../index.js';
+import { padToDecimals } from '../AmountField.jsx';
 import { InfoTip } from '../../../ui/InfoTip.jsx';
 import { FieldIconButton } from '../../../ui/FieldIconButton.jsx';
 import { BookIcon, ChevronDownIcon, FilterIcon, KeyIcon, MaxIcon, SwapIcon } from '../../../ui/icons/index.jsx';
@@ -37,6 +39,7 @@ import styles from './GiveGet.module.css';
  * @property {string} amount
  * @property {(raw: string) => void} onAmountChange
  * @property {string} amountLabel                  accessible field name, e.g. 'Give amount'
+ * @property {number | string | null} [divisibility] the asset's decimal places; the amount shows padded to them once editing ends (U61)
  * @property {boolean} [ownership]                 ownership mode: the amount gives way to the name
  * @property {string} [ownershipHint]             static note for ownership mode; it joins the card's '?' tip, never a line (U57)
  * @property {import('react').ReactNode} [balanceText]
@@ -113,8 +116,21 @@ export function GiveGetQuick({ give, get, onFlip, flipLabel = 'Flip give and get
     );
 }
 
+const NOT_EDITING = Symbol('not-editing');
+
 function QuickSideCard({ side, fallbackLabel }) {
     const label = side.label || fallbackLabel;
+    // U61, as AmountField does it: typed text stays as typed while the field
+    // has focus, then shows in the asset's exact format. The marker holds the
+    // decimal limit the edit began under, so a new asset re-formats at once.
+    const rawDivisibility = side.divisibility;
+    const parsedDivisibility = rawDivisibility === null || rawDivisibility === undefined || String(rawDivisibility).trim() === ''
+        ? Number.NaN
+        : Number(rawDivisibility);
+    const decimalLimit = Number.isInteger(parsedDivisibility) && parsedDivisibility >= 0 ? parsedDivisibility : null;
+    const [editingAt, setEditingAt] = useState(NOT_EDITING);
+    const editing = editingAt !== NOT_EDITING && editingAt === decimalLimit;
+    const amountShown = editing ? side.amount : padToDecimals(side.amount, decimalLimit);
     const tick = side.asset?.tick ? String(side.asset.tick).toUpperCase() : '';
     const hasAsset = Boolean(side.asset?.chainId && tick);
     const chainName = hasAsset ? registryLib.defaultRegistry().get(side.asset.chainId)?.displayName : null;
@@ -154,9 +170,13 @@ function QuickSideCard({ side, fallbackLabel }) {
                         spellCheck={false}
                         placeholder="0"
                         aria-label={amountName}
-                        value={side.amount}
+                        value={amountShown}
                         disabled={side.disabled}
-                        onChange={(e) => side.onAmountChange(e.target.value)}
+                        onChange={(e) => {
+                            setEditingAt(decimalLimit);
+                            side.onAmountChange(e.target.value);
+                        }}
+                        onBlur={() => setEditingAt(NOT_EDITING)}
                     />
                 )}
                 <button

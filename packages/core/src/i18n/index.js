@@ -96,7 +96,13 @@ const LOCALE_PATH_RE = /\/locales\/([^/]+)\/index\.js$/;
 // its URL with a fresh query, which the module map treats as a new module.
 // The chunk's own imports keep their URLs, so the shared English store is
 // the same instance either way.
-let freshImport = (url) => import(/* @vite-ignore */ url);
+//
+// Core holds no variable import() of its own: a shell whose chunks travel
+// over a network (the web app) opts in through enableLocaleChunkRetry. The
+// packaged extension never does, since its chunks ship inside the package
+// and Manifest V3 forbids loading code from a computed URL. Without an
+// importer a later pick simply calls the bundler's own loader again.
+let freshImport = null;
 const failedChunkUrls = new Map();
 let retryCounter = 0;
 
@@ -115,13 +121,19 @@ function lazyLoaderFor(code) {
 /**
  * The URL of a chunk whose import failed: the one the error names, else
  * the glob path resolved against this module (the dev server layout).
+ * Only a .js module on this module's own scheme and host qualifies, so an
+ * error message can never steer the retry to another origin.
  */
 function failedChunkUrl(err, path) {
     const m = FAILED_MODULE_URL_RE.exec(String((err && err.message) || ''));
     const candidate = m ? m[0].replace(/[),.;]+$/, '') : path;
     try {
-        const url = new URL(candidate, import.meta.url);
+        const self = new URL(import.meta.url);
+        const url = new URL(candidate, self);
+        if (url.protocol !== self.protocol || url.host !== self.host) return null;
+        if (!url.pathname.endsWith('.js') || url.username || url.password) return null;
         url.searchParams.delete('locale-retry');
+        url.hash = '';
         return url.href;
     } catch (_err) {
         return null;
@@ -134,6 +146,17 @@ function importFresh(url) {
     retryCounter += 1;
     busted.searchParams.set('locale-retry', `${Date.now().toString(36)}-${retryCounter}`);
     return freshImport(busted.href);
+}
+
+/**
+ * Let a shell retry a failed locale chunk under a fresh URL. The importer
+ * receives only a same-origin .js URL that failedChunkUrl accepted.
+ *
+ * @param {(url: string) => Promise<unknown>} importer
+ */
+export function enableLocaleChunkRetry(importer) {
+    if (typeof importer !== 'function') throw new TypeError('enableLocaleChunkRetry: importer must be a function');
+    freshImport = importer;
 }
 
 /**
@@ -250,7 +273,7 @@ export function setLocale(locale) {
     // After a failed load the original importer only replays the cached
     // failure, so the retry imports the chunk under a fresh URL.
     const retryUrl = failedChunkUrls.get(locale);
-    const pending = retryUrl ? importFresh(retryUrl) : loader.load();
+    const pending = retryUrl && freshImport ? importFresh(retryUrl) : loader.load();
     return pending
         .then((mod) => {
             failedChunkUrls.delete(locale);
@@ -262,7 +285,7 @@ export function setLocale(locale) {
             return locale;
         })
         .catch((err) => {
-            if (!failedChunkUrls.has(locale)) {
+            if (freshImport && !failedChunkUrls.has(locale)) {
                 const url = failedChunkUrl(err, loader.path);
                 if (url) failedChunkUrls.set(locale, url);
             }

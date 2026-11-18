@@ -965,6 +965,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 amount: giveAmount,
                 onAmountChange: amountInput(setGiveAmount),
                 amountLabel: 'Give amount',
+                divisibility: giveTokenInfo?.divisibility,
                 ownership: giveOwnership,
                 ownershipHint: 'Moves as one piece when the order fills.',
                 balanceText: giveBalanceText,
@@ -983,6 +984,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
                 amount: getAmount,
                 onAmountChange: amountInput(setGetAmount),
                 amountLabel: 'Get amount',
+                divisibility: getTokenInfo?.divisibility,
                 ownership: getOwnership,
                 ownershipHint: 'The matcher hands over this token name.',
             }}

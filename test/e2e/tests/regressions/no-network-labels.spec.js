@@ -74,14 +74,22 @@ async function gotoPaletteRoute(page, name) {
     await expect(palette).toBeHidden();
 }
 
-async function expectNoNetworkLabels(page, label) {
-    const visibleText = await page.evaluate(() => {
+async function expectNoNetworkLabels(page, label, { allowDeveloperRows = false } = {}) {
+    const visibleText = await page.evaluate(({ allowDeveloperRows: allowRows }) => {
         const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
         const text = [];
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
             if (!node.textContent.trim()) continue;
             const parent = node.parentElement;
             if (!parent) continue;
+            // The Developer mode switch row and the Developer options row name
+            // the Regtest network as what they unlock, not as the active network.
+            const row = parent.closest('li, [role="listitem"], button');
+            if (allowRows && /^(?:Developer mode|Developer options)\b/.test(row?.textContent.trim() || '')) continue;
+            // A '?' help tip the pointer left open explains a field (Automatic
+            // Donations says test-network sends add nothing); it is help copy
+            // the user asked for, not a network state label in the shell.
+            if (parent.closest('[role="tooltip"]')) continue;
             const style = getComputedStyle(parent);
             if (style.display === 'none' || style.visibility === 'hidden') continue;
             const range = document.createRange();
@@ -95,7 +103,7 @@ async function expectNoNetworkLabels(page, label) {
             if (intersectsViewport) text.push(node.textContent.trim());
         }
         return text.join(' ');
-    });
+    }, { allowDeveloperRows });
     expect(visibleText, `${label}: visible text exposes a non-mainnet label`)
         .not.toMatch(NETWORK_LABEL_RE);
     await expect(
@@ -150,11 +158,33 @@ async function expectCompactSingleRowHeader(page, label) {
     }
 }
 
-async function expectCleanShell(page, label) {
+async function expectCleanShell(page, label, options) {
     await page.getByRole('main').evaluate((main) => { main.scrollTop = 0; });
     await settle(page);
-    await expectNoNetworkLabels(page, label);
+    await expectNoNetworkLabels(page, label, options);
     await expectCompactSingleRowHeader(page, label);
+}
+
+async function expectDesktopSideMenuFits(page, label) {
+    const nav = page.getByRole('navigation', { name: 'Primary navigation' });
+    await expect(nav).toBeVisible();
+    const geometry = await nav.evaluate((element) => {
+        const navBox = element.getBoundingClientRect();
+        const lockBox = element.querySelector('[data-xc-lock-row]')?.getBoundingClientRect();
+        return {
+            clientHeight: element.clientHeight,
+            scrollHeight: element.scrollHeight,
+            scrollTop: element.scrollTop,
+            lockBottom: lockBox?.bottom ?? null,
+            navBottom: navBox.bottom,
+        };
+    });
+    expect(geometry.scrollHeight, `${label}: side menu needs vertical scrolling`)
+        .toBeLessThanOrEqual(geometry.clientHeight + 1);
+    expect(geometry.scrollTop, `${label}: side menu is not at its natural top`).toBe(0);
+    expect(geometry.lockBottom, `${label}: Lock wallet has no measurable box`).not.toBeNull();
+    expect(geometry.lockBottom, `${label}: Lock wallet is below the side menu fold`)
+        .toBeLessThanOrEqual(geometry.navBottom + 1);
 }
 
 test('a regtest demo wallet keeps network state and demo status out of the shell', async ({ page }) => {
@@ -183,7 +213,9 @@ test('a regtest demo wallet keeps network state and demo status out of the shell
                 await row.scrollIntoViewIfNeeded();
                 await row.click();
                 await expect(page.getByRole('heading', { level: 1, name: subpage, exact: true })).toBeVisible();
-                await expectCleanShell(page, label);
+                await expectCleanShell(page, label, {
+                    allowDeveloperRows: subpage === 'Advanced',
+                });
                 await backToSettingsList(page);
             });
         }
@@ -196,4 +228,10 @@ test('a regtest demo wallet keeps network state and demo status out of the shell
             await backToSettingsList(page);
         });
     }
+});
+
+test('the desktop side menu fits 1280x800 without scrolling', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+    await expectDesktopSideMenuFits(page, 'side menu at 1280x800');
 });

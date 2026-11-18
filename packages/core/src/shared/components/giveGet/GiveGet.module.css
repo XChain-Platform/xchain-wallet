@@ -172,10 +172,10 @@
     min-width: 0;
     height: 48px;
     padding: 0;
-    border: 0;
-    border-radius: var(--xc-radius-md);
+    border: 1px solid var(--xc-control-border);
+    border-radius: var(--xc-control-radius);
     outline: none;
-    background: transparent;
+    background: var(--xc-surface);
     color: var(--xc-text);
     font-family: inherit;
     font-size: 2rem;
@@ -200,6 +200,15 @@
 
 .bigAmount:focus-visible {
     box-shadow: 0 0 0 2px var(--xc-focus-ring);
+}
+
+.bigAmount:disabled {
+    border-color: var(--xc-control-disabled-border);
+    background: var(--xc-control-disabled-bg);
+    color: var(--xc-control-disabled-text);
+    opacity: var(--xc-disabled-opacity);
+    cursor: not-allowed;
+    -webkit-text-fill-color: var(--xc-control-disabled-text);
 }
 
 .bigOwnership {

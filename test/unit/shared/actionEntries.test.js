@@ -43,9 +43,9 @@ describe('ACTION_ENTRY_DEFS', () => {
         expect(new Set(handlers).size).toBe(handlers.length);
     });
 
-    it('gives every entry a label and a description', () => {
+    it('gives every entry a label or label key and a description', () => {
         for (const def of ACTION_ENTRY_DEFS) {
-            expect(def.label, `${def.id} label`).toBeTruthy();
+            expect(def.label || def.labelKey, `${def.id} label`).toBeTruthy();
             expect(def.description, `${def.id} description`).toBeTruthy();
         }
     });
@@ -150,7 +150,8 @@ describe('buildActionEntries', () => {
             if (e.id === 'pair-signer') continue;
             const def = ACTION_ENTRY_DEFS.find((d) => d.id === e.id);
             expect(e.description).toBe(def.description);
-            expect(e.label).toBe(def.label);
+            if (def.labelKey) expect(e.label).toBeTruthy();
+            else expect(e.label).toBe(def.label);
         }
     });
 

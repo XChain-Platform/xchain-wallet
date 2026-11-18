@@ -106,6 +106,13 @@
     user-select: none;
 }
 
+/* The grid's 0.85 dimming over the muted numbers measured 3.75:1, under the
+   4.5:1 AA floor a contrast check holds them to; the body text colour keeps
+   them above it while the blur still hides them. */
+.concealedGrid .index {
+    color: var(--xc-text);
+}
+
 @media not all and (min-width: 360px) {
     /* The card inset itself narrows below 360px (tokens.css). */
     .gridPopup,

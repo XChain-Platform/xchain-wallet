@@ -41,11 +41,15 @@
 // nothing. That is the whole contract: no shell-name branching, and no
 // second place where the menu's contents are decided.
 
+import { t } from '../i18n/index.js';
+import '../i18n/locales/en/actionsMenu.js';
+
 /**
  * @typedef {Object} ActionEntryDef
  * @property {string} id            Stable entry id, also the ActionsMenu key.
  * @property {string} handler       Name of the handler prop that arms it.
- * @property {string} label         Button label.
+ * @property {string} [label]       Button label.
+ * @property {string} [labelKey]    Translation key used in place of label.
  * @property {string} description   One-line explanation under the label.
  */
 
@@ -118,7 +122,7 @@ export const ACTION_ENTRY_DEFS = Object.freeze([
     {
         id: 'dispensers-list',
         handler: 'onMyDispensers',
-        label: 'My dispensers',
+        labelKey: 'actionsMenu.myDispensers',
         description: 'Manage dispensers you have opened: view and cancel.',
     },
     {
@@ -366,7 +370,7 @@ export function buildActionEntries(handlers = {}, capabilities = {}) {
         .filter(({ def }) => def)
         .map(({ def, group }) => ({
             id: def.id,
-            label: def.label,
+            label: def.labelKey ? t(def.labelKey) : def.label,
             description: def.id === 'pair-signer' && !pairsTrezor
                 ? PAIR_SIGNER_LEDGER_ONLY
                 : def.description,

@@ -268,7 +268,7 @@ for (const [shell, appPath] of [
     assert.ok(app.includes("'dispensers-list'"), `${shell} tracks the dispensers-list sub-route`);
     assert.ok(app.includes("'dispenser-detail'"), `${shell} tracks the dispenser-detail sub-route`);
     assert.ok(
-        surfacesEntry(app, 'dispensers-list', 'My dispensers'),
+        surfacesEntry(app, 'dispensers-list'),
         `${shell} registers the My dispensers entry`,
     );
     // Accept both the bare-arrow form and a block body that records a

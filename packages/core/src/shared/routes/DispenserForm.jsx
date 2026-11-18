@@ -1949,6 +1949,7 @@ export function DispenserForm({ walletId, activeAccountId, onBack, initialChainI
                 amount: giveAmount,
                 onAmountChange: tokenAmountInput(setGiveAmount),
                 amountLabel: t('dispenserForm.giveAmountPerFill'),
+                divisibility: giveTokenInfo?.divisibility,
                 balanceText: sourceBalanceText,
                 onMax: onGiveMax || null,
                 maxDisabled: !sourceTickBalance,

@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 const wipeWalletStorage = vi.hoisted(() => vi.fn());
 
@@ -102,7 +102,7 @@ describe('Locked forgot-password wipe', () => {
         expect(trigger).toHaveFocus();
         await user.keyboard('{Enter}');
 
-        expect(screen.getByRole('heading', { level: 1, name: 'Forgot Password?' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { level: 1, name: 'Forgot Password?' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
         pressBack();
         expect(screen.queryByRole('heading', { level: 1, name: 'Forgot Password?' })).toBeNull();
@@ -119,7 +119,7 @@ describe('Locked forgot-password wipe', () => {
 });
 
 describe('Locked demo exit', () => {
-    it('requires an explicit danger confirmation that names everything destroyed', () => {
+    it('requires an explicit danger confirmation that names everything destroyed', async () => {
         markDemoWallet('demo-1');
         mount();
 
@@ -127,17 +127,17 @@ describe('Locked demo exit', () => {
         expect(trigger.className).toMatch(/danger/);
         fireEvent.click(trigger);
 
-        const dialog = screen.getByRole('dialog', { name: /exit demo and delete its data/i });
+        const dialog = await screen.findByRole('dialog', { name: /exit demo and delete its data/i });
         expect(dialog).toHaveTextContent(/every wallet saved in this app on this device/i);
         expect(dialog).toHaveTextContent(/recovery information, accounts, addresses, and queued transactions/i);
         expect(wipeWalletStorage).not.toHaveBeenCalled();
     });
 
-    it('cancels without wiping', () => {
+    it('cancels without wiping', async () => {
         markDemoWallet('demo-1');
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Exit Demo & Wipe' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
 
         expect(wipeWalletStorage).not.toHaveBeenCalled();
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -148,7 +148,8 @@ describe('Locked demo exit', () => {
         wipeWalletStorage.mockRejectedValueOnce(new Error('desktop files are busy'));
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Exit Demo & Wipe' }));
-        fireEvent.click(screen.getAllByRole('button', { name: 'Exit Demo & Wipe' })[1]);
+        const confirm = await screen.findByRole('dialog');
+        fireEvent.click(within(confirm).getByRole('button', { name: 'Exit Demo & Wipe' }));
 
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent(
@@ -167,8 +168,8 @@ describe('Locked demo exit', () => {
         wipeWalletStorage.mockReturnValue(new Promise((resolve) => { resolveWipe = resolve; }));
         mount();
         fireEvent.click(screen.getByRole('button', { name: 'Exit Demo & Wipe' }));
-        const dialog = screen.getByRole('dialog');
-        fireEvent.click(screen.getAllByRole('button', { name: 'Exit Demo & Wipe' })[1]);
+        const dialog = await screen.findByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Exit Demo & Wipe' }));
 
         expect(dialog).toHaveAttribute('aria-busy', 'true');
         resolveWipe();

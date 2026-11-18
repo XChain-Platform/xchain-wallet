@@ -16,7 +16,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MessagingContext } from '../../../packages/core/src/shared/MessagingContext.js';
 import { createDefaultSettings } from '../../../packages/core/src/schemas/settings.js';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
@@ -517,6 +517,30 @@ describe('Appearance', () => {
             await waitFor(() => expect(messaging.updateSettings).toHaveBeenCalledWith({ language: 'pseudo-rtl' }));
             await waitFor(() => expect(document.querySelector('[data-settings-row-id="appearance-language"]')).toBeTruthy());
             await waitFor(() => expect(document.querySelector('[data-settings-row-id="appearance-language"] button').textContent).toContain('pseudo-rtl'));
+        } finally {
+            await setLocale('en');
+        }
+    });
+
+    it('keeps the last list pick when a different locale pick is still settling', async () => {
+        const { setLocale } = await import('../../../packages/core/src/i18n/index.js');
+        const initial = createDefaultSettings();
+        initial.developerMode = true;
+        const messaging = harness(initial);
+        try {
+            await openFromAppearance('appearance-language', messaging);
+            const list = await screen.findByRole('list', { name: 'Languages' });
+            const english = within(list).getByRole('button', { name: /^English/ });
+            const pseudo = within(list).getAllByRole('button').find((row) => row.textContent.includes('pseudo-rtl'));
+            expect(pseudo).toBeTruthy();
+
+            act(() => {
+                pseudo.click();
+                english.click();
+            });
+
+            await waitFor(() => expect(document.documentElement.dir).toBe('ltr'));
+            expect(messaging.updateSettings).not.toHaveBeenCalledWith({ language: 'pseudo-rtl' });
         } finally {
             await setLocale('en');
         }

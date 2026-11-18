@@ -1058,6 +1058,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 amount: giveAmount,
                 onAmountChange: amountInput(setGiveAmount, giveDivisibility),
                 amountLabel: 'Give amount',
+                divisibility: giveDivisibility,
                 ownership: giveType === 'token' && giveOwnership,
                 ownershipHint: 'Single fill, no partial matches.',
                 balanceText: giveBalanceText,
@@ -1076,6 +1077,7 @@ export function CreateOrderForm({ walletId, onBack, initialChainId, initialFromA
                 amount: getAmount,
                 onAmountChange: amountInput(setGetAmount, getDivisibility),
                 amountLabel: 'Get amount',
+                divisibility: getDivisibility,
                 ownership: getType === 'token' && getOwnership,
                 ownershipHint: 'The matcher hands over this token name.',
                 // The matcher paying native coin is in the You get '?' tip
