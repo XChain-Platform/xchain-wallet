@@ -16,8 +16,9 @@
 #
 # tools/ci-full.sh: run EVERY tier this repo's GitHub CI runs, in one process.
 #
-# .github/workflows/ci.yml fans this repo out as eight parallel jobs (test,
-# drift-guards, build, coverage, e2e, e2e-regtest, audit, verdict). The
+# .github/workflows/ci.yml fans this repo out as parallel jobs (test,
+# drift-guards, build, coverage, e2e, e2e-regtest, audit, verdict; test,
+# coverage and e2e as shard legs behind an aggregator of the same name). The
 # pre-push venue gate used to run only `npm run ci`, the `test` job alone, so a push could
 # gate green locally and then go red on GitHub on a job the gate never ran
 # (2026-08-15: exactly that, on three repos at once). This script IS the local
@@ -146,7 +147,9 @@ export XCHAIN_DOCS_ROOT="${XCHAIN_DOCS_ROOT:-$SIB/xchain-documentation}"
 # gate whose sibling is fine.
 need_sib xchain-documentation
 
-# --- job: test -------------------------------------------------------------
+# --- job: test-shard -------------------------------------------------------
+# GitHub runs this as vitest `--shard` legs of the unit tier plus one leg for
+# the rest of the gate; here it runs unsharded, which is the union of the legs.
 # `pnpm run ci` is unit + integration + security + fuzz + smoke, the same gate
 # the pre-push hook used to run on its own.
 FAST_CI_PLAN=""
@@ -167,6 +170,9 @@ fi
 if [ "${CI_TIER:-full}" = "fast" ]; then
   run_tier "fast-tier selector self-test" node --test tools/ci_fast_select.test.js
 fi
+
+# --- job: test -------------------------------------------------------------
+echo "ci:full: SKIPPED-BY-DESIGN test: an aggregator that fails unless every test-shard job succeeded; the section above runs the same tier unsharded in one process."
 
 # --- regression suite --------------------------------------------------
 # test:regression is not part of any ci.yml job's `pnpm run ci` bundle, so
@@ -216,10 +222,20 @@ run_tier "build: no bundled @trezor code in the shipped bundles" \
 run_tier "build: SRI hashes match the built assets" \
   node test/smoke/security/web-sri.smoke.js
 
-# --- job: coverage ---------------------------------------------------------
+# --- job: coverage-shard ---------------------------------------------------
+# GitHub runs the instrumented unit tier as `--shard` legs that write blob
+# reports, then merges them; unsharded, one run covers every leg and checks the
+# thresholds itself.
 run_tier "coverage ratchet (test:unit:coverage)" pnpm test:unit:coverage
 
-# --- job: e2e --------------------------------------------------------------
+# --- job: coverage-merge ---------------------------------------------------
+echo "ci:full: SKIPPED-BY-DESIGN coverage-merge: it merges the GitHub shard legs' blob reports and checks the thresholds; the unsharded coverage run above checks the same thresholds over the same suite."
+
+# --- job: coverage ---------------------------------------------------------
+echo "ci:full: SKIPPED-BY-DESIGN coverage: an aggregator that fails unless every coverage-shard and coverage-merge job succeeded; the section above runs the same tier unsharded in one process."
+
+# --- job: e2e-shard --------------------------------------------------------
+# GitHub runs the suite as Playwright `--shard` legs; here it runs unsharded.
 # These Vitest suites are part of the GitHub e2e job's global setup. Run them
 # as explicit tiers here so the fast gate grades them without running Playwright.
 run_tier "boundary suite (test:boundary)" pnpm test:boundary
@@ -233,6 +249,9 @@ export XCHAIN_CI_FULL_VITEST_TIERS=1
 run_tier "e2e: Playwright browsers" pnpm exec playwright install --with-deps chromium
 run_tier "e2e suite (test:e2e)" env CI=1 pnpm test:e2e
 echo "ci:full: SKIPPED-BY-DESIGN e2e/Upload Playwright report: actions/upload-artifact is a GitHub-only step (and if: failure()); the report stays on disk at test/e2e/playwright-report/."
+
+# --- job: e2e --------------------------------------------------------------
+echo "ci:full: SKIPPED-BY-DESIGN e2e: an aggregator that fails unless every e2e-shard job succeeded; the section above runs the same tier unsharded in one process."
 
 # --- job: e2e-regtest ------------------------------------------------------
 # Discovery always runs on GitHub and can go red on its own: it proves the
