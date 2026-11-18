@@ -139,21 +139,25 @@ async function buttonHeight(button) {
     return button.evaluate((element) => element.getBoundingClientRect().height);
 }
 
-async function expectTermsUseContentWidth(terms, label) {
-    const widths = await terms.evaluate((element) => {
+/**
+ * About's License row is an external link (the full text is not an in-app
+ * page): it opens the repository's LICENSE file in a new tab, and it spans
+ * the settings content area like every other action row.
+ */
+async function expectLicenseIsExternalLink(page, label) {
+    const row = page.getByRole('main').getByRole('link', { name: /^License\b/ }).first();
+    await expect(row, `${label}: About has a License link`).toBeVisible();
+    await expect(row, `${label}: the License link opens the LICENSE file`).toHaveAttribute('href', /^https:\/\/.*LICENSE\.md$/);
+    await expect(row, `${label}: the License link opens in a new tab`).toHaveAttribute('target', '_blank');
+    await expect(page.locator('#full-license-text'), `${label}: no in-app license text`).toHaveCount(0);
+    const widths = await row.evaluate((element) => {
         const content = element.closest('[data-settings-layout="responsive"]');
         if (!content) return null;
-        return {
-            terms: element.getBoundingClientRect().width,
-            content: content.getBoundingClientRect().width,
-        };
+        return { row: element.getBoundingClientRect().width, content: content.getBoundingClientRect().width };
     });
-    expect(widths, `${label}: the license text is outside the settings content area`).not.toBeNull();
-    expect(widths.content, `${label}: the settings content area has no width`).toBeGreaterThan(0);
-    expect(
-        widths.terms / widths.content,
-        `${label}: license text uses ${Math.round((widths.terms / widths.content) * 100)}% of the content width`,
-    ).toBeGreaterThanOrEqual(0.6);
+    expect(widths, `${label}: the License row is outside the settings content area`).not.toBeNull();
+    expect(widths.row / widths.content, `${label}: the License row uses ${Math.round((widths.row / widths.content) * 100)}% of the content width`)
+        .toBeGreaterThanOrEqual(0.6);
 }
 
 test('desktop forms use the available width and keep shared geometry', async ({ page }) => {
@@ -219,11 +223,8 @@ test('desktop forms use the available width and keep shared geometry', async ({ 
             await page.getByRole('main').getByRole('button', { name: /^About\b/ }).click();
             await expect(page.getByRole('heading', { name: /^About\b/ }))
                 .toBeVisible({ timeout: 30_000 });
-            // The full text is a page of its own, opened by About's License row.
-            await page.getByRole('main').getByRole('button', { name: /^License\b/ }).first().click();
-            const terms = page.locator('#full-license-text');
-            await expect(terms).toBeVisible();
-            await expectTermsUseContentWidth(terms, `${viewport.name} license or terms`);
+            // The license is an external link, not an in-app page.
+            await expectLicenseIsExternalLink(page, `${viewport.name} license or terms`);
             await expectNoHorizontalOverflow(page, `${viewport.name} license or terms`);
         });
     }

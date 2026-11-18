@@ -205,10 +205,10 @@ async function settledFirstBlock(page) {
     return previous;
 }
 
-function judgeFirstBlock(where, m) {
+function judgeFirstBlock(where, m, { centred = false } = {}) {
     if (m.error) return [`${where}: ${m.error}`];
     const out = [];
-    if (m.kind === 'list') {
+    if (m.kind === 'list' && !centred) {
         if (Math.abs(m.left - m.gutter) > GAP_TOLERANCE_PX) {
             out.push(`${where}: ${m.label} left ${m.left} is not the gutter ${m.gutter}`);
         }
@@ -232,8 +232,9 @@ test('the first block of the intro carousel and the issuance wizard fills the gu
         await settle(page);
         const intro = await settledFirstBlock(page);
         const where = `${viewport.width}px / intro carousel`;
-        // The slide is a centred role=group column, so it is judged on centring.
-        violations.push(...judgeFirstBlock(where, intro));
+        // The intro carousel is centred, not gutter-filling (operator ruling
+        // 2026-11-17), so it is judged on centring whatever element it is.
+        violations.push(...judgeFirstBlock(where, intro, { centred: true }));
     }
 
     // A demo wallet disables every submit button, so the Issue Token walk uses

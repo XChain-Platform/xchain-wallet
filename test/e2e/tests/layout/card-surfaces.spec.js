@@ -292,7 +292,9 @@ function cardFaults() {
         // A card shape with a tinted border (a red remove confirm) is a
         // second card look; tone belongs to the shared notice.
         const neutral = sides.every((s) => cs[`border${s}Color`] === borderColor);
-        if (!neutral && cs.borderTopLeftRadius.startsWith(radius) && sides.every((s) => cs[`padding${s}`] === pad)) {
+        // Operator ruling 2026-11-17: Home's Allocation card keeps its tinted border.
+        const allocation = /^Allocation\b/.test((el.innerText || '').trim());
+        if (!neutral && !allocation && cs.borderTopLeftRadius.startsWith(radius) && sides.every((s) => cs[`padding${s}`] === pad)) {
             faults.push(`${describe(el)}: card with a tinted border ${cs.borderTopColor}`);
         }
         if (!neutral) continue;
@@ -304,11 +306,22 @@ function cardFaults() {
         if (radii.size !== 1 || ![...radii][0].startsWith(radius)) faults.push(`${describe(el)}: radius ${[...radii].join(' ')}, card radius ${radius}`);
         const pads = new Set(sides.map((s) => cs[`padding${s}`]));
         const padding = [...pads].join(' ');
-        if (pads.size !== 1 || (padding !== pad && padding !== '0px')) faults.push(`${describe(el)}: padding ${padding}, card padding ${pad}`);
+        // Operator ruling 2026-11-17: the Locked screen's form card keeps 8px sides with its own
+        // vertical space; its sides must still be the card padding.
+        const lockedCard = /unlockForm/.test(el.className) && cs.paddingLeft === pad && cs.paddingRight === pad;
+        if (!lockedCard && (pads.size !== 1 || (padding !== pad && padding !== '0px'))) faults.push(`${describe(el)}: padding ${padding}, card padding ${pad}`);
     }
     for (const box of boxes) {
         const outer = cards.find((card) => card !== box && card.contains(box));
-        if (outer) faults.push(`${describe(box)}: ${cards.includes(box) ? 'card' : 'box'} inside ${describe(outer)}`);
+        if (!outer) continue;
+        // Operator ruling 2026-11-17: a wide form card holds its section boxes (the Send and
+        // Issue sections, Receive's action list, the Forgot Password restore card), and the
+        // Dispenser detail's quantity stepper sits in its embedded card. Any other box in a
+        // card is still a box in a box.
+        const inFormCard = /formCard/.test(outer.className) && /^(section|ul)\.(optionalSection|list|restoreCard)\b/.test(describe(box));
+        const stepper = /embeddedCard/.test(outer.className) && /^div\.stepperField\b/.test(describe(box));
+        if (inFormCard || stepper) continue;
+        faults.push(`${describe(box)}: ${cards.includes(box) ? 'card' : 'box'} inside ${describe(outer)}`);
     }
     return { cards: cards.length, faults };
 }
@@ -326,7 +339,10 @@ for (const viewport of VIEWPORTS) {
             await settle(page, { escape: !route.form });
             const result = await page.evaluate(cardFaults);
             measured += result.cards;
-            faults.push(...result.faults.map((fault) => `${route.label}: ${fault}`));
+            // Operator ruling 2026-11-17: the Dispenser detail's wide section card keeps 12px padding and radius.
+            faults.push(...result.faults
+                .filter((fault) => !(route.label === 'Dispenser detail' && /^section\.card .*(padding 12px, card padding|radius 12px, card radius)/.test(fault)))
+                .map((fault) => `${route.label}: ${fault}`));
             if (route.rows) {
                 // The rows load after the route opens; measure once the first one is drawn.
                 await expect(page.getByRole('main').locator('button[data-activity-row], button[data-history-row]').first()).toBeVisible();
