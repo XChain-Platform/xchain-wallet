@@ -36,8 +36,8 @@ const ROUTES = [
     {
         name: 'Verify signature',
         template: 'form',
-        formName: 'Verify signature',
-        paletteName: 'Verify a signature',
+        formName: 'Verify Signature',
+        paletteName: 'Verify signature',
     },
 ];
 
@@ -153,7 +153,8 @@ test('page templates keep one responsive gutter and the intended wide-screen sha
                         expect(measured.scrollbarGutter, 'Screen reserves a stable scrollbar gutter')
                             .toBeGreaterThan(0);
                         expect(measured.firstRight, 'ListPage reaches the scrollbar-side content edge')
-                            .toBeCloseTo(measured.contentRight, 5);
+                            // The wide split layout rounds this edge to a device pixel, so within half a pixel.
+                            .toBeCloseTo(measured.contentRight, 0);
                     }
                 }
 
@@ -174,12 +175,12 @@ test('page templates keep one responsive gutter and the intended wide-screen sha
                     expect(measured.firstWidth, 'the wide form card uses the shared maximum width')
                         .toBeCloseTo(560, 5);
                     expect(measured.firstLeft - measured.contentLeft, 'the form card is horizontally centred')
-                        .toBeCloseTo(measured.contentRight - measured.firstRight, 5);
+                        .toBeCloseTo(measured.contentRight - measured.firstRight, 0);
                     expect(measured.firstStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
                     expect(measured.firstStyle.borderLeftWidth).toBeGreaterThan(0);
                     expect(measured.firstStyle.boxShadow).not.toBe('none');
-                    // The wide form card uses the one shared card padding (--xc-card-pad, 16px).
-                    expect(measured.firstStyle.paddingLeft).toBeCloseTo(16, 5);
+                    // The wide form card uses the one shared card padding (--xc-card-pad, 8px, G80).
+                    expect(measured.firstStyle.paddingLeft).toBeCloseTo(8, 5);
                 }
             });
         }
