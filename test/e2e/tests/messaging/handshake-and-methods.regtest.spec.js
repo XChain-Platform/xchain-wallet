@@ -274,9 +274,14 @@ async function pickEncryption(scope, labelPrefix) {
  * it is the precondition for every "Send is disabled" assertion in this file:
  * the in-flight `checking` state disables Send too, and would otherwise let
  * that assertion pass without the refusal it claims to prove.
+ *
+ * A refused press also states the same sentence as the Encryption field's
+ * error and in the Form errors summary, both alerts too, so the banner is
+ * named by its warning variant: it is the one that carries the key request.
  */
 function missingPubkeyBanner(scope) {
-    return scope.getByRole('alert').filter({ hasText: "don't know the recipient's public key" });
+    return scope.locator('[role="alert"][data-variant="warning"]')
+        .filter({ hasText: "don't know the recipient's public key" });
 }
 
 /** The banner's block: the banner message plus the key-request button below it. */
@@ -287,15 +292,32 @@ function keyRequestBlock(scope) {
 const sendButton = (scope) => scope.getByRole('button', { name: 'Send Message', exact: true });
 
 /**
- * The confirm page's accessible name for a MESSAGE: "Confirm " plus the
- * decoded headline with the recipient in full. The visible headline shortens
- * the address, so the exact recipient is only checkable here.
+ * Asserts the confirm page for a MESSAGE names its kind, its recipient and its
+ * chain.
  *
+ * The Confirm Standard page (G127) keeps the address and the chain out of the
+ * sentence: its accessible name is "Confirm " plus the decoded sentence
+ * ("Send encrypted message to"), the recipient is the facts card's first
+ * address row, in full as that row's accessible name (labelled To, or From
+ * when the recipient is the signing address itself), and the chain is the
+ * Network row.
+ *
+ * @param {import('@playwright/test').Page} page
  * @param {'public' | 'encrypted'} kind
  * @param {string} recipient
+ * @param {string} message  what a wrong kind means for this step
  */
-const confirmName = (kind, recipient) =>
-    `Confirm Send ${kind} message to ${recipient} on ${REGTEST_CHAIN_LABEL}`;
+async function expectMessageConfirm(page, kind, recipient, message) {
+    const confirm = page.getByTestId('confirm-modal');
+    await expect(confirm, message).toHaveAttribute('aria-label', `Confirm Send ${kind} message to`);
+    const addressRow = confirm
+        .locator('dd[data-testid="confirm-address"], dd[data-testid="confirm-source"]').first();
+    await expect(addressRow.locator(`[aria-label="${recipient}"]`),
+        `the confirm screen does not name ${recipient} as the message's recipient`).toBeVisible();
+    await expect(confirm.locator('dd[data-testid="confirm-network"]'),
+        `the confirm screen does not name ${REGTEST_CHAIN_LABEL} as the message's chain`)
+        .toHaveText(REGTEST_CHAIN_LABEL);
+}
 
 /**
  * How long a refused press is watched for a confirm screen. An accepted press
@@ -533,12 +555,9 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
             // not from form state, and the decoder's own word for v3 is PUBLIC
             // rather than the softer "unencrypted" (`describe.js` decodeMessage,
             // version 3 branch). A user about to publish a message forever is
-            // owed the harder word. The headline draws the recipient shortened
-            // (first6…last6); the full headline is the confirm page's
-            // accessible name, so that is where the exact text is read.
-            await expect(confirm,
-                'the confirm screen does not name the message as PUBLIC on the venue chain')
-                .toHaveAttribute('aria-label', confirmName('public', REGTEST_DESTINATION));
+            // owed the harder word.
+            await expectMessageConfirm(page, 'public', REGTEST_DESTINATION,
+                'the confirm screen does not name the message as PUBLIC');
 
             const txid = await approveAndCaptureTxid(page, txids);
             const action = await waitForValidAction(txid);
@@ -792,8 +811,8 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toHaveAttribute('aria-label', /^Encryption: Standard \(ECIES\)/);
             await expect(sendButton(main)).toBeEnabled({ timeout: 15_000 });
             await sendButton(main).click();
-            await expect(page.getByTestId('confirm-modal'))
-                .toHaveAttribute('aria-label', confirmName('encrypted', ownAddress));
+            await expectMessageConfirm(page, 'encrypted', ownAddress,
+                'the confirm screen does not name the ECIES message as encrypted');
 
             const action = await waitForValidAction(await approveAndCaptureTxid(page, txids));
             expect(action.encrypted_message, 'the ECIES send carries no ENCRYPTED_MESSAGE on chain')
@@ -831,8 +850,8 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
             await sendButton(main).click();
             // The SAME decoded headline as ECIES: the confirm screen cannot tell
             // the methods apart either, because v2 carries no method field.
-            await expect(page.getByTestId('confirm-modal'))
-                .toHaveAttribute('aria-label', confirmName('encrypted', ownAddress));
+            await expectMessageConfirm(page, 'encrypted', ownAddress,
+                'the confirm screen does not name the ECDH-session message as encrypted');
 
             const action = await waitForValidAction(await approveAndCaptureTxid(page, txids));
             expect(action.encrypted_message, 'the ECDH send carries no ENCRYPTED_MESSAGE on chain')

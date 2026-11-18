@@ -18,7 +18,7 @@
 
 import { randomBytes } from 'node:crypto';
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
@@ -81,6 +81,8 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
             });
             await expect(main).toContainText(`Size${formatBytes(FILE_BYTES)}`);
             await fieldByLabel(main, 'Title').fill(TITLE);
+            // Memo is an optional section, closed until opened.
+            await openFormSection(main, 'Memo');
             await fieldByLabel(main, 'Memo').fill(MEMO);
             await main.getByRole('button', { name: 'Publish File', exact: true }).click();
         });

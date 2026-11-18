@@ -314,10 +314,15 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             const said = await line.innerText();
             const shown = Number(said.match(/([\d.]+)\s*XCHAIN/)?.[1]);
             expect(shown, `unparseable protocol-fee line: ${said}`).toBe(quotedXchain);
-            // Which balance it comes out of, and that it is contingent: a bare
-            // number cannot say either, and both are things the user needs.
-            expect(said).toMatch(/from your XCHAIN balance/i);
-            expect(said).toMatch(/only if the action is accepted/i);
+            // The confirm card gives each fee its own row (G127, revised
+            // 2026-11-16), so the row names its balance by its unit: XCHAIN,
+            // with no coin amount beside it. The contingency is told by what
+            // is absent: only a native-coin fee carries "not refunded if
+            // rejected", since its output is spent on broadcast either way.
+            expect(said, 'the XCHAIN-lane protocol-fee row also prices the fee in coin')
+                .not.toMatch(/\bBTC\b/);
+            expect(said, 'the XCHAIN-lane fee is labelled as spent even if the action is rejected')
+                .not.toMatch(/not refunded/i);
 
             // And it is NOT the miner-fee line wearing a different label: the
             // two costs are stated separately, in their own denominations.
@@ -368,13 +373,17 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             const before = await feeQuote('ISSUE', `${TICK_NATIVE_LANE}|${SUPPLY}|0|0|0`);
             await composeIssue(page, TICK_NATIVE_LANE, { nativeFee: true });
 
-            // No XCHAIN line here, deliberately: the fee is already disclosed
-            // as a coin debit below, and a second line in XCHAIN would read as
-            // a second, separate charge.
-            await expect(page.getByTestId('confirm-fee-protocol'),
-                'the native lane shows an XCHAIN protocol-fee line as well as the coin debit, which '
-                + 'reads as being charged twice')
-                .toHaveCount(0);
+            // One protocol-fee row, in the coin: the native lane prices the
+            // fee as the output it is, and an XCHAIN figure beside it would
+            // read as a second, separate charge.
+            const nativeLine = page.getByTestId('confirm-fee-protocol');
+            await expect(nativeLine, 'the native lane states no protocol fee on the confirm screen')
+                .toHaveCount(1);
+            const nativeSaid = await nativeLine.innerText();
+            expect(nativeSaid, 'the native lane prices its protocol fee in XCHAIN as well as the coin, '
+                + 'which reads as being charged twice').not.toMatch(/XCHAIN/);
+            expect(nativeSaid, 'the native-lane fee does not say it stays paid if the action is rejected')
+                .toMatch(/not refunded if rejected/i);
 
             const minerSats = await screenNetworkFeeSats(page);
             const projectedFeeSats = await projectedProtocolFeeSats(page);

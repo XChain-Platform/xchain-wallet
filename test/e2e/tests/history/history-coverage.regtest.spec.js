@@ -78,6 +78,9 @@
 // grouping half directly and is `test.fixme` for the reason stated on it.
 //
 // SCREEN FACTS worth more than the time they cost to find:
+//   - The search box, the date window and the Grouping mode control sit in
+//     the title bar's "History filters" menu, outside `main` and closed until
+//     its button is pressed (`openHistoryFilters` in fixtures/regtest.js).
 //   - The search box is `<input type="search">`, so its ARIA role is SEARCHBOX,
 //     not textbox. `getByRole('textbox', { name: 'Search history' })` matches
 //     nothing and, with no actionTimeout set, hangs for the whole test budget.
@@ -140,6 +143,10 @@ import {
     waitForValidAction,
     openFromAddress,
     approveConfirm,
+    closeHistoryFilters,
+    openHistoryFilters,
+    searchHistory,
+    setHistoryDateWindow,
 } from '../../fixtures/regtest.js';
 import { pickAssetByChainAndTick, waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
@@ -287,10 +294,7 @@ async function openHistoryWidened(page) {
 async function widenDateWindow(page) {
     const iso = (offsetDays) =>
         new Date(Date.now() + offsetDays * 86_400_000).toISOString().slice(0, 10);
-    await expect(fieldByLabel(page, 'Search history'), 'History did not render its filter bar')
-        .toBeVisible({ timeout: 30_000 });
-    await fieldByLabel(page, 'From date').fill(iso(-30));
-    await fieldByLabel(page, 'To date').fill(iso(2));
+    await setHistoryDateWindow(page, iso(-30), iso(2));
 }
 
 /** One row of ActionDetail's Details tab, found by the label that heads it. */
@@ -475,9 +479,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await page.getByRole('button', { name: 'Back to history' }).click();
             await widenDateWindow(page);
 
-            const search = fieldByLabel(page, 'Search history');
-
-            await search.fill('zzz-no-such-history-row-zzz');
+            await searchHistory(page, 'zzz-no-such-history-row-zzz');
             await expect(historyRows(page), 'a search that matches nothing still left rows on screen, '
                 + 'so the box is re-rendering rather than filtering')
                 .toHaveCount(0, { timeout: 15_000 });
@@ -485,20 +487,24 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             // By TXID, which is one of the few fields History.jsx flattens onto
             // the entry itself (`txHash`). Searching by destination or tick
             // matches nothing on this build; see the header.
-            await search.fill(sendTxid);
+            await searchHistory(page, sendTxid);
             await expect(historyRows(page), 'searching the send\'s own txid did not narrow the list to it')
                 .toHaveCount(1, { timeout: 15_000 });
             await expect(historyRowFor(page, REGTEST_CHAIN_ID, chainRow.action_index, own),
                 'the one surviving row is not the action that txid belongs to')
                 .toBeVisible();
 
-            await search.fill('');
+            await searchHistory(page, '');
             await expect(historyRows(page), 'clearing the search did not restore the full list')
                 .toHaveCount(baselineRows, { timeout: 15_000 });
         });
 
         await test.step('CLAIM 3: Grouped and Flat both render, and neither loses the row', async () => {
-            const modes = page.getByRole('radiogroup', { name: 'Grouping mode' });
+            // The Grouping mode control sits in the History filters panel; a
+            // click inside the panel leaves it open, and it is closed after
+            // each pick so the list below is what the row checks read.
+            const modes = page.getByRole('dialog', { name: 'History filters', exact: true })
+                .getByRole('radiogroup', { name: 'Grouping mode' });
             const grouped = modes.getByRole('radio', { name: 'Grouped' });
             const flat = modes.getByRole('radio', { name: 'Flat' });
             const row = historyRowFor(page, REGTEST_CHAIN_ID, chainRow.action_index, own);
@@ -506,13 +512,17 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             // Grouped is the persisted default for a wallet that has never
             // chosen (`readPersistedGroupingMode`), and this browser context is
             // fresh, so the screen should open there.
+            await openHistoryFilters(page);
             await expect(grouped, 'History did not open in its default Grouped mode')
                 .toHaveAttribute('aria-checked', 'true');
+            await closeHistoryFilters(page);
             await expect(row, 'Grouped mode does not show the send').toBeVisible();
 
+            await openHistoryFilters(page);
             await flat.click();
             await expect(flat, 'the Flat segment did not take').toHaveAttribute('aria-checked', 'true');
             await expect(grouped).toHaveAttribute('aria-checked', 'false');
+            await closeHistoryFilters(page);
             await expect(row, 'Flat mode dropped the send').toBeVisible();
             // A MINT with no ISSUE beside it and a SEND have nothing to collapse
             // under ANY grouping rule, so equal counts here is the correct
@@ -521,9 +531,11 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await expect(historyRows(page), 'Flat mode changed how many rows exist')
                 .toHaveCount(baselineRows);
 
+            await openHistoryFilters(page);
             await grouped.click();
             await expect(grouped, 'the Grouped segment did not take back')
                 .toHaveAttribute('aria-checked', 'true');
+            await closeHistoryFilters(page);
             await expect(row, 'coming back to Grouped mode lost the send').toBeVisible();
             await expect(historyRows(page), 'returning to Grouped changed how many rows exist')
                 .toHaveCount(baselineRows);

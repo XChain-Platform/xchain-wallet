@@ -118,7 +118,6 @@ import {
     PINNED_SDK,
     readOwnAddress,
     SDK_HAS_UNCONFIRMED,
-    searchForTx,
     waitForMempoolRow,
 } from '../../fixtures/pendingHistory.js';
 import {
@@ -135,6 +134,7 @@ import {
     waitForTokenBalance,
     waitForValidAction,
     openFromAddress,
+    searchHistory,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -281,7 +281,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
             // Exactly one row for this transaction, before anything confirms.
             // The baseline half of CLAIM 4: a count that starts at 1 and ends at
             // 1 is the only way to distinguish an upgrade from a duplicate.
-            await searchForTx(page, sendTxid);
+            await searchHistory(page, sendTxid);
             await expect(historyRows(page), 'searching the send\'s own txid did not narrow History '
                 + 'to exactly one pending row').toHaveCount(1, { timeout: 30_000 });
             await expect(pendingRowFor(page, sendTxid),
@@ -396,7 +396,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
 
             // Back to the LIST: the filter bar does not exist on the detail
             // page, and History re-mounts with its default window when we return.
-            await searchForTx(page, sendTxid);
+            await searchHistory(page, sendTxid);
 
             // The pending key is GONE, not merely outnumbered. This is the
             // assertion a duplicated row would fail: an "the confirmed row is

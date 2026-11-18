@@ -1237,6 +1237,63 @@ export async function searchMyTokens(page, query) {
     await closeListFilter(page, 'Filter tokens');
 }
 
+/** The accessible name History's title-bar filter menu and its panel share. */
+export const HISTORY_FILTERS = 'History filters';
+
+/**
+ * Opens History's title-bar filter menu and returns its panel, which holds
+ * the search box, the date window and the Grouping mode control. The menu
+ * sits outside `main`; a click inside the panel leaves it open.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<import('@playwright/test').Locator>}
+ */
+export async function openHistoryFilters(page) {
+    await expect(page.getByRole('button', { name: HISTORY_FILTERS, exact: true }),
+        'History did not render its filter menu').toBeVisible({ timeout: 60_000 });
+    const panel = await openListFilter(page, HISTORY_FILTERS);
+    await expect(fieldByLabel(panel, 'Search history'), 'History did not render its filter bar')
+        .toBeVisible({ timeout: 30_000 });
+    return panel;
+}
+
+/**
+ * Closes History's filter menu so the list below it takes clicks. The search,
+ * date window and grouping stay applied.
+ *
+ * @param {import('@playwright/test').Page} page
+ */
+export async function closeHistoryFilters(page) {
+    await closeListFilter(page, HISTORY_FILTERS);
+}
+
+/**
+ * Narrows History to `query` through the filter menu's search box, then
+ * closes the menu. An empty query clears the search.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} query  a txid, action, address, token or memo text
+ */
+export async function searchHistory(page, query) {
+    const panel = await openHistoryFilters(page);
+    await fieldByLabel(panel, 'Search history').fill(query);
+    await closeHistoryFilters(page);
+}
+
+/**
+ * Sets History's date window through the filter menu, then closes it.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} from  ISO date (YYYY-MM-DD)
+ * @param {string} to    ISO date (YYYY-MM-DD)
+ */
+export async function setHistoryDateWindow(page, from, to) {
+    const panel = await openHistoryFilters(page);
+    await fieldByLabel(panel, 'From date').fill(from);
+    await fieldByLabel(panel, 'To date').fill(to);
+    await closeHistoryFilters(page);
+}
+
 /**
  * Sets one of a list page's filter-menu selects (Status, Sort) to `option`.
  *
@@ -2432,6 +2489,36 @@ export async function unlockAfterReload(page, password) {
 }
 
 /**
+ * Moves the open Receive screen to `chainLabel` the one way Receive offers:
+ * the address picker behind the Address field's icon. Receive's Asset picker
+ * lists only the shown chain's coin and tokens, so it cannot change chain.
+ *
+ * The picker opens on the current chain. Its Network filter sits in the
+ * title bar's "Filter addresses" menu; the filter opens the full-screen
+ * network list, whose rows are coin FAMILIES ("Select Bitcoin", "Select
+ * Litecoin", "Select Dogecoin"), so a chain label names the row. Picking that
+ * chain's first address moves Receive to the chain before the address fills in.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} chainLabel  "Bitcoin", "Litecoin" or "Dogecoin"
+ */
+export async function chooseReceiveChain(page, chainLabel) {
+    await page.getByRole('button', { name: 'Choose receive address' }).first().click();
+
+    const panel = await openListFilter(page, 'Filter addresses');
+    const network = panel.getByRole('button', { name: /^Filter by network/ });
+    await expect(network, 'the address picker has no network filter').toBeVisible({ timeout: 30_000 });
+    await network.click();
+    await page.getByRole('dialog', { name: 'Network' })
+        .getByRole('button', { name: new RegExp(`^Select ${chainLabel}\\b`) }).first().click();
+    await closeListFilter(page, 'Filter addresses');
+
+    const first = page.getByRole('main').getByRole('button', { name: /^View address / }).first();
+    await expect(first, `the address picker lists no ${chainLabel} address`).toBeVisible({ timeout: 30_000 });
+    await first.click();
+}
+
+/**
  * Reads the wallet's own regtest receive address off the Receive screen, ON THE
  * CHAIN THIS RUN DRIVES.
  *
@@ -2467,19 +2554,7 @@ export async function readReceiveAddress(page) {
     await expect(field).toBeVisible({ timeout: 30_000 });
 
     if (!REGTEST_ADDRESS_RE.test(await field.inputValue())) {
-        await page.getByRole('button', { name: 'Choose receive address' }).first().click();
-
-        const filter = page.getByRole('button', { name: /^Filter by network/ });
-        await expect(filter, 'the address picker has no network filter').toBeVisible({ timeout: 30_000 });
-        await filter.click();
-        // The filter opens the full-screen network list. Its rows are coin
-        // FAMILIES ("Select Bitcoin" / "Select Litecoin" / "Select Dogecoin"),
-        // not network-qualified names, so a venue's chain label names the row.
-        await page.getByRole('dialog', { name: 'Network' })
-            .getByRole('button', { name: `Select ${REGTEST_CHAIN_LABEL}`, exact: true }).click();
-
-        await page.getByRole('list', { name: 'Addresses' })
-            .getByRole('button', { name: /^View address / }).first().click();
+        await chooseReceiveChain(page, REGTEST_CHAIN_LABEL);
     }
 
     await expect(field,
