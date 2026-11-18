@@ -66,14 +66,15 @@ async function checkControls(page, pass) {
 
     await test.step(`${pass} / History chips`, async () => {
         await gotoSection(page, 'History');
-        const presets = main.getByRole('group', { name: 'Date range presets' });
+        // The date presets and the fiat chip sit in the History filters panel.
+        await page.getByRole('button', { name: 'History filters' }).click();
+        const presets = page.getByRole('group', { name: 'Date range presets' });
         await expectVisibleEdge('7 days preset', presets.getByRole('button', { name: '7 days', exact: true }));
         const thirty = presets.getByRole('button', { name: '30 days', exact: true });
         await expect(thirty).toHaveAttribute('aria-pressed', 'true');
         await expectVisibleEdge('pressed 30 days preset', thirty, { pressed: true });
         await expectVisibleEdge('All dates preset', presets.getByRole('button', { name: 'All dates', exact: true }));
-        await expectVisibleEdge('More filters chip', main.getByRole('button', { name: 'More filters' }));
-        await expectVisibleEdge('fiat chip', main.getByRole('button', { name: /^Show fiat:/ }));
+        await expectVisibleEdge('fiat chip', page.getByRole('button', { name: /^(?:Show fiat|Fiat):/ }));
     });
 
     await test.step(`${pass} / NetworkFilter trigger on Contacts`, async () => {
