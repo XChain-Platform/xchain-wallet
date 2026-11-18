@@ -77,8 +77,7 @@ const messages = {
     'confirmStandard.warning.restricted': 'Only some of the checks could run for this action.',
     // A blue note, not a warning: the network approved, and the only checks
     // left are ones it makes when the action settles (operator 2026-11-17).
-    // The title stays off "Checked", which belongs to the full approval.
-    'confirmStandard.settleChecks.title': 'Limits Checked at Settlement',
+    'confirmStandard.settleChecks.title': 'Checked When It Settles',
     'confirmStandard.settleChecks.body': "The network approved this action. Some of this token's limits are checked when it settles.",
     // One short line, never a block: the status notice's title on its own.
     'confirmStandard.warning.notCheckedLine': 'Not checked with the network, so it may still fail.',

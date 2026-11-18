@@ -597,7 +597,7 @@ describe('Confirm Standard status notice and short warning', () => {
         expect(notices[0].getAttribute('data-state')).toBe('settleChecks');
         expect(notices[0].getAttribute('data-tone')).toBe('info');
         expect(notices[0].getAttribute('role')).not.toBe('alert');
-        expect(notices[0].textContent).toContain('Limits Checked at Settlement');
+        expect(notices[0].textContent).toContain('Checked When It Settles');
         expect(notices[0].textContent).toContain("Some of this token's limits are checked when it settles.");
         expect(notices[0].textContent).not.toContain('Only partly checked');
         // Never the full approval's green claim.
