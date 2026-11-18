@@ -51,21 +51,21 @@ const sizeKey = (v) => `${v.width}x${v.height}${v.fontScale ? `-text${v.fontScal
 
 /** Palette destinations that open a form (or a form-bearing list). */
 const PALETTE_ROUTES = [
-    'Add to an existing token', 'Burn supply', 'Move balances, ownerships',
-    'Post a message on-chain', 'Price a token in a currency', 'Sell a token at a fixed rate',
-    'Distribute to holders', 'Send to many recipients', 'Publish an address or token list',
-    'Public or token-gated on-chain file', 'Route this address', 'Send a token to another chain',
-    'Choose which chains a token', 'Author any action by hand', 'Trade one token for another',
-    'Trade at the price you set', 'Settle a matched order', 'Swap across chains',
-    'Limit order across chains', 'Check a signed message',
-    'Guided issuance wizard', 'Your saved addresses', 'Manage your addresses', 'Your staking positions',
-    'Polls and voting', 'Browse prediction markets', 'Smart contracts', 'Encrypted inbox', 'Markets and orders',
-    'Address and token lists', 'Coin payments you still owe', 'Find open dispensers',
+    'Mint supply', 'Destroy tokens', 'Sweep address',
+    'Broadcast', 'My oracle', 'Create dispenser',
+    'Pay a dividend', 'Airdrop', 'Create a list',
+    'Publish file', 'Bind a controller', 'Move across chains',
+    'Bridge settings', 'Advanced action', 'Swap tokens',
+    'Create order', 'Pay an order', 'Cross-chain swap',
+    'Cross-chain order', 'Verify signature',
+    'Create a token', 'Contacts', 'Addresses', 'Staking',
+    'Governance polls', 'Prediction markets', 'Contracts', 'Messaging', 'DEX',
+    'Lists', 'Payments due', 'Browse dispensers',
 ];
 
 const SETTINGS_SECTIONS = [
-    'This wallet', 'Accounts & addresses', 'Display', 'Keyboard', 'Privacy', 'Safety',
-    'Backup', 'Fees', 'Network & endpoints', 'Connected sites', 'Developer', 'About',
+    'About', 'Wallets', 'Security', 'Backup and Recovery', 'Privacy and Sites',
+    'Appearance', 'Notifications', 'Network and Fees', 'Advanced',
 ];
 
 async function palette(page, destination) {
@@ -158,6 +158,11 @@ function formFaults() {
 
     // A TokenField trigger is a field, not a button.
     const tokenTrigger = (el) => el.tagName === 'BUTTON' && sharedClass(el, 'control') && el.querySelector('[class*="caret"]');
+    // The Quick Give/Get cards (G31) are their own ruled design: a large
+    // amount, an asset chip beside it and a round flip button between the
+    // cards. They are not Form Standard fields and buttons, so the walk skips
+    // them; giveGet unit tests pin their geometry.
+    const giveGetQuickPart = (el) => ['bigAmount', 'assetChip', 'flip'].some((part) => sharedClass(el, part));
     const inFieldSizes = [];
     const styles = { labels: [], fields: [] };
     const faults = [];
@@ -165,7 +170,8 @@ function formFaults() {
 
     // Fields, and the box that draws each one's border (itself or a wrapper).
     const fieldSel = 'input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=range]):not([type=file]):not([type=color]):not([type=button]):not([type=submit]), select, textarea';
-    const fields = [...document.querySelectorAll(fieldSel), ...[...document.querySelectorAll('button')].filter(tokenTrigger)].filter(visible);
+    const fields = [...document.querySelectorAll(fieldSel), ...[...document.querySelectorAll('button')].filter(tokenTrigger)]
+        .filter((el) => visible(el) && !giveGetQuickPart(el));
     const boxOf = (el) => {
         if (borderOf(el)) return el;
         for (let a = el.parentElement, depth = 0; a && depth < 3; a = a.parentElement, depth += 1) {
@@ -215,7 +221,7 @@ function formFaults() {
     // Page-header actions and the shared notice's own action are measured by
     // their own specs.
     const buttons = [...document.querySelectorAll('button, [role="button"]')].filter((el) => visible(el)
-        && !el.closest('header, [data-variant]') && !tokenTrigger(el));
+        && !el.closest('header, [data-variant]') && !tokenTrigger(el) && !giveGetQuickPart(el));
     for (const btn of buttons) {
         const label = (btn.getAttribute('aria-label') || btn.innerText || '').trim();
         if (/^paste\b/i.test(label)) {
@@ -332,7 +338,10 @@ function formFaults() {
             }
             // The asset and market pickers draw a Button as a card (a design call).
             // Import FreeWallet wears the FreeWallet character's colour (U69).
-            const asCard = sharedClass(btn, 'assetCard') || sharedClass(btn, 'marketSelector') || sharedClass(btn, 'freeWalletButton');
+            // The blue chart hero's icon actions (the balance eye, the DEX
+            // watchlist star and reverse pair) wear the hero's `eye` style.
+            const asCard = sharedClass(btn, 'assetCard') || sharedClass(btn, 'marketSelector') || sharedClass(btn, 'freeWalletButton')
+                || sharedClass(btn, 'eye');
             // Connect Hardware Wallet is slate #334155, as the welcome picture draws it (hw-1, 2026-11-15).
             const hardwareSlate = sharedClass(btn, 'hardwareButton');
             if (hardwareSlate && cs.backgroundColor !== 'rgb(51, 65, 85)') {
@@ -399,11 +408,10 @@ async function walk(page, size, out) {
         if (!(await palette(page, dest))) { results.push({ route: dest, skipped: true, faults: [], counts: {} }); continue; }
         await record(dest);
     }
-    // The token entry opens the template wizard (Guided issuance wizard above),
-    // and the full Issue form is its Custom template (ruling U79).
+    // The Issue Token entry opens the full Issue form; the template is now an
+    // optional Select template field at its top, not a wizard step.
     for (let i = 0; i < 3; i += 1) await page.keyboard.press('Escape').catch(() => {});
-    if (await palette(page, 'Choose a token template')) {
-        await page.getByRole('main').getByRole('button', { name: /^Custom/ }).click();
+    if (await palette(page, 'Issue Token')) {
         await expect(page.getByRole('form', { name: 'Issue Token', exact: true })).toBeVisible();
         await record('Issue token');
     } else {
@@ -415,7 +423,7 @@ async function walk(page, size, out) {
         await gotoSection(page, section);
         await record(section);
     }
-    for (const [dest, add] of [['Your saved addresses', 'Add contact'], ['Manage your addresses', 'Add or import address']]) {
+    for (const [dest, add] of [['Contacts', 'Add contact'], ['Addresses', 'Add or import address']]) {
         await palette(page, dest);
         const button = page.getByRole('button', { name: add, exact: true }).first();
         if (await button.count() === 0) continue;

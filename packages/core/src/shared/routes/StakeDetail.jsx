@@ -51,6 +51,8 @@ import { useBalancesHidden } from '../hooks/useBalancesHidden.js';
 import { useTickFiatRate } from '../hooks/useFiatRate.js';
 import { readFailureMessage } from '../utils/readFailureMessage.js';
 import { neutralizeControlText } from '../utils/textHardening.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
 import tokenDetailStyles from './TokenDetail.module.css';
 import local from './StakeDetail.module.css';
 
@@ -511,7 +513,7 @@ export function StakeDetail({
             <div className={`${homeTabsStyles.heroStack} ${homeTabsStyles.heroStackWithChart}`}>
                 <section className={heroStyles.hero} aria-labelledby={captionId}>
                     <span id={captionId} className={`${heroStyles.label} ${local.heroTitle}`} data-stake-hero-line="title">
-                        Staked + rewards
+                        {t('routes.stakeDetail.stakedWithRewards')}
                     </span>
                     <div className={heroStyles.meta} role="group" aria-label="Stake summary" data-stake-hero-line="change">
                         <span className={heroStyles.metaLeft}>
@@ -557,7 +559,7 @@ export function StakeDetail({
                                     <Sparkline
                                         series={series.staked}
                                         secondarySeries={series.stakedWithRewards}
-                                        secondaryLabel="Staked + rewards"
+                                        secondaryLabel={t('routes.stakeDetail.stakedWithRewards')}
                                         secondaryDashed
                                         stepped
                                         height="100%"

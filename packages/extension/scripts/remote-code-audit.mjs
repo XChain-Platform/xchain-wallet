@@ -115,6 +115,17 @@ const ALLOWED = [
         signature: 'nondeterministic across validators',
         why: 'the contract VM\'s determinism-linter message catalogue, which names `import()` in prose to explain why it rejects it. A rule that bans dynamic import, not one that uses it.',
     },
+    // Reviewed 2026-11-17 for the v1.0.0 release.
+    {
+        pattern: 'eval-call',
+        signature: 'eval(a, x, brp = false) { checkLength(a); const idx = findOmegaIndex(',
+        why: '@noble/curves\' Lagrange polynomial helper declares an object method named `eval`; it evaluates a polynomial over a field and never runs JavaScript.',
+    },
+    {
+        pattern: 'dynamic-import',
+        signature: '// After a private key import (operator ruling 2026-11-16)',
+        why: 'a source comment in the English components catalogue that the unminified bundle keeps; the word "import" before a parenthesis is prose, not a call.',
+    },
 ];
 
 function walk(dir, out = []) {

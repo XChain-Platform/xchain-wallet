@@ -17,19 +17,10 @@ const VIEWPORTS = [
     { name: 'desktop', width: 1280, height: 800 },
 ];
 
-// The page header holds only the title and Back on these screens: their
-// create or refresh action sits in the content, in the ListPage actions row,
-// or in the EmptyState when the list is empty (the demo wallet has no lists).
 const CONTENT_ACTION_ROUTES = [
-    { paletteName: 'Messaging', heading: 'Messaging', actionName: 'New Conversation' },
-    { paletteName: 'Addresses', heading: 'Addresses', actionName: 'Add or import address' },
-    { paletteName: 'Staking', heading: 'Staking', actionName: 'New Stake' },
-    // An empty list offers Create from its empty state and a list with rows offers New from the actions row.
-    { paletteName: 'My orders', heading: 'My orders', actionName: /^(Create an order|New order)$/ },
-    { paletteName: 'My swaps', heading: 'My swaps', actionName: /^(Create a swap|New swap)$/ },
-    // Rename forms name their submit (U63).
-    { open: 'wallet-rename', heading: 'Rename wallet', actionName: 'Rename wallet' },
-    { open: 'account-rename', heading: 'Rename account', actionName: 'Rename account' },
+    // The edit forms, opened from each details page, submit with Save Changes.
+    { open: 'wallet-rename', heading: 'Edit Wallet', actionName: 'Save Changes' },
+    { open: 'account-rename', heading: 'Edit Account', actionName: 'Save Changes' },
 ];
 
 // List pages (G95): the filter icon, then the create plus at the far right.
@@ -37,10 +28,24 @@ const HEADER_ACTION_ROUTES = [
     { paletteName: 'Dispensers', heading: 'Dispensers', actionName: 'New dispenser' },
     { paletteName: 'My tokens', heading: 'My tokens', actionName: 'Create token' },
     { paletteName: 'Contacts', heading: 'Contacts', actionName: 'Add contact' },
+    // On wide layouts a thread is open and New message sits in its More menu.
+    { paletteName: 'Messaging', heading: 'Messaging', actionName: /^(New message|More)$/i },
+    { paletteName: 'Addresses', heading: 'Addresses', actionName: 'Add or import address' },
+    { paletteName: 'Staking', heading: 'Staking', actionName: 'New Stake' },
+    // The empty state is text only; the title bar's plus creates (MyOrdersView, MySwapsView).
+    { paletteName: 'My orders', heading: 'My orders', actionName: 'New order' },
+    { paletteName: 'My swaps', heading: 'My swaps', actionName: 'New swap' },
     { paletteName: 'Lists', heading: 'My Lists', actionName: 'Create list' },
     // History: the filter, then the ⋯ menu (Export and Refresh) at the far right.
     { paletteName: 'History', heading: 'History', actionName: 'More actions' },
 ];
+
+// Titles and labels are Title Case (G50); match the whole name in any case.
+function whole(name) {
+    if (typeof name !== 'string') return name;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, (ch) => '\\' + ch);
+    return new RegExp('^' + escaped + '$', 'i');
+}
 
 async function openPaletteRoute(page, route) {
     // Shortcuts are ignored while a text field has focus (a rename form
@@ -59,23 +64,29 @@ async function openPaletteRoute(page, route) {
 async function openRoute(page, route) {
     if (route.open === 'wallet-rename') {
         await openWalletPicker(page);
-        await expect(page.getByRole('heading', { level: 1, name: 'Wallets' })).toBeVisible();
-        await page.getByRole('button', { name: 'Manage Wallet', exact: true }).click();
-        await expect(page.getByRole('heading', { level: 1, name: 'Wallet details' })).toBeVisible();
-        await page.getByRole('main').getByRole('button', { name: 'Rename wallet' }).click();
+        await expect(page.getByRole('heading', { level: 1, name: /^(My )?Wallets$/ })).toBeVisible();
+        // A wallet row opens that wallet's details page.
+        await page.getByRole('main').getByRole('list', { name: /Wallets$/ }).getByRole('button').first().click();
+        await expect(page.getByRole('heading', { level: 1, name: /^Wallet details$/i })).toBeVisible();
+        await page.getByRole('main').getByRole('button', { name: /^Edit wallet\b/ }).click();
         return;
     }
 
     if (route.open === 'account-rename') {
         await openPaletteRoute(page, { paletteName: 'Settings' });
         // Settings reopens on the sub-page the wallet rename left open.
-        const back = page.getByRole('button', { name: 'Back to settings' });
-        if (await back.isVisible().catch(() => false)) await back.click();
-        // Switching account lives on the This wallet page.
-        await page.getByRole('main').getByRole('button', { name: /^This wallet\b/ }).click();
-        await page.getByRole('button', { name: 'Switch account…' }).click();
-        await expect(page.getByRole('heading', { level: 1, name: 'Accounts' })).toBeVisible();
-        await page.getByRole('main').getByRole('button', { name: /^Rename\b/ }).first().click();
+        const landing = page.getByRole('heading', { level: 1, name: 'Settings', exact: true });
+        for (let i = 0; i < 4 && !(await landing.isVisible().catch(() => false)); i += 1) {
+            await page.getByRole('banner').getByRole('button', { name: /^Back\b/ }).first().click();
+        }
+        await expect(landing).toBeVisible();
+        // Accounts live on the Wallets group page, as My Accounts; an account
+        // row opens its details, which offer Edit account.
+        await page.getByRole('main').getByRole('button', { name: /^Wallets\b/ }).click();
+        await page.getByRole('main').getByRole('button', { name: /^My Accounts\b/ }).click();
+        await expect(page.getByRole('heading', { level: 1, name: /^(My )?Accounts$/ })).toBeVisible();
+        await page.getByRole('main').getByRole('list').getByRole('button').first().click();
+        await page.getByRole('main').getByRole('button', { name: /^Edit account\b/ }).click();
         return;
     }
 
@@ -85,15 +96,14 @@ async function openRoute(page, route) {
 async function expectContentActionIcon(page, route, viewport) {
     const heading = page.getByRole('heading', {
         level: 1,
-        name: route.heading,
-        exact: true,
+        name: whole(route.heading),
     });
     await expect(heading).toBeVisible();
 
     const pageHeader = heading.locator('..').locator('..');
     await expect(pageHeader.locator(':scope > span:last-child button')).toHaveCount(0);
 
-    const action = page.getByRole('main').getByRole('button', { name: route.actionName, exact: true });
+    const action = page.getByRole('main').getByRole('button', { name: whole(route.actionName) });
     await expect(action).toHaveCount(1);
     await expect(action).toBeVisible();
 
@@ -110,17 +120,16 @@ async function expectContentActionIcon(page, route, viewport) {
 async function expectHeaderActionIcon(page, route, viewport) {
     const heading = page.getByRole('heading', {
         level: 1,
-        name: route.heading,
-        exact: true,
+        name: whole(route.heading),
     });
     await expect(heading).toBeVisible();
 
     const pageHeader = heading.locator('..').locator('..');
     // The plus sits at the far right; a filter icon may come before it.
     const trailingAction = pageHeader.locator(':scope > span:last-child button');
-    await expect(trailingAction.last()).toHaveAccessibleName(route.actionName);
+    await expect(trailingAction.last()).toHaveAccessibleName(whole(route.actionName));
 
-    const action = pageHeader.getByRole('button', { name: route.actionName, exact: true });
+    const action = pageHeader.getByRole('button', { name: whole(route.actionName) });
     await expect(action).toHaveCount(1);
     await expect(action).toBeVisible();
     await expect(page.getByRole('main').getByRole('button', {

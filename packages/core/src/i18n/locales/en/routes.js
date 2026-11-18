@@ -16,6 +16,9 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     // Copy moved out of JSX literals by the i18n sweep.
+    'routes.contractsList.myContracts': 'My Contracts',
+    'routes.dispensersList.myDispensers': 'My Dispensers',
+    'routes.stakeDetail.stakedWithRewards': 'Staked + rewards',
     'routes.contractDetail.key': 'Key',
     'routes.marketsList.loading': 'Loading markets',
     'routes.myLists.loading': 'Loading lists',

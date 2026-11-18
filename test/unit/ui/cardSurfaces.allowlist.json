@@ -60,6 +60,7 @@
         "packages/core/src/shared/routes/DispenserDetail.module.css | .stepperField": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/components/outcomeDetail/OutcomeDetail.module.css | .pickCheck": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/components/giveGet/GiveGet.module.css | .card": "Approved layout from the screen walk.",
+        "packages/core/src/shared/components/giveGet/GiveGet.module.css | .bigAmount": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/BetFeedDetail.module.css | .payout": "Approved layout from the screen walk.",
         "packages/core/src/shared/routes/CreateBetFeedForm.module.css | .addOutcome.addOutcome": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",
         "packages/core/src/shared/routes/MessagingInbox.module.css | .composerInput": "A control (button, field, toggle or picker trigger), not a card; controls keep the control border and radius.",

@@ -303,6 +303,11 @@ export function LanguagePage({ onDone, onBack, backLabel, variant, nested = true
         const pick = ++languagePick;
         setSaveError(null);
         if (next === current) {
+            // A lazy request for another row may still be in flight. Reapply
+            // the saved choice so this newer pick cancels that request and
+            // keeps the live locale aligned with the row the user tapped.
+            if (availableLocales().includes(next)) await setLocale(next);
+            if (pick !== languagePick) return;
             onDone?.();
             return;
         }

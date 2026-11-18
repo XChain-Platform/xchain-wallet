@@ -23,6 +23,8 @@ import { useChainIdsWithAction } from '../hooks/useSupportedChains.js';
 import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { contractDisplayLabel, contractMetaOf } from './contractResponseShape.js';
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/routes.js';
 import styles from './ActionsMenu.module.css';
 import contractStyles from './ContractScreens.module.css';
 
@@ -539,7 +541,7 @@ export function ContractsList({
                 aria-label="Contract views"
                 items={[
                     { id: 'all', label: <span className={contractStyles.tabLabel}><Icon.GridIcon />All</span> },
-                    { id: 'mine', label: <span className={contractStyles.tabLabel}><Icon.UserIcon />My Contracts</span> },
+                    { id: 'mine', label: <span className={contractStyles.tabLabel}><Icon.UserIcon />{t('routes.contractsList.myContracts')}</span> },
                     { id: 'interactions', label: <span className={contractStyles.tabLabel}><Icon.DollarIcon />Interactions</span> },
                 ]}
                 value={view}

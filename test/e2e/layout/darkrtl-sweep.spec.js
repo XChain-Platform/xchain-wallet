@@ -156,8 +156,8 @@ function measureRanges(list) {
     };
 }
 
-async function expectCompactCentredRanges(page, where) {
-    const list = page.getByRole('main').getByRole('tablist', { name: /Chart range/ }).first();
+async function expectCompactCentredRanges(page, where, root = page.getByRole('main')) {
+    const list = root.getByRole('tablist', { name: /Chart range/ }).first();
     await expect(list, `${where}: the chart range toggle shows`).toBeVisible({ timeout: 30_000 });
     const m = await list.evaluate(measureRanges);
     expect(m.panel, `${where}: the range tabs control a chart panel`).not.toBeNull();
@@ -186,8 +186,15 @@ test('chart range toggle is centred and compact', async ({ page }, testInfo) => 
 
     const balances = page.getByRole('main').getByRole('list', { name: /Balances/ }).first();
     await balances.getByRole('listitem').first().getByRole('button').first().click();
-    await expect(balances, `${mode}: the balance row opens token detail`).toBeHidden();
-    await expectCompactCentredRanges(page, `${mode} token detail`);
+    const wideHome = page.locator('[data-home-layout="wide"]');
+    let detailRoot = page.getByRole('main');
+    if (await wideHome.isVisible().catch(() => false)) {
+        await expect(balances, `${mode}: wide Home keeps Balances beside token detail`).toBeVisible();
+        detailRoot = wideHome.locator('[data-home-detail]');
+    } else {
+        await expect(balances, `${mode}: narrow Home opens token detail`).toBeHidden();
+    }
+    await expectCompactCentredRanges(page, `${mode} token detail`, detailRoot);
 });
 
 test('dark sweep', async ({ page }, testInfo) => {
@@ -206,6 +213,11 @@ test('dark sweep', async ({ page }, testInfo) => {
 test('rtl sweep', async ({ page }, testInfo) => {
     test.skip(testInfo.project.metadata.mode !== 'rtl');
     test.setTimeout(60 * 60 * 1000);
+    await page.route('https://downloads.xchain.io/wallet/releases.json', (route) => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ latest: '0.0.0', channels: {} }),
+    }));
     const outDir = join(OUT_ROOT, testInfo.project.name);
     const sweep = createSweep(page, {
         venue: testInfo.project.name,

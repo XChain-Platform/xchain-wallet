@@ -83,6 +83,9 @@ describe('Give/Get asset chip with a long ticker', () => {
         // The amount beside the chip yields its room rather than pushing the chip out.
         const amount = rule('.bigAmount');
         expect(amount['min-width']).toBe('0');
+        expect(amount.background).toBe('var(--xc-surface)');
+        expect(amount.border).toBe('1px solid var(--xc-control-border)');
+        expect(amount['border-radius']).toBe('var(--xc-control-radius)');
         expect(rule('.cardMid')['min-width']).toBe('0');
     });
 });

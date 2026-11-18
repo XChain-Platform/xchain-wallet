@@ -24,7 +24,6 @@ import {
     unlockedShell,
 } from '../../fixtures/wallet.js';
 import { enterDemoWallet } from '../../fixtures/responsive.js';
-import { expectDropdownValue, pickOption, rapidPicks } from '../../fixtures/pickOption.js';
 
 const FAMILY = process.env.PROBE_FAMILY || '';
 const PSEUDO_CHUNK = '**/locales/pseudo-rtl/**';
@@ -32,8 +31,38 @@ const RAW_KEY = /\b(?:settings|common|nav|home|receive|send|shell|errors|locked|
 
 test.use({ viewport: { width: 360, height: 800 } });
 
-function languageSelect(page) {
-    return page.getByRole('combobox', { name: /^‏?⟦?Language⟧?$/ });
+function languageList(page) {
+    return page.locator('[data-settings-choice-list]');
+}
+
+function languageChoice(page, code) {
+    return languageList(page).locator(`[data-settings-choice="${code}"] button`);
+}
+
+async function expectSelectedLanguage(page, code) {
+    await expect(languageChoice(page, code)).toHaveAttribute('aria-current', 'true');
+}
+
+async function openLanguageFromAppearance(page) {
+    await page.getByRole('main').getByRole('button', { name: /Language/ }).click();
+    await expect(languageList(page)).toBeVisible();
+}
+
+async function pickLanguage(page, code) {
+    await languageChoice(page, code).click();
+    await expect(languageList(page)).toBeHidden();
+}
+
+async function raceLanguagePicks(page, codes) {
+    await languageList(page).evaluate((list, picks) => {
+        const choices = new Map([...list.querySelectorAll('[data-settings-choice]')]
+            .map((item) => [item.getAttribute('data-settings-choice'), item.querySelector('button')]));
+        for (const code of picks) {
+            const button = choices.get(code);
+            if (!button) throw new Error(`Language choice ${code} is missing`);
+            button.click();
+        }
+    }, codes);
 }
 
 async function settle(page) {
@@ -56,7 +85,7 @@ async function openLanguageWithDeveloperMode(page) {
     // Language is a row on the Appearance group page.
     await page.getByRole('main').getByRole('button', { name: /^Appearance\b/ }).click();
     await page.getByRole('main').getByRole('button', { name: /^Language\b/ }).click();
-    await expect(languageSelect(page)).toBeVisible();
+    await expect(languageList(page)).toBeVisible();
 }
 
 /** Root metadata, visible stale or raw strings, and the cached language. */
@@ -135,60 +164,62 @@ test.describe('race', () => {
         test.setTimeout(240_000);
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
         await openLanguageWithDeveloperMode(page);
-        const select = languageSelect(page);
 
-        // First pass: the pseudo chunk is still cold, so the middle pick is async.
+        // First pass: dispatch the choice rows in one task while the pseudo
+        // chunk is cold. The page may return, but the newest row still wins.
         const started = Date.now();
-        await rapidPicks(select, ['en', 'pseudo-rtl', 'en']);
+        await raceLanguagePicks(page, ['en', 'pseudo-rtl', 'en']);
         expect(Date.now() - started).toBeLessThan(100);
         await settle(page);
         await page.waitForLoadState('networkidle');
         let s = await expectLocale(page, 'en', 'cold chunk race');
+        await openLanguageFromAppearance(page);
+        await expectSelectedLanguage(page, 'en');
 
         // Warm the chunk, then race again with every pick synchronous.
-        await pickOption(select, 'pseudo-rtl');
+        await pickLanguage(page, 'pseudo-rtl');
         await expectLocale(page, 'pseudo-rtl', 'warm pick');
-        await rapidPicks(languageSelect(page), ['en', 'pseudo-rtl', 'en']);
+        await openLanguageFromAppearance(page);
+        await expectSelectedLanguage(page, 'pseudo-rtl');
+        await raceLanguagePicks(page, ['en', 'pseudo-rtl', 'en']);
         s = await expectLocale(page, 'en', 'warm chunk race');
         await expect.poll(async () => (await snapshot(page)).cached).toBe('en');
 
         // Ending on the RTL pick instead.
-        await rapidPicks(languageSelect(page), ['pseudo-rtl', 'en', 'pseudo-rtl']);
+        await openLanguageFromAppearance(page);
+        await expectSelectedLanguage(page, 'en');
+        await raceLanguagePicks(page, ['pseudo-rtl', 'en', 'pseudo-rtl']);
         await expectLocale(page, 'pseudo-rtl', 'race ending on RTL');
         await expect.poll(async () => (await snapshot(page)).cached).toBe('pseudo-rtl');
-        await expectDropdownValue(languageSelect(page), 'pseudo-rtl');
+        await openLanguageFromAppearance(page);
+        await expectSelectedLanguage(page, 'pseudo-rtl');
 
         await reloadAndOpen(page);
         s = await expectLocale(page, 'pseudo-rtl', 'after reload');
         expect(s.cached).toBe('pseudo-rtl');
     });
 
-    test('double-click and repeat picks of one language keep it', async ({ page }) => {
+    test('repeated list picks of one language keep it', async ({ page }) => {
         test.setTimeout(240_000);
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
         await openLanguageWithDeveloperMode(page);
-        const select = languageSelect(page);
-        await select.dblclick();
-        await page.keyboard.press('Escape');
-        await pickOption(select, 'pseudo-rtl');
-        await pickOption(languageSelect(page), 'pseudo-rtl');
-        await rapidPicks(languageSelect(page), Array(5).fill('pseudo-rtl'));
+        await raceLanguagePicks(page, Array(5).fill('pseudo-rtl'));
         await expectLocale(page, 'pseudo-rtl', 'repeat RTL picks');
         await expect.poll(async () => (await snapshot(page)).cached).toBe('pseudo-rtl');
-        await languageSelect(page).dblclick();
-        await page.keyboard.press('Escape');
-        await pickOption(languageSelect(page), 'en');
-        await pickOption(languageSelect(page), 'en');
+        await openLanguageFromAppearance(page);
+        await expectSelectedLanguage(page, 'pseudo-rtl');
+        await raceLanguagePicks(page, Array(5).fill('en'));
         await expectLocale(page, 'en', 'repeat English picks');
         await expect.poll(async () => (await snapshot(page)).cached).toBe('en');
-        await expectDropdownValue(languageSelect(page), 'en');
+        await openLanguageFromAppearance(page);
+        await expectSelectedLanguage(page, 'en');
     });
 
     test('two tabs of one context end on the last pick', async ({ page, context }) => {
         test.setTimeout(300_000);
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
         await openLanguageWithDeveloperMode(page);
-        await pickOption(languageSelect(page), 'pseudo-rtl');
+        await pickLanguage(page, 'pseudo-rtl');
         await expectLocale(page, 'pseudo-rtl', 'tab one picks RTL');
 
         const second = await context.newPage();
@@ -201,7 +232,8 @@ test.describe('race', () => {
         test.info().annotations.push({ type: 'tab-two', description: secondUnlocked ? 'unlocked' : 'locked' });
 
         // Tab one switches back last; a reload of either tab shows that pick.
-        await pickOption(languageSelect(page), 'en');
+        await openLanguageFromAppearance(page);
+        await pickLanguage(page, 'en');
         await expectLocale(page, 'en', 'tab one picks English');
         await expect.poll(async () => (await snapshot(page)).cached).toBe('en');
         await reloadAndOpen(second);
@@ -225,16 +257,16 @@ test.describe('network', () => {
             if (block) return route.fulfill({ status: 404, body: 'missing' });
             return route.continue();
         });
-        await pickOption(languageSelect(page), 'pseudo-rtl');
+        await languageChoice(page, 'pseudo-rtl').click();
         await expect.poll(() => requests).toBeGreaterThan(0);
         await settle(page);
         await expectLocale(page, 'en', 'after 404');
-        await expectDropdownValue(languageSelect(page), 'en');
+        await expectSelectedLanguage(page, 'en');
         expect((await snapshot(page)).cached).toBe('en');
 
         block = false;
         const before = requests;
-        await pickOption(languageSelect(page), 'pseudo-rtl');
+        await languageChoice(page, 'pseudo-rtl').click();
         await expect.poll(() => requests, {
             message: 'the retry after a 404 requests the locale chunk again',
             timeout: 15_000,
@@ -254,18 +286,18 @@ test.describe('network', () => {
             await route.continue().catch(() => {});
         });
 
-        // Slow chunk, then English before it lands: English must stay.
-        await pickOption(languageSelect(page), 'pseudo-rtl');
+        // Slow chunk, then the English row in the same task: English must stay.
+        await raceLanguagePicks(page, ['pseudo-rtl', 'en']);
         await expect.poll(() => delayed).toBeGreaterThan(0);
         await expectLocale(page, 'en', 'while the chunk is delayed');
-        await pickOption(languageSelect(page), 'en');
         await page.waitForLoadState('networkidle');
         await expect.poll(() => page.evaluate(() => document.documentElement.dir), { timeout: 20_000 }).toBe('ltr');
         await expectLocale(page, 'en', 'after the delayed chunk lands behind a newer pick');
         expect((await snapshot(page)).cached).toBe('en');
 
         // Slow chunk with no newer pick: it applies when it lands.
-        await pickOption(languageSelect(page), 'pseudo-rtl');
+        await openLanguageFromAppearance(page);
+        await pickLanguage(page, 'pseudo-rtl');
         await expect.poll(async () => (await snapshot(page)).dir, { timeout: 20_000 }).toBe('rtl');
         await expectLocale(page, 'pseudo-rtl', 'after the delayed chunk lands');
         await expect.poll(async () => (await snapshot(page)).cached).toBe('pseudo-rtl');
@@ -282,15 +314,15 @@ test.describe('network', () => {
             return offline ? route.abort('internetdisconnected') : route.continue();
         });
         await context.setOffline(true);
-        await pickOption(languageSelect(page), 'pseudo-rtl');
+        await languageChoice(page, 'pseudo-rtl').click();
         await settle(page);
         await expectLocale(page, 'en', 'offline pick');
-        await expectDropdownValue(languageSelect(page), 'en');
+        await expectSelectedLanguage(page, 'en');
 
         await context.setOffline(false);
         offline = false;
         const before = requests;
-        await pickOption(languageSelect(page), 'pseudo-rtl');
+        await languageChoice(page, 'pseudo-rtl').click();
         await expect.poll(() => requests, {
             message: 'the pick after reconnect requests the locale chunk again',
             timeout: 15_000,
@@ -308,7 +340,7 @@ test.describe('lifecycle', () => {
         await watchRawKeys(page);
         await createWallet(page);
         await openLanguageWithDeveloperMode(page);
-        await pickOption(languageSelect(page), 'pseudo-rtl');
+        await pickLanguage(page, 'pseudo-rtl');
         await expectLocale(page, 'pseudo-rtl', 'picked');
         await page.evaluate(() => {
             window.dispatchEvent(new CustomEvent('xchain:native-font-scale', { detail: { fontScale: 1.5 } }));
@@ -328,8 +360,10 @@ test.describe('lifecycle', () => {
         await expectLocale(page, 'pseudo-rtl', 'hidden then visible');
         expect(await rootFont()).toBeCloseTo(24, 1);
 
-        // Lock and unlock.
-        await page.getByRole('button', { name: /^‏?⟦?Lock( wallet)?⟧?$/ }).first().click();
+        // Lock and unlock. At phone width Lock is the wallet menu header's
+        // icon action (U98), not a shell control.
+        await page.getByRole('button', { name: /^‏?⟦?Open menu⟧?$/ }).first().click();
+        await page.getByRole('dialog').getByRole('button', { name: /^‏?⟦?Lock( wallet)?⟧?$/ }).first().click();
         const unlock = page.getByRole('button', { name: /Unlock Wallet/ });
         await expect(unlock).toBeVisible();
         await expectLocale(page, 'pseudo-rtl', 'lock screen');

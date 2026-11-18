@@ -14,6 +14,7 @@
 
 import { createRoot } from 'react-dom/client';
 import { defaultRegistry } from '../../core/src/registry/index.js';
+import { enableLocaleChunkRetry } from '../../core/src/i18n/index.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import '@xchain-wallet/core/ui/tokens.css';
 import { App } from './App.jsx';
@@ -36,6 +37,11 @@ logConsole.attach();
 // Register the crash hook before anything else can throw.
 installShellErrorCapture();
 installNativeFontScale();
+
+// The web app fetches its locale chunks over the network, so a chunk that
+// failed offline is retried under a fresh URL. Core hands this importer only
+// a same-origin .js chunk URL; the packaged extension never registers one.
+enableLocaleChunkRetry((url) => import(/* @vite-ignore */ url));
 
 // Install before React mounts so every mobile KDF entry uses the native
 // provider, including callers that do not request session status first.

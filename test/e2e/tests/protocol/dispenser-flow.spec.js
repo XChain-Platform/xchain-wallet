@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
-import { pickOption } from '../../fixtures/pickOption.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -108,7 +107,10 @@ async function exerciseOwnedDispensers(page, label) {
     await expect(page.getByRole('heading', { name: 'Dispensers' })).toBeVisible();
     const views = page.getByRole('radiogroup', { name: 'Dispenser views' });
     await expect(views.getByRole('radio', { name: 'All', exact: true })).toBeVisible();
-    await expect(views.getByRole('radio', { name: 'My Dispensers', exact: true })).toBeChecked();
+    // With a market token picked the page opens on All; the owned list is one tab away.
+    const mine = views.getByRole('radio', { name: 'My Dispensers', exact: true });
+    if (!(await mine.isChecked())) await mine.click();
+    await expect(mine).toBeChecked();
 
     await page.getByRole('button', { name: 'Filter dispensers', exact: true }).click();
     const filters = page.getByRole('dialog', { name: 'Filter dispensers' });
@@ -133,22 +135,21 @@ async function exerciseDispenserExplorer(page, label) {
     );
     await expect(page.getByRole('heading', { name: 'Dispenser explorer' })).toBeVisible();
 
-    const byToken = page.getByRole('radio', { name: 'By token' });
-    const byAddress = page.getByRole('radio', { name: 'By address' });
-    await byAddress.check();
-    await expect(page.getByLabel('Address', { exact: true })).toBeVisible();
-    await byToken.check();
-
-    const chain = page.getByLabel('Network', { exact: true });
-    await pickOption(chain, { index: 1 });
-    // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
-    await page.getByLabel('Token ticker', { exact: true }).fill('PEPECASH');
-    await expectControlRowAligned([byToken, byAddress], `${label} explorer search modes`);
+    // One search box takes a token or a seller address; it and the Network
+    // field live in the title bar's filter menu, and Enter runs the search.
+    await page.getByRole('button', { name: 'Filter dispensers', exact: true }).click();
+    const filters = page.getByRole('dialog', { name: 'Filter dispensers' });
+    const search = filters.getByLabel('Search a token or seller address');
+    await expect(search).toBeVisible({ timeout: 30_000 });
+    await expect(filters.getByRole('button', { name: /^Network/ }).first()).toBeVisible();
+    await search.fill('PEPECASH');
     await expectNoHorizontalOverflow(page, `${label} dispenser explorer filters`);
+    await search.press('Enter');
 
-    await page.getByRole('button', { name: 'Search', exact: true }).click();
-    // Each result is a button named "<token> @ <address> ...".
-    await expect(page.getByRole('button', { name: /^PEPECASH @ / }).first()).toBeVisible({ timeout: 30_000 });
+    // Results group by token: each group is a row that expands its dispensers.
+    await expect(
+        page.getByRole('main').locator('button[aria-expanded]').filter({ hasText: 'PEPECASH' }).first(),
+    ).toBeVisible({ timeout: 30_000 });
     await expectNoHorizontalOverflow(page, `${label} dispenser explorer results`);
 }
 

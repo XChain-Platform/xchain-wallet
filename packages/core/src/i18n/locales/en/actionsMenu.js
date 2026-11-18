@@ -16,6 +16,7 @@ import { addEnglish } from '../../store.js';
 
 const messages = {
     'actionsMenu.more': 'More actions',
+    'actionsMenu.myDispensers': 'My dispensers',
     'actionsMenu.title': 'All Actions',
     'actionsMenu.unavailable': 'Unavailable: {reason}',
 };

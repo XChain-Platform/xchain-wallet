@@ -83,7 +83,10 @@ describe('lazy locale loading', () => {
 
     test('a pick after a failed chunk load imports a fresh URL and applies the locale', async () => {
         const i18n = await import('../../packages/core/src/i18n/index.js');
-        const chunkUrl = 'http://127.0.0.1:5860/src/i18n/locales/xx-retry/index.js';
+        // A retry URL must share the i18n module's scheme and host. The base
+        // is a variable so Vite does not rewrite this into an asset URL.
+        const testModuleUrl = import.meta.url;
+        const chunkUrl = new URL('../../packages/core/src/i18n/locales/xx-retry/index.js', testModuleUrl).href;
         const dictionary = { 'common.back': 'Retour' };
         let calls = 0;
         // Rejects once then resolves, the way a network blip behaves.
@@ -112,8 +115,9 @@ describe('lazy locale loading', () => {
         expect(loader).toHaveBeenCalledTimes(1);
         expect(freshImport).toHaveBeenCalledTimes(1);
         const retried = new URL(freshImport.mock.calls[0][0]);
-        expect(`${retried.origin}${retried.pathname}`).toBe(chunkUrl);
         expect(retried.searchParams.get('locale-retry')).toBeTruthy();
+        retried.search = '';
+        expect(retried.href).toBe(chunkUrl);
         warn.mockRestore();
     });
 
@@ -146,6 +150,28 @@ describe('lazy locale loading', () => {
             expect(parsed.pathname.endsWith('/i18n/locales/xx-sticky/index.js')).toBe(true);
             expect(parsed.searchParams.getAll('locale-retry')).toHaveLength(1);
         }
+        warn.mockRestore();
+    });
+
+    test('a failed chunk named on another origin is never imported by URL', async () => {
+        const i18n = await import('../../packages/core/src/i18n/index.js');
+        let calls = 0;
+        const loader = vi.fn(() => {
+            calls += 1;
+            if (calls === 1) {
+                return Promise.reject(new TypeError('Failed to fetch dynamically imported module: https://cdn.example.net/locales/xx-remote/index.js'));
+            }
+            return Promise.resolve({ 'common.back': 'Atrás' });
+        });
+        const freshImport = vi.fn(async () => ({ default: {} }));
+        i18n.__setLazyLocaleLoadersForTests({ './locales/xx-remote/index.js': loader }, freshImport);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        expect(await i18n.setLocale('xx-remote')).toBe('en');
+        expect(await i18n.setLocale('xx-remote')).toBe('xx-remote');
+        // The retry goes back through the bundler's own loader instead.
+        expect(freshImport).not.toHaveBeenCalled();
+        expect(loader).toHaveBeenCalledTimes(2);
         warn.mockRestore();
     });
 

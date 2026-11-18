@@ -349,9 +349,11 @@ export async function openWalletPicker(page) {
     const main = page.getByRole('main');
     const back = page.getByRole('button', { name: 'Back to settings' });
     if (await back.isVisible().catch(() => false)) await back.click();
-    await main.getByRole('button', { name: /^This wallet\b/ }).click();
-    await main.getByRole('button', { name: /^Switch \/ rename/ }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Wallets' })).toBeVisible();
+    // Settings groups its rows: the Wallets group page lists My Wallets,
+    // My Accounts and My Addresses.
+    await main.getByRole('button', { name: /^Wallets\b/ }).click();
+    await main.getByRole('button', { name: /^My Wallets\b/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: /^(My )?Wallets$/ })).toBeVisible();
 }
 
 /**
