@@ -69,6 +69,7 @@ import {
     openFromAddress,
     approveConfirm,
     FROM_ADDRESS_LABEL,
+    openDispenserForBuy,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -508,50 +509,43 @@ test.describe(`a dispenser owner off its own allow list, on ${REGTEST_CHAIN_LABE
             // and for the trap dispenser the answer does not depend on the
             // buyer at all, because its own address is off its own list.
             await test.step('and the buy panel now says which of the two is unbuyable', async () => {
-                const openPanel = async (index) => {
+                // Each seller is fresh for this run and opened one dispenser, so
+                // its address finds exactly that one. The pay-here panel is on
+                // the dispenser's full page only, so the helper opens it there
+                // and the checks run before the viewport widens.
+                const withPanel = async (seller, index, check) => {
                     await page.getByRole('button', { name: 'Home', exact: true }).first().click();
-                    await openPaletteCommand(page, 'All actions');
-                    await page.getByRole('main').getByText('Browse dispensers', { exact: true })
-                        .first().click();
-                    const main = page.getByRole('main');
-                    await expect(fieldByLabel(main, 'Token ticker')).toBeVisible({ timeout: 30_000 });
-                    await fieldByLabel(main, 'Token ticker').fill(TICK);
-                    await main.getByRole('button', { name: 'Search', exact: true }).click();
-                    const row = main.getByRole('button').filter({ hasText: `#${index} ` });
-                    await expect(row, `dispenser #${index} is on chain but a buyer searching the `
-                        + 'token it sells cannot find it')
-                        .toBeVisible({ timeout: 60_000 });
-                    await row.click();
-                    // The dispenser page opens on Actions (G102); the buy panel is
-                    // the Buy page a buyer's first action row opens.
-                    await main.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
-                    await expect(main, 'no pay-to-buy panel rendered at all')
-                        .toContainText('Pay to buy', { timeout: 30_000 });
-                    return main;
+                    return openDispenserForBuy(page, { seller, tick: TICK, index }, async (main) => {
+                        await expect(main, 'no pay-to-buy panel rendered at all')
+                            .toContainText('Pay to buy', { timeout: 30_000 });
+                        return check(main);
+                    });
                 };
 
-                const trapPanel = await openPanel(trapDispenser);
-                await expect(trapPanel.getByText(/cannot sell to anyone/i),
-                    'the panel offers this dispenser to a buyer without saying it is unbuyable - '
-                    + 'the chain refused exactly this payment two steps ago and kept the coin')
-                    .toBeVisible({ timeout: 60_000 });
-                const said = await trapPanel.innerText();
-                expect(said, 'the notice does not say the coin is kept')
-                    .toMatch(/not returned/i);
-                expect(said, 'the notice does not say the buyer cannot fix it')
-                    .toMatch(/only its owner can fix it/i);
+                await withPanel(trapSeller, trapDispenser, async (trapPanel) => {
+                    await expect(trapPanel.getByText(/cannot sell to anyone/i),
+                        'the panel offers this dispenser to a buyer without saying it is unbuyable - '
+                        + 'the chain refused exactly this payment two steps ago and kept the coin')
+                        .toBeVisible({ timeout: 60_000 });
+                    const said = await trapPanel.innerText();
+                    expect(said, 'the notice does not say the coin is kept')
+                        .toMatch(/not returned/i);
+                    expect(said, 'the notice does not say the buyer cannot fix it')
+                        .toMatch(/only its owner can fix it/i);
+                });
 
                 // The other half of the pair: the control is restricted too, so
                 // a notice that fires on both would be telling the buyer
                 // nothing about THIS dispenser.
-                const controlPanel = await openPanel(controlDispenser);
-                await expect(controlPanel.getByText(/restricted/i),
-                    'the control lost its existing restricted warning')
-                    .toBeVisible({ timeout: 30_000 });
-                await page.waitForTimeout(5_000);
-                await expect(controlPanel.getByText(/cannot sell to anyone/i),
-                    'the panel calls a dispenser unbuyable when this buyer just bought from it')
-                    .toHaveCount(0);
+                await withPanel(controlSeller, controlDispenser, async (controlPanel) => {
+                    await expect(controlPanel.getByText(/restricted/i).first(),
+                        'the control lost its existing restricted warning')
+                        .toBeVisible({ timeout: 30_000 });
+                    await page.waitForTimeout(5_000);
+                    await expect(controlPanel.getByText(/cannot sell to anyone/i),
+                        'the panel calls a dispenser unbuyable when this buyer just bought from it')
+                        .toHaveCount(0);
+                });
             });
         });
 });

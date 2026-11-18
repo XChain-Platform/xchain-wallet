@@ -69,6 +69,7 @@ import {
     openFromAddress,
     approveConfirm,
     FROM_ADDRESS_LABEL,
+    openDispenserForBuy,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -374,31 +375,19 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // buy surface must never quote a price of zero, because a buyer who
             // pays it gets nothing and a buyer who trusts it thinks the goods
             // are free.
-            await openPaletteCommand(page, 'All actions');
-            await page.getByRole('main').getByText('Browse dispensers', { exact: true })
-                .first().click();
-            const main = page.getByRole('main');
-            await expect(fieldByLabel(main, 'Token ticker')).toBeVisible({ timeout: 30_000 });
-            await fieldByLabel(main, 'Token ticker').fill('XCHAIN');
-            await main.getByRole('button', { name: 'Search', exact: true }).click();
-
-            const row = main.getByRole('button').filter({ hasText: `#${dispenserIndex} ` });
-            await expect(row, `the fiat dispenser #${dispenserIndex} is on chain but a buyer `
-                + 'searching the token it sells cannot find it')
-                .toBeVisible({ timeout: 60_000 });
-            await row.click();
-
+            // The pay-here panel is on the dispenser's full page only (the
+            // wide side panel shows a fiat dispenser no buy surface), so the
+            // helper opens it there and reads it before the viewport widens.
             const coin = REGTEST_COIN.slice(1);
-            const panel = page.getByRole('main');
-            // The dispenser page opens on Actions (G102); the buy panel is the
-            // Buy page a buyer's first action row opens.
-            await panel.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
-            // The panel has to actually be there, or the two assertions under
-            // this would pass on a screen that says nothing at all.
-            await expect(panel, 'no pay-to-buy panel rendered for a fiat dispenser at all')
-                .toContainText('Pay to buy', { timeout: 30_000 });
-
-            const text = await panel.innerText();
+            const text = await openDispenserForBuy(page, {
+                seller, tick: 'XCHAIN', index: dispenserIndex, what: `the fiat dispenser #${dispenserIndex}`,
+            }, async (panel) => {
+                // The panel has to actually be there, or the two assertions
+                // under this would pass on a screen that says nothing at all.
+                await expect(panel, 'no pay-to-buy panel rendered for a fiat dispenser at all')
+                    .toContainText('Pay to buy', { timeout: 30_000 });
+                return panel.innerText();
+            });
             // D-144. The exact string this used to print was "Send exactly 0 LTC
             // per fill", so the pattern is anchored on how the panel words a
             // price rather than on one phrasing of it. A buyer who follows a

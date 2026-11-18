@@ -1552,6 +1552,75 @@ export async function openMyDispensers(page) {
 }
 
 /**
+ * The viewport width openDispenserForBuy narrows to. Dispensers keeps a picked
+ * dispenser in its list's side panel while the content is at least
+ * LIST_DETAIL_MIN_WIDTH (720) wide, and opens the dispenser page below that.
+ */
+export const DISPENSER_PAGE_VIEWPORT_WIDTH = 600;
+
+/**
+ * Opens a dispenser this wallet does not own on its full page, opens the Buy
+ * page from its Buy action row, and runs `check` there.
+ *
+ * A buyer reaches it from All actions, Browse dispensers. The Dispenser
+ * Explorer's search sits in its title bar's "Filter dispensers" menu and runs
+ * on Enter; a seller address searches the seller lane, which matches the
+ * dispenser's source or its own address, so a seller made fresh for the run
+ * keeps the results to this run's dispensers. A card is named
+ * "<give> <TICK> for <price>, <network>".
+ *
+ * On a wide screen a picked card opens in the list's side panel, which has no
+ * pay-here panel ("Pay to buy"), no payment-token balance (`buy-balance`) and
+ * no dispenser number, and offers no link to the page. So the viewport is
+ * narrowed below the split once the Explorer opens, and put back once
+ * `check` settles, whether or not it passes. The page opens on Actions (G102)
+ * under its hero, which names "Dispenser #<index>"; the hero closes once Buy
+ * opens, so the index is read first.
+ *
+ * @template T
+ * @param {import('@playwright/test').Page} page
+ * @param {{ seller: string, tick: string, index?: string | number, what?: string, timeoutMs?: number }} opts
+ *   `seller` is typed into the search; `tick` is the token the dispenser gives;
+ *   `index`, when given, must be the opened dispenser's number
+ * @param {(main: import('@playwright/test').Locator) => Promise<T>} check  runs with the Buy page open
+ * @returns {Promise<T>}
+ */
+export async function openDispenserForBuy(page, { seller, tick, index, what, timeoutMs = 60_000 }, check) {
+    const name = what || (index != null ? `dispenser #${index}` : `the ${tick} dispenser`);
+    await openPaletteCommand(page, 'All actions');
+    await page.getByRole('main').getByText('Browse dispensers', { exact: true }).first().click();
+    const main = page.getByRole('main');
+
+    // Narrowed before the search, so a re-layout cannot drop typed results.
+    const viewport = page.viewportSize();
+    const narrow = Boolean(viewport) && viewport.width > DISPENSER_PAGE_VIEWPORT_WIDTH;
+    if (narrow) await page.setViewportSize({ width: DISPENSER_PAGE_VIEWPORT_WIDTH, height: viewport.height });
+    try {
+        // Enter runs the search and leaves the menu open over the results.
+        const filters = await openListFilter(page, 'Filter dispensers');
+        const search = filters.getByLabel('Search a token or seller address', { exact: true });
+        await expect(search, 'the Dispenser Explorer offers no search').toBeVisible({ timeout: 30_000 });
+        await search.fill(seller);
+        await search.press('Enter');
+        await closeListFilter(page, 'Filter dispensers');
+
+        const tickPattern = String(tick).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const card = main.getByRole('button', { name: new RegExp(`^\\S+ ${tickPattern} for `) }).first();
+        await expect(card, `${name} is on chain but a buyer searching its seller's address cannot find it`)
+            .toBeVisible({ timeout: timeoutMs });
+        await card.click();
+        if (index != null) {
+            await expect(main, `the card opened a different dispenser from ${name}`)
+                .toContainText(new RegExp(`Dispenser #${index}(?!\\d)`), { timeout: 30_000 });
+        }
+        await main.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
+        return await check(main);
+    } finally {
+        if (narrow) await page.setViewportSize(viewport);
+    }
+}
+
+/**
  * Puts the Create dispenser form's dispenser on its own Source address, and
  * returns that address.
  *

@@ -96,6 +96,7 @@ import {
     openFromAddress,
     approveConfirm,
     FROM_ADDRESS_LABEL,
+    openDispenserForBuy,
 } from '../../fixtures/regtest.js';
 import { writeRowsScript } from '../../fixtures/priceSeed.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
@@ -526,29 +527,17 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
             // price is not on the dispenser row at all, it is on the oracle's
             // published quote, which the explorer serves at
             // /oracle_prices/<address>/address.
-            await openPaletteCommand(page, 'All actions');
-            await page.getByRole('main').getByText('Browse dispensers', { exact: true })
-                .first().click();
-            const main = page.getByRole('main');
-            await expect(fieldByLabel(main, 'Token ticker')).toBeVisible({ timeout: 30_000 });
-            await fieldByLabel(main, 'Token ticker').fill(ORACLE.tick);
-            await main.getByRole('button', { name: 'Search', exact: true }).click();
-
-            const row = main.getByRole('button').filter({ hasText: `#${dispenserIndex} ` });
-            await expect(row, `the Mode B dispenser #${dispenserIndex} is on chain but a buyer `
-                + 'searching the token it sells cannot find it')
-                .toBeVisible({ timeout: 60_000 });
-            await row.click();
-
+            // The pay-here panel is on the dispenser's full page only (the
+            // wide side panel shows a fiat dispenser no buy surface), so the
+            // helper opens it there and reads it before the viewport widens.
             const coin = REGTEST_COIN.slice(1);
-            const panel = page.getByRole('main');
-            // The dispenser page opens on Actions (G102); the buy panel is the
-            // Buy page a buyer's first action row opens.
-            await panel.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
-            await expect(panel, 'no pay-to-buy panel rendered for a Mode B dispenser at all')
-                .toContainText('Pay to buy', { timeout: 30_000 });
-
-            const text = await panel.innerText();
+            const text = await openDispenserForBuy(page, {
+                seller, tick: ORACLE.tick, index: dispenserIndex, what: `the Mode B dispenser #${dispenserIndex}`,
+            }, async (panel) => {
+                await expect(panel, 'no pay-to-buy panel rendered for a Mode B dispenser at all')
+                    .toContainText('Pay to buy', { timeout: 30_000 });
+                return panel.innerText();
+            });
             // D-144's guard, restated for Mode B.
             expect(/(send|pay)[^\n]*\b0(\.0+)?\s*(LTC|BTC|DOGE)\b/i.test(text),
                 'the buy panel quotes a price of ZERO for an oracle-priced dispenser')
