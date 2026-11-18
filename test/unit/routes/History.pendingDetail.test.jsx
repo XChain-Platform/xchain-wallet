@@ -22,7 +22,7 @@ import { act, render, screen, waitFor, cleanup, fireEvent, within } from '@testi
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History, detailActionLabel } from '../../../packages/core/src/shared/routes/History.jsx';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { PENDING_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
 import {
     dismissAllOverlays,
     resetBackStackForTests,
@@ -319,7 +319,7 @@ describe('History pending detail branch', () => {
         // focus inside that window is dropped by design; age the rows past
         // one interval first. Only Date is faked: waitFor polls on setInterval.
         vi.useFakeTimers({ toFake: ['Date'] });
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + PENDING_POLL_INTERVAL_MS);
         window.dispatchEvent(new Event('focus'));
 
         await waitFor(() => {

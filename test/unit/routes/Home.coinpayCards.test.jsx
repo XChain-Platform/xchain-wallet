@@ -27,7 +27,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { CoinpayObligationsProvider } from '../../../packages/core/src/shared/hooks/useCoinpayObligations.js';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { BALANCE_MAX_AGE_MS } from '../../../packages/core/src/flows/balances.js';
 
 const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
 const CHAIN = 'litecoin-regtest';
@@ -113,8 +113,8 @@ describe('Home renders its coinpay resume cards from the shared scan', () => {
         expect(afterMountReads).toBe(0);
 
         // Two full balance beats, still inside the hook's 60 s window.
-        await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_POLL_INTERVAL_MS); });
-        await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_POLL_INTERVAL_MS); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_MAX_AGE_MS); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_MAX_AGE_MS); });
 
         expect(messaging.getWalletBalances.mock.calls.length).toBe(afterMountBalances + 2);
         expect(messaging.getCoinpayObligationsForAddress.mock.calls.length).toBe(afterMountReads);

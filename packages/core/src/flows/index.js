@@ -512,7 +512,9 @@ export {
     chainTipBlockTime,
     indexerWatermark,
     walletBalances,
-    BALANCE_POLL_INTERVAL_MS,
+    BALANCE_MAX_AGE_MS,
+    BALANCE_CHECK_INTERVAL_MS,
+    PENDING_POLL_INTERVAL_MS,
 } from './balances.js';
 export { createPollThrottle } from './pollThrottle.js';
 export { livePendingTxs, dismissFailedPendingTx } from './pendingTxFeed.js';

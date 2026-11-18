@@ -195,6 +195,10 @@ test('switching wallets while balances load never paints the previous wallet bal
     expect(secondWalletId).toBeTruthy();
 
     await page.evaluate(({ walletId, oldBalance }) => {
+        // A saved read under five minutes old answers a switch with no request.
+        // Mark saved reads stale, as a broadcast does, so the switch reads and
+        // the race this test holds open exists.
+        localStorage.setItem('xc:balanceCache:staleAt', String(Date.now()));
         const probe = window.__xchainRaceProbe;
         probe.holdNext = 'balances.wallet';
         probe.holdWalletId = walletId;

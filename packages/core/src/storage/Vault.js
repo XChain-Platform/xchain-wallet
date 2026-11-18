@@ -109,6 +109,7 @@ const DISPOSABLE_LOCAL_KEYS = new Set([
 const DISPOSABLE_LOCAL_PREFIXES = [
     'xc:balanceCache:',
     'xc:historyCache:',
+    'xc:ownedTokens:',
 ];
 const DISPOSABLE_CHROME_KEYS = ['xchain.logConsole'];
 

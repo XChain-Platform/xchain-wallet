@@ -80,6 +80,7 @@ import { isNavigatorOnline, useOnlineStatus } from '../hooks/useOnlineStatus.js'
 import { readHistoryCache, writeHistoryCache } from '../utils/historyCache.js';
 import { readAllListPages } from '../utils/historyPages.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
+import { isWalletDataFresh, readTimeOf } from '../utils/walletDataFreshness.js';
 import { Settings } from './Settings.jsx';
 import { hasAvailableChain, NO_CHAINS_BODY, NO_CHAINS_TITLE } from '../utils/chainAvailability.js';
 import styles from './History.module.css';
@@ -618,13 +619,21 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
     // runs at: a `focus` bump only buys something once the rows are older than
     // one beat, and a user flicking between windows used to land a full
     // history fan-out per switch. See flows/pollThrottle.js.
-    const pollThrottleRef = useRef(flowsLib.createPollThrottle(flowsLib.BALANCE_POLL_INTERVAL_MS));
+    const pollThrottleRef = useRef(flowsLib.createPollThrottle(flowsLib.PENDING_POLL_INTERVAL_MS));
+    // When the rows on screen were read (see readTimeOf; 0 after a partial or
+    // failed fan-out) and whether any is pending. With nothing pending, rows
+    // younger than BALANCE_MAX_AGE_MS are not re-read.
+    const historyReadAtRef = useRef(0);
+    const historyHasPendingRef = useRef(false);
+    const historyRowsCurrent = () => !historyHasPendingRef.current
+        && isWalletDataFresh(historyReadAtRef.current);
 
     // M2.1: History had no cadence of its own; a confirmed row only ever
     // appeared because the route remounted. Pending rows need one, so the
-    // fetch below re-runs on the same 20s beat Home already uses for
-    // balances, plus on focus, plus on mount. The tick is what re-triggers
-    // it; the fetch itself decides whether to show the loading state.
+    // fetch below re-runs on a PENDING_POLL_INTERVAL_MS beat while a row is
+    // pending (or the rows have aged past BALANCE_MAX_AGE_MS), plus on focus
+    // by the same rule, plus on mount. The tick is what re-triggers it; the
+    // fetch itself decides whether to show the loading state.
     const [refreshTick, setRefreshTick] = useState(0);
     useEffect(() => {
         if (!addressesByChain || !source.live) return undefined;
@@ -644,9 +653,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         // against the bucket the first one is waiting on.
         const bump = () => {
             if (throttle.isInFlight()) return;
+            if (historyRowsCurrent()) return;
             setRefreshTick((n) => n + 1);
         };
-        const stopPollInterval = startVisibleInterval(bump, flowsLib.BALANCE_POLL_INTERVAL_MS);
+        const stopPollInterval = startVisibleInterval(bump, flowsLib.PENDING_POLL_INTERVAL_MS);
         if (typeof window === 'undefined') return stopPollInterval;
         // A refocus is worth a fan-out only when the rows are already an
         // interval old; a burst of window switches used to cost one each.
@@ -654,7 +664,10 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         // what releases the slot, when it lands, so the focus must claim the
         // slot and leave it claimed. The fan-out effect re-marks it with its
         // own `reset(); start()` a tick later, which is harmless.
-        const onFocus = () => { if (throttle.start()) setRefreshTick((n) => n + 1); };
+        const onFocus = () => {
+            if (historyRowsCurrent()) return;
+            if (throttle.start()) setRefreshTick((n) => n + 1);
+        };
         window.addEventListener('focus', onFocus);
         return () => {
             stopPollInterval();
@@ -709,6 +722,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         const throttle = pollThrottleRef.current;
         throttle.reset();
         throttle.start();
+        const readStartedAt = Date.now();
         setRefreshing(true);
         // A background refresh must not blank the list it is refreshing; the
         // loading state belongs to the first load only.
@@ -978,6 +992,9 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             setHistoryLoaded(true);
             setShowingCachedHistory(false);
             setUnreadChainIds(unread);
+            // A chain that went unread leaves the rows due for the next beat.
+            historyReadAtRef.current = unread.length === 0 ? readTimeOf(readStartedAt) : 0;
+            historyHasPendingRef.current = merged.pending.length > 0;
             // A snapshot is saved only from a complete load.
             if (unread.length === 0) {
                 writeHistoryCache(walletId, accountId, {
@@ -990,6 +1007,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         }).catch((err) => {
             if (cancelled) return;
             throttle.fail();
+            historyReadAtRef.current = 0;
             setLoadingChains(new Set());
             setRefreshing(false);
             const cached = readHistoryCache(walletId, accountId, activeNetwork);

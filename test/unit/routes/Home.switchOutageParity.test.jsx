@@ -196,7 +196,8 @@ describe('Home under a partial balance outage', () => {
         writeBalanceCache(WALLET_A.id, 'account-a', {
             balances: { [CHAIN]: [nativeRow('bc1qgood', 'BTC', '100000000')] },
             activeByChain: {},
-            fetchedAt: Date.now() - 60_000,
+            // Older than the five-minute reuse window, so the open refreshes.
+            fetchedAt: Date.now() - 6 * 60_000,
         });
         const messaging = baseMessaging({
             listWallets: vi.fn().mockResolvedValue([WALLET_A]),
