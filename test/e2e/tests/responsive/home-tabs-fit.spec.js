@@ -3,10 +3,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Home's five view tabs (Coins, Tokens, NFTs, DeFi, Activity) all fit their
-// row on a phone at 100, 130 and 150 percent text, beside the list filter
-// button that shares the row (ruling U72), so Activity is never clipped or
-// hidden behind a sideways scroll; and a phone with room keeps the tab font
+// Home's three view tabs (Balances, NFTs, DeFi; the Activity tab is retired,
+// n.253) all fit their row on a phone at 100, 130 and 150 percent text, beside
+// the list filter button that shares the row (ruling U72), so DeFi is never
+// clipped or hidden behind a sideways scroll; and a phone with room keeps the tab font
 // size. The font scale reaches the app as its native font-scale event, as
 // in large-text-balances.spec.js.
 
@@ -74,7 +74,7 @@ test('Home view tabs fit a phone row at 100, 130 and 150 percent text', async ({
                     count: tabs.length,
                 };
             });
-            expect(fit.count, `${where}: tab count`).toBe(5);
+            expect(fit.count, `${where}: tab count`).toBe(3);
             expect(fit.filter, `${where}: the filter button shares the tab row`).toBe(true);
             expect(fit.lastClipped, `${where}: the last tab is clipped`).toBe(false);
             expect(fit.filterOffscreen, `${where}: the filter button runs off screen`).toBe(false);

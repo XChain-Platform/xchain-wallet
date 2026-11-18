@@ -12,14 +12,21 @@
 // Tokens tab reading `Nothing matches "LTC"`, with copy pointing at a top
 // toolbar that is not on the page and no way to drop the filter.
 
-import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, openFromSection, test } from '../../fixtures/wallet.js';
 import { showHomeBalances } from '../../fixtures/homeBalances.js';
 import { searchTokenPicker } from '../../fixtures/fields.js';
 
 test('a search typed in the Send picker does not filter the Home Tokens tab', async ({ page }) => {
     await createWallet(page);
     await gotoSection(page, 'Send');
-    await page.getByRole('button', { name: /Change asset/ }).click();
+    // The Send picker lists only the From network's assets, so the send
+    // moves to Litecoin before LTC can be searched.
+    await openFromSection(page.getByRole('main'));
+    await page.locator('button[aria-label^="Network:"]').click();
+    await page.getByRole('dialog', { name: 'Network' })
+        .getByRole('button', { name: /^Select Litecoin\b/ }).click();
+    // The asset control is the Asset field, `Asset: <tick> on <chain>`.
+    await page.getByRole('button', { name: /^Asset: / }).first().click();
     await searchTokenPicker(page, 'LTC');
     // Picker rows select the asset ("Select <name> on <chain>"); only Home's
     // balance rows open token details.

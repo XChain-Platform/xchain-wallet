@@ -82,8 +82,24 @@ async function measure(page) {
             if (el.closest('form, [role="dialog"], [role="menu"], [data-xc-menu-list]')) continue;
             const kind = listClasses.some((name) => el.classList.contains(name)) ? 'list'
                 : rowClasses.some((name) => el.classList.contains(name)) ? 'row' : 'card';
+            // In a list and detail split each panel is its own content area.
+            const split = el.closest('[data-list-detail]');
+            const panel = split && main.contains(split)
+                ? [...split.children].find((child) => child.contains(el) && child.getAttribute('role') !== 'separator')
+                : null;
+            let paneLeft = contentLeft;
+            let paneRight = contentRight;
+            if (panel) {
+                const panelBox = panel.getBoundingClientRect();
+                const panelStyle = getComputedStyle(panel);
+                paneLeft = panelBox.left + parseFloat(panelStyle.paddingLeft);
+                // The panel scrolls on its own, so its scrollbar is not content width.
+                paneRight = panelBox.left + panel.clientLeft + panel.clientWidth - parseFloat(panelStyle.paddingRight);
+            }
             items.push({
                 kind,
+                paneLeft,
+                paneRight,
                 label: `${el.tagName.toLowerCase()}.${kind}:${(el.textContent || '').trim().slice(0, 30)}`,
                 left: box.left,
                 right: box.right,
@@ -124,11 +140,11 @@ test('lists, rows and cards fill the content width up to the scrollbar', async (
                 violations.push(`${where}: content right ${m.contentRight} is past client width ${m.clientWidth}`);
             }
             for (const item of m.items) {
-                if (Math.abs(item.left - m.contentLeft) > 1) {
-                    violations.push(`${where}: ${item.label} left ${item.left} != ${m.contentLeft}`);
+                if (Math.abs(item.left - item.paneLeft) > 1) {
+                    violations.push(`${where}: ${item.label} left ${item.left} != ${item.paneLeft}`);
                 }
-                if (Math.abs(item.right - m.contentRight) > 1) {
-                    violations.push(`${where}: ${item.label} right ${item.right} != ${m.contentRight}`);
+                if (Math.abs(item.right - item.paneRight) > 1) {
+                    violations.push(`${where}: ${item.label} right ${item.right} != ${item.paneRight}`);
                 }
                 if (item.right > m.clientWidth + 1) {
                     violations.push(`${where}: ${item.label} right ${item.right} is past client width ${m.clientWidth}`);
@@ -214,13 +230,9 @@ test('the first block of the intro carousel and the issuance wizard fills the gu
         await page.goto('/');
         await page.getByRole('button', { name: 'Skip' }).waitFor({ state: 'visible', timeout: 60_000 });
         await settle(page);
-        // The intro carousel is an explainer, not a form: its first block
-        // fills the gutter and centres its column inside it.
         const intro = await settledFirstBlock(page);
         const where = `${viewport.width}px / intro carousel`;
-        if (!intro.error && intro.kind !== 'list') {
-            violations.push(`${where}: ${intro.label} is classed ${intro.kind}, expected a gutter-filling block`);
-        }
+        // The slide is a centred role=group column, so it is judged on centring.
         violations.push(...judgeFirstBlock(where, intro));
     }
 

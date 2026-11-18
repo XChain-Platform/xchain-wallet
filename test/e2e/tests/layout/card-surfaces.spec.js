@@ -27,6 +27,7 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
+import { selectNamedToken } from '../../fixtures/crossChain.js';
 import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const VIEWPORTS = [
@@ -36,28 +37,30 @@ const VIEWPORTS = [
 ];
 
 const ROUTES = [
-    { label: 'Home coins', open: (page) => gotoSection(page, 'Home') },
-    { label: 'Home tokens', open: async (page) => { await gotoSection(page, 'Home'); await homeTab(page, 'Tokens'); } },
+    // Home's tabs are Balances, NFTs and DeFi; History holds the activity list.
+    { label: 'Home balances', open: (page) => gotoSection(page, 'Home') },
     { label: 'Home NFTs', open: async (page) => { await gotoSection(page, 'Home'); await homeTab(page, 'NFTs'); } },
-    { label: 'Home activity', rows: true, open: async (page) => { await gotoSection(page, 'Home'); await homeTab(page, 'Activity'); } },
+    { label: 'Home DeFi', open: async (page) => { await gotoSection(page, 'Home'); await homeTab(page, 'DeFi'); } },
     { label: 'History', rows: true, open: (page) => gotoSection(page, 'History') },
     { label: 'Send', open: (page) => gotoSection(page, 'Send') },
     { label: 'Receive', open: (page) => gotoSection(page, 'Receive') },
     { label: 'Staking positions', open: (page) => palette(page, 'Your staking positions', 'Staking') },
     { label: 'Saved addresses', open: (page) => palette(page, 'Your saved addresses', 'Contacts') },
     { label: 'Issue a token', open: issueForm },
-    { label: 'DEX market detail', open: (page) => openFirst(page, 'DEX', page.getByRole('main').getByRole('button').filter({ hasText: /\// })) },
+    { label: 'DEX market detail', open: (page) => openFirst(page, 'DEX', page.getByRole('main').getByRole('button', { name: /^Open .* market$/ })) },
     { label: 'Dispenser detail', open: (page) => openFirst(page, 'Dispensers', page.getByRole('main').locator('li').getByRole('button')) },
     { label: 'My orders', open: (page) => palette(page, 'My orders') },
     { label: 'Settings', open: (page) => openSettings(page) },
-    { label: 'Settings This wallet', open: (page) => settingsSection(page, 'This wallet') },
-    { label: 'Settings This wallet Export', form: true, open: (page) => settingsForm(page, 'This wallet', 'Export…') },
-    { label: 'Settings This wallet Change password', form: true, open: (page) => settingsDirectPage(page, 'Security', 'Wallet password') },
-    { label: 'Settings This wallet Remove', form: true, open: (page) => settingsForm(page, 'This wallet', 'Remove…') },
+    // Settings is grouped: Wallets, Security, Backup and Recovery, Privacy and Sites, Appearance,
+    // Notifications, Network and Fees and Advanced.
+    { label: 'Settings Wallets', open: (page) => settingsSection(page, 'Wallets') },
+    { label: 'Settings My Wallets', open: (page) => settingsSubPage(page, 'Wallets', 'My Wallets') },
+    { label: 'Settings My Accounts', open: (page) => settingsSubPage(page, 'Wallets', 'My Accounts') },
+    { label: 'Settings Security Change password', form: true, open: (page) => settingsDirectPage(page, 'Security', 'Wallet password') },
     { label: 'Settings Backup Export', form: true, open: (page) => settingsDirectPage(page, 'Backup', 'Encrypted backup file') },
     { label: 'Settings Backup Show phrase', form: true, open: (page) => settingsDirectPage(page, 'Backup', 'Recovery phrase') },
     { label: 'Settings Backup Test', form: true, open: (page) => settingsDirectPage(page, 'Backup', 'Test backup') },
-    { label: 'Settings Fees', open: (page) => settingsSection(page, 'Fees') },
+    { label: 'Settings Fees', open: (page) => settingsSection(page, 'Network and Fees') },
     { label: 'Settings About', open: (page) => settingsSection(page, 'About') },
 ];
 
@@ -80,13 +83,9 @@ async function palette(page, destination, query = destination) {
     await expect(dialog).toBeHidden();
 }
 
-/**
- * The palette's token entry opens the template wizard, and the full Issue
- * form is its Custom template (ruling U79).
- */
+/** The palette's token entry opens the Issue Token form, with its template as an optional selector. */
 async function issueForm(page) {
-    await palette(page, 'Choose a token template', 'Issue token');
-    await page.getByRole('main').getByRole('button', { name: /^Custom/ }).click();
+    await palette(page, 'Issue token');
     await expect(page.getByRole('form', { name: 'Issue Token', exact: true })).toBeVisible();
 }
 
@@ -94,7 +93,8 @@ async function issueForm(page) {
 async function openFirst(page, section, items) {
     await gotoSection(page, section);
     await items.first().click();
-    await expect(page.getByRole('button', { name: /^Back/ }).first()).toBeVisible();
+    // A wide window opens the detail beside the list, so there is no Back button there.
+    if (page.viewportSize().width < 1024) await expect(page.getByRole('button', { name: /^Back/ }).first()).toBeVisible();
     await page.waitForTimeout(1000);
 }
 
@@ -109,11 +109,11 @@ async function settingsSection(page, name) {
     await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
 }
 
-/** Opens a Settings section and then one of its inline forms by the row's action. */
-async function settingsForm(page, section, action) {
-    await settingsSection(page, section);
-    await page.getByRole('main').getByRole('button', { name: action, exact: true }).first().click();
-    await expect(page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first()).toBeVisible();
+/** Opens a Settings group and then one of its list pages by the row title. */
+async function settingsSubPage(page, group, row) {
+    await settingsSection(page, group);
+    await page.getByRole('main').getByRole('button', { name: new RegExp(`^${row}\\b`) }).first().click();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 }
 
 /**
@@ -127,9 +127,13 @@ async function settingsDirectPage(page, group, row) {
     await expect(page.getByRole('main').locator('form').filter({ visible: true }).first()).toBeVisible();
 }
 
-/** Locks from whichever lock control this width shows. */
+/** Locks from the side menu's Lock wallet, or the Lock wallet button in the wallet menu header. */
 async function lock(page) {
-    await page.getByRole('button', { name: /^Lock( wallet)?$/ }).filter({ visible: true }).first().click();
+    const lockButton = page.getByRole('button', { name: /^Lock( wallet)?$/ }).filter({ visible: true }).first();
+    if (!(await lockButton.isVisible().catch(() => false))) {
+        await page.getByRole('button', { name: 'Open menu' }).click();
+    }
+    await lockButton.click();
     await expect(page.getByRole('button', { name: 'Unlock Wallet' })).toBeVisible();
 }
 
@@ -383,15 +387,12 @@ test('every card in the confirm stack is the same width at every size', async ({
     // order review opens the confirm stack instead.
     await palette(page, 'Create order');
     const main = page.getByRole('main');
-    await main.getByRole('region', { name: 'You get', exact: true })
-        .getByRole('group', { name: 'Asset type', exact: true })
-        .getByRole('radio', { name: 'A token' }).check();
-    const tickers = main.getByLabel('Ticker', { exact: true });
-    await tickers.first().fill('PEPECASH');
-    await tickers.last().fill('XCP');
-    const amounts = main.getByLabel('Amount', { exact: true });
-    await amounts.first().fill('2');
-    await amounts.last().fill('1');
+    // Each side is an asset button with a picker.
+    const chain = { chainId: 'bitcoin-mainnet', chainLabel: 'Bitcoin' };
+    await selectNamedToken(page, 'Give asset', { ...chain, tick: 'XCP' });
+    await selectNamedToken(page, 'Get asset', { ...chain, tick: 'PEPECASH' });
+    await main.getByRole('textbox', { name: /^Give amount/ }).fill('1');
+    await main.getByRole('textbox', { name: /^Get amount/ }).fill('2');
     await main.getByRole('button', { name: 'Place Order', exact: true }).click();
     await expect(page.getByTestId('confirm-modal')).toBeVisible();
     for (const viewport of VIEWPORTS) {

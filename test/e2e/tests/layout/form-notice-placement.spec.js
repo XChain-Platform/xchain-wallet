@@ -10,12 +10,14 @@
 
 // A notice is the first item of the page content, never a box inside a box.
 // On a wide screen a form is drawn as one card (FormPage), so its notices sit
-// above that card at the full content width; on a phone the form is bare and
+// above that card at the full content width (rulings G120 and G129, 2026-11-15
+// and 2026-11-16, now put a form's notice at the top of the form, so inside
+// the form card, first and at the card's inner width); on a phone the form is bare and
 // they lead its content. Walk the main forms at a desktop, a laptop, a
 // landscape phone and a portrait phone, submit each one empty so its
 // validation summary or form error shows, and measure every notice in the
-// page content: at 600px and wider none of them may sit inside a bordered
-// card. Failures that need the host to refuse (a load, a generate, a hardware
+// page content: at 600px and wider none of them may sit inside any bordered
+// card other than its own form card. Failures that need the host to refuse (a load, a generate, a hardware
 // check, a password change) are forced through the web messaging seam, the
 // same route-and-patch the async boundary spec uses. A forced state that is
 // about the whole form (`notice`) must show as a notice; one about a single
@@ -68,7 +70,7 @@ const ALL_FORMS = [
         fault: { hw: true, fail: { 'receive.verifyAddress': 'The device is not connected.' } },
         open: openReceiveFresh,
         trigger: async (page) => {
-            await page.getByRole('main').getByRole('button', { name: /^Verify on your/ }).first().click();
+            await page.getByRole('main').getByRole('button', { name: /^Verify on your/i }).first().click();
         },
     },
     { label: 'Issue token', open: (page) => palette(page, 'Issue token') },
@@ -102,41 +104,31 @@ const ALL_FORMS = [
         label: 'Settings public keys refused',
         fault: { fail: { 'pairing.payload': 'The vault service is unavailable.' } },
         open: async (page) => {
-            await openSettings(page);
-            const back = page.getByRole('button', { name: 'Back to settings' }).filter({ visible: true }).first();
-            if (await back.count()) await back.click();
-            await page.getByRole('main').getByRole('button', { name: /^This wallet/ }).first().click();
-            await page.getByRole('main').getByRole('button', { name: 'Export…', exact: true }).first().click();
+            // Extended public keys are a row of the account page (My Accounts).
+            await settingsPath(page, 'Wallets', 'My Accounts', '.*Active', 'Extended public keys');
         },
-        trigger: async (page) => {
-            const main = page.getByRole('main');
-            await main.getByLabel('Confirm wallet password', { exact: true }).fill('e2epassword1234');
-            await main.locator('form button[type="submit"]').filter({ visible: true }).last().click();
-        },
-        close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
+        // The page asks the host for the payload as it opens, so the refusal shows with no submit.
+        trigger: async () => {},
+        close: (page) => page.getByRole('button', { name: /^Back/ }).first().click(),
     },
     {
         label: 'Settings remove wallet refused',
         fault: { fail: { 'wallet.remove': 'The vault service is unavailable.' } },
         open: async (page) => {
-            await openSettings(page);
-            const back = page.getByRole('button', { name: 'Back to settings' }).filter({ visible: true }).first();
-            if (await back.count()) await back.click();
-            await page.getByRole('main').getByRole('button', { name: /^This wallet/ }).first().click();
-            await page.getByRole('main').getByRole('button', { name: 'Remove…', exact: true }).first().click();
+            await settingsPath(page, 'Wallets', 'My Wallets', '.*Active', 'Remove wallet');
         },
         trigger: async (page) => {
             const main = page.getByRole('main');
             const name = await main.getByLabel('Confirm wallet name', { exact: true }).getAttribute('placeholder');
             await main.getByLabel('Confirm wallet name', { exact: true }).fill(name);
-            await main.getByRole('button', { name: 'Remove wallet', exact: true }).click();
+            await main.getByRole('button', { name: /^Remove wallet$/i }).click();
         },
-        close: (page) => page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).first().click(),
+        close: (page) => page.getByRole('button', { name: /^Back/ }).first().click(),
     },
     {
         label: 'Settings sign throttle refused',
         fault: { fail: { 'settings.update': 'The settings service is unavailable.' } },
-        open: (page) => settingsSubpage(page, 'Connected Sites'),
+        open: (page) => settingsPath(page, 'Privacy and Sites', 'Connected sites'),
         trigger: async (page) => {
             const main = page.getByRole('main');
             // The sign-request throttle lives on the Options view.
@@ -212,9 +204,12 @@ const ALL_FORMS = [
         open: openAddNetwork,
         trigger: async (page) => {
             const main = page.getByRole('main');
-            await main.getByRole('button', { name: /Activate with your password/ }).first().click();
-            await main.getByLabel('Wallet password', { exact: true }).fill('e2epassword1234');
-            await main.getByRole('button', { name: 'Activate Network', exact: true }).click();
+            // Each built-in regtest network is a row that opens its activation form.
+            await main.getByRole('button', { name: /^Bitcoin Regtest/ }).first().click();
+            await fillPasswordIfAsked(main);
+            // With the signer pooled the row activates at once; otherwise the form asks for the password.
+            const activate = main.getByRole('button', { name: 'Activate Network', exact: true });
+            if (await activate.count()) await activate.click();
         },
     },
     // A native amount under the dust floor is a note under the amount field, not a notice.
@@ -270,7 +265,9 @@ const ALL_FORMS = [
         label: 'Create order coin for coin',
         open: (page) => palette(page, 'Create order'),
         trigger: async (page) => {
-            await page.getByRole('main').getByRole('radio', { name: /^Native / }).first().check();
+            // Coin on the give side as well as the get side: pick the native coin as the give asset.
+            await page.getByRole('button', { name: /^Give asset/ }).click();
+            await page.getByRole('button', { name: /^Select Bitcoin on / }).first().click();
         },
         notice: /At least one side must be a token/,
     },
@@ -290,7 +287,7 @@ const ALL_FORMS = [
     // A paste that is not a PSBT is a note under the paste field.
     {
         label: 'Sign transaction unreadable paste',
-        open: (page) => palette(page, 'Sign a transaction'),
+        open: (page) => palette(page, 'Sign transaction'),
         trigger: async (page) => {
             const field = page.getByRole('main').getByLabel('Unsigned transaction code', { exact: true });
             await field.fill('deadbeef');
@@ -359,21 +356,30 @@ async function palette(page, title) {
     const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('combobox').first().fill(title);
-    await page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
+    await page.getByRole('option', { name: new RegExp(`^${title}\\b`, 'i') }).first().click();
     await expect(dialog).toBeHidden();
 }
 
 async function openFromList(page, title, action) {
     await palette(page, title);
-    await page.getByRole('main').getByRole('button', { name: action }).first().click();
+    // The title bar's action button sits outside main.
+    await page.getByRole('button', { name: action }).first().click();
 }
 
 /** Opens a Settings sub-page by its row title. */
 async function settingsSubpage(page, section) {
+    await settingsPath(page, section);
+}
+
+/** Opens Settings from its list, then each row in order (each matched by its leading text). */
+async function settingsPath(page, ...rows) {
     await openSettings(page);
-    const back = page.getByRole('button', { name: 'Back to settings' }).filter({ visible: true }).first();
-    if (await back.count()) await back.click();
-    await page.getByRole('main').getByRole('button', { name: new RegExp(`^${section}`) }).first().click();
+    // Settings reopens on the last page it showed; step back until the list's Wallets row shows.
+    const listRow = page.getByRole('main').getByRole('button', { name: /^Wallets/ });
+    for (let step = 0; step < 4 && !(await listRow.first().isVisible()); step += 1) {
+        await page.getByRole('button', { name: /^Back/ }).filter({ visible: true }).first().click();
+    }
+    for (const row of rows) await page.getByRole('main').getByRole('button', { name: new RegExp(`^${row}`) }).first().click();
 }
 
 /** Types the e2e wallet password when the form asks for it (an empty signer pool). */
@@ -395,7 +401,7 @@ async function settingsDirectPage(page, group, row) {
 async function openDeveloperMode(page) {
     await settingsSubpage(page, 'Advanced');
     const main = page.getByRole('main');
-    const developerSwitch = main.getByRole('switch', { name: 'Developer mode', exact: true });
+    const developerSwitch = main.getByRole('switch', { name: /^Developer mode/ }).or(main.getByRole('checkbox', { name: /^Developer mode/ })).first();
     if (!(await developerSwitch.isChecked())) await developerSwitch.click();
     await main.getByRole('button', { name: /^Developer options/ }).click();
     await expect(main.getByText('Test networks')).toBeVisible();
@@ -509,6 +515,9 @@ function measureNotices() {
                 width: Math.round(el.getBoundingClientRect().width),
                 column: Math.round(column),
                 card: card ? describe(card) : null,
+                // G129: an error summary sits at the very top of its form, inside the form card.
+                cardTop: card ? Math.round(el.getBoundingClientRect().top - card.getBoundingClientRect().top - parseFloat(getComputedStyle(card).paddingTop)) : null,
+                cardInner: card ? Math.round(card.clientWidth - parseFloat(getComputedStyle(card).paddingLeft) - parseFloat(getComputedStyle(card).paddingRight)) : null,
                 inForm: !!el.closest('form'),
             };
         });
@@ -531,7 +540,7 @@ for (const viewport of VIEWPORTS) {
     test.describe(`form notices at ${size}`, () => {
         test.use({ viewport, actionTimeout: 45_000 });
 
-        test('no notice sits inside a form card', async ({ page }, testInfo) => {
+        test('notices sit at the top of their form card and in no other card', async ({ page }, testInfo) => {
             test.setTimeout(testInfo.timeout * 3);
             await installFaultSeam(page);
             await createWallet(page);
@@ -573,7 +582,12 @@ for (const viewport of VIEWPORTS) {
                 }
                 if (viewport.width < WIDE_MIN) continue;
                 for (const notice of notices) {
-                    if (notice.card) faults.push(`${form.label}: notice "${notice.text}" sits inside ${notice.card}`);
+                    if (notice.card) {
+                        // G120 and G129 put a form's notice at the top of the form card, at the card's inner width.
+                        if (!/formCard|formFrame/.test(notice.card)) faults.push(`${form.label}: notice "${notice.text}" sits inside ${notice.card}`);
+                        else if (notice.cardTop > 2) faults.push(`${form.label}: notice "${notice.text}" is ${notice.cardTop}px below the top of its form card`);
+                        else if (notice.width < notice.cardInner - 2) faults.push(`${form.label}: notice "${notice.text}" is ${notice.width}px of a ${notice.cardInner}px form card`);
+                    }
                     else if (notice.width < notice.column - 2) {
                         faults.push(`${form.label}: notice "${notice.text}" is ${notice.width}px of a ${notice.column}px content column`);
                     }

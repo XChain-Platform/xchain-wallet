@@ -223,14 +223,12 @@ test.describe('revealing an address private key', () => {
 
                 // The screen must still be about the address it was opened
                 // from: the pair checked below is only meaningful if the user is
-                // looking at that pair. Matched on the ABBREVIATED form the
-                // screen actually renders (`rltc1q…jpqld3`), which is also all a
-                // user has to compare against - so this asserts what they can
-                // actually check, not what is in the DOM behind it.
-                const screen = await main.innerText();
-                const onScreen = screen.includes(address.slice(0, 6))
-                    && screen.includes(address.slice(-6));
-                expect(onScreen,
+                // looking at that pair. The screen shows it whole, in a
+                // read-only Address field above the key (a field value, which
+                // innerText does not carry), so the field is read and compared
+                // in full.
+                const shownAddress = main.getByRole('textbox', { name: 'Address', exact: true });
+                expect(await shownAddress.inputValue().catch(() => '') === address,
                     'the reveal screen no longer names the address it was opened from')
                     .toBe(true);
 

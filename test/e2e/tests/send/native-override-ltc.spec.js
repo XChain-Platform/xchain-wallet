@@ -12,7 +12,7 @@
 // override Bitcoin gets: the pre-flight verdict is the network's opinion, not
 // a local proof, so the user keeps the final say on every chain.
 
-import { createWallet, expect, gotoSection, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, gotoSection, revealChainPicker, test } from '../../fixtures/wallet.js';
 import { searchTokenPicker } from '../../fixtures/fields.js';
 
 const VALID_LTC = 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9';
@@ -33,8 +33,15 @@ test('an unaffordable Litecoin token send offers Sign anyway behind the same war
 
     await createWallet(page);
     await gotoSection(page, 'Send');
-    await page.getByRole('button', { name: /Change asset/ }).click();
+    // The From section picks the chain the send is made on; LITEGEM is a Litecoin token.
+    const network = page.getByRole('main').getByRole('button', { name: /^Network:/ });
+    await revealChainPicker(page.getByRole('main'), network, 'Network');
+    await network.click();
+    await page.getByRole('dialog', { name: 'Network' }).getByRole('button', { name: 'Select Litecoin' }).click();
+    await page.getByRole('button', { name: /^Asset: LTC on Litecoin/ }).click();
     await searchTokenPicker(page, 'LITEGEM');
+    const filter = page.getByRole('button', { name: 'Filter coins and tokens', exact: true });
+    if (await filter.getAttribute('aria-expanded') === 'true') await filter.click();
     await page.getByRole('button', { name: /^Select Lite Gem/ }).first().click();
     const main = page.getByRole('main');
     await expect(main.getByRole('textbox', { name: /^Amount \(LITEGEM\)/ })).toBeVisible();

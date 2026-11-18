@@ -30,17 +30,19 @@
 // optional field, so the book silently dropped every order that omitted it).
 // Fixed in xchain-explorer, but a venue runs a built image, so this spec pins the
 // working shape today and its second test - the same order with NO memo, which is
-// what the wallet's form produces unless you open "Advanced options" - is gated on
+// what the wallet's form produces unless you open its Memo section - is gated on
 // the venue carrying the fix.
 //
 // RUN IT ON LITECOIN:
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/dex/market-view.regtest.spec.js
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
+    fillOrderSide,
+    placeOrderButton,
     fundAddress,
     issuePlainToken,
     readIssueSource,
@@ -162,6 +164,13 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
                 `the venue rejected the ISSUE (${issued.status}); on this chain that is usually the `
                 + 'price sentinel going stale mid-run, not a wallet defect (campaign §3.2)')
                 .toBe('valid');
+            // The give side is picked from the Asset picker's held rows, which
+            // read balances once on open, and the explorer serves the ISSUE
+            // before its balance: wait for the balance, then reload so the
+            // wallet reads it.
+            await waitForTokenBalance(source, TICK, Number(SUPPLY));
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
         });
 
         await test.step('place a token-for-token order, which is what creates a market', async () => {
@@ -170,22 +179,20 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(await openFromAddress(main)).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
-            // Both sides are tokens here, so each SideEditor renders its own
-            // Ticker + Amount: first() is "You give", last() is "You get".
-            await main.getByRole('radio', { name: 'A token' }).last().check();
-            await fieldByLabel(main, 'Ticker').first().fill(TICK);
-            await fieldByLabel(main, 'Amount').first().fill(String(GIVE));
-            await fieldByLabel(main, 'Ticker').last().fill('XCHAIN');
-            await fieldByLabel(main, 'Amount').last().fill(String(GET));
+            // Both sides are tokens here; each side's asset button opens the
+            // Asset picker, and the get side defaults to the coin.
+            await fillOrderSide(page, 'give', TICK, GIVE);
+            await fillOrderSide(page, 'get', 'XCHAIN', GET);
 
             // The memo is load-bearing on a venue that has not taken the
             // D-136 fix: without it the book drops the order. Set here so
             // this test pins the market path itself rather than re-failing on a
-            // defect its sibling below already owns.
-            await main.getByRole('button', { name: /Advanced options/ }).click();
+            // defect its sibling below already owns. Memo is its own closed
+            // optional section.
+            await openFormSection(main, 'Memo');
             await fieldByLabel(main, 'Memo').fill(`book ${STAMP}`);
 
-            await main.getByRole('button', { name: /^Place order/ }).click();
+            await placeOrderButton(page).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const order = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -255,7 +262,7 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
     });
 
     // The same lane with the field left blank, which is what the form produces
-    // unless the user opens "Advanced options" - so this is the ordinary case,
+    // unless the user opens the Memo section - so this is the ordinary case,
     // and it is the one that was broken.
     test('an order with no memo is on the book too (D-136)', async ({ page }) => {
         const noMemoTick = `NMO${STAMP}`;
@@ -284,18 +291,19 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const issued = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(issued.status), 'the venue rejected the ISSUE').toBe('valid');
+            // As above: the picker lists the token only once the wallet has read its balance.
+            await waitForTokenBalance(source, noMemoTick, Number(SUPPLY));
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
 
             await openPaletteCommand(page, 'Create order');
             main = page.getByRole('main');
             await expect(await openFromAddress(main)).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            await main.getByRole('radio', { name: 'A token' }).last().check();
-            await fieldByLabel(main, 'Ticker').first().fill(noMemoTick);
-            await fieldByLabel(main, 'Amount').first().fill(String(GIVE));
-            await fieldByLabel(main, 'Ticker').last().fill('XCHAIN');
-            await fieldByLabel(main, 'Amount').last().fill(String(GET));
-            // No memo: the field is never opened.
-            await main.getByRole('button', { name: /^Place order/ }).click();
+            await fillOrderSide(page, 'give', noMemoTick, GIVE);
+            await fillOrderSide(page, 'get', 'XCHAIN', GET);
+            // No memo: the Memo section is never opened.
+            await placeOrderButton(page).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const order = await waitForIndexedAction(await approveAndGetTxid(page));
