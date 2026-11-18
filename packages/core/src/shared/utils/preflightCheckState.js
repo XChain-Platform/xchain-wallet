@@ -38,12 +38,9 @@ export const PREFLIGHT_CHECK_STATES = Object.freeze({
     FAIL: 'fail',
 });
 
-// Unverified checks the SDK declares on every action of its kind, whatever the
-// token or address state, for rules the network decides at the including block.
-// Each has one emit site in xchain-sdk src/preflight/checks (named per entry). A
-// report whose only shortfall is these is not a partial check (operator
-// 2026-11-17, widened 2026-11-18). Matched by code, never by reason text; a
-// failed read, an unknowable state or any other code stays partial.
+// Checks the SDK declares on every action of its kind (one emit site each, in xchain-sdk
+// src/preflight/checks) for rules decided at settlement; a report short only these is not
+// partial (operator 2026-11-17, 2026-11-18). Matched by code; failed reads stay partial.
 export const SETTLE_TIME_UNVERIFIED_CHECKS = Object.freeze([
     'LEG_AMOUNT_CONSOLIDATION',        // send.js, every SEND and DESTROY
     'SEND_RESTRICTIONS',               // send.js, every SEND
