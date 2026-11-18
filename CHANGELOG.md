@@ -7,6 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.343.0] - 2026-11-18
+
+### Added
+- Large files can be published in several parts, with a quote for the whole file shown before anything starts.
+- Multi-part uploads send their transactions in funding waves and wait for each wave to be funded.
+- Unfinished multi-part uploads can be resumed, and the wallet picks up where the chain left off.
+- Publish File, Gated Publish and Attach Artwork have an Upload method field with a plain summary of each method.
+- Gated multi-part publishes encrypt the file and resolve the access key before anything is sent.
+- The multi-part upload review names every part and transaction, and a progress panel shows uploads of more than 32 parts.
+- Desktop wallets read large files from disk by path, so a big upload does not have to fit in memory.
+- Desktop wallets hold quit while a multi-part upload is still broadcasting.
+- A single wallet menu lists every page in groups, with search, a close button on every width and the same rows in every shell.
+- The bottom bar on phones has five tabs backed by the same menu, and the command palette lists the same pages.
+- Home shows Send, Receive, Exchange and More actions on wide screens, and the balance hero has one shared actions menu on Home and token pages.
+- Token details show quick actions as one compact row, and show a price history placeholder when market data is unavailable.
+- Tokens have their own content tabs, hero names and list row states.
+- The Prediction Markets list is back with its pie gauge, and governance polls follow the same layout.
+- Home lists recent activity on its Activity tab.
+- Price alerts ask before deleting one, and the add form is grouped by coin, filters and action.
+- Every list and form now has a loading, error and result state inside a shared page layout.
+- Scan QR is an icon on the label row of address, recovery phrase and signing fields.
+- Each token form has its own submit label, and every callback and pause sentence names the token.
+- The Confirm card for a contract call names the contract and the method.
+- Transaction fees default to Normal, and time-sensitive fee controls are available.
+- The style guide shows the multi-part upload section and the asset mark.
+- The demo wallet comes with issued tokens, an XCHAIN holding and rising charts.
+- Store listing screenshots and the promo tile are refreshed for v0.343.0.
+
+### Changed
+- Every screen is redesigned with shared cards, buttons, fields, tabs, spacing and icons.
+- Settings are regrouped, and every page keeps one title and one help line.
+- Pages and forms use two-panel layouts where the screen is wide enough.
+- Back is a bare chevron in the page header, with no extra Back button inside pages.
+- Wallet creation, onboarding and the intro carousel are laid out in one centred column that fills the page gutter.
+- Tabs show the selected one with an underline only.
+- The balance hero and portfolio chart keep one height across data, loading, failure and empty states.
+- Confirm screens label the button Approve and name the reviewed action in the header.
+- Hardware wallet confirm screens label the button Sign.
+- The desktop window title follows the current page.
+- Wallet and recovery copy uses plain words instead of BIP39, xpub and key-encoding jargon.
+- Prices and charts are kept on the device and shown at once, then refreshed in the background.
+- Network pickers on History and list toolbars show only the chain icon.
+- Test networks show Balance only on Home and token pages.
+- Rarely used pages and forms are laid out on shared templates so they look the same everywhere.
+- One navigation history is used in every shell.
+- Wallets keep their own mode, and agent account token rules and copy are clearer.
+- Security updates are taken for Electron, sharp, vite, hono, undici, qs, pbkdf2, ip-address and several build tools.
+
+### Fixed
+- Send Max prices only the coins the send will spend.
+- A send to your own address is shown as costing only the fee.
+- A balance the wallet cannot read is shown as unknown instead of zero.
+- Dogecoin fee floors are corrected and live fee tiers are on.
+- Balance rows that name another address, coin or network are dropped.
+- Token lookup failures are shown, and lists from another chain are refused.
+- Token holder replies the wallet cannot read are refused instead of counted as an empty set or zero.
+- Token admin refuses callback settings when holder supply is only partly read.
+- Staking refuses an empty first page when the explorer reports rows.
+- A network-wait line shows in History while an empty list is unchecked, and stale-balance wording stays off balance screens.
+- The Unverified label is skipped on assets the wallet cannot check.
+- The lock screen keeps the password field still when a wrong-password error appears.
+- Creating a wallet twice at once is prevented, and the desktop wallet refuses a stale vault save.
+- The extension stays locked while a refused session key clear is pending.
+- Contacts keep Undo available after a refused restore write.
+- Tor routing is marked off before sessions are restored.
+- A stalled session read on web start-up times out and retries in place.
+- Rate-limited wallet chunks are retried during start-up.
+- The oracle console blocks a second watcher build while one is pending.
+- Focus returns to the control that opened a page, and dispenser details take focus when opened in the side panel.
+- Long text, hints and field buttons stay inside their cards at large text sizes, and fee figures stay on one line.
+- Chart scales, avatar letters, the Back chevron and the license Accept button fit their boxes at every width.
+- Pending badges and recovery phrase numbers meet contrast requirements.
+- The phone menu scrolls as one column, and its scrollbar no longer draws over menu rows.
+- Raw file reads that cannot be parsed are reported as such instead of as empty.
+- Contract fund, bridge, airdrop and broadcast forms show their load errors and results on the page.
+- Unlock works in hidden browser tabs.
+
+### Security
+- bitcoinjs-lib is pinned to a patched release for a published advisory.
+- Patched minimatch, glob and uuid releases are forced under the build tools.
+- Multi-part gate keys and resume files are validated, legacy digests are rejected and pending upload records are bounded.
+
 ## [0.342.1] - 2026-11-01
 
 ### Changed
