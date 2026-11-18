@@ -10,12 +10,14 @@
 
 // A notice is the first item of the page content, never a box inside a box.
 // On a wide screen a form is drawn as one card (FormPage), so its notices sit
-// above that card at the full content width; on a phone the form is bare and
+// above that card at the full content width (rulings G120 and G129, 2026-11-15
+// and 2026-11-16, now put a form's notice at the top of the form, so inside
+// the form card, first and at the card's inner width); on a phone the form is bare and
 // they lead its content. Walk the main forms at a desktop, a laptop, a
 // landscape phone and a portrait phone, submit each one empty so its
 // validation summary or form error shows, and measure every notice in the
-// page content: at 600px and wider none of them may sit inside a bordered
-// card. Failures that need the host to refuse (a load, a generate, a hardware
+// page content: at 600px and wider none of them may sit inside any bordered
+// card other than its own form card. Failures that need the host to refuse (a load, a generate, a hardware
 // check, a password change) are forced through the web messaging seam, the
 // same route-and-patch the async boundary spec uses. A forced state that is
 // about the whole form (`notice`) must show as a notice; one about a single
@@ -359,7 +361,7 @@ async function palette(page, title) {
     const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('combobox').first().fill(title);
-    await page.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
+    await page.getByRole('option', { name: new RegExp(`^${title}\\b`, 'i') }).first().click();
     await expect(dialog).toBeHidden();
 }
 
@@ -509,6 +511,9 @@ function measureNotices() {
                 width: Math.round(el.getBoundingClientRect().width),
                 column: Math.round(column),
                 card: card ? describe(card) : null,
+                // G129: an error summary sits at the very top of its form, inside the form card.
+                cardTop: card ? Math.round(el.getBoundingClientRect().top - card.getBoundingClientRect().top - parseFloat(getComputedStyle(card).paddingTop)) : null,
+                cardInner: card ? Math.round(card.clientWidth - parseFloat(getComputedStyle(card).paddingLeft) - parseFloat(getComputedStyle(card).paddingRight)) : null,
                 inForm: !!el.closest('form'),
             };
         });
@@ -531,7 +536,7 @@ for (const viewport of VIEWPORTS) {
     test.describe(`form notices at ${size}`, () => {
         test.use({ viewport, actionTimeout: 45_000 });
 
-        test('no notice sits inside a form card', async ({ page }, testInfo) => {
+        test('notices sit at the top of their form card and in no other card', async ({ page }, testInfo) => {
             test.setTimeout(testInfo.timeout * 3);
             await installFaultSeam(page);
             await createWallet(page);
@@ -573,7 +578,12 @@ for (const viewport of VIEWPORTS) {
                 }
                 if (viewport.width < WIDE_MIN) continue;
                 for (const notice of notices) {
-                    if (notice.card) faults.push(`${form.label}: notice "${notice.text}" sits inside ${notice.card}`);
+                    if (notice.card) {
+                        // G120 and G129 put a form's notice at the top of the form card, at the card's inner width.
+                        if (!/formCard|formFrame/.test(notice.card)) faults.push(`${form.label}: notice "${notice.text}" sits inside ${notice.card}`);
+                        else if (notice.cardTop > 2) faults.push(`${form.label}: notice "${notice.text}" is ${notice.cardTop}px below the top of its form card`);
+                        else if (notice.width < notice.cardInner - 2) faults.push(`${form.label}: notice "${notice.text}" is ${notice.width}px of a ${notice.cardInner}px form card`);
+                    }
                     else if (notice.width < notice.column - 2) {
                         faults.push(`${form.label}: notice "${notice.text}" is ${notice.width}px of a ${notice.column}px content column`);
                     }
