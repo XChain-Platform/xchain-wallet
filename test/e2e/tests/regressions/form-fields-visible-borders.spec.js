@@ -70,11 +70,17 @@ async function selectHeldGiveToken(page) {
         .getByRole('button', { name: 'Max you give amount' })).toBeVisible();
 }
 
-async function expectVisibleFieldsHaveBorders(page, label) {
+// The big amounts on Quick's You give and You get cards are borderless and
+// transparent by operator sign-off (fe2bc59bb); the card's own 1px border
+// frames each one. Only those two cards may stand in for a field's border,
+// and only while the card draws a border on every side.
+const GIVE_GET_CARDS = ['You give', 'You get'];
+
+async function expectVisibleFieldsHaveBorders(page, label, expectedCardFramed = []) {
     const fields = page.locator(VISIBLE_FIELD_SELECTOR);
     await expect(fields.first(), `${label}: no visible text field, select, or textarea`).toBeVisible();
 
-    const measurements = await fields.evaluateAll((elements) => {
+    const measurements = await fields.evaluateAll((elements, cardNames) => {
         const shadowIsVisible = (value) => value !== 'none'
             && value.split(/,(?![^()]*\))/).some((layer) => {
                 if (/\btransparent\b/i.test(layer)) return false;
@@ -103,6 +109,15 @@ async function expectVisibleFieldsHaveBorders(page, label) {
                 || element.getAttribute('placeholder')
                 || element.id
                 || '(unlabelled)';
+            const selfOutlined = Object.values(borders).some((width) => width >= 1)
+                || shadowIsVisible(style.boxShadow);
+            const card = element.closest(cardNames.map((name) => `section[aria-label="${name}"]`).join(', '));
+            const cardStyle = card ? getComputedStyle(card) : null;
+            const cardFramed = !selfOutlined && Boolean(cardStyle)
+                && ['Top', 'Right', 'Bottom', 'Left'].every((side) => (
+                    Number.parseFloat(cardStyle[`border${side}Width`]) >= 1
+                    && cardStyle[`border${side}Style`] !== 'none'
+                ));
 
             return {
                 element: element.tagName.toLowerCase(),
@@ -110,17 +125,21 @@ async function expectVisibleFieldsHaveBorders(page, label) {
                 label: labelText,
                 borders,
                 boxShadow: style.boxShadow,
-                outlined: Object.values(borders).some((width) => width >= 1)
-                    || shadowIsVisible(style.boxShadow),
+                outlined: selfOutlined || cardFramed,
+                framedBy: cardFramed ? card.getAttribute('aria-label') : undefined,
             };
         });
-    });
+    }, GIVE_GET_CARDS);
 
     const offenders = measurements.filter(({ outlined }) => !outlined);
     expect(
         offenders,
         `${label}: visible fields without a 1px border or visible box shadow\n${JSON.stringify(measurements, null, 2)}`,
     ).toEqual([]);
+    expect(
+        measurements.map(({ framedBy }) => framedBy).filter(Boolean).sort(),
+        `${label}: fields framed by a Give/Get card instead of their own border`,
+    ).toEqual([...expectedCardFramed].sort());
 }
 
 async function expectInlineActionsInsideFields(page, label, requiredNames = []) {
@@ -210,8 +229,8 @@ async function expectInlineActionsInsideFields(page, label, requiredNames = []) 
     ).toEqual([]);
 }
 
-async function checkScreen(page, label, requiredActions = []) {
-    await expectVisibleFieldsHaveBorders(page, label);
+async function checkScreen(page, label, requiredActions = [], cardFramed = []) {
+    await expectVisibleFieldsHaveBorders(page, label, cardFramed);
     await expectInlineActionsInsideFields(page, label, requiredActions);
 }
 
@@ -245,7 +264,7 @@ for (const theme of THEMES) {
                     await gotoPaletteRoute(page, 'Swap');
                     await expect(page.getByRole('heading', { name: 'Swap Tokens', exact: true })).toBeVisible();
                     await selectHeldGiveToken(page);
-                    await checkScreen(page, `${context} / Swap`);
+                    await checkScreen(page, `${context} / Swap`, [], GIVE_GET_CARDS);
                 });
 
                 await test.step(`${context} / Receive`, async () => {
