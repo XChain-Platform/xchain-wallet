@@ -73,13 +73,16 @@ import {
     migrateContact,
     migrateConnectedSite,
     migratePendingTx,
+    migrateSigner,
 } from '../schemas/migrations.js';
 import { legacySettingsMigrationCtx } from './legacyRates.js';
 import { validateAccount } from '../schemas/account.js';
 import { validateAddress } from '../schemas/address.js';
 import { validateContact } from '../schemas/contact.js';
 import { validateConnectedSite } from '../schemas/connectedSite.js';
+import { addressSourceForSignerKind } from '../schemas/constants.js';
 import { validatePendingTx } from '../schemas/pendingTx.js';
+import { SIGNER_KINDS, validateSignerRecord } from '../schemas/signer.js';
 import { validateSettings } from '../schemas/settings.js';
 import { parseBackupPointer } from '../uri/backupPointer.js';
 import { defaultRegistry } from '../registry/index.js';
@@ -89,6 +92,9 @@ import {
     RESTORE_PASSWORD_LABELS,
     restorePasswordRequiredMessage,
 } from './restorePasswordCopy.js';
+
+// Address sources whose signerId names a SignerRecord in the same backup.
+const SIGNER_RECORD_SOURCES = new Set(SIGNER_KINDS.map(addressSourceForSignerKind));
 
 export const BACKUP_PAYLOAD_VERSION = 1;
 export const MIN_BACKUP_PASSWORD_LENGTH = 8;
@@ -191,7 +197,7 @@ function sealOpenError(err, what) {
  * @property {import('../schemas/contact.js').Contact[]} contacts
  * @property {import('../schemas/connectedSite.js').ConnectedSite[]} connectedSites
  * @property {import('../schemas/settings.js').Settings | null} settings
- * @property {unknown[]} signers                  reserved; HW pairings land here
+ * @property {import('../schemas/signer.js').SignerRecord[]} signers
  * @property {import('../schemas/pendingTx.js').PendingTx[]} pendingTxs
  */
 
@@ -234,18 +240,18 @@ export async function exportBackupFile({
 
     const wallet = await vault.wallets.get(walletId);
     if (!wallet) throw new WalletNotFoundError(walletId);
-    // The backup restores a wallet from its sealed keys; a hardware wallet
-    // has none (its device is the backup), and the payload carries no signer
-    // rows, so a restored copy would hold addresses no device is tied to.
+    // The backup restores a wallet from its sealed keys; a hardware wallet has
+    // none (its device is the backup), and signer rows hold no key material.
     refuseHardwareWallet(wallet, 'a backup file');
 
-    const [allAccounts, allAddresses, allContacts, allConnected, allPending, settings] =
+    const [allAccounts, allAddresses, allContacts, allConnected, allPending, allSigners, settings] =
         await Promise.all([
             vault.accounts.list(),
             vault.addresses.list(),
             vault.contacts.list(),
             vault.connectedSites.list(),
             vault.pendingTxs.list(),
+            vault.signers.list(),
             vault.settings.get(),
         ]);
 
@@ -287,7 +293,7 @@ export async function exportBackupFile({
         contacts: allContacts,
         connectedSites,
         settings,
-        signers: [],
+        signers: allSigners.filter((signer) => signer.walletId === walletId),
         pendingTxs,
     };
 
@@ -341,8 +347,8 @@ export async function exportBackupFile({
  * @typedef {Object} ImportBackupFileResult
  * @property {BackupPayload} payload                       the decoded payload (for the shell to surface)
  * @property {string} walletId                             imported wallet id
- * @property {{ wallets: number, accounts: number, addresses: number, contacts: number, connectedSites: number, pendingTxs: number, settings: boolean }} writes
- * @property {{ wallets: number, accounts: number, addresses: number, contacts: number, connectedSites: number, pendingTxs: number, settings: boolean }} skipped
+ * @property {{ wallets: number, accounts: number, addresses: number, contacts: number, connectedSites: number, signers: number, pendingTxs: number, settings: boolean }} writes
+ * @property {{ wallets: number, accounts: number, addresses: number, contacts: number, connectedSites: number, signers: number, pendingTxs: number, settings: boolean }} skipped
  * @property {boolean} rekeyed: the wallet's seal was moved to this
  *                                                          device's password (false only when the record
  *                                                          carried no sealed key material at all)
@@ -407,7 +413,7 @@ export async function importBackupFile({
     // vault yet at this point, so the throw leaves it untouched.
     const rekeyed = await rekeyWalletRecord(decoded.wallet, { walletPassword, devicePassword, onDeviceKey });
 
-    // §19.4: 'add' mode re-mints wallet / account / address ids so a restored
+    // §19.4: 'add' mode re-mints wallet, account, address, and signer ids so a restored
     // wallet coexists even where both vaults derived equal ones (a same-device
     // from-seed restore does); globally-id'd records fall through to
     // onConflict.
@@ -415,10 +421,11 @@ export async function importBackupFile({
         remintIdentifiers(decoded);
     }
 
+    await reuseExistingSignerIds(vault, decoded);
+
     // Collect conflicts up-front; onConflict='error' fails fast. Add
-    // mode skips the wallet / account / address collisions because we
-    // just re-minted those ids; only contacts / connectedSites can
-    // still conflict.
+    // mode skips wallet-scoped collisions because we re-minted those ids;
+    // only contacts / connectedSites can still conflict.
     //
     // Settings is exempt in 'add' mode: it is a vault-global singleton,
     // so an initialized vault ALWAYS has one and the incoming record
@@ -433,24 +440,8 @@ export async function importBackupFile({
         throw new BackupConflictError(conflicts);
     }
 
-    const writes = {
-        wallets: 0,
-        accounts: 0,
-        addresses: 0,
-        contacts: 0,
-        connectedSites: 0,
-        pendingTxs: 0,
-        settings: false,
-    };
-    const skipped = {
-        wallets: 0,
-        accounts: 0,
-        addresses: 0,
-        contacts: 0,
-        connectedSites: 0,
-        pendingTxs: 0,
-        settings: false,
-    };
+    const writes = emptyRestoreCounts();
+    const skipped = emptyRestoreCounts();
 
     // Every record is staged first and written together at the end, so a
     // storage refusal or a closed page part-way through leaves the vault as it
@@ -464,6 +455,7 @@ export async function importBackupFile({
     await stageCollection(vault.addresses, decoded.addresses ?? [], onConflict, writes, skipped, 'addresses', migrateAddress, staged);
     await stageCollection(vault.contacts, decoded.contacts ?? [], onConflict, writes, skipped, 'contacts', migrateContact, staged);
     await stageCollection(vault.connectedSites, decoded.connectedSites ?? [], onConflict, writes, skipped, 'connectedSites', migrateConnectedSite, staged);
+    await stageCollection(vault.signers, decoded.signers ?? [], onConflict, writes, skipped, 'signers', migrateSigner, staged);
     await stageCollection(vault.pendingTxs, decoded.pendingTxs ?? [], onConflict, writes, skipped, 'pendingTxs', migratePendingTx, staged);
 
     // Settings is a singleton; overwrite/preserve decisions apply to
@@ -592,7 +584,7 @@ export async function restoreFromBackupPointer({
  * @param {BackupPayload} payload
  * @param {{ skipWalletScoped?: boolean, skipSettings?: boolean }} [opts]
  *        skipWalletScoped: skip wallets / accounts / addresses /
- *          pendingTxs (the four collections whose ids `add`-mode has
+ *          signers / pendingTxs (the five collections whose ids `add`-mode has
  *          already re-minted).
  *        skipSettings: skip the settings singleton, which exists in
  *          every initialized vault and so always "collides".
@@ -611,12 +603,101 @@ async function collectConflicts(vault, payload, opts = {}) {
         await check(vault.wallets, [payload.wallet], 'wallets');
         await check(vault.accounts, payload.accounts ?? [], 'accounts');
         await check(vault.addresses, payload.addresses ?? [], 'addresses');
+        await check(vault.signers, payload.signers ?? [], 'signers');
         await check(vault.pendingTxs, payload.pendingTxs ?? [], 'pendingTxs');
     }
     await check(vault.contacts, payload.contacts ?? [], 'contacts');
     await check(vault.connectedSites, payload.connectedSites ?? [], 'connectedSites');
     if (!opts.skipSettings && payload.settings && (await vault.settings.get())) out.push('settings');
     return out;
+}
+
+/**
+ * Pairing is idempotent by wallet, vendor, and device identifier. If this
+ * vault already knows a restored device under another record id, keep that
+ * stable id so a later pairing and the restored addresses agree.
+ *
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {BackupPayload} payload
+ */
+async function reuseExistingSignerIds(vault, payload) {
+    if (!payload.signers?.length) return;
+    const existing = await vault.signers.list();
+    if (existing.length === 0) return;
+
+    const replacementIds = new Map();
+    payload.signers = payload.signers.filter((incoming) => {
+        const match = existing.find((record) => (
+            record.walletId === incoming.walletId
+            && record.vendor === incoming.vendor
+            && record.deviceIdentifier === incoming.deviceIdentifier
+        ));
+        if (!match || match.id === incoming.id) return true;
+        replacementIds.set(incoming.id, match.id);
+        return false;
+    });
+
+    for (const address of payload.addresses ?? []) {
+        if (!SIGNER_RECORD_SOURCES.has(address.source)) continue;
+        address.signerId = replacementIds.get(address.signerId) ?? address.signerId;
+    }
+}
+
+/**
+ * @param {BackupPayload['accounts']} accounts
+ * @param {Map<string, string>} addressIdMap
+ */
+function remapActiveAddressOverrides(accounts, addressIdMap) {
+    for (const account of accounts ?? []) {
+        const overrides = account?.activeAddressByChainId;
+        if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) continue;
+        const remapped = {};
+        for (const [chainId, addressId] of Object.entries(overrides)) {
+            if (addressIdMap.has(addressId)) remapped[chainId] = addressIdMap.get(addressId);
+        }
+        account.activeAddressByChainId = remapped;
+    }
+}
+
+/**
+ * Give each signer a new id under the re-minted wallet and move hardware
+ * address links with it. Only device addresses point at SignerRecords, so
+ * every other address keeps its signerId.
+ *
+ * @param {BackupPayload} decoded
+ * @param {Map<string, string>} walletIdMap
+ */
+function remintSignerIds(decoded, walletIdMap) {
+    const signerIdMap = new Map();
+    for (const signer of decoded.signers ?? []) {
+        if (!signer || typeof signer.id !== 'string') continue;
+        const newId = randomUUID();
+        signerIdMap.set(signer.id, newId);
+        signer.id = newId;
+        if (typeof signer.walletId === 'string' && walletIdMap.has(signer.walletId)) {
+            signer.walletId = walletIdMap.get(signer.walletId);
+        }
+    }
+    for (const addr of decoded.addresses ?? []) {
+        if (!addr || !SIGNER_RECORD_SOURCES.has(addr.source)) continue;
+        if (typeof addr.signerId === 'string' && signerIdMap.has(addr.signerId)) {
+            addr.signerId = signerIdMap.get(addr.signerId);
+        }
+    }
+}
+
+/**
+ * @param {BackupPayload['connectedSites']} sites
+ * @param {Map<string, string>} accountIdMap
+ */
+function remapSiteGrants(sites, accountIdMap) {
+    for (const site of sites ?? []) {
+        const grantedAccounts = site?.permissions?.accounts;
+        if (!Array.isArray(grantedAccounts)) continue;
+        site.permissions.accounts = grantedAccounts.map((accountId) => (
+            accountIdMap.get(accountId) ?? accountId
+        ));
+    }
 }
 
 /**
@@ -627,16 +708,16 @@ async function collectConflicts(vault, payload, opts = {}) {
  *
  *   - wallet.id
  *   - wallet.importedKeys[].addressId
- *   - account.id, account.walletId
+ *   - account.id, account.walletId, account.activeAddressByChainId values
  *   - address.id, address.accountId
+ *   - signer.id, signer.walletId, hardware address.signerId
  *   - pendingTx.id    (kept independent; pending txs are address-scoped
  *                     via chain / network / `fromAddress`, not id-scoped)
  *
  * Contacts / connectedSites / settings ids stay as-is (they're global),
  * while connectedSites.permissions.accounts follows the account remint.
- * Exported for
- * test access; production callers go through `importBackupFile({mode:
- * 'add'})`.
+ * Exported for test access; production callers go through
+ * `importBackupFile({ mode: 'add' })`.
  *
  * @param {BackupPayload} decoded
  */
@@ -672,13 +753,9 @@ export function remintIdentifiers(decoded) {
         }
     }
 
-    for (const site of decoded.connectedSites ?? []) {
-        const grantedAccounts = site?.permissions?.accounts;
-        if (!Array.isArray(grantedAccounts)) continue;
-        site.permissions.accounts = grantedAccounts.map((accountId) => (
-            accountIdMap.get(accountId) ?? accountId
-        ));
-    }
+    remintSignerIds(decoded, walletIdMap);
+    remapActiveAddressOverrides(decoded.accounts, addressIdMap);
+    remapSiteGrants(decoded.connectedSites, accountIdMap);
 
     // Wallet's importedKeys point at the re-minted address ids by
     // value; rewire so a wif-imported wallet lands intact.
@@ -865,6 +942,20 @@ export async function rekeyWalletRecord(wallet, { walletPassword, walletKey, dev
     }
 }
 
+/** @returns {ImportBackupFileResult['writes']} */
+function emptyRestoreCounts() {
+    return {
+        wallets: 0,
+        accounts: 0,
+        addresses: 0,
+        contacts: 0,
+        connectedSites: 0,
+        signers: 0,
+        pendingTxs: 0,
+        settings: false,
+    };
+}
+
 async function stageCollection(collection, records, onConflict, writes, skipped, name, migrateRecord, staged) {
     if (typeof migrateRecord !== 'function') {
         throw new Error(`stageCollection: a migrator is required for "${name}"`);
@@ -924,6 +1015,19 @@ function pendingTxScopeKey(record) {
     return JSON.stringify([record?.chain, record?.network, record?.fromAddress]);
 }
 
+/**
+ * @param {string} kind
+ * @param {{ id: string, walletId: string }[]} records
+ * @param {string} walletId
+ */
+function assertWalletScoped(kind, records, walletId) {
+    for (const record of records) {
+        if (record.walletId !== walletId) {
+            throw new Error(`importBackupFile: ${kind} "${record.id}" belongs to another wallet`);
+        }
+    }
+}
+
 function prepareDecodedPayload(decoded, { chainRegistry }) {
     // A backup taken before wallet mode moved onto the wallet carries the
     // mode in its own settings; that value, never the receiving vault's,
@@ -936,19 +1040,13 @@ function prepareDecodedPayload(decoded, { chainRegistry }) {
         decoded.connectedSites, 'connectedSites', migrateConnectedSite,
     );
     decoded.pendingTxs = migratePayloadRecords(decoded.pendingTxs, 'pendingTxs', migratePendingTx);
-    if (decoded.signers != null && !Array.isArray(decoded.signers)) {
-        throw new Error('importBackupFile: payload signers must be an array');
-    }
-    decoded.signers ??= [];
+    decoded.signers = migratePayloadRecords(decoded.signers, 'signers', migrateSigner);
     if (decoded.settings != null) decoded.settings = migrateSettings(decoded.settings, legacySettingsMigrationCtx());
 
     const walletId = decoded.wallet.id;
     const accountIds = new Set(decoded.accounts.map((account) => account.id));
-    for (const account of decoded.accounts) {
-        if (account.walletId !== walletId) {
-            throw new Error(`importBackupFile: account "${account.id}" belongs to another wallet`);
-        }
-    }
+    assertWalletScoped('account', decoded.accounts, walletId);
+    assertWalletScoped('signer', decoded.signers, walletId);
 
     const importedAddressIds = new Set(
         (Array.isArray(decoded.wallet.importedKeys) ? decoded.wallet.importedKeys : [])
@@ -998,6 +1096,7 @@ function prepareDecodedPayload(decoded, { chainRegistry }) {
     assertAddressTypesSupported(decoded.addresses, chainRegistry);
     assertRecordsValid('contacts', decoded.contacts, validateContact);
     assertRecordsValid('connectedSites', decoded.connectedSites, validateConnectedSite);
+    assertRecordsValid('signers', decoded.signers, validateSignerRecord);
     assertRecordsValid('pendingTxs', decoded.pendingTxs, validatePendingTx);
     if (decoded.settings != null) assertRecordsValid('settings', [decoded.settings], validateSettings);
 }

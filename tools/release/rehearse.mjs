@@ -1022,7 +1022,9 @@ export function coverageDemand({ lanesText, releaseArtifacts }) {
     let carried = { oses: new Set(), direct: [] };
     if (releaseArtifacts !== undefined) {
         const oses = osesInRelease(releaseArtifacts);
-        if (oses === null) return everything('the release named by --prod-input carries no artifacts');
+        if (oses === null) {
+            return everything('the release named by --prod-input carries no artifact any lane recognises');
+        }
         carried = { oses, direct: lanesInRelease(releaseArtifacts).directLanes };
     }
     const demanded = new Set();
@@ -1225,7 +1227,9 @@ export async function publishedOsesAt({ previousTag, prodFeedBase, fetchImpl = f
  * deliberately does not contain and whose signing identity does not exist.
  *
  * Same fail-shut posture: an unusable listing returns null, and callers
- * treat null as "every OS", which is the historical behaviour.
+ * treat null as "every OS", which is the historical behaviour. A non-empty
+ * listing that names no desktop artifact and no direct-lane artifact is
+ * unusable too.
  *
  * @returns {Set<string>|null}
  */
@@ -1242,6 +1246,11 @@ export function osesInRelease(releaseArtifacts) {
             && (lane.os !== 'darwin' || n.includes('mac')));
         if (hit) found.add(lane.os);
     }
+    // Nothing recognised and no direct-lane artifact either: a listing this
+    // function could not read, which is not the same as a release with no
+    // desktop half. An APK-only or android-plus-extension listing keeps its
+    // empty set, since it names a shape the direct lanes already claim.
+    if (found.size === 0 && !lanesInRelease(releaseArtifacts).direct) return null;
     return found;
 }
 

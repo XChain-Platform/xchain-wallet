@@ -514,7 +514,7 @@ export function registerBridgeHandlers(host, opts = {}) {
     register('bridge.getActiveChains', async (req, deps) => {
         const site = await requireReadSite(deps, req);
         const settings = await deps.vault.settings.get();
-        await requireCurrentReadSite(deps, req, site.id);
+        const current = await requireCurrentReadSite(deps, req, site.id);
         if (!settings) return [];
         // "Active" = any chain that has seeded per-chain state (feeStrategy,
         // ADS, etc). Matches what seedSettings populates at createWallet.
@@ -524,8 +524,12 @@ export function registerBridgeHandlers(host, opts = {}) {
         // a chain we can't reach). The filter helper falls through with
         // an empty result on missing registry / no chains; that's fine
         // since the dApp will get an empty list and refuse to connect.
+        // The list is also scoped to the site grant, the same predicate every
+        // per-chain method enforces, so each id returned here is one
+        // getAddresses and the signers accept.
         const raw = Object.keys(settings.fees ?? {});
-        return flows.filterChainIdsByActiveNetwork(raw, settings, deps.chainRegistry);
+        return flows.filterChainIdsByActiveNetwork(raw, settings, deps.chainRegistry)
+            .filter((chainId) => chainGranted(current, chainId));
     });
 
     register('bridge.signMessage', async (req, deps) => {
@@ -694,6 +698,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
+        assertSighashTypeShape(req.sighashType);
         assertNotThrottled(signThrottle, req);
         const account = await findCoSignerAccountByAddress({
             vault: deps.vault,
@@ -737,6 +742,7 @@ export function registerBridgeHandlers(host, opts = {}) {
                 agentPublicNonce: req.agentPublicNonce,
                 inputIndex: req.inputIndex,
                 inputs: req.inputs,
+                ...(req.sighashType !== undefined ? { sighashType: req.sighashType } : {}),
             },
         });
         if (!validCoSignOutcome(outcome)) {
@@ -750,11 +756,8 @@ export function registerBridgeHandlers(host, opts = {}) {
         // Both CoSignApprovedSuccess and CoSignRefused are `ok: true`: a policy
         // refusal is a well-formed answer to a well-formed request, distinct
         // from a BridgeErrorResult, so the flow's own `approved` flag carries
-        // through unchanged and only the missing `ok` is added.
-        return {
-            ok: true,
-            ...outcome,
-        };
+        // through and only the published fields are copied.
+        return coSignResult(outcome);
     });
 
     // §43.2 / §42.8.2 parallel(): the cross-chain composer batches N actions
@@ -1452,6 +1455,29 @@ function signMessageSuccess(req, result) {
 }
 
 /**
+ * CoSignApprovedSuccess / CoSignRefused (§43.2) from a validated core outcome.
+ * An approval always carries `signatures`, one entry per co-signed input.
+ */
+function coSignResult(outcome) {
+    if (!outcome.approved) {
+        return {
+            ok: true,
+            approved: false,
+            reason: outcome.reason,
+            ...(outcome.detail !== undefined ? { detail: outcome.detail } : {}),
+        };
+    }
+    return {
+        ok: true,
+        approved: true,
+        signatures: outcome.signatures.map(({ index, publicNonce, sig, msg }) => (
+            { index, publicNonce, sig, msg }
+        )),
+        ...(outcome.action !== undefined ? { action: outcome.action } : {}),
+    };
+}
+
+/**
  * SignActionSuccess (§43.2) from a submit result.
  *
  * `actionIndex` is emitted only when the wallet genuinely knows it. The index
@@ -1572,11 +1598,24 @@ async function touchLastUsed(vault, site) {
     });
 }
 
+// The co-signer owns the allowed-value policy; the bridge only refuses a value
+// that is not a number, before the user is asked for a password or a throttle
+// token is spent.
+function assertSighashTypeShape(sighashType) {
+    if (sighashType !== undefined && !Number.isInteger(sighashType)) {
+        throw bridgeError('INVALID_PARAMS', 'sighashType must be an integer');
+    }
+}
+
+// An empty chain grant means all chains are permitted (per §43.3).
+function chainGranted(site, chainId) {
+    const chains = site.permissions?.chains ?? [];
+    return chains.length === 0 || chains.includes(chainId);
+}
+
 function assertChainPermitted(site, chainId) {
     if (!chainId) throw bridgeError('MISSING_CHAIN_ID', '');
-    const chains = site.permissions?.chains ?? [];
-    if (chains.length === 0) return;  // empty list = all permitted (per §43.3)
-    if (!chains.includes(chainId)) {
+    if (!chainGranted(site, chainId)) {
         throw bridgeError('CHAIN_NOT_PERMITTED', chainId);
     }
 }
@@ -1864,17 +1903,13 @@ function validCoSignOutcome(outcome) {
         return false;
     }
     if (!outcome.approved) return typeof outcome.reason === 'string' && outcome.reason.length > 0;
-    const single = ['publicNonce', 'sig', 'msg'].every(
-        (field) => typeof outcome[field] === 'string' && outcome[field].length > 0,
-    );
-    const multiple = Array.isArray(outcome.signatures) && outcome.signatures.length > 0
+    return Array.isArray(outcome.signatures) && outcome.signatures.length > 0
         && outcome.signatures.every((signature) => (
             Number.isInteger(signature?.index)
             && ['publicNonce', 'sig', 'msg'].every(
                 (field) => typeof signature[field] === 'string' && signature[field].length > 0,
             )
         ));
-    return single || multiple;
 }
 
 async function invokeSignMessage(deps, req) {

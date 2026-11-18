@@ -21,7 +21,24 @@
  * @property {string} [query]           the filter value (block / address / source / token / status / feed index)
  * @property {string} [type]            how to interpret `query` (see the SDK method's type enum)
  * @property {object} [opts]            paging opts ({ page, limit, sortorder })
+ * @property {boolean} [allPages]       read down the explorer's `next_before` cursor until the
+ *   reply's `total` is covered; the reply then carries `truncated: true` when rows are still missing
  */
+
+import { followObligationPages } from '../market/obligationPaging.js';
+
+// A failure on the first page rejects to the caller. A page below it that
+// fails ends the walk, and the rows already read still come back flagged
+// `truncated` rather than being thrown away.
+function followRemainingPages(first, readPage) {
+    return followObligationPages(first, async (page) => {
+        try {
+            return await readPage(page);
+        } catch {
+            return null;
+        }
+    });
+}
 
 function requireSdk(params, ctx) {
     if (!params?.sdkRegistry) throw new Error(`${ctx}: sdkRegistry is required`);
@@ -40,10 +57,12 @@ function requireSdk(params, ctx) {
  * whether a market still takes bets.
  * @param {BetQueryOpts} params
  */
-export async function betFeedsForChain({ sdkRegistry, chainId, query, type, opts }) {
+export async function betFeedsForChain({ sdkRegistry, chainId, query, type, opts, allPages }) {
     const sdk = requireSdk({ sdkRegistry, chainId }, 'betFeedsForChain');
     if (typeof sdk.getBetFeeds !== 'function') throw new Error('betFeedsForChain: sdk.getBetFeeds is unavailable');
-    return sdk.getBetFeeds(query || null, type || null, opts);
+    const first = await sdk.getBetFeeds(query || null, type || null, opts);
+    if (!allPages) return first;
+    return followRemainingPages(first, (page) => sdk.getBetFeeds(query || null, type || null, { ...(opts || {}), ...page }));
 }
 
 /**
@@ -69,10 +88,12 @@ export async function betFeedDetail({ sdkRegistry, chainId, feedIndex, opts }) {
  * `address` is the bettor; `feed` scopes to one market.
  * @param {BetQueryOpts} params
  */
-export async function betsForQuery({ sdkRegistry, chainId, query, type, opts }) {
+export async function betsForQuery({ sdkRegistry, chainId, query, type, opts, allPages }) {
     const sdk = requireSdk({ sdkRegistry, chainId }, 'betsForQuery');
     if (typeof sdk.getBets !== 'function') throw new Error('betsForQuery: sdk.getBets is unavailable');
-    return sdk.getBets(query || null, type || null, opts);
+    const first = await sdk.getBets(query || null, type || null, opts);
+    if (!allPages) return first;
+    return followRemainingPages(first, (page) => sdk.getBets(query || null, type || null, { ...(opts || {}), ...page }));
 }
 
 /**

@@ -481,6 +481,36 @@ async function waitForIndexedTip({ budgetMs = INDEX_WAIT_TIMEOUT_MS } = {}) {
     return false;
 }
 
+/** How long the wallet reuses an identical explorer read (explorerRateLimit.js reuseMs). */
+const WALLET_STATUS_REUSE_MS = 2_000;
+
+/**
+ * Holds until the indexer has stood at the node's tip for longer than the
+ * wallet reuses a status read. `assertReferencedOfferActionable` refuses to
+ * sign a cancel, edit or close on any `last_block` / `chain_tip` gap, and any
+ * block mined on the venue opens one. Throws when the tip is never held.
+ */
+export async function waitForIndexerAtTip(timeoutMs = 120_000) {
+    const deadline = Date.now() + timeoutMs;
+    let atTipSince = null;
+    let last = null;
+    while (Date.now() < deadline) {
+        last = await explorerJson('status').catch(() => last);
+        const indexed = Number(last?.last_block?.[REGTEST_COIN]);
+        const tip = Number(last?.chain_tip?.[REGTEST_COIN]);
+        if (Number.isFinite(tip) && indexed === tip) {
+            atTipSince ??= Date.now();
+            if (Date.now() - atTipSince > WALLET_STATUS_REUSE_MS) return;
+        } else {
+            atTipSince = null;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new Error(`the ${REGTEST_COIN} indexer never held the chain tip (indexed `
+        + `${last?.last_block?.[REGTEST_COIN]}, tip ${last?.chain_tip?.[REGTEST_COIN]}), so the wallet `
+        + 'would refuse to sign an action on an offer as unverifiable. Venue state, not a wallet defect');
+}
+
 /**
  * Chain-seconds of usable life left in the venue's price, or null when that
  * cannot be established.
@@ -1300,6 +1330,55 @@ export async function setHistoryDateWindow(page, from, to) {
     await fieldByLabel(panel, 'From date').fill(from);
     await fieldByLabel(panel, 'To date').fill(to);
     await closeHistoryFilters(page);
+}
+
+/** History's list-and-detail split box (PanelSplit's `data-list-detail`). */
+function historySplit(page) {
+    return page.locator('[data-list-detail="two-panel"]');
+}
+
+/**
+ * Opens a History row's action detail and returns where it drew.
+ *
+ * History draws a list-and-detail split (`data-list-detail="two-panel"`, the
+ * detail in a region named "Action details") while its content is at least
+ * LIST_DETAIL_MIN_WIDTH wide, and routes to a standalone ActionDetail page
+ * below that. `pane` is the detail region in the split and `main` on the
+ * standalone page. `title` holds the detail's "<Action> #<index>" title in
+ * either layout: the split names it in a screen-reader h2 at the top of the
+ * pane (ActionDetailView's embedded frame), the standalone page in its header.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {import('@playwright/test').Locator} row  one `[data-history-key]` row
+ * @returns {Promise<{ split: boolean, pane: import('@playwright/test').Locator, title: import('@playwright/test').Locator }>}
+ */
+export async function openHistoryDetail(page, row) {
+    await row.getByRole('button').first().click();
+    await expect(page.getByRole('region', { name: 'Transaction details' }),
+        'the History row opened no action detail').toBeVisible({ timeout: 30_000 });
+    const split = await historySplit(page).isVisible();
+    if (split) {
+        const pane = historySplit(page).getByRole('region', { name: 'Action details', exact: true });
+        return { split, pane, title: pane.getByRole('heading', { level: 2 }).first() };
+    }
+    return {
+        split,
+        pane: page.getByRole('main'),
+        title: page.getByRole('banner').filter({ has: page.getByRole('heading', { level: 1 }) }).first(),
+    };
+}
+
+/**
+ * Returns from a History action detail to the list. The split keeps the list
+ * on screen beside the detail, with its filters applied, so there is nothing
+ * to leave; the standalone page goes back through "Back to history", and
+ * History re-mounts with its default date window.
+ *
+ * @param {import('@playwright/test').Page} page
+ */
+export async function backToHistoryList(page) {
+    if (await historySplit(page).isVisible()) return;
+    await page.getByRole('button', { name: 'Back to history', exact: true }).click();
 }
 
 /**

@@ -45,6 +45,8 @@ import {
 import {
     createRuntime,
     enforceLaunchAutoLock,
+    enforceIdleAutoLock,
+    enforceSystemAutoLock,
     ensureHost,
     handleIpcMessage,
     AUTO_LOCK_REPORT_TYPE,
@@ -407,6 +409,81 @@ describe('a cached key the lock could not delete is never used again', { timeout
         expect(state.lastActivity).toBe(expired.lastActivity);
     });
 
+    it.each([
+        ['an armed in-window record', { armed: true, idleMs: 15 * MINUTE, lastActivity: Date.now() }],
+        ['a disarmed record', { armed: false, idleMs: 0, lastActivity: Date.now() }],
+    ])('wallet.lock with %s fails closed on relaunch', async (_label, record) => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const runtime = await runtimeWithCachedKey();
+        await runtime.autoLockStore.save(record);
+        const spy = refuseUnlinkOf(sessionFile());
+
+        const response = await handleIpcMessage(runtime, { type: 'wallet.lock', request: {} });
+
+        expect(response.ok).toBe(false);
+        expect(existsSync(sessionFile())).toBe(true);
+        expect(await runtime.autoLockStore.load()).toBe(null);
+        const relaunched = relaunchRuntime();
+        expect(await enforceLaunchAutoLock(relaunched)).toEqual({ locked: true, reason: 'no-record' });
+        expect(await ensureHost(relaunched)).toBe(null);
+        spy.mockRestore();
+    });
+
+    it('a refused system lock fails closed on relaunch', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const runtime = await runtimeWithCachedKey();
+        await runtime.autoLockStore.save({ armed: true, idleMs: 15 * MINUTE, lastActivity: Date.now() });
+        const spy = refuseUnlinkOf(sessionFile());
+
+        expect(await enforceSystemAutoLock(runtime)).toEqual({ locked: true, reason: 'session-clear-failed' });
+        expect(await runtime.autoLockStore.load()).toBe(null);
+        const relaunched = relaunchRuntime();
+        expect(await enforceLaunchAutoLock(relaunched)).toEqual({ locked: true, reason: 'no-record' });
+        expect(await ensureHost(relaunched)).toBe(null);
+        spy.mockRestore();
+    });
+
+    it('orders a late activity stamp before the refused-lock record clear', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const runtime = await runtimeWithCachedKey();
+        await runtime.autoLockStore.save({
+            armed: true, idleMs: 15 * MINUTE, lastActivity: Date.now() - MINUTE,
+        });
+        const realSave = runtime.autoLockStore.save.bind(runtime.autoLockStore);
+        let releaseSave;
+        let stampStarted;
+        const started = new Promise((resolveStarted) => { stampStarted = resolveStarted; });
+        const held = new Promise((resolveHeld) => { releaseSave = resolveHeld; });
+        runtime.autoLockStore.save = async (state) => {
+            stampStarted();
+            await held;
+            return realSave(state);
+        };
+        const spy = refuseUnlinkOf(sessionFile());
+
+        const locking = handleIpcMessage(runtime, { type: 'wallet.lock', request: {} });
+        await started;
+        releaseSave();
+        await locking;
+
+        expect(await runtime.autoLockStore.load()).toBe(null);
+        expect(await enforceLaunchAutoLock(relaunchRuntime())).toEqual({ locked: true, reason: 'no-record' });
+        spy.mockRestore();
+    });
+
+    it('retries a refused explicit lock from the pending flag', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const runtime = await runtimeWithCachedKey();
+        await runtime.autoLockStore.save({ armed: true, idleMs: 15 * MINUTE, lastActivity: Date.now() });
+        const spy = refuseUnlinkOf(sessionFile());
+        await handleIpcMessage(runtime, { type: 'wallet.lock', request: {} });
+        spy.mockRestore();
+
+        expect(await enforceIdleAutoLock(runtime)).toEqual({ locked: true, reason: 'cleanup-retry' });
+        expect(runtime.autoLockCleanupPending).toBe(false);
+        expect(existsSync(sessionFile())).toBe(false);
+    });
+
     it('a fresh save after the failed clear is a fresh session again', async () => {
         const backend = new KeychainSessionBackend({ safeStorage: fakeSafeStorage, filePath: sessionFile() });
         await backend.save(new Uint8Array([9, 9]));
@@ -426,6 +503,19 @@ describe('a cached key the lock could not delete is never used again', { timeout
         refuseUnlinkOf(sessionFile());
         await expect(backend.clear()).rejects.toThrow('EPERM');
         expect(existsSync(`${sessionFile()}.tmp`)).toBe(false);
+    });
+
+    it('truncates a refused auto-lock record so it cannot reopen a session', async () => {
+        const path = autoLockStatePathFor(dir);
+        const store = new FileAutoLockStore(path);
+        await store.save({ armed: true, idleMs: 15 * MINUTE, lastActivity: Date.now() });
+        const spy = refuseUnlinkOf(path);
+
+        await expect(store.clear()).rejects.toThrow('EPERM');
+        expect(existsSync(path)).toBe(true);
+        expect(statSync(path).size).toBe(0);
+        expect(await store.load()).toBe(null);
+        spy.mockRestore();
     });
 });
 

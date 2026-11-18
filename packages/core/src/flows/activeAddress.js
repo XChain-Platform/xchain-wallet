@@ -12,28 +12,30 @@
 // for an account: the one Home shows the balance for and that actions (Send)
 // run against. The override lives on `account.activeAddressByChainId` (a
 // sparse chainId -> addressId map). Absence means "use the default" = the
-// lowest-index HD receive address for that chain, so a fresh wallet's first
-// address is active with no stored state, and a deleted override falls back
-// to the default automatically.
+// lowest-index software HD receive address for that chain, or the
+// lowest-index hardware receive address when no software address exists.
 
 import { recordLastUsedChain } from '../shared/chainSelection.js';
 import { defaultRegistry } from '../registry/index.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
 import { updateSettings } from './settings.js';
+import { isDerivedAddressSource } from '../schemas/constants.js';
 
 /**
- * Default active address for a chain group: the lowest-index HD receive
- * address (external branch change=0, not a dispenser). Imported / watch-only
- * / hardware addresses with no external-branch path are skipped.
+ * Default active address for a chain group: the lowest-index software HD
+ * receive address, or the lowest-index hardware receive address when no
+ * software address exists. Imported and watch-only addresses are skipped.
  *
  * @param {import('../schemas/address.js').Address[]} addresses
  * @returns {import('../schemas/address.js').Address | null}
  */
 function defaultActiveFor(addresses) {
-    let best = null;
-    let bestIndex = Infinity;
+    let bestSoftware = null;
+    let bestSoftwareIndex = Infinity;
+    let bestHardware = null;
+    let bestHardwareIndex = Infinity;
     for (const a of addresses) {
-        if (a.source !== 'hd') continue;
+        if (!isDerivedAddressSource(a.source)) continue;
         if (a.role === 'dispenser') continue;
         if (typeof a.derivationPath !== 'string') continue;
         const parts = a.derivationPath.split('/');
@@ -41,9 +43,15 @@ function defaultActiveFor(addresses) {
         if (parts[parts.length - 2] !== '0') continue;
         const idx = Number(parts[parts.length - 1]);
         if (!Number.isFinite(idx)) continue;
-        if (idx < bestIndex) { bestIndex = idx; best = a; }
+        if (a.source === 'hd' && idx < bestSoftwareIndex) {
+            bestSoftwareIndex = idx;
+            bestSoftware = a;
+        } else if (a.source !== 'hd' && idx < bestHardwareIndex) {
+            bestHardwareIndex = idx;
+            bestHardware = a;
+        }
     }
-    return best;
+    return bestSoftware || bestHardware;
 }
 
 /**

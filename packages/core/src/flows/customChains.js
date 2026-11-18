@@ -25,8 +25,8 @@
 //       Validates → checks for collisions against bundled + already-
 //       persisted ids → persists → registers. Returns the descriptor.
 //       Throws on validation failure / duplicate id. A persisted but
-//       unregistered id restores its stored row, or replaces it when the
-//       stored row no longer validates.
+//       unregistered id restores its stored row, or replaces it when no
+//       stored row would be installed at boot (invalid, or reserved id).
 //   - removeCustomChain({ vault, chainRegistry, chainId, sdkRegistry })
 //       Removes from settings + ChainRegistry. Bundled chains can't be
 //       removed (the registry's removeCustom enforces this). Returns
@@ -90,16 +90,17 @@ export async function listCustomChains({ vault }) {
  * Result of addCustomChain and of the chainRegistry.addCustomChain route.
  * @typedef {object} AddCustomChainResult
  * @property {object} descriptor  The registered descriptor (the stored row when `restored`).
- * @property {true} [restored]    A valid stored same-id row was registered instead; nothing written.
- * @property {true} [replaced]    Invalid stored same-id rows were replaced by the pasted descriptor.
+ * @property {true} [restored]    An installable stored same-id row was registered instead; nothing written.
+ * @property {true} [replaced]    Stored same-id rows that boot would skip were replaced by the pasted descriptor.
  */
 
 /**
  * Validate, persist, and register a user-supplied ChainDescriptor.
  *
  * When the id is already persisted but not registered, the first stored row
- * that validates is registered instead (`restored: true`, nothing written);
- * when no stored row validates, the new descriptor replaces them
+ * that passes validation and the reserved-id check is registered instead
+ * (`restored: true`, nothing written); when no stored row does, the new
+ * descriptor replaces them
  * (`replaced: true`). Either way the vault and the registry agree.
  *
  * @param {{ vault: any, chainRegistry: any, descriptor: object, sdkRegistry?: any }} args
@@ -145,7 +146,9 @@ async function addCustomChainNow({ vault, chainRegistry, descriptor, sdkRegistry
         // does: the first one this build accepts is the chain, so register THAT
         // row with its own override and write nothing. The caller learns via
         // `restored` that its paste was not what got installed.
-        const stored = list.find((d) => d?.id === descriptor.id && validateChainDescriptor(d).ok);
+        const stored = list.find((d) => d?.id === descriptor.id
+            && validateChainDescriptor(d).ok
+            && !customChainReservedIdError(d));
         if (stored) {
             chainRegistry.addCustom(stored);
             dropCachedSdk(sdkRegistry, descriptor.id);
@@ -155,13 +158,18 @@ async function addCustomChainNow({ vault, chainRegistry, descriptor, sdkRegistry
     }
     // Persist first; if the addCustom call throws (race against another
     // handler that just registered the same id), the persisted record
-    // is rolled back below. The new row drops any override for this id,
-    // since no live persisted descriptor owns it. Stored same-id rows that
-    // reach here all fail validation, so boot skips them: the new row takes
-    // the first one's place and the rest go, or the vault keeps a dead chain.
+    // is rolled back below. The new row drops any endpoint override and fee
+    // entry for this id, since no live persisted descriptor owns them (a window
+    // that had not yet heard of a removal can still have saved a rate for it). Stored same-id rows that
+    // reach here all fail validation or the reserved-id check, so boot skips
+    // them: the new row takes the first one's place and the rest go, or the
+    // vault keeps a dead chain.
     const kept = list.filter((d) => d?.id !== descriptor.id);
     kept.splice(firstSameId === -1 ? kept.length : firstSameId, 0, descriptor);
-    const next = withoutEndpointOverride({ ...settings, customChains: kept }, descriptor.id);
+    const next = withoutFeeEntry(
+        withoutEndpointOverride({ ...settings, customChains: kept }, descriptor.id),
+        descriptor.id,
+    );
     await writeSettings(vault, next);
     try {
         chainRegistry.addCustom(descriptor);

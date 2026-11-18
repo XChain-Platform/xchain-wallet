@@ -373,9 +373,11 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 60_000 });
             // The debt must be named in COIN units. Reading it as base units is
             // D-137: the explorer serves a decimal here, and a wallet that
-            // demanded all digits labelled a 1 LTC debt "1 base unit".
+            // demanded all digits labelled a 1 LTC debt "1 base unit". The row
+            // text joins cells unspaced ("Pay 1 BTC1h 58m"), so the ticker ends
+            // at a non-letter.
             await expect(pending, 'the queue does not name the amount owed in coin units')
-                .toContainText(new RegExp(`(^|\\s)${ASK}(?:\\.0+)?\\s*${COIN}(?=\\s|$)`));
+                .toContainText(new RegExp(`(^|\\s)${ASK}(?:\\.0+)?\\s*${COIN}(?![A-Za-z])`));
             await expect(pending, 'the queue labels the debt in the wrong unit (D-137)')
                 .not.toContainText(/base units/);
 

@@ -130,14 +130,23 @@ export class FileAutoLockStore {
     async clear() {
         // Both the live file and any half-written tmp sibling: a crash
         // mid-save must not leave a stamp the next launch trusts.
+        let firstError = null;
+        let liveUnlinkRefused = false;
         for (const p of [this._filePath, this._tmpPath]) {
             try {
                 await fs.unlink(p);
             } catch (err) {
                 if (err && err.code === 'ENOENT') continue;
-                throw err;
+                if (p === this._filePath) liveUnlinkRefused = true;
+                if (!firstError) firstError = err;
             }
         }
+        // Empty JSON is an unreadable record, so truncation still makes the
+        // next launch fail closed when a handle refuses the live unlink.
+        if (liveUnlinkRefused) {
+            try { await fs.truncate(this._filePath, 0); } catch { /* best-effort */ }
+        }
+        if (firstError) throw firstError;
     }
 }
 

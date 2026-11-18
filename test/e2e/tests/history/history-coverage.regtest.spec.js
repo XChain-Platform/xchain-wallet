@@ -93,11 +93,15 @@
 //     pill, the counterparty, the amount and tick, the status and a relative
 //     time. "Block N, N Confirmations" is the row button's aria-description,
 //     not its text. The txid is NOT on the row; it lives on the detail view.
-//   - On the web shell a row click does NOT expand inline. App.jsx passes
-//     `onSelectEntry`, so `onRowClick` navigates to a STANDALONE ActionDetail
-//     page (header "Send #2,262", back button labelled "Back to history"). The
-//     filter bar does not exist on that page; claims 2 and 3 have to come back
-//     first, and History re-mounts with its default date window when they do.
+//   - On the web shell a row click does NOT expand inline. While History's
+//     content is at least LIST_DETAIL_MIN_WIDTH wide it draws a list-and-detail
+//     split: the click selects the row and ActionDetail draws embedded in the
+//     "Action details" region beside the list, titled by a screen-reader h2
+//     ("Send #2262"). Narrower, App.jsx's `onSelectEntry` routes to a
+//     STANDALONE ActionDetail page (header "Send #2262", back button labelled
+//     "Back to history") with no filter bar, and History re-mounts with its
+//     default date window on the way back. openHistoryDetail and
+//     backToHistoryList (fixtures/regtest.js) take either layout.
 //   - ActionDetail's Details tab is one table row per field, each headed by a
 //     plain label: curated rows first ("Address", "Transaction ID", "Block"),
 //     then every other `entry.raw` key under a sentence-case label ("Status",
@@ -143,7 +147,9 @@ import {
     waitForValidAction,
     openFromAddress,
     approveConfirm,
+    backToHistoryList,
     closeHistoryFilters,
+    openHistoryDetail,
     openHistoryFilters,
     searchHistory,
     setHistoryDateWindow,
@@ -297,9 +303,14 @@ async function widenDateWindow(page) {
     await setHistoryDateWindow(page, iso(-30), iso(2));
 }
 
-/** One row of ActionDetail's Details tab, found by the label that heads it. */
-function detailRow(page, label) {
-    return page.getByRole('tabpanel').getByRole('row', { name: new RegExp(`^${label}\\b`) });
+/**
+ * One row of ActionDetail's Details tab, found by the label that heads it.
+ *
+ * @param {import('@playwright/test').Locator} pane  the detail, from openHistoryDetail
+ * @param {string} label
+ */
+function detailRow(pane, label) {
+    return pane.getByRole('tabpanel').getByRole('row', { name: new RegExp(`^${label}\\b`) });
 }
 
 /**
@@ -431,24 +442,20 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
 
         await test.step('CLAIM 1b: the row detail carries the chain\'s own amount, tick, destination and txid', async () => {
             const row = historyRowFor(page, REGTEST_CHAIN_ID, chainRow.action_index, own);
-            await row.getByRole('button').first().click();
-
-            // Web shell: this is a route change to a standalone page, not an
-            // inline expand. The heading is the first proof we landed on the
-            // right action.
-            await expect(page.getByRole('region', { name: 'Transaction details' }))
-                .toBeVisible({ timeout: 30_000 });
-            await expect(page.getByRole('banner').filter({ hasText: 'Send #' }).first(),
-                'the detail page is not titled for the action index the chain recorded')
+            // The split pane beside the list, or the standalone page on a
+            // narrow shell (see the header). The title is the first proof the
+            // detail shows the right action.
+            const { pane, title } = await openHistoryDetail(page, row);
+            await expect(title, 'the detail is not titled for the action index the chain recorded')
                 .toContainText(`Send #${String(Number(chainRow.action_index))}`);
 
-            await page.getByRole('tab', { name: 'Details' }).click();
+            await pane.getByRole('tab', { name: 'Details' }).click();
 
             // The nested per-action object renders as one JSON-stringified
             // cell (see the header), so its values are asserted individually
             // rather than as an exact string whose key ORDER this spec would
             // then be pinning by accident.
-            const details = detailRow(page, 'Details');
+            const details = detailRow(pane, 'Details');
             await expect(details, 'the detail does not carry the tick the chain recorded')
                 .toContainText(detailsFragment(chainRow.details, 'tick'));
             await expect(details, 'the detail does not carry the amount the chain recorded')
@@ -459,26 +466,28 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             // Direction, stated by two facts that cannot both be an accident:
             // the wallet's own address is the row's address, and the money went
             // somewhere that is not it.
-            await expect(detailRow(page, 'Address').getByTitle(own, { exact: true }),
+            await expect(detailRow(pane, 'Address').getByTitle(own, { exact: true }),
                 'the detail does not attribute this action to the wallet\'s own address')
                 .toBeVisible();
             expect(String(chainRow.details.destination)).not.toBe(own);
 
             // The tab words a status in sentence case ("Valid" for "valid").
-            await expect(detailRow(page, 'Status'), 'the detail disagrees with the chain about status')
+            await expect(detailRow(pane, 'Status'), 'the detail disagrees with the chain about status')
                 .toContainText(String(chainRow.status), { ignoreCase: true });
-            await expect(detailRow(page, 'Block'), 'the detail disagrees with the chain about the block')
+            await expect(detailRow(pane, 'Block'), 'the detail disagrees with the chain about the block')
                 .toContainText(String(Number(chainRow.block_index)));
             // The txid draws shortened; its full value is the element's title.
-            await expect(detailRow(page, 'Transaction ID').getByTitle(sendTxid, { exact: true }),
+            await expect(detailRow(pane, 'Transaction ID').getByTitle(sendTxid, { exact: true }),
                 'the detail shows a different transaction than the one the wallet said it broadcast')
                 .toBeVisible();
         });
 
         await test.step('CLAIM 2: the search box narrows the list to this row, and releases it again', async () => {
-            // Back to the LIST: the filter bar does not exist on the detail
-            // page, and History re-mounts with its default date window.
-            await page.getByRole('button', { name: 'Back to history' }).click();
+            // Back to the LIST: the standalone detail page has no filter bar,
+            // and History re-mounts there with its default date window. The
+            // split keeps the list beside the detail; widening again is
+            // harmless in that layout.
+            await backToHistoryList(page);
             await widenDateWindow(page);
 
             await searchHistory(page, 'zzz-no-such-history-row-zzz');

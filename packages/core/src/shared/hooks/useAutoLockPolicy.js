@@ -87,7 +87,7 @@ export function resolveAutoLockMinutes(raw) {
 
 /**
  * @param {object} opts
- * @param {'loading' | 'error' | 'no-wallet' | 'locked' | 'unlocked' | string} opts.sessionState
+ * @param {'loading' | 'reconnecting' | 'background-error' | 'error' | 'no-wallet' | 'locked' | 'unlocked' | string} opts.sessionState
  *   the shell's own session status. Auto-lock only arms on 'unlocked'.
  * @param {string | null | undefined} [opts.activeWalletId]
  * @param {(() => void) | undefined} [opts.onLocked] shell refresh, run after a
@@ -189,16 +189,16 @@ export function useAutoLockPolicy({ sessionState, activeWalletId, onLocked, lock
     // web keeps its key in memory only, so a closed tab is already locked
     // and it implements nothing.
     //
-    // Skipped while the session status is still resolving: reporting a
-    // premature `armed: false` there would disarm the backstop for a
-    // wallet that turns out to be unlocked a tick later.
+    // Only a settled unlocked state reports. Any other state can sit over an
+    // open vault, and `armed: false` would make both backstops read it as the
+    // user's Never choice. Lock and unlock clear the record themselves.
     //
     // Each report carries the moment it was issued; the extension messaging
     // layer repeats a report whose port dropped with the same stamp, so the
-    // service worker drops a disarm that reaches it after a newer arm (the
-    // Locked screen's disarm, repeated across the unlock).
+    // service worker drops a repeated Never disarm that reaches it after a
+    // newer arm.
     useEffect(() => {
-        if (sessionState === 'loading') return;
+        if (sessionState !== 'unlocked') return;
         if (typeof messaging?.reportAutoLock !== 'function') return;
         const issuedAt = Date.now();
         Promise.resolve()

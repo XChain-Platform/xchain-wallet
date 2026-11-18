@@ -300,6 +300,7 @@ export {
 } from './validate.js';
 export { filterChainsForUser, isChainVisibleToUser, coinFamiliesForUser } from './visibility.js';
 export { hydrateCustomChainsFromSettings } from './hydrateCustomChains.js';
+export { reconcileCustomChainsFromSettings, createCustomChainSync } from './hydrateCustomChains.js';
 // The signed hub sync (./remote.js) is re-exported by ./namespace.js, the core
 // barrel's `registry` namespace, not here: this module is on the web shell's
 // first paint and the sync's Ed25519 verifier is not.

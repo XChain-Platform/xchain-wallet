@@ -611,8 +611,8 @@ const sendSrc = readFileSync(
 assert.ok(/import \{ HwSignBlock \}/.test(sendSrc), 'Send.jsx imports HwSignBlock');
 assert.ok(/isHwSource/.test(sendSrc), 'Send.jsx gates on isHwSource');
 assert.ok(
-    /fromAddress\?\.source === 'trezor' \|\| fromAddress\?\.source === 'ledger'/.test(sendSrc),
-    'Send.jsx detects HW source',
+    /isDeviceAddressSource\(fromAddress\?\.source\)/.test(sendSrc),
+    'Send.jsx detects HW source through the shared predicate',
 );
 assert.ok(
     /messaging\.sendAssetHw\(/.test(sendSrc),

@@ -168,53 +168,88 @@ final class ScreenshotTests: XCTestCase {
             print("MISSED: license scroll gate - the terms never reached their end")
         }
 
-        // The checkbox is an <input type="checkbox"> inside a <label>. WebKit
-        // surfaces that differently depending on idiom, so rather than betting
-        // on one element type, try each and CHECK WHETHER IT WORKED.
+        // TICK THE BOX, THEN ACCEPT, AND NEVER JUDGE THE TICK BY THE BUTTON.
         //
-        // The signal is `accept.isEnabled`, not `isHittable`. That distinction
-        // is the bug this harness shipped twice: the button is visible and
-        // hittable the whole time and only becomes ENABLED once the box is
-        // ticked, so tapping on hittability alone silently does nothing and
-        // reports success. iPhone happened to pass, iPad did not, and the
-        // difference was never about iPad.
-        let predicate = NSPredicate(format: "label CONTAINS[c] %@", agreeText)
-        let candidates: [XCUIElement] = [
-            app.switches.containing(predicate).firstMatch,
-            app.checkBoxes.containing(predicate).firstMatch,
-            app.buttons.containing(predicate).firstMatch,
-            app.staticTexts.containing(predicate).firstMatch,
-            app.otherElements.containing(predicate).firstMatch,
+        // Until G130 Accept stayed DISABLED until the box was ticked, so
+        // `accept.isEnabled` doubled as the "did the tick land" signal. G130
+        // made Accept always enabled: an unticked tap is refused with a "Fix 1
+        // thing to continue" banner and the screen stays put. The old loop
+        // only ticked `if !accept.isEnabled`, so it never ticked at all, and
+        // the 2026-11-18 v0.343.0 run sat on the License Agreement for every
+        // scene. The signal now is the checkbox's own value, or failing that
+        // the screen actually advancing after Accept.
+        //
+        // ONE TAP PER ATTEMPT, VERIFIED BEFORE THE NEXT. A checkbox toggles,
+        // so the old centre-then-offset double tap on one candidate could
+        // tick and then untick it. And tick BEFORE the first Accept tap: a
+        // refused Accept prints "Check \"I have read and agree...\"" in a
+        // banner and a field error, which a CONTAINS match would then pick
+        // up as the control. BEGINSWITH keeps to the checkbox's own label.
+        let predicate = NSPredicate(format: "label BEGINSWITH[c] %@", agreeText)
+        let candidates: [(String, XCUIElement)] = [
+            ("switch", app.switches.matching(predicate).firstMatch),
+            ("checkBox", app.checkBoxes.matching(predicate).firstMatch),
+            ("button", app.buttons.matching(predicate).firstMatch),
+            ("staticText", app.staticTexts.matching(predicate).firstMatch),
+            ("otherElement", app.otherElements.matching(predicate).firstMatch),
         ]
+        let leftTerms = NSPredicate(format: "exists == false")
 
-        if !accept.isEnabled {
-            for candidate in candidates where candidate.exists && candidate.isHittable {
-                candidate.tap()
-                if accept.isEnabled { break }
-                // The tick box sits to the LEFT of its label text. When the
-                // label is what matched, tapping its centre can land on text
-                // that is not the control; aim at the box instead.
-                candidate.coordinate(withNormalizedOffset: CGVector(dx: -0.04, dy: 0.5))
-                    .withOffset(CGVector(dx: 0, dy: 0)).tap()
-                if accept.isEnabled { break }
+        /// The control's own checked state: true/false when WebKit reports a
+        /// value for it, nil when the matched element carries none (a label).
+        func ticked(_ element: XCUIElement) -> Bool? {
+            switch element.value {
+            case let n as NSNumber: return n.boolValue
+            case let s as String where s == "1" || s.lowercased() == "on" || s.lowercased() == "checked": return true
+            case let s as String where s == "0" || s.lowercased() == "off" || s.lowercased() == "unchecked": return false
+            default: return nil
             }
         }
 
-        if !accept.isEnabled {
-            missed.append("terms agree checkbox (Accept never became enabled)")
-            print("MISSED: terms agree checkbox - Accept and continue never became enabled")
+        /// Tap Accept and report whether the license actually went away.
+        func acceptAndLeave() -> Bool {
+            guard accept.exists, accept.isHittable else { return false }
+            accept.tap()
+            let gone = XCTNSPredicateExpectation(predicate: leftTerms, object: accept)
+            return XCTWaiter().wait(for: [gone], timeout: 5) == .completed
         }
 
-        _ = tap(accept, "Accept and continue")
+        var advanced = false
+        attempts: for (kind, candidate) in candidates where candidate.exists && candidate.isHittable {
+            let before = ticked(candidate)
+            print("TERMS: candidate \(kind) value=\(String(describing: candidate.value)) ticked=\(String(describing: before))")
+            if before == true {
+                // Already ticked (a retry after an earlier candidate did it):
+                // tapping would untick it, so go straight to Accept.
+                if acceptAndLeave() { advanced = true; break attempts }
+                continue
+            }
+            // The tick box sits to the LEFT of its label text. A label-type
+            // match is tapped at the box, a control-type match at its centre.
+            if kind == "staticText" || kind == "otherElement" {
+                candidate.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
+                    .withOffset(CGVector(dx: -24, dy: 0)).tap()
+            } else {
+                candidate.tap()
+            }
+            let after = ticked(candidate)
+            if after == false {
+                print("TERMS: tapping the \(kind) left the box unticked; next candidate")
+                continue
+            }
+            if acceptAndLeave() { advanced = true; break attempts }
+            // A refused Accept means this tap did not tick the box, so the
+            // next candidate starts from an unticked box.
+            print("TERMS: Accept refused after tapping the \(kind); next candidate")
+        }
 
         // Post-condition. Being still on the license after "accepting" it is
         // the single most misleading state this flow can be in.
-        let stillOnTerms = app.staticTexts.containing(
-            NSPredicate(format: "label CONTAINS[c] %@", "agree to the GNU Affero")
-        ).firstMatch
-        if stillOnTerms.waitForExistence(timeout: 3) {
-            missed.append("terms did not advance (checkbox or scroll gate still unmet)")
-            print("MISSED: still on the terms screen after accepting")
+        if !advanced {
+            missed.append("terms did not advance (agree checkbox never ticked, or Accept refused)")
+            print("MISSED: still on the terms screen after ticking and accepting")
+        } else {
+            print("TERMS: ticked the agree box and left the license")
         }
     }
 
@@ -292,12 +327,13 @@ final class ScreenshotTests: XCTestCase {
     /// Network setting has asked for since 2026-10-13, so the switch never
     /// happened. It taps it now, the same way the offline rehearsal does.
     ///
-    /// The control is a real `<select aria-label="Active network">` in the
-    /// WebView, and WebKit hands a select to UIKit differently per idiom: a
-    /// picker wheel on iPhone, a popover list on iPad. Both are tried, and a
+    /// The control was a `<select aria-label="Active network">` until the
+    /// 2026-11-13 Settings regroup; it is now the "Network" row under
+    /// Network and Fees, which opens "Select Mainnet" style list rows. A
     /// miss is RECORDED rather than ignored - shooting the listing on the
     /// wrong network is the defect this exists to prevent, so it must not
-    /// pass quietly.
+    /// pass quietly. assertListingSafe() then reads every captured scene
+    /// for a test-network address or name.
     /// Land on the real Settings SCREEN, on both idioms.
     ///
     /// `openFromNav(["Settings", "More"])` was not that, and the listing paid
@@ -366,28 +402,33 @@ final class ScreenshotTests: XCTestCase {
             return byName.first(where: { $0.exists && $0.isHittable })
         }
 
-        var safety = button(anyOf: ["Safety"])
+        // Since the 2026-11-13 Settings regroup the root lists GROUPS, and
+        // the biometric row sits on the "Security" group page (Settings.jsx
+        // securityRowGroups); "Safety" is kept as the older name for it.
+        let panelNames = ["Security", "Safety"]
+        var safety = button(anyOf: panelNames)
         var scrolls = 0
         while (safety == nil || !(safety?.isHittable ?? false)) && scrolls < 8 {
             app.swipeUp()
             scrolls += 1
-            safety = button(anyOf: ["Safety"])
+            safety = button(anyOf: panelNames)
         }
-        guard let safety, tap(safety, "Safety (settings drill)") else {
-            missed.append("\(scene): the Settings root has no reachable Safety panel after \(scrolls) scrolls")
-            print("MISSED: \(scene) - no Safety panel after \(scrolls) scrolls")
+        guard let safety, tap(safety, "Security (settings drill)") else {
+            missed.append("\(scene): the Settings root has no reachable Security panel after \(scrolls) scrolls")
+            print("MISSED: \(scene) - no Security panel after \(scrolls) scrolls")
             return false
         }
-        _ = reach(app.staticTexts.firstMatch, "safety panel", timeout: 20)
-        print("SETTINGS: opened the Safety panel after \(scrolls) scroll(s)")
+        _ = reach(app.staticTexts.firstMatch, "security panel", timeout: 20)
+        Thread.sleep(forTimeInterval: 1)
+        print("SETTINGS: opened the Security panel after \(scrolls) scroll(s)")
 
         // The panel is the destination, but the row is the SUBJECT, so its
         // presence is asserted rather than assumed: the panel could render
         // without it (no enrolled biometry on the host, a future reshuffle)
         // and the capture would look perfectly fine while showing nothing.
         guard biometricRow() != nil else {
-            missed.append("\(scene): the Safety panel opened but carries no 'Biometric unlock' row")
-            print("MISSED: \(scene) - Safety panel has no 'Biometric unlock' row")
+            missed.append("\(scene): the Security panel opened but carries no 'Biometric unlock' row")
+            print("MISSED: \(scene) - Security panel has no 'Biometric unlock' row")
             return false
         }
 
@@ -414,66 +455,48 @@ final class ScreenshotTests: XCTestCase {
     private func switchToMainnet() {
         guard openSettings(scene: "network-switch (settings)") else { return }
 
-        // The select surfaces under its aria-label, but as different element
-        // types depending on iOS version and idiom, so ask by name across the
-        // types it has actually appeared as rather than betting on one.
+        // THE NETWORK IS A PAGE OF ROWS NOW, NOT A SELECT. Since the
+        // 2026-11-13 Settings regroup (operator ruling 2026-11-14) the root
+        // lists groups, "Network and Fees" holds a "Network" chevron row, and
+        // that row opens Mainnet, Testnet and Regtest as list rows labelled
+        // "Select <network>" (SettingsInlineRows.jsx NetworkEnvironmentPage).
+        // The old `<select aria-label="Active network">` lookup found nothing
+        // and recorded a miss on every run. A pick that changes the network
+        // keeps its "Switch network" confirm; picking the current one is a
+        // no-op, which is the expected path for a demo that lands on mainnet.
         //
-        // AND SCROLL WHILE ASKING. A WKWebView publishes accessibility nodes
-        // for what it has RENDERED, so a settings row below the fold does not
-        // merely fail to be hittable, it does not exist in the tree at all.
-        // Measured 2026-08-08: identical code found the control immediately on
-        // iPad, where Settings is a sidebar screen showing the whole list, and
-        // reported "nothing named 'Active network'" on iPhone, where the same
-        // section sits several screens down.
-        // HITTABLE, not merely existing. A WKWebView publishes a node as soon
-        // as it renders, which can be while it is still below the fold, so
-        // stopping the scroll at `exists` finds the control and then fails to
-        // tap it - measured, as `MISSED: Active network select - hittable=false
-        // enabled=true`, which reads like a disabled control rather than an
-        // off-screen one.
-        func networkSelect() -> XCUIElement? {
-            let byName = [app.buttons["Active network"], app.otherElements["Active network"],
-                          app.popUpButtons["Active network"], app.staticTexts["Active network"]]
-            return byName.first(where: { $0.exists && $0.isHittable })
+        // HITTABLE, not merely existing, and scroll while asking: a WKWebView
+        // publishes nodes it has rendered below the fold, so stopping at
+        // `exists` finds a row and then fails to tap it.
+        func hittableButton(_ predicate: NSPredicate) -> XCUIElement? {
+            let match = app.buttons.matching(predicate).firstMatch
+            return match.exists && match.isHittable ? match : nil
         }
-        var control = networkSelect()
-        var scrolls = 0
-        while control == nil && scrolls < 8 {
-            app.swipeUp()
-            scrolls += 1
-            control = networkSelect()
-        }
-        guard let control else {
-            missed.append("network select (no element named 'Active network' after \(scrolls) scrolls)")
-            print("MISSED: network select - nothing named 'Active network' after \(scrolls) scrolls")
-            return
-        }
-        if scrolls > 0 { print("NETWORK: found the select after \(scrolls) scroll(s)") }
-        guard tap(control, "Active network select") else { return }
-
-        // iPhone: a picker wheel plus a Done button. iPad: a popover of
-        // buttons. Whichever appeared, land on Mainnet.
-        var switched = false
-        let wheel = app.pickerWheels.firstMatch
-        if wheel.waitForExistence(timeout: 5) {
-            wheel.adjust(toPickerWheelValue: "Mainnet")
-            let done = app.buttons["Done"]
-            if done.exists { switched = tap(done, "picker Done") }
-            // Some iOS builds dismiss the wheel by tapping outside it rather
-            // than with a Done button; the adjust above has already taken.
-            if !switched { switched = true }
-        } else {
-            let option = app.buttons["Mainnet"].exists
-                ? app.buttons["Mainnet"] : app.staticTexts["Mainnet"]
-            if option.waitForExistence(timeout: 5) {
-                switched = tap(option, "Mainnet option")
+        func drill(_ predicate: NSPredicate, _ what: String) -> Bool {
+            var found = hittableButton(predicate)
+            var scrolls = 0
+            while found == nil && scrolls < 8 {
+                app.swipeUp()
+                scrolls += 1
+                found = hittableButton(predicate)
             }
+            guard let found else {
+                missed.append("network switch: no \(what) row after \(scrolls) scrolls")
+                print("MISSED: network switch - no \(what) row after \(scrolls) scrolls")
+                return false
+            }
+            guard tap(found, what) else { return false }
+            _ = app.staticTexts.firstMatch.waitForExistence(timeout: 10)
+            Thread.sleep(forTimeInterval: 1)
+            return true
         }
-        if !switched {
-            missed.append("network switch to Mainnet")
-            print("MISSED: network switch - neither a picker wheel nor a 'Mainnet' option appeared")
-            return
-        }
+        guard drill(NSPredicate(format: "label BEGINSWITH[c] %@", "Network and Fees"), "Network and Fees") else { return }
+        // The bare "Network" row, not "Network and Fees" (the page header or
+        // a back control) and not "Network endpoints" (Developer mode only).
+        let networkRow = NSPredicate(format: "label BEGINSWITH[c] %@ AND NOT (label BEGINSWITH[c] %@) AND NOT (label BEGINSWITH[c] %@)",
+                                     "Network", "Network and Fees", "Network endpoints")
+        guard drill(networkRow, "Network") else { return }
+        guard drill(NSPredicate(format: "label ==[c] %@", "Select Mainnet"), "Select Mainnet") else { return }
 
         // "Switch to Mainnet?" confirmation, which appears after the pick
         // whenever the pick changes the network. A demo that already lands on
@@ -557,6 +580,35 @@ final class ScreenshotTests: XCTestCase {
         return false
     }
 
+    /// Read what a captured scene actually SAYS, so a listing image cannot
+    /// pass on reaching its screen alone. The 0.341.4 Receive image showed a
+    /// `bcrt1` regtest address and nothing in the run noticed; this records a
+    /// miss for any test-network address prefix or network name, and for the
+    /// `undefined` / `NaN` a broken render leaves behind. Labels cover static
+    /// text and buttons; the address field carries its text as a value.
+    private func assertListingSafe(scene: String) {
+        let banned = ["bcrt1", "tb1q", "tb1p", "tltc1", "rltc1", "regtest", "testnet", "undefined", "NaN"]
+        var texts: [String] = []
+        for element in app.staticTexts.allElementsBoundByIndex { texts.append(element.label) }
+        for element in app.buttons.allElementsBoundByIndex { texts.append(element.label) }
+        for element in app.textFields.allElementsBoundByIndex {
+            texts.append(element.label)
+            if let v = element.value as? String { texts.append(v) }
+        }
+        var hits: [String] = []
+        for text in texts {
+            for word in banned where text.range(of: word, options: word == "NaN" ? [] : [.caseInsensitive]) != nil {
+                hits.append("\(word) in '\(text.prefix(60))'")
+            }
+        }
+        if hits.isEmpty {
+            print("CHECK: \(scene) shows no test-network text, undefined or NaN (\(texts.count) labels read)")
+        } else {
+            missed.append("\(scene): listing-unsafe text: \(hits.joined(separator: ", "))")
+            print("MISSED: \(scene) listing-unsafe text - \(hits.joined(separator: ", "))")
+        }
+    }
+
     private func openFromNav(_ labels: [String], scene: String) -> Bool {
         guard let control = button(anyOf: labels) else {
             missed.append("\(scene) nav entry")
@@ -587,6 +639,7 @@ final class ScreenshotTests: XCTestCase {
 
         // 1. Balances. This is the app's home and the listing's lead image.
         capture("01-balances")
+        assertListingSafe(scene: "01-balances")
 
         // 2. Receive, which shows an address and a QR: the clearest proof in a
         //    still image that this is a wallet and not a web page.
@@ -595,6 +648,7 @@ final class ScreenshotTests: XCTestCase {
         if openReceive() {
             _ = reach(app.staticTexts.firstMatch, "receive content", timeout: 20)
             capture("02-receive")
+            assertListingSafe(scene: "02-receive")
         } else {
             capture("02-receive-FAILED")
         }
@@ -604,6 +658,7 @@ final class ScreenshotTests: XCTestCase {
         if openFromNav(["Send"], scene: "send") {
             _ = reach(app.staticTexts.firstMatch, "send content", timeout: 20)
             capture("03-send")
+            assertListingSafe(scene: "03-send")
         } else {
             capture("03-send-FAILED")
         }
@@ -614,6 +669,7 @@ final class ScreenshotTests: XCTestCase {
         if openSettings(scene: "settings") {
             revealBiometricRow(scene: "settings")
             capture("04-settings")
+            assertListingSafe(scene: "04-settings")
         } else {
             capture("04-settings-FAILED")
         }
