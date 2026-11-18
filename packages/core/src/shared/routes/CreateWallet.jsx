@@ -689,7 +689,6 @@ export function CreateWallet({ onBack, onCreated: handleCreated, mode = 'fresh',
                 help={t('createWallet.recoveryPhraseLengthHelp')}
                 value={String(wordCount)}
                 onChange={(nextWordCount) => setWordCount(nextWordCount === '24' ? 24 : 12)}
-                wrapSub
                 options={[
                     {
                         value: '12',

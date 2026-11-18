@@ -41,7 +41,6 @@ import '../i18n/locales/en/ui.js';
  * @param {'sm' | 'md' | 'lg'} [props.size]
  * @param {string} [props.tag]  small state tag after the label (such as Detected); needs label and help
  * @param {string} [props['aria-label']]  names a select that has no visible label
- * @param {boolean} [props.wrapSub]  the closed field's sub line wraps and the field grows, instead of trailing off
  * @param {string} [props.id]  the trigger's id; with a form on the form error standard (useFormErrors), the field reads its entry by this id, outlines red with its line under it, and clears on a pick
  */
 export function IconSelect({
@@ -55,7 +54,6 @@ export function IconSelect({
     size = 'md',
     tag,
     id,
-    wrapSub = false,
     'aria-label': ariaLabel,
 }) {
     const formField = useFormFieldError(id);
@@ -100,7 +98,6 @@ export function IconSelect({
                 listboxLabel={fieldName || t('ui.iconSelect.options')}
                 triggerProps={{
                     'aria-label': accessibleName,
-                    ...(wrapSub ? { className: styles.subWraps } : {}),
                     ...(id ? { id } : {}),
                     ...(errorId ? { 'aria-invalid': 'true', 'aria-describedby': errorId } : {}),
                 }}
