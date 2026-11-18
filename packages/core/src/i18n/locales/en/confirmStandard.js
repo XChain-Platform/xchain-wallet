@@ -75,6 +75,10 @@ const messages = {
     'confirmStandard.warning.partialBody': 'The network checked only part of this action, so the rest may still fail.',
     'confirmStandard.warning.partialBatch': 'The network confirmed {accepted} of {total} commands in this transaction. The rest carry no network approval.',
     'confirmStandard.warning.restricted': 'Only some of the checks could run for this action.',
+    // A blue note, not a warning: the network approved, and the only checks
+    // left are ones it makes when the action settles (operator 2026-11-17).
+    'confirmStandard.settleChecks.title': 'Checked When It Settles',
+    'confirmStandard.settleChecks.body': "The network approved this action. Some of this token's limits are checked when it settles.",
     // One short line, never a block: the status notice's title on its own.
     'confirmStandard.warning.notCheckedLine': 'Not checked with the network, so it may still fail.',
     // True whether the network was unreachable or answered but declined to

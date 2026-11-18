@@ -20,6 +20,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     isNetworkApprovalFinding,
+    isSettleTimeUnverified,
     networkApprovalIsPartial,
     preflightCheckState,
 } from '../../../packages/core/src/shared/utils/preflightCheckState.js';
@@ -28,6 +29,7 @@ import { __createDevMockSdkForTests } from '../../../packages/web/src/hostBridge
 import { requireSdkDeep, sdkInstalled } from '../../helpers/sdkDeepPaths.js';
 
 const tier1 = sdkInstalled() ? requireSdkDeep('preflightTier1Findings') : null;
+const engine = sdkInstalled() ? requireSdkDeep('preflightEngine') : null;
 
 // The SDK's computeVerdict (src/preflight/index.js), restated so the report
 // carries the verdict the engine would give these findings.
@@ -206,5 +208,85 @@ describe('preflightCheckState partial and held-back reports', () => {
 
     it('gives fail for a fail verdict even with an approval in the findings', () => {
         expect(preflightCheckState({ verdict: 'fail', findings: [approval()] })).toBe('fail');
+    });
+});
+
+// Operator 2026-11-17: an approved edition mint whose only gaps are checks the
+// network makes at settlement is a calm note, not "Only partly checked". Every
+// other cause of a partial check keeps the partial state.
+describe('preflightCheckState settle-time checks', () => {
+    const approval = (data = {}) => ({ code: 'DRYRUN_VALID', severity: 'info', source: 'dryrun', message: 'ok', data });
+    // The SDK's entry verbatim (xchain-sdk src/preflight/checks/mint.js).
+    const HEADROOM = {
+        check: 'MINT_ADDRESS_HEADROOM',
+        reason: 'per-address minted headroom, allow/block lists, and mint-guard outcome are server-side only',
+    };
+
+    it('gives settleChecks when every unverified item is a settle-time check', () => {
+        const report = { verdict: 'pass', findings: [approval()], unverified: [HEADROOM] };
+        expect(preflightCheckState(report)).toBe('settleChecks');
+        // Still not a clean pass: the green line stays the full approval's.
+        expect(preflightCleanPass(report)).toBe(false);
+    });
+
+    it('stays partial when a settle-time item sits beside any other', () => {
+        expect(preflightCheckState({
+            verdict: 'pass', findings: [approval()],
+            unverified: [HEADROOM, { check: 'AMOUNT_REPRESENTABILITY', reason: 'declared' }],
+        })).toBe('partial');
+    });
+
+    it('stays partial for a partly judged batch with only settle-time items', () => {
+        expect(preflightCheckState({
+            verdict: 'pass', findings: [approval({ subCommandCount: 3, accepted: 2 })], unverified: [HEADROOM],
+        })).toBe('partial');
+    });
+
+    it('stays partial for a command left unjudged with only settle-time items', () => {
+        expect(preflightCheckState({ verdict: 'pass', unverified: [HEADROOM], findings: [approval(), {
+            code: 'DRYRUN_SUBCOMMAND_UNJUDGED', severity: 'info', source: 'dryrun', message: 'unjudged',
+            data: { commandIndex: 1 },
+        }] })).toBe('partial');
+    });
+
+    it('stays partial for a restricted report with only settle-time items', () => {
+        expect(preflightCheckState({
+            verdict: 'pass', restricted: true, findings: [approval()], unverified: [HEADROOM],
+        })).toBe('partial');
+    });
+
+    it('matches the check code, never the reason text', () => {
+        expect(isSettleTimeUnverified(HEADROOM)).toBe(true);
+        expect(isSettleTimeUnverified({ check: 'SEND_RESTRICTIONS', reason: HEADROOM.reason })).toBe(false);
+        expect(isSettleTimeUnverified({ reason: HEADROOM.reason })).toBe(false);
+        expect(isSettleTimeUnverified(null)).toBe(false);
+    });
+
+    it('lets warn, fail and not checked outrank settle-time items', () => {
+        expect(preflightCheckState({ verdict: 'fail', findings: [approval()], unverified: [HEADROOM] })).toBe('fail');
+        expect(preflightCheckState({ verdict: 'warn', findings: [approval()], unverified: [HEADROOM] })).toBe('warn');
+        expect(preflightCheckState({ verdict: 'pass', findings: [], unverified: [HEADROOM] })).toBe('notChecked');
+    });
+});
+
+// The report the wallet's own SDK builds for a capped mint the indexer
+// approves. If the SDK starts declaring another gap here, this fails, because
+// the calm note would then stop showing on edition mints.
+describe.skipIf(!engine)('preflightCheckState on the SDK report for a capped mint', () => {
+    it('carries only the settle-time item and gives settleChecks', async () => {
+        const token = { tick: 'EDITION', info: { tick: 'EDITION', decimals: 0 }, supply: { max: '100', current: '40', decimals: 0 }, max_mint: '1' };
+        const sdk = {
+            config: { network: 'regtest' },
+            _preflightCoalescer: { run: (_key, producer) => producer() },
+            explorer: {
+                coin: 'BTC',
+                getToken: async () => token,
+                getPreflight: async () => ({ supported: true, valid: true, status: 'valid' }),
+            },
+        };
+        const report = await engine.runPreflight(sdk, 'MINT|0|EDITION|1', { source: 'bcrt1qsettlecheckfixture' });
+        expect(report.verdict).toBe('pass');
+        expect(report.unverified.map((u) => u.check)).toEqual(['MINT_ADDRESS_HEADROOM']);
+        expect(preflightCheckState(report)).toBe('settleChecks');
     });
 });
