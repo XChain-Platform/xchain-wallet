@@ -58,6 +58,7 @@ import {
     unlockAfterReload,
     openFromAddress,
     approveConfirm,
+    waitForIndexerAtTip,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -286,6 +287,35 @@ async function openOrderAction(page, orderIndex, action) {
     await main.getByRole('button', { name: new RegExp(`^${action} order`) }).click();
 }
 
+/** The wallet's refusal to sign an action on an offer while the indexer trails the node. */
+const CHAIN_SYNCING_REFUSAL = /chain height is still syncing/i;
+
+/**
+ * Approves an order cancel or edit and waits for its broadcast notice. The
+ * wallet refuses to sign while the indexer trails the node ("still syncing.
+ * Try again."), and a price keeper re-seed mines mid-step, so this waits for
+ * the tip and answers a refusal the way the notice asks: submit again.
+ */
+async function approveOrderAction(page, { submit, broadcastText, what }) {
+    const broadcast = page.getByText(broadcastText);
+    const syncing = page.getByRole('alert').filter({ hasText: CHAIN_SYNCING_REFUSAL });
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+        if (attempt > 1) {
+            await submit();
+            await expectConfirmModal(page, 'this action', 60_000);
+        }
+        await waitForIndexerAtTip();
+        await approveConfirm(page);
+        await expect(broadcast.or(syncing).first(), `the ${what} never reported being broadcast`)
+            .toBeVisible({ timeout: 120_000 });
+        if (await broadcast.isVisible()) return;
+        // eslint-disable-next-line no-console
+        console.log(`[order lane] the ${what} was refused while the indexer trailed the node; retrying`);
+    }
+    throw new Error(`the ${what} was refused three times because the chain height was still syncing. `
+        + 'Venue state (the indexer keeps trailing the node), not a wallet defect');
+}
+
 test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(1_800_000);
@@ -353,10 +383,11 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toContainText('Cancelling closes the order');
             await expect(cancelWarning, 'the review never said the escrow comes back')
                 .toContainText('Any escrowed side returns to you.');
-            await approveConfirm(page);
-            await expect(page.getByText('Cancel broadcast'),
-                'the cancel never reported being broadcast')
-                .toBeVisible({ timeout: 120_000 });
+            await approveOrderAction(page, {
+                submit: () => page.getByRole('button', { name: 'Cancel Order' }).click(),
+                broadcastText: 'Cancel broadcast',
+                what: 'cancel',
+            });
 
             const cancel = await waitForOrderCancel(source, orderIndex);
             expect(String(cancel.status), 'the chain rejected the cancel').toBe('valid');
@@ -444,10 +475,11 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await expiration.fill(localInput);
             await main.getByRole('button', { name: 'Update Order' }).click();
             await expectConfirmModal(page, 'this action', 60_000);
-            await approveConfirm(page);
-            await expect(page.getByText('Edit broadcast'),
-                'the edit never reported being broadcast')
-                .toBeVisible({ timeout: 120_000 });
+            await approveOrderAction(page, {
+                submit: () => main.getByRole('button', { name: 'Update Order' }).click(),
+                broadcastText: 'Edit broadcast',
+                what: 'edit',
+            });
         });
 
         await test.step('the chain records the edit against the order', async () => {

@@ -481,6 +481,36 @@ async function waitForIndexedTip({ budgetMs = INDEX_WAIT_TIMEOUT_MS } = {}) {
     return false;
 }
 
+/** How long the wallet reuses an identical explorer read (explorerRateLimit.js reuseMs). */
+const WALLET_STATUS_REUSE_MS = 2_000;
+
+/**
+ * Holds until the indexer has stood at the node's tip for longer than the
+ * wallet reuses a status read. `assertReferencedOfferActionable` refuses to
+ * sign a cancel, edit or close on any `last_block` / `chain_tip` gap, and any
+ * block mined on the venue opens one. Throws when the tip is never held.
+ */
+export async function waitForIndexerAtTip(timeoutMs = 120_000) {
+    const deadline = Date.now() + timeoutMs;
+    let atTipSince = null;
+    let last = null;
+    while (Date.now() < deadline) {
+        last = await explorerJson('status').catch(() => last);
+        const indexed = Number(last?.last_block?.[REGTEST_COIN]);
+        const tip = Number(last?.chain_tip?.[REGTEST_COIN]);
+        if (Number.isFinite(tip) && indexed === tip) {
+            atTipSince ??= Date.now();
+            if (Date.now() - atTipSince > WALLET_STATUS_REUSE_MS) return;
+        } else {
+            atTipSince = null;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new Error(`the ${REGTEST_COIN} indexer never held the chain tip (indexed `
+        + `${last?.last_block?.[REGTEST_COIN]}, tip ${last?.chain_tip?.[REGTEST_COIN]}), so the wallet `
+        + 'would refuse to sign an action on an offer as unverifiable. Venue state, not a wallet defect');
+}
+
 /**
  * Chain-seconds of usable life left in the venue's price, or null when that
  * cannot be established.

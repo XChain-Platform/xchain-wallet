@@ -857,6 +857,13 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // which is what a closed tab or a crash does to a real user.
             await page.reload();
             await unlockAfterReload(page, PASSWORD);
+
+            // A second coin for the resume, funded after the reload so its block
+            // cannot let the dead run finish chunk 1. The cut lands mid-build of
+            // chunk 1, and the encoder reserves an unsigned build's inputs for
+            // five minutes, so with one coin the resume reads "1 candidate
+            // input(s) are reserved". A user retries once that lapses.
+            await fundAddress(payer, FUNDING);
         });
 
         let resumedGas = null;
