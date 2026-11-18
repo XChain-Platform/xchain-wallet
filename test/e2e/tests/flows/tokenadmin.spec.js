@@ -188,8 +188,14 @@ async function openManagedToken(page) {
     const row = page.getByRole('button', { name: 'Open XCP token details' }).first();
     await expect(row).toBeVisible();
     await row.click();
-    await // The token page is titled by the ticker.
-    await expectScreenLayout(page, 'XCP', 'Manage token');
+    // A narrow window titles the token page by its ticker; a wide one keeps the list
+    // beside it, so the title stays My Tokens and the token opens as a panel.
+    if (page.viewportSize().width < 1024) {
+        await expectScreenLayout(page, 'XCP', 'Manage token');
+    } else {
+        await expect(page.getByRole('region', { name: 'XCP token management' })).toBeVisible();
+        await expectScreenLayout(page, 'My Tokens', 'Manage token');
+    }
 }
 
 for (const viewport of VIEWPORTS) {

@@ -12,8 +12,8 @@ import { createWallet, expect, test } from '../../fixtures/wallet.js';
 
 const VIEWPORTS = [
     { width: 390, height: 844, columns: 2 },
-    { width: 834, height: 1112, columns: 3 },
-    { width: 1280, height: 800, columns: 3 },
+    { width: 834, height: 1112, columns: 4 },
+    { width: 1280, height: 800, columns: 4 },
 ];
 
 const menuDialog = (page) => page.getByRole('dialog', { name: 'Wallet menu' });
@@ -56,8 +56,9 @@ test('wallet menu lays out its catalogue, searches, and provides compact navigat
             await page.setViewportSize(viewport);
             const { dialog, opener } = await openMenu(page);
             const groups = dialog.locator('[data-wallet-menu-group]');
-            await expect(groups).toHaveCount(6);
-            for (const id of ['wallet', 'assets', 'trade', 'earn', 'people', 'actions']) {
+            // Eight groups of seven rows (ruling 2026-11-14).
+            await expect(groups).toHaveCount(8);
+            for (const id of ['wallet', 'assets', 'trade', 'earn', 'governance', 'people', 'wallets', 'actions']) {
                 const group = dialog.locator(`[data-wallet-menu-group="${id}"]`);
                 await expect(group).toBeVisible();
                 await expect(group).toHaveCSS('border-top-width', '1px');
@@ -67,21 +68,25 @@ test('wallet menu lays out its catalogue, searches, and provides compact navigat
             const positions = await groupPositions(dialog);
             expect(new Set(Object.values(positions)).size, 'the menu uses the expected group columns')
                 .toBe(viewport.columns);
-            // Equal boxes line up in columns: two across on phones, three on wide panels.
+            // Equal boxes line up in columns: two across on phones, four on wide panels.
             if (viewport.columns === 2) {
                 expect(positions.wallet).toBe(positions.trade);
-                expect(positions.trade).toBe(positions.people);
+                expect(positions.trade).toBe(positions.governance);
+                expect(positions.governance).toBe(positions.wallets);
                 expect(positions.assets).toBe(positions.earn);
-                expect(positions.earn).toBe(positions.actions);
+                expect(positions.earn).toBe(positions.people);
+                expect(positions.people).toBe(positions.actions);
                 expect(positions.wallet).not.toBe(positions.assets);
             } else {
-                expect(positions.wallet).toBe(positions.earn);
+                expect(positions.wallet).toBe(positions.governance);
                 expect(positions.assets).toBe(positions.people);
-                expect(positions.trade).toBe(positions.actions);
+                expect(positions.trade).toBe(positions.wallets);
+                expect(positions.earn).toBe(positions.actions);
             }
 
             await expect(dialog.locator('[data-wallet-menu-row="settings"]')).toHaveAccessibleName('Settings');
-            await expect(dialog.locator('[data-wallet-menu-row="lock"]')).toHaveAccessibleName('Lock wallet');
+            // Lock wallet is a button in the menu header, not a row.
+            await expect(dialog.locator('[data-wallet-menu-lock]')).toHaveAccessibleName('Lock wallet');
             const titlePainted = await dialog.getByText('Wallet menu', { exact: true }).evaluateAll((elements) => (
                 elements.some((element) => {
                     const style = getComputedStyle(element);
@@ -114,7 +119,8 @@ test('wallet menu lays out its catalogue, searches, and provides compact navigat
                     };
                 });
                 expect(fit.withinViewport, 'the phone menu fits inside the viewport').toBe(true);
-                expect(fit.scrollableCount, 'the phone menu has no scrollable overflow').toBe(0);
+                // Eight groups of seven rows no longer fit a phone, so the group list is the one scroller.
+                expect(fit.scrollableCount, 'the phone menu has exactly one scrollable area').toBeLessThanOrEqual(1);
 
                 const tabs = bottomBar.locator('[data-bottom-tab]');
                 await expect(tabs).toHaveCount(5);

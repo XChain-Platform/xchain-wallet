@@ -10,7 +10,7 @@
 
 // The page header keeps one height whether its Back control shows or not.
 // Back is hidden on screens the visible nav links to (Send, Settings) and
-// shown on nested screens (Settings > Privacy). Holding the hidden case at
+// shown on nested screens (Settings > Privacy and Sites). Holding the hidden case at
 // the larger trailing-control size made every header 8px taller than the
 // Back control it is meant to match. Trailing actions (Payments due
 // refresh) take the Back control size too, so a screen with one is the same
@@ -26,6 +26,9 @@ import {
     unlockedShell,
 } from '../../fixtures/wallet.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
+
+// The page header row is the app bar's button height.
+const HEADER_ROW_PX = 44;
 
 const SIZES = [
     [360, 800],
@@ -74,26 +77,29 @@ for (const [width, height] of SIZES) {
 
         await gotoSection(page, 'Settings');
         await page.getByRole('main').getByRole('button', { name: /^Privacy\b/ }).click();
-        const privacy = await headerBox(page, 'Privacy');
+        const privacy = await headerBox(page, 'Privacy and Sites');
         expect(privacy.back, 'a Settings section always shows Back').toBe(true);
 
-        // The row is exactly as tall as the Back control, shown or not.
-        expect(privacy.row).toBe(privacy.backHeight);
-        expect(send.row).toBe(privacy.backHeight);
+        // The row is the app bar's button height (44px), shown or not, and the
+        // small Back control sits inside it.
+        expect(privacy.row).toBe(HEADER_ROW_PX);
+        expect(privacy.backHeight).toBeLessThanOrEqual(privacy.row);
+        expect(send.row).toBe(HEADER_ROW_PX);
         expect(send.row).toBe(privacy.row);
         expect(send.band).toBe(privacy.band);
 
-        // No screen puts an action in the page header: History (Back hidden,
-        // it is a nav destination), Contacts (Back shown where the tab bar
-        // does not link it) and Payments due hold only the title and Back,
-        // at the same height.
+        // List pages put create and filter in the title bar (G95): History, Contacts
+        // and Payments due keep the same row and band height with their actions, and
+        // every action is as tall as the row.
         const boxes = [];
-        for (const name of ['History', 'Contacts', 'Payments due']) {
+        for (const [name, title] of [['History', 'History'], ['Contacts', 'Contacts'], ['Payments due', 'Payments Due']]) {
             await gotoSection(page, name);
-            boxes.push([name, await headerBox(page, name)]);
+            boxes.push([name, await headerBox(page, title)]);
         }
         for (const [name, box] of boxes) {
-            expect(box.actionHeights, `${name} page header holds only the title and Back`).toEqual([]);
+            for (const actionHeight of box.actionHeights) {
+                expect(actionHeight, `${name} action height`).toBe(HEADER_ROW_PX);
+            }
             expect(box.row, `${name} row height`).toBe(privacy.row);
             expect(box.band, `${name} band height`).toBe(privacy.band);
         }
@@ -102,7 +108,8 @@ for (const [width, height] of SIZES) {
 
 test('Settings opens at the top after it was scrolled and left', async ({ page }) => {
     test.slow();
-    await page.setViewportSize({ width: 1290, height: 850 });
+    // The grouped Settings landing fits a tall window, so a short one makes it scroll.
+    await page.setViewportSize({ width: 1290, height: 420 });
     await enterDemoWallet(page);
     const main = page.locator('#xc-main');
 
