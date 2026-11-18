@@ -268,20 +268,21 @@ test.describe(`the PRICE v1 deviation gate on ${REGTEST_CHAIN_LABEL}`, () => {
 
                 // It says WHAT the move is, not merely that something is unusual:
                 // the number is the whole point on a fat-fingered decimal.
-                const alert = review.getByRole('alert').filter({ hasText: /move from your last published/i });
-                await expect(alert, 'the review does not name the move against the last published price')
+                // The move is stated in the "Before you approve" block, which is
+                // not an alert, and the size is computed from this spec's prices.
+                const movePct = Math.round(((Number(BIG_MOVE) - Number(FIRST)) / Number(FIRST)) * 100);
+                const moveText = `+${movePct}%`;
+                const warning = review.getByTestId('confirm-warning');
+                await expect(warning.getByText(
+                    `This is a ${moveText} move from the last published price. Check the decimal point before approving.`,
+                ), 'the review does not name the move against the last published price')
                     .toBeVisible({ timeout: 30_000 });
-                const said = (await alert.textContent()) || '';
-                expect(said, 'the warning does not state the size of the move')
-                    .toMatch(/100(\.0+)?\s*%/);
-                // Compared as a NUMBER, not as the string that was typed: the
-                // form renders the value the mirror stored, and 1.50 comes back
-                // as "1.5". A `toContain('1.50')` here fails on formatting while
-                // the sentence is perfectly correct, which is a spec defect
-                // dressed as a product one.
-                const quoted = Number((said.match(/price of\s+([\d.]+)/) || [])[1]);
-                expect(quoted, `the warning does not quote the price being moved from: "${said}"`)
-                    .toBe(Number(FIRST));
+                // The prior value is a fact row, compared as a NUMBER because the
+                // form renders the stored value ("1.50" comes back as "1.5").
+                const pending = review.locator('dt', { hasText: /^Pending price$/ })
+                    .locator('xpath=following-sibling::dd[1]');
+                await expect(pending, 'the review does not quote the price being moved from')
+                    .toHaveText(`${Number(FIRST)} ${FIAT} (${moveText})`);
 
                 const box = typedConfirmBox(review);
                 await expect(box, 'a +100% move did not ask for the typed confirm at all')
