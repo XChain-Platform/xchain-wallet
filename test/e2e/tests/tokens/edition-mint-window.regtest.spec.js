@@ -534,14 +534,16 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
             for (const expected of [PER_TX, PER_TX * 2]) {
                 await composeMint(page, PER_TX);
                 await expectConfirmScreen(page);
-                // An edition mint's per-address headroom, lists and mint guard are
-                // checked only server-side, so the venue may report the check as
-                // partial; anything else partial, or a fail, is still a failure.
+                // An edition mint's per-address headroom is checked only when it
+                // settles, which the confirm screen states as the calm settleChecks
+                // notice. A red partial means some other check went unverified.
                 const status = page.getByTestId('confirm-status');
-                await expect(status).toHaveAttribute('data-state', /^(pass|partial)$/);
-                if ((await status.getAttribute('data-state')) === 'partial') {
-                    await expect(status, 'the check is partial for a reason other than the server-side-only edition limits')
-                        .toContainText(/per-address minted headroom, allow\/block lists, and mint-guard outcome are server-side only/);
+                await expect(status,
+                    'a capped edition mint inside its window drew a check state other than pass or settleChecks')
+                    .toHaveAttribute('data-state', /^(pass|settleChecks)$/);
+                if ((await status.getAttribute('data-state')) === 'settleChecks') {
+                    await expect(status).toHaveAttribute('data-tone', 'info');
+                    await expect(status).toContainText('Checked When It Settles');
                 }
 
                 const action = await waitForIndexedAction(await approveAndGetTxid(page));
