@@ -96,7 +96,7 @@ for (const label of Object.keys(shells)) {
     // A palette pick opens its page as a root of the one history (G06).
     assert.ok(
         /useCommandPalette\(\{[\s\S]{0,240}?navigate:\s*openRootView/.test(src)
-            && /const openRootView = nav\.navigateRoot;/.test(src),
+            && /const openRootView = createRootViewOpener\(nav\.navigateRoot,/.test(src),
         `${label} App backs palette navigation with the history's root navigation`,
     );
     // Command list assembled from the shared catalogue.
