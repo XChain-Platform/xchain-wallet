@@ -115,6 +115,12 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, on
         setSummaryLoading(true);
         setSummaryError(null);
         setMarketMissing(false);
+        if (demo) {
+            // A demo wallet's markets are the local samples; the explorer has no
+            // record of them, so asking it would show a load error on every one.
+            setSummaryLoading(false);
+            return undefined;
+        }
         messaging.getMarket({ chainId, tick1, tick2 })
             .then((summary) => {
                 if (!cancelled) {
@@ -129,7 +135,7 @@ export function MarketView({ walletId, chainId, tick1, tick2, onBack, onSwap, on
                 }
             });
         return () => { cancelled = true; };
-    }, [messaging, chainId, tick1, tick2, reloadKey]);
+    }, [messaging, chainId, tick1, tick2, reloadKey, demo]);
 
     useEffect(() => {
         setLocalTrade(null);

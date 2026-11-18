@@ -272,12 +272,19 @@ assert.equal(nameLine[1].trim(), manifest.name,
     `${PACK_PATH} names the listing "${nameLine[1].trim()}" but manifest.json ships name `
     + `"${manifest.name}". The store takes the listing title from the package, so these cannot differ.`);
 
-const platformLead = 'The wallet for the XChain Platform';
-const currentSupport = 'Current chains: Bitcoin, Litecoin &amp; Dogecoin';
-assert.ok(captureScript.includes(platformLead),
-    `${CAPTURE_SCRIPT_PATH} promo tile must lead with "${platformLead}"`);
-assert.ok(captureScript.includes(currentSupport),
-    `${CAPTURE_SCRIPT_PATH} promo tile must name Bitcoin, Litecoin, and Dogecoin as current chain support`);
+// The promo tile is designed art the operator approved ("One wallet for
+// everything blockchain", with the coin icons), committed as a source file.
+// The capture copies it, so a recapture cannot overwrite the approved tile
+// with a composed one.
+const PROMO_SOURCE_PATH = 'packages/extension/docs/listing-source/promo-tile-source.png';
+assert.ok(captureScript.includes('docs/listing-source/promo-tile-source.png'),
+    `${CAPTURE_SCRIPT_PATH} must copy the promo tile from ${PROMO_SOURCE_PATH}`);
+assert.ok(!/function composePromoTile\b/.test(captureScript),
+    `${CAPTURE_SCRIPT_PATH} composes a promo tile again; a recapture would overwrite the approved art`);
+assert.ok(existsSync(join(root, PROMO_SOURCE_PATH)), `${PROMO_SOURCE_PATH} is missing`);
+assert.ok(readFileSync(join(root, PROMO_SOURCE_PATH))
+    .equals(readFileSync(join(root, ASSET_DIR, 'promo-tile-440x280.png'))),
+    `${ASSET_DIR}/promo-tile-440x280.png differs from ${PROMO_SOURCE_PATH}; the listing must carry the approved art`);
 assert.ok(!/Bitcoin, Dogecoin &(?:amp;)? Litecoin wallet/.test(captureScript),
     `${CAPTURE_SCRIPT_PATH} promo tile must not define the product as a three-coin wallet`);
 

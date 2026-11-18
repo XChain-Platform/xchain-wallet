@@ -44,6 +44,9 @@ export const DEMO_TOKEN_ICONS = {
     PEPECASH: nftImg('CASH', '#16A34A', '#A16207'),
     XCP: nftImg('XCP', '#1E90C7', '#7B2C8F'),
     DOGINAL: nftImg('DOGE', '#EAB308', '#92400E'),
+    BEANCOIN: nftImg('BEAN', '#B45309', '#78350F'),
+    STUDIOPASS: nftImg('PASS', '#0E7490', '#1E3A8A'),
+    HARBORFEST: nftImg('HARBR', '#BE185D', '#6D28D9'),
 };
 //
 // Demo wallets are real BIP39 wallets. They have real addresses on
@@ -71,10 +74,18 @@ const PER_CHAIN_DEFAULTS = /** @type {Record<string, BalanceFixture>} */ ({
             // populated) lives in demoExampleTis.json; holding it lets the
             // demo show a maxed-out token info surface.
             { tick: 'EXAMPLE', displayName: 'Example Token', divisibility: 8, quantity: '10000000000', fiatRate: 0.5, imageUrl: DEMO_TOKEN_ICONS.EXAMPLE }, // 100 EXAMPLE
+            // The platform token, so the demo's mainnet wallet holds XCHAIN like
+            // the regtest one does.
+            { tick: 'XCHAIN', displayName: 'XChain', divisibility: 8, quantity: '200000000000', fiatRate: 1.25 }, // 2,000 XCHAIN
             // Divisible mainnet tokens
             { tick: 'XCP', displayName: 'Counterparty', divisibility: 8, quantity: '500000000', fiatRate: 35 }, // 5 XCP
             { tick: 'PEPECASH', displayName: 'PepeCash', divisibility: 8, quantity: '10000000000', fiatRate: 0.0012, imageUrl: DEMO_TOKEN_ICONS.PEPECASH }, // 100 PEPECASH
             { tick: 'BANANE', displayName: 'Banane', divisibility: 8, quantity: '20000000000', fiatRate: 0.04 }, // 200 BANANE
+            // Tokens this demo wallet issued (listed in My Tokens by
+            // synthesizeDemoOwnedTokens), with the supply it still holds.
+            { tick: 'BEANCOIN', displayName: 'Bean Coin', divisibility: 8, quantity: '2500000000000', fiatRate: 0.08, imageUrl: DEMO_TOKEN_ICONS.BEANCOIN }, // 25,000 BEANCOIN
+            { tick: 'STUDIOPASS', displayName: 'Studio North Pass', divisibility: 0, quantity: '12', fiatRate: 120, imageUrl: DEMO_TOKEN_ICONS.STUDIOPASS },
+            { tick: 'HARBORFEST', displayName: 'Harbor Fest 2027 Ticket', divisibility: 0, quantity: '8', fiatRate: 45, imageUrl: DEMO_TOKEN_ICONS.HARBORFEST },
             { tick: 'RUSTBITS', displayName: 'Rustbits', divisibility: 8, quantity: '750000000', fiatRate: 2.50 }, // 7.5 RUSTBITS
             // Indivisible; surfaced in NFTs because they carry imageUrl
             { tick: 'RAREPEPE', displayName: 'Rare Pepe', divisibility: 0, quantity: '1', fiatRate: 650, imageUrl: DEMO_TOKEN_ICONS.RAREPEPE },
@@ -205,23 +216,78 @@ export function synthesizeDemoBalances(addressesByChain) {
 
 // Fixed 24-hour moves for the demo wallet's native coins, one per
 // coin family (the three networks of a family share a figure, the way
-// they share a fixture). Chosen to read as an ordinary day rather than
-// a rally: one coin up, one flat-ish, one down, so the hero's change
-// line and its colour states are both visible in a demo.
+// they share a fixture). Every coin is up: a demo never advertises a
+// loss, and the synthesized charts rise to match.
 //
-// These exist because a demo wallet used to take its 24h change from
-// the LIVE price oracle while every other number on the screen was
-// synthetic - so the figure was a real market move applied to
-// imaginary holdings, it made a third-party request from a wallet that
-// is supposed to fetch nothing, and it was the last input keeping two
-// store-listing captures of one tree from matching: whether the fetch
-// landed before the screenshot decided whether the whole card below it
-// sat 24px lower.
+// They are fixed rather than read from the live price oracle: every
+// other number on a demo screen is synthetic, a demo wallet fetches
+// nothing, and two store-listing captures of one tree must match, which
+// a fetch racing the screenshot (moving the card below by 24px) breaks.
 const DEMO_NATIVE_CHANGE_24H_PCT = /** @type {Record<string, number>} */ ({
     bitcoin: 1.24,
-    litecoin: -0.72,
+    litecoin: 0.72,
     dogecoin: 3.15,
 });
+
+// Tokens the demo wallet has issued and still owns, for My Tokens. Bitcoin
+// only (the demo's token chain). Supplies are in whole units.
+const DEMO_OWNED_TOKENS_BY_CHAIN = {
+    'bitcoin-mainnet': [
+        {
+            tick: 'BEANCOIN',
+            description: 'Loyalty points for the Sunrise Roasters coffee network. Earn on every cup, spend at any cafe.',
+            divisibility: 8,
+            totalSupply: '1250000',
+            maxSupply: '10000000',
+            locked: false,
+            holders: 412,
+            fiatRate: 0.08,
+            displayName: 'Bean Coin',
+            quantity: '2500000000000',
+            imageUrl: DEMO_TOKEN_ICONS.BEANCOIN,
+        },
+        {
+            tick: 'STUDIOPASS',
+            description: 'Lifetime member passes for Studio North, the shared creative workspace.',
+            divisibility: 0,
+            totalSupply: '500',
+            maxSupply: '500',
+            locked: true,
+            holders: 187,
+            fiatRate: 120,
+            displayName: 'Studio North Pass',
+            quantity: '12',
+            imageUrl: DEMO_TOKEN_ICONS.STUDIOPASS,
+        },
+        {
+            tick: 'HARBORFEST',
+            description: 'Weekend tickets for Harbor Fest 2027, the waterfront music and food festival.',
+            divisibility: 0,
+            totalSupply: '2000',
+            maxSupply: '2000',
+            // Fully issued and supply-locked, so the indivisible ticket also
+            // classifies as a collectible on the NFTs tab.
+            locked: true,
+            holders: 1206,
+            fiatRate: 45,
+            displayName: 'Harbor Fest 2027 Ticket',
+            quantity: '8',
+            imageUrl: DEMO_TOKEN_ICONS.HARBORFEST,
+        },
+    ],
+};
+
+/**
+ * The tokens a demo wallet issued and owns, shaped like the rows
+ * `messaging.getOwnedTokens` returns for an address (My Tokens adds the chain
+ * and owner address itself).
+ *
+ * @param {string} chainId
+ * @returns {Array<{ tick: string, description: string, divisibility: number, totalSupply: string, maxSupply: string, locked: boolean, holders: number, fiatRate: number, youOwn: boolean }>}
+ */
+export function synthesizeDemoOwnedTokens(chainId) {
+    return (DEMO_OWNED_TOKENS_BY_CHAIN[chainId] || []).map((t) => ({ ...t, youOwn: true, demo: true }));
+}
 
 /**
  * Native-coin price entries for a demo wallet, in the shape
@@ -800,6 +866,16 @@ const DEMO_CONTRACT_STAKES_BY_CHAIN = {
                 tick: 'PEPECASH',
                 amount: '25000',
                 block_index: 12_390,
+                signing_pubkey: '03f0e1d2c3b4a5968778695a4b3c2d1e0fa1b2c3d4e5f60718293a4b5c6d7e8f9',
+            },
+            // A later top-up keeps this position's staked-balance chart net up
+            // across the slash below.
+            {
+                action_index: 'demo-cstake-2048b',
+                target_contract_index: '2048',
+                tick: 'PEPECASH',
+                amount: '2000',
+                block_index: 12_520,
                 signing_pubkey: '03f0e1d2c3b4a5968778695a4b3c2d1e0fa1b2c3d4e5f60718293a4b5c6d7e8f9',
             },
         ],
