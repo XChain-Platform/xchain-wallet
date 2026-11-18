@@ -48,8 +48,6 @@ async function expectReachableLayout(page, label, action) {
             // clipped to 1px by design and never painted.
             if (node.closest('.sr-only')) continue;
             if (node.scrollWidth <= node.clientWidth + 1) continue;
-            // A 1px-wide clipped span is the visually hidden full name behind a short tab label.
-            if (node.clientWidth <= 1) continue;
             // A closed dropdown's option subtitle may end in an ellipsis (operator
             // ruling 2026-11-17); its title, labels and buttons may not.
             if (style.textOverflow === 'ellipsis' && /(^|\s)_sub_/.test(String(node.className))
