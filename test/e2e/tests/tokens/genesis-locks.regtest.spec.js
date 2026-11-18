@@ -67,6 +67,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
+    expectSubmitRefused,
     selectPickerAsset,
     approveConfirm,
 } from '../../fixtures/regtest.js';
@@ -413,15 +414,18 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // lock flags and withdraws the Description action, naming the
             // lock as the reason. The Mint settings edit above went through
             // the same page, so this is the lock and not a dead menu.
+            // The Description row sits in the Token page group, locked with
+            // its reason in place of its description.
             await openManageToken(page);
-            await page.getByRole('button', { name: /More/ }).last().click();
-            const describeAction = page.getByRole('menuitem', { name: 'Description', exact: true });
+            const describeAction = page.getByRole('main')
+                .getByRole('region', { name: 'Token page' })
+                .getByRole('button', { name: /^Description\b/ });
             await expect(describeAction,
                 'Manage Token offers a description edit on a token whose LOCK_DESCRIPTION is set')
                 .toBeDisabled({ timeout: 30_000 });
             await expect(describeAction,
                 'the withdrawn Description action does not say the description is locked')
-                .toHaveAttribute('title', /permanently locked/i);
+                .toContainText(/permanently locked/i);
             expect(await page.getByTestId('confirm-modal').count(),
                 'an edit the network has already refused reached the confirm screen')
                 .toBe(0);
@@ -503,21 +507,19 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // says so rather than offering it again.
             await expect(form.getByRole('switch', { name: /^Max supply/ })).toBeDisabled();
 
-            // D-165, asserted in both directions. The typed confirmation used to
-            // render only in the legacy review stage, which the wallet shows to
-            // WATCHER wallets alone, so an ordinary user locked a token
-            // permanently with a checkbox and one click.
+            // The typed LOCK gate, in both directions. Submit is never disabled
+            // (G130): a tap is refused on the form, and nothing is sent, until
+            // the word is exact.
             await descriptionLock.check();
-            await expect(submit,
-                'a permanent lock is submittable without the typed confirmation')
-                .toBeDisabled();
+            await expectSubmitRefused(page, submit, /Type LOCK to confirm the permanent lock/,
+                'a permanent lock with no typed confirmation');
             const typed = fieldByLabel(form, 'Type LOCK to confirm');
             await expect(typed, 'the Lock form has no typed confirmation at all on this path')
                 .toBeVisible({ timeout: 15_000 });
             await typed.fill('LOOK');
-            await expect(submit, 'a near-miss word satisfied the confirmation').toBeDisabled();
+            await expectSubmitRefused(page, submit, /Type LOCK to confirm the permanent lock/,
+                'a permanent lock confirmed with a near-miss word');
             await typed.fill('LOCK');
-            await expect(submit).toBeEnabled();
             await submit.click();
 
             await expectConfirmScreen(page);
@@ -610,9 +612,9 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // required whichever lock is being set, not just the one it was
             // first driven with.
             await form.getByRole('switch', { name: /^Minting/ }).check();
-            await expect(submit).toBeDisabled();
+            await expectSubmitRefused(page, submit, /Type LOCK to confirm the permanent lock/,
+                'a MINTING lock with no typed confirmation');
             await fieldByLabel(form, 'Type LOCK to confirm').fill('LOCK');
-            await expect(submit).toBeEnabled();
             await submit.click();
 
             await expectConfirmScreen(page);

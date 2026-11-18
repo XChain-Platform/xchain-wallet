@@ -2049,6 +2049,9 @@ export async function approveConfirm(page, what = 'this action', timeoutMs = 120
         await expect(approve).toBeVisible({ timeout: Math.max(1_000, deadline - Date.now()) })
             .catch(() => {});
         if (!(await approve.isVisible().catch(() => false))) {
+            // A tap taken after the outcome window closed takes Approve away
+            // before the next pass, which readApproveOutcome reads as taken.
+            if (last) return;
             await fail('the Approve button is not on screen');
         }
         await approve.click();
@@ -2115,6 +2118,34 @@ export async function expectApproveRefused(page, reason, what = 'this action', t
     }
     throw new Error(`no tap on Approve for ${what} drew the ${reason} refusal within `
         + `${Math.round(timeoutMs / 1000)}s (last outcome: ${last ? last.kind : 'none'})`);
+}
+
+/**
+ * Taps a form's submit button and asserts the tap is REFUSED on the form: an
+ * alert naming `message` shows and no confirm screen opens.
+ *
+ * The form-side twin of `expectApproveRefused`. Submit is never disabled
+ * (G130), so a gate that lives on the form itself (a typed LOCK word, a
+ * missing required field) is proven by what a tap does: the form lists the
+ * problem at the top and on the field, and nothing reaches signing.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {import('@playwright/test').Locator} submit
+ * @param {string | RegExp} message  the refusal text the alert must carry
+ * @param {string} [what]  names the gate in the failure message
+ */
+export async function expectSubmitRefused(page, submit, message, what = 'this action', timeoutMs = 15_000) {
+    await expect(submit, `the submit button is not on screen for ${what}`).toBeVisible({ timeout: timeoutMs });
+    await submit.click();
+    await expect(page.getByRole('alert').filter({ hasText: message }).first(),
+        `a tap on submit for ${what} drew no refusal naming what is missing`)
+        .toBeVisible({ timeout: timeoutMs });
+    // The refusal is synchronous, so a confirm screen that opens at all opens
+    // within this beat.
+    await page.waitForTimeout(1_000);
+    await expect(page.getByTestId('confirm-modal'),
+        `${what} reached the confirm screen past its refusal`)
+        .toHaveCount(0);
 }
 
 /**

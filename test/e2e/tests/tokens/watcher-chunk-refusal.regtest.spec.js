@@ -214,9 +214,15 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
                 + 'commit with no reveal, and signing it spends coin into a script nothing can open')
                 .toHaveCount(0);
 
-            // A way out, rather than a dead end (D-134 / D-151 family).
-            await expect(page.getByRole('button', { name: 'Edit', exact: true }),
-                'the refusal left the user on a screen with no way back to the form')
+            // A way out, rather than a dead end (D-134 / D-151 family). The
+            // refusal stays on the confirm screen (G127), whose Reject returns
+            // to the form.
+            const reject = page.getByTestId('confirm-reject');
+            await expect(reject, 'the refusal left the user on a screen with no way back to the form')
+                .toBeVisible({ timeout: 30_000 });
+            await reject.click();
+            await expect(fieldByLabel(page.getByRole('main'), 'Ticker'),
+                'Reject on the refused build did not return to the Issue form')
                 .toBeVisible({ timeout: 30_000 });
         });
     });

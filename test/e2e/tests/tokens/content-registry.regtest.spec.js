@@ -187,7 +187,13 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             issueActionIndex = issued.actionIndex;
 
             await openManageTokenAction(page, TICK, 'Artwork');
-            await expect(page.getByText(`Attach artwork to ${TICK}`)).toBeVisible({ timeout: 30_000 });
+            // The form names the token on its fixed Token field, not in a
+            // sentence, so the pin is that field reading this token.
+            const attachForm = page.getByRole('main').getByRole('form', { name: 'Attach artwork' });
+            await expect(attachForm).toBeVisible({ timeout: 30_000 });
+            await expect(attachForm.getByRole('button', { name: new RegExp(`^Token: ${TICK} on `) }),
+                'the Attach artwork form is not fixed to the token it was opened from')
+                .toBeVisible({ timeout: 30_000 });
 
             await page.setInputFiles('input[aria-label="Choose file to attach"]', {
                 name: 'nft.svg',

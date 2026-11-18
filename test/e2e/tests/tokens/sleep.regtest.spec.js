@@ -17,6 +17,7 @@
 
 import {
     clickManageTokenAction,
+    openFromSection,
     createWallet,
     expect,
     openPaletteCommand,
@@ -81,7 +82,12 @@ async function openLockAddress(page) {
     const entry = page.getByRole('main').getByRole('button', { name: /^Lock this address/ });
     await expect(entry, 'All actions has no "Lock this address" entry').toBeVisible({ timeout: 30_000 });
     await entry.click();
-    await expect(fieldByLabel(page, 'Address to lock')).toBeVisible({ timeout: 30_000 });
+    // The address being locked is the form's From address, inside the From
+    // section, which the form keeps closed until opened.
+    const main = page.getByRole('main');
+    await expect(main.getByRole('form', { name: 'Lock address' })).toBeVisible({ timeout: 30_000 });
+    await openFromSection(main);
+    await expect(fieldByLabel(main, 'Address to lock')).toBeVisible({ timeout: 30_000 });
 }
 
 /**
