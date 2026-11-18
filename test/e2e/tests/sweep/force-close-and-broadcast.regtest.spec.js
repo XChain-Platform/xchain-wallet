@@ -90,6 +90,7 @@ import {
     openFromAddress,
     approveConfirm,
     expectApproveRefused,
+    FROM_ADDRESS_LABEL,
 } from '../../fixtures/regtest.js';
 import { fundXchain } from '../../fixtures/gasToken.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
@@ -287,7 +288,7 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             let main = page.getByRole('main');
             await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            source = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+            source = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
             expect(source, 'the throwaway destination collides with the wallet\'s own address')

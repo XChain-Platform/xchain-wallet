@@ -68,6 +68,7 @@ import {
     selectPickerAsset,
     openFromAddress,
     approveConfirm,
+    FROM_ADDRESS_LABEL,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -400,7 +401,7 @@ test.describe(`a dispenser owner off its own allow list, on ${REGTEST_CHAIN_LABE
                 const main = page.getByRole('main');
                 await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(main);
-                trapSeller = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+                trapSeller = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
                 expect(trapSeller, `the form has no ${REGTEST_CHAIN_LABEL} address`)
                     .toMatch(REGTEST_ADDRESS_RE);
 

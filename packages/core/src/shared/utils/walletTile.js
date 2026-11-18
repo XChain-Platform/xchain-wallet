@@ -3,6 +3,8 @@
 // The wallet record in the vault has no field for it and no message to write
 // one, so the look stays on this device and does not travel with a backup.
 
+import { publishRecordChange, TILE_TOPIC } from './recordChanges.js';
+
 const KEY = 'xc.walletTile.';
 // The key the review build wrote, read until the look is saved again.
 const PREVIEW_KEY = 'xc.preview.walletTile.';
@@ -26,6 +28,7 @@ export function writeWalletTile(walletId, tile) {
         // Storage refused: the tile keeps its default look.
     }
     try { window.dispatchEvent(new CustomEvent(WALLET_TILE_EVENT, { detail: { walletId } })); } catch { /* no window */ }
+    publishRecordChange(TILE_TOPIC);
 }
 
 /**

@@ -60,6 +60,7 @@ import {
     waitForTokenBalance,
     selectPickerAsset,
     approveConfirm,
+    FROM_ADDRESS_LABEL,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -207,7 +208,7 @@ test.describe(`dispenser refill ceiling on ${REGTEST_CHAIN_LABEL}`, () => {
             let main = page.getByRole('main');
             await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            owner = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+            owner = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 

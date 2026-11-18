@@ -59,7 +59,8 @@ const ISSUE_PARAMS = `0|${ISSUE_TICK}|${ISSUE_SUPPLY}||0||${ISSUE_SUPPLY}`;
 const POPUP = { width: 360, height: 600 };
 
 function feeToggle(scope) {
-    const name = /^Pay protocol fee in BTC instead of XCHAIN/;
+    // The switch reads "Pay protocol fee in <coin>" (flows.protocolFee.toggleLabel).
+    const name = /^Pay protocol fee in \S+/;
     return scope.getByRole('switch', { name }).or(scope.getByRole('checkbox', { name })).first();
 }
 
@@ -70,8 +71,8 @@ async function composeIssue(page, { nativeFee }) {
     await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     await fieldByLabel(main, 'Ticker').fill(ISSUE_TICK);
     await fieldByLabel(main, 'Max supply').fill(ISSUE_SUPPLY);
-    // The fee switch sits in the Network fee section, closed until opened.
-    await openIssueSection(main, 'Network fee');
+    // The fee switch sits in the Speed and Fees section, closed until opened.
+    await openIssueSection(main, 'Speed and Fees');
     const toggle = feeToggle(main);
     await expect(toggle).toBeVisible({ timeout: 30_000 });
     if (nativeFee !== (await toggle.isChecked())) await toggle.click();

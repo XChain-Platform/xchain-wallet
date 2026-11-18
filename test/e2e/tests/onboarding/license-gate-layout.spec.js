@@ -37,7 +37,7 @@ async function measureGate(form) {
         // terms followed by the shared controls wrapper.
         const gate = terms.parentElement;
         const hero = element.querySelector('header');
-        const button = element.querySelector('button');
+        const button = [...element.querySelectorAll('button')].find((b) => /Accept and continue/i.test(b.textContent));
         const rect = (node) => {
             const box = node.getBoundingClientRect();
             return {
