@@ -98,7 +98,7 @@ async function signAndVerify(page, viewportName) {
     await openPaletteRoute(page, 'Sign message', 'Sign Message', 'Sign message');
     const signForm = page.getByRole('form', { name: 'Sign message', exact: true });
     await selectVenueChain(signForm, 'Network');
-    const addressField = signForm.getByLabel('Address', { exact: true });
+    const addressField = signForm.getByLabel('Signing address', { exact: true });
     // The Address field is a read-only picker field that starts on the chain's
     // active address, so the form offering the active address is its value.
     await expect(addressField, 'the sign form does not start on the active address')

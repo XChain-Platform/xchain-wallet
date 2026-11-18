@@ -172,13 +172,12 @@ async function receiveAddressFor(page, chain) {
     await expect(field, 'Receive rendered no Address field').toBeVisible({ timeout: 30_000 });
     await expect(field).toHaveValue(/^[a-zA-Z0-9]{20,}$/, { timeout: 30_000 });
 
-    // Receive's asset control is the hero icon button, named
-    // "Change asset (currently <tick> on <chain>)".
-    const assetButton = page.getByRole('main').getByRole('button', { name: /^Change asset \(currently / });
-    await expect(assetButton, 'Receive rendered no Change asset button to pick a chain with')
+    // Receive's asset control is the Asset field, named "Asset: <tick> on <chain>".
+    const assetButton = page.getByRole('main').getByRole('button', { name: /^Asset: / });
+    await expect(assetButton, 'Receive rendered no Asset field to pick a chain with')
         .toBeVisible({ timeout: 30_000 });
 
-    if (!((await assetButton.getAttribute('aria-label')) || '').endsWith(`on ${chain.label})`)) {
+    if (!((await assetButton.getAttribute('aria-label')) || '').endsWith(`on ${chain.label}`)) {
         const before = await field.inputValue();
         await assetButton.click();
 
@@ -187,7 +186,7 @@ async function receiveAddressFor(page, chain) {
             .toBeVisible({ timeout: 30_000 });
         await pick.getByRole('button', { name: /^Select / }).first().click();
 
-        await expect(assetButton).toHaveAttribute('aria-label', new RegExp(`on ${chain.label}\\)$`), { timeout: 30_000 });
+        await expect(assetButton).toHaveAttribute('aria-label', new RegExp(`on ${chain.label}$`), { timeout: 30_000 });
         // The address is fetched per chain AFTER the switch lands, so reading
         // it too early hands back the previous chain's address - the wrong-chain
         // funding failure above, arrived at from the other direction. Every
