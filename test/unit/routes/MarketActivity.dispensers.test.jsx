@@ -288,7 +288,9 @@ describe('Marketplace network scope', () => {
         expect(asked.length).toBeGreaterThan(0);
         expect(asked.every((chainId) => chainId.endsWith('-regtest'))).toBe(true);
         const selector = screen.getByRole('button', { name: /Change market/ });
-        const marks = [...selector.querySelectorAll('img')].map((img) => img.getAttribute('src'));
+        // XCHAIN's own bundled mark is network-neutral; every chain mark must be regtest.
+        const marks = [...selector.querySelectorAll('img')].map((img) => img.getAttribute('src'))
+            .filter((src) => !/xchain-token-500/.test(src));
         expect(marks.length).toBeGreaterThan(0);
         expect(marks.every((src) => /regtest/.test(src))).toBe(true);
     });

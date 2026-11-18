@@ -33,7 +33,8 @@ export function tickerColor(tick) {
  */
 export function AssetMark({ chainId, tick, imageUrl = null, isNative = false, className = '' }) {
     const chainIconUrl = branding.chainIconSmallUrl(chainId);
-    const artworkUrl = isNative ? chainIconUrl : imageUrl;
+    const platformIconUrl = !isNative && !imageUrl ? branding.platformTokenIconUrl(tick) : null;
+    const artworkUrl = isNative ? chainIconUrl : (imageUrl || platformIconUrl);
     const [failedArtworkUrl, setFailedArtworkUrl] = useState(null);
     const showArtwork = Boolean(artworkUrl) && failedArtworkUrl !== artworkUrl;
     const handleArtworkError = useCallback(() => {
@@ -66,10 +67,10 @@ export function AssetMark({ chainId, tick, imageUrl = null, isNative = false, cl
                 />
             ) : showArtwork ? (
                 <img
-                    src={imageUrl}
+                    src={artworkUrl}
                     alt=""
                     aria-hidden="true"
-                    className={`${styles.image} ${styles.tokenImage}`}
+                    className={`${styles.image} ${platformIconUrl ? '' : styles.tokenImage}`}
                     loading="lazy"
                     decoding="async"
                     onError={handleArtworkError}
