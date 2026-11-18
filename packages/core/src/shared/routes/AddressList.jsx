@@ -39,6 +39,7 @@ import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/settings.js';
 import { useSignerReady } from '../hooks/useSignerReady.js';
+import { useRecordRevision } from '../hooks/useRecordRevision.js';
 import { useProtectedScreen } from '../utils/screenGuard.js';
 import { tickerForCoin } from '../../registry/coinTicker.js';
 import { explorerPageUrl } from '../utils/explorerLinks.js';
@@ -313,6 +314,9 @@ export function AddressList({
     const [activeByChain, setActiveByChain] = useState(
         /** @type {Record<string, { id: string, address: string }>} */ ({}),
     );
+    // Set active pops the detail back to this same mounted list, so the
+    // badges read again when an address write lands.
+    const addressRevision = useRecordRevision('addresses');
     useEffect(() => {
         if (!walletId || typeof messaging.getActiveAddresses !== 'function') return undefined;
         let cancelled = false;
@@ -320,7 +324,7 @@ export function AddressList({
             .then((m) => { if (!cancelled) setActiveByChain(m || {}); })
             .catch(() => { if (!cancelled) setActiveByChain({}); });
         return () => { cancelled = true; };
-    }, [walletId, accountId, messaging, reloadKey]);
+    }, [walletId, accountId, messaging, reloadKey, addressRevision]);
 
     const isActiveRow = (row) => (
         !!row?.address && activeByChain[row.chainId]?.address === row.address
@@ -1188,11 +1192,10 @@ export function AddressList({
                 await messaging.setActiveAddress(accountId, selected.chainId, selected.record.id);
                 // Choosing an address is choosing its chain: the action forms
                 // open here next. Best-effort, and before the navigation so
-                // the write is in flight by the time Home mounts.
+                // the write is in flight before the next screen mounts.
                 recordLastUsedChain(messaging, selected.chainId);
-                // Leave the addresses section entirely and return to Home. The
-                // active address is persisted before we navigate, so Home's
-                // fresh mount refetches balances against the new active address.
+                // Back from the detail; the write above is stored first, so the
+                // screen it lands on reads the new active address.
                 onBack?.();
             } catch (err) {
                 // D-64/D-65: this is the site that told a user
