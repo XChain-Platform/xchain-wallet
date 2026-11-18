@@ -119,6 +119,15 @@ function myListsRow(page, index) {
     });
 }
 
+/** Selects one of ListDetail's tabs (Actions, List, Details) and waits for it to show. */
+async function openListDetailTab(page, name) {
+    const tab = page.getByRole('tablist', { name: 'List detail view' })
+        .getByRole('tab', { name, exact: true });
+    await expect(tab, `ListDetail has no ${name} tab`).toBeVisible({ timeout: 30_000 });
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+}
+
 async function openManageTokenAction(page, tick, label) {
     await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
@@ -321,25 +330,30 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 60_000 });
             await listRow.click();
 
-            await expect(page.getByText(/^Members as published \(1\)$|^Current members \(1\)$/))
+            // ListDetail opens on its Actions tab; the members are on the List
+            // tab, one row each, every address named in full by its label.
+            await openListDetailTab(page, 'List');
+            const members = page.getByRole('tabpanel');
+            await expect(members.getByLabel(source, { exact: true }),
+                `list #${listActionIndex} does not show the address it was published with`)
                 .toBeVisible({ timeout: 30_000 });
-            await expect(page.getByRole('main')).toContainText(source);
+            await expect(members.getByRole('listitem'),
+                `list #${listActionIndex} was published with one member`)
+                .toHaveCount(1);
 
+            await openListDetailTab(page, 'Actions');
             await page.getByRole('list', { name: 'List actions' }).getByRole('button', { name: /^Fork\b/ }).click();
             const forkMain = page.getByRole('main');
             await expect(forkMain.getByRole('button', { name: 'Publish Fork', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
             // The fork adds a member the parent does not already hold: the List form's Fork
             // drops additions that are already on the list, so re-adding `source`
-            // would leave nothing to publish and Publish Fork disabled.
+            // would leave nothing to publish.
             await fieldByLabel(forkMain, 'Addresses').fill(REGTEST_DESTINATION);
+            await expect(forkMain).toContainText('1 to add');
+            // An add-only fork is one transaction: Publish Fork goes straight
+            // to the confirm page.
             await forkMain.getByRole('button', { name: 'Publish Fork', exact: true }).click();
-
-            const publishAdd = forkMain.getByRole('button', { name: 'Publish Add', exact: true });
-            await expect(publishAdd).toBeVisible({ timeout: 30_000 });
-            const forkPassword = fieldByLabel(forkMain, 'Password');
-            if (await forkPassword.count() > 0 && await forkPassword.isVisible()) await forkPassword.fill(PASSWORD);
-            await publishAdd.click();
 
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -352,17 +366,18 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(forkRow, `the fork just published (#${forkActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
             await forkRow.click();
-            // "Forked from" lives in a <dt> and "#N (...)" in the sibling <dd>
-            // (ListDetail.jsx), two DOM nodes with no text of their own in
-            // common, so this locates the label then reads its own value
-            // rather than searching for one node holding both.
-            const forkedFromValue = page.locator('dt:has-text("Forked from") + dd');
-            await expect(forkedFromValue,
+            // "Forked from" is one row of the Details tab, its value at the
+            // row's trailing edge.
+            await openListDetailTab(page, 'Details');
+            const forkedFrom = page.getByRole('tabpanel').getByRole('listitem')
+                .filter({ hasText: 'Forked from' });
+            await expect(forkedFrom,
                 `ListDetail for fork #${forkActionIndex} does not name #${listActionIndex} as its parent`)
-                .toContainText(`#${listActionIndex}`, { timeout: 30_000 });
-            await expect(page.getByRole('main'),
+                .toContainText(`#${listActionIndex} (added items)`, { timeout: 30_000 });
+            await openListDetailTab(page, 'List');
+            await expect(page.getByRole('tabpanel').getByLabel(REGTEST_DESTINATION, { exact: true }),
                 `ListDetail for fork #${forkActionIndex} does not show the member it added`)
-                .toContainText(REGTEST_DESTINATION);
+                .toBeVisible({ timeout: 30_000 });
         });
 
         await test.step('the list manager: rename the list, then transfer it to another owner', async () => {
