@@ -96,6 +96,11 @@ export const TREZOR_LOGO_FILE = 'trezor-symbol-black-rgb.svg';
 // (Ledger_Press_kit_october_2025.zip, Logos/Ledger/LEDGER-WORDMARK-SINGLE-CHARACTER-BLACK-CMYK-01.svg, renamed only).
 export const LEDGER_LOGO_FILE = 'ledger-symbol-black.svg';
 export const FAVICON_FILE = 'favicon.png';
+// The platform's gas and staking token (the same tick as GAS_TICK in
+// cosigner/allowedTicks.js, kept local so branding stays import-free).
+export const PLATFORM_TOKEN_TICK = 'XCHAIN';
+// The XChain mark inside an outlined circle, the shape of the coin icons.
+export const PLATFORM_TOKEN_ICON_FILE = 'xchain-token-500.png';
 export const FREEWALLET_WALLY_FILE = 'freewallet-wally-180.png';
 
 /**
@@ -176,6 +181,17 @@ export function signerVendorLogoUrl(vendor) {
 /** @returns {string} Favicon URL. */
 export function faviconUrl() {
     return brandingUrl(FAVICON_FILE);
+}
+
+/**
+ * Bundled icon for the platform's own token (XCHAIN), or null for any other
+ * ticker. The token has no on-chain image, so without this its rows drew a
+ * bare letter; every token icon surface reads this one source.
+ * @param {string} tick
+ * @returns {string | null}
+ */
+export function platformTokenIconUrl(tick) {
+    return String(tick || '').toUpperCase() === PLATFORM_TOKEN_TICK ? brandingUrl(PLATFORM_TOKEN_ICON_FILE) : null;
 }
 
 /**

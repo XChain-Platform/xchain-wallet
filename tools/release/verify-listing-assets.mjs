@@ -142,7 +142,7 @@ export const ASSETS = [
     },
     {
         name: 'screenshot-sidepanel.png',
-        shows: 'Side panel, Tokens view',
+        shows: 'Side panel, DeFi view',
         depends: [...SHELL, 'packages/extension/sidepanel.html', 'packages/extension/src/popup'],
     },
     {
@@ -164,12 +164,11 @@ export const ASSETS = [
     },
     {
         name: 'promo-tile-440x280.png',
-        shows: 'Brand logo and wordmark on the accent gradient',
-        // No wallet UI at all: it is composited from the branding image and
-        // the accent tokens, so UI churn legitimately does not stale it.
+        shows: 'Designed tile: logo, "One wallet for everything blockchain", coin icons',
+        // No wallet UI at all: the capture copies the approved art from its
+        // committed source, so UI churn legitimately does not stale it.
         depends: [
-            'packages/core/src/branding/images/xchain-color-750.png',
-            'packages/core/src/ui/tokens.css',
+            'packages/extension/docs/listing-source/promo-tile-source.png',
             'packages/extension/scripts/capture-listing-screenshots.mjs',
         ],
     },
@@ -203,21 +202,18 @@ const DESKTOP_SHELL = [
 export const MAS_ASSETS = [
     {
         name: 'screenshot-home.png',
-        shows: 'Desktop window, Home view with the coin list',
+        shows: 'Desktop window, wide Home with the XCHAIN token selected',
         depends: [...DESKTOP_SHELL],
     },
     {
-        name: 'screenshot-tokens.png',
-        shows: 'Desktop window, Tokens view',
+        name: 'screenshot-exchange.png',
+        shows: 'Desktop window, Exchange (DEX) with a market selected',
         depends: [...DESKTOP_SHELL],
     },
     {
-        name: 'screenshot-settings.png',
-        shows: 'Desktop window, Settings',
-        // Deliberately this screen and not a prettier one: it is the screen
-        // that was dead on desktop until row 105, and a listing image of it is
-        // one more thing that cannot go quietly blank again.
-        depends: [...DESKTOP_SHELL, 'packages/core/src/shared/components/settings'],
+        name: 'screenshot-my-tokens.png',
+        shows: 'Desktop window, My Tokens with an issued token selected and its owner actions',
+        depends: [...DESKTOP_SHELL, 'packages/core/src/shared/routes/MyTokens.jsx'],
     },
 ];
 

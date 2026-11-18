@@ -580,13 +580,15 @@ function TokenDetailContent({
             || rowImageUrl
             || null;
         if (fromTis) return fromTis;
+        const platformIcon = branding.platformTokenIconUrl(tick);
+        if (platformIcon) return platformIcon;
         if (isNative) {
             return branding.chainIconLargeUrl(chainId)
                 || branding.chainIconSmallUrl(chainId)
                 || null;
         }
         return null;
-    }, [assetInfo, rowImageUrl, isNative, chainId]);
+    }, [assetInfo, rowImageUrl, isNative, chainId, tick]);
 
     // An outlined open-in-new button on the title line opens this coin
     // or token on the XChain explorer, for everything this page does not show.
@@ -1278,7 +1280,7 @@ function TokenDetailContent({
                         >
                             {activeTab === 'actions' ? (
                                 <>
-                                <AssetActionsPanel grid={actionGrid} tick={tick} ownerGroups={ownerGroups} />
+                                <AssetActionsPanel grid={actionGrid} tick={tick} ownerGroups={ownerGroups} ownerFirst={ownerView} />
                                 </>
                             ) : activeTab === 'history' ? (
                                 <TokenHistoryTab
@@ -1571,17 +1573,20 @@ function AssetActionRow({ tile }) {
 // The Actions tab (G101): one action list for everyone, then the issuer's
 // actions as lists under their own headings (one per group when the shell
 // wires the issuer's handlers).
-function AssetActionsPanel({ grid, tick, ownerGroups = null }) {
+function AssetActionsPanel({ grid, tick, ownerGroups = null, ownerFirst = false }) {
     if (grid.main.length === 0 && grid.owner.length === 0 && !ownerGroups?.length) {
         return <p className={styles.muted}>{t('tokenDetail.actions.empty')}</p>;
     }
+    // Opened from My Tokens, the page is for managing the token, so the issuer's
+    // groups lead and the everyday coin actions follow.
+    const mainList = grid.main.length > 0 ? (
+        <ActionList label={t('tokenDetail.actions.label', { tick })}>
+            {grid.main.map((tile) => <AssetActionRow key={tile.id} tile={tile} />)}
+        </ActionList>
+    ) : null;
     return (
         <div className={styles.assetActions}>
-            {grid.main.length > 0 ? (
-                <ActionList label={t('tokenDetail.actions.label', { tick })}>
-                    {grid.main.map((tile) => <AssetActionRow key={tile.id} tile={tile} />)}
-                </ActionList>
-            ) : null}
+            {ownerFirst ? null : mainList}
             {grid.owner.length > 0 ? (
                 <section className={styles.assetActionOwner} aria-label={t('tokenDetail.actions.ownerHeading')}>
                     <SectionHeader title={t('tokenDetail.actions.ownerHeading')} />
@@ -1593,6 +1598,7 @@ function AssetActionsPanel({ grid, tick, ownerGroups = null }) {
             {ownerGroups?.length ? (
                 <TokenOwnerActionGroups groups={ownerGroups} sectionClassName={styles.assetActionOwner} />
             ) : null}
+            {ownerFirst ? mainList : null}
         </div>
     );
 }

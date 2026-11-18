@@ -2977,6 +2977,11 @@ function AppInner() {
                             tick: row.tick,
                             kind: 'token',
                             divisibility: row.divisibility ?? null,
+                            // A demo wallet's issued tokens carry the holding and
+                            // artwork the page would otherwise read from Home's row.
+                            ...(row.demo === true ? {
+                                displayName: row.displayName, quantity: row.quantity, fiatRate: row.fiatRate, imageUrl: row.imageUrl,
+                            } : {}),
                         }, { embedded: true, ownerView: true })}
                         onSelectTick={(tick, chainId, row) => {
                             setTokenDetailRef({

@@ -36,10 +36,11 @@ const PIP_PIXELS = Object.freeze({ header: 14, list: 20, hero: 32 });
  * @param {string} props.tick
  * @param {number} [props.size] legacy size mapped to the nearest context
  * @param {'header'|'list'|'hero'} [props.context='list']
+ * @param {string | null} [props.imageUrl] artwork for a token with its own image
  * @param {boolean} [props.pip=true] false leaves the chain pip off, for a list
  *   whose rows all sit on one chain the page already names
  */
-export function TickerIcon({ chainId, tick, size, context, pip = true }) {
+export function TickerIcon({ chainId, tick, size, context, pip = true, imageUrl = null }) {
     const [failedImageUrl, setFailedImageUrl] = useState(null);
     const descriptor = chainRegistry.get(chainId);
     const tickUpper = String(tick || '').toUpperCase();
@@ -78,6 +79,7 @@ export function TickerIcon({ chainId, tick, size, context, pip = true }) {
         : undefined;
     const chainPipUrl = descriptor ? brandingLib.chainIconSmallUrl(descriptor.id) : null;
     const showNativeIcon = isNative && nativeIconUrl && failedImageUrl !== nativeIconUrl;
+    const platformIconUrl = !isNative ? brandingLib.platformTokenIconUrl(tickUpper) : null;
     return (
         <span role="img" aria-label={accessibleName} style={wrapStyle}>
             <IdentityAvatar
@@ -86,7 +88,7 @@ export function TickerIcon({ chainId, tick, size, context, pip = true }) {
                 context={avatarContext}
                 tone={tickerColor(tickUpper)}
                 variant="asset"
-                src={showNativeIcon ? nativeIconUrl : null}
+                src={showNativeIcon ? nativeIconUrl : (imageUrl || platformIconUrl)}
                 srcSet={showNativeIcon ? nativeIconSrcSet : undefined}
                 imagePixels={AVATAR_PIXELS[avatarContext]}
             />
