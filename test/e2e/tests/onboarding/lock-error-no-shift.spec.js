@@ -24,7 +24,7 @@ async function lockWallet(page) {
     } else {
         await page.getByRole('button', { name: 'Open menu' }).click();
         await page.getByRole('dialog', { name: 'Wallet menu' })
-            .locator('[data-wallet-menu-row="lock"]').click();
+            .getByRole('button', { name: 'Lock wallet' }).click();
     }
     await expect(unlockButton(page)).toBeVisible();
 }
