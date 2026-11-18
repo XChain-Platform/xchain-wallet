@@ -133,7 +133,7 @@ describe('Licence gate actions sit under the terms', () => {
         expect(checkbox.compareDocumentPosition(accept) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it('keeps the checkbox and button on one row at every width, including the 834px tablet window', () => {
+    it('keeps the checkbox and button on one row from 600px, and spans the button across a phone', () => {
         const bodies = ruleBodies(onboardingCss, '.licenseControls');
         expect(bodies.length).toBeGreaterThan(0);
         // No rule at any breakpoint may stack the row.
@@ -146,12 +146,15 @@ describe('Licence gate actions sit under the terms', () => {
         expect(base).toMatch(/align-items\s*:\s*center\s*;/);
         expect(base).toMatch(/justify-content\s*:\s*space-between\s*;/);
         expect(base).toMatch(/gap\s*:\s*var\(--xc-space-2\)\s*;/);
-        // The button keeps its natural width at the tablet breakpoint.
-        for (const body of ruleBodies(onboardingCss, '.licenseActions > button')) {
-            expect(body).not.toMatch(/width\s*:\s*100%/);
-        }
-        for (const body of ruleBodies(onboardingCss, '.licenseActions')) {
-            expect(body).not.toMatch(/width\s*:\s*100%/);
-        }
+        // G50: on a phone the main action spans the width, so it wraps under
+        // the acknowledgement; from 600px it keeps its natural width at the
+        // row end, beside the acknowledgement.
+        const actions = ruleBodies(onboardingCss, '.licenseActions');
+        const button = ruleBodies(onboardingCss, '.licenseActions > button');
+        expect(actions[0]).toMatch(/width\s*:\s*100%/);
+        expect(button[0]).toMatch(/width\s*:\s*100%/);
+        const tablet = [...onboardingCss.matchAll(/@media \(min-width: 600px\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+        expect(tablet).toMatch(/\.licenseActions\s*\{[^}]*width\s*:\s*auto\s*;/);
+        expect(tablet).toMatch(/\.licenseActions > button\s*\{[^}]*width\s*:\s*auto\s*;/);
     });
 });
