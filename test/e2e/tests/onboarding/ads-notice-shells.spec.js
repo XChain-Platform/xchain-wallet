@@ -84,8 +84,12 @@ async function assertNotice(page) {
     expect(text, 'notice states the send-at default').toContain('$5.00');
     expect(text, 'notice text carries a per-chain amount').not.toMatch(CHAIN_AMOUNT_COPY);
 
-    // A notice: the title, a subtitle, a bullet list of statements, one action.
-    expect(await form.locator('ul > li').count(), 'statement bullets').toBe(3);
+    // A notice: one info notice whose title is the subtitle and whose body is
+    // three statement paragraphs, then one action.
+    const notice = form.locator('[data-tone="info"]');
+    expect(await notice.count(), 'one info notice').toBe(1);
+    expect(await notice.locator('p').count(), 'statement paragraphs').toBe(3);
+    expect(await form.locator('ul, ol').count(), 'no list on the notice').toBe(0);
     expect(await form.getByRole('button').count(), 'actions inside the notice').toBe(1);
 }
 
