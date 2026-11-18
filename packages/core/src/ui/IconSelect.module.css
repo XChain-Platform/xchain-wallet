@@ -180,6 +180,19 @@
     white-space: nowrap;
 }
 
+/* A field whose sub line must read in full (wrapSub) wraps it and grows
+   taller; with room for one line it keeps the control height. */
+.trigger.subWraps {
+    height: auto;
+    padding-block: calc(var(--xc-space-1) / 2);
+}
+
+.subWraps .sub {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+}
+
 .caret {
     flex: 0 0 auto;
     color: var(--xc-text-muted);
