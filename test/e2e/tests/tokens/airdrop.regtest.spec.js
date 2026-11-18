@@ -530,7 +530,7 @@ async function sendToken(page, tick, destination, amount, destinationAfter) {
  */
 async function pickAsset(page, tick) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
-        await page.getByRole('main').getByRole('button', { name: /^Change asset \(currently / }).first().click();
+        await page.getByRole('main').getByRole('button', { name: /^Asset: / }).first().click();
         try {
             await expect(page.locator('[data-balance-key]').first(),
                 'the asset picker listed nothing at all, so its balances never arrived')

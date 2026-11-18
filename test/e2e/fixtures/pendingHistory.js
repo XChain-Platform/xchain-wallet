@@ -238,8 +238,8 @@ export async function chainHistoryRow(address, txid, timeoutMs = 90_000) {
 /**
  * Picks an asset in the Send form's picker by its (chainId, tick) pair.
  *
- * The form's asset control is the hero button `Change asset (currently
- * <name>)`, anchored so it cannot also catch an extra recipient's
+ * The form's asset control is the Asset field, `Asset: <tick> on <chain>`,
+ * anchored so it cannot also catch an extra recipient's
  * "Recipient N token: X. Change asset" button. The row is chosen by
  * `data-balance-key`, NOT by accessible name: the row's "Select XCHAIN on
  * Bitcoin" label repeats the display name, which every chain shares for the
@@ -247,7 +247,7 @@ export async function chainHistoryRow(address, txid, timeoutMs = 90_000) {
  */
 export async function pickAssetByChainAndTick(page, searchText, chainId, tick) {
     const main = page.getByRole('main');
-    const trigger = main.getByRole('button', { name: /^Change asset \(currently / }).first();
+    const trigger = main.getByRole('button', { name: /^Asset: / }).first();
     const empty = main.getByRole('heading', { name: 'Nothing to send yet' });
     await expect(trigger.or(empty).first(), 'Send rendered neither its form nor its empty state')
         .toBeVisible({ timeout: 30_000 });
@@ -261,7 +261,7 @@ export async function pickAssetByChainAndTick(page, searchText, chainId, tick) {
     await expect(row, `the Send picker offered no ${tick} row on ${chainId} for "${searchText}"`)
         .toBeVisible({ timeout: 30_000 });
     await row.getByRole('button', { name: /^Select / }).first().click();
-    await expect(main.getByRole('button', { name: /^Change asset \(currently / }).first(),
+    await expect(main.getByRole('button', { name: /^Asset: / }).first(),
         `picking ${tick} did not return to the Send form`).toBeVisible({ timeout: 15_000 });
 }
 
