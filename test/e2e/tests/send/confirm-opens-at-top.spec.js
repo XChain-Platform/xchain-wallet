@@ -87,6 +87,9 @@ async function openDispenserConfirm(page) {
     await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible();
     await main.getByRole('button', { name: /^Token:/ }).click();
     await searchTokenPicker(page, 'RAREPEPE');
+    // On a narrow screen the open filter panel floats over the results, so close it.
+    const filter = page.getByRole('button', { name: 'Filter coins and tokens', exact: true });
+    if (await filter.getAttribute('aria-expanded') === 'true') await filter.click();
     await page.getByRole('button', { name: /^Select Rare Pepe/ }).click();
 
     main = page.getByRole('main');
