@@ -417,11 +417,15 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
         if (!moreOpen) return undefined;
         const onDown = (e) => { if (!moreRef.current?.contains(e.target)) setMoreOpen(false); };
         const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
+        // Tabbing out closes the menu, as BalanceHeroMenu does.
+        const onFocusIn = (e) => { if (!moreRef.current?.contains(e.target)) setMoreOpen(false); };
         window.addEventListener('mousedown', onDown);
         window.addEventListener('keydown', onKey);
+        window.addEventListener('focusin', onFocusIn);
         return () => {
             window.removeEventListener('mousedown', onDown);
             window.removeEventListener('keydown', onKey);
+            window.removeEventListener('focusin', onFocusIn);
         };
     }, [moreOpen]);
     const [exportFormat, setExportFormat] = useState(/** @type {'csv' | 'json'} */ ('csv'));
