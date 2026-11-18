@@ -63,7 +63,7 @@
 //       --config=playwright.regtest.config.js tests/tokens/collectible-one-of-one.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openIssueSection, openPaletteCommand, pickIssuePreset, submitTokenWizard, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, expectManageTokenView, openIssueSection, openPaletteCommand, pickIssuePreset, submitTokenWizard, test } from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -394,24 +394,22 @@ test.describe(`collectible 1-of-1 on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(row, `${TICK} is on chain but My Tokens does not list it`)
                 .toBeVisible({ timeout: 60_000 });
             await row.click();
-            await expect(page.getByRole('heading', { name: 'Manage Token' })
-                .or(page.getByText('Manage Token').first()))
-                .toBeVisible({ timeout: 30_000 });
+            await expectManageTokenView(page);
 
-            // Manage Token splits its actions between page BUTTONS and the More
-            // menu, so both are checked; and the lookup is scoped to `main`
-            // because the shell's own chrome carries same-named controls
-            // (§3.5, Session 39).
-            expect(await main.getByRole('button', { name: /^Mint$/ }).count(),
+            // The owner groups always list Mint under Supply; a token whose
+            // LOCK_MINT is set shows that row locked (aria-disabled, its
+            // reason in place of the description), so a locked row is "no
+            // way to mint". Scoped to `main` because the shell's own chrome
+            // carries same-named controls (§3.5, Session 39).
+            const mintAction = main.locator('[data-action-id="mint"]');
+            await expect(mintAction, 'the owner\'s page lists no Mint action at all').toBeVisible({ timeout: 30_000 });
+            await expect(mintAction,
                 'the owner\'s page offers Mint on a token whose LOCK_MINT the chain enforces')
-                .toBe(0);
-            const more = main.getByRole('button', { name: /^More/ });
-            if (await more.count() > 0) {
-                await more.first().click();
-                expect(await page.getByRole('menuitem', { name: /^Mint$/ }).count(),
-                    'the More menu offers Mint on a token whose LOCK_MINT the chain enforces')
-                    .toBe(0);
-            }
+                .toHaveAttribute('aria-disabled', 'true', { timeout: 30_000 });
+            // A row is also locked while the owner read is pending, so the
+            // reason pins it to the mint lock itself.
+            await expect(mintAction, 'the locked Mint row does not name the mint lock as its reason')
+                .toContainText(/permanently locked/i, { timeout: 60_000 });
         });
     });
 });

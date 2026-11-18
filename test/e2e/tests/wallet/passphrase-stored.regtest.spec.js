@@ -256,7 +256,8 @@ async function revealRecoveryPhrase(page, password) {
     await show.click();
 
     await fieldByLabel(page, 'Wallet password').fill(password);
-    await page.getByRole('button', { name: 'Reveal', exact: true }).click();
+    // The submit reads "Reveal Phrase".
+    await page.getByRole('button', { name: /^Reveal(?: phrase)?$/i }).click();
     // The heading, by role: the panel's warning paragraph ("Never share your
     // recovery phrase...") also contains the words as a substring.
     await expect(page.getByRole('heading', { name: 'Your recovery phrase', exact: true }),

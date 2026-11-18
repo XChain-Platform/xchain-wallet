@@ -154,10 +154,10 @@ test.describe('DESTROY on regtest', () => {
         await test.step('fill the Destroy form and reach the confirm screen', async () => {
             await openPaletteCommand(page, 'Destroy');
             const main = page.getByRole('main');
-            // Scoped by role (the warning sits in a raw role="alert" div)
-            // rather than bare text, matching the rest of this suite's
-            // convention for alert-region content.
-            await expect(main.getByRole('alert').filter({ hasText: 'Destroy is irreversible.' }))
+            // The form opens on its "Tokens to Destroy" section; the
+            // irreversibility warning now leads the confirm screen instead of
+            // sitting on the form, and is asserted there below.
+            await expect(main.getByRole('button', { name: /^Token:/ }), 'the Destroy form did not open')
                 .toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             await selectDestroyToken(page, TICK);
@@ -171,6 +171,10 @@ test.describe('DESTROY on regtest', () => {
             await expectConfirmModal(page, 'the DESTROY');
             const intent = page.getByTestId('confirm-sentence');
             await expect(intent).toContainText(`Destroy ${DESTROY_AMOUNT} ${TICK}`);
+            // actionWarnings.destroy.permanent: "Destroyed tokens are burned for good."
+            await expect(page.getByTestId('confirm-warning'),
+                'the DESTROY confirm screen does not warn that the burn is irreversible')
+                .toContainText(/burned for good/i);
         });
 
         await test.step('the typed "DESTROY" gate stays closed until the word is right', async () => {

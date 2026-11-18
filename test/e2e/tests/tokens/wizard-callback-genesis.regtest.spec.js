@@ -17,7 +17,7 @@ import {
     waitForValidAction,
     approveConfirm,
 } from '../../fixtures/regtest.js';
-import { fieldByLabel, searchTokenPicker } from '../../fixtures/fields.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const STAMP = Date.now().toString().slice(-6);
@@ -83,13 +83,11 @@ test.describe(`wizard callback fields on ${REGTEST_CHAIN_LABEL}`, () => {
         await openIssueSection(main, 'Callback');
 
         const callbackBlock = (await readCurrentHeight(main)) + 25;
-        // Callback token is a token field: a button that opens the token picker.
-        await main.getByRole('button', { name: /^Callback token:/ }).click();
-        await searchTokenPicker(page, CALLBACK_TICK);
-        await page.getByRole('button', { name: new RegExp(`^Select ${CALLBACK_TICK} on `) }).first()
-            .click({ timeout: 30_000 });
-        await expect(main.getByRole('button', { name: new RegExp(`^Callback token: ${CALLBACK_TICK} on `) }))
-            .toBeVisible({ timeout: 30_000 });
+        // On the Issue form the Callback token is a plain text field (the
+        // token need not be one this wallet holds), not a picker button.
+        const callbackToken = fieldByLabel(main, 'Callback token');
+        await callbackToken.fill(CALLBACK_TICK);
+        await expect(callbackToken).toHaveValue(CALLBACK_TICK);
         await fieldByLabel(main, 'Payout per unit').fill(String(CALLBACK_AMOUNT));
         await fieldByLabel(main, 'Callback allowed from block').fill(String(callbackBlock));
         await submitTokenWizard(page);

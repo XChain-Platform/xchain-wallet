@@ -69,6 +69,7 @@
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     clickManageTokenAction,
+    expectManageTokenView,
     createWallet,
     expect,
     openPaletteCommand,
@@ -415,9 +416,7 @@ async function bindAccessList(page, tick, kind, listIndex, memberCount) {
         .toBeVisible({ timeout: 60_000 });
     await row.click();
 
-    await expect(page.getByRole('heading', { name: 'Manage Token' })
-        .or(page.getByText('Manage Token').first()))
-        .toBeVisible({ timeout: 30_000 });
+    await expectManageTokenView(page);
     await clickManageTokenAction(main, 'Access lists');
 
     const form = page.getByRole('main');
