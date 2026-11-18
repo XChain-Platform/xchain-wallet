@@ -2510,7 +2510,7 @@ export async function chooseReceiveChain(page, chainLabel) {
     await expect(network, 'the address picker has no network filter').toBeVisible({ timeout: 30_000 });
     await network.click();
     await page.getByRole('dialog', { name: 'Network' })
-        .getByRole('button', { name: `Select ${chainLabel}`, exact: true }).click();
+        .getByRole('button', { name: new RegExp(`^Select ${chainLabel}\\b`) }).first().click();
     await closeListFilter(page, 'Filter addresses');
 
     const first = page.getByRole('main').getByRole('button', { name: /^View address / }).first();

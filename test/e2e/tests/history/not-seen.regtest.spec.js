@@ -69,7 +69,6 @@ import {
     mempoolRowFor,
     pendingRowFor,
     pickAssetByChainAndTick,
-    searchForTx,
 } from '../../fixtures/pendingHistory.js';
 import {
     expectConfirmModal,
@@ -85,6 +84,7 @@ import {
     waitForTokenBalance,
     waitForValidAction,
     openFromAddress,
+    searchHistory,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -241,7 +241,7 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
 
             // Exactly one row for the transaction: a warning state that
             // duplicated the entry would also be "visible".
-            await searchForTx(page, sendTxid);
+            await searchHistory(page, sendTxid);
             await expect(historyRows(page), 'the not-seen transaction has more than one History row')
                 .toHaveCount(1, { timeout: 30_000 });
 
@@ -278,7 +278,7 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
             const chainRow = await chainHistoryRow(own, sendTxid);
             expect(Number(chainRow.block_index)).toBeGreaterThan(0);
 
-            await searchForTx(page, sendTxid);
+            await searchHistory(page, sendTxid);
             await expect(pendingRowFor(page, sendTxid),
                 'the pending entry is STILL in the list after its transaction confirmed')
                 .toHaveCount(0, { timeout: 120_000 });

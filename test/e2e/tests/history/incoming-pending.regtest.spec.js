@@ -83,7 +83,6 @@ import {
     pickAssetByChainAndTick,
     PINNED_SDK,
     SDK_HAS_UNCONFIRMED,
-    searchForTx,
     waitForMempoolRow,
 } from '../../fixtures/pendingHistory.js';
 import {
@@ -100,6 +99,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    searchHistory,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -387,7 +387,7 @@ test.describe(`Incoming pending payment on ${REGTEST_CHAIN_LABEL} regtest`, () =
 
             // Exactly one row for it, so a duplicate cannot hide behind a
             // "the row is visible" assertion.
-            await searchForTx(page, txid);
+            await searchHistory(page, txid);
             await expect(historyRows(page), 'the incoming payment has more than one History row')
                 .toHaveCount(1, { timeout: 30_000 });
 
