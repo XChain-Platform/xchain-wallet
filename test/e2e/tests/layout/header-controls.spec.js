@@ -136,9 +136,8 @@ test.describe('layout: app header controls', () => {
 
                 const header = page.getByRole('region', { name: 'App header' });
                 await expect(header.getByRole('img', { name: 'XChain Wallet' })).toBeVisible();
-                // The active wallet is a plain label: no button, no prefix.
-                const walletIdentity = header.getByText(WALLET_NAME, { exact: true });
-                await expect(walletIdentity).toBeVisible();
+                // G03: the header no longer shows the wallet name.
+                await expect(header.getByText(WALLET_NAME, { exact: true })).toHaveCount(0);
 
                 const headerColumns = header.locator(':scope > div');
                 await expect(headerColumns).toHaveCount(2);

@@ -74,7 +74,7 @@ function Shell({ route = 'dispensers-list', initialRef = null, onOpenDispenser =
             onOpenDispenser={onOpenDispenser}
             selectedDispenser={selected}
             onSelectDispenser={(ref) => { onPick(ref); setSelected(ref); }}
-            renderDispenser={(ref) => <h2>{`Detail ${ref.actionIndex}`}</h2>}
+            renderDispenser={(ref) => <h2 tabIndex={-1} data-panel-detail-heading="">{`Detail ${ref.actionIndex}`}</h2>}
             renderDispenserPage={route === 'dispenser-detail'
                 ? (ref, page) => (
                     <main ref={page.measureRef} data-list-detail="page">
@@ -96,7 +96,7 @@ function renderShell(messaging, props = {}) {
 
 describe('DispensersList two panels', () => {
     it('wires the embedded and standalone detail into every shell', () => {
-        expect(detailSource).toContain('if (embedded) return page;');
+        expect(detailSource).toMatch(/if \(embedded\) \{\s*return \(\s*<>\s*<h1 className="sr-only" tabIndex=\{-1\} data-panel-detail-heading="">\{DETAIL_TITLE\}<\/h1>\s*\{page\}/);
         for (const source of shellSources) {
             expect(source).toContain('selectedDispenser={dispenserRef}');
             expect(source).toContain('marketAsset={dispenserMarketAsset}');
@@ -143,6 +143,20 @@ describe('DispensersList two panels', () => {
         expect(screen.getByRole('region', { name: 'Dispensers' })).toBe(list);
         expect(onOpenDispenser).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: 'Open BETA dispenser #31' })).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('moves focus to the detail heading when a row is picked, not for the default dispenser', async () => {
+        layoutWidth = 1046;
+        renderShell(makeMessaging());
+        fireEvent.click(screen.getByRole('radio', { name: 'My Dispensers' }));
+        const first = await screen.findByRole('heading', { name: 'Detail 40' });
+        expect(document.activeElement).not.toBe(first);
+
+        const row = screen.getByRole('button', { name: 'Open BETA dispenser #31' });
+        row.focus();
+        fireEvent.click(row);
+        const picked = await screen.findByRole('heading', { name: 'Detail 31' });
+        await waitFor(() => expect(picked).toHaveFocus());
     });
 
     it('keeps two panels and shows a quiet detail state when the first list is empty', async () => {

@@ -47,7 +47,7 @@ async function openScanner(page) {
 
 async function openSendFor(page, uri) {
     await page.evaluate((url) => globalThis.__deliverLink(url), uri);
-    // Coin amounts show their exact 8-decimal format (U61).
+    // A fractional coin amount pads to its 8 decimals; a whole one stays whole (U61).
     await expect(page.locator('#send-amount')).toHaveValue('0.00100000');
 }
 
@@ -73,7 +73,7 @@ test('a request for another coin scanned over Send never keeps the old payee or 
     await page.getByRole('button', { name: 'Use pasted text' }).click();
 
     await expect(page.locator('#send-destination')).toHaveValue(LITECOIN);
-    await expect(page.locator('#send-amount')).toHaveValue('5.00000000');
+    await expect(page.locator('#send-amount')).toHaveValue('5');
     await expect(page.locator('label[for="send-amount"]')).toContainText('LTC');
 });
 

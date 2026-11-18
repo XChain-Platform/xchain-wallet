@@ -82,13 +82,16 @@ describe('DestroyForm amount format and help tips', () => {
         expect(document.body.textContent).not.toContain('Destroy is irreversible');
     });
 
-    it('pads a whole amount to an 8-place token once the edit ends', async () => {
+    it('keeps a whole amount whole and pads a fractional one to an 8-place token once the edit ends', async () => {
         const { messaging } = mountDestroy({ divisibility: 8 });
         await waitFor(() => expect(messaging.getTokenInfo).toHaveBeenCalled());
         const field = await amountField();
         fireEvent.change(field, { target: { value: '1' } });
         fireEvent.blur(field);
-        await waitFor(() => expect(field.value).toBe('1.00000000'));
+        await waitFor(() => expect(field.value).toBe('1'));
+        fireEvent.change(field, { target: { value: '1.5' } });
+        fireEvent.blur(field);
+        await waitFor(() => expect(field.value).toBe('1.50000000'));
     });
 
     it('refuses a fraction for a whole-number token with a field error and holds Destroy', async () => {

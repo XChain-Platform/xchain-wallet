@@ -76,10 +76,11 @@ describe('phone landscape layout', () => {
     });
 
     it('keeps core chrome on its own inset and the popup recovery panel on the page gutter', () => {
-        // The only calc margin is the Back chevron stepping its glyph onto the logo line.
+        // No calc margins: the Back chevron steps its glyph onto the logo line
+        // inside its own svg, so its box never reaches past the screen edge.
         const calcMargins = pageHeader.match(/margin-inline-(?:start|end):\s*calc[^;]*;/g) || [];
-        expect(calcMargins).toEqual(['margin-inline-start: calc(var(--xc-icon-size, 16px) / -3);']);
-        expect(pageHeader).toMatch(/\.header \.back > span\s*\{\s*margin-inline-start: calc/);
+        expect(calcMargins).toEqual([]);
+        expect(pageHeader).toMatch(/\.header \.back svg > \*\s*\{[^}]*transform: translateX\(calc\(100% \/ -3\)\);/);
         expect(routeError).not.toContain('var(--xc-page-gutter)');
         expect(routeError).toMatch(/\.recovery\s*\{[^}]*padding: var\(--xc-space-4\);/);
         expect(popup).toMatch(/\.popup-background-connection\s*\{[\s\S]*?padding: var\(--xc-page-top\) var\(--xc-page-gutter\);/);

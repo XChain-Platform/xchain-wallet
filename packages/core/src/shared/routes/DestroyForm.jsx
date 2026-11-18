@@ -207,9 +207,9 @@ export function DestroyForm({ walletId, onBack, initialChainId, initialTick, ini
     // An amount refusal shows under the Amount field, which takes focus, so a
     // phone shows it beside the value to fix instead of above the fold.
     const [amountError, setAmountError] = useState(/** @type {string | null} */ (null));
-    // The Amount field shows the chosen token's own decimal places: it
-    // pads "1" to "1.00000000" for an 8-place token and refuses extra digits
-    // with its own field error, which also holds the Destroy button.
+    // The Amount field shows the chosen token's own format: "1" stays "1",
+    // "1.5" pads to "1.50000000" for an 8-place token, and extra digits get
+    // its own field error, which also holds the Destroy button.
     const amountDivisibility = amountPlacesFor(tokenInfo);
     // The field shows its own precision error and holds the last valid
     // amount, so a press while it shows refuses here (G22: never disabled).

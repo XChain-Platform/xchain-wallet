@@ -79,7 +79,7 @@ describe('Issue token draft with nothing typed', () => {
         mount();
         fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
         expect(screen.getByLabelText('Ticker').value).toBe('KEPT');
-        expect(screen.getByRole('textbox', { name: 'Max supply' }).value).toBe('77.00000000');
+        expect(screen.getByRole('textbox', { name: 'Max supply' }).value).toBe('77');
     });
 
     it('starts a new token with Divisible on and still counts the form as empty', async () => {

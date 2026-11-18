@@ -43,12 +43,14 @@ function fractionDigits(amount) {
 }
 
 /**
- * Pads a plain decimal amount with trailing zeros to the asset's decimal
- * places ("1" at 8 reads "1.00000000"). Display only: the caller keeps the
- * amount it passed. Empty, non-decimal or already full amounts come back as
- * given. A zero limit removes only a trailing decimal separator; a real
- * fractional value stays intact for precision validation. A null limit pads
- * nothing.
+ * Shows a plain decimal amount in the asset's format (U61). A whole amount
+ * shows without decimals ("25", "25.0" and "1.00000000" read "25", "25" and
+ * "1"); an amount with a fractional part pads with trailing zeros to the
+ * asset's decimal places ("25.1" at 8 reads "25.10000000"). Display only:
+ * the caller keeps the amount it passed. Empty or non-decimal amounts, and
+ * amounts finer than the limit, come back as given so the precision error
+ * shows. A zero limit removes only a trailing decimal separator. A null
+ * limit changes nothing.
  *
  * @param {string} amount
  * @param {number | null} limit
@@ -59,8 +61,11 @@ export function padToDecimals(amount, limit) {
     if (limit === 0 && /^\d+\.$/.test(text)) return text.slice(0, -1);
     if (!limit || !/^\d*\.?\d*$/.test(text) || !/\d/.test(text)) return text;
     const digits = fractionDigits(text);
-    if (digits >= limit) return text;
-    return `${text}${text.includes('.') ? '' : '.'}${'0'.repeat(limit - digits)}`;
+    if (digits > limit) return text;
+    const [whole, fraction = ''] = text.split('.');
+    // A whole amount drops its decimals; only a fractional part is padded.
+    if (!/[1-9]/.test(fraction)) return whole || '0';
+    return `${text}${'0'.repeat(limit - digits)}`;
 }
 
 /**
@@ -135,8 +140,8 @@ export function AmountField({
         : null;
 
     // Typed text stays as typed until the field loses focus or the asset's
-    // decimal places change; only then does the display pad the stored
-    // amount. The marker holds the decimal limit the edit started under, so a
+    // decimal places change; only then does the display show the stored
+    // amount in the asset's format. The marker holds the decimal limit the edit started under, so a
     // divisibility change ends the edit without an effect.
     const [editingAt, setEditingAt] = useState(NOT_EDITING);
     const editing = editingAt !== NOT_EDITING && editingAt === decimalLimit;

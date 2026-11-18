@@ -460,10 +460,34 @@ export function DispensersList({
             onSelectDispenser?.(shownDispenser);
         }
     }, [showPanel, shownDispenser, requestedDispenser, selectedDispenser, onSelectDispenser]);
+    // A row picked on the wide layout hands focus to the detail's heading, as
+    // opening the detail page does on a phone; the first dispenser shown by
+    // default takes no focus. The detail may still be loading its code, so
+    // the heading is awaited.
+    const [focusPick, setFocusPick] = useState(0);
     const pickDispenser = (ref) => {
         setLocalPick(ref);
+        setFocusPick((n) => n + 1);
         onSelectDispenser?.(ref);
     };
+    useEffect(() => {
+        const root = layoutRef.current;
+        if (!focusPick || !root) return undefined;
+        const heading = () => /** @type {HTMLElement | null} */ (root.querySelector('[data-panel-detail-heading]'));
+        const found = heading();
+        if (found) {
+            found.focus({ preventScroll: true });
+            return undefined;
+        }
+        const observer = new MutationObserver(() => {
+            const late = heading();
+            if (!late) return;
+            observer.disconnect();
+            late.focus({ preventScroll: true });
+        });
+        observer.observe(root, { childList: true, subtree: true });
+        return () => observer.disconnect();
+    }, [focusPick, layoutRef]);
 
     // The title bar holds the filter and New dispenser icons. The fixed list
     // header holds the marketplace controls above the scrolling rows.

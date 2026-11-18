@@ -77,15 +77,15 @@ async function fieldMetrics(input, actionNames) {
     }, actionNames);
 }
 
-async function expectTrailingActionsFit(input, label, actionNames) {
+async function expectTrailingActionsFit(input, label, actionNames, minTextWidth = 120) {
     await expect(input, `${label}: input is not visible`).toBeVisible();
     const metrics = await fieldMetrics(input, actionNames);
     const diagnostic = JSON.stringify(metrics, null, 2);
 
     expect(
         metrics.inputTextWidth,
-        `${label}: input has less than 120px for text\n${diagnostic}`,
-    ).toBeGreaterThanOrEqual(120);
+        `${label}: input has less than ${minTextWidth}px for text\n${diagnostic}`,
+    ).toBeGreaterThanOrEqual(minTextWidth);
 
     for (const action of metrics.actions) {
         // An icon-only action (the address book) has no text line to count;
@@ -152,6 +152,7 @@ async function checkViewports(page, surface, fields) {
                     field.input,
                     `${surface} ${field.name} at ${viewport.width}x${viewport.height}`,
                     field.actions,
+                    field.minTextWidth?.[viewport.width],
                 );
             }
         });
@@ -196,6 +197,9 @@ test('trailing field actions stay inside their fields without squeezing input te
             name: 'Give amount',
             input: main.getByRole('textbox', { name: /^Give amount/ }),
             actions: [],
+            // Operator ruling 2026-11-17: the swap amount sits beside its token
+            // picker, and 108px of text width is approved at 320px.
+            minTextWidth: { 320: 108 },
         },
     ]);
     for (const viewport of VIEWPORTS) {

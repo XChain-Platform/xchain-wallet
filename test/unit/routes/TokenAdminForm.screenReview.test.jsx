@@ -133,13 +133,19 @@ describe('Callback settings', () => {
         expect(screen.getByRole('button', { name: 'About Payout per unit' })).toBeInTheDocument();
     });
 
-    it('pads Payout per unit to an 8-place callback token', async () => {
+    it('keeps a whole Payout per unit whole and pads a fractional one to an 8-place callback token', async () => {
         mount('callback-settings');
         await pickCallbackToken('EIGHT');
         const payout = await screen.findByLabelText(/^Payout per unit/);
         fireEvent.change(payout, { target: { value: '1' } });
         fireEvent.blur(payout);
-        await waitFor(() => expect(payout.value).toBe('1.00000000'));
+        await waitFor(() => expect(payout.value).toBe('1'));
+        fireEvent.change(payout, { target: { value: '1.00000000' } });
+        fireEvent.blur(payout);
+        await waitFor(() => expect(payout.value).toBe('1'));
+        fireEvent.change(payout, { target: { value: '25.1' } });
+        fireEvent.blur(payout);
+        await waitFor(() => expect(payout.value).toBe('25.10000000'));
     });
 
     it('re-formats when the callback token changes and refuses extra digits with a field error', async () => {
@@ -147,9 +153,9 @@ describe('Callback settings', () => {
         // The token picker replaces the form while open, so the field is
         // looked up again after each pick.
         const payout = () => screen.findByLabelText(/^Payout per unit/);
-        fireEvent.change(await payout(), { target: { value: '2' } });
+        fireEvent.change(await payout(), { target: { value: '2.5' } });
         await pickCallbackToken('EIGHT');
-        await waitFor(async () => expect((await payout()).value).toBe('2.00000000'));
+        await waitFor(async () => expect((await payout()).value).toBe('2.50000000'));
         fireEvent.change(await payout(), { target: { value: '1.5' } });
         await pickCallbackToken('WHOLE');
         expect(await screen.findByText(/Payout per unit must be a whole number because WHOLE is indivisible\./))
@@ -160,9 +166,9 @@ describe('Callback settings', () => {
     it('drops only the padding when the callback token turns whole-number', async () => {
         mount('callback-settings');
         const payout = () => screen.findByLabelText(/^Payout per unit/);
-        fireEvent.change(await payout(), { target: { value: '2' } });
+        fireEvent.change(await payout(), { target: { value: '2.00000000' } });
         await pickCallbackToken('EIGHT');
-        await waitFor(async () => expect((await payout()).value).toBe('2.00000000'));
+        await waitFor(async () => expect((await payout()).value).toBe('2'));
         await pickCallbackToken('WHOLE');
         await waitFor(async () => expect((await payout()).value).toBe('2'));
         expect(document.body.textContent).not.toMatch(/Payout per unit must be a whole number/);

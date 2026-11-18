@@ -514,19 +514,22 @@ describe('DividendForm review hint', () => {
         expect(screen.getByTestId('confirm-fee-network')).toHaveTextContent(/BTC/);
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
-        expect(await amountField()).toHaveValue('9.00000000');
+        expect(await amountField()).toHaveValue('9');
         expect(screen.getByRole('button', { name: /Dividend token: XCHAIN/ })).toBeTruthy();
     });
 });
 
 describe('DividendForm per-unit amount follows the dividend token format', () => {
-    it('pads a typed amount to an 8-decimal token once the field is left', async () => {
+    it('keeps a whole amount whole and pads a fractional one to an 8-decimal token once the field is left', async () => {
         mountDividend({ divisibility: 8 });
         await pickDividendToken();
         await flushTimers();
+        fireEvent.change(amountField(), { target: { value: '1.5' } });
+        fireEvent.blur(amountField());
+        expect(amountField().value).toBe('1.50000000');
         fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.blur(amountField());
-        expect(amountField().value).toBe('1.00000000');
+        expect(amountField().value).toBe('1');
     });
 
     it('keeps a whole amount whole on an indivisible token', async () => {

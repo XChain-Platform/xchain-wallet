@@ -302,7 +302,7 @@ describe('SellOwnershipForm rendering', () => {
         expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
-        expect(screen.getByLabelText(/^Price/)).toHaveValue('5.00000000');
+        expect(screen.getByLabelText(/^Price/)).toHaveValue('5');
         expect(screen.getByLabelText(/^Expires after/)).toHaveValue(' 12 ');
         expect(screen.getByLabelText('Memo')).toHaveValue(' note ');
 

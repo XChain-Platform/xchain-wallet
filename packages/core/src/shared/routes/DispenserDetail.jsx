@@ -116,6 +116,9 @@ const BUYER_ACCESS_REFUSED = 'BuyerAccessRefusedError';
 // The warnings card a close carries (flows/actionWarnings.js).
 const CANCEL_WARNING_IDS = ['DISPENSER_CLOSE'];
 
+// The page's title, and the hidden heading of the wide side panel.
+const DETAIL_TITLE = 'Dispenser Detail';
+
 // Address rows in the stats hero keep every character visible and wrap
 // within the value column on narrow screens.
 const ADDRESS_CELL_STYLE = {
@@ -1713,12 +1716,21 @@ export function DispenserDetail({
                                 ? 'Confirm Buy'
                                 : buyOpen
                                     ? 'Buy from Dispenser'
-                                    : 'Dispenser Detail'}
+                                    : DETAIL_TITLE}
         />
     );
     const wrap = (children, template = 'list') => {
         const page = template === 'list' ? <ListPage>{children}</ListPage> : children;
-        if (embedded) return page;
+        // The side panel has no title bar of its own: a hidden heading names
+        // the detail, and the list moves focus to it when a row opens it.
+        if (embedded) {
+            return (
+                <>
+                    <h1 className="sr-only" tabIndex={-1} data-panel-detail-heading="">{DETAIL_TITLE}</h1>
+                    {page}
+                </>
+            );
+        }
         return (
             <Screen variant={variant} header={header}>
                 {measureRef ? (

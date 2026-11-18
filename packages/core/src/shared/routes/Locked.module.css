@@ -14,7 +14,8 @@
     margin-block: auto;
 }
 
-/* One line of the field error (its gap plus a 1.4 line of the xs text) waits
+/* One line of the field error (its gap plus a 1.4 line of the sm text, as
+   Input.module.css .error sets it) waits
    below the unlock actions while no error shows, and the error takes it back
    when it does. The centred form keeps one height either way, so the password
    field does not move, and no space opens between the field and Unlock. A
@@ -22,7 +23,7 @@
 .centreIdle::after {
     content: '';
     flex: none;
-    block-size: calc(var(--xc-help-gap) + var(--xc-text-xs) * 1.4);
+    block-size: calc(var(--xc-help-gap) + var(--xc-text-sm) * 1.4);
 }
 
 .hero {

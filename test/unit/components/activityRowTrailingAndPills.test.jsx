@@ -91,7 +91,7 @@ describe('ActivityRow status pills', () => {
 
     it('keeps every status text colour on a token', () => {
         expect(ruleBody('.confirmed')).toMatch(/color:\s*var\(--xc-success\);/);
-        expect(ruleBody('.pending')).toMatch(/color:\s*var\(--xc-warning\);/);
+        expect(ruleBody('.pending')).toMatch(/color:\s*var\(--xc-warning-text\);/);
         expect(ruleBody('.failed')).toMatch(/color:\s*var\(--xc-danger-fg\);/);
     });
 
