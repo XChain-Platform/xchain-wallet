@@ -58,7 +58,9 @@
    too narrow for the title trims its end. */
 .row[data-settings-inline='select'] .title {
     white-space: nowrap;
-    overflow: hidden;
+    /* clip, not hidden: a scroll container reports no min-content width, and
+       the copy column needs the title's full width to know when to wrap. */
+    overflow: clip;
     text-overflow: ellipsis;
     overflow-wrap: normal;
 }
@@ -142,4 +144,21 @@
 .row[data-settings-inline] .select {
     min-width: min(6rem, 100%);
     max-width: min(14rem, 100%);
+}
+
+/* A dropdown row never trims its title: the copy keeps the title's full
+   one-line width, so a control too wide to sit beside it wraps under the copy
+   instead of cutting the title off (360px phone, large text). */
+.row.row[data-settings-inline='select'] {
+    flex-wrap: wrap;
+}
+
+.row.row[data-settings-inline='select'] > .copy {
+    min-width: min-content;
+    max-width: 100%;
+}
+
+.row.row[data-settings-inline='select'] .title {
+    min-width: max-content;
+    max-width: 100%;
 }
