@@ -2401,11 +2401,107 @@ export function DispenserDetail({
         totalDispenses: dispenser?.total_dispenses ?? dispenser?.dispense_total,
         dispenseCount: recordedFills,
     });
-    const perTokenPrice = getAmount && giveAmount
+    // A fiat-priced dispenser stores GET_AMOUNT 0, so no coin per-token price
+    // exists; dividing it out would quote "0 BTC" (D-144).
+    const perTokenPrice = getAmount && giveAmount && !isFiatPriced
         ? divideDecimalStrings(String(getAmount), String(giveAmount), 8)
         : null;
     const priceFiat = getAmount && payFiatRate ? coinToFiatExact(String(getAmount), payFiatRate) : null;
     const priceFiatText = priceFiat ? formatFiatAmount(priceFiat, fiatCurrency, settings?.language) : '';
+    // The pay-here block, the balance line and the stale-price alert are the
+    // full page's pieces; the wide side panel renders the same ones, so a
+    // buyer gets the same facts at every width.
+    const payHerePanel = showPayHere ? (
+        <FormSection title="Pay to buy" className={local.buySection}>
+            {canBuyWithSend ? null : listWarnings}
+            <p className={styles.hintLeft}>
+                This dispenser accepts bare {getCoin} payments.
+                {currentAllowList || currentBlockList
+                    ? ''
+                    : ` Any ${getCoin} wallet can trigger a fill.`}
+                {isFiatPriced
+                    ? ` Its price is set in ${fiatCode}, not in ${getCoin}: the `
+                      + `${getCoin} each fill costs is worked out when your payment `
+                      + 'lands, from the price feed the network was using at that '
+                      + 'moment. Send at least that much or the payment buys nothing.'
+                    : ` Send exactly ${formatNum(getAmount)} ${getCoin} per fill to the dispenser address.`}
+            </p>
+            <dl className={styles.detailsList}>
+                <dt className={styles.detailsLabel}>Send to</dt>
+                <dd className={styles.detailsValue}>
+                    <code style={{ wordBreak: 'break-all' }}>{dispAddr}</code>
+                    {' '}
+                    <CopyButton value={dispAddr} label="Copy Dispenser Payment Address" />
+                </dd>
+                {isFiatPriced ? (
+                    <>
+                        <dt className={styles.detailsLabel}>Price per fill</dt>
+                        <dd className={styles.detailsValue}>
+                            {/* A price, or an explicit statement that there
+                                is none to show. "Set by an oracle" was
+                                neither: it named the mechanism and left the
+                                buyer to guess the number, on a payment that
+                                is not returned if it guesses low. The oracle
+                                prices ONE TOKEN, and a fill is GIVE_AMOUNT
+                                tokens, so the fill price is the quote
+                                multiplied out (see oracleFillPrice). The
+                                per-token quote is shown beside it whenever a
+                                fill is more than one token, because that is
+                                the number the oracle's own feed publishes and
+                                a buyer comparing the two should not have to
+                                guess which is which. */}
+                            {oracleAddress && fiatAmount == null
+                                ? (oracleFillPrice != null
+                                    ? `${formatNum(oracleFillPrice)} ${fiatCode}`
+                                      + (giveAmount && String(giveAmount) !== '1'
+                                          ? ` (${formatNum(giveAmount)} ${giveTick || 'tokens'} at `
+                                            + `${formatNum(oracleQuote.value)} ${fiatCode} each)`
+                                          : '')
+                                    : (oracleQuoteChecked
+                                        ? `Set by the oracle at ${oracleAddress}, in ${fiatCode}, `
+                                          + 'and it is publishing no price this wallet can read '
+                                          + 'right now. A payment made against a dark oracle is '
+                                          + 'refused and NOT returned.'
+                                        : `Set by an oracle, in ${fiatCode}`))
+                                : `${formatNum(fiatAmount)} ${fiatCode}`}
+                            {` (paid in ${getCoin} at the rate when your payment lands)`}
+                        </dd>
+                    </>
+                ) : (
+                    <>
+                        <dt className={styles.detailsLabel}>Send exactly</dt>
+                        <dd className={styles.detailsValue}>
+                            <code>{getAmount} {getCoin}</code>
+                            {' '}
+                            <CopyButton value={String(getAmount)} label="Copy Amount" />
+                            {' per fill'}
+                        </dd>
+                    </>
+                )}
+                <dt className={styles.detailsLabel}>You receive per fill</dt>
+                <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
+            </dl>
+            <p className={styles.hintLeft}>
+                {canBuyWithSend
+                    ? `Paying from another ${getCoin} wallet works too: send the amount above to this address.`
+                    : isFiatPriced
+                        ? `This wallet cannot size a fiat-priced payment before it lands; use any ${getCoin} wallet to trigger the dispense.`
+                        : `No spendable ${getCoin} address in this wallet on this network; use any ${getCoin} wallet to trigger the dispense.`}
+            </p>
+        </FormSection>
+    ) : null;
+    const buyBalanceLine = (
+        <p className={styles.hintLeft} data-testid="buy-balance">
+            {buyBalance == null
+                ? `Checking your ${String(payTick).toUpperCase()} balance…`
+                : `${formatWithThousands(buyBalance)} ${String(payTick).toUpperCase()} available`}
+        </p>
+    );
+    const priceStaleAlert = priceStale ? (
+        <StatusMessage variant="warning" role="alert" title={DISPENSER_PRICE_STALE_MESSAGE}>
+            A payment made now would be refused and kept.
+        </StatusMessage>
+    ) : null;
 
     if (embedded && !ownerAddress) {
         return wrap(
@@ -2514,6 +2610,7 @@ export function DispenserDetail({
                                     {inventoryError ? <StatusMessage variant="warning" role="alert">{inventoryError}</StatusMessage> : null}
                                     {minFillsNotice ? <StatusMessage variant="warning">{minFillsNotice}</StatusMessage> : null}
                                     {buyDustBlock ? <StatusMessage variant="warning" role="alert" testId="buy-dust-block">{buyDustBlock}</StatusMessage> : null}
+                                    {buyBalanceLine}
                                     {buyUnderfunded ? (
                                         <FormNotice variant="warning" role="alert">
                                             {buyPreflight?.findings?.[0]?.message}
@@ -2534,6 +2631,13 @@ export function DispenserDetail({
                                     </Button>
                                 </div>
                             </FormErrorsContext.Provider>
+                        ) : showPayHere ? (
+                            // No in-wallet form (fiat or oracle price, or no
+                            // spendable address): pay the dispenser address.
+                            <>
+                                {priceStaleAlert}
+                                {payHerePanel}
+                            </>
                         ) : (
                             <StatusMessage variant="status">{buyUnavailable}</StatusMessage>
                         )}
@@ -2649,11 +2753,7 @@ export function DispenserDetail({
                     <WarningLine>Only the address that opened this dispenser can open it again.</WarningLine>
                 </WarningCard>
             ) : null}
-            {priceStale ? (
-                <StatusMessage variant="warning" role="alert" title={DISPENSER_PRICE_STALE_MESSAGE}>
-                    A payment made now would be refused and kept.
-                </StatusMessage>
-            ) : null}
+            {priceStaleAlert}
             {!ownerAddress && isOpen && !hasCompleteFill ? (
                 <StatusMessage variant="warning" role="status">
                     This dispenser has no complete fills left to buy.
@@ -3076,11 +3176,7 @@ export function DispenserDetail({
                         {buyDustBlock ? (
                             <StatusMessage variant="warning" role="alert" testId="buy-dust-block">{buyDustBlock}</StatusMessage>
                         ) : null}
-                        <p className={styles.hintLeft} data-testid="buy-balance">
-                            {buyBalance == null
-                                ? `Checking your ${String(payTick).toUpperCase()} balance…`
-                                : `${formatWithThousands(buyBalance)} ${String(payTick).toUpperCase()} available`}
-                        </p>
+                        {buyBalanceLine}
                         {buyUnderfunded ? (
                             <FormNotice variant="warning" role="alert">
                                 {buyPreflight?.findings?.[0]?.message}
@@ -3113,85 +3209,7 @@ export function DispenserDetail({
                 </FormErrorsContext.Provider>
             ) : null}
 
-            {buyOpen && showPayHere ? (
-                <FormSection title="Pay to buy" className={local.buySection}>
-                    {canBuyWithSend ? null : listWarnings}
-                    <p className={styles.hintLeft}>
-                        This dispenser accepts bare {getCoin} payments.
-                        {currentAllowList || currentBlockList
-                            ? ''
-                            : ` Any ${getCoin} wallet can trigger a fill.`}
-                        {isFiatPriced
-                            ? ` Its price is set in ${fiatCode}, not in ${getCoin}: the `
-                              + `${getCoin} each fill costs is worked out when your payment `
-                              + 'lands, from the price feed the network was using at that '
-                              + 'moment. Send at least that much or the payment buys nothing.'
-                            : ` Send exactly ${formatNum(getAmount)} ${getCoin} per fill to the dispenser address.`}
-                    </p>
-                    <dl className={styles.detailsList}>
-                        <dt className={styles.detailsLabel}>Send to</dt>
-                        <dd className={styles.detailsValue}>
-                            <code style={{ wordBreak: 'break-all' }}>{dispAddr}</code>
-                            {' '}
-                            <CopyButton value={dispAddr} label="Copy Dispenser Payment Address" />
-                        </dd>
-                        {isFiatPriced ? (
-                            <>
-                                <dt className={styles.detailsLabel}>Price per fill</dt>
-                                <dd className={styles.detailsValue}>
-                                    {/* A price, or an explicit statement that there
-                                        is none to show. "Set by an oracle" was
-                                        neither: it named the mechanism and left the
-                                        buyer to guess the number, on a payment that
-                                        is not returned if it guesses low. The oracle
-                                        prices ONE TOKEN, and a fill is GIVE_AMOUNT
-                                        tokens, so the fill price is the quote
-                                        multiplied out (see oracleFillPrice). The
-                                        per-token quote is shown beside it whenever a
-                                        fill is more than one token, because that is
-                                        the number the oracle's own feed publishes and
-                                        a buyer comparing the two should not have to
-                                        guess which is which. */}
-                                    {oracleAddress && fiatAmount == null
-                                        ? (oracleFillPrice != null
-                                            ? `${formatNum(oracleFillPrice)} ${fiatCode}`
-                                              + (giveAmount && String(giveAmount) !== '1'
-                                                  ? ` (${formatNum(giveAmount)} ${giveTick || 'tokens'} at `
-                                                    + `${formatNum(oracleQuote.value)} ${fiatCode} each)`
-                                                  : '')
-                                            : (oracleQuoteChecked
-                                                ? `Set by the oracle at ${oracleAddress}, in ${fiatCode}, `
-                                                  + 'and it is publishing no price this wallet can read '
-                                                  + 'right now. A payment made against a dark oracle is '
-                                                  + 'refused and NOT returned.'
-                                                : `Set by an oracle, in ${fiatCode}`))
-                                        : `${formatNum(fiatAmount)} ${fiatCode}`}
-                                    {` (paid in ${getCoin} at the rate when your payment lands)`}
-                                </dd>
-                            </>
-                        ) : (
-                            <>
-                                <dt className={styles.detailsLabel}>Send exactly</dt>
-                                <dd className={styles.detailsValue}>
-                                    <code>{getAmount} {getCoin}</code>
-                                    {' '}
-                                    <CopyButton value={String(getAmount)} label="Copy Amount" />
-                                    {' per fill'}
-                                </dd>
-                            </>
-                        )}
-                        <dt className={styles.detailsLabel}>You receive per fill</dt>
-                        <dd className={styles.detailsValue}>{giveAmount} {giveTick}</dd>
-                    </dl>
-                    <p className={styles.hintLeft}>
-                        {canBuyWithSend
-                            ? `Paying from another ${getCoin} wallet works too: send the amount above to this address.`
-                            : isFiatPriced
-                                ? `This wallet cannot size a fiat-priced payment before it lands; use any ${getCoin} wallet to trigger the dispense.`
-                                : `No spendable ${getCoin} address in this wallet on this network; use any ${getCoin} wallet to trigger the dispense.`}
-                    </p>
-                </FormSection>
-            ) : null}
+            {buyOpen ? payHerePanel : null}
             </div>
             </div>
         </>,

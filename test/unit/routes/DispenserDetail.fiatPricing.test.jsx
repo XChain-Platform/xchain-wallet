@@ -322,3 +322,128 @@ describe('fiat-priced dispenser, buyer view (D-144)', () => {
         await waitFor(() => expect(screen.getByRole('button', { name: 'Buy 1 Dispense' })).toBeEnabled());
     });
 });
+
+// The wide Dispensers side panel (content 720px or wider) is the only buyer
+// surface on desktop. Its slim layout showed a buy form only for token-priced
+// and payable coin-priced dispensers and a dead-end line for every other kind,
+// so a fiat- or oracle-priced dispenser had no way to buy at all. The panel
+// now carries the full page's own Pay to buy block wherever the full page
+// would offer it without an in-wallet form.
+function mountEmbedded(dispenser, extraMessaging = {}, addresses = ADDRESSES) {
+    const messaging = {
+        ...extraMessaging,
+        getDispenserByActionIndex: vi.fn().mockResolvedValue(dispenser),
+        getAddressesByChain: vi.fn().mockResolvedValue(addresses),
+        getDispenses: vi.fn().mockResolvedValue({ data: [] }),
+        getWalletBalances: vi.fn().mockResolvedValue({
+            [CHAIN]: [{
+                address: BUYER,
+                balances: {
+                    native: { tick: 'LTC', quantity: '100000000', divisibility: 8 },
+                    tokens: [],
+                },
+            }],
+        }),
+        getSignerStatus: vi.fn().mockResolvedValue({ unlocked: false }),
+        getSettings: vi.fn().mockResolvedValue({ fiatCurrency: 'EUR' }),
+        sendToken: vi.fn().mockResolvedValue({ txid: 'deadbeef' }),
+    };
+    render(
+        React.createElement(
+            MessagingProvider,
+            { shell: 'web', messaging },
+            React.createElement(DispenserDetail, {
+                walletId: 'w',
+                chainId: CHAIN,
+                actionIndex: dispenser.action_index,
+                onBack() {},
+                onCanceled() {},
+                embedded: true,
+            }),
+        ),
+    );
+    return messaging;
+}
+
+async function embeddedPayToBuy() {
+    const buy = await screen.findByTestId('embedded-buy');
+    return within((await within(buy).findByText('Pay to buy')).closest('section'));
+}
+
+describe('fiat-priced dispenser in the wide side panel', () => {
+    it('offers the Pay to buy block with the address and the fixed fiat price', async () => {
+        mountEmbedded(FIAT_DISPENSER);
+        const panel = await embeddedPayToBuy();
+        expect(panel.getByText(OWNER)).toBeVisible();
+        expect(panel.getByRole('button', { name: 'Copy Dispenser Payment Address' })).toBeVisible();
+        expect(panel.getByText(/3 USD/)).toBeVisible();
+        expect(panel.getByText(/cannot size a fiat-priced payment/)).toBeVisible();
+        expect(screen.queryByText('This dispenser has no price this wallet can pay.')).toBeNull();
+    });
+
+    it('offers the Pay to buy block with the oracle quote for a user-oracle dispenser', async () => {
+        mountEmbedded(ORACLE_DISPENSER, { oracleFeeds: vi.fn().mockResolvedValue(ORACLE_FEEDS) });
+        const panel = await embeddedPayToBuy();
+        expect(await panel.findByText(/7\.5 USD/)).toBeVisible();
+        expect(panel.getByText(ORACLE_DISPENSER.address)).toBeVisible();
+        expect(screen.queryByText('This dispenser has no price this wallet can pay.')).toBeNull();
+    });
+
+    it('warns of a dark oracle in the side panel too', async () => {
+        mountEmbedded(ORACLE_DISPENSER, {
+            oracleFeeds: vi.fn().mockResolvedValue([{ ...ORACLE_FEEDS[0], live: null }]),
+        });
+        await embeddedPayToBuy();
+        expect(await screen.findByText(/publishing no price/i)).toBeVisible();
+    });
+
+    it('never quotes a zero price, per token or per fill', async () => {
+        mountEmbedded(FIAT_DISPENSER);
+        await embeddedPayToBuy();
+        const details = screen.getByTestId('embedded-details');
+        const perToken = within(details).getByText('Price per token').nextElementSibling;
+        expect(perToken.textContent).toBe('-');
+        const text = document.body.textContent || '';
+        expect(text).not.toMatch(/(^|[^\d.])0(\.0+)?\s*LTC\b/);
+        expect(text).not.toMatch(/about [^\d]*0(\.0+)?\b/);
+    });
+
+    it('offers Pay to buy for a coin-priced dispenser this wallet has no address to pay from', async () => {
+        mountEmbedded(COIN_DISPENSER, {}, { [CHAIN]: [] });
+        const panel = await embeddedPayToBuy();
+        expect(panel.getByText('Send exactly')).toBeVisible();
+        expect(panel.getByText(/No spendable LTC address in this wallet/)).toBeVisible();
+        expect(screen.queryByTestId('dispenser-buy-form')).toBeNull();
+    });
+
+    it('keeps the in-wallet form, now with the balance line, and no Pay to buy for a payable coin-priced dispenser', async () => {
+        mountEmbedded(COIN_DISPENSER);
+        const form = await screen.findByTestId('dispenser-buy-form');
+        expect(within(form).getByTestId('buy-balance')).toBeVisible();
+        expect(screen.queryByText('Pay to buy')).toBeNull();
+    });
+
+    it('shows the stale-price alert above Pay to buy', async () => {
+        mountEmbedded({ ...FIAT_DISPENSER, price_stale: true });
+        const buy = await screen.findByTestId('embedded-buy');
+        await within(buy).findByText('Pay to buy');
+        expect(within(buy).getByText(/payment made now would be refused and kept/i)).toBeVisible();
+    });
+
+    it('keeps the plain notice for a dispenser that is not open', async () => {
+        mountEmbedded({ ...FIAT_DISPENSER, status: 'closed', current_status: 'closed' });
+        expect(await screen.findByText('This dispenser is not open, so it does not sell right now.')).toBeInTheDocument();
+        expect(screen.queryByText('Pay to buy')).toBeNull();
+    });
+});
+
+describe('fiat-priced dispenser on the full page (phone)', () => {
+    it('keeps Pay to buy behind the Buy row, once, with one stale alert', async () => {
+        mount({ ...FIAT_DISPENSER, price_stale: true });
+        await screen.findByText('Pay to buy');
+        expect(screen.getAllByText('Pay to buy')).toHaveLength(1);
+        expect(screen.getAllByText(/payment made now would be refused and kept/i)).toHaveLength(1);
+        expect(screen.queryByTestId('embedded-buy')).toBeNull();
+        expect(screen.queryByTestId('buy-balance')).toBeNull();
+    });
+});

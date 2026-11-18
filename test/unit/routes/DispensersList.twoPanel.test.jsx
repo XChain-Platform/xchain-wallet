@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { LIST_DETAIL_MIN_WIDTH } from '../../../packages/core/src/shared/components/PanelSplit.jsx';
 import { DispensersList } from '../../../packages/core/src/shared/routes/DispensersList.jsx';
+import { DispenserDetail } from '../../../packages/core/src/shared/routes/DispenserDetail.jsx';
 
 const CHAIN = 'bitcoin-testnet';
 const OWNER = 'tb1qownerownerownerownerownerownerownerow';
@@ -219,5 +220,81 @@ describe('Dispenser detail route', () => {
         expect(screen.queryByRole('button', { name: /^Open .* dispenser/ })).toBeNull();
         expect(messaging.getAddressesByChain).not.toHaveBeenCalled();
         expect(messaging.getDispensersForSource).not.toHaveBeenCalled();
+    });
+});
+
+// The real detail in both slots: a fiat-priced dispenser from another seller
+// must be buyable in the wide side panel, and the narrow full page keeps its
+// Buy row in front of the same Pay to buy block.
+const SELLER = 'tb1qsellersellersellersellersellersellersell';
+const FIAT_ROW = {
+    action_index: '50', block_index: 210, source: SELLER, address: SELLER,
+    give_tick: 'GAMMA', give_amount: '5', get_tick: null, get_coin: 'BTC', get_amount: '0',
+    fiat: 'USD', fiat_amount: '10', oracle_address: null,
+    status: 'valid', current_status: 'open', escrow_remaining: '50',
+};
+
+function realMessaging() {
+    const host = {
+        getAddressesByChain: vi.fn().mockResolvedValue({
+            [CHAIN]: [{ id: 'a1', address: OWNER, source: 'hd' }],
+        }),
+        getDispensersForSource: vi.fn().mockResolvedValue({ data: [FIAT_ROW, ...ROWS] }),
+        getDispensersForToken: vi.fn().mockResolvedValue({ data: [FIAT_ROW, ...ROWS] }),
+        getDispenserByActionIndex: vi.fn().mockResolvedValue(FIAT_ROW),
+        getDispenses: vi.fn().mockResolvedValue({ data: [] }),
+        getDispenserLifecycle: vi.fn().mockResolvedValue({ data: [] }),
+        getSettings: vi.fn().mockResolvedValue({}),
+        getWalletBalances: vi.fn().mockResolvedValue({}),
+    };
+    return new Proxy(host, {
+        get(target, property) {
+            if (property in target) return target[property];
+            return vi.fn().mockResolvedValue(null);
+        },
+    });
+}
+
+function RealShell() {
+    const [selected, setSelected] = useState({ chainId: CHAIN, actionIndex: '50' });
+    const detail = (ref, extra) => (
+        <DispenserDetail walletId="wallet-1" chainId={ref.chainId} actionIndex={ref.actionIndex} onBack={() => {}} {...extra} />
+    );
+    return (
+        <DispensersList
+            walletId="wallet-1"
+            onBack={() => {}}
+            onOpenDispenser={() => {}}
+            selectedDispenser={selected}
+            onSelectDispenser={setSelected}
+            renderDispenser={(ref) => detail(ref, { embedded: true })}
+            renderDispenserPage={(ref, page) => (
+                <main ref={page.measureRef} data-list-detail="page">{detail(ref)}</main>
+            )}
+        />
+    );
+}
+
+describe('Fiat-priced dispenser through the real detail', () => {
+    it('offers Pay to buy in the wide side panel', async () => {
+        layoutWidth = 1046;
+        render(<MessagingProvider shell="web" messaging={realMessaging()}><RealShell /></MessagingProvider>);
+        const buy = await screen.findByTestId('embedded-buy');
+        const pay = within((await within(buy).findByText('Pay to buy')).closest('section'));
+        expect(pay.getByText(SELLER)).toBeVisible();
+        expect(pay.getByText(/10 USD/)).toBeVisible();
+        expect(screen.queryByText('This dispenser has no price this wallet can pay.')).toBeNull();
+    });
+
+    it('keeps the narrow full page: Buy row first, then the same Pay to buy block', async () => {
+        layoutWidth = 640;
+        render(<MessagingProvider shell="web" messaging={realMessaging()}><RealShell /></MessagingProvider>);
+        const row = await screen.findByTestId('dispenser-buy-row');
+        expect(screen.queryByTestId('embedded-buy')).toBeNull();
+        expect(screen.queryByText('Pay to buy')).toBeNull();
+        await waitFor(() => expect(row.getAttribute('aria-disabled')).toBeNull());
+        fireEvent.click(row);
+        expect(await screen.findByText('Pay to buy')).toBeInTheDocument();
+        expect(screen.getAllByText(SELLER).length).toBeGreaterThan(0);
     });
 });

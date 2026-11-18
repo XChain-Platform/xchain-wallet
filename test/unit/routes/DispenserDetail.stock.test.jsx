@@ -82,4 +82,22 @@ describe('DispenserDetail stock', () => {
         expect(within(buy).getByRole('meter', { name: 'Stock left' }))
             .toHaveAttribute('aria-valuenow', '60');
     });
+
+    it("states the payment token balance in the wide buy form, as the full page does", async () => {
+        render(
+            <MessagingProvider shell="web" messaging={messaging()}>
+                <DispenserDetail
+                    walletId="wallet-stock"
+                    chainId={CHAIN}
+                    actionIndex="77"
+                    onBack={() => {}}
+                    embedded
+                />
+            </MessagingProvider>,
+        );
+
+        const form = await screen.findByTestId("dispenser-buy-form");
+        expect(within(form).getByTestId("buy-balance")).toHaveTextContent(/XCP/);
+        expect(screen.queryByText("Pay to buy")).toBeNull();
+    });
 });

@@ -80,4 +80,17 @@ describe('Dispenser detail wide panel layout', () => {
         expect(jsx).toContain('const buyPreflight = useMemo');
         expect(jsx).toContain('if (!validateBuy()) return;');
     });
+
+    it("reuses the full page's Pay to buy block and balance line in the wide Buy box", () => {
+        const buy = /data-testid="embedded-buy"([\s\S]*?)data-testid="embedded-details"/.exec(jsx)?.[1] || "";
+
+        // One shared block, rendered by both layouts, so the two never drift.
+        expect(jsx.match(/<FormSection title="Pay to buy"/g)).toHaveLength(1);
+        expect(jsx).toMatch(/\{buyOpen \? payHerePanel : null\}/);
+        expect(buy).toContain("{payHerePanel}");
+        expect(buy).toContain("{buyBalanceLine}");
+        expect(buy.indexOf("{buyDustBlock")).toBeLessThan(buy.indexOf("{buyBalanceLine}"));
+        expect(buy.indexOf("{buyBalanceLine}")).toBeLessThan(buy.indexOf("{buyUnderfunded"));
+        expect(jsx.match(/data-testid="buy-balance"/g)).toHaveLength(1);
+    });
 });
