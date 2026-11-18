@@ -21,12 +21,12 @@
 // rejects it with HW_SIGN_BACK, and Try again (a click, which WebHID and the
 // Trezor Connect popup need) runs ensureLive and the op again.
 
+import { isDeviceSignerKind } from '../schemas/constants.js';
 import * as hardwareSession from './hardwareSession.js';
 import { isLedgerIdentity, ledgerIdentityFingerprint } from './ledgerIdentity.js';
 import { isWebHidSupported } from '../shared/utils/webhidSupport.js';
 import { isNativeShell } from '../shared/nativeShell.js';
 
-const HARDWARE_VENDORS = new Set(['trezor', 'ledger']);
 
 /** @type {Record<string, Function | null | undefined>} vendor -> shell pair factory */
 let shellFactories = {};
@@ -356,8 +356,8 @@ export function makeHardwareSessionSigner(record, opts = {}) {
  * @param {any} signer
  */
 export function recordFromLiveSigner(signerId, signer) {
-    const vendor = HARDWARE_VENDORS.has(signer?.vendor) ? signer.vendor
-        : HARDWARE_VENDORS.has(signer?.kind) ? signer.kind : null;
+    const vendor = isDeviceSignerKind(signer?.vendor) ? signer.vendor
+        : isDeviceSignerKind(signer?.kind) ? signer.kind : null;
     return {
         id: signerId,
         vendor,
@@ -372,7 +372,7 @@ export function recordFromLiveSigner(signerId, signer) {
  * @param {{ vendor?: string, kind?: string } | null | undefined} recordOrSigner
  */
 export function isHardwareVendorRecord(recordOrSigner) {
-    return HARDWARE_VENDORS.has(recordOrSigner?.vendor) || HARDWARE_VENDORS.has(recordOrSigner?.kind);
+    return isDeviceSignerKind(recordOrSigner?.vendor) || isDeviceSignerKind(recordOrSigner?.kind);
 }
 
 /**

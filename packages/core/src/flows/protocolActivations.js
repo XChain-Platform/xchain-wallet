@@ -9,8 +9,8 @@
 // contact legal@dankest.llc.
 
 // protocolActivations (PC-29): the wallet's single source of truth for
-// flag-day protocol extensions it must not emit (or honor) before their
-// activation height.
+// protocol extensions it must not emit before their deployment interlock
+// is released.
 //
 // GATE_MIN_AMOUNT is a DECIDED protocol extension (operator, 2026-07-24;
 // wallet coverage spec §5 PC-29): an optional
@@ -28,25 +28,18 @@
 // used across xchain-indexer/src/stateHash.js. That decision retires
 // the coordinated train for testnet only.
 //
-// MAINNET and REGTEST stay null. Mainnet has real pre-extension history
-// and still needs a pinned coordinated height. Regtest stays null
-// because the live regtest stack runs pre-train services, so early
-// emission breaks round-trips there exactly like on mainnet.
+// MAINNET and REGTEST stay null until deployed services have completed
+// the batch rollout and soak. The indexer at HEAD validates and enforces
+// GATE_MIN_AMOUNT without an activation gate, but a pre-batch deployed
+// indexer or SDK can silently drop the trailing ninth field.
 //
-// Filling a mainnet height is what turns the extension on for that
-// chain: forms start offering the threshold field, the publish flow
-// starts emitting the ninth FILE field, and the send guard starts
-// honoring the below-threshold plain-SEND lane, each strictly at/after
-// the height on its chain. This map is the ONLY protection on the
-// publish side: the wire format is trailing-tolerant end to end
-// (verified 2026-07-25: the SDK validator drops unknown positional
-// fields and the indexer's setActionParams iterates only the format's
-// fields), so a premature ninth field would NOT be rejected - it would
-// publish successfully with the threshold silently dropped,
-// PERMANENTLY, since a FILE is immutable. On the send side, honoring
-// the lane early composes plain SENDs an unupgraded indexer rejects.
-// A smoke test pins the mainnet and regtest entries null so a height
-// cannot land on them outside a real activation decision.
+// Setting an entry to 0 is the wallet-last deployment step after that
+// soak. It lets forms offer the threshold field and lets the publish flow
+// emit the ninth FILE field. This map protects only that publish side.
+// The send guard instead honors thresholds already recorded and served
+// by the indexer, so a pre-batch indexer that drops the field exposes no
+// threshold to act on. A smoke test pins the mainnet and regtest entries
+// null so the publish interlock cannot move outside a deployment decision.
 
 /**
  * chainId -> GATE_MIN_AMOUNT activation block height. 0 means active

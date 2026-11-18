@@ -35,6 +35,7 @@
 // form decides what "submitting"/"done"/"review" mean and what an error
 // message reads.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging } from '../useMessaging.js';
@@ -207,7 +208,7 @@ export function useActionForm({
     }, [chainId, addressesByChain, activeByChain, pickedFromId, initialFromAddress]);
 
     const chainsWithAddresses = addressesByChain ? Object.keys(addressesByChain) : [];
-    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const isHwSource = isDeviceAddressSource(fromAddress?.source);
 
     // Block 2: the canonical `from` descriptor. One definition so a
     // renamed/added field is a one-line change, not a 24-form sweep.

@@ -20,7 +20,7 @@
 // install base for good (SECURITY.md, "Android APK signing certificate").
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const DEFAULT_SECURITY_MD = fileURLToPath(new URL('../../SECURITY.md', import.meta.url));
@@ -129,6 +129,18 @@ function main(argv) {
     return 0;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// import.meta.url is the resolved module path while argv[1] is not, so the
+// comparison goes through realpath: a symlinked checkout must still run the
+// check, because skipping main() exits 0 having verified nothing.
+const invokedDirectly = (() => {
+    if (!process.argv[1]) return false;
+    try {
+        return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+    } catch {
+        return false;
+    }
+})();
+
+if (invokedDirectly) {
     process.exit(main(process.argv.slice(2)));
 }

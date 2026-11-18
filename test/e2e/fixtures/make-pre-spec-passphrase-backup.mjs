@@ -162,6 +162,7 @@ export async function buildPreSpecEnvelope() {
             addresses: memCollection(await vault.addresses.list()),
             contacts: memCollection([]),
             connectedSites: memCollection([]),
+            signers: memCollection([]),
             pendingTxs: memCollection([]),
             settings: { get: async () => structuredClone(settings), put: async () => {} },
         };

@@ -66,7 +66,7 @@ function pending(txid, psbtHex, over = {}) {
     };
 }
 
-function harness(initial = [pending(ORIGINAL, 'original-psbt')]) {
+function harness(initial = [pending(ORIGINAL, 'original-psbt')], addressOverrides = {}) {
     const rows = new Map(initial.map((row) => [row.id, row]));
     const put = vi.fn(async (row) => { rows.set(row.id, row); return row; });
     const createTx = vi.fn(async () => ({ psbt: 'replacement-psbt', encoding: 'OP_RETURN' }));
@@ -111,6 +111,7 @@ function harness(initial = [pending(ORIGINAL, 'original-psbt')]) {
             publicKey: '02'.padEnd(66, '1'),
             derivationPath: "m/84'/1'/0'/0/0",
             source: 'hd',
+            ...addressOverrides,
         }]) },
         pendingTxs: {
             list: vi.fn(async () => [...rows.values()]),
@@ -152,6 +153,14 @@ const call = (host, request) => host.handle({ type: 'tx.replace', request: {
 const queueOf = async (host) => (await host.handle({ type: 'broadcast.queue.list', request: { walletId: WALLET } })).result;
 
 describe('tx.replace background route', () => {
+    it('uses the pooled signer when a software address stores the wallet id', async () => {
+        const h = harness(undefined, { signerId: WALLET });
+        const response = await call(h.host, {});
+
+        expect(response.ok, JSON.stringify(response.error)).toBe(true);
+        expect(h.signPsbt).toHaveBeenCalledTimes(1);
+    });
+
     it('plans, signs, audits, and broadcasts a speedup', async () => {
         const h = harness();
         const response = await call(h.host, {});
@@ -180,19 +189,34 @@ describe('tx.replace background route', () => {
     });
 
     it('cancels entirely to the wallet without reproducing action data', async () => {
-        const h = harness();
+        const adsBooking = {
+            id: 'pending-aaaa', fiat: '25', currency: 'USD', paid: true, booked: true,
+        };
+        const h = harness([pending(ORIGINAL, 'original-psbt', { adsBooking })]);
         const response = await call(h.host, { strategy: 'cancel' });
 
         expect(response.ok, JSON.stringify(response.error)).toBe(true);
         expect(h.createTx.mock.calls[0][0]).not.toHaveProperty('data');
         expect(h.createTx.mock.calls[0][0].customOutputs).toEqual([{ address: SOURCE, value: 8000 }]);
         expect(h.decodeActionStringFromPsbt).not.toHaveBeenCalled();
+        expect([...h.rows.values()].find((row) => row.txid === REPLACEMENT)?.adsBooking)
+            .toEqual({ ...adsBooking, paid: false });
     });
 
     it('restores the original payment while replacing the cancel transaction', async () => {
         const h = harness([
-            pending(ORIGINAL, 'original-psbt', { status: 'rbf-replaced', rbfReplacement: CANCEL }),
-            pending(CANCEL, 'cancel-psbt', { id: 'pending-cancel', toAddress: SOURCE }),
+            pending(ORIGINAL, 'original-psbt', {
+                status: 'rbf-replaced', rbfReplacement: CANCEL,
+                adsBooking: {
+                    id: 'pending-aaaa', fiat: '25', currency: 'USD', paid: true, booked: true,
+                },
+            }),
+            pending(CANCEL, 'cancel-psbt', {
+                id: 'pending-cancel', toAddress: SOURCE,
+                adsBooking: {
+                    id: 'pending-aaaa', fiat: '25', currency: 'USD', paid: false, booked: true,
+                },
+            }),
         ]);
         const response = await call(h.host, {
             strategy: 'restore', originalTxHash: CANCEL, restoreTxHash: ORIGINAL,
@@ -206,6 +230,8 @@ describe('tx.replace background route', () => {
         expect(h.rows.get('pending-cancel')).toMatchObject({
             status: 'rbf-replaced', rbfReplacement: REPLACEMENT,
         });
+        expect([...h.rows.values()].find((row) => row.txid === REPLACEMENT)?.adsBooking)
+            .toMatchObject({ id: 'pending-aaaa', paid: true });
     });
 
     it('fails closed before signing when the transaction is not replaceable', async () => {

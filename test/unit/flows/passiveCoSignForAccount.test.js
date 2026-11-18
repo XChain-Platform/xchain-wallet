@@ -77,7 +77,8 @@ function mockSdkRegistry(verdict, { recordBudget = false } = {}) {
                     seen.tweaks = config.tweaks;
                     seen.recoveryPublicKey = config.recoveryPublicKey;
                 }
-                process() {
+                process(req) {
+                    seen.request = req;
                     if (recordBudget && seen.windowStore) {
                         seen.windowStore.snapshot();
                         seen.windowStore.record({ action: 'SEND', tick: 'X', amount: '1', txid: 'tx1' });
@@ -165,6 +166,17 @@ describe('passiveCoSignForAccount decision path', () => {
         const reloaded = await vault.coSignerAccounts.get(account.id);
         expect(reloaded.window.entries).toHaveLength(1);
         expect(reloaded.window.entries[0]).toMatchObject({ action: 'SEND', tick: 'X', amount: '1' });
+    });
+
+    it('hands the requested sighashType to the CoSigner, zero included', async () => {
+        for (const sighashType of [0, 1]) {
+            const { sdkRegistry, seen } = mockSdkRegistry({ approved: false, reason: 'SIGHASH_TYPE_NOT_ALLOWED' });
+            await passiveCoSignForAccount({
+                vault, chainRegistry, sdkRegistry, accountId: account.id, password: 'pw',
+                request: { psbt: 'aabb', agentPublicNonce: '03' + 'c'.repeat(130), sighashType },
+            });
+            expect(seen.request.sighashType).toBe(sighashType);
+        }
     });
 
     it('relays a CoSigner denial verdict unchanged', async () => {

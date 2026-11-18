@@ -54,7 +54,18 @@ export async function importedAddressIdsForStrict(vault, walletId) {
         throw new Error('importedAddressIdsForStrict: wallet collection is unreadable');
     }
     if (typeof walletId !== 'string' || walletId.length === 0) return new Set();
-    const wallet = await vault.wallets.get(walletId);
+    return importedAddressIdsOfWallet(await vault.wallets.get(walletId));
+}
+
+/**
+ * The same rule applied to a wallet record the caller already holds, so a
+ * caller that needs the record and the ids from ONE snapshot does not read
+ * the wallet twice and risk the two reads disagreeing.
+ *
+ * @param {{ importedKeys?: unknown } | null | undefined} wallet
+ * @returns {Set<string>} address ids of this wallet's imported keys
+ */
+export function importedAddressIdsOfWallet(wallet) {
     const keys = Array.isArray(wallet?.importedKeys) ? wallet.importedKeys : [];
     return new Set(
         keys

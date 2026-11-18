@@ -358,18 +358,18 @@ export interface CoSignParams {
     inputIndex?: number;
     // Multi-input form: one { index, agentPublicNonce } per input to co-sign.
     inputs?: Array<{ index: number; agentPublicNonce: string }>;
+    // Only 0 (SIGHASH_DEFAULT) is accepted; omitting it means the same thing.
+    // A non-integer fails with INVALID_PARAMS, and any other integer yields a
+    // CoSignRefused with reason SIGHASH_TYPE_NOT_ALLOWED and no signature.
     sighashType?: number;
 }
 
 export interface CoSignApprovedSuccess {
     ok: true;
     approved: true;
-    // Single-input approval.
-    publicNonce?: string;
-    sig?: string;
-    msg?: string;
-    // Multi-input approval.
-    signatures?: Array<{ index: number; publicNonce: string; sig: string; msg: string }>;
+    // One entry per co-signed input; a single-input request gets a
+    // one-element array.
+    signatures: Array<{ index: number; publicNonce: string; sig: string; msg: string }>;
     // The action the wallet decoded from the PSBT.
     action?: string;
 }
@@ -474,6 +474,9 @@ export interface XChainProvider {
     getBalances(chainId: ChainId, address: string): Promise<Balance[]>;
 
     getSupportedChains(): Promise<ChainDescriptor[]>;
+    // Chains active on the wallet's current network AND inside this site's
+    // chain grant (an empty grant means all), so every id returned is accepted
+    // by the per-chain methods.
     getActiveChains(): Promise<ChainId[]>;
 
     signMessage(params: SignMessageParams): Promise<SignMessageResult>;

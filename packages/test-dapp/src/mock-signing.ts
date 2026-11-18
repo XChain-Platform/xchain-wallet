@@ -38,15 +38,16 @@ const signatureFor = (index: number) => ({
     msg: `mock-message-${index}`,
 });
 
+// An approval always answers with `signatures`, one entry per co-signed
+// input, so a single-input request gets a one-element array.
 export function approvedCoSign(params: CoSignParams): CoSignApprovedSuccess {
-    if (params.inputs?.length) {
-        return {
-            ok: true,
-            approved: true,
-            action: 'SEND',
-            signatures: params.inputs.map(({ index }) => signatureFor(index)),
-        };
-    }
-    const { index: _index, ...signature } = signatureFor(params.inputIndex ?? 0);
-    return { ok: true, approved: true, action: 'SEND', ...signature };
+    const indexes = params.inputs?.length
+        ? params.inputs.map(({ index }) => index)
+        : [params.inputIndex ?? 0];
+    return {
+        ok: true,
+        approved: true,
+        action: 'SEND',
+        signatures: indexes.map(signatureFor),
+    };
 }

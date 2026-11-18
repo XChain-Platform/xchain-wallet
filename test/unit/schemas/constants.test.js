@@ -15,8 +15,13 @@ import {
     NETWORKS,
     ACTION_PERMISSIONS,
     ADDRESS_SOURCES,
+    DEVICE_ADDRESS_SOURCES,
+    DEVICE_SIGNER_KINDS,
     addressSourceForSignerKind,
+    isDeviceAddressSource,
+    isDeviceSignerKind,
 } from '../../../packages/core/src/schemas/constants.js';
+import { SIGNER_KINDS } from '../../../packages/core/src/schemas/signer.js';
 
 describe('schemas/constants', () => {
     describe('NETWORKS', () => {
@@ -70,5 +75,25 @@ describe('schemas/constants', () => {
         it.each(['multisig', 'airgap', 'bogus', undefined])('rejects unmapped kind %s', (kind) => {
             expect(() => addressSourceForSignerKind(kind)).toThrow(/no Address\.source mapping/);
         });
+    });
+
+    describe('device signer and address source predicates', () => {
+        it('derives the address source set from the signer kind set', () => {
+            expect(DEVICE_SIGNER_KINDS).toEqual(SIGNER_KINDS);
+            expect(DEVICE_ADDRESS_SOURCES).toEqual(SIGNER_KINDS.map(addressSourceForSignerKind));
+        });
+
+        it.each(['trezor', 'ledger'])('recognizes device kind and source %s', (value) => {
+            expect(isDeviceSignerKind(value)).toBe(true);
+            expect(isDeviceAddressSource(value)).toBe(true);
+        });
+
+        it.each(['software', 'hd', 'imported-wif', 'watch-only', undefined, null, 1, {}])(
+            'rejects non-device value %s',
+            (value) => {
+                expect(isDeviceSignerKind(value)).toBe(false);
+                expect(isDeviceAddressSource(value)).toBe(false);
+            },
+        );
     });
 });

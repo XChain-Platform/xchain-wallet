@@ -37,4 +37,5 @@ export {
     getBroadcastTxids,
     markPendingTxIndexed,
     markPendingTxMempoolSeen,
+    stampPendingTxAdsBooking,
 } from './pendingTxBridge.js';

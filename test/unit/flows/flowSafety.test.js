@@ -86,6 +86,7 @@ function vaultWith(records = {}) {
         addresses: collection(records.addresses),
         contacts: collection(records.contacts),
         connectedSites: collection(records.connectedSites),
+        signers: collection(records.signers),
         pendingTxs: collection(records.pendingTxs),
         settings: {
             get: vi.fn(async () => records.settings ?? null),

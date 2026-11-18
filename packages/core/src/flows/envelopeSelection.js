@@ -17,6 +17,7 @@
 // means no action (a long broadcast, a large list) fails at build time on a
 // chain and signer that could have carried it because its form never opted in.
 
+import { isDeviceAddressSource } from '../schemas/constants.js';
 import { MAX_COMPILED_ACTION_BYTES, pushPrefixSize } from './fileSizeLimits.js';
 import { signerSupportsTapscript } from './signerCapability.js';
 
@@ -116,7 +117,7 @@ export function envelopeUnavailableReason({ descriptor, fromAddress, isWatcherMo
     } catch {
         return 'signer';
     }
-    if (source === 'trezor' || source === 'ledger') return 'hardware';
+    if (isDeviceAddressSource(source)) return 'hardware';
     if (source === 'watch-only') return 'watchOnly';
     if (!signerSupportsTapscript(fromAddress)) return 'signer';
     return null;

@@ -58,6 +58,7 @@ import { submitAction } from './submitAction.js';
 import { ENVELOPE_MAX_PAYLOAD } from './fileSizeLimits.js';
 import { readRawFile } from './rawFileRead.js';
 import { activeSourceId } from '../shared/addressSelection.js';
+import { importedAddressIdsFor, importedAddressIdsOfWallet } from './_importedAddressIds.js';
 
 export const LABEL_SYNC_PAYLOAD_VERSION = 1;
 
@@ -103,8 +104,10 @@ export async function buildLabelSyncPayload({ vault, walletId, seed }) {
     const accountIds = new Set(
         allAccounts.filter((a) => a.walletId === walletId).map((a) => a.id),
     );
-    const importedIds = new Set(wallet.importedKeys.map((k) => k.addressId));
-
+    // Ids come off the record loaded above, so the payload never mixes two
+    // reads of the wallet: a record that vanished between them would
+    // otherwise publish a payload missing every imported-key label.
+    const importedIds = importedAddressIdsOfWallet(wallet);
     // Only carry addresses WITH a user-set label. Un-labeled HD
     // addresses are re-derivable; shipping their default labels would
     // just bloat the payload.
@@ -877,7 +880,7 @@ function withTimeout(promise, ms, message) {
 
 /**
  * Default source-address picker: the chain's active (operating) address
- * when `activeEntry` resolves to one of this wallet's eligible addresses,
+ * when `activeEntry` resolves to an account or imported address in this wallet,
  * otherwise the newest external HD address on the chain across any account
  * in the wallet.
  *
@@ -889,12 +892,15 @@ function withTimeout(promise, ms, message) {
  * lines this up with the chain balance Send and Home show.
  */
 async function defaultPickFromAddress({ vault, walletId, descriptor, activeEntry }) {
-    const accounts = await vault.accounts.findBy('walletId', walletId);
+    const [accounts, importedIds] = await Promise.all([
+        vault.accounts.findBy('walletId', walletId),
+        importedAddressIdsFor(vault, walletId),
+    ]);
     const accountIds = new Set(accounts.map((a) => a.id));
-    if (accountIds.size === 0) return null;
+    if (accountIds.size === 0 && importedIds.size === 0) return null;
     const all = await vault.addresses.list();
     const eligible = all.filter(
-        (a) => accountIds.has(a.accountId)
+        (a) => (a.accountId ? accountIds.has(a.accountId) : importedIds.has(a.id))
             && a.chain === descriptor.coin
             && a.network === descriptor.networkKind,
     );

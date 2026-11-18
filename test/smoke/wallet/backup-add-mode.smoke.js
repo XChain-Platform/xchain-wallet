@@ -13,7 +13,8 @@
 //   - importBackupFile accepts a `mode` parameter
 //   - the helper re-mints wallet / account / address ids and rewires
 //     every cross-reference (account.walletId, address.accountId,
-//     wallet.importedKeys[].addressId, pendingTx.id)
+//     account.activeAddressByChainId, wallet.importedKeys[].addressId,
+//     pendingTx.id)
 //   - contacts / connectedSites / settings ids stay untouched
 //   - the host route forwards req.mode
 //   - ImportWallet's backup lane forwards mode through
@@ -57,7 +58,15 @@ const payload = {
         ],
     },
     accounts: [
-        { id: 'acc-old-1', walletId: 'w-old' },
+        {
+            id: 'acc-old-1',
+            walletId: 'w-old',
+            activeAddressByChainId: {
+                'bitcoin-mainnet': 'a-derived-1',
+                'litecoin-mainnet': 'a-imported-1',
+                'dogecoin-mainnet': 'a-not-in-backup',
+            },
+        },
         { id: 'acc-old-2', walletId: 'w-old' },
     ],
     addresses: [
@@ -98,6 +107,13 @@ for (const addr of payload.addresses) {
             'address.accountId rewired to a fresh account id');
     }
 }
+
+assert.deepEqual(payload.accounts[0].activeAddressByChainId, {
+    'bitcoin-mainnet': payload.addresses[1].id,
+    'litecoin-mainnet': payload.addresses[0].id,
+});
+assert.equal(payload.accounts[1].activeAddressByChainId, undefined,
+    'an absent active-address map stays absent');
 
 // Imported-key addressIds rewired to the new address ids.
 const addressIdSet = new Set(payload.addresses.map((a) => a.id));

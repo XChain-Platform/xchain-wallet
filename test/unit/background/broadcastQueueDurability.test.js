@@ -284,6 +284,39 @@ describe('the vault rebuild runs while the queue blob is unreadable', () => {
         expect(store.saves.at(-1)[W]).toHaveLength(1);
     });
 
+    it('keeps retry backoff from a blob twin that has no ADS verdict', async () => {
+        const records = memCollection();
+        await records.put(record('p1'));
+        const nextRetryAt = Date.now() + 60_000;
+        const store = flakyStorage({
+            [W]: [blobTwin({ adsCommit: undefined, retryAttempt: 4, nextRetryAt })],
+        });
+        const h = makeHost({ storage: store.adapter, pendingTxs: records });
+        await h.list();
+
+        store.recover();
+        const recovered = await h.list();
+        expect(recovered).toHaveLength(1);
+        expect(recovered[0]).toMatchObject({ retryAttempt: 4, nextRetryAt });
+        await settle();
+        expect(store.saves.at(-1)[W][0]).toMatchObject({ retryAttempt: 4, nextRetryAt });
+    });
+
+    it('does not adopt invalid retry backoff from a blob twin', async () => {
+        const records = memCollection();
+        await records.put(record('p1'));
+        const store = flakyStorage({
+            [W]: [blobTwin({ adsCommit: undefined, retryAttempt: '4', nextRetryAt: null })],
+        });
+        const h = makeHost({ storage: store.adapter, pendingTxs: records });
+        await h.list();
+
+        store.recover();
+        const [recovered] = await h.list();
+        expect(recovered).not.toHaveProperty('retryAttempt');
+        expect(recovered).not.toHaveProperty('nextRetryAt');
+    });
+
     it('keeps the resumed-claim label across the recovery', async () => {
         const records = memCollection();
         await records.put(record('p1', { status: 'broadcasting' }));

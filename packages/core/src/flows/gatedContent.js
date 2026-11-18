@@ -21,6 +21,7 @@
 //   - plaintexts cached by (address, actionIndex) for the session.
 // Caches are in-memory, per-process. Clearing happens on wallet lock.
 
+import { isDeviceAddressSource } from '../schemas/constants.js';
 import { exportPrivateKey } from './exportPrivateKey.js';
 import {
     AES_GCM_ENVELOPE_BYTES,
@@ -526,7 +527,7 @@ export async function recoverGatedKeysForTick({
     const recovered = /** @type {string[]} */ ([]);
     let scanned = 0;
     const scannable = (Array.isArray(addresses) ? addresses : []).filter((a) => a
-        && a.source !== 'watch-only' && a.source !== 'trezor' && a.source !== 'ledger');
+        && a.source !== 'watch-only' && !isDeviceAddressSource(a.source));
     for (const addr of scannable) {
         if (wanted.size === 0) break;
         let wif;
