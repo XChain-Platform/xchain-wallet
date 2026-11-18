@@ -182,6 +182,23 @@ async function measureFirstBlock(page) {
         if (!first) return { error: 'no first content block' };
         const box = first.getBoundingClientRect();
         const isForm = first.tagName === 'FORM' || first.getAttribute('role') === 'group';
+        // A form page (Issue Token, Send, Create dispenser) opens on a full-width
+        // wrapper around its form card. The card is what is judged, on centring
+        // in the content box, since the end padding already gives up the
+        // scrollbar lane on every page.
+        const card = isForm ? null : first.querySelector('form');
+        if (card) {
+            const cardBox = card.getBoundingClientRect();
+            const contentLeft = frameLeft + gutter;
+            const contentRight = frameRight - (parseFloat(style.paddingRight) || 0);
+            return {
+                kind: 'form',
+                label: `form:${(card.getAttribute('aria-label') || card.textContent || '').trim().slice(0, 30)}`,
+                gutter,
+                left: Math.round((cardBox.left - contentLeft) * 100) / 100,
+                rightGap: Math.round((contentRight - cardBox.right) * 100) / 100,
+            };
+        }
         return {
             kind: isForm ? 'form' : 'list',
             label: `${first.tagName.toLowerCase()}:${(first.textContent || '').trim().slice(0, 30)}`,

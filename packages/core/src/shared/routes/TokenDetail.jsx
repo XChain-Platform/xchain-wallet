@@ -2032,7 +2032,7 @@ function MarketPanel({ market, hidden, showFiat, currency, unit, locale }) {
                 room unseen so the card holds one height. */}
             <div className={portfolioChartStyles.foot}>
                 {holdingNote ? (
-                    <div className={portfolioChartStyles.tokenNote} data-chart-note={noMarketPrice ? 'no-market-price' : 'no-price-history'}>{holdingNote}</div>
+                    <div className={`${portfolioChartStyles.tokenNote}${showRanges ? '' : ` ${styles.noteInIdleRanges}`}`} data-chart-note={noMarketPrice ? 'no-market-price' : 'no-price-history'}>{holdingNote}</div>
                 ) : null}
                 <ChartRangeTabs
                     panelId={panelId}

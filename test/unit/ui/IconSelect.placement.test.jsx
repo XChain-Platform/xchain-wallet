@@ -83,6 +83,19 @@ describe('dropdown placement in a short viewport', () => {
         expect(listPlacement(popover, trigger).maxHeight).toBe(72);
     });
 
+    it('leaves a list laid out in its container flow uncapped (the filter panel)', () => {
+        vi.stubGlobal('innerWidth', 360);
+        vi.stubGlobal('innerHeight', 300);
+        const popover = document.createElement('div');
+        popover.style.position = 'static';
+        document.body.append(popover);
+        const trigger = document.createElement('button');
+        popover.getBoundingClientRect = () => rect({ left: 20, top: 244, width: 180, height: 320 });
+        trigger.getBoundingClientRect = () => rect({ left: 20, top: 200, width: 180, height: 40 });
+        expect(listPlacement(popover, trigger)).toEqual({ end: false, up: false, maxHeight: null });
+        popover.remove();
+    });
+
     it('applies the cap to the open list as its max height', () => {
         vi.stubGlobal('innerWidth', 360);
         vi.stubGlobal('innerHeight', 300);

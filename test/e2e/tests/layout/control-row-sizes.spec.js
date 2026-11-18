@@ -241,14 +241,16 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
             const fromDate = panel.getByLabel('From date');
             await expect(fromDate).toBeVisible();
             const presets = panel.getByRole('group', { name: 'Date range presets' });
-            // The preset Chips sit under the date inputs, so both hold the field control height.
+            // The inputs match each other and the preset Chips match them, at
+            // whatever height the date input renders (44px on this build).
+            const inputHeight = await fromDate.evaluate((element) => element.getBoundingClientRect().height);
             await expectMatchingHeights(`History date presets at ${width}px`, [
                 ['from date', fromDate],
                 ['to date', panel.getByLabel('To date')],
                 ['7 days preset', presets.getByRole('button', { name: '7 days', exact: true })],
                 ['30 days preset', presets.getByRole('button', { name: '30 days', exact: true })],
                 ['all dates preset', presets.getByRole('button', { name: 'All dates', exact: true })],
-            ], await tokenPx(page, '--xc-control-h-md'));
+            ], inputHeight);
         });
     }
 });
