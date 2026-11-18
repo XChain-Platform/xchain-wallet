@@ -91,11 +91,14 @@ for (const size of SIZES) {
             await expect(help).toBeHidden();
         });
 
-        test('balance actions menu closes when Tab leaves it', async ({ page }) => {
-            const trigger = page.getByRole('button', { name: 'Balance actions' });
+        // The Home balance card keeps only its two circle buttons (G11), so the
+        // in-page menu that must close on Tab is History's More actions menu.
+        test('page actions menu closes when Tab leaves it', async ({ page }) => {
+            await gotoSection(page, 'History');
+            const trigger = page.getByRole('button', { name: 'More actions' });
             await trigger.focus();
             await page.keyboard.press('Enter');
-            const menu = page.getByRole('menu', { name: 'Balance actions' });
+            const menu = page.getByRole('menu');
             await expect(menu).toBeVisible();
             for (let i = 0; i < 12 && await menu.isVisible(); i += 1) await page.keyboard.press('Tab');
             await expect(menu, 'Tab past the last item closes the menu instead of leaving it open behind focus').toBeHidden();
