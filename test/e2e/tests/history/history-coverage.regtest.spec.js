@@ -416,9 +416,11 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
                 .toContainText('Send');
             await expect(button, 'the row does not read Confirmed for a mined, valid action')
                 .toContainText('Confirmed');
+            // History rows print the block as a bare integer (HistoryEntryRow's
+            // `String(entry.blockIndex)`), never grouped with commas.
             await expect(button, 'the row shows a different block than the explorer recorded')
                 .toHaveAttribute('aria-description',
-                    new RegExp(`^Block ${Number(chainRow.block_index).toLocaleString('en-US')}(,|$)`));
+                    new RegExp(`^Block ${String(Number(chainRow.block_index))}(,|$)`));
 
             baselineRows = await historyRows(page).count();
             // The MINT and the SEND. More than one matters: claim 2's
@@ -438,7 +440,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
                 .toBeVisible({ timeout: 30_000 });
             await expect(page.getByRole('banner').filter({ hasText: 'Send #' }).first(),
                 'the detail page is not titled for the action index the chain recorded')
-                .toContainText(`Send #${Number(chainRow.action_index).toLocaleString('en-US')}`);
+                .toContainText(`Send #${String(Number(chainRow.action_index))}`);
 
             await page.getByRole('tab', { name: 'Details' }).click();
 
@@ -466,7 +468,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await expect(detailRow(page, 'Status'), 'the detail disagrees with the chain about status')
                 .toContainText(String(chainRow.status), { ignoreCase: true });
             await expect(detailRow(page, 'Block'), 'the detail disagrees with the chain about the block')
-                .toContainText(Number(chainRow.block_index).toLocaleString('en-US'));
+                .toContainText(String(Number(chainRow.block_index)));
             // The txid draws shortened; its full value is the element's title.
             await expect(detailRow(page, 'Transaction ID').getByTitle(sendTxid, { exact: true }),
                 'the detail shows a different transaction than the one the wallet said it broadcast')

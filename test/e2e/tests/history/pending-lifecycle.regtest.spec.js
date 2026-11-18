@@ -412,7 +412,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
                 .toBeVisible({ timeout: 60_000 });
             await expect(confirmed.getByRole('button').first(),
                 'the row shows a different block than the explorer recorded')
-                .toContainText(`Block ${Number(chainRow.block_index).toLocaleString('en-US')}`);
+                .toContainText(`Block ${String(Number(chainRow.block_index))}`);
 
             // And the count that makes the whole transition meaningful: ONE row
             // for this transaction before the block, ONE after it.
