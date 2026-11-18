@@ -85,6 +85,7 @@ import {
     waitForValidAction,
     openFromAddress,
     searchHistory,
+    backToHistoryList,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -245,7 +246,7 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
             await expect(historyRows(page), 'the not-seen transaction has more than one History row')
                 .toHaveCount(1, { timeout: 30_000 });
 
-            // Drill in: the standalone page carries the same verdict.
+            // Drill in: the action detail carries the same verdict.
             await pendingRowFor(page, sendTxid).getByRole('button').first().click();
             // The one reader of the state on this page is the status bar's
             // Confirmed step (operator rulings 2026-11-13: the bar alone
@@ -262,7 +263,7 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
             await expect(fieldByLabel(page, 'Transaction status'),
                 'Details still draws a second status timeline')
                 .toHaveCount(0);
-            await page.getByRole('button', { name: 'Back to history' }).click();
+            await backToHistoryList(page);
         });
 
         await test.step('CLAIM 4: once the network catches up, the warning clears and the SAME entry confirms', async () => {
