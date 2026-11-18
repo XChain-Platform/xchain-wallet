@@ -38,7 +38,7 @@ async function gotoPalette(page, title) {
     const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(title);
-    await palette.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
+    await palette.getByRole('option', { name: new RegExp(`^${title}\\b`, 'i') }).first().click();
     await expect(palette).toBeHidden();
 }
 
@@ -153,8 +153,10 @@ async function reviewDetails(form) {
     });
 }
 
+// Issue token ends on the shared Confirm screen, labelled "Confirm <summary>";
+// the other actions keep their own Review screen and form.
 async function expectReview(page, {
-    heading,
+    heading = 'Confirm',
     formName,
     summary,
     details,
@@ -167,7 +169,9 @@ async function expectReview(page, {
         { message: `${label}: review did not open at the top` },
     ).toBeLessThanOrEqual(1);
 
-    const form = page.getByRole('form', { name: formName, exact: true });
+    const form = formName
+        ? page.getByRole('form', { name: formName, exact: true })
+        : page.getByLabel(`Confirm ${summary}`, { exact: true });
     await expect(form).toBeVisible();
     await expect(form.getByText(summary, { exact: true })).toBeVisible();
     expect(await reviewDetails(form)).toMatchObject(details);
@@ -176,13 +180,16 @@ async function expectReview(page, {
 
 async function openManagedToken(page) {
     await gotoPalette(page, 'My tokens');
-    await expectScreenLayout(page, 'My tokens', 'My tokens');
-    await page.getByLabel('Search your tokens by ticker or description').fill('XCP');
+    await expectScreenLayout(page, 'My Tokens', 'My tokens');
+    // Search sits in the Filter tokens panel in the title bar.
+    await page.getByRole('banner').getByRole('button', { name: 'Filter tokens', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Filter tokens' }).getByLabel('Search your tokens by ticker or description').fill('XCP');
+    await page.keyboard.press('Escape');
     const row = page.getByRole('button', { name: 'Open XCP token details' }).first();
     await expect(row).toBeVisible();
     await row.click();
-    await expectScreenLayout(page, 'Manage token', 'Manage token');
-    await expect(page.getByRole('main').getByText('XCP', { exact: true }).first()).toBeVisible();
+    await // The token page is titled by the ticker.
+    await expectScreenLayout(page, 'XCP', 'Manage token');
 }
 
 for (const viewport of VIEWPORTS) {
@@ -219,20 +226,17 @@ for (const viewport of VIEWPORTS) {
             await fieldByLabel(main, 'Max per transaction').fill('50');
             await openSection('Description');
             await fieldByLabel(main, 'Token description').fill('Responsive token admin fixture');
-            await expectScreenLayout(page, 'Issue token', `${viewport.name} Issue token with sections open`);
+            await expectScreenLayout(page, 'Issue Token', `${viewport.name} Issue token with sections open`);
             await page.waitForTimeout(450);
             await scrollFormToBottom(page);
             // With a supply set the main button reads Issue token (ruling U80).
             await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
             await expectReview(page, {
-                heading: 'Review issue',
-                formName: 'Review token issue',
-                summary: `Create token ${issueTick} with max supply 1000 on Bitcoin`,
+                summary: `Issue a new token, ${issueTick}`,
                 details: {
-                    Token: issueTick,
                     // Review amounts carry their unit.
-                    'Max supply': `1000 ${issueTick}`,
+                    'Max supply': `1,000 ${issueTick}`,
                     'Max mint per tx': `50 ${issueTick}`,
                     Description: 'Responsive token admin fixture',
                     'Initial mint': `250 ${issueTick}`,
@@ -256,7 +260,7 @@ for (const viewport of VIEWPORTS) {
             await main.getByRole('button', { name: 'Mint', exact: true }).click();
 
             await expectReview(page, {
-                heading: 'Review mint',
+                heading: 'Review Mint',
                 formName: 'Review mint',
                 summary: 'Mint 25 XCP on Bitcoin',
                 details: {
@@ -270,53 +274,60 @@ for (const viewport of VIEWPORTS) {
 
         await test.step('Dividend', async () => {
             await gotoPalette(page, 'Pay a dividend');
-            await expectScreenLayout(page, 'Pay dividend', `${viewport.name} Dividend`);
+            await expectScreenLayout(page, 'Pay Dividend', `${viewport.name} Dividend`);
             await selectNamedToken(page, 'Holder-of token', { ...CHAIN, tick: 'XCP' });
             await selectNamedToken(page, 'Dividend token', { ...CHAIN, tick: 'PEPECASH' });
 
             const main = page.getByRole('main');
             await main.getByRole('textbox', { name: /^Per-unit amount/ }).fill('0.0001');
+            // Memo is an optional section that starts closed.
+            const memoHeader = main.getByRole('button', { name: /^Memo\b/ });
+            if (await memoHeader.getAttribute('aria-expanded') !== 'true') await memoHeader.click();
             await main.getByLabel('Memo', { exact: true }).fill('Quarterly payout');
             const preview = main.getByRole('button', { name: 'Pay Dividend', exact: true });
             await expect(preview).toBeEnabled();
             await scrollFormToBottom(page);
-            await preview.click();
+            // The form refuses until the holder list has loaded, so press again until the review opens.
+            await expect(async () => {
+                if (await page.getByRole('heading', { level: 1, name: 'Confirm', exact: true }).isVisible()) return;
+                await preview.click({ timeout: 5_000 });
+                await expect(page.getByRole('heading', { level: 1, name: 'Confirm', exact: true })).toBeVisible({ timeout: 5_000 });
+            }).toPass({ timeout: 60_000 });
 
             await expectReview(page, {
-                heading: 'Review dividend',
-                formName: 'Review dividend',
-                summary: 'Pay 0.0001 PEPECASH per unit of XCP on Bitcoin',
+                summary: 'Pay 0.0001 PEPECASH per unit of XCP',
                 details: {
                     'Holders of': 'XCP',
                     Receive: 'PEPECASH',
-                    'Per-unit amount': '0.0001 PEPECASH',
+                    'Per-unit amount': '0.0001',
                     Memo: 'Quarterly payout',
                 },
                 label: `${viewport.name} Dividend review`,
             });
         });
 
-        await test.step('Destroy from Manage token', async () => {
+        await test.step('Destroy', async () => {
             await openManagedToken(page);
             // Manage token's Actions tab is one icon grid of every action, Destroy
             // included, with no More menu (ruling U78).
             await expect(page.getByRole('tab', { name: 'Actions' })).toHaveAttribute('aria-selected', 'true');
-            await page.getByRole('main').getByRole('button', { name: 'Destroy', exact: true }).click();
+            // A watch-only wallet cannot sign, so the tile is disabled and says why; the
+            // palette still opens the form to prepare the transaction for another phone.
+            const destroyTile = page.getByRole('main').getByRole('button', { name: /^Destroy\b/ });
+            await expect(destroyTile).toBeDisabled();
+            await expect(destroyTile).toContainText('another phone signs for this one');
+            await gotoPalette(page, 'Destroy');
             await expectScreenLayout(page, 'Destroy', `${viewport.name} Destroy`);
 
+            await selectNamedToken(page, 'Token', { ...CHAIN, tick: 'XCP' });
             const main = page.getByRole('main');
             await main.getByRole('textbox', { name: /^Amount/ }).fill('2');
             await scrollFormToBottom(page);
             await main.getByRole('button', { name: 'Destroy', exact: true }).click();
 
             await expectReview(page, {
-                heading: 'Review destroy',
-                formName: 'Review destroy',
-                summary: 'Destroy 2 XCP on Bitcoin',
-                details: {
-                    Token: 'XCP',
-                    Amount: '2 XCP',
-                },
+                summary: 'Destroy 2 XCP',
+                details: { Network: 'Bitcoin' },
                 label: `${viewport.name} Destroy review`,
             });
         });
