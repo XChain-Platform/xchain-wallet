@@ -101,12 +101,17 @@ async function openFilterPanel(page, name) {
     return panel;
 }
 
-async function openSettingsSearch(page, query) {
+/** Opens a Settings group, then its rows in order, from the Settings list. */
+async function openSettingsPath(page, ...rows) {
     await openSettings(page);
-    // The search sits behind the header filter button (G04).
-    await page.getByRole('button', { name: 'Filter settings' }).click();
-    const search = page.getByRole('searchbox', { name: 'Search settings' });
-    await search.fill(query);
+    // Settings reopens on the last page it showed; step back until the list's Wallets row shows.
+    const listRow = page.getByRole('main').getByRole('button', { name: /^Wallets/ });
+    for (let step = 0; step < 4 && !(await listRow.first().isVisible()); step += 1) {
+        await page.getByRole('button', { name: /^Back/ }).filter({ visible: true }).first().click();
+    }
+    for (const row of rows) {
+        await page.getByRole('main').getByRole('button', { name: new RegExp(`^${row}`, 'i') }).first().click();
+    }
 }
 
 async function openStaking(page) {
@@ -207,46 +212,39 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
         });
 
         await test.step(`${width}px / Settings price alerts`, async () => {
-            await openSettingsSearch(page, 'price alerts');
+            await openSettingsPath(page, 'Notifications', 'Your price alerts');
+            await page.getByRole('button', { name: 'Add Price Alert', exact: true }).click();
             await expectMatchingControlSizes(`Settings price alerts at ${width}px`, [
-                ['coin', main.getByRole('combobox', { name: 'Coin' })],
-                ['direction', main.getByRole('combobox', { name: 'Direction' })],
-                ['target price', main.getByRole('textbox', { name: 'Target price' })],
+                ['asset', main.getByRole('button', { name: /^Asset:/ })],
+                ['direction', main.getByRole('button', { name: /^When the price:/ })],
+                ['target price', main.locator('#price-alert-target')],
                 ['add alert', main.getByRole('button', { name: 'Add Alert' })],
             ]);
         });
 
         await test.step(`${width}px / Settings dApp permissions`, async () => {
-            await openSettingsSearch(page, 'dApp permissions');
-            await main.getByRole('button', { name: /^Connected sites/ }).click();
+            await openSettingsPath(page, 'Privacy and Sites', 'Connected sites');
             // The header plus opens the Block Site form.
             await page.getByRole('button', { name: 'Block a site', exact: true }).click();
-            const origin = main.getByRole('textbox', { name: 'Origin or wildcard to block' });
-            // A filter `has` locator resolves inside the form, so it cannot start at main.
-            const blockForm = main.locator('form').filter({
-                has: page.getByRole('textbox', { name: 'Origin or wildcard to block' }),
-            });
+            const origin = main.locator('#block-site-origin');
             await expectMatchingControlSizes(`Settings dApp permissions at ${width}px`, [
                 ['blocked origin', origin],
-                ['block', blockForm.getByRole('button', { name: 'Block Site', exact: true })],
+                ['block', main.getByRole('button', { name: 'Block Site', exact: true })],
             ]);
         });
 
         await test.step(`${width}px / History date presets`, async () => {
             await gotoSection(page, 'History');
-            const fromDate = main.getByLabel('From date');
-            await expect(fromDate).toBeAttached();
-            // Phone widths fold the filter card behind a Filters toggle.
-            const filtersToggle = main.getByRole('button', { name: /^Filters \(\d+\)$/ });
-            if (await filtersToggle.isVisible()) {
-                if (await filtersToggle.getAttribute('aria-expanded') !== 'true') await filtersToggle.click();
-                await expect(filtersToggle).toHaveAttribute('aria-expanded', 'true');
-            }
-            const presets = main.getByRole('group', { name: 'Date range presets' });
+            // The date inputs and presets sit in the History filters panel.
+            await page.getByRole('button', { name: 'History filters' }).click();
+            const panel = page.getByRole('dialog', { name: 'History filters' });
+            const fromDate = panel.getByLabel('From date');
+            await expect(fromDate).toBeVisible();
+            const presets = panel.getByRole('group', { name: 'Date range presets' });
             // The preset Chips sit under the date inputs, so both hold the field control height.
             await expectMatchingHeights(`History date presets at ${width}px`, [
                 ['from date', fromDate],
-                ['to date', main.getByLabel('To date')],
+                ['to date', panel.getByLabel('To date')],
                 ['7 days preset', presets.getByRole('button', { name: '7 days', exact: true })],
                 ['30 days preset', presets.getByRole('button', { name: '30 days', exact: true })],
                 ['all dates preset', presets.getByRole('button', { name: 'All dates', exact: true })],
@@ -265,7 +263,7 @@ for (const width of VIEWPORTS) {
         const main = page.getByRole('main');
 
         await test.step(`${width}px / Bridge move pickers`, async () => {
-            await openPaletteRoute(page, 'Move a token', /^Move a token/);
+            await openPaletteRoute(page, 'Move across chains', /^Move across chains/);
             // The ChainPicker trigger and the TokenField button stack in one
             // column with the address field, so all three share one height.
             // The chain picker and the address sit in the closed From section.
@@ -279,7 +277,11 @@ for (const width of VIEWPORTS) {
 
         await test.step(`${width}px / Fee selector ticks and help tip`, async () => {
             await gotoSection(page, 'Messaging');
-            await page.getByRole('button', { name: 'New message', exact: true }).click();
+            // New message is a title bar button on a phone and a row of the More menu on a wide screen.
+            const newMessage = page.getByRole('button', { name: 'New message', exact: true });
+            await newMessage.or(page.getByRole('button', { name: 'More', exact: true })).first().waitFor();
+            if (await newMessage.count() === 0) await page.getByRole('button', { name: 'More', exact: true }).click();
+            await page.getByRole('button', { name: 'New message', exact: true }).or(page.getByRole('menuitem', { name: 'New message' })).first().click();
             // The slider sits in the Fees section, closed until opened.
             await openFormSection(main, 'Speed and Fees');
             // The tier ticks are pointer-only labels under the slider; each
