@@ -45,6 +45,7 @@
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     clickManageTokenAction,
+    expectManageTokenView,
     createWallet,
     expect,
     openIssueSection,
@@ -308,9 +309,7 @@ test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () 
             await expect(row, `${PARENT} is on chain but My Tokens does not list it`)
                 .toBeVisible({ timeout: 60_000 });
             await row.click();
-            await expect(page.getByRole('heading', { name: 'Manage Token' })
-                .or(page.getByText('Manage Token').first()))
-                .toBeVisible({ timeout: 30_000 });
+            await expectManageTokenView(page);
 
             await clickManageTokenAction(main, 'Sell Ownership');
 

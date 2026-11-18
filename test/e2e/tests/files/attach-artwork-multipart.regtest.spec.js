@@ -24,18 +24,20 @@ import {
     explorerJson,
     expectConfirmModal,
     fundAddress,
+    issuePlainToken,
     minerRpc,
     mintXchain,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
-    selectVenueChain,
+    readIssueSource,
     switchToRegtest,
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
     approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const UNLOCK_VALUE = ['regtest', 'pass', 'word123'].join('');
 const FILE_BYTES = 10_000_000;
@@ -77,22 +79,18 @@ async function readLabelledTxid(page, heading, label) {
     return txid;
 }
 
+// The one-page Issue Token form keeps Network and the From address in a closed
+// From section, which readIssueSource opens before it reads the signer.
 async function issueToken(page, source) {
     await openPaletteCommand(page, 'My tokens');
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    // Issue token opens the template wizard; Custom opens the full form (ruling U79).
-    await main.getByRole('button', { name: /^Custom\b/ }).click();
-    // Each field label carries a help tip button named after it (ruling U80), so fields are found by role.
-    await expect(main.getByRole('textbox', { name: 'Ticker', exact: true })).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-    expect(await main.getByRole('textbox', { name: 'From', exact: true }).inputValue()).toBe(source);
-    await main.getByRole('textbox', { name: 'Ticker', exact: true }).fill(TICK);
-    await main.getByRole('textbox', { name: 'Max supply', exact: true }).fill('1000');
-    await fillUnlock(main);
-    await main.getByRole('button', { name: 'Issue token', exact: true }).click();
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    expect(await readIssueSource(main), 'the form signs with an address other than the funded source')
+        .toBe(source);
+    await issuePlainToken(main, { ticker: TICK, supply: '1000', password: UNLOCK_VALUE });
     await expectConfirmModal(page, 'the multipart artwork token', 90_000);
-    await approveConfirm(page);
+    await approveConfirm(page, `the ISSUE of ${TICK}`);
     const txid = await waitForShownTxid(main, { message: 'the ISSUE transaction id never appeared' });
     return waitForValidAction(txid);
 }
@@ -102,12 +100,9 @@ async function prepareWallet(page) {
     await switchToRegtest(page, UNLOCK_VALUE);
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    // Issue token opens the template wizard; Custom opens the full form (ruling U79).
-    await main.getByRole('button', { name: /^Custom\b/ }).click();
-    await expect(main.getByRole('textbox', { name: 'Ticker', exact: true })).toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(main);
-    const source = await main.getByRole('textbox', { name: 'From', exact: true }).inputValue();
-    expect(source).toMatch(REGTEST_ADDRESS_RE);
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    const source = await readIssueSource(main);
+    expect(source, 'this wallet has no address on the venue chain').toMatch(REGTEST_ADDRESS_RE);
     await fundAddress(source, FUNDING);
     await page.reload();
     await unlockAfterReload(page, UNLOCK_VALUE);
@@ -139,14 +134,14 @@ async function reviewArtwork(page, bytes) {
         mimeType: 'image/png',
         buffer: bytes,
     });
-    await main.getByRole('button', { name: 'Attach artwork', exact: true }).click();
-    await expect(main.getByRole('button', { name: 'Upload file', exact: true }))
+    await main.getByRole('button', { name: 'Attach Artwork', exact: true }).click();
+    await expect(main.getByRole('button', { name: 'Upload File', exact: true }))
         .toBeVisible({ timeout: 120_000 });
     const method = detailValue(main, 'Upload method');
     await expect(method).toContainText(new RegExp(`${EXPECTED_PARTS} parts`, 'i'));
     await expect(method).toContainText(new RegExp(`${EXPECTED_TRANSACTIONS} transactions`, 'i'));
     await fillUnlock(main);
-    await main.getByRole('button', { name: 'Upload file', exact: true }).click();
+    await main.getByRole('button', { name: 'Upload File', exact: true }).click();
 }
 
 async function artworkLinks(source, issueIndex) {
@@ -213,7 +208,7 @@ async function approveUpload(page, source, issueIndex) {
 
 async function approveLink(page, source, issueIndex, manifestIndex) {
     const main = page.getByRole('main');
-    const linkButton = main.getByRole('button', { name: `Link artwork to ${TICK}`, exact: true });
+    const linkButton = main.getByRole('button', { name: `Link Artwork to ${TICK}`, exact: true });
     await expect(linkButton).toBeVisible({ timeout: 300_000 });
     await fillUnlock(main);
     await linkButton.click();

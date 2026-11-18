@@ -432,7 +432,8 @@ test.describe('BET round trip on regtest', () => {
             // goes on resolving the original oracle address. The bet then
             // never changes hands and the failure reads as a wallet defect.
             await selectVenueChain(page.getByRole('main'), 'Coin');
-            await page.getByRole('button', { name: /^Generate/ }).click();
+            // The Add addresses form submits with "Add Address" in its footer.
+            await page.getByRole('button', { name: /^(?:Generate|Add Address(?:es)?$)/ }).click();
 
             // Pick the row that is neither the oracle nor already active, open it,
             // and make it the active address: every action, the bet included,

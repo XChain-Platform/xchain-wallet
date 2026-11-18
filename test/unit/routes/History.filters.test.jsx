@@ -13,7 +13,7 @@ import { ToastHost } from '../../../packages/core/src/shared/components/ToastHos
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
 import { fact } from '../../helpers/detailFacts.js';
 import filterMenuStyles from '../../../packages/core/src/shared/components/HomeListFilterMenu.module.css';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { BALANCE_MAX_AGE_MS } from '../../../packages/core/src/flows/balances.js';
 import { resetBackStackForTests } from '../../../packages/core/src/ui/backStack.js';
 import {
     EXPORT_ITEM,
@@ -499,7 +499,7 @@ describe('History filters', () => {
         await screen.findByRole('button', { name: 'Fiat: USD' });
 
         const callsBeforeRefresh = messaging.getAddressHistory.mock.calls.length;
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS);
         act(() => { window.dispatchEvent(new Event('focus')); });
         await waitFor(() => {
             expect(messaging.getAddressHistory.mock.calls.length).toBe(callsBeforeRefresh + 2);

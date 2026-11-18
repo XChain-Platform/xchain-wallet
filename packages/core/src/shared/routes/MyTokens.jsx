@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     Screen,
@@ -26,6 +26,7 @@ import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
 import { synthesizeDemoOwnedTokens } from '../../flows/demoFixtures.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
+import { ownedTokensAddressKey, readFreshOwnedTokens, writeOwnedTokensCache } from '../utils/ownedTokensCache.js';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
 import {
@@ -80,6 +81,8 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick, r
     const [tokensError, setTokensError] = useState(/** @type {string | null} */ (null));
     const [addressesReload, setAddressesReload] = useState(0);
     const [tokensReload, setTokensReload] = useState(0);
+    // Try again reads past a fresh saved list; an open or a remount does not.
+    const lastTokensReloadRef = useRef(tokensReload);
     const [query, setQuery] = useState('');
     // "Holding" narrows ownership to tokens whose supply the wallet still
     // holds; row.youOwn is a balance check, not an ownership check.
@@ -130,6 +133,15 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick, r
             setTokens([]);
             return undefined;
         }
+        const addressKey = ownedTokensAddressKey(addressesByChain);
+        const retry = lastTokensReloadRef.current !== tokensReload;
+        lastTokensReloadRef.current = tokensReload;
+        const saved = retry ? null : readFreshOwnedTokens(walletId, addressKey);
+        if (saved) {
+            setTokens(saved);
+            return undefined;
+        }
+        const requestedAt = Date.now();
         let cancelled = false;
         const calls = [];
         for (const [chainId, addrs] of Object.entries(addressesByChain)) {
@@ -177,6 +189,8 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick, r
                 setTokensError(failedCount === batches.length
                     ? 'Could not load your owned tokens. Try again.'
                     : 'Some owned token lists could not be loaded. Results may be incomplete.');
+            } else {
+                writeOwnedTokensCache(walletId, addressKey, merged, requestedAt);
             }
             setTokens(merged);
         });

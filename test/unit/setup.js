@@ -62,6 +62,17 @@ afterEach(async () => {
         const advanced = await import('../../packages/core/src/shared/components/formStandard/advancedOptions.js');
         advanced.resetAdvancedStore?.();
     } catch { /* mocked module without a reset */ }
+    // A clean load saves its read, and a saved read under five minutes old
+    // answers the next mount without a request; no test inherits another's.
+    try {
+        const store = globalThis.localStorage;
+        for (let i = (store?.length ?? 0) - 1; i >= 0; i -= 1) {
+            const key = store.key(i);
+            if (key?.startsWith('xc:balanceCache:') || key?.startsWith('xc:ownedTokens:')) store.removeItem(key);
+        }
+        const freshness = await import('../../packages/core/src/shared/utils/walletDataFreshness.js');
+        freshness._resetWalletDataStale?.();
+    } catch { /* no DOM storage, or a mocked module */ }
 });
 
 afterEach(() => {

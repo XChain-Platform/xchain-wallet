@@ -76,6 +76,7 @@ import { explorerPage, uniqueRows } from '../utils/pagedRows.js';
 import { percentChangeDisplay } from '../utils/percentFormat.js';
 import { safeHttpUrl, safeImageSrc } from '../utils/externalUrl.js';
 import { readActiveAccount } from '../utils/activeAccountMemory.js';
+import { isBalanceCacheFresh, readBalanceCache } from '../utils/balanceCache.js';
 import { chainReadFailed, sumTickOnChain } from '../utils/walletBalanceShape.js';
 import styles from './TokenDetail.module.css';
 import { ActionList, ActionListItem } from '../components/ActionList.jsx';
@@ -239,6 +240,10 @@ function TokenDetailContent({
     );
     // A failed balance read leaves the amount unknown; it never reads as zero.
     const [balanceFailed, setBalanceFailed] = useState(false);
+    // Home's saved balances answer while fresh, so the network is known first.
+    const settingsReady = Boolean(settings) || Boolean(settingsError);
+    // Home's default when the setting is unset.
+    const balanceNetwork = settingsReady ? (settings?.activeNetwork || 'mainnet') : null;
     useEffect(() => {
         setBalanceFailed(false);
         if (typeof suppliedQuantity === 'string') {
@@ -246,25 +251,36 @@ function TokenDetailContent({
             return undefined;
         }
         setResolvedQuantity(null);
+        if (!settingsReady) return undefined;
+        // A failed address, or an unreadable half this asset lives in,
+        // leaves the total short, so the amount is unknown.
+        const settle = (byChain) => {
+            const half = kind === 'native' ? 'native' : 'tokens';
+            if (chainReadFailed(byChain, chainId, { half })) setBalanceFailed(true);
+            else setResolvedQuantity(sumTickOnChain(byChain, chainId, tick));
+        };
+        const accountId = readActiveAccount(walletId) || undefined;
+        const saved = !isDemoWallet(walletId) && balanceNetwork
+            ? readBalanceCache(walletId, accountId, balanceNetwork)
+            : null;
+        if (isBalanceCacheFresh(saved)) {
+            settle(saved.balances);
+            return undefined;
+        }
         if (typeof messaging.getWalletBalances !== 'function') {
             setBalanceFailed(true);
             return undefined;
         }
         let cancelled = false;
-        messaging.getWalletBalances(walletId, readActiveAccount(walletId) || undefined)
+        messaging.getWalletBalances(walletId, accountId)
             .then((byChain) => {
-                if (cancelled) return;
-                // A failed address, or an unreadable half this asset lives in,
-                // leaves the total short, so the amount is unknown.
-                const half = kind === 'native' ? 'native' : 'tokens';
-                if (chainReadFailed(byChain, chainId, { half })) setBalanceFailed(true);
-                else setResolvedQuantity(sumTickOnChain(byChain, chainId, tick));
+                if (!cancelled) settle(byChain);
             })
             .catch(() => {
                 if (!cancelled) setBalanceFailed(true);
             });
         return () => { cancelled = true; };
-    }, [messaging, walletId, chainId, tick, kind, suppliedQuantity]);
+    }, [messaging, walletId, chainId, tick, kind, suppliedQuantity, settingsReady, balanceNetwork]);
     const quantity = resolvedQuantity;
 
     const descriptor = chainRegistry.get(chainId);
@@ -2016,7 +2032,7 @@ function MarketPanel({ market, hidden, showFiat, currency, unit, locale }) {
                 room unseen so the card holds one height. */}
             <div className={portfolioChartStyles.foot}>
                 {holdingNote ? (
-                    <div className={portfolioChartStyles.tokenNote} data-chart-note={noMarketPrice ? 'no-market-price' : 'no-price-history'}>{holdingNote}</div>
+                    <div className={`${portfolioChartStyles.tokenNote}${showRanges ? '' : ` ${styles.noteInIdleRanges}`}`} data-chart-note={noMarketPrice ? 'no-market-price' : 'no-price-history'}>{holdingNote}</div>
                 ) : null}
                 <ChartRangeTabs
                     panelId={panelId}

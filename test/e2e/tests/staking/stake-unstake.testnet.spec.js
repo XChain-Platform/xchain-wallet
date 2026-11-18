@@ -152,8 +152,8 @@ test.describe('STAKE and partial UNSTAKE on Bitcoin testnet', () => {
             const row = page.getByRole('button', { name: /^Open (Validator stake), / });
             await expect(row).toBeVisible({ timeout: 120_000 });
             await row.click();
-            await page.getByRole('group', { name: 'Stake actions' })
-                .getByRole('button', { name: 'Unstake', exact: true }).click();
+            await page.getByRole('list', { name: 'Stake actions' })
+                .getByRole('button', { name: /^Unstake\b/ }).click();
             const main = page.getByRole('main');
             await expect(main.getByLabel('Signing public key', { exact: true })).toHaveValue(pubkey);
             await main.getByRole('textbox', { name: /^Amount/ }).fill(UNSTAKE_AMOUNT);

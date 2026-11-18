@@ -30,6 +30,7 @@ import { test as base, expect } from '@playwright/test';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
 import { generateBip39Mnemonic } from '../../../packages/core/src/crypto/mnemonic.js';
 import { visibleWalletMenu } from '../../../packages/core/src/shared/walletMenu.js';
+import { WALLET_DATA_STALE_KEY } from '../../../packages/core/src/shared/utils/walletDataFreshness.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
 import { stubPriceFeed } from './priceStub.js';
 import { stubHubRegistry } from './hubStub.js';
@@ -132,7 +133,7 @@ export const DEFAULT_PASSWORD = 'e2epassword1234';
  *
  * @returns {Promise<{ attempts: string[] }>} the guard, read after the spec
  */
-async function prepareDevicePage(page, { acceptLicense, outboundStubHosts, outboundLiveHosts }) {
+async function prepareDevicePage(page, { acceptLicense, outboundStubHosts, outboundLiveHosts, freshReadsOnLoad }) {
     // Registered first so it runs last: only a request no stub answered reaches it.
     const outbound = await guardOutbound(page, {
         stubbedHosts: outboundStubHosts,
@@ -145,6 +146,16 @@ async function prepareDevicePage(page, { acceptLicense, outboundStubHosts, outbo
     await stubPriceFeed(page.context());
     // Nor the mainnet hub registry the app syncs at boot; see hubStub.js.
     await stubHubRegistry(page.context());
+    // A live-chain suite funds and mines between page loads, and each reload
+    // there stands for the user's explicit refresh: every load marks the saved
+    // wallet reads stale, as the palette Refresh does, so the next read is live.
+    if (freshReadsOnLoad) {
+        await page.addInitScript((staleKey) => {
+            try {
+                window.localStorage.setItem(staleKey, String(Date.now()));
+            } catch { /* storage unavailable: nothing saved to go stale */ }
+        }, WALLET_DATA_STALE_KEY);
+    }
     if (acceptLicense) {
         await page.addInitScript(
             ([atKey, versionKey, version]) => {
@@ -169,9 +180,11 @@ export const test = base.extend({
     outboundStubHosts: [[], { option: true }],
     // Hosts a suite drives for real (the testnet config sets the services).
     outboundLiveHosts: [[], { option: true }],
+    // Live-chain configs set it; see prepareDevicePage.
+    freshReadsOnLoad: [false, { option: true }],
 
-    page: async ({ page, acceptLicense, outboundStubHosts, outboundLiveHosts }, use) => {
-        const outbound = await prepareDevicePage(page, { acceptLicense, outboundStubHosts, outboundLiveHosts });
+    page: async ({ page, acceptLicense, outboundStubHosts, outboundLiveHosts, freshReadsOnLoad }, use) => {
+        const outbound = await prepareDevicePage(page, { acceptLicense, outboundStubHosts, outboundLiveHosts, freshReadsOnLoad });
         await use(page);
         expect(outbound.attempts, 'a spec tried to reach a non-local host').toEqual([]);
     },
@@ -182,10 +195,10 @@ export const test = base.extend({
     // signer of a phrase is by design another phone anyway. Built only for a
     // spec that asks for it. `browser.newContext()` inside a test takes the
     // config's context options (baseURL, viewport, user agent), like `page`.
-    otherPhone: async ({ browser, acceptLicense, outboundStubHosts, outboundLiveHosts }, use) => {
+    otherPhone: async ({ browser, acceptLicense, outboundStubHosts, outboundLiveHosts, freshReadsOnLoad }, use) => {
         const context = await browser.newContext();
         const phone = await context.newPage();
-        const outbound = await prepareDevicePage(phone, { acceptLicense, outboundStubHosts, outboundLiveHosts });
+        const outbound = await prepareDevicePage(phone, { acceptLicense, outboundStubHosts, outboundLiveHosts, freshReadsOnLoad });
         await use(phone);
         expect(outbound.attempts, 'a spec tried to reach a non-local host from the second phone').toEqual([]);
         await context.close();
@@ -656,6 +669,29 @@ export async function clickManageTokenAction(main, label, { timeout = 30_000 } =
 }
 
 /**
+ * Waits for a token opened from My Tokens to show its management view and
+ * puts it on the Actions tab, where the owner groups (Supply, Distribute,
+ * Token page, Ownership, Rules and automation) list the issuer actions.
+ *
+ * The view is the region "<TICK> token management" beside the token list;
+ * there is no "Manage Token" heading any more.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} [message]
+ * @returns {Promise<import('@playwright/test').Locator>} the management region
+ */
+export async function expectManageTokenView(page, message = 'the token did not open its management view') {
+    const view = page.getByRole('region', { name: / token management$/ }).first();
+    await expect(view, message).toBeVisible({ timeout: 30_000 });
+    const actionsTab = view.getByRole('tab', { name: 'Actions', exact: true });
+    if (await actionsTab.isVisible().catch(() => false)
+        && (await actionsTab.getAttribute('aria-selected')) !== 'true') {
+        await actionsTab.click();
+    }
+    return view;
+}
+
+/**
  * Waits for a My Tokens row, pressing the screen's own Try again while its
  * owned-tokens read has failed.
  *
@@ -703,8 +739,15 @@ export async function pickIssueParent(main, parent) {
     // Ownership comes from the explorer, so a just-issued parent can take a
     // moment to list.
     const row = main.page().getByRole('button', { name: new RegExp(`^Select ${escaped} on `) });
-    await expect(row, `the Parent token picker does not list ${parent} as owned by this wallet`)
-        .toBeVisible({ timeout: 90_000 });
+    // The picker reads the owned tokens once on open and does not retry a
+    // rate-limited read itself, so its own Try Again is pressed while that
+    // failed-read state shows.
+    const retry = main.page().getByRole('main').getByRole('button', { name: /^Try again$/i });
+    await expect(async () => {
+        if (await retry.first().isVisible().catch(() => false)) await retry.first().click();
+        await expect(row).toBeVisible({ timeout: 5_000 });
+    }, `the Parent token picker does not list ${parent} as owned by this wallet`)
+        .toPass({ timeout: 90_000, intervals: [2_000, 5_000, 10_000] });
     await row.click();
     await expect(main.page().getByRole('button', { name: new RegExp(`^Parent token: ${escaped} on `) }))
         .toBeVisible({ timeout: 30_000 });

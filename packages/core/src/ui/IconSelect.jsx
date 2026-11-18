@@ -435,6 +435,9 @@ function visibleBand(node, vh) {
  */
 export function listPlacement(popover, trigger) {
     if (!popover || !trigger || typeof window === 'undefined') return null;
+    // A list laid out in its container's flow (a filter panel) grows that
+    // container, which scrolls, so a cap here would cut options off.
+    if (window.getComputedStyle?.(popover)?.position === 'static') return NO_FLIP;
     const vw = window.innerWidth || document.documentElement?.clientWidth || 0;
     const vh = window.innerHeight || document.documentElement?.clientHeight || 0;
     const list = popover.getBoundingClientRect();

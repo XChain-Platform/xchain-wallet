@@ -304,7 +304,11 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
             const build = async (tick, nativeFee) => {
                 const main = await fillIssueForm(watcherPhone, tick, { nativeFee });
                 await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
-                await main.getByRole('button', { name: 'Create Transaction for Signing', exact: true }).click();
+                // The watcher review is the shared confirm screen; its
+                // Approve builds the unsigned transaction.
+                await expect(watcherPhone.getByTestId('confirm-modal'), 'the watcher review did not open')
+                    .toBeVisible({ timeout: 90_000 });
+                await approveConfirm(watcherPhone, 'the watcher build');
                 // By ROLE: the panel also carries a "Copy unsigned transaction
                 // hex" button, so the label alone matches two elements.
                 const hex = watcherPhone.getByRole('textbox', { name: 'Unsigned transaction code' });

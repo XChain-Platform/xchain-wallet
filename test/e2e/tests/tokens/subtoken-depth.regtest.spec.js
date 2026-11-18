@@ -462,20 +462,25 @@ test.describe(`subtoken depth on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toMatch(/parent unknown/i);
 
             const satsBefore = await coinBalanceSats(owner);
-            await fillSubtoken(page, {
-                parent: absentParent, child: GRAND, supply: GRAND_SUPPLY,
-            });
 
-            // Refused on the Details form by the wallet's fail-closed parent
-            // lookup, so no confirm screen opens and no fee is attached.
-            const alert = page.getByRole('alert')
-                .filter({ hasText: /could not be confirmed as a token this wallet owns/i });
-            await expect(alert,
-                'the wizard neither refused a grandchild under a non-existent middle level nor '
-                + 'explained it, which is what truncating the parent to its first segment would '
-                + 'look like from here')
+            // The Parent token is a picker of tokens this wallet owns (no
+            // typed ticker), so an absent middle level cannot be chosen at
+            // all: the picker offers the real parent and never the absent one.
+            await reloadToHome(page);
+            await openPaletteCommand(page, 'Create a token');
+            const main = page.getByRole('main');
+            await pickIssuePreset(main, /Subtoken/);
+            const parentField = main.getByRole('button', { name: /^Parent token:/ });
+            await expect(parentField).toBeVisible({ timeout: 30_000 });
+            await parentField.click();
+            const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            await expect(page.getByRole('button', { name: new RegExp(`^Select ${esc(PARENT)} on `) }),
+                'the Parent token picker does not list the real top-level parent, so its absence '
+                + 'check below would prove nothing')
                 .toBeVisible({ timeout: 90_000 });
-            await expect(alert).toContainText(/Check the ticker and your connection, then try again/i);
+            await expect(page.getByRole('button', { name: new RegExp(`^Select ${esc(absentParent)} on `) }),
+                'the Parent token picker offers a middle level that was never issued')
+                .toHaveCount(0);
             expect(await page.getByTestId('confirm-modal').count(),
                 'an ISSUE the network has already refused reached the confirm screen')
                 .toBe(0);

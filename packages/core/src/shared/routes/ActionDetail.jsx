@@ -96,7 +96,7 @@ export function ActionDetail({ entry: entryProp, walletId, chainTip, indexerWate
         const id = setInterval(() => {
             if (typeof document !== 'undefined' && document.hidden) return;
             look();
-        }, flowsLib.BALANCE_POLL_INTERVAL_MS);
+        }, flowsLib.PENDING_POLL_INTERVAL_MS);
         return () => { cancelled = true; clearInterval(id); };
     }, [pendingTxHash, confirmed, entryProp, messaging, browserOnline, source.live]);
 

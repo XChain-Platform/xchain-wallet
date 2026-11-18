@@ -378,7 +378,8 @@ async function generateVenueAddress(page) {
     await page.getByRole('button', { name: 'Add or import address' }).click();
     await page.getByRole('menuitem', { name: 'Add address' }).click();
     await selectVenueChain(page, 'Coin');
-    await page.getByRole('button', { name: /^Generate/ }).click();
+    // The Add addresses form submits with "Add Address" in its footer.
+    await page.getByRole('button', { name: /^(?:Generate|Add Address(?:es)?$)/ }).click();
 
     const generated = (await listed()).filter((a) => !before.has(a));
     expect(generated.length, 'generating added exactly one address to the list').toBe(1);
@@ -448,8 +449,14 @@ test.describe(`subtoken issuance on ${REGTEST_CHAIN_LABEL}`, () => {
             // carries only the native-fee forfeiture notice on this chain.
             await expect(page.getByTestId('confirm-status'))
                 .toHaveAttribute('data-state', 'pass');
-            await expect(page.getByTestId('confirm-warning'))
-                .toHaveAttribute('data-state', 'irreversible');
+            // The short warning is drawn only when there is something to say
+            // (G127 revised 2026-11-16), and on Bitcoin regtest an ISSUE has
+            // none; when it is drawn it is the irreversible kind, never a
+            // network verdict.
+            const warning = page.getByTestId('confirm-warning');
+            if (await warning.count() > 0) {
+                await expect(warning).toHaveAttribute('data-state', 'irreversible');
+            }
             await expect(page.getByTestId('ack-DRYRUN_INVALID')).toHaveCount(0);
 
             // THE ASSERTION THIS TEST EXISTS FOR. Litecoin forces the native

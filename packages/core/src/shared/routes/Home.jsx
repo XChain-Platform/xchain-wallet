@@ -42,7 +42,8 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { humanizeError } from '../utils/humanizeError.js';
 import { writeActiveWallet } from '../utils/activeWalletMemory.js';
 import { takeInterruptedView } from '../utils/lastViewMemory.js';
-import { readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
+import { isBalanceCacheFresh, readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
+import { isWalletDataFresh, markWalletDataStale, readTimeOf, subscribeWalletDataStale } from '../utils/walletDataFreshness.js';
 import { readHistoryCache } from '../utils/historyCache.js';
 import { historyResponseRows, normalizeHistoryRow, recentActivityEntries } from '../utils/historyRow.js';
 import { loadDefiPositions as readDefiPositions } from '../hooks/useDefiPositions.js';
@@ -131,16 +132,16 @@ function rateLimitWaitFromBalances(balancesByChain) {
 }
 
 // Nothing pushes balance changes to the wallet (an incoming send, a mint
-// landing, a token someone else sent you), so Home has to poll for them.
-// 20s balances catching an incoming token promptly against hammering the
-// SDK/indexer on every open tab; see the polling effect below, which also
-// refreshes immediately on focus/visibility and pauses while hidden.
+// landing, a token someone else sent you), so Home asks. A saved read under
+// BALANCE_MAX_AGE_MS old is shown without a request; an open Home checks every
+// BALANCE_CHECK_INTERVAL_MS and on focus, and reads only once the data has
+// aged past that. A broadcast or the refresh button reads at once.
 //
-// Defined in flows/balances.js, next to the aggregator this re-runs, because
-// the same number is the wallet's sustained request rate against the public
-// endpoints and tools/release/cold-open-profile.mjs has to read the real one
+// Defined in flows/balances.js, next to the aggregator they gate, because the
+// same numbers are the wallet's sustained request rate against the public
+// endpoints and tools/release/cold-open-profile.mjs has to read the real ones
 // when it works out what the zone rate limits must clear.
-const { BALANCE_POLL_INTERVAL_MS } = flowsLib;
+const { BALANCE_MAX_AGE_MS, BALANCE_CHECK_INTERVAL_MS } = flowsLib;
 
 /**
  * Home screen: landing view for an unlocked wallet. Header shows the
@@ -273,8 +274,10 @@ export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onO
     );
     // Cached rows stay visible while their live replacement is in flight.
     // This flag distinguishes that refresh from a first load with no data.
+    // A fresh saved copy is not refreshed on open, so it is not updating.
     const [cachedBalancesUpdating, setCachedBalancesUpdating] = useState(
-        Boolean(initialBalanceCache) && isNavigatorOnline(),
+        Boolean(initialBalanceCache) && isNavigatorOnline()
+            && !(sourceLive && isBalanceCacheFresh(initialBalanceCache)),
     );
     const [sdkLoadFailed, setSdkLoadFailed] = useState(false);
     const balanceScopeRef = useRef({
@@ -297,7 +300,8 @@ export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onO
         setBalances(scopedCache?.balances || null);
         setActiveByChain(scopedCache?.activeByChain || {});
         setBalancesFetchedAt(scopedCache?.fetchedAt ?? null);
-        setCachedBalancesUpdating(Boolean(scopedCache) && isNavigatorOnline());
+        setCachedBalancesUpdating(Boolean(scopedCache) && isNavigatorOnline()
+            && !(sourceLive && isBalanceCacheFresh(scopedCache)));
         balancesScopeRef.current = scopedCache ? `${activeWalletId}:${activeAccountId || ''}` : null;
     }
     // What every row consumer reads: the balances plus each shown address's
@@ -320,6 +324,7 @@ export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onO
         const cached = readHistoryCache(activeWalletId, activeAccountId, activeNetwork);
         const cachedEntries = cached?.entries ? recentActivityEntries(cached.entries) : null;
         setRecentActivityState({ scope, entries: cachedEntries, failed: false });
+        if (cachedEntries && sourceLive && isWalletDataFresh(cached.fetchedAt)) return;
         const land = (entries, failed) => {
             if (recentActivityRequestRef.current !== scope) return;
             setRecentActivityState({ scope, entries, failed });
@@ -467,12 +472,19 @@ export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onO
     // refresh would be noisy; the user explicitly opting Hide / dismissing
     // the toast counts as "they decided" for the rest of the session.
     const spamNudgedForWalletRef = useRef(/** @type {string | null} */ (null));
-    // One re-poll rule for this mount. The interval below already bounds how
-    // stale a balance can be, so a focus/visibilitychange re-poll only buys
-    // anything once the balances are older than that; without the rule an
-    // alt-tab (which fires both events) cost two full reads of every address
-    // inside one rate-limit period. See flows/pollThrottle.js.
-    const pollThrottleRef = useRef(flowsLib.createPollThrottle(BALANCE_POLL_INTERVAL_MS));
+    // The in-flight slot and the age of the balances on screen: its last
+    // success is the shown read's time (walletDataFreshness.readTimeOf), so a
+    // broadcast during or after that read leaves the data due. See
+    // flows/pollThrottle.js.
+    const pollThrottleRef = useRef(flowsLib.createPollThrottle(BALANCE_MAX_AGE_MS));
+    const balancesDue = useCallback(
+        () => !isWalletDataFresh(pollThrottleRef.current.lastSuccessAt()),
+        [],
+    );
+    // A broadcast heard while a load was in flight: that load began before the
+    // send, so another follows it at once.
+    const refreshAfterLoadRef = useRef(false);
+    const refreshNowRef = useRef(/** @type {(() => void) | null} */ (null));
 
     useEffect(() => {
         let cancelled = false;
@@ -678,132 +690,160 @@ export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onO
         reset,
         isCancelled,
         reportError = false,
+        savedReadAt = null,
     }) => {
-        if (!activeNetwork) return;
+        if (!activeNetwork) {
+            // Settings are still loading: release any slot the caller claimed;
+            // the mount effect reads once the network is known.
+            pollThrottleRef.current.fail();
+            return;
+        }
         // The saved copy of this pair's balances; only a clean fresh read
         // replaces it. activeForCache starts from the saved active addresses.
         let activeForCache = readBalanceCache(walletId, accountId, activeNetwork)?.activeByChain || {};
         let freshBalances = null;
         let freshFetchedAt = null;
+        let freshReadAt = null;
         let freshBalancesCacheable = false;
-        // A device-offline signal or corroborated service outage avoids work
-        // that cannot finish and keeps saved balances in place.
-        if (offline || !isNavigatorOnline()) {
+        const requestedAt = Date.now();
+        if (savedReadAt !== null) {
+            // The saved copy is fresh: it stays on screen, no balance request
+            // runs, and its age decides when the next one does.
+            pollThrottleRef.current.reset();
+            pollThrottleRef.current.succeed(savedReadAt);
+            if (!isCancelled()) {
+                setCachedBalancesUpdating(false);
+                setBalanceLoadFailed(false);
+                setLoadError(null);
+                // A countdown from the previous scope must not fire a read here.
+                setRateLimitRetryAt(null);
+            }
+        } else if (offline || !isNavigatorOnline()) {
+            // A device-offline signal or corroborated service outage avoids
+            // work that cannot finish and keeps saved balances in place.
             pollThrottleRef.current.fail();
             if (!isCancelled()) setCachedBalancesUpdating(false);
             return;
         }
-        if (reset) {
-            const scopeKey = `${walletId}:${accountId || ''}`;
-            const hasCachedBalances = balancesScopeRef.current === scopeKey;
-            // A reset owns a fresh polling window even when cached rows remain
-            // visible for the same wallet and account.
-            pollThrottleRef.current.reset();
-            // ...but the load about to run DOES take the in-flight slot, the
-            // way an event-driven one does. Without it a cold open that is
-            // still waiting (a 429's honoured Retry-After holds one request for
-            // up to 60 s) would be joined by the 20 s beat, which is the burst
-            // the limiter counted in the first place.
-            pollThrottleRef.current.start();
-            setBalanceLoadFailed(false);
-            if (!hasCachedBalances) {
-                setBalances(null);
-                setBalancesFetchedAt(null);
-                setActiveByChain({});
-                setCachedBalancesUpdating(false);
-                setMultisig(null);
-            } else {
-                setCachedBalancesUpdating(isNavigatorOnline());
+        if (savedReadAt === null) {
+            if (reset) {
+                const scopeKey = `${walletId}:${accountId || ''}`;
+                const hasCachedBalances = balancesScopeRef.current === scopeKey;
+                // A reset owns a fresh polling window even when cached rows remain
+                // visible for the same wallet and account.
+                pollThrottleRef.current.reset();
+                // ...but the load about to run DOES take the in-flight slot, the
+                // way an event-driven one does. Without it a cold open that is
+                // still waiting (a 429's honoured Retry-After holds one request for
+                // up to 60 s) would be joined by the check beat, which is the burst
+                // the limiter counted in the first place.
+                pollThrottleRef.current.start();
+                setBalanceLoadFailed(false);
+                if (!hasCachedBalances) {
+                    setBalances(null);
+                    setBalancesFetchedAt(null);
+                    setActiveByChain({});
+                    setCachedBalancesUpdating(false);
+                    setMultisig(null);
+                } else {
+                    setCachedBalancesUpdating(isNavigatorOnline());
+                }
+                setLoadError(null);
             }
-            setLoadError(null);
-        }
 
-        try {
-            // The selected source returns the same balance shape for sample
-            // data and live data, so every downstream row follows one path.
-            const b = await messaging.getWalletBalances(walletId, accountId);
-            if (!isCancelled()) {
-                // A read can LAND and still be rate limited: the aggregator
-                // reports a refused address as that entry's `error` string
-                // rather than throwing, so the banner is decided from what
-                // came back, on the poll path as well as the reset one. The
-                // last complete balances stay on screen until every requested
-                // address has a usable answer.
-                const wait = rateLimitWaitFromBalances(b);
-                const hasBalanceFailure = Object.values(b || {}).some((rows) => (
-                    Array.isArray(rows) && rows.some((entry) => entry?.error)
-                ));
-                if (hasBalanceFailure) {
-                    const sdkFailed = Object.values(b || {}).some((rows) => (
-                        Array.isArray(rows) && rows.some((entry) => isSdkLoadFailure(entry?.error))
+            try {
+                // The selected source returns the same balance shape for sample
+                // data and live data, so every downstream row follows one path.
+                const b = await messaging.getWalletBalances(walletId, accountId);
+                if (!isCancelled()) {
+                    // A read can LAND and still be rate limited: the aggregator
+                    // reports a refused address as that entry's `error` string
+                    // rather than throwing, so the banner is decided from what
+                    // came back, on the poll path as well as the reset one. The
+                    // last complete balances stay on screen until every requested
+                    // address has a usable answer.
+                    const wait = rateLimitWaitFromBalances(b);
+                    const hasBalanceFailure = Object.values(b || {}).some((rows) => (
+                        Array.isArray(rows) && rows.some((entry) => entry?.error)
                     ));
-                    if (sdkFailed) setSdkLoadFailed(true);
-                    pollThrottleRef.current.fail();
+                    if (hasBalanceFailure) {
+                        const sdkFailed = Object.values(b || {}).some((rows) => (
+                            Array.isArray(rows) && rows.some((entry) => isSdkLoadFailure(entry?.error))
+                        ));
+                        if (sdkFailed) setSdkLoadFailed(true);
+                        pollThrottleRef.current.fail();
+                        setBalanceLoadFailed(true);
+                        if (wait) beginRateLimitWait(wait.seconds);
+                        else setLoadError("Couldn't load balances. Try again.");
+                        if (reportError && balancesRef.current !== null) {
+                            showToast({
+                                message: wait
+                                    ? "Couldn't refresh balances. The service asked the wallet to slow down. Try again in a moment."
+                                    : "Couldn't refresh balances. Try again.",
+                                variant: 'error',
+                            });
+                        }
+                    } else {
+                        freshBalancesCacheable = true;
+                        setSdkLoadFailed(false);
+                        // Fresh balances restart the age, whichever path asks
+                        // for them; a broadcast during the read leaves them due.
+                        freshReadAt = readTimeOf(requestedAt);
+                        pollThrottleRef.current.succeed(freshReadAt);
+                        setBalanceLoadFailed(false);
+                        balancesScopeRef.current = `${walletId}:${accountId || ''}`;
+                        setBalances(b);
+                        setBalancesFetchedAt(Date.now());
+                        freshBalances = b;
+                        freshFetchedAt = Date.now();
+                    }
+                    setCachedBalancesUpdating(false);
+                    if (!hasBalanceFailure) {
+                        // Balances landed clean, so whatever the last failure said
+                        // is no longer true. Cleared on the poll path too: a wallet
+                        // that recovered on its own used to keep the error banner
+                        // over correct balances until the next switch, and the
+                        // countdown promises the banner goes when the wait pays off.
+                        setLoadError(null);
+                        setRateLimitRetryAt(null);
+                    }
+                }
+            } catch (err) {
+                // Release the window rather than move it: a blip must not pin the
+                // screen to stale balances for a whole interval.
+                pollThrottleRef.current.fail();
+                // A failed poll leaves the last complete rows in place and marks
+                // them as saved data, so they cannot look freshly synchronized.
+                if (!isCancelled()) {
+                    setCachedBalancesUpdating(false);
                     setBalanceLoadFailed(true);
-                    if (wait) beginRateLimitWait(wait.seconds);
-                    else setLoadError("Couldn't load balances. Try again.");
+                    if (isSdkLoadFailure(err)) setSdkLoadFailed(true);
+                    // The raw SDK message used to go straight on screen here, URL
+                    // and all ("Explorer returned HTTP 429 for /RLTC/api/balances/
+                    // bcrt1q..."). humanizeError owns the wording for every shape
+                    // this can arrive in.
+                    // A THROWN failure is still possible (the vault, the messaging
+                    // channel, a chain-wide fault), and it is the path that used to
+                    // print the wire text.
+                    const humanized = humanizeError(err, BALANCES_VERB);
                     if (reportError && balancesRef.current !== null) {
                         showToast({
-                            message: wait
-                                ? "Couldn't refresh balances. The service asked the wallet to slow down. Try again in a moment."
-                                : "Couldn't refresh balances. Try again.",
+                            message: humanizeError(err, 'refresh balances').message,
                             variant: 'error',
                         });
                     }
-                } else {
-                    freshBalancesCacheable = true;
-                    setSdkLoadFailed(false);
-                    // Fresh balances restart the re-poll window, whichever
-                    // path asks for them.
-                    pollThrottleRef.current.succeed();
-                    setBalanceLoadFailed(false);
-                    balancesScopeRef.current = `${walletId}:${accountId || ''}`;
-                    setBalances(b);
-                    setBalancesFetchedAt(Date.now());
-                    freshBalances = b;
-                    freshFetchedAt = Date.now();
-                }
-                setCachedBalancesUpdating(false);
-                if (!hasBalanceFailure) {
-                    // Balances landed clean, so whatever the last failure said
-                    // is no longer true. Cleared on the poll path too: a wallet
-                    // that recovered on its own used to keep the error banner
-                    // over correct balances until the next switch, and the
-                    // countdown promises the banner goes when the wait pays off.
-                    setLoadError(null);
-                    setRateLimitRetryAt(null);
+                    if (humanized.cause === 'rate_limited') {
+                        beginRateLimitWait(humanized.retryAfterSeconds ?? null);
+                    } else {
+                        setLoadError(humanized.message);
+                    }
                 }
             }
-        } catch (err) {
-            // Release the window rather than move it: a blip must not pin the
-            // screen to stale balances for a whole interval.
-            pollThrottleRef.current.fail();
-            // A failed poll leaves the last complete rows in place and marks
-            // them as saved data, so they cannot look freshly synchronized.
-            if (!isCancelled()) {
-                setCachedBalancesUpdating(false);
-                setBalanceLoadFailed(true);
-                if (isSdkLoadFailure(err)) setSdkLoadFailed(true);
-                // The raw SDK message used to go straight on screen here, URL
-                // and all ("Explorer returned HTTP 429 for /RLTC/api/balances/
-                // bcrt1q..."). humanizeError owns the wording for every shape
-                // this can arrive in.
-                // A THROWN failure is still possible (the vault, the messaging
-                // channel, a chain-wide fault), and it is the path that used to
-                // print the wire text.
-                const humanized = humanizeError(err, BALANCES_VERB);
-                if (reportError && balancesRef.current !== null) {
-                    showToast({
-                        message: humanizeError(err, 'refresh balances').message,
-                        variant: 'error',
-                    });
-                }
-                if (humanized.cause === 'rate_limited') {
-                    beginRateLimitWait(humanized.retryAfterSeconds ?? null);
-                } else {
-                    setLoadError(humanized.message);
-                }
-            }
+        }
+
+        if (refreshAfterLoadRef.current && !pollThrottleRef.current.isInFlight()) {
+            refreshAfterLoadRef.current = false;
+            if (!isCancelled()) setTimeout(() => refreshNowRef.current?.(), 0);
         }
 
         // A wallet or account switch can cancel this load while the balance
@@ -830,6 +870,7 @@ export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onO
                 balances: freshBalances,
                 activeByChain: activeForCache,
                 fetchedAt: freshFetchedAt,
+                readAt: freshReadAt,
             }, activeNetwork);
         }
 
@@ -893,23 +934,31 @@ export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onO
     // Switching either flushes stale state and refetches. When
     // `activeAccountId` is null (data layer returned no accounts for this
     // wallet, or pre-load), the calls fall back to wallet-wide aggregation.
+    // A wallet, account or network switch, a resume and a remount read only
+    // when this scope has no fresh saved copy. A new address forces a read.
+    const lastHomeReloadKeyRef = useRef(homeReloadKey);
     useEffect(() => {
         if (!activeWalletId || !activeNetwork) return undefined;
         let cancelled = false;
+        const addressAdded = lastHomeReloadKeyRef.current !== homeReloadKey;
+        lastHomeReloadKeyRef.current = homeReloadKey;
+        const saved = sourceLive && !addressAdded
+            ? readBalanceCache(activeWalletId, activeAccountId, activeNetwork)
+            : null;
         loadHomeData(activeWalletId, activeAccountId || undefined, {
             reset: true,
             isCancelled: () => cancelled,
+            savedReadAt: saved && isBalanceCacheFresh(saved) ? saved.readAt : null,
         });
         return () => { cancelled = true; };
-    }, [activeWalletId, activeAccountId, activeNetwork, homeReloadKey, resumeKey, loadHomeData]);
+    }, [activeWalletId, activeAccountId, activeNetwork, homeReloadKey, resumeKey, loadHomeData, sourceLive]);
 
     // Nothing pushes balance changes to the wallet - an incoming send, a
-    // mint landing, a token someone else sent you - so Home has to ask.
-    // Poll on an interval, and also refresh the moment the tab/window
-    // regains focus or visibility, since that's exactly when a user goes
-    // looking for a balance that "isn't showing up yet". Paused while the
-    // document is hidden so a backgrounded wallet isn't burning SDK/indexer
-    // calls for no viewer.
+    // mint landing, a token someone else sent you - so Home has to ask. A
+    // check runs every BALANCE_CHECK_INTERVAL_MS and when the tab or window
+    // regains focus or visibility, and reads only once the balances are
+    // BALANCE_MAX_AGE_MS old. Paused while the document is hidden so a
+    // backgrounded wallet isn't burning SDK/indexer calls for no viewer.
     useEffect(() => {
         if (!activeWalletId || !sourceLive) return undefined;
         let cancelled = false;
@@ -920,55 +969,54 @@ export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onO
             reset: false, isCancelled: () => cancelled,
         });
 
-        // The beat is not gated on the WINDOW: it is what keeps the window
-        // moving, since loadHomeData notes the success when balances land. It
-        // IS gated on the in-flight slot, and that is the whole of the change:
-        // a load can now sit for up to 60 s while the SDK waits out a
-        // `Retry-After`, and a 20 s beat firing through it would put three
-        // whole wallet loads against the bucket the first one is waiting on,
-        // which is how one 429 becomes three. Checked before `start()`, since
-        // `start()` claims the slot and its false answer also means "the window
-        // has not aged", which the beat must ignore.
-        const poll = () => {
+        // Gated on the in-flight slot: a load can sit for up to 60 s while
+        // the SDK waits out a `Retry-After`, and a check firing through it
+        // would stack wallet loads against the bucket the first is waiting on.
+        // The beat and a focus or visibility return share one rule, so an
+        // alt-tab (both events at once) costs at most one load.
+        const check = () => {
             if (typeof document !== 'undefined' && document.hidden) return;
             if (offline || !isNavigatorOnline()) return;
             if (pollThrottleRef.current.isInFlight()) return;
-            // Claim the slot the reset path's way. `start()` alone marks a
-            // load in flight only once the window has aged, and at beat time
-            // the window is younger than the interval by the previous load's
-            // own latency (the beat fires one interval after the previous
-            // BEAT; `succeed()` ran later, when that load landed), so a bare
-            // `start()` left the beat's load unmarked and the next beat
-            // stacked a second one on it. The window is re-keyed on this
-            // load's landing either way.
+            if (!balancesDue()) return;
+            // `reset()` first: `start()` alone claims the slot only once the
+            // throttle's own window has aged, and the age rule here is ours.
             pollThrottleRef.current.reset();
             pollThrottleRef.current.start();
             load();
         };
 
-        const stopPollInterval = startVisibleInterval(poll, BALANCE_POLL_INTERVAL_MS, {
+        const stopPollInterval = startVisibleInterval(check, BALANCE_CHECK_INTERVAL_MS, {
             runOnVisible: false,
         });
-        // An alt-tab fires `focus` and `visibilitychange` together, so coming
-        // back to the wallet used to cost two loads. The first event after the
-        // balances have aged past one interval still fires at once; the rest
-        // of the burst rides the data the beat already has.
-        const onVisibilityOrFocus = () => {
-            if (typeof document !== 'undefined' && document.hidden) return;
-            if (offline || !isNavigatorOnline()) return;
-            if (!pollThrottleRef.current.start()) return;
+        window.addEventListener('focus', check);
+        document.addEventListener('visibilitychange', check);
+
+        // A broadcast from this device, or an address write, makes every
+        // saved balance wrong at once, whatever its age.
+        const refreshNow = () => {
+            if (cancelled || offline || !isNavigatorOnline()) return;
+            if (pollThrottleRef.current.isInFlight()) {
+                refreshAfterLoadRef.current = true;
+                return;
+            }
+            pollThrottleRef.current.reset();
+            pollThrottleRef.current.start();
             load();
         };
-        window.addEventListener('focus', onVisibilityOrFocus);
-        document.addEventListener('visibilitychange', onVisibilityOrFocus);
+        refreshNowRef.current = refreshNow;
+        const stopStaleWatch = subscribeWalletDataStale(refreshNow);
 
         return () => {
             cancelled = true;
             stopPollInterval();
-            window.removeEventListener('focus', onVisibilityOrFocus);
-            document.removeEventListener('visibilitychange', onVisibilityOrFocus);
+            stopStaleWatch();
+            if (refreshNowRef.current === refreshNow) refreshNowRef.current = null;
+            refreshAfterLoadRef.current = false;
+            window.removeEventListener('focus', check);
+            document.removeEventListener('visibilitychange', check);
         };
-    }, [activeWalletId, activeAccountId, loadHomeData, offline, sourceLive]);
+    }, [activeWalletId, activeAccountId, loadHomeData, offline, sourceLive, balancesDue]);
 
     // Reconnect immediately after either the device or wallet services recover.
     // The quiet refresh preserves cached rows until fresh data lands.
@@ -1215,7 +1263,12 @@ export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onO
                     the controls that raised it. */}
                 <AddressDiscoveryNotice
                     dismissOnLeave
-                    onFinished={(job) => { if (job?.found > 0) void refreshPortfolio(); }}
+                    onFinished={(job) => {
+                        if (!(job?.found > 0)) return;
+                        // New addresses: no saved read covers them.
+                        markWalletDataStale({ notify: false });
+                        void refreshPortfolio();
+                    }}
                 />
                 {interruptedAction ? (
                     <StatusMessage variant="warning">

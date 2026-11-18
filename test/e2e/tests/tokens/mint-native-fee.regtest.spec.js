@@ -96,7 +96,10 @@ test.describe(`MINT native-fee payment on ${REGTEST_CHAIN_LABEL} regtest`, () =>
             await selectPickerAsset(page, TICK);
             await main.getByRole('textbox', { name: /^Amount/ }).fill(String(MINT_AMOUNT));
 
-            const name = new RegExp(`^Pay protocol fee in ${REGTEST_TICKER} instead of XCHAIN`);
+            // The switch reads "Pay protocol fee in BTC"; the old "instead of
+            // XCHAIN" tail is optional so this absence check cannot pass by
+            // name drift alone.
+            const name = new RegExp(`^Pay protocol fee in ${REGTEST_TICKER}(?: instead of XCHAIN)?$`);
             const toggle = main.getByRole('switch', { name })
                 .or(main.getByRole('checkbox', { name })).first();
             await expect(toggle, 'MINT exposes a protocol-fee switch').toHaveCount(0);

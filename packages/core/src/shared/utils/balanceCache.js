@@ -12,6 +12,8 @@
 // Wallet, account and network ids live in both the key and value so malformed
 // or misplaced storage cannot cross any display boundary.
 
+import { isWalletDataFresh } from './walletDataFreshness.js';
+
 const NS = 'xc:balanceCache:v2:';
 const clearedWallets = new Set();
 
@@ -36,7 +38,7 @@ function networkScope(activeNetwork) {
  * @param {string | null | undefined} walletId
  * @param {string | null | undefined} accountId
  * @param {string | null} [activeNetwork]
- * @returns {{ balances: Record<string, any[]>, activeByChain: Record<string, any>, fetchedAt: number } | null}
+ * @returns {{ balances: Record<string, any[]>, activeByChain: Record<string, any>, fetchedAt: number, readAt: number } | null}
  */
 export function readBalanceCache(walletId, accountId, activeNetwork) {
     if (typeof walletId !== 'string' || !walletId) return null;
@@ -58,7 +60,12 @@ export function readBalanceCache(walletId, accountId, activeNetwork) {
             && !Array.isArray(stored.activeByChain)
             ? stored.activeByChain
             : {};
-        return { balances: stored.balances, activeByChain, fetchedAt: stored.fetchedAt };
+        // What the read's age counts from (walletDataFreshness.readTimeOf);
+        // a copy from before this device's last broadcast is stale.
+        const readAt = Number.isFinite(stored.readAt) && stored.readAt > 0 && stored.readAt <= stored.fetchedAt
+            ? stored.readAt
+            : stored.fetchedAt;
+        return { balances: stored.balances, activeByChain, fetchedAt: stored.fetchedAt, readAt };
     } catch {
         return null;
     }
@@ -67,7 +74,7 @@ export function readBalanceCache(walletId, accountId, activeNetwork) {
 /**
  * @param {string | null | undefined} walletId
  * @param {string | null | undefined} accountId
- * @param {{ balances: Record<string, any[]>, activeByChain?: Record<string, any>, fetchedAt: number }} value
+ * @param {{ balances: Record<string, any[]>, activeByChain?: Record<string, any>, fetchedAt: number, readAt?: number }} value
  * @param {string | null} [activeNetwork]
  */
 export function writeBalanceCache(walletId, accountId, value, activeNetwork) {
@@ -89,8 +96,19 @@ export function writeBalanceCache(walletId, accountId, value, activeNetwork) {
             balances: value.balances,
             activeByChain: value.activeByChain || {},
             fetchedAt: value.fetchedAt,
+            ...(Number.isFinite(value.readAt) ? { readAt: value.readAt } : {}),
         }));
     } catch { /* best-effort cache */ }
+}
+
+/**
+ * Is this saved copy recent enough to show without a balance request?
+ *
+ * @param {ReturnType<typeof readBalanceCache>} cache
+ * @param {number} [now]
+ */
+export function isBalanceCacheFresh(cache, now = Date.now()) {
+    return Boolean(cache) && isWalletDataFresh(cache.readAt, now);
 }
 
 /** Remove every account-scoped balance cache owned by one wallet. */

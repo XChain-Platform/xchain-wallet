@@ -8,7 +8,7 @@
 
 // D18/C13/C29 regression. `useProofVerification`'s effect used to key on the
 // `balances` object itself. Home hands the hook a NEW `balances` object on
-// every `BALANCE_POLL_INTERVAL_MS` poll even when the addresses and tokens
+// every balance refresh even when the addresses and tokens
 // on it are unchanged, so the whole SPV proof fan-out (two explorer reads
 // per (chain, address, token), under 60/min limiters) re-fired every poll.
 // This pins the fix: the effect now keys on `proofJobsSignature`, a stable
