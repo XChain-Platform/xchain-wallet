@@ -56,6 +56,7 @@ function makeVault() {
         addresses: memCollection(),
         contacts: memCollection(),
         connectedSites: memCollection(),
+        signers: memCollection(),
         pendingTxs: memCollection(),
         settings: memSettings(),
     };

@@ -34,7 +34,7 @@
 // tag and default label.
 
 import { createAddress } from '../schemas/address.js';
-import { addressSourceForSignerKind } from '../schemas/constants.js';
+import { addressSourceForSignerKind, isDeviceAddressSource } from '../schemas/constants.js';
 import { NoMatchingAccountError } from './receiveAddress.js';
 import { unlockWallet } from './unlockWallet.js';
 import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
@@ -196,7 +196,7 @@ export async function dispenserAddress({
         // external index space per account, so a Trezor account keeps
         // allocating index+1 instead of colliding at 0. imported-wif /
         // watch-only have a null derivationPath and drop out below.
-        if (a.source !== 'hd' && a.source !== 'trezor' && a.source !== 'ledger') continue;
+        if (a.source !== 'hd' && !isDeviceAddressSource(a.source)) continue;
         if (typeof a.derivationPath !== 'string') continue;
         const parts = a.derivationPath.split('/');
         // BIP44-style path: m / purpose' / coin' / account' / change / index

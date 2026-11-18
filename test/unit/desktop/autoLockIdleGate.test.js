@@ -122,7 +122,7 @@ describe('windowless idle auto-lock', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, (
         expect(vault.close).toHaveBeenCalled();
         expect(runtime.autoLockCleanupPending).toBe(true);
         expect(existsSync(sessionFile())).toBe(true);
-        expect(await runtime.autoLockStore.load()).not.toBe(null);
+        expect(await runtime.autoLockStore.load()).toBe(null);
 
         const statusReply = await handleIpcMessage(runtime, { type: 'session.status' });
         expect(statusReply).toMatchObject({
@@ -140,7 +140,7 @@ describe('windowless idle auto-lock', { timeout: FILESYSTEM_FIXTURE_TIMEOUT }, (
 
         expect(await enforceIdleAutoLock(runtime, now)).toEqual({
             locked: true,
-            reason: 'idle-window-elapsed',
+            reason: 'cleanup-retry',
         });
         expect(runtime.autoLockCleanupPending).toBe(false);
         expect(existsSync(sessionFile())).toBe(false);

@@ -763,6 +763,17 @@ function AppInner() {
     shownWalletId.current = activeWalletId;
     const shownView = useRef(/** @type {string} */ ('home'));
     shownView.current = unlockedView;
+    // The sync is built once so its latest-call-wins guard spans events. A
+    // chain that left remounts the open screens unless a review is showing.
+    const customChainSync = useRef(/** @type {(() => Promise<unknown>) | null} */ (null));
+    if (!customChainSync.current) {
+        customChainSync.current = registryLib.createCustomChainSync({
+            registry: APP_CHAIN_REGISTRY,
+            getSettings: messaging.getSettings,
+            onSettings: (next) => window.dispatchEvent(new CustomEvent('xc:settings-changed', { detail: next })),
+            onChainsDropped: () => { if (!isConfirmActive()) setNetworkRevision((value) => value + 1); },
+        });
+    }
 
     useEffect(() => {
         const bridge = globalThis.xchainWalletWindow;
@@ -774,6 +785,12 @@ function AppInner() {
             }
             if (change?.kind === 'wallets' && change.change === 'added') {
                 if (statusStateRef.current === 'unlocked') setWalletsRevision((value) => value + 1);
+                return;
+            }
+            // A custom network added or removed in a sibling window: read the saved
+            // settings and make this realm's registry match.
+            if (change?.kind === 'custom-chains') {
+                if (statusStateRef.current === 'unlocked') void customChainSync.current?.();
                 return;
             }
             // A sibling's settings write reaches this window's useSettings the way its own does.

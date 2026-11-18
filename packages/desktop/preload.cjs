@@ -316,6 +316,7 @@ contextBridge.exposeInMainWorld('xchainWalletWindow', {
      * Returns an unsubscribe function.
      * @param {(change: { kind: 'session' } | { kind: 'active-wallet', walletId: string }
      *   | { kind: 'settings' | 'network', settings: Record<string, unknown> }
+     *   | { kind: 'custom-chains' }
      *   | { kind: 'wallets', change: 'added' }
      *   | { kind: 'wallets', change: 'renamed' | 'removed', walletId: string }
      *   | { kind: 'accounts', change: 'added' | 'renamed', walletId: string, accountId: string }) => void} listener

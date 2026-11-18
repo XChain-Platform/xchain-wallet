@@ -52,7 +52,7 @@ assert.match(adsSrc, /export function withAdsAtEncode/, 'live builds fold and fa
 assert.match(adsSrc, /export async function commitAdsStep/, 'post-broadcast booking');
 assert.match(composeSrc, /createTxWithAdsFallback\(/, 'compose uses the fallback build');
 assert.match(submitSrc, /resolveAdsPayout\(/, 'live submit resolves the payout');
-const commitAt = submitSrc.indexOf('await commitAdsStep({ vault, ...adsVerdict() })');
+const commitAt = submitSrc.indexOf('await commitAdsStepWithBooking({ vault, ...adsVerdict() })');
 const broadcastAt = submitSrc.indexOf('result = await submitWithSigner(');
 assert.ok(broadcastAt > 0 && commitAt > broadcastAt, 'the queue is booked only after the broadcast');
 

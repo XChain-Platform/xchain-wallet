@@ -61,6 +61,7 @@ import {
 import { coinpayAction as defaultCoinpayAction } from '../flows/coinpayAction.js';
 import { indexerWatermark } from '../flows/balances.js';
 import { ATTEMPTED_STATUSES, pendingTxReferencesMatch } from '../market/coinpayPending.js';
+import { readBlockOrderMatches } from '../market/obligationPaging.js';
 import {
     extractCoinpayRows,
     getCoinpayObligationsForAddress,
@@ -407,6 +408,16 @@ export class CoinpayAutopayWatcher {
         }
     }
 
+    // A block read whole that lacks the match will not gain it by waiting, so
+    // the cycle logs it once per match instead of repeating the silent return.
+    _logMissingMatch(chainId, blockIndex, matchIndex) {
+        this._missingMatches = this._missingMatches || new Set();
+        const key = `${chainId}:${matchIndex}`;
+        if (this._missingMatches.has(key)) return;
+        this._missingMatches.add(key);
+        this._log.warn(`CoinpayAutopayWatcher: match ${matchIndex} is not in block ${blockIndex} on ${chainId}`);
+    }
+
     async _handleObligation({ chainId, row, addrConsents, tipHeight, matchesByBlock, isPayer, pendingTxs }) {
         const matchIndex = String(row.action_index ?? row.actionIndex ?? '');
         if (!matchIndex || this._stopped) return;
@@ -433,8 +444,7 @@ export class CoinpayAutopayWatcher {
             if (!matchesByBlock.has(blockIndex)) {
                 try {
                     const sdk = this._sdkRegistry.get(chainId);
-                    const resp = await sdk.getOrderMatches(String(blockIndex), 'block');
-                    matchesByBlock.set(blockIndex, extractCoinpayRows(resp));
+                    matchesByBlock.set(blockIndex, await readBlockOrderMatches(sdk, blockIndex));
                 } catch {
                     matchesByBlock.set(blockIndex, null); // unavailable ≠ empty
                 }
@@ -455,6 +465,7 @@ export class CoinpayAutopayWatcher {
             // Without a match row we cannot attribute the obligation to a
             // consented order yet; if any consent still lacks its index or
             // the row is unavailable, wait rather than misclassify.
+            if (!matchRow && Array.isArray(matchesByBlock.get(blockIndex))) this._logMissingMatch(chainId, blockIndex, matchIndex);
             return;
         }
 

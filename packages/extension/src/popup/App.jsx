@@ -820,6 +820,18 @@ function AppInner({ canOpenInTab, titleEnabled }) {
     const remountUnlessReviewing = () => {
         if (!isConfirmActive()) setSurfaceStateRevision((value) => value + 1);
     };
+    // A custom network added or removed in another surface: read the saved
+    // settings, make this realm's registry match, and remount only when a
+    // chain left, since an open screen may hold it.
+    const customChainSync = useRef(/** @type {(() => Promise<unknown>) | null} */ (null));
+    if (!customChainSync.current) {
+        customChainSync.current = registryLib.createCustomChainSync({
+            registry: APP_CHAIN_REGISTRY,
+            getSettings: messaging.getSettings,
+            onSettings: (next) => window.dispatchEvent(new CustomEvent('xc:settings-changed', { detail: next })),
+            onChainsDropped: remountUnlessReviewing,
+        });
+    }
     // A wallet chosen in another surface while a review, or the signing or
     // broadcast result it ends on, is open here waits until the review is
     // cancelled or the user leaves the result, so both stay on screen for the
@@ -921,6 +933,7 @@ function AppInner({ canOpenInTab, titleEnabled }) {
             },
             // Chain-scoped routes load from the active network when they mount.
             remountNetworkState: () => setSurfaceStateRevision((value) => value + 1),
+            customChainsChanged: () => { void customChainSync.current?.(); },
             // Screens that list wallet or account rows read them again.
             remountScreens: remountRecordLists,
         });

@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Network, From and the fee selector render inside the standard
 // FromSection and FeeSection.
@@ -461,7 +462,7 @@ export function ExecuteContractForm({
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
 
-    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const isHwSource = isDeviceAddressSource(fromAddress?.source);
     const hwSignerInfo = useSignerInfo({
         walletId,
         signerId: isHwSource ? fromAddress?.signerId : null,

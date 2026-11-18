@@ -76,6 +76,7 @@ function exportFixture() {
             addresses: collection(),
             contacts: collection(),
             connectedSites: collection(),
+            signers: collection(),
             pendingTxs: collection([{ id: 'pending-1' }]),
             settings: { get: vi.fn(async () => null), put: vi.fn(async () => {}) },
         },
@@ -89,6 +90,7 @@ function importVault() {
         addresses: collection(),
         contacts: collection(),
         connectedSites: collection(),
+        signers: collection(),
         pendingTxs: collection(),
         settings: { get: vi.fn(async () => null), put: vi.fn(async () => {}) },
     };

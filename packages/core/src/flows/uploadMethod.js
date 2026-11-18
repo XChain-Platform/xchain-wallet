@@ -26,6 +26,7 @@
 // fails closed exactly as flows/signerCapability.js does: a reveal nobody can
 // sign strands the commit.
 
+import { isDeviceAddressSource } from '../schemas/constants.js';
 import {
     AES_GCM_ENVELOPE_BYTES,
     compiledCeilingFor,
@@ -66,7 +67,6 @@ export function gatedFileCompiledBytes(meta, plainBytes) {
 }
 
 const ENVELOPE_CAPABLE_SOURCE = Object.freeze({ source: 'hd' });
-const HARDWARE_SOURCES = Object.freeze(['trezor', 'ledger']);
 
 /**
  * Why the Taproot envelope cannot carry this upload, or null when it can.
@@ -85,7 +85,7 @@ export function taprootUnavailableReason({ descriptor, fromAddress, isWatcherMod
     }
     if (isWatcherMode) return 'watcher';
     const source = fromAddress?.source;
-    if (HARDWARE_SOURCES.includes(source)) return 'hardware';
+    if (isDeviceAddressSource(source)) return 'hardware';
     if (source === 'watch-only') return 'watchOnly';
     if (!envelopeAvailableFor(descriptor, fromAddress)) return 'signer';
     return null;

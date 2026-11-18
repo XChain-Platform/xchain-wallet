@@ -358,7 +358,10 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             // text alone also matches the price field's own label, "Price of one
             // XCHAIN in USD", which is present on an empty form - so a text
             // match passes before anything has been published.
+            // The list sits in the closed "Published Prices" section, whose body
+            // stays mounted but hidden, so it is opened on every mount.
             const feed = main.getByRole('button', { name: `${TICK} in ${FIAT}`, exact: true });
+            await openFormSection(main, 'Published Prices');
             const deadline = Date.now() + 240_000;
             for (;;) {
                 // Give the mount's own fetch time to land before judging it. A
@@ -376,10 +379,13 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
                     + 'is also what the fat-finger deviation gate compares a republish against')
                     .toBe(true);
                 await mineIfPending();
-                await page.getByRole('button', { name: /^Back/ }).first().click();
+                // The form is a root page with no Back control, and the palette
+                // ignores the route it is already on, so leave through Home.
+                await openPaletteCommand(page, 'Home');
                 await openPaletteCommand(page, ORACLE_COMMAND);
                 await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(main);
+                await openFormSection(main, 'Published Prices');
             }
 
             // "nothing live yet" is the assertion that matters: an operator who

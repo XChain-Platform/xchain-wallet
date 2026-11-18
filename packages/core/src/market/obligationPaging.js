@@ -29,6 +29,49 @@ function rowKey(row) {
     return String(row?.action_index ?? row?.actionIndex ?? '');
 }
 
+/** Rows the explorer serves per page of a block's order matches. */
+export const MATCH_PAGE_ROWS = 100;
+
+/**
+ * Most pages one block read follows. A block holding more matches than this
+ * reads as unavailable rather than as a short list.
+ */
+export const MATCH_BLOCK_PAGE_CAP = 50;
+
+/**
+ * Every order match in one block. The match list pages by position and has no
+ * cursor, newest first, and a mined block does not change, so its pages are
+ * stable. The first read is the plain one; later pages are read only when its
+ * `total` shows rows were left behind. A page that fails or comes back the
+ * wrong size throws, so the caller treats the block as unavailable rather than
+ * searching a list with a hole in it.
+ *
+ * @param {{ getOrderMatches: (query: string, type: string, opts?: object) => Promise<any> }} sdk
+ * @param {number | string} blockIndex
+ * @returns {Promise<any[]>}
+ */
+export async function readBlockOrderMatches(sdk, blockIndex) {
+    const query = String(blockIndex);
+    const first = await sdk.getOrderMatches(query, 'block');
+    const rows = [...extractObligationRows(first)];
+    const total = Number(first?.total);
+    if (!first || Array.isArray(first) || !Number.isFinite(total) || total <= rows.length) return rows;
+    const pages = Math.ceil(total / MATCH_PAGE_ROWS);
+    if (rows.length !== MATCH_PAGE_ROWS || pages > MATCH_BLOCK_PAGE_CAP) {
+        throw new Error(`block ${query} order matches cannot be read whole: ${rows.length} of ${total} rows on page 1`);
+    }
+    for (let page = 2; page <= pages; page += 1) {
+        const body = await sdk.getOrderMatches(query, 'block', { page, limit: MATCH_PAGE_ROWS });
+        const pageRows = extractObligationRows(body);
+        const expected = page === pages ? total - (pages - 1) * MATCH_PAGE_ROWS : MATCH_PAGE_ROWS;
+        if (pageRows.length !== expected) {
+            throw new Error(`block ${query} order matches page ${page} of ${pages} returned ${pageRows.length} rows, expected ${expected}`);
+        }
+        rows.push(...pageRows);
+    }
+    return rows;
+}
+
 /**
  * Continue a first-page reply down the explorer's `next_before` cursor until
  * its `total` is covered, the page cap is reached or a page adds nothing.

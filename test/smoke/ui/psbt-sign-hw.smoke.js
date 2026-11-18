@@ -88,8 +88,8 @@ assert.match(handlerBlock, /addressId is required/, 'validates addressId');
 assert.match(handlerBlock, /psbtHex is required/, 'validates psbtHex');
 assert.match(handlerBlock, /vault\.addresses\.get\(addressId\)/, 'fetches Address record');
 assert.match(handlerBlock, /resolveSigner\(\{ vault, address \}\)/, 'resolves descriptor via shared helper');
-assert.match(handlerBlock, /descriptor\.kind !== 'trezor' && descriptor\.kind !== 'ledger'/,
-    'rejects non-HW source addresses');
+assert.match(handlerBlock, /!schemas\.isDeviceSignerKind\(descriptor\.kind\)/,
+    'rejects non-HW source addresses through the shared predicate');
 assert.match(handlerBlock, /signerBridge\.requireTransport\(descriptor\.signerRecord\.id\)/,
     'fetches transport from signer bridge (HW_NOT_CONNECTED when absent)');
 assert.match(handlerBlock, /buildRemoteSigner\(descriptor, transport\)/,
@@ -149,8 +149,8 @@ assert.match(
 );
 assert.match(
     formSrc,
-    /const isHwSource = selectedAddress\?\.source === 'trezor' \|\| selectedAddress\?\.source === 'ledger'/,
-    'PsbtSignForm derives isHwSource from the chosen address',
+    /const isHwSource = isDeviceAddressSource\(selectedAddress\?\.source\)/,
+    'PsbtSignForm derives isHwSource through the shared predicate',
 );
 assert.match(
     formSrc,

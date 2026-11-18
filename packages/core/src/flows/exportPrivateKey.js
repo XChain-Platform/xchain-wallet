@@ -28,6 +28,7 @@
 // auto-hide on blur, clipboard auto-clear) live in the shell UI.
 // This flow is the pure primitive that returns a WIF string.
 
+import { isDeviceAddressSource } from '../schemas/constants.js';
 import {
     base64ToBytes,
     decrypt,
@@ -154,7 +155,7 @@ export async function exportPrivateKey({
     if (addressRecord.source === 'watch-only') {
         throw new NoKeyForAddressError('watch-only');
     }
-    if (addressRecord.source === 'trezor' || addressRecord.source === 'ledger') {
+    if (isDeviceAddressSource(addressRecord.source)) {
         throw new NoKeyForAddressError('hardware');
     }
 

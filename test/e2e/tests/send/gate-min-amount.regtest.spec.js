@@ -19,12 +19,9 @@
 // runs pre-train indexer/encoder/SDK services, and the wire format is
 // trailing-tolerant, so an early-emitted ninth FILE field would publish
 // successfully with the threshold silently and PERMANENTLY dropped, and an
-// early below-threshold plain SEND would compose something an un-upgraded
-// indexer rejects. There is therefore no chain in this stack on which the
-// threshold lane can be exercised as ACTIVE - the smoke test pins that
-// invariant, and this spec cannot and must not route around it with a
-// test-only override, because that would test code the wallet never runs
-// against a real network.
+// the publish interlock stays closed. The send guard separately follows
+// thresholds the indexer has already recorded. This fixture publishes no
+// threshold, so the send remains unconditional on both old and new services.
 //
 // What IS real, and worth asserting on a live chain rather than only in a
 // unit test, is that the inertness HOLDS end to end here: the publisher form

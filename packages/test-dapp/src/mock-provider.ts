@@ -253,11 +253,13 @@ export class MockXChainProvider implements XChainProvider {
 
     async getAddresses(chainId: ChainId): Promise<Address[]> {
         this.assertConnected();
+        this.assertChainGranted(chainId);
         return this.opts.addresses[chainId] ?? [];
     }
 
     async getBalances(chainId: ChainId, address: string): Promise<Balance[]> {
         this.assertConnected();
+        this.assertChainGranted(chainId);
         return this.opts.balances[`${chainId}|${address}`] ?? [];
     }
 
@@ -267,7 +269,7 @@ export class MockXChainProvider implements XChainProvider {
 
     async getActiveChains(): Promise<ChainId[]> {
         this.assertConnected();
-        return this.opts.activeChains;
+        return this.opts.activeChains.filter((id) => this.isChainGranted(id));
     }
 
     async signMessage(params: SignMessageParams): Promise<SignMessageResult> {
@@ -326,7 +328,19 @@ export class MockXChainProvider implements XChainProvider {
     async coSign(params: CoSignParams): Promise<CoSignResult> {
         const blockedOrThrottled = this.maybeBlockedOrThrottled();
         if (blockedOrThrottled) return blockedOrThrottled;
+        const { sighashType } = params;
+        if (sighashType !== undefined && !Number.isInteger(sighashType)) {
+            return { ok: false, error: 'INVALID_PARAMS', message: 'sighashType must be an integer' };
+        }
         if (this.opts.rejectAll) return { ok: false, error: 'USER_REJECTED' };
+        if (sighashType !== undefined && sighashType !== 0) {
+            return {
+                ok: true,
+                approved: false,
+                reason: 'SIGHASH_TYPE_NOT_ALLOWED',
+                detail: { sighashType },
+            };
+        }
         return approvedCoSign(params);
     }
 
@@ -414,6 +428,22 @@ export class MockXChainProvider implements XChainProvider {
         if (!set) return;
         for (const fn of set) {
             (fn as (...a: unknown[]) => void)(...args);
+        }
+    }
+
+    // The connect grant gates every per-chain read, as it does in the wallet: a
+    // chain outside it is refused with CHAIN_NOT_SUPPORTED.
+    private isChainGranted(chainId: ChainId): boolean {
+        const chains = this.grantedPermissions?.chains ?? [];
+        return chains.length === 0 || chains.includes(chainId);
+    }
+
+    private assertChainGranted(chainId: ChainId): void {
+        if (!this.isChainGranted(chainId)) {
+            throw codedError(
+                'CHAIN_NOT_SUPPORTED',
+                `CHAIN_NOT_SUPPORTED: ${chainId} is outside the connect grant`,
+            );
         }
     }
 

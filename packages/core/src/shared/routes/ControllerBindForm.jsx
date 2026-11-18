@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Network, From and the fee selector render inside the standard
@@ -94,14 +95,9 @@ const ACTION_CLASS_GROUP_HELP = 'One binding is sent per ticked class. Ownership
 // watch-only address reaches the form so a full-mode wallet can explain why it
 // cannot sign, while watcher mode can build the unsigned transaction.
 function isFormSource(address) {
-    switch (address?.source) {
-        case 'hd': return externalIndexOf(address.derivationPath) !== null;
-        case 'trezor':
-        case 'ledger':
-        case 'watch-only':
-            return true;
-        default: return false;
-    }
+    if (isDeviceAddressSource(address?.source)) return true;
+    if (address?.source === 'hd') return externalIndexOf(address.derivationPath) !== null;
+    return address?.source === 'watch-only';
 }
 
 const NO_SOURCE_MESSAGE = 'No address on this network to sign from. Use Receive to generate one first.';
@@ -387,7 +383,7 @@ export function ControllerBindForm({ walletId, chainId: initialChainId, tick, on
         sourceAddress: fromAddress?.address,
     });
 
-    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const isHwSource = isDeviceAddressSource(fromAddress?.source);
     const isBlockedWatchOnlySource = fromAddress?.source === 'watch-only' && !isWatcherMode;
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);

@@ -211,6 +211,7 @@ describe('a send waiting in the retry queue holds the payout', () => {
         await expect(composedSend(w.vault, q.enqueue)).rejects.toThrow(/ECONNREFUSED/);
         const [record] = await w.vault.pendingTxs.list();
         expect(record.status).toBe('queued');
+        expect(record.adsBooking).toMatchObject({ id: record.id, fiat: '30', paid: true, booked: false });
         expect(q.blob[W]).toHaveLength(1);
         expect(q.blob[W][0].adsCommit).toEqual({
             chainId: MAIN, donationIncluded: true, donatedFiat: '30', currency: 'EUR', mainnet: true, reservationId: record.id,
@@ -238,7 +239,9 @@ describe('a send waiting in the retry queue holds the payout', () => {
         expect(broadcastTx).toHaveBeenCalledTimes(1);
         expect(w.ads()).toMatchObject({ queued: '0.10', donated: '30', donationCount: 1 });
         expect(w.ads().reserved).toBeUndefined();
-        expect(await w.vault.pendingTxs.get(record.id)).toMatchObject({ status: 'broadcast' });
+        expect(await w.vault.pendingTxs.get(record.id)).toMatchObject({
+            status: 'broadcast', adsBooking: { id: record.id, fiat: '30', paid: true, booked: true },
+        });
     });
 
     it('releases the claim when the queued send is discarded, so the next send pays', async () => {
