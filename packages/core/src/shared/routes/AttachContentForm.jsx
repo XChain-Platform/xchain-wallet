@@ -34,7 +34,7 @@ import { SignCredentials, isHwSource } from '../components/SignCredentials.jsx';
 import { useSignerReady } from '../hooks/useSignerReady.js';
 import { useWalletMode } from '../hooks/useWalletMode.js';
 import { FileField } from '../components/FileField.jsx';
-import { UploadMethodField, useUploadMethod } from '../components/UploadMethodField.jsx';
+import { UploadMethodField, UploadMethodReviewRows, useUploadMethod } from '../components/UploadMethodField.jsx';
 import { publicFileCompiledBytes } from '../../flows/uploadMethod.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
 import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
@@ -78,7 +78,6 @@ import { FALLBACK_FILE_NAME, MULTIPART_FILE_MAX_BYTES } from '../../flows/fileSi
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/publishFile.js';
-import '../../i18n/locales/en/uploadMethod.js';
 
 const chainRegistry = registryLib.defaultRegistry();
 const POLL_INTERVAL_MS = 10_000;
@@ -1218,14 +1217,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                             <dd className={styles.detailsValue}><code>{fileParams.MEMO}</code></dd>
                         </>
                     ) : null}
-                    <dt className={styles.detailsLabel}>{t('uploadMethod.label')}</dt>
-                    <dd className={styles.detailsValue} data-testid="review-upload-method">{upload.label}</dd>
-                    {upload.feeText ? (
-                        <>
-                            <dt className={styles.detailsLabel}>{t('uploadMethod.review.fee')}</dt>
-                            <dd className={styles.detailsValue} data-testid="review-upload-fee">{upload.feeText}</dd>
-                        </>
-                    ) : null}
+                    {/* A multi-part pick names its parts, transactions and whole fee. */}
+                    <UploadMethodReviewRows
+                        upload={upload}
+                        labelClassName={styles.detailsLabel}
+                        valueClassName={styles.detailsValue}
+                    />
                 </dl>
                 <p className={styles.hint}>
                     This is step 1 of 2. The file goes on-chain first; once
@@ -1367,7 +1364,9 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     icon={<Icon.UploadIcon />}
                     loading={genesisRefreshing}
                     disabled={genesisRefreshing
-                        || (!multipartMethod.ready && fileMeta?.bytes != null)
+                        // A file held by reference (bytes null) still waits
+                        // for its multi-part quote, so the review can name it.
+                        || !multipartMethod.ready
                         || issuerEligibility.pending || !!issuerEligibility.error}
                 >
                     Attach Artwork

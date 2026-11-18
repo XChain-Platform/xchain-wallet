@@ -39,7 +39,6 @@ import {
     NATIVE_COIN as COIN,
     pendingRowFor,
     pickAssetByChainAndTick,
-    searchForTx,
 } from '../../fixtures/pendingHistory.js';
 import {
     assertNoActionRecorded,
@@ -54,6 +53,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     openFromAddress,
+    searchHistory,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -197,7 +197,7 @@ test.describe(`Native-coin send lifecycle on ${REGTEST_CHAIN_LABEL} regtest`, ()
 
             // And no explorer row appeared beside it: there is no action to
             // show, so the wallet's own confirmed record is the only row.
-            await searchForTx(page, txid);
+            await searchHistory(page, txid);
             await expect(historyRows(page), 'History lists a second row for a plain payment the '
                 + 'explorer knows nothing about').toHaveCount(1, { timeout: 30_000 });
             await expect(pendingRowFor(page, txid)).toHaveCount(1);
@@ -223,7 +223,7 @@ test.describe(`Native-coin send lifecycle on ${REGTEST_CHAIN_LABEL} regtest`, ()
                     .toBeVisible({ timeout: 150_000 });
             }
             await gotoSection(page, 'History');
-            await searchForTx(page, txid);
+            await searchHistory(page, txid);
             await expect(pendingRowFor(page, txid).locator('[data-pending-state]'),
                 'after a reload the native send is pending again: the PendingTx record was never '
                 + 'flipped to indexed')

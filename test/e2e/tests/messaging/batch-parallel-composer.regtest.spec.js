@@ -144,10 +144,10 @@ async function gotoBatchComposer(page) {
     return main;
 }
 
+// The Parallel composer is titled "Action queue" and is not on All Actions;
+// the command palette (and the wallet menu) reach it.
 async function gotoParallelComposer(page) {
-    await gotoMoreActions(page);
-    const menu = page.getByRole('main');
-    await menu.getByRole('button', { name: /^Parallel cross-chain actions/ }).click();
+    await openPaletteCommand(page, 'Action queue');
     const main = page.getByRole('main');
     await expect(main.getByRole('button', { name: /^Network:/ }).first(), 'the Parallel composer never rendered').toBeVisible({ timeout: 30_000 });
     return main;

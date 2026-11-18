@@ -104,7 +104,7 @@ async function signAndVerify(page, viewportName) {
     await expect(addressField, 'the sign form does not start on the active address')
         .toHaveValue(address);
     await signForm.getByLabel('Message', { exact: true }).fill(MESSAGE);
-    await expectScreen(page, 'Sign message', `${viewportName} sign form`);
+    await expectScreen(page, 'Sign Message', `${viewportName} sign form`);
 
     // Sign message started inside the wallet signs in place with no approval
     // page (ruling U92); the Signature box is on the form from the start.
@@ -114,7 +114,7 @@ async function signAndVerify(page, viewportName) {
     const copySignature = signForm.getByRole('button', { name: 'Copy Signature', exact: true });
     await expect(copySignature).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
-    await expectScreen(page, 'Sign message', `${viewportName} signed result`);
+    await expectScreen(page, 'Sign Message', `${viewportName} signed result`);
     const signature = (await signatureBox.locator('pre').textContent() || '').trim();
     expect(signature, 'signing returned no base64 signature').toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
 
@@ -141,7 +141,7 @@ async function signAndVerify(page, viewportName) {
     await signatureField.focus();
     await page.keyboard.press('ControlOrMeta+V');
     await expect(signatureField).toHaveValue(signature);
-    await expectScreen(page, 'Verify signature', `${viewportName} verify form`);
+    await expectScreen(page, 'Verify Signature', `${viewportName} verify form`);
 
     await verifyForm.getByRole('button', { name: 'Verify Signature', exact: true }).click();
     // FormPage draws a plain form's notices just above the form, as a sibling
@@ -151,7 +151,7 @@ async function signAndVerify(page, viewportName) {
         'Valid signature. Signature matches this message and address.',
         { timeout: 30_000 },
     );
-    await expectScreen(page, 'Verify signature', `${viewportName} verified result`);
+    await expectScreen(page, 'Verify Signature', `${viewportName} verified result`);
 }
 
 export function defineSignVerifyTests() {

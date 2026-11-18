@@ -52,7 +52,6 @@
 //    that distinguishes a real round trip from a well-formed no-op.
 
 import { createWallet, expect, gotoSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
-import { searchForTx } from '../../fixtures/pendingHistory.js';
 import {
     EXPLORER_URL,
     REGTEST_ADDRESS_RE,
@@ -70,6 +69,7 @@ import {
     waitForValidAction,
     openFromAddress,
     approveConfirm as approveWhenReady,
+    searchHistory,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -410,7 +410,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // payloads, never off a device-local label.
             await gotoSection(page, 'History');
             const label = `${META_NAME} v${META_VERSION} (C:${REGTEST_TICKER}:${contractIndex})`;
-            await searchForTx(page, deployTxid);
+            await searchHistory(page, deployTxid);
             await expect(page.getByText(label, { exact: true }).first(),
                 'a history row shows "<name> v<version> (<address>)"').toBeVisible({ timeout: 60_000 });
         });

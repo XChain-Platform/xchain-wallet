@@ -37,7 +37,9 @@
 // by name because the rule is about the difference between them - so it runs
 // under the default XC_REGTEST_COIN.
 
-import { createWallet, expect, openPaletteCommand, revealChainPicker, test } from '../../fixtures/wallet.js';
+import {
+    createWallet, expect, openFormSection, openPaletteCommand, revealChainPicker, test,
+} from '../../fixtures/wallet.js';
 import { switchToRegtest } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -66,6 +68,10 @@ const STATEMENT_TEXT = /LTC is the only way to pay a protocol fee on this networ
  * Every form carries its own picker and they do not share state (§3.5), so this
  * deliberately does not go through settings: the point is a chain change made
  * INSIDE an open form, with the form still mounted.
+ *
+ * The fee row (the switch on Bitcoin, the statement elsewhere) sits in the
+ * Speed and Fees section, closed by default, so the section is opened after
+ * every switch; an open section is left alone.
  */
 async function switchFormChain(scope, chainLabel) {
     const trigger = scope.getByRole('button', { name: /^Network:/ }).first();
@@ -75,6 +81,7 @@ async function switchFormChain(scope, chainLabel) {
         .getByRole('button', { name: new RegExp(`^Select ${chainLabel}\\b`) }).first().click();
     await expect(trigger, `the form did not switch to ${chainLabel}`)
         .toHaveAttribute('aria-label', new RegExp(chainLabel), { timeout: 15_000 });
+    await openFormSection(scope, 'Speed and Fees');
 }
 
 test.describe('the native-fee rule when the chain changes under an open form', () => {

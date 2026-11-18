@@ -1048,7 +1048,10 @@ export function PublishFileForm({ walletId, onBack }) {
                 <FormAction
                     icon={<UploadIcon />}
                     loading={actionConfirm.composing || multipartUpload.running}
-                    disabled={actionConfirm.composing || multipartUpload.running}
+                    // A multi-part file waits for its quote, so the review
+                    // can name its parts, transactions and whole fee.
+                    disabled={actionConfirm.composing || multipartUpload.running
+                        || (multipartAvailable && !multipartMethod.ready)}
                 >
                     {multipartUpload.running
                         ? t('publishFile.publishing')
