@@ -10,6 +10,7 @@
 import { readShownTxid } from '../../fixtures/pendingHistory.js';
 import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
+    approveConfirm,
     expectConfirmModal,
     explorerJson,
     fundAddress,
@@ -78,10 +79,9 @@ test.describe(`SLEEP v0 address self-lock on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByTestId('confirm-warning'))
                 .toContainText('Nothing can lift the lock before its resume block');
             await fieldByLabel(page, 'Type LOCK to confirm').fill('LOCK');
-            // The confirm screen's own Approve, whatever the verb on it.
-            const approve = page.getByTestId('confirm-approve');
-            await expect(approve).toBeEnabled({ timeout: 30_000 });
-            await approve.click();
+            // Approve never disables (G130), so the shared fixture presses it
+            // and reports the confirm screen's reason if the tap is refused.
+            await approveConfirm(page, 'the address lock');
         });
 
         await test.step('read the SLEEP v0 row back from the explorer', async () => {

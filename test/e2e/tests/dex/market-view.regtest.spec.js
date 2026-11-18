@@ -164,6 +164,13 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
                 `the venue rejected the ISSUE (${issued.status}); on this chain that is usually the `
                 + 'price sentinel going stale mid-run, not a wallet defect (campaign §3.2)')
                 .toBe('valid');
+            // The give side is picked from the Asset picker's held rows, which
+            // read balances once on open, and the explorer serves the ISSUE
+            // before its balance: wait for the balance, then reload so the
+            // wallet reads it.
+            await waitForTokenBalance(source, TICK, Number(SUPPLY));
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
         });
 
         await test.step('place a token-for-token order, which is what creates a market', async () => {
@@ -284,6 +291,10 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             const issued = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(issued.status), 'the venue rejected the ISSUE').toBe('valid');
+            // As above: the picker lists the token only once the wallet has read its balance.
+            await waitForTokenBalance(source, noMemoTick, Number(SUPPLY));
+            await page.reload();
+            await unlockAfterReload(page, PASSWORD);
 
             await openPaletteCommand(page, 'Create order');
             main = page.getByRole('main');
