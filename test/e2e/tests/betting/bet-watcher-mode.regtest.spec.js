@@ -25,9 +25,11 @@
 // market is never offered a bet on it either (which is what cost the
 // unhappy-stakes spec its first run).
 //
-// TWO ROLES, ONE WALLET, and no funding for the second address: the bettor's
+// TWO ROLES, ONE PHRASE, and no funding for the second address: the bettor's
 // view is being tested, not its ability to pay, and the spec never submits.
-// Address A opens the market; address B is what looks at it.
+// Address A opens the market; address B is what looks at it. The Normal wallet
+// is on the first phone (`page`) and its watch-only copy on a second phone
+// (`otherPhone`), since one app refuses to hold the same phrase twice.
 //
 // Runs on Litecoin (XC_REGTEST_COIN=RLTC) for the reasons §3.5 records.
 
@@ -206,7 +208,7 @@ test.describe('BET in watcher mode', () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(1_800_000);
 
-    test('a watcher is refused in words, on both sides of the role boundary', async ({ page }) => {
+    test('a watcher is refused in words, on both sides of the role boundary', async ({ page, otherPhone }) => {
         let oracle;
         let watcher;
         let feedIndex;
@@ -283,16 +285,22 @@ test.describe('BET in watcher mode', () => {
         await test.step('watcher mode offers an unsigned build instead of a signed bet', async () => {
             // A wallet's mode is fixed at setup, so the watcher half is the
             // same recovery phrase added again as a watch-only wallet: same
-            // addresses, same market, only the mode differs.
-            await addWalletFromPhrase(page, phrase, {
+            // addresses, same market, only the mode differs. It lives on a
+            // second phone because one app refuses a phrase it already holds
+            // ("already in this app as ..."), and a watcher of a phrase is
+            // another phone in real use too. That phone opens its vault with a
+            // Normal wallet of its own, reaches the venue, then pairs.
+            await createWallet(otherPhone, { password: PASSWORD, name: 'Second Phone' });
+            await switchToRegtest(otherPhone, PASSWORD);
+            await addWalletFromPhrase(otherPhone, phrase, {
                 password: PASSWORD, name: 'Mirror Copy', walletMode: 'watcher',
             });
-            const mirrored = await generateVenueAddress(page);
+            const mirrored = await generateVenueAddress(otherPhone);
             expect(mirrored, 'the watch-only copy does not derive the same second address')
                 .toBe(watcher);
-            await useAddress(page, watcher);
+            await useAddress(otherPhone, watcher);
 
-            const main = await openMarket(page, feedIndex);
+            const main = await openMarket(otherPhone, feedIndex);
             await openPlaceBet(main);
             await expect(main.getByRole('form', { name: 'Buy a position' }),
                 'a watcher-mode wallet lost the place-bet form instead of getting an unsigned build')
@@ -313,8 +321,10 @@ test.describe('BET in watcher mode', () => {
         });
 
         await test.step('and the oracle side builds unsigned too', async () => {
-            await openPaletteCommand(page, 'My markets');
-            const main = page.getByRole('main');
+            // Still the watch-only copy on the second phone: it holds the
+            // oracle address too, so My markets lists this run's market.
+            await openPaletteCommand(otherPhone, 'My markets');
+            const main = otherPhone.getByRole('main');
             const card = main.locator(`[data-market-index="${feedIndex}"]`);
             await expect(card, 'My markets did not list the market this run created')
                 .toBeVisible({ timeout: 30_000 });
@@ -339,6 +349,8 @@ test.describe('BET in watcher mode', () => {
 
         await test.step('back on the normal wallet, and the bet is offered again', async () => {
             // Closes the pair: the difference is watcher mode, not the market.
+            // The first phone still holds the Normal wallet; the switch confirms
+            // it is the active one before the control is re-read.
             await switchToWallet(page, 'Watcher Wallet', { timeoutMs: 60_000 });
             await useAddress(page, watcher);
             const main = await openMarket(page, feedIndex);

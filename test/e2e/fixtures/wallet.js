@@ -28,6 +28,7 @@
 
 import { test as base, expect } from '@playwright/test';
 import { LICENSE_VERSION } from '../../../packages/core/src/buildInfo.js';
+import { generateBip39Mnemonic } from '../../../packages/core/src/crypto/mnemonic.js';
 import { visibleWalletMenu } from '../../../packages/core/src/shared/walletMenu.js';
 import { kdfStepTimeout } from '../timeout-budget.js';
 import { stubPriceFeed } from './priceStub.js';
@@ -55,11 +56,12 @@ const PAIR_ROLE_BUTTON = { watcher: /^Sign on another phone\b/, signer: /^Make t
 const DEFAULT_MODE_WALLET_NAME = { watcher: 'Signs on Another Phone', signer: 'Signer Phone' };
 
 /**
- * The name of the Normal wallet a mode wallet is mirrored from when a spec
- * asks `createWallet` for a mode wallet. It shares no words with any name a
- * spec passes, so the switch to the mode wallet cannot pick it by mistake.
+ * The name of the Normal wallet `createWallet` makes first when a spec asks
+ * for a mode wallet, so the pairing page has an open vault to add to. It
+ * shares no words with any name a spec passes, so the switch to the mode
+ * wallet cannot pick it by mistake.
  */
-const SHARED_PHRASE_WALLET_NAME = 'Shared Phrase Holder';
+const PAIRING_HOST_WALLET_NAME = 'Pairing Host';
 
 /**
  * Opens the two-phone pairing page from Settings, Advanced, "Use another
@@ -91,7 +93,9 @@ export async function fillPairAnotherPhone(page, { words, name, password, wallet
 /**
  * Adds `words` as a new wallet in `walletMode` through the two-phone pairing
  * page (Settings, Advanced, "Use another phone as a signer") inside the
- * unlocked session, then switches to it.
+ * unlocked session, then switches to it. `words` must not already be in this
+ * app: the app refuses a phrase it holds ("This recovery phrase is already in
+ * this app as ...", DuplicateWalletError), whatever the mode.
  *
  * The mode is fixed when the page adds the wallet (`addImportedWallet` with
  * the picked role), before the code exchange, so this leaves once the page
@@ -121,6 +125,43 @@ export const LICENSE_ACCEPTED_VERSION_KEY = 'xc:licenseAcceptedVersion';
 
 export const DEFAULT_PASSWORD = 'e2epassword1234';
 
+/**
+ * Readies a fresh page the way every spec's device starts: the outbound guard,
+ * the host, price and hub stubs, and (unless the spec drives it) the license
+ * gate seeded as accepted.
+ *
+ * @returns {Promise<{ attempts: string[] }>} the guard, read after the spec
+ */
+async function prepareDevicePage(page, { acceptLicense, outboundStubHosts, outboundLiveHosts }) {
+    // Registered first so it runs last: only a request no stub answered reaches it.
+    const outbound = await guardOutbound(page, {
+        stubbedHosts: outboundStubHosts,
+        liveHosts: outboundLiveHosts,
+    });
+    // Regtest starts on the production network before each spec switches it.
+    // Answer only the probes needed to render Home and refuse every other call.
+    await stubOutboundHosts(page.context(), outboundStubHosts);
+    // No spec reaches the live price service; see priceStub.js.
+    await stubPriceFeed(page.context());
+    // Nor the mainnet hub registry the app syncs at boot; see hubStub.js.
+    await stubHubRegistry(page.context());
+    if (acceptLicense) {
+        await page.addInitScript(
+            ([atKey, versionKey, version]) => {
+                try {
+                    window.localStorage.setItem(atKey, new Date().toISOString());
+                    window.localStorage.setItem(versionKey, version);
+                } catch {
+                    // Storage unavailable: the gate renders and the spec
+                    // fails loudly rather than silently testing the gate.
+                }
+            },
+            [LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY, LICENSE_VERSION],
+        );
+    }
+    return outbound;
+}
+
 export const test = base.extend({
     // Set `test.use({ acceptLicense: false })` in a spec that wants to
     // drive the license gate itself.
@@ -130,34 +171,24 @@ export const test = base.extend({
     outboundLiveHosts: [[], { option: true }],
 
     page: async ({ page, acceptLicense, outboundStubHosts, outboundLiveHosts }, use) => {
-        // Registered first so it runs last: only a request no stub answered reaches it.
-        const outbound = await guardOutbound(page, {
-            stubbedHosts: outboundStubHosts,
-            liveHosts: outboundLiveHosts,
-        });
-        // Regtest starts on the production network before each spec switches it.
-        // Answer only the probes needed to render Home and refuse every other call.
-        await stubOutboundHosts(page.context(), outboundStubHosts);
-        // No spec reaches the live price service; see priceStub.js.
-        await stubPriceFeed(page.context());
-        // Nor the mainnet hub registry the app syncs at boot; see hubStub.js.
-        await stubHubRegistry(page.context());
-        if (acceptLicense) {
-            await page.addInitScript(
-                ([atKey, versionKey, version]) => {
-                    try {
-                        window.localStorage.setItem(atKey, new Date().toISOString());
-                        window.localStorage.setItem(versionKey, version);
-                    } catch {
-                        // Storage unavailable: the gate renders and the spec
-                        // fails loudly rather than silently testing the gate.
-                    }
-                },
-                [LICENSE_ACCEPTED_AT_KEY, LICENSE_ACCEPTED_VERSION_KEY, LICENSE_VERSION],
-            );
-        }
+        const outbound = await prepareDevicePage(page, { acceptLicense, outboundStubHosts, outboundLiveHosts });
         await use(page);
         expect(outbound.attempts, 'a spec tried to reach a non-local host').toEqual([]);
+    },
+
+    // A second phone: its own browser context, so its own vault, readied like
+    // `page`. A spec that needs one recovery phrase in two modes at once uses
+    // it, because one app refuses a phrase it already holds, and a watcher or
+    // signer of a phrase is by design another phone anyway. Built only for a
+    // spec that asks for it. `browser.newContext()` inside a test takes the
+    // config's context options (baseURL, viewport, user agent), like `page`.
+    otherPhone: async ({ browser, acceptLicense, outboundStubHosts, outboundLiveHosts }, use) => {
+        const context = await browser.newContext();
+        const phone = await context.newPage();
+        const outbound = await prepareDevicePage(phone, { acceptLicense, outboundStubHosts, outboundLiveHosts });
+        await use(phone);
+        expect(outbound.attempts, 'a spec tried to reach a non-local host from the second phone').toEqual([]);
+        await context.close();
     },
 });
 
@@ -341,9 +372,15 @@ export function activeWalletIdentity(page) {
     return page.getByRole('region', { name: 'App header' }).locator('span[title]');
 }
 
-/** Asserts the App header names `name` as the active wallet. */
+/**
+ * Asserts `name` is the active wallet, on the wallet picker, and leaves the
+ * picker open. The App header no longer names the active wallet, so the
+ * picker's row for it, marked `aria-current` (WalletPicker.jsx), is the one
+ * place every shell shows which wallet is active, signer mode included.
+ */
 export async function expectActiveWallet(page, name, message, { timeoutMs = 30_000 } = {}) {
-    await expect(activeWalletIdentity(page).filter({ hasText: name }),
+    await openWalletPicker(page);
+    await expect(page.getByRole('main').locator('button[aria-current="true"]').filter({ hasText: name }),
         message || `the app did not switch to ${name}`)
         .toBeVisible({ timeout: timeoutMs });
 }
@@ -362,19 +399,34 @@ export async function openWalletPicker(page) {
 }
 
 /**
- * Switches to the wallet called `name` through Settings, and confirms it in
- * the App header.
+ * Switches to the wallet called `name` through Settings, and confirms it on
+ * the wallet picker.
  *
  * The row is told apart from its own "Wallet details for <name>" button,
- * which carries the same name.
+ * which carries the same name. A picker row opens that wallet's page
+ * (WalletPicker.jsx since 2026-11-12), whose "Set as active wallet" action
+ * switches and then hides; the row is absent when the wallet is already
+ * active. A shell whose picker still switches on the row shows no such page.
  */
 export async function switchToWallet(page, name, { timeoutMs = 30_000 } = {}) {
     await openWalletPicker(page);
-    const row = page.getByRole('main')
+    const main = page.getByRole('main');
+    const row = main
         .getByRole('button', { name: new RegExp(`^(?!Wallet details for).*${escapeRegExp(name)}`) })
         .first();
     await expect(row, `the wallet picker lists no wallet named ${name}`).toBeVisible({ timeout: timeoutMs });
     await row.click();
+    // Every wallet page lists Edit wallet; Set as active wallet only when inactive.
+    const setActive = main.getByRole('button', { name: /^Set as active wallet\b/ });
+    const editWallet = main.getByRole('button', { name: /^Edit wallet\b/ });
+    const onDetails = await setActive.or(editWallet).first()
+        .waitFor({ state: 'visible', timeout: 15_000 })
+        .then(() => true, () => false);
+    if (onDetails && await setActive.isVisible()) {
+        await setActive.click();
+        await expect(setActive, `Set as active wallet did not take for ${name}`)
+            .toBeHidden({ timeout: timeoutMs });
+    }
     await expectActiveWallet(page, name, undefined, { timeoutMs });
 }
 
@@ -402,14 +454,17 @@ export async function addWallet(page, {
 
 /**
  * Adds a second wallet from an existing recovery phrase in the given mode,
- * then switches to it. A wallet's mode is fixed when it is set up, so a spec
- * that needs the same addresses in the `watcher` (another phone signs) or
- * `signer` mode adds the phrase again as a new wallet instead of flipping the
- * first one. Create and import no longer offer a mode, so a `watcher` or
- * `signer` wallet comes from the two-phone pairing page in Settings,
- * Advanced, and a `full` one from Import wallet.
+ * then switches to it. Create and import no longer offer a mode, so a
+ * `watcher` or `signer` wallet comes from the two-phone pairing page in
+ * Settings, Advanced, and a `full` one from Import wallet.
  *
- * @param {string[]} words the recovery phrase of the wallet to mirror
+ * The phrase must not already be in this app: it refuses a phrase it holds
+ * ("This recovery phrase is already in this app as ..."), in any mode. A spec
+ * that needs one wallet's addresses in a second mode adds the phrase on the
+ * `otherPhone` fixture, a second device with its own vault, which is where a
+ * watcher or signer of that phrase lives in real use.
+ *
+ * @param {string[]} words the recovery phrase to add
  */
 export async function addWalletFromPhrase(page, words, {
     name, password = DEFAULT_PASSWORD, ads = 'off', walletMode = 'watcher',
@@ -836,7 +891,11 @@ export async function completeRecoveryPhraseChallenge(page, words) {
  * `tests/wallet/passphrase-stored.regtest.spec.js`, which drives it, and the
  * generator beside the envelope, which builds it.
  *
- * @returns {Promise<string[]>} the generated recovery phrase
+ * Pass `walletMode: 'watcher' | 'signer'` for a mode wallet: a Normal
+ * "Pairing Host" wallet is created first, then a fresh phrase is paired in
+ * that mode and made active. The returned phrase is the mode wallet's.
+ *
+ * @returns {Promise<string[]>} the active wallet's recovery phrase
  */
 export async function createWallet(page, options = {}) {
     const {
@@ -847,16 +906,21 @@ export async function createWallet(page, options = {}) {
     // Create no longer offers a Wallet mode (operator ruling 2026-11-15): every
     // created wallet is Normal, and only the two-phone pairing sets `watcher`
     // or `signer`. So a mode wallet is made the way a user makes one: create a
-    // Normal wallet, then add the same phrase in that mode through Settings,
-    // Advanced, "Use another phone as a signer", and switch to it. The vault
-    // then holds two wallets with the same addresses; the mode one is active.
+    // Normal wallet so the vault is open, then pair a NEW phrase in that mode
+    // through Settings, Advanced, "Use another phone as a signer", and switch
+    // to it. The phrase cannot be the Normal wallet's own: the app refuses a
+    // phrase it already holds (DuplicateWalletError, since 2026-10-23). It is
+    // fresh per call, not a fixed test vector, so regtest specs that fund the
+    // mode wallet never share addresses, UTXOs or input reservations across
+    // runs and workers.
     if (walletMode !== 'full') {
         if (bip39Passphrase !== null) {
             throw new Error('createWallet: the two-phone pairing page has no extra passphrase, so a mode wallet cannot take one');
         }
-        const words = await createWallet(page, {
-            ...options, name: SHARED_PHRASE_WALLET_NAME, walletMode: 'full',
+        await createWallet(page, {
+            ...options, name: PAIRING_HOST_WALLET_NAME, walletMode: 'full',
         });
+        const words = generateBip39Mnemonic().split(' ');
         await addModeWalletByPairing(page, words, {
             name: name || DEFAULT_MODE_WALLET_NAME[walletMode], password, walletMode,
         });
