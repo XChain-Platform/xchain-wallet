@@ -354,3 +354,23 @@ describe('synthesizeTokenChart', () => {
         expect(Number.isFinite(first.change24hPct)).toBe(true);
     });
 });
+
+describe('synthesizeTokenChart demo walks never read as a loss', () => {
+    // Every range the demo heroes and the Home value chart ask for.
+    const POINT_COUNTS = [24, 60, 90, 120, 150, 168, 180, 240];
+
+    it('rises over the window and over its last day for every seed', () => {
+        const failures = [];
+        for (const points of POINT_COUNTS) {
+            for (let seed = 0; seed < 1500; seed += 1) {
+                const key = `bitcoin-mainnet|SEED${seed}|fiat|r${points}`;
+                const { sparkline, change24hPct } = synthesizeTokenChart(key, 1.25, points);
+                if (!(change24hPct > 0) || !(sparkline.at(-1) > sparkline[0])) {
+                    failures.push(`${key}: change24h=${change24hPct}`);
+                }
+            }
+        }
+        expect(failures.slice(0, 5)).toEqual([]);
+        expect(failures).toHaveLength(0);
+    });
+});

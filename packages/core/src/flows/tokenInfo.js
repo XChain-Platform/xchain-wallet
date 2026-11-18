@@ -1556,6 +1556,14 @@ function demoRowFor(tick) {
     };
 }
 
+// Inline icon tile for a demo-issued token (no remote image, so the demo
+// stays offline and inside the app's img-src policy).
+function demoIssuedIcon(label, from, to) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${from}"/><stop offset="100%" stop-color="${to}"/></linearGradient></defs><rect width="200" height="200" fill="url(#g)"/><text x="100" y="118" font-family="system-ui,sans-serif" font-size="44" font-weight="800" fill="#FFFFFF" text-anchor="middle">${label}</text></svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+const DEMO_OWNER_ADDRESS = 'bc1qdemowalletissuer0xchain0sunrise0roasters';
+
 // Hand-rolled demo TIS documents, keyed by ticker; mirrors the TIS v1.0.0
 // shape so they flow through `tisToMediaBundle` unchanged. URLs point at
 // publicly hosted, freely-redistributable media so an offline demo can
@@ -1684,6 +1692,46 @@ const DEMO_TIS_BY_TICK = {
                 { type: 'github', data: 'https://github.com/XChain-Platform' },
             ],
             categories: [{ type: 'main', data: 'Showcase' }],
+        },
+    },
+    // Tokens the demo wallet itself issued (see synthesizeDemoOwnedTokens).
+    BEANCOIN: {
+        description: 'Loyalty points for the Sunrise Roasters coffee network. Earn on every cup, spend at any cafe.',
+        owner: DEMO_OWNER_ADDRESS,
+        supply: { current: '1250000', max: '10000000' },
+        locks: { description: false, max_supply: false, mint: false, mint_supply: false },
+        market: { price: 0.00000084, floor: 0.00000071 },
+        tis: {
+            description: 'Loyalty points for the Sunrise Roasters coffee network. Earn on every cup, spend at any cafe.',
+            images: [{ type: 'icon', data: demoIssuedIcon('BEAN', '#B45309', '#78350F') }],
+            website: 'https://xchain.io',
+            categories: [{ type: 'main', data: 'Loyalty and rewards' }],
+        },
+    },
+    STUDIOPASS: {
+        description: 'Lifetime member passes for Studio North, the shared creative workspace.',
+        owner: DEMO_OWNER_ADDRESS,
+        supply: { current: '500', max: '500' },
+        locks: { description: false, max_supply: true, mint: true, mint_supply: true },
+        market: { price: 0.0012, floor: 0.0009 },
+        tis: {
+            description: 'Lifetime member passes for Studio North, the shared creative workspace.',
+            images: [{ type: 'icon', data: demoIssuedIcon('PASS', '#0E7490', '#1E3A8A') }],
+            website: 'https://xchain.io',
+            categories: [{ type: 'main', data: 'Memberships' }],
+        },
+    },
+    HARBORFEST: {
+        description: 'Weekend tickets for Harbor Fest 2027, the waterfront music and food festival.',
+        owner: DEMO_OWNER_ADDRESS,
+        supply: { current: '2000', max: '2000' },
+        locks: { description: false, max_supply: true, mint: false, mint_supply: false },
+        market: { price: 0.00048, floor: 0.0004 },
+        tis: {
+            description: 'Weekend tickets for Harbor Fest 2027, the waterfront music and food festival.',
+            images: [{ type: 'icon', data: demoIssuedIcon('HARBR', '#BE185D', '#6D28D9') }],
+            website: 'https://xchain.io',
+            categories: [{ type: 'main', data: 'Events' }],
         },
     },
     XCP: {
