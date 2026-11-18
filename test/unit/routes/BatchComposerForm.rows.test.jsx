@@ -11,6 +11,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { BatchComposerForm } from '../../../packages/core/src/shared/routes/BatchComposerForm.jsx';
 import { selectOption } from '../../helpers/selectOption.js';
+import { slowTimeout } from '../../helpers/testEnvSpeed.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const FROM = {
@@ -135,7 +136,9 @@ describe('BatchComposerForm rows', () => {
         expect(screen.getAllByRole('region', { name: /Action \d/ })).toHaveLength(flows.BATCH_MAX_COMMANDS);
         expect(add).toBeDisabled();
         expect(screen.getByText(new RegExp(`${flows.BATCH_MAX_COMMANDS} actions is the most one batch carries`))).toBeTruthy();
-    }, 60000);
+    // 249 clicks, each re-rendering a longer list: about 20s on a dev box, and
+    // instrumentation plus a shared runner more than doubled it past 60s.
+    }, slowTimeout(60000));
 
     it('waits to ask for an action until the user touches the row or presses Batch', async () => {
         mount();
