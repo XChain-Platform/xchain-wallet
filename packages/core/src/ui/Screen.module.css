@@ -167,6 +167,8 @@
            title scrolls away; this viewport floor has no spacing token. */
         flex: 1 0 220px;
         min-height: 220px;
+        /* G80: the full 8px end gutter, less only a classic scrollbar's lane. */
+        padding-inline-end: max(0px, calc(var(--xc-page-gutter) - var(--xc-frame-scrollbar, 0px)));
     }
 
     /* A footer row is route content too, so a body followed by one keeps a
