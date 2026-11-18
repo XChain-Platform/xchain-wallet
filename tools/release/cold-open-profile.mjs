@@ -73,7 +73,7 @@ import https from 'node:https';
 import { ChainRegistry } from '../../packages/core/src/registry/index.js';
 import { SDKRegistry, DEFAULT_SDK_NETWORK_OPTIONS } from '../../packages/core/src/sdk/SDKRegistry.js';
 import { sharedExplorerLimiter } from '../../packages/core/src/sdk/explorerRateLimit.js';
-import { walletBalances, BALANCE_POLL_INTERVAL_MS } from '../../packages/core/src/flows/balances.js';
+import { walletBalances, BALANCE_MAX_AGE_MS } from '../../packages/core/src/flows/balances.js';
 import { createPollThrottle } from '../../packages/core/src/flows/pollThrottle.js';
 import { getCoinpayObligationsForAddress } from '../../packages/core/src/flows/coinpayQueries.js';
 import { verifyAddressBalance } from '../../packages/core/src/flows/verifyBalances.js';
@@ -187,9 +187,9 @@ export const COUNTING_PERIOD_SEC = 10;
 /**
  * The step name under which the repeat load is recorded.
  *
- * Home's polling effect re-runs the whole balance load (balances and native
- * coin, every address on every chain) every BALANCE_POLL_INTERVAL_MS, and
- * again on a focus or visibilitychange that the poll throttle admits. So a
+ * Home re-runs the whole balance load (balances and native coin, every
+ * address on every chain) once its data is BALANCE_MAX_AGE_MS old, whether its
+ * 60 s check or a focus or visibilitychange finds it so. So a
  * cold-open is not a one-off spike to be absorbed: it is the wallet's
  * steady-state shape.
  *
@@ -586,8 +586,8 @@ export async function measureColdOpen({
         const proofReads = requests.length - before;
 
         // 5. The SECOND load, on the same SDK instances, because a cold-open
-        //    is not a one-off. Home's polling effect re-runs step 2 every
-        //    BALANCE_POLL_INTERVAL_MS for as long as the wallet is open. Step
+        //    is not a one-off. Home re-runs step 2 once per
+        //    BALANCE_MAX_AGE_MS for as long as the wallet is open. Step
         //    3 is NOT part of that beat any more (spec row 29): the coinpay
         //    scan repeats on the badge's own, slower interval below.
         //
@@ -663,7 +663,7 @@ export async function measureColdOpen({
         batchSupported: typeof XChainSDK.prototype.getBalancesBatch === 'function',
         requests: all,
         recurringRequests: recurring,
-        recurringIntervalMs: BALANCE_POLL_INTERVAL_MS,
+        recurringIntervalMs: BALANCE_MAX_AGE_MS,
         badgeRequests,
         badgeIntervalMs: COINPAY_BADGE_POLL_MS,
         proof,
@@ -678,7 +678,7 @@ export async function measureColdOpen({
  * Two events at once, twice: inside the window and after it. Returns how many
  * polls the throttle admitted each time.
  */
-export function driveRefocus(intervalMs = BALANCE_POLL_INTERVAL_MS) {
+export function driveRefocus(intervalMs = BALANCE_MAX_AGE_MS) {
     let clock = 0;
     const throttle = createPollThrottle(intervalMs, { now: () => clock });
     throttle.succeed(); // the cold-open landed at t=0

@@ -23,7 +23,7 @@
 //
 // The fan-out runs once per (chain, address, token) SET per session, not
 // once per poll: Home hands this hook a new `balances` object every
-// `BALANCE_POLL_INTERVAL_MS` even when nothing changed, so keying the
+// balance refresh even when nothing changed, so keying the
 // effect on that object re-verified every job every 20 seconds (two
 // uncached explorer reads per job, against 60/min limiters; see the spec's
 // D18/C13). `proofJobsSignature` collapses `balances` to the sorted set of
@@ -192,7 +192,7 @@ export function useProofVerification({ messaging, balances, enabled }) {
         return () => { cancelled = true; };
     // `sig` captures the set of (chain, address, tick) jobs; `balances`
     // identity changes on every poll (Home hands down a new object every
-    // BALANCE_POLL_INTERVAL_MS) but its job set, and thus the work, does
+    // balance refresh) but its job set, and thus the work, does
     // not. Reading `balances` here still recomputes the jobs for the render
     // that produced this `sig`, so the two never disagree.
     // eslint-disable-next-line react-hooks/exhaustive-deps

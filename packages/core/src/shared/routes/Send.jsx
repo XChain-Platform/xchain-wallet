@@ -318,7 +318,7 @@ import { normalizeHistoryRow } from '../utils/historyRow.js';
 import { pendingTxToEntry } from '../utils/pendingHistory.js';
 import { classifyEntryStatusWithoutMempool } from '../utils/historyFilter.js';
 import { startVisibleInterval } from '../utils/visibleInterval.js';
-import { BALANCE_POLL_INTERVAL_MS } from '../../flows/balances.js';
+import { PENDING_POLL_INTERVAL_MS } from '../../flows/balances.js';
 import {
     externalIndexOf,
     hasAnyAddress,
@@ -1916,7 +1916,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         };
 
         void poll();
-        const stop = startVisibleInterval(() => { void poll(); }, BALANCE_POLL_INTERVAL_MS);
+        const stop = startVisibleInterval(() => { void poll(); }, PENDING_POLL_INTERVAL_MS);
         return () => {
             cancelled = true;
             sentStatusPollRef.current += 1;

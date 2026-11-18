@@ -15,6 +15,7 @@ import { clearPanicModeState } from '../../flows/panicMode.js';
 import { clearBackupReminderState } from '../../flows/backupReminder.js';
 import { clearMigrationSweeps } from '../../flows/migrationSweeps.js';
 import { clearBalanceCache } from './balanceCache.js';
+import { clearOwnedTokensCache, OWNED_TOKENS_CACHE_PREFIX } from './ownedTokensCache.js';
 import { HISTORY_CACHE_PREFIX } from './historyCache.js';
 import { FAUCET_HISTORY_KEY, forgetFaucetHistory } from './faucetHistory.js';
 
@@ -63,6 +64,7 @@ const WALLET_LOCAL_STORAGE_PREFIXES = Object.freeze([
     'xc:balanceCache:',
     'xc:balances:sort:',
     HISTORY_CACHE_PREFIX,
+    OWNED_TOKENS_CACHE_PREFIX,
     'xc:homeFilters:',
 ]);
 
@@ -216,6 +218,7 @@ export function subscribeVaultWipe(onWipe) {
 export function clearRemovedWalletStorage(walletId) {
     if (typeof walletId !== 'string' || walletId.length === 0) return;
     clearBalanceCache(walletId);
+    clearOwnedTokensCache(walletId);
     clearBackupReminderState(walletId);
     // A migration list names the legacy wallet and its sweep destination;
     // either one leaving makes the list meaningless.

@@ -23,6 +23,8 @@
 // the extension does for the same reason.
 
 import { invalidateTokenInfoForAction } from '@xchain-wallet/core/shared/utils/tokenInfoCache.js';
+import { isBroadcastMessageType } from '@xchain-wallet/core/shared/utils/broadcastRoutes.js';
+import { markWalletDataStale } from '@xchain-wallet/core/shared/utils/walletDataFreshness.js';
 import { hydrateEnvelopeError } from '@xchain-wallet/extension/src/background/MessageHost.js';
 
 /**
@@ -46,6 +48,8 @@ export async function sendMessage(type, request) {
             const req = /** @type {any} */ (request);
             invalidateTokenInfoForAction(req?.chainId, req);
         }
+        // A broadcast changed this wallet's balances; saved reads are stale.
+        if (isBroadcastMessageType(type)) markWalletDataStale();
         return response.result;
     }
     // The MAIN process runs the SAME bridge handlers the extension

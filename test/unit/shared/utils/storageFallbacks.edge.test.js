@@ -73,6 +73,7 @@ describe('balance cache defensive branches', () => {
             balances: { chain: [] },
             activeByChain: {},
             fetchedAt: 0,
+            readAt: 0,
         });
     });
 

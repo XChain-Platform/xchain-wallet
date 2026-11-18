@@ -24,6 +24,7 @@
 // surfacing dead entries.
 
 import { t } from '../../i18n/index.js';
+import { markWalletDataStale } from '../utils/walletDataFreshness.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/firstPaint.js';
 import '../../i18n/locales/en/commandPalette.js';
@@ -443,7 +444,8 @@ export function buildCommands(ctx) {
 
     // ---- Wallet verbs (only when the shell wires the handler) -----------
     if (typeof ctx.refresh === 'function') {
-        list.push({ id: 'wallet-refresh', category: 'Wallet', title: t('components.tradeHistoryPanel.refresh'), subtitle: t('palette.walletRefresh.subtitle'), keywords: ['reload', 'sync', 'update'], Icon: Icon.RefreshIcon, run: () => ctx.refresh() });
+        // An explicit refresh reads past every saved wallet read, whatever its age.
+        list.push({ id: 'wallet-refresh', category: 'Wallet', title: t('components.tradeHistoryPanel.refresh'), subtitle: t('palette.walletRefresh.subtitle'), keywords: ['reload', 'sync', 'update'], Icon: Icon.RefreshIcon, run: () => { markWalletDataStale(); ctx.refresh(); } });
     }
     if (typeof ctx.switchWallet === 'function') {
         list.push({ id: 'wallet-switch', category: 'Wallet', title: t('components.bottomTabBar.switchWallet'), subtitle: t('palette.walletSwitch.subtitle'), keywords: ['wallet', 'account', 'change'], Icon: Icon.UsersIcon, run: () => ctx.switchWallet() });

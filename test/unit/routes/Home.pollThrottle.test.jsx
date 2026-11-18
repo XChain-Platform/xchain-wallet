@@ -25,7 +25,7 @@ import { render, waitFor, act, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { BALANCE_MAX_AGE_MS } from '../../../packages/core/src/flows/balances.js';
 
 const WALLET = { id: 'wallet-a', name: 'Main Wallet' };
 
@@ -63,7 +63,7 @@ describe('Home throttles its focus/visibilitychange re-poll', () => {
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalled());
         const afterMount = messaging.getWalletBalances.mock.calls.length;
 
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS - 1);
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS - 1);
         fireAltTab();
         fireAltTab();
 
@@ -76,7 +76,7 @@ describe('Home throttles its focus/visibilitychange re-poll', () => {
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalled());
         const afterMount = messaging.getWalletBalances.mock.calls.length;
 
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS);
         fireAltTab();
 
         // One load for the pair of events, and the load that landed restarts

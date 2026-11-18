@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
+import { BALANCE_MAX_AGE_MS } from '../../../packages/core/src/flows/balances.js';
 import { useAutoLockPolicy } from '../../../packages/core/src/shared/hooks/useAutoLockPolicy.js';
 import {
     dismissAllOverlays,
@@ -287,7 +288,7 @@ describe('Capacitor app resume', () => {
 });
 
 describe('Home native resume refresh', () => {
-    it('loads balances exactly once for each new resume key', async () => {
+    it('a new resume key reloads stale balances once, and fresh ones not at all', async () => {
         const messaging = {
             listWallets: vi.fn().mockResolvedValue([WALLET]),
             listAccounts: vi.fn().mockResolvedValue([ACCOUNT]),
@@ -296,23 +297,29 @@ describe('Home native resume refresh', () => {
             getActiveAddresses: vi.fn().mockResolvedValue({}),
             getSettings: vi.fn().mockResolvedValue({}),
         };
-        const view = render(provider(
+        const home = (resumeKey) => provider(
             messaging,
-            <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} resumeKey={0} />,
-        ));
+            <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} resumeKey={resumeKey} />,
+        );
+        const view = render(home(0));
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(1));
 
-        view.rerender(provider(
-            messaging,
-            <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} resumeKey={1} />,
-        ));
-        await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2));
-
-        view.rerender(provider(
-            messaging,
-            <Home activeWalletId={WALLET.id} activeAccountId={ACCOUNT.id} resumeKey={1} />,
-        ));
+        // A resume inside the five-minute reuse window keeps the saved read.
+        view.rerender(home(1));
         await act(async () => { await Promise.resolve(); });
-        expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
+        expect(messaging.getWalletBalances).toHaveBeenCalledTimes(1);
+
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS);
+            view.rerender(home(2));
+            await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2));
+
+            view.rerender(home(2));
+            await act(async () => { await Promise.resolve(); });
+            expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

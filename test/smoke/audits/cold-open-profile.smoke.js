@@ -40,7 +40,7 @@ import {
     ZONE_RULES, RATE_LIMIT_SKIP_HOSTS, SBFM_ONLY_SKIP_HOSTS, ATTEMPTS_PER_CALL, COUNTING_PERIOD_SEC,
 } from '../../../tools/release/cold-open-profile.mjs';
 import { DEFAULT_SDK_NETWORK_OPTIONS } from '../../../packages/core/src/sdk/SDKRegistry.js';
-import { BALANCE_POLL_INTERVAL_MS, BALANCES_BATCH_MAX_ADDRESSES } from '../../../packages/core/src/flows/balances.js';
+import { BALANCE_MAX_AGE_MS, BALANCES_BATCH_MAX_ADDRESSES } from '../../../packages/core/src/flows/balances.js';
 import { COINPAY_BADGE_POLL_MS } from '../../../packages/core/src/shared/hooks/useCoinpayObligations.js';
 import { BUNDLED_DESCRIPTORS } from '../../../packages/core/src/registry/descriptors/index.js';
 
@@ -189,7 +189,7 @@ assert.deepEqual(
     { inside: 0, after: 1 },
     'focus + visibilitychange together: no poll inside the interval, exactly one after it',
 );
-assert.equal(oneAddress.refocus.intervalMs, BALANCE_POLL_INTERVAL_MS);
+assert.equal(oneAddress.refocus.intervalMs, BALANCE_MAX_AGE_MS);
 assert.deepEqual(driveRefocus(1000), { intervalMs: 1000, insideWindow: 0, afterWindow: 1 });
 
 // --- 5. The zone rules and both skips are transcribed as read ------------
@@ -245,7 +245,7 @@ assert.equal(
 
 const profile = coldOpenProfile(oneAddress, { headroom: 3 });
 assert.equal(profile.periodSec, COUNTING_PERIOD_SEC);
-assert.equal(profile.recurringIntervalMs, BALANCE_POLL_INTERVAL_MS, 'the repeat cadence is the app\'s own constant');
+assert.equal(profile.recurringIntervalMs, BALANCE_MAX_AGE_MS, 'the repeat cadence is the app\'s own constant');
 
 // The split the M2 rules were reshaped to produce: the API rule counts EVERY
 // request the profiled wallet makes and the General rule counts none, so exactly
@@ -286,7 +286,7 @@ assert.equal(overApi.fitsToday, true, 'and the bare cold-open still fits, so the
 
 // The per-poll figures are per chain per address, so a fourth chain cannot
 // fail this: two balance reads, NO coinpay read (spec row 29 moved the resume
-// cards onto the shared hook, so the 20 s beat carries no coinpay traffic at
+// cards onto the shared hook, so the balance refresh carries no coinpay traffic at
 // all), no proof reads.
 // Two honest shapes, decided by the SDK in node_modules: the flows feature-detect
 // the batch reads, so the pinned SDK (no batch methods) still reads two per
@@ -304,7 +304,7 @@ if (profile.batchSupported) {
 
 // The worst minute per route folds in every further poll and badge scan that
 // fits in the minute after the cold-open.
-const furtherPolls = Math.ceil(60_000 / BALANCE_POLL_INTERVAL_MS) - 1;
+const furtherPolls = Math.ceil(60_000 / BALANCE_MAX_AGE_MS) - 1;
 const furtherBadge = Math.ceil(60_000 / COINPAY_BADGE_POLL_MS) - 1;
 let balancesRoute;
 if (profile.batchSupported) {
@@ -327,7 +327,7 @@ if (profile.batchSupported) {
     // repeats ONLY: its per-poll term is zero, so the formula below has to be
     // pinned with that term stated, or a coinpay read creeping back into Home's
     // beat would still satisfy it.
-    assert.equal(coinpayRoute.perPoll, 0, 'no coinpay read rides the 20 s balance poll any more');
+    assert.equal(coinpayRoute.perPoll, 0, 'no coinpay read rides the balance refresh any more');
     assert.equal(coinpayRoute.worstMinute,
         coinpayRoute.coldOpen + coinpayRoute.perPoll * furtherPolls + coinpayRoute.perBadge * furtherBadge);
     assert.equal(coinpayRoute.worstMinute, coinpayRoute.coldOpen + coinpayRoute.perBadge * furtherBadge);

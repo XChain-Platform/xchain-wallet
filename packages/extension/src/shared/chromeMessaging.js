@@ -26,6 +26,8 @@
 // request named, which is the same set `submitAction` would have dropped.
 
 import { invalidateTokenInfoForAction } from '@xchain-wallet/core/shared/utils/tokenInfoCache.js';
+import { isBroadcastMessageType } from '@xchain-wallet/core/shared/utils/broadcastRoutes.js';
+import { markWalletDataStale } from '@xchain-wallet/core/shared/utils/walletDataFreshness.js';
 import { hydrateEnvelopeError } from '../background/MessageHost.js';
 import { createSurfaceStateBroadcaster } from './surfaceStateSync.js';
 
@@ -136,6 +138,8 @@ function sendMessageOnce(type, request, timeoutMs) {
                     const req = /** @type {any} */ (request);
                     invalidateTokenInfoForAction(req?.chainId, req);
                 }
+                // A broadcast changed this wallet's balances; saved reads are stale.
+                if (isBroadcastMessageType(type)) markWalletDataStale();
                 if (type === 'settings.update' && response.result
                     && typeof response.result === 'object') {
                     publishSettingsChange(response.result);

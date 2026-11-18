@@ -28,7 +28,7 @@ import { render, waitFor, act, cleanup } from '@testing-library/react';
 import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { BALANCE_MAX_AGE_MS } from '../../../packages/core/src/flows/balances.js';
 import * as branding from '../../../packages/core/src/branding/branding.js';
 
 const CHAIN = 'litecoin-regtest';
@@ -84,13 +84,13 @@ describe('History throttles its focus bump', () => {
 
         // Leading edge: the first return once the rows have aged past one
         // interval is honoured at once.
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS);
         fireFocus();
         await waitFor(() => expect(fanOuts(messaging)).toBe(afterMount + 1));
 
         // The rest of the switching costs nothing until the rows age out.
         fireFocus();
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS - 1);
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS - 1);
         fireFocus();
         expect(fanOuts(messaging)).toBe(afterMount + 1);
 
@@ -116,7 +116,7 @@ describe('History will not stack a fan-out on one still in flight', () => {
         await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     };
     const beat = async () => {
-        await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_POLL_INTERVAL_MS); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_MAX_AGE_MS); });
     };
 
     it('does not re-render unchanged rows when the polling beat starts', async () => {
@@ -190,7 +190,7 @@ describe('History will not stack a fan-out on one still in flight', () => {
         expect(fanOuts(messaging)).toBe(1);
 
         // In flight: the window's opinion does not matter, the slot is taken.
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS * 3);
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS * 3);
         fireFocus();
         fireFocus();
         await settle();
@@ -200,7 +200,7 @@ describe('History will not stack a fan-out on one still in flight', () => {
         await settle();
         // Landed: the slot is free, but the window restarted at the landing,
         // so a return inside it is still dropped.
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS - 1);
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS - 1);
         fireFocus();
         await settle();
         expect(fanOuts(messaging)).toBe(1);
