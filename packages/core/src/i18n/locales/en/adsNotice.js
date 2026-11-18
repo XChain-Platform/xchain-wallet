@@ -20,7 +20,7 @@ const messages = {
     'adsNotice.subtitle':
         'XChain Platform includes automatic donations that support continued development.',
     'adsNotice.defaultBehavior':
-        'Automatic donations are on by default. Each mainnet transaction you send adds {perTransaction} to one queue, and when the queue reaches {sendAt} it goes out as one donation with your next mainnet send that can cover it. At the defaults, that is about 100 transactions. The review screen shows the donation before you approve.',
+        'Automatic donations are on by default. Each mainnet transaction you send adds a small donation to one queue, and when the queue is full it goes out as one donation with your next mainnet send that can cover it. The review screen shows the donation before you approve.',
     'adsNotice.optional':
         "You don't need to donate to use XChain Platform.",
     'adsNotice.settings':

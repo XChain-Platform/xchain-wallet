@@ -12,15 +12,14 @@ import { forwardRef } from 'react';
 import { Button, FormPage, Icon, Notice } from '@xchain-wallet/core/ui';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/adsNotice.js';
-import { ADS_DEFAULT_PER_TRANSACTION, ADS_DEFAULT_SEND_AT } from '../../schemas/settings.js';
-import { formatFiatAmount } from '../utils/fiatAmountFormat.js';
 import styles from './AdsNotice.module.css';
 
 /**
  * §36.1 ADS notice: the one-time screen at the end of onboarding, after a
  * wallet is created, imported, migrated from FreeWallet or restored from a
- * backup. It informs; it does not ask. The default donation settings already
- * hold, so there is nothing to write here. The amount, the send-at total and
+ * backup. It informs; it does not ask, and it states no amounts (U21). The
+ * default donation settings already hold, so there is nothing to write here.
+ * The amount, the send-at total and
  * the recipient live in Settings -> Automatic donations (operator rulings
  * 2026-10-12 and 2026-11-14).
  *
@@ -56,10 +55,7 @@ export const AdsNotice = forwardRef(function AdsNotice({ onContinue, busy = fals
                 role={null}
                 title={t('adsNotice.subtitle')}
             >
-                <p>{t('adsNotice.defaultBehavior', {
-                    perTransaction: formatFiatAmount(ADS_DEFAULT_PER_TRANSACTION, 'USD'),
-                    sendAt: formatFiatAmount(ADS_DEFAULT_SEND_AT, 'USD'),
-                })}</p>
+                <p>{t('adsNotice.defaultBehavior')}</p>
                 <p>{t('adsNotice.optional')}</p>
                 <p>{t('adsNotice.settings')}</p>
             </Notice>
