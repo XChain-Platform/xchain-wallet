@@ -47,7 +47,7 @@
 //       --config=playwright.regtest.config.js tests/dispensers/fiat-priced-fill.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
 import { pickFiatCurrency } from '../../fixtures/pickerFields.js';
 import {
     expectConfirmModal as sharedConfirmModal,
@@ -248,11 +248,12 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // a fiat dispenser carries GET_AMOUNT 0 and derives the coin price
             // at settlement, which is exactly what makes the buyer-side model
             // below interesting.
-            await main.getByRole('button', { name: /Advanced options/ }).click();
+            // The fiat and oracle fields sit in the closed Dispenser Terms section.
+            await openFormSection(main, 'Dispenser Terms');
             await pickFiatCurrency(main, FIAT_CODE);
             await main.getByLabel(/^Fiat amount/).fill(String(FIAT_AMOUNT));
 
-            await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
             await expectConfirmModal(page);
             const created = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(created.action)).toBe('DISPENSER');

@@ -43,6 +43,9 @@ import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/w
 import {
     expectConfirmModal,
     EXPLORER_URL,
+    fillOrderSide,
+    placeOrderButton,
+    REGTEST_TICKER,
     fundAddress,
     minerRpc,
     mintXchain,
@@ -66,8 +69,6 @@ const MINT = 1000;
 const GIVE = 100;
 /** The ask, in native coin. Never paid here - nothing matches this order. */
 const GET = '0.5';
-/** The chain's own ticker. */
-const COIN = REGTEST_COIN.replace(/^R/, '');
 
 async function explorerJson(path) {
     const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
@@ -239,21 +240,14 @@ async function placeOrder(page) {
     await expect(await openFromAddress(main)).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
 
-    // The default sides are exactly the pair this spec is about (give a
-    // token, get native coin); asserted rather than assumed, because a
-    // changed default would silently move the test onto a shape that
-    // escrows nothing.
-    // `exact` matters on both fields: the give side also carries a "Trade
-    // ownership of this ticker" checkbox, and the get side an "Amount (LTC)"
-    // - a loose label match resolves to two elements.
-    await expect(fieldByLabel(main, 'Ticker'),
-        'the give side no longer defaults to a token, so nothing would be escrowed')
-        .toBeVisible();
-    await fieldByLabel(main, 'Ticker').fill('XCHAIN');
-    await fieldByLabel(main, 'Amount').fill(String(GIVE));
-    await fieldByLabel(main, `Amount (${COIN})`).fill(GET);
+    // The pair this spec is about: give a token (the only side that
+    // escrows), get native coin. Both sides are picked by name rather than
+    // left to the form's defaults, and the helper asserts each pick, so a
+    // changed default cannot move the test onto a shape that escrows nothing.
+    await fillOrderSide(page, 'give', 'XCHAIN', GIVE);
+    await fillOrderSide(page, 'get', REGTEST_TICKER, GET);
 
-    await main.getByRole('button', { name: /^Place order/ }).click();
+    await placeOrderButton(page).click();
 
     await expectConfirmModal(page, 'this action', 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });

@@ -272,7 +272,7 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 30_000 });
             await fieldByLabel(main, 'Payment amount per fill').fill(String(PRICE_PER_FILL));
 
-            await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
             await expectConfirmModal(page);
             const created = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(created.action)).toBe('DISPENSER');

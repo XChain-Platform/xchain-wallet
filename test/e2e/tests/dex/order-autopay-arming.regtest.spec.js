@@ -29,10 +29,13 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/dex/order-autopay-arming.regtest.spec.js
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
     EXPLORER_URL,
+    fillOrderSide,
+    placeOrderButton,
+    REGTEST_TICKER,
     fundAddress,
     issuePlainToken,
     readIssueSource,
@@ -61,7 +64,6 @@ const TICK = `APY${STAMP}`;
 /** The GIVE side, in native coin. Never actually paid: nothing matches. */
 const GIVE_COIN = '0.5';
 const WANT_TOKENS = 100;
-const COIN = REGTEST_COIN.replace(/^R/, '');
 
 async function explorerJson(path) {
     const res = await fetch(`${EXPLORER_URL}/${REGTEST_COIN}/api/${path}`, {
@@ -100,14 +102,15 @@ async function approveAndGetTxid(page) {
     return (await main.innerText()).match(/[0-9a-f]{64}/)?.[0];
 }
 
-/** Fills the native-GIVE / token-GET pair this spec arms auto-pay on. */
-async function fillNativeGiveOrder(main) {
-    // Radios come in DOM order: the "You give" group first, "You get" second.
-    await main.getByRole('radio', { name: `Native ${COIN}` }).first().check();
-    await main.getByRole('radio', { name: 'A token' }).last().check();
-    await fieldByLabel(main, `Amount (${COIN})`).fill(GIVE_COIN);
-    await fieldByLabel(main, 'Ticker').fill(TICK);
-    await fieldByLabel(main, 'Amount').fill(String(WANT_TOKENS));
+/**
+ * Fills the native-GIVE / token-GET pair this spec arms auto-pay on, then
+ * opens Order Terms, the closed optional section that holds the Auto pay
+ * switch.
+ */
+async function fillNativeGiveOrder(page) {
+    await fillOrderSide(page, 'give', REGTEST_TICKER, GIVE_COIN);
+    await fillOrderSide(page, 'get', TICK, WANT_TOKENS);
+    await openFormSection(page.getByRole('main'), 'Order Terms');
 }
 
 test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
@@ -157,7 +160,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = page.getByRole('main');
             await expect(await openFromAddress(main)).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            await fillNativeGiveOrder(main);
+            await fillNativeGiveOrder(page);
 
             // Auto-pay is offered ON by default, and only on this shape: a
             // token GIVE escrows instead, and there is nothing to pay later.
@@ -175,8 +178,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('place it, and read what the wallet promises', async () => {
-            const main = page.getByRole('main');
-            await main.getByRole('button', { name: /^Place order/ }).click();
+            await placeOrderButton(page).click();
 
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-summary-notice'),

@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 import { readShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     explorerJson,
     expectConfirmModal,
@@ -57,28 +57,36 @@ test.describe('ADDRESS v0 preferences on regtest', () => {
             await openPaletteCommand(page, 'Addresses');
             const main = page.getByRole('main');
             await main.getByRole('button', { name: `View address ${source}` }).click();
-            await main.getByRole('button', { name: 'Edit on-chain preferences' }).click();
+            // The detail's Actions tab lists the editor as an "On-chain prefs" row.
+            await main.getByRole('list', { name: 'Actions', exact: true })
+                .getByRole('button', { name: /^On-chain prefs\b/ }).click();
 
             // The screen title sits in the page banner, outside main.
             await expect(page.getByRole('banner').getByRole('heading', {
-                name: 'On-chain preferences',
+                name: 'Address Preferences',
             }))
                 .toBeVisible({ timeout: 30_000 });
-            // Each preference is the themed dropdown (G119): open it, pick the option.
+            // Each preference is the themed dropdown (G119): open it, pick the
+            // option. Protocol Fee Handling starts open; Incoming Sends,
+            // Dispensers and Memo are closed sections.
             await main.getByRole('button', { name: /^How the protocol fee is handled: / }).click();
             await main.getByRole('option', { name: 'Destroy (reduces supply)' }).click();
+            await openFormSection(main, 'Incoming Sends');
             await main.getByRole('button', { name: /^Require memo on incoming sends: / }).click();
             await main.getByRole('option', { name: 'Yes' }).click();
+            await openFormSection(main, 'Dispensers');
             await main.getByRole('button', { name: /^Who may open dispensers: / }).click();
             await main.getByRole('option', { name: 'Anyone' }).click();
+            await openFormSection(main, 'Memo');
             await fieldByLabel(main, 'Memo').fill(MEMO);
-            await main.getByRole('button', { name: 'Update preferences', exact: true }).click();
+            await main.getByRole('button', { name: 'Update Preferences', exact: true }).click();
 
-            await expect(main).toContainText('Destroy the fee (reduces supply) - CHANGED');
-            await expect(main).toContainText('Memo required on incoming sends - CHANGED');
-            await expect(main).toContainText('Anyone may open a dispenser here - CHANGED');
-            await main.getByRole('button', { name: 'Continue to Confirmation', exact: true }).click();
-            await expectConfirmModal(page, 'address preferences');
+            // Review is the confirm screen itself, and its facts mark each of
+            // the three rewritten values as changed against a fresh read.
+            const confirm = await expectConfirmModal(page, 'address preferences');
+            await expect(confirm).toContainText(/Destroy the fee \(reduces supply\) - changed/i);
+            await expect(confirm).toContainText(/Memo required on incoming sends - changed/i);
+            await expect(confirm).toContainText(/Anyone may open a dispenser here - changed/i);
             const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
                 await password.fill(PASSWORD);
