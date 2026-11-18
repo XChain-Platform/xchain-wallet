@@ -56,6 +56,7 @@ import {
 // ServiceWorkerGlobalScope), and keeping it off the barrel is what lets the
 // Node smokes go on importing sdkFactory.js without an installed SDK.
 import { XChainSDK } from './background/sdkStatic.js';
+import { preflightAmountModules } from './background/sdkStatic.js';
 import {
     SIGNING_SECRET_SESSION_KEY,
     loadSigningCredentials,
@@ -464,6 +465,7 @@ async function buildHost() {
             signingSecretBackend: new ChromeSessionBackend({ key: SIGNING_SECRET_SESSION_KEY }),
         }),
         broadcastQueueStore,
+        loadAmountRules: () => flowsLib.amountRulesFromSdk(preflightAmountModules),
         approvals: approvalBroker,
         surfaceStateEvents,
         // §26: an auto-lock arm storage refused locks at once (fail closed).

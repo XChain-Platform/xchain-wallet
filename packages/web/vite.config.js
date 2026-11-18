@@ -431,8 +431,10 @@ export default defineConfig({
     // only WalletUtils (pure PSBT helpers), never an explorer or encoder
     // client, so pre-bundling it hands the dev shell no path to a live SDK and
     // the flag above still decides that alone.
+    // The real-SDK venue also pre-bundles the pre-flight amount validators that
+    // hostBridge loads by path; off the flag that load fails and reports pass through.
     optimizeDeps: process.env.VITE_XCHAIN_REAL_SDK === '1'
-        ? { include: ['xchain-sdk', 'xchain-sdk/src/wallet.js'] }
+        ? { include: ['xchain-sdk', 'xchain-sdk/src/wallet.js', 'xchain-sdk/src/preflight/numeric.js', 'xchain-sdk/src/preflight/checks/amount_format.js'] }
         : { include: ['xchain-sdk/src/wallet.js'], exclude: ['xchain-sdk'] },
     // Old-but-capable WebViews (below the soft floor in
     // src/platform/webviewFloor.js) drop any declaration that uses

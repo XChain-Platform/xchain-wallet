@@ -775,6 +775,8 @@ export {
 } from './nativeFeeRequote.js';
 // Host routes run signature guards and retried pre-flights with fresh explorer reads.
 export { explorerFreshScope, retryRateLimitedPreflight } from '../sdk/explorerRateLimit.js';
+// The host settles the newer amount rule on its own action's pre-flight report.
+export { amountRulesFromSdk, settleAmountRepresentability } from './amountRepresentability.js';
 export { diagnosticDump, createErrorRingBuffer } from './diagnosticDump.js';
 export {
     markBackupVerified,

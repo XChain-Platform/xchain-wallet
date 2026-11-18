@@ -47,6 +47,7 @@ import { configureFiatRateSource } from '../../core/src/flows/priceLookup.js';
 import { legacySettingsMigrationCtx } from '../../core/src/flows/legacyRates.js';
 import { VAULT_SESSION_LOCK_NAME } from '../../core/src/flows/eraseSchedule.js';
 import { createFileRefResolver } from '../../core/src/flows/fileRefSource.js';
+import { amountRulesFromSdk } from '../../core/src/flows/amountRepresentability.js';
 import { PassphraseMismatchError } from '../../core/src/flows/unlockWallet.js';
 import { NotificationService } from '../../core/src/notifications/NotificationService.js';
 import { PriceAlertWatcher } from '../../core/src/notifications/PriceAlertWatcher.js';
@@ -135,6 +136,16 @@ function webVaultKeyring() {
             save: (next) => createMetaBackend().save(next),
         },
     });
+}
+
+// The SDK amount validators the host settles pre-flight reports with. They sit on
+// no SDK index export, so they load by path, on first use, beside the SDK chunk.
+async function loadWebAmountRules() {
+    const [numeric, amountFormat] = await Promise.all([
+        import('xchain-sdk/src/preflight/numeric.js'),
+        import('xchain-sdk/src/preflight/checks/amount_format.js'),
+    ]);
+    return amountRulesFromSdk({ numeric, amountFormat });
 }
 
 // §50 / Cluster L FOLLOWUP 4: shell-specific diagnostic env + build
@@ -1694,6 +1705,7 @@ export async function createWalletLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
+            loadAmountRules: loadWebAmountRules,
         });
         ownHost = host;
         startNotifications();
@@ -1847,6 +1859,7 @@ export async function importMnemonicLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
+            loadAmountRules: loadWebAmountRules,
         });
         ownHost = host;
         startNotifications();
@@ -2051,6 +2064,7 @@ export async function importBackupLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
+            loadAmountRules: loadWebAmountRules,
         });
         ownHost = host;
         startNotifications();
@@ -2135,6 +2149,7 @@ export async function createHardwareWalletLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
+            loadAmountRules: loadWebAmountRules,
         });
         ownHost = host;
         startNotifications();
@@ -2302,6 +2317,7 @@ export async function unlockWalletLocal(req) {
             getDiagnosticContext: webDiagnosticContext,
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
+            loadAmountRules: loadWebAmountRules,
         });
         ownHost = host;
         startNotifications();

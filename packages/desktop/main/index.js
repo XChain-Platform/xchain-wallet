@@ -52,6 +52,9 @@ import { flows as flowsLib, registry as registryLib, sdk as sdkLib } from '@xcha
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import * as sdkModule from 'xchain-sdk';
+// The pre-flight amount validators sit on no SDK index export, so they are read by path.
+import * as preflightNumeric from 'xchain-sdk/src/preflight/numeric.js';
+import * as preflightAmountFormat from 'xchain-sdk/src/preflight/checks/amount_format.js';
 
 import { IPC_CHANNEL } from './messageHost.js';
 // Pre-host + runtime helpers live in the pure-JS runtime module so the
@@ -543,6 +546,10 @@ function buildRuntime() {
         sdkRegistry: new sdkLib.SDKRegistry({
             chainRegistry,
             sdkFactory: REAL_SDK_FACTORY,
+        }),
+        loadAmountRules: () => flowsLib.amountRulesFromSdk({
+            numeric: preflightNumeric,
+            amountFormat: preflightAmountFormat,
         }),
         // Apply the egress policy for the current settings. ensureHost calls
         // this the moment the vault opens (boot or password unlock), and the

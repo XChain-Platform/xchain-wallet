@@ -1341,6 +1341,9 @@ export function createBackgroundHost(deps) {
         lockedSendOutcomes = createLockedSendOutcomeStore(),
         fileBlobs = createPendingFileBlobs(),
         resolveFileRef: injectedResolveFileRef,
+        // Returns the SDK's amount validators (flows.amountRulesFromSdk). Each shell
+        // loads them from its own SDK import; absent, pre-flight reports pass through.
+        loadAmountRules,
         ...hostDeps
     } = deps ?? {};
     // Resolved here, not as a destructuring default, so the default stays bound to fileBlobs.
@@ -3811,12 +3814,28 @@ export function createBackgroundHost(deps) {
         // The Approve-time re-check and any 429 retry skip the SDK's report
         // cache. Their explorer reads go fresh too, so neither an HTTP cache nor
         // the host's short reuse window can return the local-only first result.
-        return flows.retryRateLimitedPreflight(sdk, (attempt) => (
+        const report = await flows.retryRateLimitedPreflight(sdk, (attempt) => (
             req.bypassCache === true || attempt > 0
                 ? flows.explorerFreshScope(sdk, () => run(attempt))
                 : run(attempt)
         ));
+        return settleAmountRule(sdk, req.actionString, report);
     });
+
+    // Where the newer amount rule is unarmed, judge this action's amounts with the
+    // SDK's validator; any failure to read them keeps the report as the SDK built it.
+    async function settleAmountRule(sdk, actionString, report) {
+        if (!report?.unverified?.length || typeof loadAmountRules !== 'function') return report;
+        try {
+            const rules = await loadAmountRules();
+            const parsed = sdk.decoder?.parse?.(actionString);
+            const tokenFor = typeof sdk.explorer?.getToken === 'function'
+                ? (tick) => sdk.explorer.getToken(tick) : null;
+            return await flows.settleAmountRepresentability(report, { parsed, rules, tokenFor });
+        } catch {
+            return report;
+        }
+    }
 
     // §4.6 input liveness: are the coins this PSBT spends still unspent?
     //

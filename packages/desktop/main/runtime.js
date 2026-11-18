@@ -106,6 +106,8 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  *        Desktop supplies a file ledger so removals survive queue IO failures.
  * @property {import('@xchain-wallet/core').registry.ChainRegistry} chainRegistry
  * @property {import('@xchain-wallet/core').sdk.SDKRegistry} sdkRegistry
+ * @property {() => object|null} [loadAmountRules]
+ *        The SDK amount validators the host settles pre-flight reports with.
  * @property {() => Promise<{env?: object, build?: object}>} [getDiagnosticContext]
  *        §50 / Cluster L FOLLOWUP 4: supplied by main/index.js so the
  *        diagnostic dump records electron version + OS + walletVersion.
@@ -168,6 +170,7 @@ export function createRuntime(deps) {
         broadcastQueuePrunedLedger: deps.broadcastQueuePrunedLedger,
         chainRegistry: deps.chainRegistry,
         sdkRegistry: deps.sdkRegistry,
+        loadAmountRules: deps.loadAmountRules || null,
         getDiagnosticContext: deps.getDiagnosticContext,
         // Egress-policy applier, kept optional: unit tests and headless
         // callers build runtimes without it and must still get a host.
@@ -466,6 +469,7 @@ export async function ensureHost(runtime) {
             chainRegistry: runtime.chainRegistry,
             sdkRegistry: runtime.sdkRegistry,
             signerPool: runtime.signerPool,
+            loadAmountRules: runtime.loadAmountRules,
             // A password change re-seals the vault; the keychain-cached
             // session key must follow it or the next launch opens nothing.
             vaultKeyring: createVaultKeyring({
