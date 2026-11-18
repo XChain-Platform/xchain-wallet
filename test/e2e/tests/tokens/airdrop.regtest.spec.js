@@ -1186,8 +1186,9 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toContainText(`List #${listIndex}`);
             // An address list is described by its member count ("1 address on
             // this list."); a token list reads "Token list: ..." instead.
-            await expect(main, 'the form did not recognise the pick as an ADDRESS list')
-                .toContainText(/\b1 address on this list\b/);
+            await expect(main.getByText(/^1 address on this list\.$/),
+                'the form did not recognise the pick as an ADDRESS list')
+                .toBeVisible({ timeout: 30_000 });
 
             await payProtocolFeeInCoin(main);
             // 'existing' skips the LIST leg entirely, so the submit button is

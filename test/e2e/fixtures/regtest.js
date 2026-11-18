@@ -2129,20 +2129,30 @@ export async function expectApproveRefused(page, reason, what = 'this action', t
  * missing required field) is proven by what a tap does: the form lists the
  * problem at the top and on the field, and nothing reaches signing.
  *
+ * A refusal's alert can still be showing from an earlier tap, so when the
+ * gate's `field` is given, the tap is also proven by the cursor: a refused
+ * press puts it back on the field that is missing (G22).
+ *
  * @param {import('@playwright/test').Page} page
  * @param {import('@playwright/test').Locator} submit
  * @param {string | RegExp} message  the refusal text the alert must carry
  * @param {string} [what]  names the gate in the failure message
+ * @param {{ field?: import('@playwright/test').Locator, timeoutMs?: number }} [opts]
  */
-export async function expectSubmitRefused(page, submit, message, what = 'this action', timeoutMs = 15_000) {
+export async function expectSubmitRefused(page, submit, message, what = 'this action',
+    { field, timeoutMs = 15_000 } = {}) {
     await expect(submit, `the submit button is not on screen for ${what}`).toBeVisible({ timeout: timeoutMs });
     await submit.click();
     await expect(page.getByRole('alert').filter({ hasText: message }).first(),
         `a tap on submit for ${what} drew no refusal naming what is missing`)
         .toBeVisible({ timeout: timeoutMs });
+    if (field) {
+        await expect(field, `a tap on submit for ${what} did not return the cursor to the missing field`)
+            .toBeFocused({ timeout: timeoutMs });
+    }
     // The refusal is synchronous, so a confirm screen that opens at all opens
     // within this beat.
-    await page.waitForTimeout(1_000);
+    await page.waitForTimeout(2_000);
     await expect(page.getByTestId('confirm-modal'),
         `${what} reached the confirm screen past its refusal`)
         .toHaveCount(0);

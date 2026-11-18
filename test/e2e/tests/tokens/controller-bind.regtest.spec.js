@@ -672,7 +672,7 @@ async function unbindController(page, source, tick = TICK) {
         'the Unbind form still offers a cooldown field, which a drop cannot set')
         .toHaveCount(0);
     await chooseActionClass(form, 'transfer');
-    await form.getByRole('button', { name: 'Unbind Token', exact: true }).click();
+    await form.getByRole('button', { name: 'Unbind', exact: true }).click();
 
     await expectConfirmModal(page);
     const dropped = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -800,7 +800,7 @@ async function unbindAddressController(page, source) {
     await selectVenueChain(form);
     await readChainAddresses(page, source);
     await chooseActionClass(form, 'transfer');
-    await form.getByRole('button', { name: 'Unbind Address', exact: true }).click();
+    await form.getByRole('button', { name: 'Unbind', exact: true }).click();
 
     await expectConfirmModal(page);
     const dropped = await waitForIndexedAction(await approveAndGetTxid(page));

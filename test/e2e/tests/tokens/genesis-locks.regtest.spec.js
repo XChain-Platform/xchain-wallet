@@ -518,7 +518,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 15_000 });
             await typed.fill('LOOK');
             await expectSubmitRefused(page, submit, /Type LOCK to confirm the permanent lock/,
-                'a permanent lock confirmed with a near-miss word');
+                'a permanent lock confirmed with a near-miss word', { field: typed });
             await typed.fill('LOCK');
             await submit.click();
 

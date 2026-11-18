@@ -353,7 +353,7 @@ async function composeMint(page, amount, tick = TICK, signAs = null) {
     // headroom, the per-address cap and the window notice at different moments,
     // and a regex that only knew the first of those reported the fix as absent.
     const footer = await main
-        .getByText(/available to mint|per-address cap|No supply cap|opens at block|closed at block/).first()
+        .getByText(/available to mint|reached its per-address cap|No supply cap|opens at block|closed at block/).first()
         .innerText().catch(() => '');
 
     await main.getByRole('textbox', { name: /^Amount/ }).fill(String(amount));
