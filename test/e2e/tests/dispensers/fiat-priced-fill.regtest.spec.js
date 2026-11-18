@@ -68,6 +68,7 @@ import {
     selectPickerAsset,
     openFromAddress,
     approveConfirm,
+    FROM_ADDRESS_LABEL,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -211,7 +212,7 @@ test.describe(`fiat-priced dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             let main = page.getByRole('main');
             await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            seller = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+            seller = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
             expect(seller, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 

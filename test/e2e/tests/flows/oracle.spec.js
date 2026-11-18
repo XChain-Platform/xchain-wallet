@@ -6,9 +6,11 @@
 import {
     createWallet,
     expect,
+    openFormSection,
     test,
 } from '../../fixtures/wallet.js';
-import { pickFiatCurrency, pickToken } from '../../fixtures/pickerFields.js';
+import { pickFiatCurrency } from '../../fixtures/pickerFields.js';
+import { searchTokenPicker } from '../../fixtures/fields.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -17,9 +19,13 @@ import {
 
 const ORACLE = 'bc1qoraclelayoutrecord000000000000000000000';
 const MARKET_TITLE = 'Will the reference launch finish before the quarterly release window closes?';
-const TICK = 'ORCLTEST';
+// The dev-mock token search returns no platform hits, so the walk prices a
+// token the dev wallet owns on Litecoin, which the picker lists first.
+const TICK = 'LITEGEM';
+const TICK_NAME = 'Lite Gem';
 const PRICE = '12.34';
 const FIAT = 'EUR';
+// 1% on the Usage fee slider, carried on chain as 0.01.
 const USAGE_FEE = '0.01';
 const MEMO = 'Quarterly reference price';
 
@@ -161,12 +167,16 @@ async function expectScreenLayout(page, heading, label) {
         `${label}: the document scrolls horizontally`,
     ).toBeLessThanOrEqual(documentSize.clientWidth + 1);
 
+    // A G128 list-and-detail split bleeds one 8px gutter into main, which
+    // clips it; anything wider is a real overflow.
     const mainSize = await page.getByRole('main').evaluate((main) => ({
         scrollWidth: main.scrollWidth,
         clientWidth: main.clientWidth,
+        twoPanel: [...main.querySelectorAll('[class*="_twoPanel_"]')]
+            .some((el) => el.getBoundingClientRect().width > 0),
     }));
     expect(mainSize.scrollWidth, `${label}: main content overflows horizontally`)
-        .toBeLessThanOrEqual(mainSize.clientWidth + 1);
+        .toBeLessThanOrEqual(mainSize.clientWidth + 1 + (mainSize.twoPanel ? 8 : 0));
 
     for (const row of await sharedControlRows(page)) {
         const heights = row.controls.map((control) => control.height);
@@ -177,9 +187,6 @@ async function expectScreenLayout(page, heading, label) {
     }
 }
 
-async function expectReviewValue(review, value) {
-    await expect(review.getByText(value, { exact: true })).toBeVisible();
-}
 
 for (const viewport of VIEWPORTS) {
     test(`oracle flow renders at ${viewport.width}x${viewport.height}`, async ({ page }) => {
@@ -193,30 +200,32 @@ for (const viewport of VIEWPORTS) {
         // (ruling 2026-11-13). The fixture market belongs to ORACLE, not to
         // this fresh wallet, so the walk reaches it from All.
         await test.step('market list', async () => {
-            await gotoPalette(page, 'Betting');
+            await gotoPalette(page, 'Prediction markets');
             await expect(page.getByText(MARKET_TITLE, { exact: false }).first()).toBeVisible({ timeout: 30_000 });
-            await expectScreenLayout(page, 'Prediction markets', `${viewport.name} market list`);
+            await expectScreenLayout(page, 'Prediction Markets', `${viewport.name} market list`);
         });
 
         await test.step('oracle record', async () => {
             await page.getByRole('main').locator(`[data-market-index="${MARKET.action_index}"]`).click();
             await expect(page.getByRole('heading', { name: MARKET_TITLE, exact: true })).toBeVisible();
+            // The market's oracle sits on its Details tab.
+            await page.getByRole('main').getByRole('tab', { name: 'Details' }).click();
             await page.getByRole('main').getByRole('button', { name: ORACLE, exact: true }).click();
 
             const main = page.getByRole('main');
-            // The record opens on Actions (G102); its counts and fees are on About.
+            // The record opens on Actions (G102); its counts and fees are on Details.
             await expect(main.getByRole('list', { name: 'Oracle actions' })).toBeVisible({ timeout: 30_000 });
-            await main.getByRole('tab', { name: 'About' }).click();
+            await main.getByRole('tab', { name: 'Details' }).click();
             await expect(main.getByText('Markets opened', { exact: true })).toBeVisible({ timeout: 30_000 });
             await expect(main.getByText('ORACLELAYOUTTOKEN', { exact: true })).toBeVisible();
-            await expectScreenLayout(page, 'Oracle record', `${viewport.name} oracle record`);
+            await expectScreenLayout(page, 'Oracle Record', `${viewport.name} oracle record`);
         });
 
         await test.step('oracle form', async () => {
-            await gotoPalette(page, 'Publish oracle price');
+            await gotoPalette(page, 'My oracle');
             const form = page.getByRole('form', { name: 'Publish oracle price' });
             await expect(form).toBeVisible({ timeout: 30_000 });
-            await expectScreenLayout(page, 'My oracle', `${viewport.name} oracle form`);
+            await expectScreenLayout(page, 'My Oracle', `${viewport.name} oracle form`);
 
             // The Network field opens the network picker screen (ruling U59).
             await form.getByRole('button', { name: /^Priced token network:/ }).click();
@@ -224,11 +233,26 @@ for (const viewport of VIEWPORTS) {
             await networkPicker.getByRole('button', { name: /^Select Litecoin/ }).click();
             await expect(networkPicker).toBeHidden();
             // G122: the Token and Fiat currency fields open picker pages.
-            await pickToken(form, TICK);
+            // The picker names a row by the token's display name, so the pick
+            // matches Lite Gem and the field then shows its ticker.
+            await form.getByRole('button', { name: /^Token:/ }).click();
+            await searchTokenPicker(page, TICK);
+            // On a phone the open filter covers the list; close it to reach the row.
+            await page.getByRole('button', { name: 'Filter coins and tokens', exact: true }).click();
+            await page.getByRole('button', { name: new RegExp(`^Select ${TICK_NAME} on `) }).first().click();
+            await expect(form.getByRole('button', { name: new RegExp(`^Token: ${TICK} on `) })).toBeVisible();
             await pickFiatCurrency(form, FIAT);
             // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
             await form.getByRole('textbox', { name: /^Price of one/ }).fill(PRICE);
-            await form.getByLabel('Usage fee', { exact: true }).fill(USAGE_FEE);
+            // Usage Fee and Memo are closed optional sections.
+            await openFormSection(form, 'Usage Fee');
+            // The slider steps over named stops: Free, 0.5%, then 1%.
+            const fee = form.getByRole('slider', { name: 'Usage fee', exact: true });
+            await fee.focus();
+            await fee.press('ArrowRight');
+            await fee.press('ArrowRight');
+            await expect(fee).toHaveAttribute('aria-valuetext', '1 percent');
+            await openFormSection(form, 'Memo');
             await form.getByLabel('Memo', { exact: true }).fill(MEMO);
 
             const preview = form.getByRole('button', { name: 'Publish Price', exact: true });
@@ -240,18 +264,18 @@ for (const viewport of VIEWPORTS) {
         });
 
         await test.step('oracle review', async () => {
-            const review = page.getByRole('form', { name: 'Review price publish' });
+            // The publish reviews on the shared Confirm page (G127).
+            const review = page.getByTestId('confirm-modal');
             await expect(review).toBeVisible({ timeout: 30_000 });
             await settle(page);
 
             const scroll = await page.getByRole('main').evaluate((main) => main.scrollTop);
             expect(scroll, `${viewport.name}: oracle review did not open at the top`).toBeLessThanOrEqual(1);
-            await expectReviewValue(review, 'LTC:ORCLTEST');
-            await expectReviewValue(review, FIAT);
-            await expectReviewValue(review, `${PRICE} ${FIAT}`);
-            await expectReviewValue(review, `${USAGE_FEE} (1% of a dispenser's projected proceeds)`);
-            await expectReviewValue(review, MEMO);
-            await expectScreenLayout(page, 'Review price publish', `${viewport.name} oracle review`);
+            await expect(review).toContainText(`Publish oracle price 1 ${TICK} = ${PRICE} ${FIAT}`);
+            for (const value of [`LTC:${TICK}`, `${PRICE} ${FIAT}`, `${USAGE_FEE} (1% of a dispenser's projected proceeds)`, MEMO]) {
+                await expect(review).toContainText(value);
+            }
+            await expectScreenLayout(page, 'Confirm', `${viewport.name} oracle review`);
         });
     });
 }

@@ -61,6 +61,7 @@ import {
     selectPickerAsset,
     openFromAddress,
     approveConfirm,
+    FROM_ADDRESS_LABEL,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -258,7 +259,7 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = page.getByRole('main');
             await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            seller = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+            seller = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
             expect(seller, `the form has no ${REGTEST_CHAIN_LABEL} address`).toMatch(REGTEST_ADDRESS_RE);
 
             // Both buyers are read BEFORE the list is published, because the
