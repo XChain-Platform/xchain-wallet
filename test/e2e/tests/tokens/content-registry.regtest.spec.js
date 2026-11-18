@@ -394,7 +394,11 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             // read while the venue's per-IP limit is paused after a 429.
             // Renaming is the Edit action: its name and description sit in the
             // Details section, closed until used, and it publishes with Publish Edit.
-            await page.getByRole('button', { name: 'Edit', exact: true }).click({ timeout: 90_000 });
+            // The Actions tab row's name carries its description after the
+            // title, and "Edit look" shares the first word.
+            await openListDetailTab(page, 'Actions');
+            await page.getByRole('list', { name: 'List actions' })
+                .getByRole('button', { name: /^Edit\b(?! look\b)/ }).click({ timeout: 90_000 });
             const renameMain = page.getByRole('main');
             await openFormSection(renameMain, 'Details');
             await fieldByLabel(renameMain, 'Name').fill(NAME);
@@ -412,11 +416,14 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             }, { message: `the explorer never showed the new name on list #${managedListIndex}`, timeout: 120_000 })
                 .toBe(NAME);
             await openManagedList();
-            await expect(page.locator('dt:has-text("Name") + dd'),
+            // A named list's identity card is headed by its name.
+            await expect(page.getByRole('region', { name: 'List identity' }).getByRole('heading', { level: 2 }),
                 'ListDetail does not show the name the rename published')
-                .toContainText(NAME, { timeout: 30_000 });
+                .toHaveText(NAME, { timeout: 30_000 });
 
-            await page.getByRole('button', { name: 'Transfer List', exact: true }).click();
+            await openListDetailTab(page, 'Actions');
+            await page.getByRole('list', { name: 'List actions' })
+                .getByRole('button', { name: /^Transfer\b/ }).click();
             const transferMain = page.getByRole('main');
             // The Transfer List form has no typed TRANSFER word any more: the
             // new owner is the only field before review (ListCreateForm, 2026-11-16).
@@ -429,6 +436,16 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const transferTxid = await approveAndGetTxid(page);
             const transferred = await waitForValidAction(transferTxid);
             expect(String(transferred.status ?? 'valid')).toBe('valid');
+
+            // The list's Details tab reads its owner off the chain, so the new
+            // owner showing there is the transfer having moved ownership.
+            await openManagedList();
+            await openListDetailTab(page, 'Details');
+            const currentOwner = page.getByRole('tabpanel').getByRole('listitem')
+                .filter({ hasText: 'Current owner' });
+            await expect(currentOwner.getByLabel(REGTEST_DESTINATION, { exact: true }),
+                `list #${managedListIndex} does not name ${REGTEST_DESTINATION} as its owner after the transfer`)
+                .toBeVisible({ timeout: 60_000 });
         });
 
         await test.step('the project roster: publish a token list and link it to the project', async () => {
