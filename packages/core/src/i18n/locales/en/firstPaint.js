@@ -98,7 +98,6 @@ const messages = {
     'components.leftNav.bettingMarkets': 'Prediction markets',
     'components.leftNav.footerActions': 'Wallet controls',
     'components.leftNav.openCommandPalette': 'Open the wallet menu',
-    'components.leftNav.searchCmdCtrlK': 'Search the wallet menu (Cmd/Ctrl+K)',
     'components.leftNav.skipToMainContent': 'Skip to main content',
     // The side menu's three states (G100); button labels are Title Case.
     'components.leftNav.hideSideMenu': 'Hide Side Menu',
