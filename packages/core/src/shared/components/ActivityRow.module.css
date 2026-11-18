@@ -187,9 +187,11 @@
     color: var(--xc-danger-fg);
 }
 
+/* The amber text token clears AA on the pill's 18% tint; --xc-warning
+   itself reads 4.25:1 there in the light theme. */
 .pending {
     background: var(--xc-warning-bg);
-    color: var(--xc-warning);
+    color: var(--xc-warning-text);
 }
 
 .block {
