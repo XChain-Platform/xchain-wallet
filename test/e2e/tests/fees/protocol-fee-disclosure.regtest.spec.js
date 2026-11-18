@@ -191,7 +191,7 @@ async function projectedProtocolFeeSats(page) {
 
 /** The native-fee opt-in, which on Bitcoin is a real control. */
 function feeToggle(scope) {
-    const name = /^Pay protocol fee in BTC instead of XCHAIN/;
+    const name = /^Pay protocol fee in BTC\b/;
     return scope.getByRole('switch', { name }).or(scope.getByRole('checkbox', { name })).first();
 }
 

@@ -61,6 +61,10 @@ import {
     mintXchain,
     REGTEST_ADDRESS_RE,
     REGTEST_COIN,
+    closeListFilter,
+    openListFilter,
+    selectListFilterOption,
+    selectListNetwork,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
@@ -177,16 +181,16 @@ async function waitForToken(address, tick, min, timeoutMs = 300_000) {
  * list, which reads as the market having vanished.
  */
 async function gotoBettingHub(page) {
-    await openPaletteCommand(page, 'Betting');
+    await openPaletteCommand(page, 'Prediction markets');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(page.getByRole('main'));
+    await selectListNetwork(page, 'Filter prediction markets');
 }
 
 /** Every market card currently rendered, as {index, text}. */
 // The card draws no market number or status pill (operator ruling
 // 2026-11-13); each carries its number as data-market-index, and the list
-// it sits in (the "Taking bets" filter or "All markets") is what says which
+// it sits in (the "Positions available" filter or "All markets") is what says which
 // status the wallet read.
 async function renderedCards(page) {
     const cards = page.getByRole('main').locator('[data-market-index]');
@@ -410,7 +414,7 @@ test.describe('BET browse', () => {
                 + 'screen is still listed under "Taking bets" (D-117)')
                 .toBeHidden({ timeout: 75_000 });
 
-            await page.getByRole('button', { name: 'All markets', exact: true }).click();
+            await selectListFilterOption(page, 'Filter prediction markets', 'Status', 'All markets');
             const mine = page.getByRole('main').locator(`[data-market-index="${feedIndex}"]`);
             await expect(mine, '"All markets" does not list the market that just closed')
                 .toBeVisible({ timeout: 30_000 });
@@ -442,11 +446,14 @@ test.describe('BET browse', () => {
             // market rightly stays listed.
             const other = OTHER_CHAIN;
             const main = page.getByRole('main');
-            const picker = main.getByRole('button', { name: /^Network:/ }).first();
+            // The hub's Network field sits in the title bar's filter menu.
+            const filters = await openListFilter(page, 'Filter prediction markets');
+            const picker = filters.getByRole('button', { name: /^Network:/ }).first();
             await picker.click();
             await page.getByRole('dialog', { name: 'Network' })
                 .getByRole('button', { name: new RegExp(`^Select ${other.label}\\b`) }).first().click();
             await expect(picker).toHaveAttribute('aria-label', new RegExp(other.label), { timeout: 15_000 });
+            await closeListFilter(page, 'Filter prediction markets');
 
             // Matched on the LABEL, not the index: action indexes are per
             // chain, so the other chain having a market #<same number> is

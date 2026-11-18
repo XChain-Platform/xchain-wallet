@@ -134,7 +134,7 @@ async function holdComposeQuotesAtHigherPrice(page) {
 }
 
 function feeToggle(scope) {
-    const name = /^Pay protocol fee in .* instead of XCHAIN/;
+    const name = /^Pay protocol fee in \S+/;
     return scope.getByRole('switch', { name }).or(scope.getByRole('checkbox', { name })).first();
 }
 
