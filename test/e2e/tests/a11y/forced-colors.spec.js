@@ -227,7 +227,7 @@ test.describe('forced-colors: onboarding', () => {
         await page.goto('/');
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Import wallet' }).click();
-        await expect(page.getByRole('heading', { name: 'Import an existing wallet' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Import Wallet', level: 1 })).toBeVisible();
         await inspect(page, 'Import wallet');
     });
 });

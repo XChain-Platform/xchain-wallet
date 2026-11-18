@@ -85,7 +85,7 @@ test('tinted pills, hovered rows and sheets meet color contrast in light and dar
         await test.step(`${theme} / wallet menu`, async () => {
             await page.getByRole('button', { name: 'Open menu' }).click();
             const menu = page.getByRole('dialog', { name: 'Wallet menu' });
-            const lock = menu.locator('[data-wallet-menu-row="lock"]');
+            const lock = menu.getByRole('button', { name: 'Lock wallet' });
             await lock.hover();
             await expectContrast(page, `${theme} theme / wallet menu`);
             await page.keyboard.press('Escape');
