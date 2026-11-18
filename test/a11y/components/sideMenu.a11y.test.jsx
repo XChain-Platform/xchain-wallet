@@ -33,7 +33,6 @@ function renderShell(state) {
                     onSelect={() => {}}
                     onOpenSettings={() => {}}
                     onLock={() => {}}
-                    onCommandPalette={() => {}}
                 />
             )}
         >
