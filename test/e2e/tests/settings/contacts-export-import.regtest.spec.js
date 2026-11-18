@@ -219,9 +219,14 @@ test.describe('Settings: contacts export / import', () => {
 
                 await openPaletteCommand(page, 'Contacts');
                 await contactRow(page, CONTACT_NAME).click();
-                // The contact page draws the address truncated, with the full
-                // address as that element's accessible name.
-                await expect(page.getByRole('main').locator(`[aria-label="${CONTACT_ADDRESS}"]`),
+                // The contact page opens on its Actions tab; the addresses are
+                // cards on the Addresses tab, each drawing the address with the
+                // full value as that element's accessible name.
+                const main = page.getByRole('main');
+                await main.getByRole('tablist', { name: 'Contact sections' })
+                    .getByRole('tab', { name: 'Addresses', exact: true }).click();
+                await expect(main.getByRole('list', { name: 'Addresses', exact: true })
+                    .locator(`[aria-label="${CONTACT_ADDRESS}"]`),
                     'the contact came back by NAME but not by ADDRESS - a restored address book that '
                     + 'shows a familiar name against a missing or wrong address is worse than one '
                     + 'that failed outright, because the user pays a stranger from a form that looks '

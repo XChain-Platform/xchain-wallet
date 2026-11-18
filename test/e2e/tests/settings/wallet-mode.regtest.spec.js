@@ -132,8 +132,12 @@ test.describe('Wallet mode', () => {
                     .toBeVisible({ timeout: 90_000 });
 
                 // Wallet Details shows the mode read-only: a row, no radio.
+                // A picker row opens that wallet's page; the facts sit on its
+                // Details tab.
                 await openWalletPicker(page);
-                await page.getByRole('button', { name: `Wallet details for ${walletName}` }).click();
+                await page.getByRole('main').getByRole('list', { name: /Wallets$/ })
+                    .getByRole('button').filter({ hasText: walletName }).click();
+                await page.getByRole('main').getByRole('tab', { name: 'Details', exact: true }).click();
                 await expect(page.getByRole('main').locator('dl'),
                     'Wallet Details does not show the mode the wallet was created with, so it was never persisted')
                     .toContainText('Wallet modeSigner for another phone', { timeout: 30_000 });
