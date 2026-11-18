@@ -55,6 +55,7 @@ export const SDK_DEEP_PATHS = {
     policyEvaluator: ['src/cosigner/policy_evaluator.js'],
     networks: ['src/networks.js'],
     preflightConstants: ['src/preflight/constants.js'],
+    preflightEngine: ['src/preflight/index.js'],
     preflightTier1Findings: ['src/preflight/index/tier1_findings.js'],
     protocolConstants: ['src/protocol/constants.js'],
     protocolNetworks: ['src/protocol/networks.js', 'src/networks.js'],

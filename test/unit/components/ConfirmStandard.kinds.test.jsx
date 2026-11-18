@@ -35,6 +35,8 @@ const DEV_MOCK = { verdict: 'pass', findings: [{ code: 'DRYRUN_VALID', severity:
 const FAIL = { verdict: 'fail', findings: [{ code: 'INSUFFICIENT_BALANCE', severity: 'error', overridable: false, message: 'You hold 200 XYZ and this order needs 250 XYZ.' }], unverified: [] };
 const PARTIAL = { verdict: 'pass', findings: [{ code: 'DRYRUN_VALID', severity: 'info', source: 'dryrun', message: 'ok', data: { subCommandCount: 3, accepted: 2 } }], unverified: [] };
 const WARN = { verdict: 'warn', findings: [{ code: 'LOW_BALANCE', severity: 'warning', message: 'Balance is low after this.' }], unverified: [] };
+// The SDK's mint declaration verbatim (xchain-sdk src/preflight/checks/mint.js).
+const SETTLE_ONLY = { check: 'MINT_ADDRESS_HEADROOM', reason: 'per-address minted headroom, allow/block lists, and mint-guard outcome are server-side only' };
 
 // One composed action per kind: the action name and the decoder's own
 // summary and details, the shapes xchain-sdk's describe() returns.
@@ -585,6 +587,42 @@ describe('Confirm Standard status notice and short warning', () => {
         expect(toggled).toEqual(['DRYRUN_INVALID']);
         fireEvent.click(getByTestId('confirm-approve'));
         expect(getByTestId('confirm-blocked').textContent).toBe('Tick Sign anyway at the top to approve it.');
+    });
+
+    it('an approved mint whose only gap is checked at settlement shows one blue note', () => {
+        const report = { ...PASS, unverified: [SETTLE_ONLY] };
+        const { getAllByTestId } = render(<ConfirmActionModal {...props('mint', { report })} />);
+        const notices = getAllByTestId('confirm-status');
+        expect(notices).toHaveLength(1);
+        expect(notices[0].getAttribute('data-state')).toBe('settleChecks');
+        expect(notices[0].getAttribute('data-tone')).toBe('info');
+        expect(notices[0].getAttribute('role')).not.toBe('alert');
+        expect(notices[0].textContent).toContain('Checked by the Network');
+        expect(notices[0].textContent).toContain("Some of this token's limits are checked when it settles.");
+        expect(notices[0].textContent).not.toContain('Only partly checked');
+    });
+
+    it('a settle-time gap beside any other cause keeps the red partly checked status', () => {
+        const reports = [
+            { ...PASS, unverified: [SETTLE_ONLY, { check: 'BALANCE_LOOKUP', reason: 'timeout' }] },
+            { ...PARTIAL, unverified: [SETTLE_ONLY] },
+            { ...PASS, restricted: true, unverified: [SETTLE_ONLY] },
+            { ...PASS, unverified: [SETTLE_ONLY], findings: [...PASS.findings, { code: 'DRYRUN_SUBCOMMAND_UNJUDGED', severity: 'info', source: 'dryrun', message: 'unjudged', data: { commandIndex: 1 } }] },
+        ];
+        for (const report of reports) {
+            const status = confirmStatus({ report });
+            expect(status.state).toBe('partial');
+            expect(status.tone).toBe('danger');
+            expect(status.title).toBe('Only partly checked');
+        }
+    });
+
+    it('owed oracle fees keep a settle-time-only report red', () => {
+        const report = { ...PASS, unverified: [SETTLE_ONLY], findings: [...PASS.findings, { code: 'DRYRUN_ORACLE_FEES_OWED', severity: 'info', source: 'dryrun', message: 'owes 1 XCHAIN', data: {} }] };
+        const status = confirmStatus({ report });
+        expect(status.tone).toBe('danger');
+        expect(status.state).toBe('partial');
+        expect(status.points.map((p) => p.key)).toContain('oracle-owed');
     });
 
     it('a partly checked batch and a warning verdict each show one red status', () => {
