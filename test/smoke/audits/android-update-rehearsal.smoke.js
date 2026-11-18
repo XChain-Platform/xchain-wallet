@@ -39,6 +39,8 @@ import {
     probeDirectLane,
     assertRecord,
     lanesInRelease,
+    osesInRelease,
+    splitLaneFailures,
     RECORD_VERSION,
 } from '../../../tools/release/rehearse.mjs';
 import {
@@ -388,6 +390,47 @@ const check = (over, releaseArtifacts) => assertRecord({
     assert.deepEqual(lanesInRelease([]), { desktop: true, direct: false, directLanes: [] });
     assert.deepEqual(lanesInRelease(['notes.txt']), { desktop: true, direct: false, directLanes: [] });
     assert.match(check({ lanes: [] }, []).problems.join(' '), /no result for lane/);
+}
+
+{
+    // The unrecognised half of the same rule, driven end to end: a listing
+    // that is non-empty but names nothing any lane claims is as unreadable
+    // as an empty one, so every lane is demanded of it in both `assert`
+    // and `run`.
+    const unreadable = ['notes.txt'];
+    assert.equal(osesInRelease(unreadable), null, 'an unrecognised listing reads as every OS');
+    assert.equal(osesInRelease([]), null);
+
+    const bare = check({ lanes: [], swaps: [] }, unreadable);
+    assert.ok(!bare.ok, 'an unrecognised listing waived every desktop lane');
+    assert.match(bare.problems.join(' '), /no result for lane/);
+    assert.match(bare.problems.join(' '), /no observed swap on any OS/);
+
+    const allFailed = LANES.map((l) => ({ id: l.id, ok: false, failed: 'feed', reason: 'HTTP 404' }));
+    const failedRecord = check({ lanes: allFailed }, unreadable);
+    assert.ok(!failedRecord.ok, 'failed lanes were downgraded to notes for an unrecognised listing');
+    for (const l of LANES) assert.match(failedRecord.problems.join(' '), new RegExp(`lane ${l.id} failed at feed`));
+
+    const split = splitLaneFailures({
+        lanes: [allFailed[0]], directLanes: [], releaseArtifacts: unreadable,
+    });
+    assert.equal(split.demanded.length, 1, 'run reported a failed lane as not demanded');
+    assert.deepEqual(split.notes, []);
+
+    // The shapes that legitimately name no desktop OS keep waiving the desktop half.
+    const androidExt = [APK, AAB, `xchain-wallet-extension-v${VERSION}.zip`];
+    assert.equal(osesInRelease([APK, AAB]).size, 0, 'an APK-only listing names no desktop OS');
+    assert.equal(osesInRelease(androidExt).size, 0, 'an android plus extension listing names no desktop OS');
+    const partial = check({ lanes: [], swaps: [] }, androidExt);
+    assert.ok(partial.ok, partial.problems.join(' '));
+    assert.equal(splitLaneFailures({
+        lanes: [allFailed[0]], directLanes: [], releaseArtifacts: androidExt,
+    }).demanded.length, 0);
+
+    // Extension and web only: no APK to account for the listing, so it is unreadable and strict.
+    const extWeb = [`xchain-wallet-extension-v${VERSION}.zip`, `xchain-wallet-web-v${VERSION}.tar.gz`];
+    assert.equal(osesInRelease(extWeb), null);
+    assert.ok(!check({ lanes: [], swaps: [] }, extWeb).ok);
 }
 
 {

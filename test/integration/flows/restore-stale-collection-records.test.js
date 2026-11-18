@@ -119,6 +119,7 @@ function oldReleaseVault(sealed) {
         addresses: memCollection([address]),
         contacts: memCollection([]),
         connectedSites: memCollection([]),
+        signers: memCollection([]),
         pendingTxs: memCollection([]),
         settings: {
             get: async () => (settings ? JSON.parse(JSON.stringify(settings)) : null),

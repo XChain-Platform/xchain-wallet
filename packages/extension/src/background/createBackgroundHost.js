@@ -22,7 +22,7 @@
 // therefore trusted, keeping that data off the wire narrows the blast
 // radius of any future logging or telemetry bug in the popup layer.
 
-import { crypto as coreCrypto, decoder, flows, registry, schemas } from '@xchain-wallet/core';
+import { crypto as coreCrypto, decoder, flows, notifications, registry, schemas } from '@xchain-wallet/core';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
 import { sharedListDirectory } from '@xchain-wallet/core/flows/sharedLists.js';
 import { listTickCoinSupport } from '@xchain-wallet/core/flows/listTickCoinSupport.js';
@@ -639,7 +639,7 @@ async function deviceHardenedEncoderOpts(vault, req, encoderOpts) {
 }
 
 function isDeviceSource(source) {
-    return source === 'ledger' || source === 'trezor';
+    return schemas.isDeviceAddressSource(source);
 }
 
 /**
@@ -767,7 +767,7 @@ async function pickSignerFromRequest({ vault, walletId, signerId, signerPool }) 
         if (record.walletId !== walletId) {
             throw new Error(`signerId "${signerId}" belongs to a different wallet.`);
         }
-        if (record.kind !== 'trezor' && record.kind !== 'ledger') {
+        if (!schemas.isDeviceSignerKind(record.kind)) {
             throw new Error(`signerId "${signerId}" is not a hardware wallet.`);
         }
         // Throws with code HW_NOT_CONNECTED when the device has no live transport.
@@ -1004,7 +1004,7 @@ async function newestAddress(req, { vault, chainRegistry }) {
         if (a.chain !== descriptor.coin) continue;
         if (a.network !== descriptor.networkKind) continue;
         if (a.addressType !== type) continue;
-        if (!['hd', 'trezor', 'ledger', 'watch-only'].includes(a.source)) continue;
+        if (!['hd', 'watch-only'].includes(a.source) && !schemas.isDeviceAddressSource(a.source)) continue;
         if (typeof a.derivationPath !== 'string') continue;
         const parts = a.derivationPath.split('/');
         if (parts.length < 2) continue;
@@ -1290,7 +1290,7 @@ function toSafeWallet(w) {
  * @param {import('./MessageHost.js').MessageHostDeps & {
  *   approvals?: import('../bridge/Approvals.js').Approvals,
  *   getDiagnosticContext?: DiagnosticContext,
- *   surfaceStateEvents?: { publish: (kind: 'wallet' | 'wallets' | 'accounts' | 'network', payload: Record<string, unknown>) => Promise<unknown> | unknown },
+ *   surfaceStateEvents?: { publish: (kind: 'wallet' | 'wallets' | 'accounts' | 'network' | 'custom-chains', payload: Record<string, unknown>) => Promise<unknown> | unknown },
  * }} deps
  * @returns {MessageHost}
  */
@@ -1691,8 +1691,10 @@ export function createBackgroundHost(deps) {
     // chainRegistry instance with the persisted custom chains. The
     // registry is module-scoped in the shell entry (extension/web/
     // desktop) and survives host teardown across lock/unlock cycles,
-    // so we only seed once per registry instance: re-installing a
-    // descriptor would throw on the duplicate id. Only a COMPLETED read
+    // so the boot pass runs once per registry instance (hydration skips an
+    // id the registry already holds, so a re-run is harmless but wasted
+    // reads). A settings restore hydrates again through
+    // rehydrateAfterSettingsRestore. Only a COMPLETED read
     // latches: the popup's first settings.get lands while the vault is
     // still locked, and a read that fails there leaves the registry
     // unseeded so the next settings.get retries. Concurrent callers share
@@ -1743,6 +1745,20 @@ export function createBackgroundHost(deps) {
             // Vault not open yet or read failed: the bundled defaults keep
             // serving and the next trigger tries again.
         }
+    }
+    // A restore that replaces the Settings record can bring custom chains and
+    // endpoint overrides the latched boot pass never saw. Hydrate straight from
+    // a fresh read instead of through the latch: a boot pass still in flight
+    // read the pre-restore record, and hydration only adds, so the two cannot
+    // undo each other. Seed first, overrides second, for the reason above.
+    async function rehydrateAfterSettingsRestore(vault, chainRegistry, sdkRegistry) {
+        if (!vault || !chainRegistry) return;
+        try {
+            registry.hydrateCustomChainsFromSettings(chainRegistry, await vault.settings.get());
+        } catch {
+            // The restore already committed; a failed re-read must not fail it.
+        }
+        await applyEndpointOverridesFromVault(vault, sdkRegistry);
     }
     // Seed BEFORE the override pass, and seed here rather than only on
     // settings.get. A host can start with no UI attached at all: an MV3
@@ -2771,7 +2787,7 @@ export function createBackgroundHost(deps) {
     // + conflict policy. Returns the imported walletId + write/skip
     // counts so the shell can surface "Imported wallet 'X' with N
     // addresses" copy.
-    host.register('wallet.importBackup', async (req, { vault, vaultKeyring, chainRegistry }) => {
+    host.register('wallet.importBackup', async (req, { vault, vaultKeyring, chainRegistry, sdkRegistry }) => {
         await assertRestoreDevicePassword(req?.devicePassword, vault, vaultKeyring);
         // The re-seal's key, lent so the recovery record needs no second derivation.
         let lentKey = null;
@@ -2793,6 +2809,7 @@ export function createBackgroundHost(deps) {
                 mode: req?.mode,
                 chainRegistry,
             });
+            if (r.writes?.settings) await rehydrateAfterSettingsRestore(vault, chainRegistry, sdkRegistry);
             await publishSurfaceState('wallets', { change: 'added', walletId: r.walletId });
             // Copied synchronously inside, so the finally below may zero ours.
             refreshPhraseRecoveryAfterAdd({ vault, vaultKeyring }, req?.devicePassword,
@@ -2819,7 +2836,7 @@ export function createBackgroundHost(deps) {
     // locations are fetched; on-chain FILE references are a follow-up
     // that needs SDK wiring and are rejected explicitly rather than
     // silently ignored.
-    host.register('wallet.importBackupPointer', async (req, { vault, vaultKeyring, chainRegistry }) => {
+    host.register('wallet.importBackupPointer', async (req, { vault, vaultKeyring, chainRegistry, sdkRegistry }) => {
         await assertRestoreDevicePassword(req?.devicePassword, vault, vaultKeyring);
         const r = await restoreFromBackupPointer({
             vault,
@@ -2832,6 +2849,7 @@ export function createBackgroundHost(deps) {
             chainRegistry,
             resolveBackupContent: resolveBackupPointerContent,
         });
+        if (r.writes?.settings) await rehydrateAfterSettingsRestore(vault, chainRegistry, sdkRegistry);
         await publishSurfaceState('wallets', { change: 'added', walletId: r.walletId });
         refreshPhraseRecoveryAfterAdd({ vault, vaultKeyring }, req?.devicePassword);
         return {
@@ -3125,13 +3143,17 @@ export function createBackgroundHost(deps) {
         if (!req || typeof req !== 'object' || !req.descriptor) {
             throw new Error('A network description is required.');
         }
-        return addCustomChain({ vault, chainRegistry, sdkRegistry, descriptor: req.descriptor });
+        const added = await addCustomChain({ vault, chainRegistry, sdkRegistry, descriptor: req.descriptor });
+        await publishSurfaceState('custom-chains', {});
+        return added;
     });
     host.register('chainRegistry.removeCustomChain', async (req, { vault, chainRegistry, sdkRegistry }) => {
         if (!req || typeof req !== 'object' || typeof req.chainId !== 'string') {
             throw new Error('chainRegistry.removeCustomChain: chainId required');
         }
-        return removeCustomChain({ vault, chainRegistry, sdkRegistry, chainId: req.chainId });
+        const outcome = await removeCustomChain({ vault, chainRegistry, sdkRegistry, chainId: req.chainId });
+        if (outcome?.removed) await publishSurfaceState('custom-chains', {});
+        return outcome;
     });
 
     // §31.4 / Cluster O FOLLOWUP 2: recipient resolution for DIVIDEND
@@ -4265,18 +4287,20 @@ export function createBackgroundHost(deps) {
             }
         }
 
-        const signer = await sessionSigner(
-            source.signerId ? { ...req, signerId: source.signerId } : req,
+        const sourceSigner = await resolveSigner({ vault, address: source });
+        const signer = await pickSignerFromRequest({
             vault,
+            walletId,
+            signerId: sourceSigner.kind === 'software' ? null : sourceSigner.signerRecord.id,
             signerPool,
-        );
+        });
         if (!signer) throw new Error('tx.replace: wallet must be unlocked before replacing a transaction');
         const encoded = await sdk.encoder.createTx({
             ...(actionString ? { data: actionString } : {}),
             pubkey: source.publicKey,
             sourceAddress: source.address,
             ...plan.encoderOpts,
-            ...((source.source === 'ledger' || source.source === 'trezor') ? { attachPrevTx: true } : {}),
+            ...(schemas.isDeviceAddressSource(source.source) ? { attachPrevTx: true } : {}),
         });
         if (typeof encoded?.psbt !== 'string' || !encoded.psbt) {
             throw new Error('tx.replace: encoder did not return a PSBT');
@@ -4336,6 +4360,12 @@ export function createBackgroundHost(deps) {
             txid: signed.txid,
             txHex: signed.txHex,
             rbfReplacesPendingTxId: conflictRecord.id,
+            ...(templateRecord.adsBooking ? {
+                adsBooking: {
+                    ...templateRecord.adsBooking,
+                    paid: strategy !== 'cancel' && templateRecord.adsBooking.paid === true,
+                },
+            } : {}),
         };
         await vault.pendingTxs.put(pending);
 
@@ -4456,7 +4486,7 @@ export function createBackgroundHost(deps) {
         try {
             if (verdict && accrue) {
                 const descriptor = chainRegistry?.get?.(verdict.chainId ?? entry.chainId) ?? null;
-                await flows.commitAdsStep({
+                const { booking } = await flows.commitAdsStepWithBooking({
                     vault,
                     donationIncluded: verdict.donationIncluded,
                     donatedFiat: verdict.donatedFiat ?? null,
@@ -4464,9 +4494,17 @@ export function createBackgroundHost(deps) {
                     mainnet: verdict.mainnet !== false && descriptor?.networkKind === 'mainnet',
                     reservationId: verdict.reservationId ?? null,
                 });
+                if (booking && typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
+                    await notifications.stampPendingTxAdsBooking(vault, entry.pendingTxId, booking);
+                }
             } else {
                 const reservationId = adsClaimOf(entry);
-                if (reservationId) await flows.settleAdsReservation({ vault, reservationId });
+                if (reservationId) {
+                    const { booking } = await flows.settleAdsReservationWithBooking({ vault, reservationId });
+                    if (booking && typeof entry?.pendingTxId === 'string' && entry.pendingTxId) {
+                        await notifications.stampPendingTxAdsBooking(vault, entry.pendingTxId, booking);
+                    }
+                }
             }
         } catch (e) {
             console.warn('broadcast.queue: ADS commit failed', e && e.message ? String(e.message) : String(e));
@@ -5241,7 +5279,7 @@ export function createBackgroundHost(deps) {
         if (!address) throw new Error(`auth.signPsbt.hw: address "${addressId}" not found`);
         await assertAddressInWallet(vault, address, walletId);
         const descriptor = await resolveSigner({ vault, address });
-        if (descriptor.kind !== 'trezor' && descriptor.kind !== 'ledger') {
+        if (!schemas.isDeviceSignerKind(descriptor.kind)) {
             throw new Error('auth.signPsbt.hw: source address is not a hardware wallet');
         }
         const transport = signerBridge.requireTransport(descriptor.signerRecord.id);
@@ -5292,7 +5330,7 @@ export function createBackgroundHost(deps) {
             const { vault } = deps;
             const address = await loadAddressForHwSigning(vault, req, deps.chainRegistry);
             const descriptor = await resolveSigner({ vault, address });
-            if (descriptor.kind !== 'trezor' && descriptor.kind !== 'ledger') {
+            if (!schemas.isDeviceSignerKind(descriptor.kind)) {
                 throw new Error(`${type}: source address is not a hardware wallet`);
             }
             // Throws with code HW_NOT_CONNECTED when the device has no live transport.

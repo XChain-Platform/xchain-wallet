@@ -135,6 +135,8 @@ import {
     waitForValidAction,
     openFromAddress,
     searchHistory,
+    backToHistoryList,
+    openHistoryDetail,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -322,29 +324,27 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
         await test.step('CLAIM 3: drilling into the pending entry renders the pending detail branch', async () => {
             // Worth knowing before reading the locators: arriving through the
             // success card leaves this row auto-SELECTED (History's
-            // `initialFocus` sets `selectedKey`), so an inline DetailCard is
-            // already open inside the <li>. Clicking the row button is still a
-            // route change on the web shell - `onSelectEntry` is wired, so
-            // `onRowClick` navigates rather than toggling - which is why the
-            // assertions below are about the STANDALONE page.
+            // `initialFocus` sets `selectedKey`). At desktop width History
+            // draws that selection in the split's "Action details" pane, and
+            // a click keeps it selected; on a narrow shell the click routes
+            // to the standalone page (`onSelectEntry`). The assertions below
+            // read whichever one drew.
             //
             // Nothing here asserts WHICH pending state the row is in, on
             // purpose. CLAIM 2 spends up to a couple of minutes waiting on the
             // decoder, so by now the 180s awaiting-network window may well have
             // expired; the pre-validation line renders in every pending state
             // and that is the claim.
-            await pendingRowFor(page, sendTxid).getByRole('button').first().click();
-
-            // The standalone detail page, which is where every real shell sends
-            // a row click. Its title is the bare action label: a pending action
-            // has no index, and "#0" would name a real action on every chain.
-            const banner = page.getByRole('banner').filter({ hasText: 'Send' }).first();
-            await expect(banner, 'the pending detail page did not open')
-                .toBeVisible({ timeout: 30_000 });
-            // Not a bare '#': the banner carries the app chrome as well, and a
-            // stray hash anywhere in it would fail a correct screen. The claim
-            // is specifically that the TITLE is not "Send #N".
-            await expect(banner, 'the pending detail page is titled with an action index it cannot have')
+            // The detail beside the list, or the standalone page on a narrow
+            // shell (openHistoryDetail). Its title is the bare action label: a
+            // pending action has no index, and "#0" would name a real action
+            // on every chain.
+            const { title } = await openHistoryDetail(page, pendingRowFor(page, sendTxid));
+            await expect(title, 'the pending detail did not open').toContainText('Send', { timeout: 30_000 });
+            // Not a bare '#': the standalone header carries the app chrome as
+            // well, and a stray hash anywhere in it would fail a correct
+            // screen. The claim is specifically that the TITLE is not "Send #N".
+            await expect(title, 'the pending detail is titled with an action index it cannot have')
                 .not.toContainText('Send #');
 
             // Operator ruling 2026-11-13: the four-step status bar alone says
@@ -382,7 +382,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
         });
 
         await test.step('CLAIM 4: mining confirms the SAME entry rather than adding a second one', async () => {
-            await page.getByRole('button', { name: 'Back to history' }).click();
+            await backToHistoryList(page);
 
             // Release the chain and let the action index. `waitForValidAction`
             // mines through `nudgeChain` (never unconditionally), and asserts

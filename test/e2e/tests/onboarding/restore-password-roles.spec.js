@@ -109,6 +109,7 @@ async function buildEnvelope() {
         }]),
         contacts: memCollection(),
         connectedSites: memCollection(),
+        signers: memCollection(),
         pendingTxs: memCollection(),
         settings: { get: async () => null, put: async () => {} },
     };

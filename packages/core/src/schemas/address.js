@@ -110,7 +110,8 @@ export function normalizeAddressLabel(label, record) {
  * @property {string} label
  * @property {boolean} pinned
  * @property {boolean} hidden
- * @property {string | null} signerId         owning signer id (§17.6); null = unlinked (invalid for hardware sources)
+ * @property {string | null} signerId         owning signer id (§17.6); null = unlinked and accepted at rest,
+ *                                             but hardware signing refuses it until reconciliation
  * @property {typeof ADDRESS_ROLES[number]} role   'receive' | 'change' | 'dispenser' (§16)
  * @property {string} createdAt
  */

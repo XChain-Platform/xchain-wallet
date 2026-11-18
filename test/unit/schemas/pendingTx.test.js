@@ -237,4 +237,22 @@ describe('validatePendingTx', () => {
         const r = validatePendingTx({ ...tx, error: 42 });
         expect(r.ok).toBe(false);
     });
+
+    it('accepts a valid donation booking stamp and rejects malformed stamps', () => {
+        const tx = createPendingTx(BASE_INPUT);
+        const adsBooking = {
+            id: tx.id, fiat: '25.50', currency: 'USD', paid: true, booked: true,
+        };
+        expect(validatePendingTx({ ...tx, adsBooking }).ok).toBe(true);
+        expect(validatePendingTx({ ...tx, adsBooking: null }).ok).toBe(true);
+        for (const invalid of [
+            { ...adsBooking, id: '' },
+            { ...adsBooking, fiat: '-1' },
+            { ...adsBooking, currency: '' },
+            { ...adsBooking, paid: 'yes' },
+            { ...adsBooking, booked: 'yes' },
+        ]) {
+            expect(validatePendingTx({ ...tx, adsBooking: invalid }).ok).toBe(false);
+        }
+    });
 });

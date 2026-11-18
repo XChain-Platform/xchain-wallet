@@ -113,6 +113,17 @@ for device in "${devices[@]}"; do
     xcrun simctl spawn "$udid" notifyutil -s com.apple.BiometricKit.enrollmentChanged 1 >/dev/null 2>&1 || true
     xcrun simctl spawn "$udid" notifyutil -p com.apple.BiometricKit.enrollmentChanged >/dev/null 2>&1 || true
 
+    # LIGHT THEME AND A CLEAN STATUS BAR, SET ON THE SIMULATOR. The wallet's
+    # default theme is "system", so the listing's theme is whatever the
+    # simulator was last left in: the 0.341.4 set came out dark because the
+    # host simulator was. The listing is shot light, so the appearance is
+    # forced here rather than trusted. The status bar override gives every
+    # image the same 9:41, full bars and charged battery instead of the
+    # wall clock of the run.
+    xcrun simctl ui "$udid" appearance light
+    xcrun simctl status_bar "$udid" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 \
+        --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100
+
     # The line this whole script exists for.
     xcrun simctl uninstall "$udid" "$bundle_id" >/dev/null 2>&1 || true
 

@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
     AddressText,
@@ -373,7 +374,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack, embedded = fa
         tick: poll?.tick || '',
     });
 
-    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const isHwSource = isDeviceAddressSource(fromAddress?.source);
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
     const { isWatcherMode } = useWalletMode(walletId);

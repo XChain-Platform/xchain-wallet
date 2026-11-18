@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { AddressField, AddressText, Button, CopyButton, EmptyState, FormNotice, FormPage, Icon, ListPage, MultisigBadge, PageHeader, Screen, StatusMessage } from '@xchain-wallet/core/ui';
@@ -152,7 +153,8 @@ function newestAddressOfType(addresses, addressType) {
     let newestIndex = -1;
     for (const candidate of addresses || []) {
         if (candidate?.addressType !== addressType) continue;
-        if (!['hd', 'trezor', 'ledger', 'watch-only'].includes(candidate.source || 'hd')) continue;
+        if (!['hd', 'watch-only'].includes(candidate.source || 'hd')
+            && !isDeviceAddressSource(candidate.source)) continue;
         const parts = typeof candidate.derivationPath === 'string'
             ? candidate.derivationPath.split('/')
             : [];
@@ -503,7 +505,7 @@ export function Receive({ walletId, accountId, prefill = null, onBack, onChangeA
     // need (and support) on-device confirmation. Reset the verify state
     // whenever the shown address changes.
     const isHwAddress = hasReceiveAddress
-        && (address.source === 'trezor' || address.source === 'ledger');
+        && (isDeviceAddressSource(address.source));
     const hwDeviceLabel = address?.source === 'ledger'
         ? 'Ledger'
         : address?.source === 'trezor' ? 'Trezor' : 'device';

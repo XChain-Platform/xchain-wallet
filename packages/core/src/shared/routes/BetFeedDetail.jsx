@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, Button, EmptyState, Icon, IconSelect, ListPage, PageHeader, Screen, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
 import { decoder as decoderLib, registry as registryLib } from '@xchain-wallet/core';
@@ -447,7 +448,7 @@ export function BetFeedDetail({
             .catch(() => { /* Max stays disabled when this address's balance cannot be read. */ });
         return () => { cancelled = true; };
     }, [chainId, feed?.tick, fromAddress?.address, messaging]);
-    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const isHwSource = isDeviceAddressSource(fromAddress?.source);
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);
 

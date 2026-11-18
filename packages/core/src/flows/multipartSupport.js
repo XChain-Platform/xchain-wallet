@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isDeviceAddressSource } from '../schemas/constants.js';
 import { signerSupportsTapscript } from './signerCapability.js';
 
 const MULTIPART_FILE_MAX_BYTES = 262_140_000_000;
@@ -23,7 +24,7 @@ export function multipartSupportFor({
     if (isWatcherMode === true) return { supported: false, reason: 'watcher' };
 
     const source = addressRecord?.source;
-    if (source === 'trezor' || source === 'ledger') {
+    if (isDeviceAddressSource(source)) {
         return { supported: false, reason: 'hardware' };
     }
     if (source === 'watch-only') return { supported: false, reason: 'watchOnly' };

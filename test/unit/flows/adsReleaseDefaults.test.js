@@ -88,6 +88,21 @@ describe('one queue across every chain', () => {
         expect(after).toBe(before);
     });
 
+    it('still books a payout carried before donations were turned off', async () => {
+        const vault = await makeVault();
+        const base = seeded();
+        await vault.settings.put({
+            ...base,
+            ads: { ...base.ads, perTransaction: '0', queued: '25' },
+        });
+        await commitAdsStep({
+            vault, donationIncluded: true, donatedFiat: '25', currency: 'USD',
+        });
+        expect((await vault.settings.get()).ads).toMatchObject({
+            queued: '0', donated: '25', donationCount: 1, perTransaction: '0',
+        });
+    });
+
     it('follows the display currency only while nothing is queued or donated', () => {
         const base = { ...createDefaultSettings(), fiatCurrency: 'EUR' };
         expect(stepAdsQueue(base).ads.currency).toBe('EUR');

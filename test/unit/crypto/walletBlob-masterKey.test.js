@@ -105,6 +105,32 @@ describe('crypto/walletBlob with a supplied master key', () => {
         retained.fill(0);
     });
 
+    it('zeroes the retained key and plaintext when the retention callback throws', async () => {
+        const key = callerKey();
+        const { encryptedSeed } = await encryptWalletSeed({
+            password: 'unused', seed: SEED, kdfParams: KDF_PARAMS, masterKey: key,
+        });
+        vi.mocked(decrypt).mockClear();
+
+        let retained = null;
+        await expect(decryptWalletSeed({
+            password: 'unused',
+            encryptedSeed,
+            kdfParams: KDF_PARAMS,
+            masterKey: key,
+            retainMasterKey: (copy) => {
+                retained = copy;
+                throw new Error('retain failed');
+            },
+        })).rejects.toThrow('retain failed');
+
+        const opened = await vi.mocked(decrypt).mock.results[0].value;
+        expect(isZero(retained)).toBe(true);
+        expect(isZero(opened)).toBe(true);
+        expect(isZero(vi.mocked(decrypt).mock.calls[0][0])).toBe(true);
+        expect(isElevens(key)).toBe(true);
+    });
+
     it('a key the caller zeroes afterwards does not reach back into the stored blob', async () => {
         const key = callerKey();
         const { encryptedSeed } = await encryptWalletSeed({

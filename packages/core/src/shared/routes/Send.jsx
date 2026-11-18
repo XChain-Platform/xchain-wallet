@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
     Screen,
@@ -3142,7 +3143,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         setStage('review');
     }
 
-    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const isHwSource = isDeviceAddressSource(fromAddress?.source);
     const hasNovelSendRecipient = useMemo(() => {
         const desc = chainId ? chainRegistry.get(chainId) : null;
         if (!isHwSource || !desc?.coin) return false;

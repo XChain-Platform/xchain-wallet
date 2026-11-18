@@ -166,9 +166,9 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             if (missing.length > 0) live.unshift(...missing);
         }
     }
-    // Copy the blob copy's ADS verdict and fee-bump link onto a vault-rebuilt
-    // twin of the same bytes; a rebuild carries no verdict, and carries the link
-    // only from a record that names it, so the blob copy fills it for the rest.
+    // Copy the blob copy's ADS verdict, fee-bump link and retry backoff onto a
+    // vault-rebuilt twin of the same bytes. A rebuild carries no verdict or
+    // retry state, so the blob copy keeps the attempt from moving backwards.
     function adoptSnapshotVerdict(live, persisted) {
         if (live.signedTxHex !== persisted.signedTxHex) return;
         mergePendingTxIds(live, persisted);
@@ -178,6 +178,18 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         }
         const link = persisted.rbfReplacesPendingTxId;
         if (!live.rbfReplacesPendingTxId && typeof link === 'string' && link) live.rbfReplacesPendingTxId = link;
+        if (Number.isSafeInteger(persisted.retryAttempt) && persisted.retryAttempt > 0) {
+            const liveAttempt = Number.isSafeInteger(live.retryAttempt) && live.retryAttempt > 0
+                ? live.retryAttempt
+                : 0;
+            live.retryAttempt = Math.max(liveAttempt, persisted.retryAttempt);
+        }
+        if (Number.isFinite(persisted.nextRetryAt)) {
+            const liveRetryAt = Number.isFinite(live.nextRetryAt) ? live.nextRetryAt : null;
+            if (liveRetryAt === null || persisted.nextRetryAt > liveRetryAt) {
+                live.nextRetryAt = persisted.nextRetryAt;
+            }
+        }
         const verdict = cleanAdsCommit(persisted.adsCommit);
         if (!verdict) return;
         if (!live.adsCommit) {

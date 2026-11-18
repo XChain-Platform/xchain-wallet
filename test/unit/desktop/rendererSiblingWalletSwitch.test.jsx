@@ -336,3 +336,37 @@ describe('desktop window names a wallet its list lacks', () => {
         expect(await screen.findByText('Settings for Bravo')).toBeInTheDocument();
     });
 });
+
+describe('desktop window follows a custom network added or removed in a sibling window', () => {
+    const chainId = 'sibling-fork-regtest';
+    const answerSettings = (record) => {
+        const original = window.xchainWalletBridge.sendMessage.getMockImplementation();
+        window.xchainWalletBridge.sendMessage.mockImplementation(async (message) => (
+            message.type === 'settings.get' ? { ok: true, result: record() } : original(message)
+        ));
+    };
+
+    it('installs an added network and drops a removed one from this window registry', async () => {
+        const { registry: registryLib } = await import('@xchain-wallet/core');
+        const registry = registryLib.defaultRegistry();
+        const template = registry.get('bitcoin-regtest');
+        const descriptor = { ...template, id: chainId, displayName: 'Sibling fork', isUserAdded: undefined };
+        let saved = { customChains: [descriptor] };
+        answerSettings(() => saved);
+        const onStateChange = await onSettingsForAlpha();
+        const heard = vi.fn();
+        window.addEventListener('xc:settings-changed', heard);
+
+        act(() => { onStateChange({ kind: 'custom-chains' }); });
+        await waitFor(() => expect(registry.has(chainId)).toBe(true));
+        expect(heard).toHaveBeenCalled();
+
+        const mounts = review.settingsMounts;
+        saved = { customChains: [] };
+        act(() => { onStateChange({ kind: 'custom-chains' }); });
+        await waitFor(() => expect(registry.has(chainId)).toBe(false));
+        await settle();
+        expect(review.settingsMounts).toBe(mounts + 1);
+        window.removeEventListener('xc:settings-changed', heard);
+    });
+});

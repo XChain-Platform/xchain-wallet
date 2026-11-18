@@ -70,6 +70,7 @@ function vault({ wallet = null, accounts = [], addresses = [], settings = null }
         addresses: collection(addresses),
         contacts: collection(),
         connectedSites: collection(),
+        signers: collection(),
         pendingTxs: collection(),
         settings: settingsStore(settings),
     };

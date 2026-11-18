@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FormNotice, Icon, ListPage, PageHeader, Screen, Select, StatusMessage } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -73,14 +74,9 @@ const FALLBACK_ACTION_CLASSES = ['transfer', 'trade', 'burn', 'mint', 'stake', '
 // The same signing sources Bind Controller accepts: an HD external address,
 // a hardware address, and a watch-only address (which only watcher mode can use).
 function isFormSource(address) {
-    switch (address?.source) {
-        case 'hd': return externalIndexOf(address.derivationPath) !== null;
-        case 'trezor':
-        case 'ledger':
-        case 'watch-only':
-            return true;
-        default: return false;
-    }
+    if (isDeviceAddressSource(address?.source)) return true;
+    if (address?.source === 'hd') return externalIndexOf(address.derivationPath) !== null;
+    return address?.source === 'watch-only';
 }
 
 // Which input a validation message is about; null for the form as a whole.
@@ -312,7 +308,7 @@ export function UnbindForm({
         sourceAddress: fromAddress?.address,
     });
 
-    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const isHwSource = isDeviceAddressSource(fromAddress?.source);
     const isBlockedWatchOnlySource = fromAddress?.source === 'watch-only' && !isWatcherMode;
     const [hwStatus, setHwStatus] = useState('idle');
     const onHwStatusChange = useCallback(({ status }) => setHwStatus(status), []);

@@ -24,6 +24,7 @@ describe('notifications public surface', () => {
             'getBroadcastTxids',
             'markPendingTxIndexed',
             'markPendingTxMempoolSeen',
+            'stampPendingTxAdsBooking',
             'pendingTxReferencesMatch',
             'pickedSoundForFamily',
             'resolveNotificationSound',

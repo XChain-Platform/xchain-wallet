@@ -37,7 +37,7 @@
 // reason a send cannot be composed.
 
 import { createAddress } from '../schemas/address.js';
-import { addressSourceForSignerKind } from '../schemas/constants.js';
+import { addressSourceForSignerKind, isDeviceAddressSource } from '../schemas/constants.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { indexSpaceSharedForAccount } from './_addressIndexSpace.js';
 
@@ -45,7 +45,7 @@ import { indexSpaceSharedForAccount } from './_addressIndexSpace.js';
 export const CHANGE_BRANCH = 1;
 
 /** HD-derived sources: these share one index space per branch per account. */
-const HD_SOURCES = new Set(['hd', 'trezor', 'ledger']);
+const isHdSource = (source) => source === 'hd' || isDeviceAddressSource(source);
 
 /**
  * Is change-address rotation switched on in this Settings record?
@@ -107,7 +107,7 @@ export function nextChangeIndex(addresses, {
         if (a.chain !== coin) continue;
         if (a.network !== network) continue;
         if (!sharedIndexSpace && a.addressType !== addressType) continue;
-        if (!HD_SOURCES.has(a.source)) continue;
+        if (!isHdSource(a.source)) continue;
         const parsed = branchOf(a.derivationPath);
         if (!parsed || parsed.branch !== String(CHANGE_BRANCH)) continue;
         changeCount += 1;
@@ -177,7 +177,7 @@ export async function deriveChangeAddress({
     });
     // No record, no account, or a non-HD source: nothing to rotate onto.
     if (!sourceRecord) return null;
-    if (!HD_SOURCES.has(sourceRecord.source)) return null;
+    if (!isHdSource(sourceRecord.source)) return null;
     if (typeof sourceRecord.accountId !== 'string' || !sourceRecord.accountId) return null;
 
     const account = await vault.accounts.get(sourceRecord.accountId);

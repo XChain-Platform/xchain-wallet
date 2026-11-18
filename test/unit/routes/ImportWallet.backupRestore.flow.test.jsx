@@ -50,6 +50,7 @@ function vault(initialWallets = []) {
         addresses: collection(),
         contacts: collection(),
         connectedSites: collection(),
+        signers: collection(),
         pendingTxs: collection(),
         settings: { get: async () => null, put: async () => {} },
     };
