@@ -364,9 +364,10 @@ export async function openPaletteCommand(page, title, { option, timeoutMs = 30_0
 /**
  * The active wallet's identity in the App header.
  *
- * The header names the active wallet as a plain label (a span carrying the
- * name as its title, not a button), and the wallet picker closes itself after
- * a pick, so this is the one place a switch can be confirmed.
+ * STALE: the App header no longer names the active wallet, so this matches
+ * nothing on the current UI. Confirm a switch with `expectActiveWallet`, which
+ * reads the wallet picker. Kept only for add-wallet-activation.spec.js until
+ * that spec moves off it.
  */
 export function activeWalletIdentity(page) {
     return page.getByRole('region', { name: 'App header' }).locator('span[title]');
@@ -428,6 +429,11 @@ export async function switchToWallet(page, name, { timeoutMs = 30_000 } = {}) {
             .toBeHidden({ timeout: timeoutMs });
     }
     await expectActiveWallet(page, name, undefined, { timeoutMs });
+    // Leave the way a finished switch does, on Home, not two levels down in
+    // Settings: a caller's next Settings walk (switchToRegtest) starts from
+    // the Settings list, which one Back from the picker does not reach.
+    await gotoSection(page, 'Home');
+    await expect(unlockedAnyScreen(page)).toBeVisible({ timeout: timeoutMs });
 }
 
 /**

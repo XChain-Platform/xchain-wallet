@@ -35,6 +35,7 @@
 
 import {
     addWalletFromPhrase, createWallet, expect, openPaletteCommand, switchToWallet, test,
+    unlockButton, unlockWallet,
 } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal,
@@ -350,7 +351,12 @@ test.describe('BET in watcher mode', () => {
         await test.step('back on the normal wallet, and the bet is offered again', async () => {
             // Closes the pair: the difference is watcher mode, not the market.
             // The first phone still holds the Normal wallet; the switch confirms
-            // it is the active one before the control is re-read.
+            // it is the active one before the control is re-read. It sat idle
+            // through the second phone's setup, which on a loaded runner can
+            // pass the 15 minute auto-lock, so unlock it first if it locked.
+            if (await unlockButton(page).isVisible().catch(() => false)) {
+                await unlockWallet(page, PASSWORD);
+            }
             await switchToWallet(page, 'Watcher Wallet', { timeoutMs: 60_000 });
             await useAddress(page, watcher);
             const main = await openMarket(page, feedIndex);
