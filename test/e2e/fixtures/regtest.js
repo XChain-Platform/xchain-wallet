@@ -1621,6 +1621,79 @@ export async function openDispenserForBuy(page, { seller, tick, index, what, tim
 }
 
 /**
+ * Opens a dispenser this wallet does not own in the Dispenser Explorer's side
+ * panel at the configured desktop width, and runs `check` on that panel.
+ *
+ * The desktop twin of openDispenserForBuy, which narrows to the full page.
+ * While the content is at least LIST_DETAIL_MIN_WIDTH (720) wide, Dispensers
+ * is a list-and-detail split (`data-list-detail="two-panel"`, PanelSplit's
+ * ListDetailSplit) and a picked card fills its detail region, named
+ * "<TICK> dispenser #<index>" (DispensersList's `detailLabel`). The split is
+ * required before the search, so a run too narrow for it fails here rather
+ * than quietly reading the full page. The wide split seeds its first row into
+ * the panel before any click, so the panel is found by the picked dispenser's
+ * number when `index` is given. The viewport is never changed.
+ *
+ * @template T
+ * @param {import('@playwright/test').Page} page
+ * @param {{ seller: string, tick: string, index?: string | number, what?: string, timeoutMs?: number }} opts
+ *   `seller` is typed into the search; `tick` is the token the dispenser gives;
+ *   `index`, when given, must be the number the opened panel names
+ * @param {(panel: import('@playwright/test').Locator) => Promise<T>} check  runs on the side panel region
+ * @returns {Promise<T>}
+ */
+export async function openDispenserPanel(page, { seller, tick, index, what, timeoutMs = 60_000 }, check) {
+    const name = what || (index != null ? `dispenser #${index}` : `the ${tick} dispenser`);
+    await openPaletteCommand(page, 'All actions');
+    await page.getByRole('main').getByText('Browse dispensers', { exact: true }).first().click();
+    const main = page.getByRole('main');
+    const split = main.locator('[data-list-detail="two-panel"]');
+    const width = page.viewportSize()?.width;
+    await expect(split, `Dispensers shows no list-and-detail split at ${width}px, so there is no side panel to read`)
+        .toBeVisible({ timeout: 30_000 });
+
+    // Enter runs the search and leaves the menu open over the results.
+    const filters = await openListFilter(page, 'Filter dispensers');
+    const search = filters.getByLabel('Search a token or seller address', { exact: true });
+    await expect(search, 'the Dispenser Explorer offers no search').toBeVisible({ timeout: 30_000 });
+    await search.fill(seller);
+    await search.press('Enter');
+    await closeListFilter(page, 'Filter dispensers');
+
+    const tickPattern = String(tick).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const card = split.getByRole('region', { name: 'Dispensers', exact: true })
+        .getByRole('button', { name: new RegExp(`^\\S+ ${tickPattern} for `) }).first();
+    await expect(card, `${name} is on chain but a buyer searching its seller's address cannot find it`)
+        .toBeVisible({ timeout: timeoutMs });
+    await card.click();
+
+    const panelName = index != null
+        ? new RegExp(`dispenser #${index}$`, 'i')
+        : /dispenser #\d+$/i;
+    const panel = split.getByRole('region', { name: panelName });
+    await expect(panel, `${name} did not open in the Dispensers side panel`).toBeVisible({ timeout: 30_000 });
+    await expect(panel.getByTestId('embedded-dispenser-detail'),
+        `the side panel does not show ${name} in its buyer layout`)
+        .toBeVisible({ timeout: 30_000 });
+    return check(panel);
+}
+
+/**
+ * Reads the dispenser payment address a "Pay to buy" block prints on its
+ * "Send to" row, on the full page or in the side panel.
+ *
+ * @param {import('@playwright/test').Locator} scope  a locator holding one Pay to buy block
+ * @returns {Promise<string>}
+ */
+export async function readPayToBuySendTo(scope) {
+    const block = scope.getByRole('region', { name: 'Pay to buy', exact: true });
+    const sendTo = block.locator('dt', { hasText: /^Send to$/ })
+        .locator('xpath=following-sibling::dd[1]').locator('code');
+    await expect(sendTo, 'the Pay to buy block names no Send to address').toBeVisible({ timeout: 30_000 });
+    return (await sendTo.innerText()).trim();
+}
+
+/**
  * Puts the Create dispenser form's dispenser on its own Source address, and
  * returns that address.
  *

@@ -50,6 +50,7 @@ import {
     selectPickerAsset,
     approveConfirm,
     FROM_ADDRESS_LABEL,
+    openDispenserPanel,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel, searchTokenPicker } from '../../fixtures/fields.js';
 
@@ -296,94 +297,69 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await seedPrices();
             // "Browse dispensers" is how a buyer reaches a dispenser they do not
-            // own; My dispensers only ever lists their own. It lives on the
-            // All actions screen rather than in the palette itself.
-            await openPaletteCommand(page, 'All actions');
-            await page.getByRole('main').getByText('Browse dispensers', { exact: true })
-                .first().click();
-            const main = page.getByRole('main');
-            // The Dispenser Explorer's search sits in its title bar's "Filter
-            // dispensers" menu and runs on Enter. Searching the SELLER's address
-            // keeps the results to this seller's dispensers on every chain, and
-            // the payment token is minted fresh for this run, so a card selling
-            // XCHAIN for that PAY token is this seller's dispenser. Its index is
-            // proven on the Confirm screen below ("This pays dispenser #N").
-            await page.getByRole('button', { name: 'Filter dispensers', exact: true }).click();
-            const search = page.getByRole('dialog', { name: 'Filter dispensers' })
-                .getByLabel('Search a token or seller address', { exact: true });
-            await expect(search, 'the Dispenser Explorer offers no search').toBeVisible({ timeout: 30_000 });
-            await search.fill(seller);
-            await search.press('Enter');
+            // own; My dispensers only ever lists their own. At the configured
+            // desktop width a picked dispenser opens in the list's side panel,
+            // with the buy form inline under the identity card, and the helper
+            // finds it by searching the SELLER's address, which keeps the
+            // results to this seller's dispensers. The panel is matched by its
+            // number, and the Confirm screen below proves it again ("This pays
+            // dispenser #N").
+            await openDispenserPanel(page, {
+                seller, tick: 'XCHAIN', index: dispenserIndex, what: `the seller's dispenser #${dispenserIndex}`,
+            }, async (panel) => {
+                const buyForm = panel.getByTestId('dispenser-buy-form');
+                await expect(buyForm,
+                    'the side panel shows no buy form for a token-priced dispenser this wallet does not own')
+                    .toBeVisible({ timeout: 30_000 });
 
-            // A card is named "<give> for <price>, <network>".
-            const row = main.getByRole('button', {
-                name: new RegExp(`^\\S+ XCHAIN for \\S+ ${PAY_TICK}, `),
-            }).first();
-            await expect(row,
-                `the seller's dispenser #${dispenserIndex} is on chain but the buyer cannot find it by `
-                + "searching its seller's address")
-                .toBeVisible({ timeout: 60_000 });
-            await row.click();
-            // On a wide screen the list keeps the dispenser in its side panel,
-            // with the buy form inline under the identity card. Narrower, the
-            // dispenser page opens on Actions (G102) and the buy form is the
-            // page a buyer's first action row (Buy) opens.
-            const buyForm = page.getByTestId('dispenser-buy-form');
-            const buyRow = page.getByTestId('dispenser-buy-row');
-            await expect(buyForm.or(buyRow).first(),
-                'the dispenser opened with neither a buy form nor a Buy row for a wallet that does not own it')
-                .toBeVisible({ timeout: 30_000 });
-            if (!(await buyForm.isVisible().catch(() => false))) await buyRow.click({ timeout: 30_000 });
+                const dispenses = buyForm.getByRole('textbox', { name: /^(?:How Many )?Dispenses$/ });
+                await expect(dispenses,
+                    'the buy form never rendered for a dispenser this wallet does not own')
+                    .toBeVisible({ timeout: 30_000 });
+                // The form must know what the buyer holds of the PAYMENT token: a
+                // wrong read raises the underfunded warning. The side panel prints
+                // that balance on the same line as the full page.
+                await expect(buyForm.getByTestId('buy-balance'),
+                    `the side panel buy form does not show the buyer's 1,000 ${PAY_TICK}`)
+                    .toContainText(new RegExp(`1,?000\\s*${PAY_TICK} available`), { timeout: 60_000 });
 
-            const dispenses = buyForm.getByRole('textbox', { name: /^(?:How Many )?Dispenses$/ });
-            await expect(dispenses,
-                'the buy form never rendered for a dispenser this wallet does not own')
-                .toBeVisible({ timeout: 30_000 });
-            // The form must know what the buyer holds of the PAYMENT token: a
-            // wrong read raises the underfunded warning. The full page also
-            // prints the balance; the side panel does not.
-            const balance = page.getByTestId('buy-balance');
-            if (await balance.count() > 0) {
-                await expect(balance)
-                    .toContainText(new RegExp(`1,?000\\s*${PAY_TICK}`), { timeout: 60_000 });
-            }
+                // The buyer already holds XCHAIN (the gas mint, less the ISSUE
+                // fee), so the fill is measured as a delta from this figure.
+                buyerXchainBefore = await tokenBalance(buyer, 'XCHAIN');
+                await dispenses.fill('1');
+                await expect(buyForm.getByTestId('buy-totals'),
+                    'one dispense is not priced at the dispenser\'s per-fill price')
+                    .toContainText(new RegExp(`You pay\\s*${PRICE_PER_FILL}\\s*${PAY_TICK}`), { timeout: 30_000 });
+                await expect(buyForm.getByRole('alert'),
+                    'a buyer holding 1,000 of the payment token is warned it cannot pay for one dispense')
+                    .toHaveCount(0);
+                // Never disabled (G130): the side panel reads "Buy", the page
+                // "Buy 1 Dispense".
+                await buyForm.getByRole('button', { name: /^Buy(?: 1 Dispense)?$/ }).click();
 
-            // The buyer already holds XCHAIN (the gas mint, less the ISSUE
-            // fee), so the fill is measured as a delta from this figure.
-            buyerXchainBefore = await tokenBalance(buyer, 'XCHAIN');
-            await dispenses.fill('1');
-            await expect(buyForm.getByTestId('buy-totals'),
-                'one dispense is not priced at the dispenser\'s per-fill price')
-                .toContainText(new RegExp(`You pay\\s*${PRICE_PER_FILL}\\s*${PAY_TICK}`), { timeout: 30_000 });
-            await expect(buyForm.getByRole('alert'),
-                'a buyer holding 1,000 of the payment token is warned it cannot pay for one dispense')
-                .toHaveCount(0);
-            // Never disabled (G130): the side panel reads "Buy", the page
-            // "Buy 1 Dispense".
-            await buyForm.getByRole('button', { name: /^Buy(?: 1 Dispense)?$/ }).click();
-
-            // A purchase signs through the shared Confirm screen (dry-run, From
-            // row and the dispenser purchase notice), whose approve button is
-            // named after the payment ("Send 5 PAY..."), so it is found by its
-            // test id. The notice must name THIS dispenser: a token SEND to the
-            // right address that the screen did not recognise as a buy is the
-            // case where a buyer pays and nothing dispenses.
-            await sharedConfirmModal(page, 'the dispenser buy', 60_000);
-            const password = fieldByLabel(page, 'Password');
-            if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await expectConfirmModal(page);
-            await expect(page.getByTestId('confirm-modal'),
-                'the Confirm screen does not say this payment buys from the dispenser')
-                .toContainText(`This pays dispenser #${dispenserIndex}:`);
-            const feeLine = page.getByTestId('confirm-fee-protocol');
-            if (await feeLine.count() > 0) {
-                const said = await feeLine.innerText();
-                buyFeeXchain = Number(said.match(/([\d.]+)\s*XCHAIN\b/)?.[1]);
-                expect(Number.isFinite(buyFeeXchain), `unparseable protocol-fee line: ${said}`).toBe(true);
-            }
-            await approveConfirm(page);
-            await expect(page.getByText('Buy submitted'), 'the buy never reported being submitted')
-                .toBeVisible({ timeout: 180_000 });
+                // A purchase signs through the shared Confirm screen (dry-run, From
+                // row and the dispenser purchase notice), whose approve button is
+                // named after the payment ("Send 5 PAY..."), so it is found by its
+                // test id. The notice must name THIS dispenser: a token SEND to the
+                // right address that the screen did not recognise as a buy is the
+                // case where a buyer pays and nothing dispenses.
+                await sharedConfirmModal(page, 'the dispenser buy', 60_000);
+                const password = fieldByLabel(page, 'Password');
+                if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
+                await expectConfirmModal(page);
+                await expect(page.getByTestId('confirm-modal'),
+                    'the Confirm screen does not say this payment buys from the dispenser')
+                    .toContainText(`This pays dispenser #${dispenserIndex}:`);
+                const feeLine = page.getByTestId('confirm-fee-protocol');
+                if (await feeLine.count() > 0) {
+                    const said = await feeLine.innerText();
+                    buyFeeXchain = Number(said.match(/([\d.]+)\s*XCHAIN\b/)?.[1]);
+                    expect(Number.isFinite(buyFeeXchain), `unparseable protocol-fee line: ${said}`).toBe(true);
+                }
+                await approveConfirm(page);
+                await expect(page.getByText('Buy submitted'), 'the buy never reported being submitted')
+                    .toBeVisible({ timeout: 180_000 });
+            });
         });
 
         await test.step('the chain settles it in BOTH directions', async () => {
