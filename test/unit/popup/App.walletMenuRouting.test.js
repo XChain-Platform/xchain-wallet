@@ -38,7 +38,7 @@ describe('extension wallet menu routing', () => {
         expect(handler).toContain('palette.navigate(viewId);');
         expect(handler).not.toContain('TAB_BAR_DESTINATIONS');
         expect(handler).not.toContain('setUnlockedView(viewId)');
-        expect(source).toContain('const openRootView = nav.navigateRoot;');
+        expect(source).toContain('const openRootView = createRootViewOpener(nav.navigateRoot, () => {');
     });
 
     it('keeps no per-page return state for Lists, Contacts or forms', () => {

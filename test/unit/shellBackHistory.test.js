@@ -100,7 +100,7 @@ describe.each([
     // G06: every nav, menu, palette and go-to shortcut pick is a root, and
     // the outlet tells PageHeader whether the page on screen can go back.
     it('opens every nav, menu and palette pick as a root and hands canGoBack to the outlet', () => {
-        expect(source).toContain('const openRootView = nav.navigateRoot;');
+        expect(source).toContain('const openRootView = createRootViewOpener(nav.navigateRoot, () => {');
         expect(source).toMatch(/useCommandPalette\(\{[\s\S]{0,240}?navigate: openRootView,/);
         expect(source).toMatch(/useKeyboardShortcuts\(\{[\s\S]{0,400}?navigate: openRootView,/);
         expect(source).toMatch(/<ShellRouteOutlet[\s\S]{0,400}?canGoBack=\{nav\.canGoBack\}/);

@@ -238,7 +238,6 @@
 }
 
 .nav > .brand,
-.nav > .search,
 .nav > .groups,
 .nav > .footer {
     flex-shrink: 0;
@@ -351,22 +350,13 @@
     outline-offset: -2px;
 }
 
-/* §33 command-palette launcher reads as a search box rather than a destination. */
-.search {
-    margin: 0 var(--xc-space-3) var(--xc-space-2);
-}
-
-.search > button,
-.action > button {
-    justify-content: flex-start;
-    text-align: start;
-}
-
 .action {
     margin: var(--xc-space-1) var(--xc-space-3) 0;
 }
 
 .action > button {
+    justify-content: flex-start;
+    text-align: start;
     gap: var(--xc-space-3);
     padding-inline: calc(var(--xc-space-1) - 1px);
 }
@@ -505,14 +495,7 @@
     white-space: nowrap;
 }
 
-.layout[data-xc-side-menu='icons'] .search,
-.layout[data-xc-tier='rail'] .search {
-    margin-inline: var(--xc-space-2);
-}
-
-.layout[data-xc-side-menu='icons'] .search > button,
 .layout[data-xc-side-menu='icons'] .action > button,
-.layout[data-xc-tier='rail'] .search > button,
 .layout[data-xc-tier='rail'] .action > button {
     justify-content: center;
     padding-inline: 0;
@@ -527,13 +510,6 @@
     .layout[data-xc-tier] {
         --xc-page-top: var(--xc-space-2);
     }
-}
-
-/* The header menu trigger is redundant when it would hold only Search and a
-   visible rail already shows a Search button; a collapsed side menu shows
-   none, so the trigger stays. */
-.layout[data-xc-rail='shown']:not([data-xc-side-menu='collapsed']) :global([data-header-menu='search-only']) {
-    display: none;
 }
 
 /* With the side menu shown (iPad and desktop), the app bar runs the full
