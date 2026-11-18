@@ -170,7 +170,7 @@ test.describe('responsive: one interface at every width', () => {
         await test.step('Forgot Password opens its own page and Back returns', async () => {
             const forgot = page.getByRole('button', { name: 'Forgot Password?' });
             await forgot.click();
-            await expect(page.getByRole('list', { name: 'Restore wallet access' })).toBeVisible();
+            await expect(page.getByRole('list', { name: 'Ways back into your wallet' })).toBeVisible();
             await expect(forgot).toBeHidden();
             await expect(page.getByRole('button', { name: 'Unlock Wallet' })).toBeHidden();
             await page.getByRole('button', { name: 'Back to previous screen' }).click();
