@@ -252,9 +252,9 @@ form.licenseForm > [data-form-stack] {
     white-space: nowrap;
 }
 
-/* The controls follow the terms as one group. From 600px the acknowledgement
-   sits left and Accept and continue right on one line; on phones the button
-   takes the full width, so it wraps under the acknowledgement (U68, G50). */
+/* The controls follow the terms as one group: acknowledgement left, Accept
+   and continue right, one line at every width. The row wraps only when both
+   cannot fit, which is below the smallest phone width. */
 .licenseControls {
     display: flex;
     flex: 0 0 auto;
@@ -271,27 +271,14 @@ form.licenseForm > [data-form-stack] {
    it must keep its one-pixel box, or it widens the page sideways. */
 .licenseActions {
     display: flex;
-    flex: 1 1 100%;
-    width: 100%;
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    width: auto;
     margin: 0;
 }
 
 .licenseActions > button {
-    width: 100%;
-}
-
-/* G50: the main action spans the phone width; from 600px it keeps its own
-   width at the row's end. */
-@media (min-width: 600px) {
-    .licenseActions {
-        flex: 0 0 auto;
-        justify-content: flex-end;
-        width: auto;
-    }
-
-    .licenseActions > button {
-        width: auto;
-    }
+    width: auto;
 }
 
 /* From 834px the terms read as a centred card two-thirds of the available
