@@ -302,34 +302,26 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.getByRole('main').getByText('Browse dispensers', { exact: true })
                 .first().click();
             const main = page.getByRole('main');
-            await expect(fieldByLabel(main, 'Token ticker')).toBeVisible({ timeout: 30_000 });
-            await fieldByLabel(main, 'Token ticker').fill('XCHAIN');
-            await main.getByRole('button', { name: 'Search', exact: true }).click();
+            // The Dispenser Explorer's search sits in its title bar's "Filter
+            // dispensers" menu and runs on Enter. Searching the SELLER's address
+            // keeps the results to this seller's dispensers on every chain, and
+            // the payment token is minted fresh for this run, so a card selling
+            // XCHAIN for that PAY token is this seller's dispenser. Its index is
+            // proven on the Confirm screen below ("This pays dispenser #N").
+            await page.getByRole('button', { name: 'Filter dispensers', exact: true }).click();
+            const search = page.getByRole('dialog', { name: 'Filter dispensers' })
+                .getByLabel('Search a token or seller address', { exact: true });
+            await expect(search, 'the Dispenser Explorer offers no search').toBeVisible({ timeout: 30_000 });
+            await search.fill(seller);
+            await search.press('Enter');
 
-            // An explorer result row is named "<TICK> @ <dispenser address>
-            // Dispenser terms #<index> · by <owner>" - not the "Open …
-            // dispenser #N" aria-label the OWNER's list uses. The address after
-            // "@" is the dispenser's own derived address, not the seller's, so
-            // the seller is matched on the "by" line.
-            //
-            // MATCHED ON THE SELLER'S ADDRESS AS WELL AS THE INDEX, because a
-            // dispenser index is per-CHAIN and this search is not. Dogecoin's
-            // #343 and Litecoin's #343 are different dispensers with equal
-            // standing in one result list, and the index alone resolved to both
-            // on 2026-09-02 - a strict-mode violation reported as "the buyer
-            // cannot find it", which is the opposite of what happened. The
-            // address is the only part of the row that is unique across chains.
-            //
-            // Read off the ACCESSIBLE NAME rather than the row's text: the
-            // rendered address is truncated for width, so a `hasText` on the
-            // full string matches nothing at all - which fails identically to a
-            // dispenser that never landed.
+            // A card is named "<give> for <price>, <network>".
             const row = main.getByRole('button', {
-                name: new RegExp(`#${dispenserIndex} · by ${seller}\\b`),
-            });
+                name: new RegExp(`^\\S+ XCHAIN for \\S+ ${PAY_TICK}, `),
+            }).first();
             await expect(row,
                 `the seller's dispenser #${dispenserIndex} is on chain but the buyer cannot find it by `
-                + 'searching the token it sells')
+                + "searching its seller's address")
                 .toBeVisible({ timeout: 60_000 });
             await row.click();
             // The dispenser page opens on Actions (G102); the buy panel is the

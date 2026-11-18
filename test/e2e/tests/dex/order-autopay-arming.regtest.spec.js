@@ -224,13 +224,15 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
 
             // The consent record is keyed by txid at broadcast and only gains its
             // orderActionIndex when a later pass resolves it, so this toggle
-            // appearing at all is the backfill working end to end.
-            const toggle = row.getByRole('switch', { name: /^Auto pay (on|off)/ });
+            // appearing at all is the backfill working end to end. The detail
+            // page names it "Auto-pay on" or "Auto-pay off (notify-only)",
+            // hyphenated where the order form's switch reads "Auto pay".
+            const toggle = row.getByRole('switch', { name: /^Auto[- ]pay (on|off)/ });
             await expect(toggle,
                 'the armed order carries no auto-pay control on its detail page, so the consent cannot be '
                 + 'seen or withdrawn')
                 .toBeVisible({ timeout: 60_000 });
-            await expect(row, 'the page does not say the order is armed').toContainText(/auto pay on/i);
+            await expect(row, 'the page does not say the order is armed').toContainText(/auto[- ]pay on/i);
             await expect(toggle).toBeChecked();
 
             // click(), NOT uncheck(): the switch is CONTROLLED by the consent

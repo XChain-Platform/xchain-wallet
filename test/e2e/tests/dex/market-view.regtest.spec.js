@@ -251,7 +251,12 @@ test.describe(`the DEX market view on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 60_000 });
 
             await row.click();
-            await expect(page.getByText(`${TICK}/XCHAIN`).or(page.getByText(`XCHAIN/${TICK}`)).first(),
+            // Beside the list the pair view is a region named
+            // "<BASE>/<QUOTE> market"; on its own route it is the pair title,
+            // which spaces the slash ("MKT1 / XCHAIN").
+            await expect(page.getByRole('region', {
+                name: new RegExp(`^(?:${TICK}/XCHAIN|XCHAIN/${TICK}) market$`),
+            }).or(page.getByText(new RegExp(`^(?:${TICK} / XCHAIN|XCHAIN / ${TICK})$`))).first(),
                 'the market row did not open its pair view')
                 .toBeVisible({ timeout: 30_000 });
             await main.getByRole('tab', { name: 'Book' }).click();

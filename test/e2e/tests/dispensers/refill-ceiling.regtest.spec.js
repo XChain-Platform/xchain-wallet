@@ -61,6 +61,7 @@ import {
     selectPickerAsset,
     approveConfirm,
     FROM_ADDRESS_LABEL,
+    openMyDispensers,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -176,8 +177,7 @@ async function signedTxid(page) {
  * doing this five times actually does.
  */
 async function openDispenserDetail(page, index) {
-    await openPaletteCommand(page, 'Dispensers');
-    const main = page.getByRole('main');
+    const main = await openMyDispensers(page);
     // The owner's list labels a row rather than printing the index in its text:
     // "Open XCHAIN dispenser #1699". Filtering on the visible text finds nothing
     // (campaign §"Dispensers", Session 31's harness note about the same list).

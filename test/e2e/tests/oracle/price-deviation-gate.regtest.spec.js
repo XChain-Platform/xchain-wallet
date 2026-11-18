@@ -44,7 +44,9 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/oracle/price-deviation-gate.regtest.spec.js
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    createWallet, expect, openFormSection, openPaletteCommand, test,
+} from '../../fixtures/wallet.js';
 import { pickFiatCurrency, pickToken } from '../../fixtures/pickerFields.js';
 import {
     EXPLORER_URL,
@@ -72,7 +74,25 @@ const ORACLE_COMMAND = 'My oracle';
 const FUNDING = 3;
 const TICK = 'XCHAIN';
 const FIAT = 'USD';
+/**
+ * The protocol fee fraction, the form's 1% stop. The form takes the fee on a
+ * slider of named stops (Free, 0.5%, 1%, 2%, 5%, Custom) in the optional
+ * Usage Fee section.
+ */
 const USAGE_FEE = '0.01';
+const USAGE_FEE_STOP = { index: '2', valueText: '1 percent' };
+
+/**
+ * Opens the Usage Fee section and sets the slider to the 1% stop by position,
+ * so a revisit that prefills a fee still lands on the same stop.
+ */
+async function setUsageFee(main) {
+    await openFormSection(main, 'Usage Fee');
+    const fee = main.getByRole('slider', { name: 'Usage fee', exact: true });
+    await fee.fill(USAGE_FEE_STOP.index);
+    await expect(fee, `the usage fee slider is not on the ${USAGE_FEE} stop`)
+        .toHaveAttribute('aria-valuetext', USAGE_FEE_STOP.valueText);
+}
 
 /** The three prices, sized around the form's 25% threshold. */
 const FIRST = '1.50';
@@ -145,7 +165,7 @@ async function stagePublish(page, value) {
     await pickToken(main, TICK);
     await pickFiatCurrency(main, FIAT);
     await main.getByLabel(/^Price of one/).fill(value);
-    await main.getByLabel(/^Usage fee/).fill(USAGE_FEE);
+    await setUsageFee(main);
     await main.getByRole('button', { name: 'Publish price' }).click();
     // A full-mode wallet signs from the shared confirm screen, which carries the
     // oracle notes, the typed PUBLISH box and the password.

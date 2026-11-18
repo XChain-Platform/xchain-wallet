@@ -311,15 +311,20 @@ test.describe('Addresses: importing a private key', () => {
 
                 await openPaletteCommand(page, 'Addresses');
                 await showImportedOnly(page);
-                await page.getByRole('button', { name: `View address ${imported}` }).click();
 
-                // The detail marks the active address with an "Active" badge
-                // beside its label and offers no Use action for it, so both
-                // halves are read: the badge appearing and Use going away.
+                // The address LIST marks the active address with an "Active"
+                // badge beside its label (AddressList addrActive), and the
+                // detail offers no Set active action for it, so both halves are
+                // read: the row's badge appearing and Set active going away.
                 const notActivated = 'Use did not make the imported address active - D-65 and its '
                     + 'fourth sibling in resolveActiveAddresses both present exactly this way, and Send '
                     + 'spends the ACTIVE address, so an imported key that cannot be activated cannot be spent';
-                await expect(page.getByRole('main').getByText('Active', { exact: true }), notActivated)
+                const importedRow = page.getByRole('button', { name: `View address ${imported}` });
+                await expect(importedRow.getByText('Active', { exact: true }), notActivated)
+                    .toBeVisible({ timeout: 30_000 });
+                await importedRow.click();
+                await expect(page.getByRole('list', { name: 'Actions', exact: true }),
+                    'the imported address detail never opened its Actions list')
                     .toBeVisible({ timeout: 30_000 });
                 await expect(page.getByRole('list', { name: 'Actions', exact: true })
                     .getByRole('button', { name: /^Set active/ }), notActivated)

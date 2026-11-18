@@ -98,6 +98,12 @@ const FIAT = 'USD';
 const VALUE = '1.50';
 /** A fraction, not a percentage: 1% of a Mode B dispenser's projected proceeds. */
 const USAGE_FEE = '0.01';
+/**
+ * The form's stop for that fee. The form takes the fee as a percent on a
+ * slider of named stops (Free, 0.5%, 1%, 2%, 5%, Custom) in the optional
+ * Usage Fee section, so the 1% stop is what publishes 0.01 on the wire.
+ */
+const USAGE_FEE_STOP = { index: '2', valueText: '1 percent' };
 /** The protocol's fixed maturation delay, in seconds (oracle/price_aggregator/single_ingest.js). */
 const ACTIVATION_DELAY_S = 86_400;
 /** Enough XCHAIN to escrow a dispenser with. */
@@ -239,7 +245,11 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await pickToken(main, TICK);
             await pickFiatCurrency(main, FIAT);
             await main.getByLabel(/^Price of one/).fill(VALUE);
-            await main.getByLabel(/^Usage fee/).fill(USAGE_FEE);
+            await openFormSection(main, 'Usage Fee');
+            const fee = main.getByRole('slider', { name: 'Usage fee', exact: true });
+            await fee.fill(USAGE_FEE_STOP.index);
+            await expect(fee, `the usage fee slider is not on the ${USAGE_FEE} stop`)
+                .toHaveAttribute('aria-valuetext', USAGE_FEE_STOP.valueText);
             await expect(main, 'the form does not warn that a first price is inert for 24 hours')
                 .toContainText(`First price for ${TICK} in ${FIAT}`);
 

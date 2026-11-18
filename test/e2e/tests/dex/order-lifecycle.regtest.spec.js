@@ -342,13 +342,17 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main, 'the cancel form is pointed at a different order')
                 .toContainText(`#${orderIndex}`);
             // Signed on the shared confirm page, after its network dry run;
-            // the cancel's promise is the review screen's warning (G105),
-            // the claim the chain settles below.
+            // the cancel's promise is the confirm page's warning slot (G105,
+            // G127): the title "Cancelling closes the order" over the line
+            // "Any escrowed side returns to you.", the claim the chain
+            // settles below.
             await page.getByRole('button', { name: 'Cancel Order' }).click();
             await expectConfirmModal(page, 'this action', 60_000);
-            await expect(page.getByTestId('confirm-action-warnings'),
-                'the review never said what the cancel does')
-                .toContainText(/Cancelling closes the order and returns any escrowed side/);
+            const cancelWarning = page.getByTestId('confirm-warning');
+            await expect(cancelWarning, 'the review never said what the cancel does')
+                .toContainText('Cancelling closes the order');
+            await expect(cancelWarning, 'the review never said the escrow comes back')
+                .toContainText('Any escrowed side returns to you.');
             await approveConfirm(page);
             await expect(page.getByText('Cancel broadcast'),
                 'the cancel never reported being broadcast')

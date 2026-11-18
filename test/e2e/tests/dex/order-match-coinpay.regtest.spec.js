@@ -364,7 +364,9 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('wallet B pays it from Payments due', async () => {
             const makerSatsBefore = await coinBalanceSats(maker);
 
-            await page.getByRole('button', { name: 'Payments due' }).first().click();
+            // Payments due is a wallet menu row (Trade group), reached by the
+            // command palette like the rest of the menu.
+            await openPaletteCommand(page, 'Payments due');
             const main = page.getByRole('main');
             const pending = main.getByRole('list', { name: 'Payments due' });
             await expect(pending, 'the obligation this wallet owes is not in Payments due')
@@ -381,7 +383,9 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             // the payment's detail either way.
             await pending.getByRole('button', { name: new RegExp(`^Buying\\b.*, Pay ${ASK}`) }).first().click();
             await main.getByRole('button', { name: 'Pay Order', exact: true }).click();
-            await page.getByRole('button', { name: /^Pay \d/ }).click();
+            // The review page states the amount in its rows; its submit is
+            // the bare verb "Pay".
+            await page.getByRole('button', { name: 'Pay', exact: true }).click();
             await expectConfirmModal(page, 'the matched order payment', 60_000);
             const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);

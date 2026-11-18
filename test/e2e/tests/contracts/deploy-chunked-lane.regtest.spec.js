@@ -123,7 +123,11 @@ function uniqueChunkedSource(tag) {
  * screen (`confirm-modal`), and only the chunked review lists its legs, so this
  * is what tells the chunked review from a single-shot confirm.
  */
-const REVIEW_SUMMARY = /\b\d+ chunks and 1 assembling transaction\b/;
+// No leading \b: the review's "Transactions" fact sits right against its value
+// in the confirm's textContent ("Transactions2 chunks ..."), so a word boundary
+// before the count never matches there, and `hasNotText` would then count the
+// chunked review as a single-transaction confirm.
+const REVIEW_SUMMARY = /\d+ chunks and 1 assembling transaction\b/;
 
 const codeHashOf = (source) => createHash('sha256').update(Buffer.from(source, 'utf8')).digest('hex');
 
@@ -318,7 +322,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // lane at all, not a workaround for a wallet problem.
             const nudger = setInterval(() => { mineIfPending(); }, 5_000);
             try {
-                await go.click();
+                await approveConfirm(page, 'starting the chunked run');
                 // ENTERING the lane is what this asserts. Completing all three legs
                 // needs the payer to hold XCHAIN for gas - the first live run landed
                 // a real v4 carrier (chunk_index 0 of total_chunks 2) that indexed
@@ -442,7 +446,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // for is a confirmation only this loop can produce.
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
-                await go.click();
+                await approveConfirm(page, 'the three-leg chunked run');
 
                 // D-124's regression guard, and the only thing the user sees for
                 // several minutes: the progress copy renders during `submitting`,
@@ -626,7 +630,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // guard withholds exactly the confirmations this loop must produce.
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
-                await go.click();
+                await approveConfirm(page, 'the chunked deploy');
                 const done = page.getByText(/Contract published/i);
                 // Counting ANY non-empty alert as a failure is too
                 // broad off Bitcoin: where the native fee is MANDATORY the
@@ -685,11 +689,15 @@ test.describe('§11.3: the chunked deploy lane', () => {
 
         await test.step('call inc() and read the state the VM wrote', async () => {
             await openPaletteCommand(page, 'Contracts');
-            await page.getByRole('tab', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
+            // The list groups every chain in its own "Contracts on <network>"
+            // region, and a contract index is per chain, so the row is found
+            // inside this run's chain.
             // The label is "<meta.name> v<version> (C:<coin>:<index>)"; the list row prefixes it with "Open".
             const labelPattern = `Wallet Counter v1\\.0\\.0 \\(C:${REGTEST_TICKER}:${contractIndex}\\)`;
             const rowLabel = new RegExp(`^${labelPattern}$`);
-            const row = page.getByRole('button', { name: new RegExp(`^Open ${labelPattern}$`) });
+            const row = page.getByRole('main')
+                .getByRole('region', { name: `Contracts on ${REGTEST_CHAIN_LABEL}`, exact: true })
+                .getByRole('button', { name: new RegExp(`^Open ${labelPattern}$`) });
             await expect(row.first(), 'the deployed contract is not in the list')
                 .toBeVisible({ timeout: 60_000 });
             await row.first().click();
@@ -819,7 +827,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
 
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
-                await go.click();
+                await approveConfirm(page, 'the interrupted chunked run');
                 // Wait for the FIRST carrier to be indexed, then pull the rug. It
                 // has to be indexed and not merely broadcast, or the record holds
                 // no action_index and this is a test of the old bug rather than of
@@ -901,7 +909,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
 
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
-                await go.click();
+                await approveConfirm(page, 'finishing the chunked run');
                 const done = page.getByText(/Contract published/i);
                 // Counting ANY non-empty alert as a failure is too
                 // broad off Bitcoin: where the native fee is MANDATORY the

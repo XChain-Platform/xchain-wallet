@@ -127,8 +127,10 @@ test.describe(`same-chain SWAP on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('button', { name: 'Create Swap', exact: true }).click();
 
             await expectConfirmModal(page, 'the same-chain SWAP');
+            // The review reads a swap as the order it is, from the side it buys
+            // (confirmStandard.sentence.buy: "Buy {get} for {give}").
             await expect(page.getByTestId('confirm-sentence'))
-                .toContainText(`give ${GIVE_AMOUNT} ${GIVE_TICK} for ${GET_AMOUNT} XCHAIN`);
+                .toContainText(`Buy ${GET_AMOUNT} XCHAIN for ${GIVE_AMOUNT} ${GIVE_TICK}`);
             swapTxid = await approveAndReadTxid(page, 'the same-chain SWAP');
             await expect(main).toContainText('Swap sent');
         });

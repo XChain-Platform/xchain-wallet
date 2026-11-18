@@ -321,37 +321,34 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // Reach the contract the way a user does: find it in the list, open
             // it, and call a method from the detail page.
             //
-            // FILTERED TO THIS RUN'S CHAIN FIRST, with the list's own chain
-            // tabs. A contract's action index is per-CHAIN, and this list shows
-            // every chain at once, so "#376" alone can name a Litecoin contract
-            // and a Dogecoin one in the same screen - the same collision the
-            // dispenser browse hit on 2026-09-02. The filter is also the real
-            // user path, so nothing is being reached around here.
+            // SCOPED TO THIS RUN'S CHAIN. A contract's action index is
+            // per-CHAIN, and the list groups every chain at once in its own
+            // "Contracts on <network>" region, so "#376" alone can name a
+            // Litecoin contract and a Dogecoin one on the same screen - the
+            // same collision the dispenser browse hit on 2026-09-02.
             //
             // FOUND BY THE NAME THE CHAIN RECORDED, which is what every row is
             // labelled with: "<meta.name> v<meta.version> (C:<coin>:<index>)".
             // The address makes the label unique across runs and chains, which
             // the name alone (every run deploys the same source) is not.
             //
-            // `.first()` because the list renders the same contract twice on
-            // purpose - once under "My contracts (published by me)", once under
-            // "Browse all contracts" - and the first is the one that proves the
-            // wallet recognises the deploy as its own.
-            await page.getByRole('tab', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
+            // The All view proves the deploy is browsable by anyone; the My
+            // Contracts view (deploys by this wallet's own addresses) proves
+            // the wallet recognises it as its own, and the row is opened there.
             const rowLabel = `${META_NAME} v${META_VERSION} (C:${REGTEST_TICKER}:${contractIndex})`;
-            // The list row carries its identity as an aria-label with an "Open" prefix.
-            const row = page.getByRole('button', { name: `Open ${rowLabel}`, exact: true });
-            await expect(row.first()).toBeVisible({ timeout: 60_000 });
-            // The two sections load independently ("My contracts" is a
-            // per-address query, browse-all a paginated one), so the second
-            // copy can land after the first is already visible: poll the count
-            // rather than read it once (a one-shot read went red on 2026-09-09
-            // with both rows on screen in the failure snapshot).
-            await expect.poll(async () => row.count(), {
-                message: 'the wallet lists its own deploy under "My contracts", not only under browse-all',
-                timeout: 30_000,
-            }).toBeGreaterThan(1);
-            await row.first().click();
+            const contractRow = () => page.getByRole('main')
+                .getByRole('region', { name: `Contracts on ${REGTEST_CHAIN_LABEL}`, exact: true })
+                // The list row carries its identity as an aria-label with an "Open" prefix.
+                .getByRole('button', { name: `Open ${rowLabel}`, exact: true });
+            const views = page.getByRole('tablist', { name: 'Contract views' });
+            await views.getByRole('tab', { name: 'All', exact: true }).click();
+            await expect(contractRow(), 'the deployed contract is not in the All view')
+                .toBeVisible({ timeout: 60_000 });
+            await views.getByRole('tab', { name: 'My Contracts', exact: true }).click();
+            await expect(contractRow(),
+                'the wallet does not list its own deploy under My Contracts, only under All')
+                .toBeVisible({ timeout: 60_000 });
+            await contractRow().click();
 
             const main = page.getByRole('main');
             // The detail page is headed by the same "<name> v<version> (C:<coin>:<n>)"

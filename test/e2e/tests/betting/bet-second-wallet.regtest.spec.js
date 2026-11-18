@@ -61,6 +61,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     approveConfirm as approveWhenReady,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -153,7 +154,7 @@ async function signingAddress(page) {
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     const main = page.getByRole('main');
     await selectVenueChain(main);
-    return fieldByLabel(main, 'Your oracle address').inputValue();
+    return (await openFromAddress(main)).inputValue();
 }
 
 test.describe('BET across two wallets', () => {
@@ -188,20 +189,20 @@ test.describe('BET across two wallets', () => {
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            expect(await fieldByLabel(main, 'Your oracle address').inputValue()).toBe(oracle);
+            expect(await (await openFromAddress(main)).inputValue()).toBe(oracle);
 
-            const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
+            const tokenField = main.getByRole('button', { name: /^Token:/ });
             await expect(tokenField).toBeVisible({ timeout: 30_000 });
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
             await fieldByLabel(main, 'Question').fill(`Two wallets ${RUN_TAG}`);
-            await fieldByLabel(main, 'Outcome 0').fill('Yes');
-            await fieldByLabel(main, 'Outcome 1').fill('No');
-            await fieldByLabel(main, 'Purchases Close')
+            await fieldByLabel(main, 'Outcome 1').fill('Yes');
+            await fieldByLabel(main, 'Outcome 2').fill('No');
+            await fieldByLabel(main, /^(?:Closes|Purchases Close)$/)
                 .fill(toLocalDateTimeInput((await chainTime()) + DEADLINE_LEAD_SEC));
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Open market', exact: true }).click();
+            await main.getByRole('button', { name: 'Open Market', exact: true }).click();
             await approveConfirm(page);
 
             const until = Date.now() + 180_000;

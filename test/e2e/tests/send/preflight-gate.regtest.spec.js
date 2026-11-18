@@ -38,6 +38,7 @@
 import { readShownTxid } from '../../fixtures/pendingHistory.js';
 import { createWallet, expect, openIssueSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
+    approveConfirm,
     expectConfirmModal,
     fundAddress,
     readReceiveAddress,
@@ -221,7 +222,7 @@ test.describe('pre-flight gate on regtest', () => {
         const approve = page.getByTestId('confirm-approve');
         await expect(approve).toHaveText(`Create token ${ISSUE_TICK}`);
         await expect(approve).toBeEnabled();
-        await approve.click();
+        await approveConfirm(page, 'the ISSUE the pre-flight passed');
 
         await expect(page.getByRole('heading', { name: 'Token issued' }))
             .toBeVisible({ timeout: 120_000 });

@@ -50,6 +50,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     approveConfirm,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -164,7 +165,7 @@ async function signingAddress(page) {
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     const main = page.getByRole('main');
     await selectVenueChain(main);
-    return fieldByLabel(main, 'Your oracle address').inputValue();
+    return (await openFromAddress(main)).inputValue();
 }
 
 /** Generates one address on the venue chain, identified by difference (§3.5). */
@@ -239,18 +240,18 @@ test.describe('BET in watcher mode', () => {
             const main = page.getByRole('main');
             await selectVenueChain(main);
 
-            const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
+            const tokenField = main.getByRole('button', { name: /^Token:/ });
             await expect(tokenField).toBeVisible({ timeout: 30_000 });
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
             await fieldByLabel(main, 'Question').fill(`Mode gate ${RUN_TAG}`);
-            await fieldByLabel(main, 'Outcome 0').fill('Yes');
-            await fieldByLabel(main, 'Outcome 1').fill('No');
-            await fieldByLabel(main, 'Purchases Close')
+            await fieldByLabel(main, 'Outcome 1').fill('Yes');
+            await fieldByLabel(main, 'Outcome 2').fill('No');
+            await fieldByLabel(main, /^(?:Closes|Purchases Close)$/)
                 .fill(toLocalDateTimeInput(await deadlineUnix(DEADLINE_LEAD_SEC)));
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Open market', exact: true }).click();
+            await main.getByRole('button', { name: 'Open Market', exact: true }).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await approveConfirm(page);
 

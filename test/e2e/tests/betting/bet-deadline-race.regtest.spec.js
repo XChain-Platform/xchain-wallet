@@ -70,6 +70,7 @@ import {
     unlockAfterReload,
     warmPreflight,
     approveConfirm as approveWhenReady,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -289,7 +290,7 @@ test.describe('BET deadline race', () => {
             await gotoBettingHub(page);
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             await selectVenueChain(page.getByRole('main'));
-            oracle = await fieldByLabel(page.getByRole('main'), 'Your oracle address').inputValue();
+            oracle = await (await openFromAddress(page.getByRole('main'))).inputValue();
             expect(oracle, `the create form names a ${REGTEST_COIN} address`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -367,7 +368,7 @@ test.describe('BET deadline race', () => {
             await gotoBettingHub(page);
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             await selectVenueChain(page.getByRole('main'));
-            punter = await fieldByLabel(page.getByRole('main'), 'Your oracle address').inputValue();
+            punter = await (await openFromAddress(page.getByRole('main'))).inputValue();
             expect(punter, 'the wallet now signs as some other address').not.toBe(oracle);
 
             await fundAddress(punter, FUNDING);
@@ -397,24 +398,24 @@ test.describe('BET deadline race', () => {
 
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            expect(await fieldByLabel(main, 'Your oracle address').inputValue(),
+            expect(await (await openFromAddress(main)).inputValue(),
                 'the form signs with the funded oracle address').toBe(oracle);
 
-            const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
+            const tokenField = main.getByRole('button', { name: /^Token:/ });
             await expect(tokenField).toBeVisible({ timeout: 30_000 });
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
             await fieldByLabel(main, 'Question').fill(`Deadline race ${RUN_TAG}`);
-            await fieldByLabel(main, 'Outcome 0').fill(OUTCOME.label);
-            await fieldByLabel(main, 'Outcome 1').fill(OUTCOME_OTHER);
+            await fieldByLabel(main, 'Outcome 1').fill(OUTCOME.label);
+            await fieldByLabel(main, 'Outcome 2').fill(OUTCOME_OTHER);
 
             // From the CHAIN's clock, not the browser's.
             deadlineSec = (await chainTime()) + DEADLINE_LEAD_SEC;
-            await fieldByLabel(main, 'Purchases Close').fill(toLocalDateTimeInput(deadlineSec));
+            await fieldByLabel(main, /^(?:Closes|Purchases Close)$/).fill(toLocalDateTimeInput(deadlineSec));
 
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Open market', exact: true }).click();
+            await main.getByRole('button', { name: 'Open Market', exact: true }).click();
             await approveConfirm(page);
 
             const until = Date.now() + 180_000;
