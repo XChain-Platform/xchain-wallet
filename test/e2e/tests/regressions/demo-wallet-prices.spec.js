@@ -40,7 +40,8 @@ test('demo Home prices its hero and coin rows and renders its chart', async ({ p
                 await expect(rows.nth(index)).toContainText(FIAT_VALUE);
             }
 
-            await expect(page.getByRole('img', { name: /^Portfolio performance chart\./ }))
+            // The chart sits behind the hero and is named for what it plots.
+            await expect(page.getByRole('img', { name: /^Wallet value over [^.]+\./ }))
                 .toBeVisible();
         });
     }
