@@ -61,6 +61,19 @@ async function openPaletteRoute(page, query, option) {
     await expect(palette).toBeHidden();
 }
 
+// Contacts and Addresses keep their network filter in the title bar's filter
+// panel (2b842b099), so the trigger is read inside that panel, which is then
+// closed so the palette shortcut is not typed into its search box.
+async function expectPanelNetworkFilterEdge(page, label, panelName) {
+    const toggle = page.getByRole('button', { name: panelName, exact: true });
+    await toggle.click();
+    const panel = page.getByRole('dialog', { name: panelName });
+    await expect(panel).toBeVisible();
+    await expectVisibleEdge(label, panel.getByRole('button', { name: /^Filter by network/ }), { surface: true });
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+}
+
 async function checkControls(page, pass) {
     const main = page.getByRole('main');
 
@@ -79,17 +92,22 @@ async function checkControls(page, pass) {
 
     await test.step(`${pass} / NetworkFilter trigger on Contacts`, async () => {
         await gotoSection(page, 'Contacts');
-        await expectVisibleEdge('Contacts network filter', main.getByRole('button', { name: /^Filter by network/ }), { surface: true });
+        await expectPanelNetworkFilterEdge(page, 'Contacts network filter', 'Filter contacts');
     });
 
     await test.step(`${pass} / NetworkFilter trigger on Addresses`, async () => {
         await openPaletteRoute(page, 'Addresses', /^Addresses/);
-        await expectVisibleEdge('Addresses network filter', main.getByRole('button', { name: /^Filter by network/ }), { surface: true });
+        await expectPanelNetworkFilterEdge(page, 'Addresses network filter', 'Filter addresses');
     });
 
     await test.step(`${pass} / IconSelect triggers`, async () => {
         await gotoSection(page, 'Messaging');
-        await page.getByRole('button', { name: 'New message', exact: true }).click();
+        // New message is a title bar button on a phone and a row of the More menu on a wide screen.
+        const newMessage = page.getByRole('button', { name: 'New message', exact: true });
+        const more = page.getByRole('button', { name: 'More', exact: true });
+        await newMessage.or(more).first().waitFor();
+        if (await newMessage.count() === 0) await more.click();
+        await newMessage.or(page.getByRole('menuitem', { name: 'New message' })).first().click();
         await expectVisibleEdge('encryption select', main.getByRole('button', { name: /^Encryption:/ }), { surface: true });
         await openFromSection(main);
         await expectVisibleEdge('compose network field', main.getByRole('button', { name: /^Network:/ }), { surface: true });
