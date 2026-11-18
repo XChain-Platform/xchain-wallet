@@ -59,6 +59,7 @@ import { coinFromChainId } from '../components/BalanceList.jsx';
 import { useTickBalance } from '../hooks/useTickBalance.js';
 import { compareDecimalStrings, formatWithThousands, tokenAmountPrecisionError } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import { contractCallFacts } from './contractCallFacts.js';
 import '../../i18n/locales/en/execute.js';
 import '../../i18n/locales/en/send.js';
 import '../../i18n/locales/en/components.js';
@@ -1020,6 +1021,7 @@ export function ExecuteContractForm({
                     chainId,
                     address: fromAddress?.address,
                     facts: [
+                        ...contractCallFacts({ index: contractActionIndex, row: contractRow, method }),
                         ...paramsArray.map((param, index) => ({
                             label: `${t('execute.params')} ${index + 1}`,
                             value: revealHiddenText(param),
@@ -1057,6 +1059,7 @@ export function ExecuteContractForm({
             chainId,
             address: fromAddress?.address,
             facts: [
+                ...contractCallFacts({ index: contractActionIndex, row: contractRow, method }),
                 ...paramsArray.map((param, index) => ({
                     label: `${t('execute.params')} ${index + 1}`,
                     value: revealHiddenText(param),

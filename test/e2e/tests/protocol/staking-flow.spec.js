@@ -115,9 +115,9 @@ async function releaseStakeBalanceLookup(page) {
 
 /** Opens Validator staking from Staking and fills a new stake. */
 async function fillNewStake(page, viewport) {
-    // New stake sits in the content, in the actions row or, on an empty list, the empty state.
-    await page.getByRole('main').getByRole('button', { name: 'New Stake', exact: true }).click();
-    await expectScreenFits(page, 'New stake', `${viewport.name} new stake chooser`);
+    // New Stake is the title bar's plus.
+    await page.getByRole('banner').getByRole('button', { name: 'New Stake', exact: true }).click();
+    await expectScreenFits(page, 'New Stake', `${viewport.name} new stake chooser`);
 
     await page.getByRole('button', { name: /^Validator staking/ }).click();
     // Both the demo wallet and a created one hold a single Bitcoin chain, so
@@ -149,18 +149,24 @@ for (const viewport of VIEWPORTS) {
             await openPaletteItem(page, 'Staking', 'Your staking positions');
             await expectScreenFits(page, 'Staking', `${viewport.name} staking positions`);
 
+            // The search and network filter live in the title bar's Filter staking panel.
+            await page.getByRole('banner').getByRole('button', { name: 'Filter staking', exact: true }).click();
+            const filters = page.getByRole('dialog', { name: 'Filter staking' });
             await expectSameLineHeights([
-                page.getByRole('searchbox', { name: 'Search staking positions' }),
-                page.getByRole('button', { name: /^Filter by network/ }),
+                filters.getByRole('searchbox', { name: 'Search staking positions' }),
+                filters.getByRole('button', { name: /^Filter by network/ }),
             ], `${viewport.name} staking toolbar`);
+            await page.keyboard.press('Escape');
 
             await expect(page.getByRole('button', { name: /^Open Validator stake/ })).toBeVisible();
         });
 
         await test.step('stake detail', async () => {
             await page.getByRole('button', { name: /^Open Validator stake/ }).click();
-            await expectScreenFits(page, 'Validator stake', `${viewport.name} validator stake detail`);
-            await expect(page.getByRole('main').getByText('50,000 XCHAIN', { exact: true }))
+            // Two panels keep the Staking title; a phone opens the detail as its own page.
+            await expectScreenFits(page, viewport.name === 'phone' ? 'Validator Stake' : 'Staking',
+                `${viewport.name} validator stake detail`);
+            await expect(page.getByRole('main').getByLabel('50,000 XCHAIN staked', { exact: true }))
                 .toBeVisible();
 
             // The shared action list (G101): one row per action, all one height.
@@ -172,7 +178,7 @@ for (const viewport of VIEWPORTS) {
                 actions.getByRole('button', { name: /^Revoke\b/ }),
             ], `${viewport.name} stake actions`);
 
-            await page.getByRole('button', { name: 'Back to staking' }).click();
+            if (viewport.name === 'phone') await page.getByRole('button', { name: 'Back to staking' }).click();
             await expect(page.getByRole('heading', { name: 'Staking', exact: true })).toBeVisible();
         });
 
@@ -212,7 +218,7 @@ for (const viewport of VIEWPORTS) {
         });
 
         await test.step('stake review', async () => {
-            await expectScreenFits(page, 'Review stake', `${viewport.name} stake review`);
+            await expectScreenFits(page, 'Review Stake', `${viewport.name} stake review`);
             await releaseStakeBalanceLookup(page);
 
             const main = page.getByRole('main');
