@@ -8,9 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// A network-invalid action on Litecoin gets the same "Sign anyway"
-// override Bitcoin gets: the pre-flight verdict is the network's opinion, not
-// a local proof, so the user keeps the final say on every chain.
+// An amount over the available balance on Litecoin is blocked on the form
+// itself, as on Bitcoin: no Confirm opens and there is no Sign anyway override.
 
 import { createWallet, expect, gotoSection, revealChainPicker, test } from '../../fixtures/wallet.js';
 import { searchTokenPicker } from '../../fixtures/fields.js';
@@ -22,7 +21,7 @@ const VALID_LTC = 'ltc1qw508d6qejxtdg4y5r3zarvary0c5xw7kgmn4n9';
 // that as an error that says nothing about this flow.
 const PRICE_FEED = /api\.coingecko\.com/;
 
-test('an unaffordable Litecoin token send offers Sign anyway behind the same warning', async ({ page }) => {
+test('an unaffordable Litecoin token send is blocked on the form with no Sign anyway', async ({ page }) => {
     const consoleErrors = [];
     page.on('console', (msg) => {
         if (msg.type() !== 'error') return;
@@ -50,15 +49,10 @@ test('an unaffordable Litecoin token send offers Sign anyway behind the same war
     await page.getByRole('textbox', { name: /^Amount/ }).fill('999999');
     await main.getByRole('button', { name: 'Send', exact: true }).click();
 
-    const confirm = page.getByTestId('confirm-modal');
-    await expect(confirm).toBeVisible();
-    await expect(confirm.getByText('Sign anyway')).toBeVisible();
-    // G130: Approve keeps its colour; a tap before Sign anyway is ticked says
-    // so at the top and sends nothing.
-    await page.getByTestId('confirm-approve').click();
-    await expect(page.getByTestId('confirm-blocked')).toContainText('Sign anyway');
-    await confirm.getByTestId('ack-BALANCE_INSUFFICIENT').check();
-    await expect(page.getByTestId('confirm-blocked')).toHaveCount(0);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled();
+    // Operator ruling 2026-11-17: the form blocks an amount over the balance,
+    // so no Confirm opens and there is no Sign anyway override.
+    await expect(main.getByText('Amount exceeds the available balance', { exact: false }).first()).toBeVisible();
+    await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
+    await expect(page.getByText('Sign anyway')).toHaveCount(0);
     expect(consoleErrors).toEqual([]);
 });

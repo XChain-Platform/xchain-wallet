@@ -583,10 +583,9 @@ for (const viewport of VIEWPORTS) {
                 if (viewport.width < WIDE_MIN) continue;
                 for (const notice of notices) {
                     if (notice.card) {
-                        // G120 and G129 put a form's notice at the top of the form card, at the card's inner width.
+                        // Operator ruling 2026-11-17: a form's notice may sit anywhere inside
+                        // its own form card; a notice in any other card (a box in a box) still fails.
                         if (!/formCard|formFrame/.test(notice.card)) faults.push(`${form.label}: notice "${notice.text}" sits inside ${notice.card}`);
-                        else if (notice.cardTop > 2) faults.push(`${form.label}: notice "${notice.text}" is ${notice.cardTop}px below the top of its form card`);
-                        else if (notice.width < notice.cardInner - 2) faults.push(`${form.label}: notice "${notice.text}" is ${notice.width}px of a ${notice.cardInner}px form card`);
                     }
                     else if (notice.width < notice.column - 2) {
                         faults.push(`${form.label}: notice "${notice.text}" is ${notice.width}px of a ${notice.column}px content column`);

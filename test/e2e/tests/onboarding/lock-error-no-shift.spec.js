@@ -14,7 +14,8 @@
 // height: the logo and the password field do not move when the error shows.
 // Unlock moves down by the error line, which is the error taking its place.
 
-const FORM_GAP_PX = 16;
+// G80: the field-to-Unlock gap is 8px (the stack gap), not the 16px form gap.
+const FORM_GAP_PX = 8;
 
 import { createWallet, expect, test, lockButton, unlockButton } from '../../fixtures/wallet.js';
 
