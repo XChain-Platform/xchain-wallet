@@ -102,11 +102,12 @@
 //     "Back to history") with no filter bar, and History re-mounts with its
 //     default date window on the way back. openHistoryDetail and
 //     backToHistoryList (fixtures/regtest.js) take either layout.
-//   - ActionDetail's Details tab is one table row per field, each headed by a
-//     plain label: curated rows first ("Address", "Transaction ID", "Block"),
-//     then every other `entry.raw` key under a sentence-case label ("Status",
-//     "Details"). The nested `details` object renders as ONE JSON-stringified
-//     cell, so its real values are substrings of it.
+//   - ActionDetail's Details tab is a facts list (`dl`, FactRows): one `dt`
+//     label and one `dd` value per field, curated facts first ("Address",
+//     "Transaction ID", "Block"), then every other `entry.raw` key under a
+//     sentence-case label ("Status", "Details"). The nested `details` object
+//     renders as ONE JSON-stringified value, so its real values are
+//     substrings of it.
 //   - Addresses and the txid on that tab draw as `first6…last6` (U+2026); the
 //     full value is the element's title, which is what the assertions read.
 //   - The Send form has no chain picker (D-140): it follows the SELECTED
@@ -304,17 +305,21 @@ async function widenDateWindow(page) {
 }
 
 /**
- * One row of ActionDetail's Details tab, found by the label that heads it.
+ * The value of one fact on ActionDetail's Details tab: the `dd` beside the
+ * `dt` whose whole text is `label`. The tab is a facts list (`dl`), not a
+ * table, so there are no row roles to find.
  *
  * @param {import('@playwright/test').Locator} pane  the detail, from openHistoryDetail
  * @param {string} label
  */
 function detailRow(pane, label) {
-    return pane.getByRole('tabpanel').getByRole('row', { name: new RegExp(`^${label}\\b`) });
+    return pane.getByRole('tabpanel')
+        .locator('dt').filter({ hasText: new RegExp(`^${label}$`) })
+        .locator('xpath=following-sibling::dd[1]');
 }
 
 /**
- * The exact substring the Details tab's one `details` cell must contain for a
+ * The exact substring the Details tab's one `details` value must contain for a
  * single field of the explorer's payload.
  *
  * Re-serialised from the CHAIN's own value rather than compared as a bare
@@ -452,7 +457,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await pane.getByRole('tab', { name: 'Details' }).click();
 
             // The nested per-action object renders as one JSON-stringified
-            // cell (see the header), so its values are asserted individually
+            // value (see the header), so its values are asserted individually
             // rather than as an exact string whose key ORDER this spec would
             // then be pinning by accident.
             const details = detailRow(pane, 'Details');
