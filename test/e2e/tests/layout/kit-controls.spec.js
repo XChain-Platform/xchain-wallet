@@ -18,6 +18,7 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
+import { fieldByLabel, searchTokenPicker } from '../../fixtures/fields.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 
 const VALID_BTC = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
@@ -125,34 +126,35 @@ test('choice controls retain their values through order and Send review', async 
     test.slow();
     await createWallet(page);
 
-    await test.step('Markets order radios and checkbox survive a review round trip', async () => {
+    await test.step('Markets order assets and ownership checkbox survive a review round trip', async () => {
         await openPaletteRoute(page, 'Create order');
         const main = page.getByRole('main');
-        const give = main.getByRole('region', { name: 'You give', exact: true })
-            .getByRole('group', { name: 'Asset type', exact: true });
-        const receive = main.getByRole('region', { name: 'You get', exact: true })
-            .getByRole('group', { name: 'Asset type', exact: true });
-        const receiveToken = receive.getByRole('radio', { name: 'A token' });
+        const pickAsset = async (side, tick, rowName) => {
+            await main.getByRole('button', { name: new RegExp(`^${side} asset:`) }).click();
+            await searchTokenPicker(page, tick);
+            // The open filter panel covers the first result row, so collapse it.
+            await page.getByRole('button', { name: 'Filter coins and tokens', exact: true }).click();
+            await page.getByRole('button', { name: rowName }).first().click();
+        };
+        await pickAsset('Give', 'XCHAINGOV', /^Select XChain Governance on Bitcoin\b/);
+        await pickAsset('Get', 'XCP', /^Select Counterparty on Bitcoin\b/);
+        const give = main.getByRole('button', { name: /^Give asset: XCHAINGOV on / });
+        const receive = main.getByRole('button', { name: /^Get asset: XCP on Bitcoin/ });
+        await expect(give).toBeVisible();
+        await expect(receive).toBeVisible();
 
-        await receiveToken.check();
-        const tickers = main.getByLabel('Ticker', { exact: true });
-        await tickers.first().fill('PEPECASH');
-        await tickers.last().fill('XCP');
-        const ownership = main.getByRole('checkbox', {
-            name: 'Trade ownership of this ticker (not a balance)',
-        }).first();
-        await ownership.check();
-        await main.getByLabel('Amount', { exact: true }).fill('2');
+        await main.getByRole('button', { name: /^Ownership\b/ }).click();
+        const ownership = main.getByRole('switch', { name: 'Trade ownership of XCHAINGOV (not a balance)' });
+        await ownership.click();
+        await fieldByLabel(main, 'Get amount').fill('2');
 
-        await expect(give.getByRole('radio', { name: 'A token' })).toBeChecked();
         await main.getByRole('button', { name: 'Place Order', exact: true }).click();
         await expect(page.getByTestId('confirm-modal')).toBeVisible();
         await page.getByTestId('confirm-reject').click();
 
-        await expect(receiveToken).toBeChecked();
+        await expect(give).toBeVisible();
+        await expect(receive).toBeVisible();
         await expect(ownership).toBeChecked();
-        await expect(tickers.first()).toHaveValue('PEPECASH');
-        await expect(tickers.last()).toHaveValue('XCP');
     });
 
     await test.step('Send switch state survives a review round trip', async () => {
@@ -160,7 +162,7 @@ test('choice controls retain their values through order and Send review', async 
         const main = page.getByRole('main');
         await main.getByLabel('To', { exact: true }).fill(VALID_BTC);
         await main.getByRole('textbox', { name: /^Amount/ }).fill('0.01');
-        await main.locator('summary', { hasText: 'Advanced' }).click();
+        await main.getByRole('button', { name: /^Advanced\b/ }).click();
 
         const rbf = main.getByRole('switch', { name: 'Allow a higher network fee later' });
         const expected = !(await rbf.isChecked());
@@ -172,10 +174,8 @@ test('choice controls retain their values through order and Send review', async 
         await page.getByTestId('confirm-reject').click();
         // The review replaces the form, so Advanced comes back collapsed; the
         // switch value itself is form state and must survive.
-        const advanced = main.locator('details', { has: page.locator('summary', { hasText: 'Advanced' }) });
-        if (!(await advanced.evaluate((element) => element.open))) {
-            await main.locator('summary', { hasText: 'Advanced' }).click();
-        }
+        const advanced = main.getByRole('button', { name: /^Advanced\b/ });
+        if ((await advanced.getAttribute('aria-expanded')) !== 'true') await advanced.click();
         await expectChecked(rbf, expected);
     });
 });
