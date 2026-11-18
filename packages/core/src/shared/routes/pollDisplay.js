@@ -230,7 +230,22 @@ export function pollResultSummary(rows, options) {
 }
 
 /**
- * "in 3 days", "in 4 h", "in 20 min" for a block count at the chain's
+ * The poll header's voter total. The frozen count wins, then the distinct
+ * voters in a complete ballot read; when that read lists no ballots but the
+ * tally rows count voters, the header sums the rows so it matches them.
+ *
+ * @param {{ finalVoters: number | null, liveVoters: number | null, tally: { totalVoters: number } }} args
+ * @returns {{ voters: number | null, ballotsListed: boolean }}
+ */
+export function headerVoterCount({ finalVoters, liveVoters, tally }) {
+    const ballotsListed = Number.isFinite(liveVoters) && liveVoters > 0;
+    if (Number.isFinite(finalVoters)) return { voters: finalVoters, ballotsListed };
+    if (!ballotsListed && tally?.totalVoters > 0) return { voters: tally.totalVoters, ballotsListed: false };
+    return { voters: liveVoters, ballotsListed: liveVoters !== null };
+}
+
+/**
+ * "in 3 days","in 4 h", "in 20 min" for a block count at the chain's
  * target block interval; null when either is unknown or the span passes a year.
  *
  * @param {number | null} blocks
