@@ -172,13 +172,13 @@ for (const vp of VIEWPORTS) {
             await expect(dialog).toBeHidden();
             await expect(navItem(page, 'Send')).toHaveAttribute('aria-current', 'page');
             await expect(page.getByRole('textbox', { name: /^Amount/ })).toHaveValue('5.00000000');
-            await expect(page.getByRole('button', { name: 'Change asset (currently XCP)' })).toBeVisible();
+            await expect(page.getByRole('button', { name: /^Asset: XCP\b/ })).toBeVisible();
 
             // Abandoned without submitting: the plain Send command opens a
             // blank form, carrying neither the typed amount nor the token.
             await runPlainSend(page);
             await expect(page.getByRole('textbox', { name: /^Amount/ })).toHaveValue('');
-            await expect(page.getByRole('button', { name: 'Change asset (currently XCP)' })).toHaveCount(0);
+            await expect(page.getByRole('button', { name: /^Asset: XCP\b/ })).toHaveCount(0);
         });
 
         test('the browser drops offline mid-session: palette and money routes hold, then recover', async ({ page, context }) => {

@@ -67,7 +67,7 @@ export { openFromAddress, FROM_ADDRESS_LABEL };
 import { kdfStepTimeout } from '../timeout-budget.js';
 import { rateLimitDelayMs, venueVerdict } from './venueHealth.js';
 import { pickOption } from './pickOption.js';
-import { searchTokenPicker } from './fields.js';
+import { fieldByLabel, searchTokenPicker } from './fields.js';
 import { compareDecimal, subtractDecimal } from '../../../packages/core/src/shared/utils/mintHeadroom.js';
 import {
     MIN_SEED_MARGIN_SECONDS,
@@ -1249,7 +1249,8 @@ export async function readFromAddress(main) {
  */
 export async function issuePlainToken(main, { ticker, supply, description, feeInCoin = false, password }) {
     await main.getByLabel('Ticker', { exact: true }).fill(ticker);
-    await main.getByLabel('Max supply', { exact: true }).fill(String(supply));
+    // fieldByLabel: the lock switch beside the field is also labelled Max supply.
+    await fieldByLabel(main, 'Max supply').fill(String(supply));
     if (description !== undefined) {
         await openIssueSection(main, 'Description');
         await main.getByLabel('Token description', { exact: true }).fill(description);
@@ -1292,9 +1293,8 @@ async function expectVenueSourceAddress(scope, field) {
  * Puts the SEND screen on this run's chain by choosing its asset.
  *
  * Send has no chain picker. The asset IS the chain selection, and the control
- * is the hero icon button named `Change asset (currently <name>)`, where the
- * name is the chain's display name for a native coin ("Bitcoin") and the
- * token's name otherwise. Clicking it NAVIGATES to the send picker screen
+ * is the Asset field, named `Asset: <tick> on <chain>` (TokenField), so a
+ * native coin reads "Asset: BTC on Bitcoin". Clicking it NAVIGATES to the send picker screen
  * (`TokenPicker` with `purpose="send"`), which holds no `role="option"`
  * element, so `selectVenueChain` cannot drive it.
  *
@@ -1315,7 +1315,7 @@ async function expectVenueSourceAddress(scope, field) {
  */
 export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
     const main = page.getByRole('main');
-    const trigger = main.getByRole('button', { name: /^Change asset \(currently / }).first();
+    const trigger = main.getByRole('button', { name: /^Asset: / }).first();
     const empty = main.getByRole('heading', { name: 'Nothing to send yet' });
     await expect(trigger.or(empty).first(), 'Send rendered neither its form nor its empty state')
         .toBeVisible({ timeout: 30_000 });
@@ -1333,9 +1333,7 @@ export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
     // behind it, and the row detaches mid-click.
     // A token's hero name is the picked row's display name, which need not be
     // the bare tick, so a token is matched as a whole word inside it.
-    const shows = native
-        ? new RegExp(`^Change asset \\(currently ${REGTEST_CHAIN_LABEL}\\)$`)
-        : new RegExp(`^Change asset \\(currently .*\\b${tick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b.*\\)$`, 'i');
+    const shows = new RegExp(`^Asset: ${tick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} on `, native ? '' : 'i');
     const selected = (await trigger.getAttribute('aria-label')) || '';
     if (shows.test(selected) && await onVenueChain()) return;
 
@@ -1374,7 +1372,7 @@ export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
 
     // Assert the selection took. The picker closes on click either way, so an
     // unasserted click is a silent wrong-chain run.
-    const hero = main.getByRole('button', { name: /^Change asset \(currently / }).first();
+    const hero = main.getByRole('button', { name: /^Asset: / }).first();
     await expect(hero, 'the picker closed without putting an asset on the Send form')
         .toBeVisible({ timeout: 15_000 });
     await expect(hero, `the Send form is not showing ${tick} after picking it`)

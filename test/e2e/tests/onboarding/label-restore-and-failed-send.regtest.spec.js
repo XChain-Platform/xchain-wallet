@@ -143,16 +143,20 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
             await expect(nudge).toContainText(/only on this device/);
             await nudge.getByRole('button', { name: 'Open Backup' }).click();
 
+            // Open Backup lands on the whole Backup section (the 'backup'
+            // subpage, as the palette's Backup entry does), not on the Backup
+            // and Recovery row list: one card per action, Publish labels
+            // on-chain among them with its own Publish Now button.
             const main = page.getByRole('main');
-            await expect(main.getByRole('button', { name: /^Publish labels on-chain\b/ }).first(),
+            await expect(main.getByRole('heading', { name: 'Publish labels on-chain', exact: true }),
                 'Open Backup did not land on the Backup section')
                 .toBeVisible({ timeout: 30_000 });
         });
 
         await test.step('publish the labels from Backup and wait for the chain to accept the FILE', async () => {
             const main = page.getByRole('main');
-            // The Publish labels page opens straight on its form (no Publish Now button).
-            await main.getByRole('button', { name: /^Publish labels on-chain\b/ }).first().click();
+            // Publish Now opens the publish form in place of its card.
+            await main.getByRole('button', { name: /^Publish Now\b/ }).click();
             // The network is the standard Network field and its full-screen list.
             await selectVenueChain(main, 'Network');
             // An unlocked session publishes with its pooled signer and asks no

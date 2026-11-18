@@ -9,9 +9,10 @@
 // contact legal@dankest.llc.
 
 // Wallet mode is a property of each wallet: chosen once when the wallet is
-// created, imported or paired, then shown read-only on Wallet Details. There
-// is no Settings page for it, so this spec creates a Signer wallet through the
-// create form's own mode choice instead of switching a wallet after the fact.
+// paired, then shown read-only on Wallet Details. There is no Settings page
+// for it, and create no longer offers one, so this spec adds a Signer wallet
+// through the two-phone pairing page instead of switching a wallet after the
+// fact.
 //
 // THE CLAIM IS THE MODE'S OWN PROMISE, as the create form states it: Signer
 // says "Sign transactions from a watcher wallet **without showing
@@ -55,10 +56,45 @@
 //   cd test/e2e && npx playwright test \
 //       --config=playwright.regtest.config.js tests/settings/wallet-mode.regtest.spec.js
 
-import { createWallet, expect, openSettings, openWalletPicker, test } from '../../fixtures/wallet.js';
+import {
+    createWallet, expect, fillPairAnotherPhone, openSettings, openWalletPicker, switchToWallet, test,
+} from '../../fixtures/wallet.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
+import { kdfStepTimeout } from '../../timeout-budget.js';
 
 const PASSWORD = 'regtestpassword123';
+
+/**
+ * The Signer wallet's phrase: a BIP39 test vector, so its checksum is valid and
+ * it is nobody's live phrase. It must differ from the device's own Normal
+ * wallet, because the app refuses a phrase it already holds ("This recovery
+ * phrase is already in this app as ..."), which is why this spec does not use
+ * `createWallet({ walletMode })`: that mirrors the Normal wallet's phrase.
+ */
+const SIGNER_MNEMONIC =
+    'legal winner thank year wave sausage worth useful legal winner thank yellow';
+
+/**
+ * Makes the Signer wallet the way a user does since create stopped offering a
+ * mode (2026-11-15): an unlocked device adds the phrase through Settings,
+ * Advanced, "Use another phone as a signer", picking the signer role. The page
+ * fixes the mode when it adds the wallet, before any code exchange, so this
+ * leaves once this phone's pairing code is shown and switches to the wallet.
+ */
+async function createSignerWallet(page, walletName) {
+    // A Normal wallet first: the pairing page needs an open vault. Its Home
+    // waits on no balance, since the venue's mainnet default is unreachable.
+    await createWallet(page, { password: PASSWORD, name: 'Device Wallet', waitForBalances: false });
+    await fillPairAnotherPhone(page, {
+        words: SIGNER_MNEMONIC, name: walletName, password: PASSWORD, walletMode: 'signer',
+    });
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Copy Pairing Code' }),
+        `the pairing page did not add "${walletName}" in signer mode`)
+        .toBeVisible({ timeout: kdfStepTimeout() });
+    await page.getByRole('button', { name: 'Back to previous screen' }).first().click();
+    await switchToWallet(page, walletName);
+}
 
 test.describe('Wallet mode', () => {
     test.setTimeout(300_000);
@@ -66,10 +102,7 @@ test.describe('Wallet mode', () => {
     test('a wallet created as Signer is applied - the send/receive promise is kept',
         async ({ page }) => {
             const walletName = 'Signer Wallet';
-            // A signer Home renders no balance, so the fixture must not wait for one.
-            await createWallet(page, {
-                password: PASSWORD, name: walletName, walletMode: 'signer', waitForBalances: false,
-            });
+            await createSignerWallet(page, walletName);
 
             await test.step('Settings no longer offers a wallet-mode page', async () => {
                 await openSettings(page);
