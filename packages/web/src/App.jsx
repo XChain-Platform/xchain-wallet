@@ -77,6 +77,7 @@ import { UpdateNoticeBanner } from '@xchain-wallet/core/shared/components/Update
 import { LeftNav, FullLayoutWithNav } from '@xchain-wallet/core/shared/components/LeftNav.jsx';
 import { ShellAppHeader } from '@xchain-wallet/core/shared/components/ShellAppHeader.jsx';
 import { useCommandPalette } from '@xchain-wallet/core/shared/commandPalette/useCommandPalette.js';
+import { createRootViewOpener } from '@xchain-wallet/core/shared/rootViewOpener.js';
 import { useKeyboardShortcuts } from '@xchain-wallet/core/shared/keyboard/useKeyboardShortcuts.js';
 import { dismissAllOverlays, useBackHandler } from '@xchain-wallet/core/ui/backStack.js';
 import { navItemKey, useNavHistory, WALLET_SWITCH_KEEPS } from '@xchain-wallet/core/ui/navHistory.js';
@@ -395,7 +396,12 @@ function AppInner() {
     const setUnlockedView = nav.navigate;
     // A page opened from the sidebar, bottom bar, menu or palette is a root:
     // the history starts over on it and it shows no Back.
-    const openRootView = nav.navigateRoot;
+    // Every root open clears the form's source token, so no shell entry point
+    // (menu, bottom bar, palette, go-to shortcut) can leak one into another form.
+    const openRootView = createRootViewOpener(nav.navigateRoot, () => {
+        setFormSource(null);
+        setTokenAdminInitialPicker(null);
+    });
     const goBack = nav.back;
     const resetNav = nav.reset;
     useDocumentTitle({
@@ -3525,10 +3531,6 @@ function AppInner() {
                     // A fresh payment, as the All actions row opens it.
                     setResumeCoinpay(null);
                 }
-                // A menu row opens its form free-entry: no token carried over
-                // from a Manage token or token page form (Back restores it).
-                setFormSource(null);
-                setTokenAdminInitialPicker(null);
                 // Every nav and menu row opens its page as a root: the history
                 // starts over on it, so it shows no Back (G06).
                 palette.navigate(view);

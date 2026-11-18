@@ -615,6 +615,158 @@ describe('pacing when ratelimit-remaining runs low', () => {
     });
 });
 
+// The explorer keeps one bucket per route family (the batch-balance POSTs get
+// 72 a minute, ordinary GETs share a larger app-wide one) and names each in
+// RateLimit-Policy. A nearly drained batch bucket once spaced every request to
+// the host 1.3 to 1.7 s apart, so the confirm screen's /preflight left 4.7 s
+// after the click and the SDK's 4 s dry-run budget expired.
+describe('pacing per rate-limit policy', () => {
+    /** A limiter whose sleeps stay pending until the test resolves them. */
+    function heldLimiter(opts = {}) {
+        let t = T0;
+        const held = [];
+        const limiter = new HostRateLimiter({
+            now: () => t,
+            sleep: (ms) => new Promise((resolve) => { held.push({ ms, resolve }); }),
+            random: () => 0.5,
+            ...opts,
+        });
+        return { limiter, held, advance: (ms) => { t += ms; } };
+    }
+
+    const window = (policy, remaining, reset) => ({
+        'ratelimit-policy': policy, 'ratelimit-limit': policy.split(';')[0],
+        'ratelimit-remaining': String(remaining), 'ratelimit-reset': String(reset),
+    });
+
+    /**
+     * A wrapped explorer axios client whose answers carry the window headers
+     * `headersFor(method, url)` returns, recording every request it sends.
+     */
+    function explorerOn(limiter, headersFor) {
+        const sent = [];
+        const client = {
+            defaults: { baseURL: 'https://explorer.example' },
+            get: async (url, config) => {
+                sent.push(`GET ${url}`);
+                return ok({ url }, headersFor('GET', url, config));
+            },
+            post: async (url, body, config) => {
+                sent.push(`POST ${url}`);
+                return ok({ url }, headersFor('POST', url, config));
+            },
+        };
+        installExplorerRateLimit({ explorer: { client } }, limiter);
+        return { client, sent };
+    }
+
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    it('sends a request on a roomy policy while a drained policy\'s requests wait out their spacing', async () => {
+        const { limiter, held } = heldLimiter();
+        const { client, sent } = explorerOn(limiter, (method, url) => (
+            method === 'POST' ? window('72;w=60', 16, 30) : window('1200;w=60', 994, 40)
+        ));
+        // The incident's order: the batch POST answered last, so a host-wide
+        // window read 16 left and paced everything behind it.
+        await client.get('/RBTC/api/preflight', { params: { action: 'ISSUE' } });
+        await client.post('/RBTC/api/balances', { addresses: ['a'] }, {});
+        // More paced batch reads than the host has send slots.
+        const batch = Array.from({ length: 6 }, (_, i) => client.post('/RBTC/api/balances', { addresses: [String(i)] }, {}));
+        await settle();
+        expect(held.length).toBeGreaterThan(0);
+        const before = sent.length;
+
+        const preflight = client.get('/RBTC/api/preflight', { params: { action: 'DISPENSER' } });
+        await settle();
+        expect(sent.slice(before)).toContain('GET /RBTC/api/preflight');
+        await expect(preflight).resolves.toMatchObject({ status: 200 });
+
+        while (held.length) held.shift().resolve();
+        await Promise.all(batch);
+    });
+
+    it('keeps pacing a drained policy after a roomy policy answers', async () => {
+        const { limiter, held } = heldLimiter();
+        const { client } = explorerOn(limiter, (method) => (
+            method === 'POST' ? window('72;w=60', 16, 30) : window('1200;w=60', 994, 40)
+        ));
+        await client.post('/RBTC/api/balances', { addresses: ['a'] }, {});
+        // A host-wide window would now read 994 left and stop pacing the batch reads.
+        await client.get('/RBTC/api/token/XCHAIN', {});
+        const batch = [0, 1, 2].map((i) => client.post('/RBTC/api/balances', { addresses: [String(i)] }, {}));
+        await settle();
+        expect(held.length).toBeGreaterThan(0);
+        // 30 s over the 16 left: one batch read every 1.875 s.
+        expect(held[0].ms).toBeGreaterThanOrEqual(1_800);
+        while (held.length) {
+            held.shift().resolve();
+            await settle();
+        }
+        await Promise.all(batch);
+    });
+
+    it('paces every route that reports into one bucket together', async () => {
+        const { limiter, held } = heldLimiter();
+        const { client, sent } = explorerOn(limiter, () => window('180;w=60', 10, 30));
+        await client.get('/RBTC/api/balances/a', {});
+        // A route the bucket has not answered for yet is not known to share it,
+        // but once it has, it paces with the rest of the app-wide bucket.
+        await client.get('/RBTC/api/token/XCHAIN', {});
+        const before = sent.length;
+        const first = client.get('/RBTC/api/token/ONE', {});
+        const second = client.get('/RBTC/api/balances/b', {});
+        await settle();
+        expect(sent.length - before).toBe(1);
+        expect(held.length).toBe(1);
+        held.shift().resolve();
+        await Promise.all([first, second]);
+    });
+
+    it('keeps two buckets that share a policy string apart by their windows', async () => {
+        const { limiter, held } = heldLimiter();
+        // Four explorer buckets default to 60;w=60. Two routes, one drained and
+        // resetting in 10 s, one roomy and resetting in 45 s.
+        const { client, sent } = explorerOn(limiter, (method, url) => (
+            url.includes('/feequote') ? window('60;w=60', 50, 45) : window('60;w=60', 2, 10)
+        ));
+        await client.post('/RBTC/api/history', { addresses: ['a'] }, {});
+        await client.post('/RBTC/api/feequote', { action: 'SEND' }, {});
+        await client.post('/RBTC/api/history', { addresses: ['b'] }, {});
+        const drained = [0, 1].map((i) => client.post('/RBTC/api/history', { addresses: [String(i)] }, {}));
+        await settle();
+        expect(held.length).toBeGreaterThan(0);
+        const before = sent.length;
+        const quote = client.post('/RBTC/api/feequote', { action: 'SEND' }, {});
+        await settle();
+        expect(sent.slice(before)).toContain('POST /RBTC/api/feequote');
+        await quote;
+        while (held.length) {
+            held.shift().resolve();
+            await settle();
+        }
+        await Promise.all(drained);
+    });
+
+    it('pauses only the policy whose window is empty, and still reports that pause as the explorer being busy', async () => {
+        const { limiter } = fakeLimiter();
+        const { client, sent } = explorerOn(limiter, (method) => (
+            method === 'POST' ? window('72;w=60', 0, 45) : window('1200;w=60', 994, 40)
+        ));
+        await client.get('/RBTC/api/preflight', { params: { action: 'ISSUE' } });
+        await client.post('/RBTC/api/balances', { addresses: ['a'] }, {});
+        const before = sent.length;
+
+        const refused = await client.post('/RBTC/api/balances', { addresses: ['b'] }, {}).catch((e) => e);
+        expect(refused.response.status).toBe(429);
+        expect(refused.response.headers['retry-after']).toBe('45');
+
+        await expect(client.get('/RBTC/api/preflight', { params: { action: 'DISPENSER' } }))
+            .resolves.toMatchObject({ status: 200 });
+        expect(sent.slice(before)).toEqual(['GET /RBTC/api/preflight']);
+    });
+});
+
 describe('the friendly message across the wallet', () => {
     it('is recognised as a rate limit even after the messaging envelope strips the fields', () => {
         const err = Object.assign(new Error(EXPLORER_BUSY_MESSAGE), {

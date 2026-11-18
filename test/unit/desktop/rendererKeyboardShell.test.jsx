@@ -60,7 +60,6 @@ function DesktopKeyboardShell() {
                 <LeftNav
                     currentView={view}
                     onSelect={setView}
-                    onCommandPalette={palette.openPalette}
                 />
             )}
         >
@@ -96,14 +95,21 @@ describe('desktop renderer keyboard shell', () => {
         pressEnter(skip);
         expect(document.getElementById('xc-main')).toHaveFocus();
 
-        const paletteTrigger = screen.getByRole('button', { name: 'Open the wallet menu' });
+        // The side menu has no Search row (U99, operator 2026-11-18): Home is its first stop.
+        expect(screen.queryByRole('button', { name: 'Open the wallet menu' })).toBeNull();
         const home = screen.getByRole('button', { name: 'Home' });
         const send = screen.getByRole('button', { name: 'Send' });
         const receive = screen.getByRole('button', { name: 'Receive' });
         const myTokens = screen.getByRole('button', { name: 'My Tokens' });
         const history = screen.getByRole('button', { name: 'History' });
-        paletteTrigger.focus();
-        fireEvent.keyDown(paletteTrigger, { key: 'ArrowDown' });
+        const nav = screen.getByRole('navigation');
+        const navButtons = [...nav.querySelectorAll('button:not(:disabled)')];
+        expect(navButtons[0]).toBe(home);
+        home.focus();
+        fireEvent.keyDown(home, { key: 'ArrowUp' });
+        expect(navButtons.at(-1)).toHaveFocus();
+        navButtons.at(-1).focus();
+        fireEvent.keyDown(navButtons.at(-1), { key: 'ArrowDown' });
         expect(home).toHaveFocus();
         fireEvent.keyDown(home, { key: 'ArrowDown' });
         expect(send).toHaveFocus();

@@ -11,7 +11,8 @@
 // The Approve-time pre-flight re-check passes bypassCache, which skips the
 // SDK's report cache. Its explorer reads go fresh as well, so a read another
 // caller made a moment earlier, reused or served from the HTTP cache, never
-// answers the re-check. The pre-flight that opens the review reads as before.
+// answers the re-check. The pre-flight that opens the review reads fresh too
+// (preflightFirstReadFresh.test.js) but still uses the SDK's report cache.
 
 import { describe, it, expect } from 'vitest';
 import { createBackgroundHost } from '../../../packages/extension/src/background/createBackgroundHost.js';
@@ -102,13 +103,15 @@ describe.skipIf(!sdkInstalled())('pre-flight re-check reads fresh', () => {
         expect(res.result.round).toBe(2);
     });
 
-    it('keeps the ordinary pre-flight on the shared reads', async () => {
-        const { sdk, sent, advance } = dryRunSdk();
+    it('sends the ordinary pre-flight fresh as well, past an identical read a moment earlier', async () => {
+        const { sdk, sent, attempts, advance } = dryRunSdk();
         const host = hostFor(sdk);
         await preflight(host, false);
         advance(700);
         await preflight(host, false);
-        expect(sent).toHaveLength(1);
+        expect(sent).toHaveLength(2);
+        for (const read of sent) expect(read.config.fetchOptions).toEqual({ cache: 'no-store' });
+        expect(attempts.map((opts) => opts.bypassCache)).toEqual([false, false]);
     });
 
     it('waits out a 429 report and retries with fresh report and HTTP reads', async () => {

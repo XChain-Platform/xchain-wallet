@@ -3834,12 +3834,14 @@ export function createBackgroundHost(deps) {
                 ? { feeMode: req.feeMode } : {}),
         });
         // The Approve-time re-check and any 429 retry skip the SDK's report
-        // cache. Their explorer reads go fresh too, so neither an HTTP cache nor
-        // the host's short reuse window can return the local-only first result.
+        // cache. Every attempt's explorer reads go fresh, the first included:
+        // the explorer serves balance listings with max-age=5,
+        // stale-while-revalidate=10, and the SDK reads a token missing from a
+        // listing as a balance of 0. A copy cached from before an ISSUE once
+        // refused a dispenser for a token its seller held. Fresh reads change
+        // no URL or header, so they add no CORS preflight.
         const report = await flows.retryRateLimitedPreflight(sdk, (attempt) => (
-            req.bypassCache === true || attempt > 0
-                ? flows.explorerFreshScope(sdk, () => run(attempt))
-                : run(attempt)
+            flows.explorerFreshScope(sdk, () => run(attempt))
         ));
         return settleAmountRule(sdk, req.actionString, report);
     });

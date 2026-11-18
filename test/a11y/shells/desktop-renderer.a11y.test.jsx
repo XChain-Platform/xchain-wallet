@@ -98,7 +98,6 @@ function DesktopRendererHarness() {
                                 onSelect={setView}
                                 onOpenSettings={() => setView('settings')}
                                 onOpenWalletPicker={() => {}}
-                                onCommandPalette={() => {}}
                                 onLock={() => {}}
                                 walletName={WALLET.name}
                                 hasVmAddress

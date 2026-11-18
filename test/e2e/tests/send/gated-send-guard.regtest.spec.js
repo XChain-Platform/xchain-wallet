@@ -238,7 +238,6 @@ test.describe('the PC-26 gated SEND guard', () => {
             if (await reviewPassword.count() > 0 && await reviewPassword.isVisible().catch(() => false)) {
                 await reviewPassword.fill(PASSWORD);
             }
-            await main.getByRole('button', { name: 'Sign and Publish' }).click();
             await expectConfirmModal(issuer, 'the gated publish', 60_000);
             await approveWhenReady(issuer);
 
@@ -345,16 +344,24 @@ test.describe('the PC-26 gated SEND guard', () => {
             } else {
                 await expectConfirmModal(holder, 'the bypassed raw SEND');
 
-                // The confirm preflight dry-runs the action against the network and
-                // shows the indexer's own refusal. The SDK marks network-sourced
-                // verdicts overridable so confirmed-only state cannot censor signing.
+                // The confirm preflight dry-runs the action against the network.
+                // The indexer's refusal arrives as a DRYRUN_INVALID error, and the
+                // status notice states it as a pre-send check, "This action would
+                // be refused because <indexer reason>." (consensusRefusalMessage),
+                // with the reason after "because" verbatim. The SDK marks
+                // network-sourced verdicts overridable so confirmed-only state
+                // cannot censor signing, so the notice carries a Sign anyway box.
                 const confirm = holder.getByTestId('confirm-modal');
-                const refusal = confirm.getByRole('listitem')
-                    .filter({ hasText: /gated token transfer requires key handoff message/ });
+                const status = confirm.getByTestId('confirm-status');
+                await expect(status, 'the preflight did not fail the bypassed SEND')
+                    .toHaveAttribute('data-state', 'fail', { timeout: 60_000 });
+                const refusal = status.getByTestId('confirm-warning-point')
+                    .filter({ hasText: /would be refused because gated token transfer requires key handoff message/ });
                 await expect(refusal, 'the preflight did not surface the network\'s gated-send refusal')
-                    .toBeVisible({ timeout: 60_000 });
-                const override = refusal.getByRole('checkbox', { name: 'Sign anyway' });
+                    .toBeVisible();
+                const override = status.getByTestId('ack-DRYRUN_INVALID');
                 await expect(override, 'the SDK override policy was ignored').toBeVisible();
+                await expect(override).toHaveAccessibleName('Sign anyway');
                 // Approve keeps its colour (G130): before explicit consent a
                 // tap is refused with "Tick Sign anyway" and sends nothing.
                 await expectApproveRefused(holder, 'signAnyway', 'the bypassed raw SEND before explicit consent');

@@ -228,17 +228,17 @@ export function ShellNavigationSection() {
                 when={<>Mounted once by the shell layout, never by a route.</>}
                 whenNot={<>In-page navigation: Tabs and SegmentedControl.</>}
                 doRule={<>✓ Remove a destination the build lacks instead of disabling it</>}
-                dontRule={<>✗ Put Scan, Lists or Payments due in the side menu; they stay in the complete wallet menu</>}
+                dontRule={<>✗ Put Scan, Lists or Payments due in the side menu; they stay in the complete wallet menu. ✗ Put a Search row in the side menu; the header menu button and Cmd/Ctrl+K open the wallet menu and its search (U99)</>}
                 supersedes={<>Source: <code>walletMenu.js</code>, <code>LeftNav.jsx</code> and <code>BottomTabBar.jsx</code> in <code>shared</code>.</>}
             />
             <Markup>
-{`<LeftNav currentView={view} onSelect={setView} onLock={lock} onOpenSettings={openSettings} onCommandPalette={openPalette} />
+{`<LeftNav currentView={view} onSelect={setView} onLock={lock} onOpenSettings={openSettings} />
 <BottomTabBar currentView={view} onSelect={setView} onOpenSettings={openSettings} isSignerMode={isSignerMode} />`}
             </Markup>
             <LiveExample label="LeftNav" minHeight={420} padded={false}>
                 <PartsExampleProvider>
                     <div style={{ ...frame, width: 'max-content', maxWidth: '100%' }}>
-                        <LeftNav currentView={view} onSelect={setView} onLock={noop} onOpenSettings={noop} onCommandPalette={noop} />
+                        <LeftNav currentView={view} onSelect={setView} onLock={noop} onOpenSettings={noop} />
                     </div>
                 </PartsExampleProvider>
             </LiveExample>

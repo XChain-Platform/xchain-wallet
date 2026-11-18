@@ -204,10 +204,10 @@ describe('grouped full menu', () => {
             expect(handler).toMatch(/'multisig-sign'[\s\S]*?setMultisigSessionId\(null\);\s*setMultisigInitialLink\(null\);/);
             expect(handler).toMatch(/'add-wallet'[\s\S]*?setOnboardingStep\('welcome'\);/);
             expect(handler).toMatch(/'coinpay'[\s\S]*?setResumeCoinpay\(null\);/);
-            // A form opened from the menu is free-entry: no token prefill left
-            // over from Manage token (the history restores it on Back).
-            expect(handler).toContain('setFormSource(null);');
-            expect(handler).toContain('setTokenAdminInitialPicker(null);');
+            // A form opened from the menu is free-entry: the menu opens it through
+            // openRootView, which clears the token prefill left over from Manage
+            // token (rootNavigationClearsFormSource.test.jsx pins that helper).
+            expect(handler).toContain('palette.navigate(');
             // The menu reaches every gated row: the governance gate is passed in.
             expect(app).toMatch(/gates: \{[^}]*hasGovernanceAddress,[^}]*\}/);
         });
