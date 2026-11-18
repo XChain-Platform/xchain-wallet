@@ -361,7 +361,10 @@ test.describe('BET unhappy stakes', () => {
             // screen.
             await main.locator('button[type="submit"]').click();
             // BetFeedDetail's stake check: "Enter a positive position amount ...".
-            await expect(page.getByRole('alert').filter({ hasText: /positive position amount/ }),
+            // The words show twice, each with role alert: in the "Fix 1 thing
+            // to continue" summary at the top and under the Amount field, so
+            // one match is read rather than a strict single element.
+            await expect(page.getByRole('alert').filter({ hasText: /positive position amount/ }).first(),
                 'a blank stake was not refused in words')
                 .toBeVisible({ timeout: 30_000 });
             await expect(page.getByTestId('confirm-modal'),
@@ -386,7 +389,8 @@ test.describe('BET unhappy stakes', () => {
             await review.click();
 
             const alert = page.getByRole('alert');
-            await expect(alert, 'a zero stake produced no visible refusal at all')
+            // The summary and the Amount field each carry role alert.
+            await expect(alert.first(), 'a zero stake produced no visible refusal at all')
                 .toBeVisible({ timeout: 60_000 });
             const text = (await alert.first().innerText()) || '';
             expect(text,
