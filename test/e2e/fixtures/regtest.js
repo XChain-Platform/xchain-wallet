@@ -1302,6 +1302,55 @@ export async function setHistoryDateWindow(page, from, to) {
     await closeHistoryFilters(page);
 }
 
+/** History's list-and-detail split box (PanelSplit's `data-list-detail`). */
+function historySplit(page) {
+    return page.locator('[data-list-detail="two-panel"]');
+}
+
+/**
+ * Opens a History row's action detail and returns where it drew.
+ *
+ * History draws a list-and-detail split (`data-list-detail="two-panel"`, the
+ * detail in a region named "Action details") while its content is at least
+ * LIST_DETAIL_MIN_WIDTH wide, and routes to a standalone ActionDetail page
+ * below that. `pane` is the detail region in the split and `main` on the
+ * standalone page. `title` holds the detail's "<Action> #<index>" title in
+ * either layout: the split names it in a screen-reader h2 at the top of the
+ * pane (ActionDetailView's embedded frame), the standalone page in its header.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {import('@playwright/test').Locator} row  one `[data-history-key]` row
+ * @returns {Promise<{ split: boolean, pane: import('@playwright/test').Locator, title: import('@playwright/test').Locator }>}
+ */
+export async function openHistoryDetail(page, row) {
+    await row.getByRole('button').first().click();
+    await expect(page.getByRole('region', { name: 'Transaction details' }),
+        'the History row opened no action detail').toBeVisible({ timeout: 30_000 });
+    const split = await historySplit(page).isVisible();
+    if (split) {
+        const pane = historySplit(page).getByRole('region', { name: 'Action details', exact: true });
+        return { split, pane, title: pane.getByRole('heading', { level: 2 }).first() };
+    }
+    return {
+        split,
+        pane: page.getByRole('main'),
+        title: page.getByRole('banner').filter({ hasText: '#' }).first(),
+    };
+}
+
+/**
+ * Returns from a History action detail to the list. The split keeps the list
+ * on screen beside the detail, with its filters applied, so there is nothing
+ * to leave; the standalone page goes back through "Back to history", and
+ * History re-mounts with its default date window.
+ *
+ * @param {import('@playwright/test').Page} page
+ */
+export async function backToHistoryList(page) {
+    if (await historySplit(page).isVisible()) return;
+    await page.getByRole('button', { name: 'Back to history', exact: true }).click();
+}
+
 /**
  * Sets one of a list page's filter-menu selects (Status, Sort) to `option`.
  *

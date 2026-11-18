@@ -131,7 +131,12 @@ async function classifyPaste(page, text) {
     // and psbt alike - and the transient "Scanned, routing…" text is never
     // observable, because the parent switches views in the same state update.
     const routed = page.getByTestId('scan-route');
-    const failed = scanStatus(page);
+    // A browser with no camera grant shows QrScanner's camera notice
+    // (cameraErrorText: "Camera access is turned off...") in the same notice
+    // slot before anything is pasted. It is about the camera, not the paste,
+    // so it is never the paste's verdict; ScanRoute's own refusals never
+    // mention the camera.
+    const failed = scanStatus(page).filter({ hasNotText: /\bcamera\b/i });
     let outcome = null;
     await expect.poll(async () => {
         if (await routed.count() === 0) outcome = 'routed';

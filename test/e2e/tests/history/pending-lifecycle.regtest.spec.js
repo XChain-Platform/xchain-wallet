@@ -135,6 +135,7 @@ import {
     waitForValidAction,
     openFromAddress,
     searchHistory,
+    backToHistoryList,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -382,7 +383,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
         });
 
         await test.step('CLAIM 4: mining confirms the SAME entry rather than adding a second one', async () => {
-            await page.getByRole('button', { name: 'Back to history' }).click();
+            await backToHistoryList(page);
 
             // Release the chain and let the action index. `waitForValidAction`
             // mines through `nudgeChain` (never unconditionally), and asserts

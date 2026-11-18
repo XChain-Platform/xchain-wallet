@@ -85,6 +85,7 @@ import {
     waitForValidAction,
     openFromAddress,
     searchHistory,
+    backToHistoryList,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -262,7 +263,7 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
             await expect(fieldByLabel(page, 'Transaction status'),
                 'Details still draws a second status timeline')
                 .toHaveCount(0);
-            await page.getByRole('button', { name: 'Back to history' }).click();
+            await backToHistoryList(page);
         });
 
         await test.step('CLAIM 4: once the network catches up, the warning clears and the SAME entry confirms', async () => {
