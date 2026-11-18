@@ -34,7 +34,7 @@
 // Runs on Litecoin (XC_REGTEST_COIN=RLTC) for the reasons §3.5 records.
 
 import {
-    addWalletFromPhrase, createWallet, expect, openPaletteCommand, switchToWallet, test,
+    addWalletFromPhrase, createWallet, expect, makeAddressActive, openPaletteCommand, switchToWallet, test,
     unlockButton, unlockWallet,
 } from '../../fixtures/wallet.js';
 import {
@@ -146,18 +146,11 @@ async function fillPasswordIfPresent(scope) {
     if (await field.count() > 0 && await field.isVisible()) await field.fill(PASSWORD);
 }
 
+// The last step returns the first phone to the address its control half made
+// active, so its detail offers no Set active; the helper accepts that and
+// proves it from the list badge.
 async function useAddress(page, address) {
-    await openPaletteCommand(page, 'Addresses');
-    await page.getByRole('button', { name: `View address ${address}` }).click();
-    await page.getByRole('list', { name: 'Actions', exact: true })
-        .getByRole('button', { name: 'Set active' }).click();
-    // Use awaits the active-address write and only then returns to Home, and
-    // any route change closes the wallet menu. A palette opened before
-    // that late navigation is unmounted under the next step, so leaving the
-    // detail screen is what marks the switch as done.
-    await expect(page.getByRole('list', { name: 'Actions', exact: true }),
-        'Use never completed, so the active-address write is still in flight')
-        .toBeHidden({ timeout: 30_000 });
+    await makeAddressActive(page, address);
 }
 
 async function signingAddress(page) {

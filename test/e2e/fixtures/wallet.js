@@ -375,6 +375,38 @@ export async function openPaletteCommand(page, title, { option, timeoutMs = 30_0
 }
 
 /**
+ * Makes `address` its chain's active address through Addresses > detail >
+ * Set active, and returns once the write has landed.
+ *
+ * The detail offers Set active only for an address that is not active yet, so
+ * an address that already is gets no button. That case walks Back to the list
+ * and reads the row's "Active" badge (AddressList addrActive), since the
+ * detail itself carries no badge and the Addresses command does not leave it.
+ * Set active awaits its write and then navigates, so leaving the detail is
+ * what marks the switch as done.
+ */
+export async function makeAddressActive(page, address) {
+    await openPaletteCommand(page, 'Addresses');
+    const row = page.getByRole('button', { name: `View address ${address}` });
+    await row.click();
+    const actions = page.getByRole('list', { name: 'Actions', exact: true });
+    await expect(actions, `the detail for ${address} did not open`).toBeVisible({ timeout: 30_000 });
+    const setActive = actions.getByRole('button', { name: 'Set active' });
+    if (await setActive.count() > 0) {
+        await setActive.click();
+        await expect(actions, 'Set active never completed, so the active-address write is still in flight')
+            .toBeHidden({ timeout: 30_000 });
+        return;
+    }
+    await page.getByRole('button', { name: 'Back to previous screen' }).first().click();
+    await expect(actions, 'Back did not leave the address detail').toBeHidden({ timeout: 30_000 });
+    await openPaletteCommand(page, 'Addresses');
+    await expect(row.getByText('Active', { exact: true }),
+        `the detail for ${address} offered no Set active, yet its row is not marked Active`)
+        .toBeVisible({ timeout: 15_000 });
+}
+
+/**
  * The active wallet's identity in the App header.
  *
  * STALE: the App header no longer names the active wallet, so this matches
