@@ -69,11 +69,11 @@ describe('checkFirmware edge classification', () => {
 
 describe('compareVersions edge ordering', () => {
     it.each([
-        ['1.0.0+build.1', '1.0.0', -1],
+        ['9.8.7+build.1', '9.8.7', -1],
         ['release-a', 'release-b', -1],
         ['release-b', 'release-a', 1],
         ['release', 'release', 0],
-        [1, '1.0.0', 0],
+        [9, '9.0.0', 0],
     ])('compares %j with %j', (left, right, expected) => {
         expect(compareVersions(left, right)).toBe(expected);
     });

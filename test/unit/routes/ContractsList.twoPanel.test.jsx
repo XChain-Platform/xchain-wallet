@@ -40,7 +40,7 @@ function contracts(count) {
         source: ADDRESS,
         status: 'valid',
         meta_name: index === 0 ? 'First Contract' : `Contract ${index + 1}`,
-        meta_version: '1.0.0',
+        meta_version: '9.8.7',
         meta_description: `Description ${index + 1}`,
     }));
 }

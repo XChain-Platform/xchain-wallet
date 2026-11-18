@@ -43,7 +43,7 @@ const ADDRESS = {
 // A contract row carrying the explorer's answer, or no field at all when the
 // answer is undefined (what an explorer without the derivation serves).
 function contractRow(ownerWithdraw) {
-    const row = { action_index: '49', status: 'valid', meta_name: 'Pool', meta_version: '1.0.0' };
+    const row = { action_index: '49', status: 'valid', meta_name: 'Pool', meta_version: '9.8.7' };
     if (ownerWithdraw !== undefined) row.owner_withdraw = ownerWithdraw;
     return { data: row };
 }

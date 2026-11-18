@@ -18,6 +18,11 @@ import {
 } from '../../../packages/core/src/branding/branding.js';
 import { WALLET_VERSION } from '../../../packages/core/src/buildInfo.js';
 
+// Newer-than-installed fixture versions derived from the running release so the tests hold at any version.
+const [MAJOR, MINOR] = WALLET_VERSION.split('.').map(Number);
+const NEWER = `${MAJOR}.${MINOR + 1}.0`;
+const NEWEST = `${MAJOR}.${MINOR + 2}.0`;
+
 afterEach(() => {
     cleanup();
     delete window.xchainWalletUpdater;
@@ -44,18 +49,18 @@ const TARGETS = Object.freeze({
     ios: 'https://apps.apple.com/app/xchain-wallet/id123',
     'macos-appstore': 'https://apps.apple.com/app/xchain-wallet/id123',
     'android-play': 'https://play.google.com/store/apps/details?id=io.xchain.wallet.android',
-    'android-direct': 'https://downloads.xchain.io/wallet/android/xchain-wallet-v0.343.0.apk',
+    'android-direct': `https://downloads.xchain.io/wallet/android/xchain-wallet-v${NEWER}.apk`,
     'windows-store': 'https://apps.microsoft.com/detail/xchain-wallet',
     'desktop-direct': 'https://downloads.xchain.io/wallet/desktop/',
     snap: 'https://snapcraft.io/xchain-wallet',
 });
 
-function feedBody({ latest = '0.343.0', versions = {} } = {}) {
+function feedBody({ latest = NEWER, versions = {} } = {}) {
     return JSON.stringify({
         latest,
         channels: Object.fromEntries(Object.entries(TARGETS).map(([channel, url]) => [
             channel,
-            { version: versions[channel] || '0.343.0', url },
+            { version: versions[channel] || NEWER, url },
         ])),
     });
 }
@@ -125,7 +130,7 @@ describe('AboutSection update check', () => {
         const getUpdate = vi.fn();
         const checker = vi.fn().mockResolvedValue({
             status: 'available',
-            version: '0.343.0',
+            version: NEWER,
             getUpdate,
         });
         mount(checker);
@@ -134,7 +139,7 @@ describe('AboutSection update check', () => {
 
         const notice = await screen.findByRole('status');
         expect(notice).toHaveTextContent('Update available');
-        expect(notice).toHaveTextContent('Update available: v0.343.0.');
+        expect(notice).toHaveTextContent(`Update available: v${NEWER}.`);
         const actions = notice.querySelectorAll('button');
         expect(actions).toHaveLength(1);
         fireEvent.click(screen.getByRole('button', { name: 'Update' }));
@@ -211,14 +216,14 @@ describe('AboutSection update check', () => {
         const getUpdate = vi.fn();
         mount(vi.fn().mockResolvedValue({
             status: 'pending',
-            version: '0.344.0',
+            version: NEWEST,
             storeName: 'Chrome Web Store',
             getUpdate,
         }));
 
         fireEvent.click(checkButton());
 
-        expect(await screen.findByText(/Version v0.344.0 is out but is still waiting for Chrome Web Store review/))
+        expect(await screen.findByText(new RegExp(`Version v${NEWEST} is out but is still waiting for Chrome Web Store review`)))
             .toHaveTextContent('Your update will arrive there soon. To use the new version now, open the web wallet.');
         fireEvent.click(screen.getByRole('button', { name: 'Open web wallet' }));
         expect(getUpdate).toHaveBeenCalledOnce();
@@ -238,7 +243,7 @@ describe('release channel update targets', () => {
     it.each(Object.keys(TARGETS))('uses the %s channel target', async (channel) => {
         const { env, shell } = envFor(channel);
         const result = await checkShellForUpdates(shell, env);
-        expect(result).toMatchObject({ status: 'available', version: '0.343.0' });
+        expect(result).toMatchObject({ status: 'available', version: NEWER });
         await result.getUpdate();
 
         if (channel === 'web') {
@@ -254,11 +259,11 @@ describe('release channel update targets', () => {
 
     it('reports a release still waiting for the detected store', async () => {
         const versions = Object.fromEntries(Object.keys(TARGETS).map((key) => [key, WALLET_VERSION]));
-        const { env, shell } = envFor('chrome', feedBody({ latest: '0.344.0', versions }));
+        const { env, shell } = envFor('chrome', feedBody({ latest: NEWEST, versions }));
         const result = await checkShellForUpdates(shell, env);
         expect(result).toMatchObject({
             status: 'pending',
-            version: '0.344.0',
+            version: NEWEST,
             storeName: 'Chrome Web Store',
         });
         result.getUpdate();
@@ -269,7 +274,7 @@ describe('release channel update targets', () => {
         const { env, shell } = envFor('chrome');
         env.navigator.userAgent = 'Unknown Browser';
         const result = await checkShellForUpdates(shell, env);
-        expect(result).toMatchObject({ status: 'available', version: '0.343.0' });
+        expect(result).toMatchObject({ status: 'available', version: NEWER });
         result.getUpdate();
         expect(env.open).toHaveBeenCalledWith(WEB_WALLET_URL, '_blank', 'noopener,noreferrer');
     });
@@ -277,8 +282,8 @@ describe('release channel update targets', () => {
     it('rejects malformed versions and off-store update targets', () => {
         expect(() => parseReleaseFeed({ latest: 'v1', channels: {} })).toThrow('invalid update feed');
         expect(() => parseReleaseFeed({
-            latest: '1.0.0',
-            channels: { chrome: { version: '1.0.0', url: 'https://example.com/wallet' } },
+            latest: '9.8.7',
+            channels: { chrome: { version: '9.8.7', url: 'https://example.com/wallet' } },
         })).toThrow('invalid update target');
     });
 });
