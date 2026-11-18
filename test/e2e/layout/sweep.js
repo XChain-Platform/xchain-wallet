@@ -69,6 +69,25 @@ export function measureInPage(opts = {}) {
         seen.add(key);
         res[list].push(item);
     };
+    // An icon is judged by the shapes it draws, not by its box. G07 clips a
+    // list row's chevron, a 32px icon box, to its middle third, so the svg's
+    // empty sides are cut by design. Its path, line and polygon children are
+    // leaves measured on their own, so a glyph that is itself cut (a wider
+    // down chevron in that slot loses its arm ends) still fails.
+    const drawnByShapes = (el) => el.tagName === 'svg'
+        && el.querySelector('path, line, polyline, polygon, circle, ellipse, rect') !== null;
+    // Text that ends in an ellipsis is shortened, not cut: a leaf drawing its
+    // own ellipsis passes below, and an inline run inside a box that draws
+    // one (an amount in a <bdi>, a span of help) shows the same ellipsis at
+    // that box's edge. Only inline runs: a block or inline-block inside the
+    // box is cut whole, with no ellipsis drawn over it.
+    const ellipsizedBy = (el, box) => {
+        if (getComputedStyle(box).textOverflow !== 'ellipsis') return false;
+        for (let a = el; a && a !== box; a = a.parentElement) {
+            if (getComputedStyle(a).display !== 'inline') return false;
+        }
+        return true;
+    };
     for (const el of document.querySelectorAll('body *')) {
         const cs = getComputedStyle(el);
         if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) continue;
@@ -107,7 +126,7 @@ export function measureInPage(opts = {}) {
         if (!leaf) continue;
         if (R > vw + 1 || L < -1) {
             push('offscreen', { el: desc(el), left: Math.round(L), right: Math.round(R) });
-        } else if (clipX && (r.right > R + 2 || r.left < L - 2)) {
+        } else if (clipX && (r.right > R + 2 || r.left < L - 2) && !drawnByShapes(el) && !ellipsizedBy(el, clipX)) {
             const ccs = getComputedStyle(clipX);
             if (ccs.overflowX === 'hidden' || ccs.overflowX === 'clip') {
                 push('clipped', { el: desc(el), by: desc(clipX), cut: Math.round(Math.max(r.right - R, L - r.left)) });
@@ -423,10 +442,32 @@ export function measureInPage(opts = {}) {
                 target = parent;
             }
             const r = target.getBoundingClientRect();
+            // The panel the block sits in. A list-and-detail page (G115 wide
+            // Home, G128 two-panel pages) scrolls each panel on its own, so
+            // each panel is a content area with its own scrollbar, and a list
+            // fills its panel, not the page.
+            // The list column's fixed header (tabs, the DEX asset picker) sits
+            // in PanelSplit's listPanel above the scrolling list body, so a
+            // named G128 column counts as a panel as a scroller does.
+            let panel = null;
+            for (let a = target.parentElement; a && a !== scroller; a = a.parentElement) {
+                if (scrollable(getComputedStyle(a).overflowY)
+                    || [...a.classList].some((c) => /(^|_)(listPanel|detailPanel)(_|$)/.test(c))) { panel = a; break; }
+            }
+            // A wrapper as wide as the block (a grid cell holding a card) is
+            // the block's slot, and the row is read beside that slot: wide
+            // Home's value hero and Allocation card sit in two cells of one
+            // row (G115).
+            let slot = target;
+            while (slot.parentElement && slot.parentElement !== scroller && slot.parentElement !== panel) {
+                const pr = slot.parentElement.getBoundingClientRect();
+                if (Math.abs(pr.left - r.left) > 1 || Math.abs(pr.right - r.right) > 1) break;
+                slot = slot.parentElement;
+            }
             // The row this block sits in: siblings overlapping it vertically.
             let rowL = r.left; let rowR = r.right;
-            for (const sib of target.parentElement ? target.parentElement.children : []) {
-                if (sib === target) continue;
+            for (const sib of slot.parentElement ? slot.parentElement.children : []) {
+                if (sib === slot) continue;
                 const sr2 = sib.getBoundingClientRect();
                 if (sr2.width < 1 || sr2.bottom <= r.top || sr2.top >= r.bottom) continue;
                 rowL = Math.min(rowL, sr2.left); rowR = Math.max(rowR, sr2.right);
@@ -440,12 +481,25 @@ export function measureInPage(opts = {}) {
                 rowL = Math.max(rowL, ar.left + a.clientLeft);
                 rowR = Math.min(rowR, ar.left + a.clientLeft + a.clientWidth);
             }
-            const short = Math.round(usable - (rowR - rowL));
+            // The frame the row is judged in: its panel, else the page scroller.
+            let frameUsable = usable; let frameLeft = left; let frameEdge = frameRight;
+            if (panel) {
+                const pcs = getComputedStyle(panel);
+                const pr = panel.getBoundingClientRect();
+                const pPadL = parseFloat(pcs.paddingLeft) || 0;
+                const pBorderL = parseFloat(pcs.borderLeftWidth) || 0;
+                frameUsable = panel.clientWidth - pPadL - (parseFloat(pcs.paddingRight) || 0);
+                frameLeft = pr.left + pBorderL + pPadL;
+                frameEdge = pcs.direction === 'rtl'
+                    ? pr.right - (parseFloat(pcs.borderRightWidth) || 0)
+                    : pr.left + pBorderL + panel.clientWidth;
+            }
+            const short = Math.round(frameUsable - (rowR - rowL));
             // A block that runs past the frame edge sits under the scrollbar.
-            const under = Math.round(rowR - frameRight);
+            const under = Math.round(rowR - frameEdge);
             if (short > 2 || under > 1) {
                 out.push({
-                    el: desc(target), w: Math.round(rowR - rowL), usable: Math.round(usable), short, offset: Math.round(rowL - left), under: Math.max(under, 0),
+                    el: desc(target), w: Math.round(rowR - rowL), usable: Math.round(frameUsable), short, offset: Math.round(rowL - frameLeft), under: Math.max(under, 0),
                 });
                 if (out.length >= 15) break;
             }
@@ -1205,8 +1259,15 @@ export function measureRulings() {
         }
         return null;
     };
+    // A CSS module class (`_bigAmount_1juic_169` in dev) by its local name.
+    const sharedClass = (el, part) => [...el.classList].some((c) => new RegExp(`(^|_)${part}(_|$)`).test(c));
     for (const field of fields) {
         if (field.closest('[role="dialog"][data-wallet-menu]')) continue;
+        // The Quick Give/Get cards' large amount (G31) is their own ruled
+        // design: borderless and transparent inside its You give or You get
+        // card, restored to the approved look in fe2bc59bb. The U14 form gate
+        // (form-consistency.spec.js) skips it the same way.
+        if (sharedClass(field, 'bigAmount')) continue;
         if (!frameOf(field)) cap(out.borderlessFields, desc(field));
     }
 
@@ -1238,6 +1299,21 @@ export function measureRulings() {
     const tok = getComputedStyle(probe);
     const token = { w: tok.borderTopWidth, c: tok.borderTopColor, r: tok.borderTopLeftRadius };
     probe.remove();
+    // The chart hero's surface (G10): every hero, wide Home's Allocation card
+    // included, wears the hero border on the card radius, which the operator
+    // ruled is the hero's own look, not an off-token card.
+    probe.style.cssText = 'position:absolute;visibility:hidden;border:1px solid var(--xc-hero-border);border-radius:var(--xc-card-radius)';
+    document.body.appendChild(probe);
+    const heroTok = getComputedStyle(probe);
+    const hero = { w: heroTok.borderTopWidth, c: heroTok.borderTopColor, r: heroTok.borderTopLeftRadius };
+    probe.remove();
+    const heroSurface = (cs) => cs.borderTopStyle === 'solid' && cs.borderTopWidth === hero.w
+        && cs.borderTopColor === hero.c && cs.borderTopLeftRadius === hero.r;
+    // The Quick Give/Get You give and You get cards (G31, the operator's pick
+    // of the swap-card layout, n.492) keep their approved look, and boxes
+    // inside a form card stay as drawn (operator 2026-11-18, "Box-in-card:
+    // keep"); test/unit/ui/cardSurfaces.allowlist.json records the same card.
+    const giveGetCard = (el) => sharedClass(el, 'card') && [...el.children].some((c) => sharedClass(c, 'cardMid'));
     void root;
     const NOT_CARD = 'button, input, select, textarea, [role="button"], [role="tab"], [role="switch"], [role="checkbox"], [role="radio"], [role="dialog"], [role="menu"], [role="listbox"], header, nav, img, svg';
     const NOTICE = '[role="status"], [role="alert"], [data-variant]';
@@ -1261,7 +1337,7 @@ export function measureRulings() {
         if (el.querySelector('input, textarea, select') && r.height < 70) continue; // a field frame
         const off = cs.borderTopWidth !== token.w || cs.borderTopStyle !== 'solid'
             || cs.borderTopColor !== token.c || cs.borderTopLeftRadius !== token.r;
-        if (off) {
+        if (off && !heroSurface(cs) && !giveGetCard(el)) {
             cap(out.offTokenCards, {
                 el: desc(el), border: `${cs.borderTopWidth} ${cs.borderTopStyle} ${cs.borderTopColor}`, radius: cs.borderTopLeftRadius,
                 token: `${token.w} solid ${token.c} / ${token.r}`,
@@ -1335,22 +1411,41 @@ export function measureRulings() {
         const NOTICE = '[data-xc-notice], [role="alert"], [role="status"]';
         const notices = [...main.querySelectorAll(NOTICE)]
             .filter((el) => visible(el) && text(el).length > 0 && !el.parentElement.closest(NOTICE));
+        // On a list-and-detail page each panel scrolls on its own (G115, G128),
+        // so a notice's content column is its panel: it is first in that
+        // panel and spans that panel's width (U15: "full width of its page's
+        // content column").
+        const panelOf = (el) => {
+            for (let a = el.parentElement; a && a !== main; a = a.parentElement) {
+                if (/^(auto|scroll|overlay)$/.test(getComputedStyle(a).overflowY)
+                    || sharedClass(a, 'listPanel') || sharedClass(a, 'detailPanel')) return a;
+            }
+            return null;
+        };
         for (const el of notices) {
             if (el.closest('form, [role="dialog"], [role="group"]')) continue; // a form's own status line
             // A status that announces nothing is a label of the data beside
             // it ("Updated just now" under a balance), not a notice.
             if (el.matches('[role="status"][aria-live="off"]')) continue;
             const r = el.getBoundingClientRect();
-            const contentAbove = [...main.querySelectorAll('h2, h3, p, li, button, input, table')]
+            const panel = panelOf(el);
+            let colLeft = left; let colRight = right;
+            if (panel) {
+                const pr = panel.getBoundingClientRect();
+                const pcs = getComputedStyle(panel);
+                colLeft = pr.left + panel.clientLeft + (parseFloat(pcs.paddingLeft) || 0);
+                colRight = pr.left + panel.clientLeft + panel.clientWidth - (parseFloat(pcs.paddingRight) || 0);
+            }
+            const contentAbove = [...(panel || main).querySelectorAll('h2, h3, p, li, button, input, table')]
                 .some((other) => visible(other) && !el.contains(other) && !other.closest(NOTICE)
                     && other.getBoundingClientRect().bottom <= r.top + 1);
-            const narrow = right - left - r.width > 2;
+            const narrow = colRight - colLeft - r.width > 2;
             // An empty state stands where its list would be, below the
             // page's own controls; U15 asks of it only that it fill the
             // content width, so it is measured for width, not for place.
             const emptyState = el.matches('[data-xc-empty-state]');
             if ((contentAbove && !emptyState) || narrow) {
-                cap(out.noticePlacement, { el: desc(el), contentAbove, width: Math.round(r.width), content: Math.round(right - left) });
+                cap(out.noticePlacement, { el: desc(el), contentAbove, width: Math.round(r.width), content: Math.round(colRight - colLeft) });
             }
         }
     }
