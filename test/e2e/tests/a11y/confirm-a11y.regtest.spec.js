@@ -133,7 +133,7 @@ async function warmIssue(source, expected, feeMode = 'xchain') {
 async function scanBothVerdicts(page, own, width) {
     await warmIssue(own, true, 'native');
     await composeIssue(page, { nativeFee: true });
-    await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', /^(?:pass|settleChecks)$/);
+    await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'pass');
     await scan(page, `Confirm surface (ready, ${width})`);
     await page.getByTestId('confirm-reject').click();
 
