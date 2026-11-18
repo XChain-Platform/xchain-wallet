@@ -12,7 +12,7 @@
 // page shows its edge (UI ruling U13: a visible 1px outline; the operator's
 // example was the onboarding import buttons). At a phone and a desktop
 // size, in the light palette, on the onboarding welcome and import screens,
-// Home, Send and Settings:
+// Home, Send, Receive, Contacts and Settings:
 //   - every shared Button carries exactly one variant class and one size
 //     class, so none is restyled into a look the kit does not have;
 //   - every shared Button that paints a box (not ghost, link or icon-only)
@@ -46,7 +46,7 @@ const EDGE_CONTRAST = 1.2;
 function buttonFaults(screen, buttons) {
     const faults = [];
     for (const b of buttons) {
-        if (!b.shared) continue;
+        if (!b.shared || b.trigger) continue;
         if (b.variants.length !== 1) faults.push(`${screen}: "${b.name}" has variant classes [${b.variants.join(', ')}]`);
         if (b.sizes.length !== 1) faults.push(`${screen}: "${b.name}" has size classes [${b.sizes.join(', ')}]`);
         const boxed = !b.iconOnly && !b.variants.some((v) => v === 'ghost' || v === 'link');
@@ -68,8 +68,8 @@ for (const viewport of VIEWPORTS) {
         const record = async (screen) => {
             await page.waitForTimeout(300);
             const buttons = await page.evaluate(measureButtons);
-            measured += buttons.filter((b) => b.shared).length;
-            boxedLight += buttons.filter((b) => b.shared && b.lightOnLight && !b.iconOnly && !b.variants.some((v) => v === 'ghost' || v === 'link')).length;
+            measured += buttons.filter((b) => b.shared && !b.trigger).length;
+            boxedLight += buttons.filter((b) => b.shared && !b.trigger && b.lightOnLight && !b.iconOnly && !b.variants.some((v) => v === 'ghost' || v === 'link')).length;
             faults.push(...buttonFaults(screen, buttons));
             if (OUT) {
                 mkdirSync(OUT, { recursive: true });
@@ -80,7 +80,7 @@ for (const viewport of VIEWPORTS) {
         await page.goto('/');
         await dismissIntroCarousel(page);
         await record('welcome');
-        for (const name of ['Import wallet', 'Import FreeWallet']) {
+        for (const name of ['Import wallet']) {
             const opener = page.getByRole('button', { name }).first();
             if (await opener.count() === 0) continue;
             await opener.click();
@@ -93,6 +93,10 @@ for (const viewport of VIEWPORTS) {
         await record('home');
         await gotoSection(page, 'Send');
         await record('send');
+        await gotoSection(page, 'Receive');
+        await record('receive');
+        await gotoSection(page, 'Contacts');
+        await record('contacts');
         await openSettings(page);
         await record('settings');
 

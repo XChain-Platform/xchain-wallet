@@ -44,7 +44,7 @@ import { fieldByLabel } from '../../fixtures/fields.js';
 const PASSWORD = 'regtestpassword123';
 
 /** The row as a CHOICE: Bitcoin, where an XCHAIN balance can pay the fee. */
-const CHOICE_LABEL = /^Pay protocol fee in BTC instead of XCHAIN/;
+const CHOICE_LABEL = /^Pay protocol fee in BTC\b/;
 /**
  * The row as a STATEMENT: off Bitcoin, where the coin output is the only lane.
  *

@@ -116,7 +116,7 @@ async function approveConfirm(page) {
 
 async function gotoDeployForm(page) {
     await openPaletteCommand(page, 'Contracts');
-    const deploy = page.getByRole('button', { name: 'Publish contract' });
+    const deploy = page.getByRole('button', { name: 'Publish contract', exact: true });
     await expect(deploy).toBeVisible({ timeout: 30_000 });
     await deploy.click();
     await expect(fieldByLabel(page.getByRole('main'), 'Code source')).toBeVisible({ timeout: 30_000 });
@@ -268,7 +268,7 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             await expect(main.getByTestId('deploy-code-status')).toContainText(/^✓Valid, .+ of 64 KB/, { timeout: 30_000 });
 
             await fieldByLabel(main, 'Gas limit').fill(DEPLOY_GAS);
-            await main.getByRole('button', { name: 'Publish', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish Contract', exact: true }).click();
             await approveConfirm(page);
 
             await expect(main.getByText(/Contract published\./)).toBeVisible({ timeout: 120_000 });
