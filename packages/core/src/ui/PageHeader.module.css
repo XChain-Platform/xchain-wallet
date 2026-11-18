@@ -62,15 +62,23 @@
 }
 
 /* The chevron glyph is drawn a third of its box in from its start
-   edge, so the icon steps back by that much to put the visible stroke on
-   the logo line. */
-.header .back > span {
-    margin-inline-start: calc(var(--xc-icon-size, 16px) / -3);
-}
-
+   edge, so the glyph steps back by that much inside its svg to put the
+   visible stroke on the logo line. Moving the glyph rather than the box keeps
+   the empty side of the box from reaching past the screen edge, where the
+   screen would clip it. */
 .header .back svg {
     width: var(--xc-icon-size);
     height: var(--xc-icon-size);
+    overflow: visible;
+}
+
+.header .back svg > * {
+    transform-box: view-box;
+    transform: translateX(calc(100% / -3));
+}
+
+.header .back svg:dir(rtl) > * {
+    transform: translateX(calc(100% / 3));
 }
 
 /* The hit target stays at the touch floor: --xc-control-hit-min is 44px on
