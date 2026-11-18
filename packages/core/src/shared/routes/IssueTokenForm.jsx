@@ -45,6 +45,7 @@ import { useWalletMode } from '../hooks/useWalletMode.js';
 import { useFormDraft } from '../hooks/useFormDraft.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { getActiveNetwork } from '../../flows/effectiveNetwork.js';
+import { synthesizeDemoOwnedTokens } from '../../flows/demoFixtures.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { ContactsPickerScreen } from '../components/ContactsPickerScreen.jsx';
 import { AmountField } from '../components/AmountField.jsx';
@@ -552,12 +553,21 @@ export function IssueTokenForm({ walletId, onBack, initialChainId, initialParent
 
     // The Parent token picker's list: every token an issuing address of this
     // wallet owns, on every network, read only while the Subtoken template is
-    // on. A demo wallet owns nothing and never sends its addresses to an
-    // explorer, as on My tokens.
+    // on. A demo wallet never sends its addresses to an explorer, so its
+    // tokens come from the fixtures, owned by each chain's first address, as
+    // on My tokens.
     useEffect(() => {
         if (!isSubtoken || !addressesByChain) return undefined;
         if (flowsLib.isDemoWallet(walletId)) {
-            setOwnedParents({ rows: [], failed: false });
+            const rows = [];
+            for (const [sourceChainId, addrs] of Object.entries(addressesByChain)) {
+                const owner = Array.isArray(addrs) ? addrs[0] : null;
+                if (!owner?.id) continue;
+                for (const row of synthesizeDemoOwnedTokens(sourceChainId)) {
+                    rows.push({ chainId: sourceChainId, tick: row.tick, ownerAddressId: owner.id });
+                }
+            }
+            setOwnedParents({ rows, failed: false });
             return undefined;
         }
         if (typeof messaging?.getOwnedTokens !== 'function') {
