@@ -593,13 +593,16 @@ async function bindController(page, source, contractIndex, { tick = TICK, action
         'the form opened from a token but did not default to protecting it')
         .toHaveText(/^\s*Token\s*$/);
 
-    // The form defaults From to the NEWEST HD address, which by now is the
-    // destination generated below - not the token owner. An ISSUE v6 signed by
-    // anyone but the owner is refused, so this is a correction, not a check.
-    await readChainAddresses(page, source);
-    expect(await (await openFromAddress(form)).inputValue(),
+    // A token bind anchors From to the token's recorded owner and locks the
+    // From picker, because an ISSUE v6 signed by anyone but the owner is
+    // refused. The wallet's newest HD address is the destination generated
+    // below, so a form that left From on it would sign with the wrong key.
+    await expect(await openFromAddress(form),
         'the bind would be signed by an address that does not own the token')
-        .toBe(source);
+        .toHaveValue(source, { timeout: 30_000 });
+    await expect(page.getByRole('button', { name: 'Choose source address' }),
+        'a token bind lets From move off the token owner')
+        .toHaveAttribute('aria-disabled', 'true');
 
     await fieldByLabel(form, 'Guard contract').fill(contractIndex);
     // A missing checkbox fails chooseActionClass, so this line is also the
@@ -796,7 +799,8 @@ async function unbindAddressController(page, source) {
         .toBeVisible({ timeout: 30_000 });
     await expect(fieldByLabel(form, 'What to unbind'),
         'opened without a token, the Unbind form still defaults to a token')
-        .toHaveValue('address');
+        // "What to unbind" is a themed select (a combobox showing its pick).
+        .toHaveText(/^\s*Address\s*$/);
     await selectVenueChain(form);
     await readChainAddresses(page, source);
     await chooseActionClass(form, 'transfer');

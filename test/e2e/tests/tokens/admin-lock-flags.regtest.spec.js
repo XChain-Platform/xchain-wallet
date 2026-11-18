@@ -243,7 +243,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('Pause token refuses SLEEP before composition', async () => {
             await openTokenAdmin(page, 'Pause token');
             const main = page.getByRole('main');
-            await expect(main.getByRole('alert').filter({ hasText: /Pausing and resuming are permanently locked/ }))
+            await expect(main.getByRole('alert').filter({ hasText: /Pause and resume are permanently locked for / }))
                 .toBeVisible({ timeout: 30_000 });
             await expect(main.getByRole('button', { name: /^Pause setting/ })).toBeDisabled();
             await expect(main.getByRole('button', { name: 'Pause Token', exact: true })).toBeDisabled();

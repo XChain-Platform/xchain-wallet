@@ -315,7 +315,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const listActionIndex = String(created.action_index);
             managedListIndex = listActionIndex;
 
-            await openPaletteCommand(page, 'My lists');
+            await openPaletteCommand(page, 'Lists');
             const listRow = myListsRow(page, listActionIndex);
             await expect(listRow, `the list just published (#${listActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
@@ -347,7 +347,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const forked = await waitForValidAction(forkTxid);
             const forkActionIndex = String(forked.action_index);
 
-            await openPaletteCommand(page, 'My lists');
+            await openPaletteCommand(page, 'Lists');
             const forkRow = myListsRow(page, forkActionIndex);
             await expect(forkRow, `the fork just published (#${forkActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
@@ -368,7 +368,7 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('the list manager: rename the list, then transfer it to another owner', async () => {
             const NAME = `Roster ${STAMP}`;
             const openManagedList = async () => {
-                await openPaletteCommand(page, 'My lists');
+                await openPaletteCommand(page, 'Lists');
                 const row = myListsRow(page, managedListIndex);
                 await expect(row, `list #${managedListIndex} is not in My Lists`).toBeVisible({ timeout: 60_000 });
                 await row.click();

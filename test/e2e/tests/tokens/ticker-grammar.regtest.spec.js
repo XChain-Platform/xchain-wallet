@@ -760,7 +760,10 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             await fieldByLabel(second, 'Max supply').fill(String(SUPPLY));
             await second.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
-            const alert = page.getByRole('alert').filter({ hasText: /Ticker cannot contain \^/ });
+            // The refusal shows twice, in the Form errors summary and on the
+            // Ticker field; the field's own alert is the one asserted.
+            const alert = page.getByRole('alert').filter({ hasText: /Ticker cannot contain \^/ })
+                .and(page.locator(':not([data-form-errors])'));
             await expect(alert,
                 'the direct Issue form now authors a caret ticker while the wizard refuses one')
                 .toBeVisible({ timeout: 60_000 });
