@@ -14,7 +14,6 @@
 // control, not the control's own rectangle.
 
 import { dismissIntroCarousel, expect, gotoSection, test, unlockedShell } from '../../fixtures/wallet.js';
-import { XCHAIN_SERVICE_HOSTS } from '../../fixtures/outboundGuard.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 
 const TAP_MIN = 44;
@@ -22,13 +21,7 @@ const TAP_MIN = 44;
 // controls sit on fractional positions.
 const TOLERANCE = 0.5;
 
-// The style guide's price lookups reach for the explorer, so the service hosts are stubbed and no real request is made.
-test.use({
-    viewport: { width: 360, height: 800 },
-    hasTouch: true,
-    isMobile: true,
-    outboundStubHosts: [...XCHAIN_SERVICE_HOSTS],
-});
+test.use({ viewport: { width: 360, height: 800 }, hasTouch: true, isMobile: true });
 
 /**
  * Runs in the page (or an iframe): for each selector returns the size of the
@@ -125,19 +118,21 @@ test('Home and Send compact controls give a 44px tap area on touch', async ({ pa
 
 test('fee selector stops and edit buttons give a 44px tap area on touch', async ({ page }) => {
     test.slow();
-    await page.goto('/style-guide/#fee-selector');
-    const section = page.locator('#fee-selector');
-    await section.scrollIntoViewIfNeeded();
-    // The style guide renders each example in an iframe; the first one in the
-    // section is the Send variant, with four stops and both edit buttons.
-    const iframe = section.locator('iframe').first();
-    await expect(iframe).toBeVisible();
-    const frame = await (await iframe.elementHandle()).contentFrame();
-    await frame.waitForSelector('[class*="sliderTick"]', { timeout: 60_000 });
+    await page.goto('/');
+    await dismissIntroCarousel(page);
+    await page.getByRole('button', { name: 'Try Demo' }).click();
+    await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
+
+    // A form's Speed and Fees section holds the fee selector: four stops and the
+    // fee amount edit button. The demo wallet prices tiers on the New message form; the Send
+    // form stays on Calculating.
+    await gotoSection(page, 'Messaging');
+    await page.getByRole('button', { name: 'New message', exact: true }).click();
+    const header = page.getByRole('main').getByRole('button', { name: /^Speed and Fees\b/ });
+    if (await header.getAttribute('aria-expanded') !== 'true') await header.click();
+    await expect(page.locator('button[class*="sliderTick"]').first()).toBeVisible({ timeout: 60_000 });
     const targets = [0, 1, 2, 3].map((i) => ({ name: `fee tier stop ${i + 1}`, selector: 'button[class*="sliderTick"]', index: i }));
-    targets.push(
-        { name: 'fee amount edit', selector: 'button[class*="readoutEdit"]', index: 0 },
-        { name: 'fee rate edit', selector: 'button[class*="readoutEdit"]', index: 1 },
-    );
-    expectTapAreas(await frame.evaluate(measureHitAreas, targets));
+    // One custom fee editor, the fee amount (G113), so there is no separate rate edit button.
+    targets.push({ name: 'fee amount edit', selector: 'button[class*="readoutEdit"]', index: 0 });
+    expectTapAreas(await page.evaluate(measureHitAreas, targets));
 });
