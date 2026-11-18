@@ -8,7 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AddressField, AddressText, Button, ChainBadge, EmptyState, FormPage, Icon, Input, ListPage, ListRow, NetworkField, PageHeader, Screen, Select, Skeleton, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
 import { copyText } from '../clipboard.js';
@@ -194,6 +194,16 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
     const [scanFromEdit, setScanFromEdit] = useState(false);
     // The scanner was opened from Add Address: a scanned address fills its field.
     const [scanForAddress, setScanForAddress] = useState(false);
+
+    // Add contact opened the New contact form: leaving it for the list hands
+    // focus back to Add contact. A layout effect runs before the page header
+    // would move a lost focus to its heading.
+    const addButtonRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
+    const returnToAddRef = useRef(false);
+    useLayoutEffect(() => {
+        if (mode === 'list' && returnToAddRef.current) addButtonRef.current?.focus({ preventScroll: true });
+        if (mode !== 'edit' && mode !== 'scan') returnToAddRef.current = false;
+    }, [mode]);
 
     // List-view filters. `query` is a free-text match over name / notes /
     // any entry address or label; `networkFilter` keeps only contacts that
@@ -858,9 +868,10 @@ export function ContactsList({ walletId, onSend, onSendMessage, onBack, scanPref
                         type="button"
                         variant="secondary"
                         icon={<Icon.PlusIcon />}
+                        ref={addButtonRef}
                         aria-label="Add contact"
                         title="Add contact"
-                        onClick={() => { setActiveId(null); startEdit(null); }}
+                        onClick={() => { returnToAddRef.current = true; setActiveId(null); startEdit(null); }}
                     >
                         {null}
                     </Button>
