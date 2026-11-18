@@ -90,6 +90,10 @@ div.carouselForm > [data-form-stack] {
     .wideCentre.wideCentre.wideCentre {
         display: flex;
         flex-direction: column;
+        /* The page keeps no end padding for a scrollbar lane, so a column
+           centred in the body sat off the page centre by the gutter;
+           matching the start gutter centres it in the visible page. */
+        padding-inline-end: var(--xc-space-2);
     }
 
     .wideCentre.wideCentre.wideCentre > * {
