@@ -534,9 +534,15 @@ export function measureControlRows() {
         '[role="main"]', '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]',
         '[role="complementary"]', '[role="dialog"]', '[role="alertdialog"]', '[role="menu"]',
     ].join(',');
+    // A CSS module class (`_bigAmount_1juic_169` in dev) by its local name.
+    const sharedClass = (el, part) => Boolean(el) && [...el.classList].some((c) => new RegExp(`(^|_)${part}(_|$)`).test(c));
+    // A list-and-detail page (G115 wide Home, G128 two-panel pages) scrolls
+    // its list and its detail as two panels, so a list row never forms a row
+    // with the detail's range chips or tabs that happen to sit level with it.
+    const panel = (node) => sharedClass(node, 'listPanel') || sharedClass(node, 'detailPanel');
     const regionOf = (el) => {
         for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
-            if (node.matches(regionSelector)) return node;
+            if (node.matches(regionSelector) || panel(node)) return node;
             if (/^(fixed|sticky)$/.test(getComputedStyle(node).position)) return node;
         }
         return document.body;
@@ -550,10 +556,21 @@ export function measureControlRows() {
         if (!describedBy || !el.hasAttribute('aria-expanded')) return false;
         return describedBy.split(/\s+/).some((id) => document.getElementById(id)?.getAttribute('role') === 'tooltip');
     };
+    // Two ruled controls keep their own size beside the row they sit in:
+    // - The Quick Give/Get cards' large amount (G31): borderless 2rem type
+    //   beside the card's asset pill, restored to the approved look in
+    //   fe2bc59bb. measureRulings' borderless-field rule and the U14 form
+    //   gate skip it the same way.
+    // - The page header's bare Back chevron (G02, U38): no outline, border or
+    //   fill, so its box never shows beside the header's 44px outlined
+    //   actions.
+    const ruledOwnSize = (el) => (sharedClass(el, 'bigAmount')
+            && sharedClass(el.parentElement, 'cardMid') && sharedClass(el.parentElement.parentElement, 'card'))
+        || (sharedClass(el, 'back') && sharedClass(el.parentElement, 'header'));
     // Nested interactive markup represents one control even when both the
     // wrapper and its implementation carry an interactive role.
     const controls = [...document.querySelectorAll(selector)].filter((el) => (
-        visible(el) && !el.parentElement?.closest(selector) && !labelHelpTip(el)
+        visible(el) && !el.parentElement?.closest(selector) && !labelHelpTip(el) && !ruledOwnSize(el)
     ));
     // A control with no background and no full border draws no box: an
     // underlined text link in a sentence, an underline tab. Its height and
