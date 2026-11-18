@@ -40,7 +40,11 @@
     line-height: 1;
 }
 
+/* The hero card clips at this same box; clipping here too keeps the bottom
+   label's line box, which grows under user text spacing (WCAG 1.4.12), from
+   making the card's content overflow it. */
 .scaleHero {
+    overflow: clip;
     color: var(--xc-hero-scale-text);
     text-shadow: 0 1px 2px color-mix(in srgb, var(--xc-hero-bg) 75%, transparent);
 }
