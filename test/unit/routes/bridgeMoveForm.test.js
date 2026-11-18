@@ -65,7 +65,8 @@ const LTC_ADDRESS = {
 
 // 4 s on a dev box; scaled so coverage instrumentation on a loaded runner does not
 // outrun it (the debounced balance read and every async mount settle inside it).
-const WAIT = { timeout: slowTimeout(4000) };
+// Loaded CI venues need well over 4 s for the wallet list to fill Receive at.
+const WAIT = { timeout: slowTimeout(15000) };
 
 /**
  * @param {object} [opts]
