@@ -14,6 +14,7 @@
 // control, not the control's own rectangle.
 
 import { dismissIntroCarousel, expect, gotoSection, test, unlockedShell } from '../../fixtures/wallet.js';
+import { XCHAIN_SERVICE_HOSTS } from '../../fixtures/outboundGuard.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 
 const TAP_MIN = 44;
@@ -21,7 +22,13 @@ const TAP_MIN = 44;
 // controls sit on fractional positions.
 const TOLERANCE = 0.5;
 
-test.use({ viewport: { width: 360, height: 800 }, hasTouch: true, isMobile: true });
+// The style guide's price lookups reach for the explorer, so the service hosts are stubbed and no real request is made.
+test.use({
+    viewport: { width: 360, height: 800 },
+    hasTouch: true,
+    isMobile: true,
+    outboundStubHosts: [...XCHAIN_SERVICE_HOSTS],
+});
 
 /**
  * Runs in the page (or an iframe): for each selector returns the size of the
@@ -102,11 +109,16 @@ test('Home and Send compact controls give a 44px tap area on touch', async ({ pa
     ), { width: rangeTapWidth });
 
     await gotoSection(page, 'Send');
-    await expect(page.getByRole('button', { name: 'Create a real wallet' })).toBeVisible();
+    // A demo wallet shows the Create a Real Wallet exit once a send is refused.
+    await page.getByRole('main').getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Create a Real Wallet' })).toBeVisible();
     await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true; }));
     expectTapAreas(await page.evaluate(measureHitAreas, [
         { name: 'Create a real wallet', selector: 'button[class*="recovery"]' },
-        { name: 'Advanced disclosure', selector: 'summary' },
+        // The Advanced disclosure is one of the form's collapsible section headers.
+        { name: 'Payment section header', selector: 'main form button[aria-expanded][aria-controls]', index: 0 },
+        { name: 'Advanced section header', selector: 'main form button[aria-expanded][aria-controls]', index: 1 },
+        { name: 'Speed and Fees section header', selector: 'main form button[aria-expanded][aria-controls]', index: 2 },
         { name: 'help dot', selector: 'button[class*="trigger"][aria-describedby]' },
     ]));
 });
