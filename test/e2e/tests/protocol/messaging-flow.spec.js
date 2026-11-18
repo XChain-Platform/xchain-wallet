@@ -31,7 +31,7 @@ const VIEWPORTS = [
 
 const RECIPIENT = 'bc1qdevmock02aabbcc';
 const MESSAGE = 'Review this encrypted message before sending.';
-const NORMAL_FEE = '0.25';
+const NORMAL_FEE = '0.005';
 
 async function settleLayout(page) {
     await page.evaluate(() => new Promise((resolve) => {
@@ -84,6 +84,10 @@ for (const viewport of VIEWPORTS) {
     test(`messaging compose stops at the demo note at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
+        const phone = viewport.name === 'phone';
+        const filterName = phone ? 'Filter conversations' : 'Filter messaging';
+        const filter = page.getByRole('button', { name: filterName, exact: true });
+        const newMessage = page.getByRole('button', { name: 'New message', exact: true });
 
         await test.step('encrypted inbox renders without a horizontal leak', async () => {
             await gotoSection(page, 'Messaging');
@@ -93,14 +97,15 @@ for (const viewport of VIEWPORTS) {
             await expect(conversations.getByRole('button', { name: /Erin Calloway/ })).toBeVisible();
             await expectHeading(page, 'Messaging');
             // The title bar holds the New message plus, then the filter icon.
+            // Desktop folds New message into the More menu beside the filter.
             await expectSameLineHeights('inbox title bar actions', [
-                page.getByRole('button', { name: 'New message', exact: true }),
-                page.getByRole('button', { name: 'Filter', exact: true }),
+                phone ? newMessage : page.getByRole('button', { name: 'More', exact: true }),
+                filter,
             ]);
             // The search lives in the filter panel, never on the page itself.
             await expect(main.getByRole('searchbox', { name: 'Search conversations' })).toHaveCount(0);
-            await page.getByRole('button', { name: 'Filter', exact: true }).click();
-            await expect(page.getByRole('dialog', { name: 'Filter' }).getByRole('searchbox', { name: 'Search conversations' })).toBeVisible();
+            await filter.click();
+            await expect(page.getByRole('dialog', { name: filterName }).getByRole('searchbox', { name: 'Search conversations' })).toBeVisible();
             await page.keyboard.press('Escape');
             await expectNoHorizontalOverflow(page, `${viewport.name} inbox`);
         });
@@ -110,7 +115,8 @@ for (const viewport of VIEWPORTS) {
                 .getByRole('list', { name: 'Conversations' })
                 .getByRole('button', { name: /Erin Calloway/ })
                 .click();
-            await expectHeading(page, 'Erin Calloway');
+            // Two panels keep the inbox title; a phone opens the thread as its own page.
+            await expectHeading(page, phone ? 'Erin Calloway' : 'Messaging');
             await expect(page.getByRole('main').getByText('Moved the savings stash to the new address. All set.'))
                 .toBeVisible();
             await expect(page.getByRole('main').getByText(/ECIES/).first()).toBeVisible();
@@ -121,9 +127,13 @@ for (const viewport of VIEWPORTS) {
         });
 
         await test.step('compose renders the selected fee and aligned address controls', async () => {
-            await page.getByRole('button', { name: 'Back to previous screen' }).click();
+            if (phone) await page.getByRole('button', { name: 'Back to previous screen' }).click();
             await expectHeading(page, 'Messaging');
-            await page.getByRole('button', { name: 'New message', exact: true }).click();
+            if (phone) await newMessage.click();
+            else {
+                await page.getByRole('button', { name: 'More', exact: true }).click();
+                await page.getByRole('menuitem', { name: 'New Message', exact: true }).click();
+            }
 
             const main = page.getByRole('main');
             await expectHeading(page, 'New message');

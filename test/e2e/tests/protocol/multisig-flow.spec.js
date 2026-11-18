@@ -183,36 +183,35 @@ test.describe('multisig flow', () => {
         await expect(createForm).toBeVisible();
 
         await expectDropdownValue(createForm.getByLabel('Type', { exact: true }), 'p2wsh-multisig');
-        await createForm.getByRole('button', {
-            name: "Joining someone else's multisig? Share this wallet as a cosigner",
-            exact: true,
-        }).click();
-        let share = page.getByRole('region', { name: 'Share this wallet as a cosigner' });
-        await share.locator('summary').click();
+        // Sharing this wallet as a cosigner is its own page, opened from the title bar.
+        await page.getByRole('banner')
+            .getByRole('button', { name: 'Share Wallet as Cosigner', exact: true }).click();
+        const share = page.getByRole('form', { name: 'Share Wallet as Cosigner' });
+        await expect(share).toBeVisible();
         await share.getByRole('button', { name: 'Choose address to share', exact: true }).click();
-        await expect(page.getByRole('heading', { name: 'Address to Share', exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Address to share', exact: true })).toBeVisible();
         const sharedAddress = await pickFirstAddress(page);
-        share = page.getByRole('region', { name: 'Share this wallet as a cosigner' });
-        await share.locator('summary').click();
         await expect(share.getByLabel('Address to share', { exact: true })).toHaveValue(sharedAddress);
+        await share.getByRole('button', { name: 'Share', exact: true }).click();
         // The share details are offered as a QR code and a copy action; the
         // page shows no textarea repeating their raw text.
         await expect(share.getByRole('img', { name: 'QR code for multisig cosigner share details' })).toBeVisible();
         await expect(share.getByRole('button', { name: /Copy Cosigner Share Details/ })).toBeVisible();
 
         for (const viewport of VIEWPORTS) {
-            await test.step(`${viewport.name}: create and cosigner share`, async () => {
-                await expectScreen(page, viewport, 'Create multisig');
-                await expect(page.getByRole('heading', {
-                    name: 'Share this wallet as a cosigner',
-                    exact: true,
-                })).toBeVisible();
+            await test.step(`${viewport.name}: cosigner share`, async () => {
+                await expectScreen(page, viewport, 'Share Wallet as Cosigner');
                 await expectNoHorizontalOverflow(
                     page,
                     `cosigner share at ${viewport.width}x${viewport.height}`,
                 );
             });
         }
+
+        // Back steps exist on the phone layout only.
+        await page.setViewportSize({ width: VIEWPORTS[0].width, height: VIEWPORTS[0].height });
+        await page.getByRole('banner').getByRole('button', { name: 'Back to previous screen' }).click();
+        await expect(createForm).toBeVisible();
 
         // Each cosigner is a collapsible section, open while it is new.
         const cosignerSection = (n) => createForm.locator('section[data-form-section^="cosigner-"]').nth(n - 1);
@@ -251,7 +250,7 @@ test.describe('multisig flow', () => {
                     .toBeLessThanOrEqual(1);
                 await expect(review).toContainText('2-of-3 SegWit');
                 await expect(review.locator('fieldset')).toHaveCount(3);
-                await expectScreen(page, viewport, 'Review multisig', { requireRow: true });
+                await expectScreen(page, viewport, 'Review Multisig', { requireRow: true });
 
                 if (viewport !== VIEWPORTS.at(-1)) {
                     await review.getByRole('button', { name: 'Edit', exact: true }).click();
