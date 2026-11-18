@@ -186,16 +186,35 @@ test('trailing field actions stay inside their fields without squeezing input te
         tick: 'PEPECASH',
     });
     main = page.getByRole('main');
-    // Every amount field carries Max (disabled when nothing is held), so look in You give.
-    await expect(main.getByRole('region', { name: 'You give' })
-        .getByRole('button', { name: 'Use max available amount' })).toBeVisible();
+    // The swap amount sits beside its token picker; Max is an icon button on
+    // the available line below it, so check it fits its You give card.
+    const giveCard = main.getByRole('region', { name: 'You give' });
+    const giveMax = giveCard.getByRole('button', { name: 'Max you give amount' });
+    await expect(giveMax).toBeVisible();
     await checkViewports(page, 'Swap', [
         {
             name: 'Give amount',
             input: main.getByRole('textbox', { name: /^Give amount/ }),
-            actions: ['Use max available amount'],
+            actions: [],
         },
     ]);
+    for (const viewport of VIEWPORTS) {
+        await page.setViewportSize(viewport);
+        await settle(page);
+        const card = await giveCard.boundingBox();
+        const fit = await giveMax.evaluate((button, cardBox) => {
+            const box = button.getBoundingClientRect();
+            return {
+                height: box.height,
+                clipped: button.scrollWidth > button.clientWidth,
+                inside: box.left >= cardBox.x && box.right <= cardBox.x + cardBox.width
+                    && box.top >= cardBox.y && box.bottom <= cardBox.y + cardBox.height,
+            };
+        }, card);
+        expect(fit.inside, `Swap Max leaves its card at ${viewport.width}x${viewport.height}`).toBe(true);
+        expect(fit.clipped, `Swap Max is clipped at ${viewport.width}x${viewport.height}`).toBe(false);
+        expect(fit.height, `Swap Max is too short to read as a control at ${viewport.width}x${viewport.height}`).toBeGreaterThanOrEqual(24);
+    }
 
     await gotoSection(page, 'Receive');
     main = page.getByRole('main');

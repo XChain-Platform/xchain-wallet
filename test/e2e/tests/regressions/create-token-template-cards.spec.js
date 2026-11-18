@@ -25,8 +25,10 @@ const TEMPLATE_NAMES = [
     'Collectible',
     'Limited edition',
     'Subtoken',
-    'Custom',
 ];
+
+// The first entry is the neutral choice that fills nothing in.
+const PICKER_ROWS = ['Select template', ...TEMPLATE_NAMES];
 
 const MAX_OFFSET_PX = 1;
 
@@ -43,34 +45,39 @@ async function openCreateToken(page) {
     await palette.getByRole('combobox').fill('Create a token');
     await palette.getByRole('option', { name: /^Create a token\b/ }).click();
     await expect(palette).toBeHidden();
-    await expect(page.getByText('Step 1 of 4: Template', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Issue Token' })).toBeVisible();
 }
 
 async function cardMetrics(page) {
-    const main = page.getByRole('main');
-    const templateList = main.getByRole('list').filter({ hasText: 'Meme token' });
-    const cards = templateList.locator(':scope > li > button');
-    await expect(cards).toHaveCount(TEMPLATE_NAMES.length);
+    // The templates are the options of the Select template dropdown.
+    const picker = page.getByRole('listbox', { name: 'Select template' });
+    if (!(await picker.isVisible())) {
+        await page.getByRole('button', { name: /Select template/ }).click();
+    }
+    await expect(picker).toBeVisible();
+    const cards = picker.getByRole('option');
+    await expect(cards).toHaveCount(PICKER_ROWS.length);
 
     const metrics = [];
-    for (let index = 0; index < TEMPLATE_NAMES.length; index += 1) {
-        const name = TEMPLATE_NAMES[index];
+    for (let index = 0; index < PICKER_ROWS.length; index += 1) {
+        const name = PICKER_ROWS[index];
         const card = cards.nth(index);
-        const title = card.getByText(name, { exact: true });
+        const title = card.getByText(name, { exact: true }).first();
         await expect(card, `${name} card is not visible`).toBeVisible();
         await expect(title, `${name} title is not visible`).toBeVisible();
 
         metrics.push(await card.evaluate((element, titleText) => {
-            // The title is the icon plus the name; the row's subtitle sits after its title line.
-            const titleElement = element.querySelector('[data-template-title]');
+            // An option is an icon plus a text column of the name over its description.
+            const iconElement = element.firstElementChild;
+            const textColumn = element.children[1];
+            const titleElement = textColumn?.children[0];
+            const subtitleElement = textColumn?.children[1];
             if (!titleElement || titleElement.textContent.trim() !== titleText) {
                 throw new Error(`No title element for ${titleText}`);
             }
 
             const cardBox = element.getBoundingClientRect();
             const titleBox = titleElement.getBoundingClientRect();
-            const iconElement = titleElement.querySelector(':scope > span[aria-hidden="true"]');
-            const subtitleElement = titleElement.parentElement?.nextElementSibling;
             const nameNode = [...titleElement.childNodes]
                 .find((node) => node.nodeType === Node.TEXT_NODE
                     && node.textContent.trim() === titleText);
@@ -80,7 +87,8 @@ async function cardMetrics(page) {
 
             const nameRange = document.createRange();
             nameRange.selectNodeContents(nameNode);
-            const nameBox = nameRange.getBoundingClientRect();
+            // The icon is centred on the whole name-over-description column.
+            const textBox = textColumn.getBoundingClientRect();
             const iconBox = iconElement.getBoundingClientRect();
             const subtitleBox = subtitleElement.getBoundingClientRect();
             const titleStyle = getComputedStyle(titleElement);
@@ -91,8 +99,8 @@ async function cardMetrics(page) {
                 titleInset: titleBox.left - cardBox.left,
                 titleColor: titleStyle.color,
                 nameLineCount: nameRange.getClientRects().length,
-                iconNameCenterOffset: Math.abs(
-                    (iconBox.top + iconBox.height / 2) - (nameBox.top + nameBox.height / 2),
+                iconTextCenterOffset: Math.abs(
+                    (iconBox.top + iconBox.height / 2) - (textBox.top + textBox.height / 2),
                 ),
                 descriptionInset: subtitleBox.left - cardBox.left,
                 iconInset: iconBox.left - cardBox.left,
@@ -151,21 +159,21 @@ test('Create token template cards retain their visual hierarchy', async ({ page 
                 `${viewport.width}px: every template name must stay on one line with its icon\n${diagnostic}`,
             ).toEqual([]);
 
-            const iconNameOffsets = metrics.map(({ iconNameCenterOffset }) => iconNameCenterOffset);
+            const iconTextOffsets = metrics.map(({ iconTextCenterOffset }) => iconTextCenterOffset);
             expect(
-                Math.max(...iconNameOffsets),
-                `${viewport.width}px: template icons and names do not share a line\n${diagnostic}`,
+                Math.max(...iconTextOffsets),
+                `${viewport.width}px: template icons are not centred on their text\n${diagnostic}`,
             ).toBeLessThanOrEqual(MAX_OFFSET_PX);
 
             const descriptionAlignmentFailures = metrics
-                .filter(({ descriptionInset, iconInset, descriptionGap }) => (
-                    Math.abs(descriptionInset - iconInset) > MAX_OFFSET_PX
+                .filter(({ descriptionInset, titleInset, descriptionGap }) => (
+                    Math.abs(descriptionInset - titleInset) > MAX_OFFSET_PX
                     || descriptionGap < -MAX_OFFSET_PX
                 ))
                 .map(({ name }) => name);
             expect(
                 descriptionAlignmentFailures,
-                `${viewport.width}px: descriptions must sit under the title and align with the icon\n${diagnostic}`,
+                `${viewport.width}px: descriptions must sit under the title and align with it\n${diagnostic}`,
             ).toEqual([]);
 
             const titleInsets = metrics.map(({ titleInset }) => titleInset);
