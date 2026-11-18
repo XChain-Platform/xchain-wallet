@@ -33,6 +33,7 @@
 //       getSignerStatus={messaging.getSignerStatus}
 //   />
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { useCallback } from 'react';
 import { Input, FieldNote } from '../../ui/index.js';
 import { HwSignBlock } from './HwSignBlock.jsx';
@@ -77,7 +78,7 @@ export function SignCredentials({
 }) {
     const src = fromAddress?.source;
     const signerId = fromAddress?.signerId;
-    const isHw = src === 'trezor' || src === 'ledger';
+    const isHw = isDeviceAddressSource(src);
     const getHwStatus = useCallback((opts) => getSignerStatus?.({
         signerId,
         chainId: opts?.chainId ?? chainId,
@@ -153,5 +154,5 @@ export function SignCredentials({
  * @returns {boolean}
  */
 export function isHwSource(fromAddress) {
-    return fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    return isDeviceAddressSource(fromAddress?.source);
 }

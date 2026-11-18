@@ -31,6 +31,7 @@
 // Pure function: no I/O, no side effects. Caller computes the inputs
 // (the form already has them) and passes them in.
 
+import { isDeviceSignerKind } from '../schemas/constants.js';
 import { t } from '../i18n/index.js';
 import '../i18n/locales/en/flows.js';
 
@@ -136,7 +137,7 @@ export function classifySignRisk(input = {}) {
     } = input;
 
     // Software signers don't render the cross-check block at all.
-    const isHw = signerKind === 'trezor' || signerKind === 'ledger';
+    const isHw = isDeviceSignerKind(signerKind);
     if (!isHw) {
         return { requireExplicitConfirm: false, reason: null };
     }

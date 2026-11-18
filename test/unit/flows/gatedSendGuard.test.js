@@ -407,9 +407,8 @@ describe('gatedSendReadiness', () => {
 });
 
 // --- PC-29 unlock-threshold lane (GATE_MIN_AMOUNT) --------------------
-// Inert until the flag-day train pins activation heights; these
-// tests force activation through the test-only `_activationHeights`
-// override. Post-activation SEND rule: a pack's key handoff is required
+// The send side follows thresholds already recorded by the indexer,
+// independently of the publish-side deployment interlock. A pack's key handoff is required
 // only when the destination's POST-SEND balance meets the pack's
 // threshold; below it the send goes out plain and carries no key.
 describe('PC-29 unlock-threshold lane', () => {
@@ -429,17 +428,17 @@ describe('PC-29 unlock-threshold lane', () => {
         });
     }
 
-    it('is fully inert while no activation height is scheduled (frozen map)', async () => {
+    it('honors an indexer-recorded threshold while the publish map is null', async () => {
         const sdk = thresholdSdk({
             getFiles: vi.fn(async () => [thresholdRow(HASH_A, '100', '1000000')]),
         });
         const vault = makeVault();
         seedVaultKey(vault, HASH_A, KEY_A.toString('hex'));
-        // No _activationHeights override: production map, all-null. The
-        // absurd threshold must be ignored and the key attached as today.
-        const plan = await prepareGatedSend(makeArgs({ sdk, vault }));
-        expect(plan.attachedKeyHashes).toEqual([HASH_A]);
-        expect(sdk.getBalances).not.toHaveBeenCalled();
+        const plan = await prepareGatedSend(makeArgs({
+            sdk, vault, chainId: 'bitcoin-mainnet',
+        }));
+        expect(plan).toBeNull();
+        expect(sdk.getBalances).toHaveBeenCalledWith(RECIPIENT);
     });
 
     it('composes a plain SEND (null) when every pack is below threshold', async () => {

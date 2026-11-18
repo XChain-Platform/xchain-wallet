@@ -461,6 +461,63 @@ describe('useAutoLockPolicy', () => {
         expect(reportAutoLock).not.toHaveBeenCalled();
     });
 
+    it.each(['loading', 'reconnecting', 'background-error', 'error', 'locked', 'no-wallet', 'something-new'])(
+        'withholds backstop reports from unsettled state %s',
+        async (sessionState) => {
+            for (const shell of ['popup', 'desktop']) {
+                const reportAutoLock = vi.fn(async () => ({ ok: true }));
+                const messaging = makeMessaging({ autolockMinutes: 5, reportAutoLock });
+                function UnsettledShell() {
+                    useAutoLockPolicy({ sessionState, activeWalletId: 'w1' });
+                    return <div />;
+                }
+                renderShell(<UnsettledShell />, { messaging, shell });
+                await settle();
+                expect(reportAutoLock).not.toHaveBeenCalled();
+                cleanup();
+            }
+        },
+    );
+
+    it.each(['reconnecting', 'background-error', 'error'])(
+        'does not disarm when an unlocked session changes to %s',
+        async (nextState) => {
+            const reportAutoLock = vi.fn(async () => ({ ok: true }));
+            const messaging = makeMessaging({ autolockMinutes: 5, reportAutoLock });
+            function TransitionShell() {
+                const [sessionState, setSessionState] = useState('unlocked');
+                useAutoLockPolicy({ sessionState, activeWalletId: 'w1' });
+                return <button type="button" onClick={() => setSessionState(nextState)}>change</button>;
+            }
+            const view = renderShell(<TransitionShell />, { messaging, shell: 'desktop' });
+            await settle();
+            expect(reportAutoLock).toHaveBeenCalledWith(expect.objectContaining({ armed: true }));
+            reportAutoLock.mockClear();
+
+            await act(async () => { view.getByRole('button', { name: 'change' }).click(); });
+            await settle();
+            expect(reportAutoLock.mock.calls.some(([signal]) => signal.armed === false)).toBe(false);
+        },
+    );
+
+    it('still reports a real Never choice from an unlocked session', async () => {
+        const reportAutoLock = vi.fn(async () => ({ ok: true }));
+        const messaging = makeMessaging({ autolockMinutes: 0, reportAutoLock });
+        renderShell(<Shell messaging={messaging} />, { messaging, shell: 'desktop' });
+        await settle();
+        expect(reportAutoLock).toHaveBeenCalledWith(expect.objectContaining({ armed: false }));
+    });
+
+    it('still reports an unlocked demo session as disarmed', async () => {
+        window.localStorage.setItem('xc:demoWalletId', 'demo-1');
+        const reportAutoLock = vi.fn(async () => ({ ok: true }));
+        const messaging = makeMessaging({ autolockMinutes: 5, reportAutoLock });
+        renderShell(<Shell messaging={messaging} activeWalletId="demo-1" />, { messaging, shell: 'popup' });
+        await settle();
+        expect(reportAutoLock).toHaveBeenCalledWith(expect.objectContaining({ armed: false }));
+        window.localStorage.removeItem('xc:demoWalletId');
+    });
+
     it('gives a full idle window after re-arming, however long the lock screen sat idle', async () => {
         function Harness({ enabled, onLock }) {
             useAutoLock(onLock, { enabled, idleMs: MINUTE });

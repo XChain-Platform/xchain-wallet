@@ -102,6 +102,7 @@ beforeEach(async () => {
         addresses: memCollection(),
         contacts: memCollection(),
         connectedSites: memCollection(),
+        signers: memCollection(),
         pendingTxs: memCollection(),
         settings: { get: async () => null, put: async () => {} },
     };

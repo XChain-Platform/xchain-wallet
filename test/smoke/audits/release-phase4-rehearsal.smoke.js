@@ -35,9 +35,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -45,6 +47,7 @@ import {
     gateFallbackMismatch, LIB_SH_DEPENDENCIES, PIN_FORMAT, PIN_PATH, pinPathFiles, probe, probeEnv, scopeMismatch,
     signingPathFiles, STEPS, timeoutFromArgs, uncoveredByPin,
 } from '../../../tools/release/phase4-rehearsal.mjs';
+import { mirrorInput, SIGNING_OUTPUTS } from '../../../tools/release/probe-mirror.mjs';
 
 assert.ok(existsSync(PIN_PATH),
     `no Phase 4 rehearsal pin at ${PIN_PATH}. Nothing would record which commit the signing path was `
@@ -268,6 +271,103 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
     for (const output of [sigRefused, launchFailed, hostBlocked, gpgAfterGates, ...devMockRefusals,
         ...earlyRefusals.map(([out]) => out)]) {
         assert.ok(STEPS.includes(classify(output)), 'classify returned a step STEPS does not list');
+    }
+}
+
+// xr_lane_scope's own refusals are the lane-scope step failing, so only dev-mock-gate was reached. The same
+// wording from xr_check_shipped_lanes, after lane scope passed, or on a run with no lane, is a different step.
+{
+    const scopeRow = (what) => `release/lib.sh: /repo/tools/release/shipped-lanes.txt: lane 'android' ${what}\n`;
+    const partial = 'sign.sh: PARTIAL release - gating against lane(s): android\n  scope: android-*.apk\n';
+    const status = scopeRow("declares status '<missing>'; expected SHIPPED or NOT-SHIPPED.");
+    const feed = scopeRow("declares feed '<missing>'; expected store direct.");
+    const noGlob = scopeRow('declares no artifact glob.');
+    const claimNone = 'release/lib.sh: the requested lane(s) claim no artifact globs: android\n';
+    const ran = 'sign.sh: running pre-sign dev-mock gate against /tmp/stage ...\n';
+    for (const refusal of [status, feed, noGlob, claimNone]) {
+        assert.equal(classify(ran + refusal, { lane: 'android' }), 'dev-mock-gate',
+            `xr_lane_scope refused, so lane scope did not pass: ${refusal.trim()}`);
+        assert.equal(firstRefusal(ran + refusal), refusal.trim(), 'the blocker is the lane-scope refusal line');
+        assert.notEqual(classify(ran + partial + refusal, { lane: 'android' }), 'dev-mock-gate',
+            'a refusal printed after the PARTIAL line came from a later step');
+    }
+    for (const later of [status, feed]) {
+        assert.equal(classify(ran + later), 'lane-scope', 'a full release never calls xr_lane_scope');
+        assert.equal(classify(ran + partial + later, { lane: 'android' }), 'lane-scope');
+    }
+    for (const gate of ['/tmp/stage/RELEASE_HASHES.txt', '/tmp/stage/RELEASE_HASHES.txt.asc']) {
+        assert.equal(classify(`${ran}sign.sh: ${gate} already exists. Pass --force to overwrite.\n`), 'dev-mock-gate',
+            'an existing manifest or signature is refused after the dev-mock gate and before lane scope');
+    }
+    const walletRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const signSrc = readFileSync(join(walletRoot, 'tools', 'release', 'sign.sh'), 'utf8');
+    const libSrc = readFileSync(join(walletRoot, 'tools', 'release', 'lib.sh'), 'utf8');
+    for (const literal of ['echo "sign.sh: PARTIAL release - gating against lane(s): $COVERAGE_LANES"',
+        'echo "sign.sh: $MANIFEST already exists. Pass --force to overwrite."',
+        'echo "sign.sh: $SIG already exists. Pass --force to overwrite."']) {
+        assert.ok(signSrc.includes(literal), `sign.sh no longer prints ${literal}; update classify() with it`);
+    }
+    for (const literal of ['echo "release/lib.sh: $lanes: lane \'$lane\' declares status"',
+        'echo "release/lib.sh: $lanes: lane \'$lane\' declares feed"',
+        'echo "release/lib.sh: $lanes: lane \'$lane\' declares no artifact glob." >&2',
+        'echo "release/lib.sh: the requested lane(s) claim no artifact globs: ${want[*]}"']) {
+        assert.ok(libSrc.includes(literal), `lib.sh no longer carries ${literal}; update classify() and these fixtures`);
+    }
+}
+
+// The probe runs sign.sh against a copy of the input, so it leaves the operator's directory byte-identical.
+{
+    const snapshot = (dir) => readdirSync(dir, { recursive: true }).sort().map((p) => {
+        const full = join(dir, p);
+        const st = statSync(full);
+        return `${p}:${st.isDirectory() ? 'dir' : createHash('sha256').update(readFileSync(full)).digest('hex')}:${st.mode}`;
+    });
+    const parent = mkdtempSync(join(tmpdir(), 'phase4-mirror-'));
+    const input = join(parent, 'input');
+    try {
+        mkdirSync(join(input, 'records'), { recursive: true });
+        writeFileSync(join(input, 'a.zip'), 'artifact');
+        writeFileSync(join(input, 'records', 'PROVENANCE.txt'), 'provenance');
+        for (const name of SIGNING_OUTPUTS) writeFileSync(join(input, name), 'previous');
+        const before = snapshot(input);
+
+        const mirror = mirrorInput(input, parent);
+        assert.ok(mirror.dir.startsWith(`${realpathSync(parent)}${sep}`) || mirror.dir.startsWith(`${parent}${sep}`),
+            'an input inside the repo is mirrored beside it, where sign.sh\'s clean-tree check sees the copy too');
+        assert.equal(readFileSync(join(mirror.dir, 'records', 'PROVENANCE.txt'), 'utf8'), 'provenance',
+            'the copy holds subdirectories, which the ceremony-record gate reads');
+        for (const name of SIGNING_OUTPUTS) assert.ok(!existsSync(join(mirror.dir, name)), `${name} must not be copied`);
+        assert.notEqual(statSync(join(mirror.dir, 'a.zip')).ino, statSync(join(input, 'a.zip')).ino,
+            'a hardlinked copy would let a write through it reach the original');
+        writeFileSync(join(mirror.dir, 'a.zip'), 'overwritten in place');
+        writeFileSync(join(mirror.dir, 'RELEASE_HASHES.txt'), 'new manifest');
+        assert.deepEqual(snapshot(input), before, 'a write into the copy reached the operator\'s directory');
+        assert.equal(mirror.restore(`x ${mirror.dir}/a.zip y ${realpathSync(mirror.dir)}/b`),
+            `x ${resolve(input)}/a.zip y ${resolve(input)}/b`, 'the copy\'s path must not leak into what is returned');
+        mirror.cleanup();
+        assert.ok(!existsSync(mirror.dir), 'cleanup must remove the copy');
+        assert.equal(mirrorInput(join(parent, 'gone'), parent), null, 'a missing input is left for sign.sh to refuse');
+
+        // A stand-in for sign.sh that does what the real one does at the manifest step: write into its --input.
+        const stub = join(parent, 'sign-stub.sh');
+        writeFileSync(stub, [
+            'input=""',
+            'while [ "$#" -gt 0 ]; do [ "$1" = --input ] && input="$2"; shift; done',
+            'echo "sign.sh: hashing artifacts in $input ..." >&2',
+            'echo manifest > "$input/RELEASE_HASHES.txt"',
+            'echo "gpg: signing failed: No secret key in $input" >&2',
+            'exit 2',
+            '',
+        ].join('\n'));
+        const r = probe({ repo: parent, tag: 'v0.0.0', input, signSh: stub, env: { XCHAIN_RELEASE_GPG_KEY: 'K' } });
+        assert.equal(r.reached, 'manifest-written', 'the stand-in must reach its write for this check to mean anything');
+        assert.equal(r.blocker, `gpg: signing failed: No secret key in ${resolve(input)}`,
+            'the blocker names the operator\'s input, not the copy');
+        assert.deepEqual(snapshot(input), before, 'a probe changed the operator\'s input directory');
+        assert.deepEqual(readdirSync(parent).sort(), ['input', 'sign-stub.sh'], 'a probe left its copy behind');
+        assert.doesNotMatch(`${r.output}${r.blocker}`, /phase4-probe-/, 'the copy\'s path leaked into the result');
+    } finally {
+        rmSync(parent, { recursive: true, force: true });
     }
 }
 

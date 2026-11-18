@@ -26,6 +26,7 @@
 // Separating "which kind?" from "build it" keeps this helper pure
 // and testable. Callers supply their own transport factory.
 
+import { isDeviceAddressSource, isDeviceSignerKind } from '../schemas/constants.js';
 import { RemoteSigner } from '../signers/RemoteSigner.js';
 import { getSignerRecord } from './registerSigner.js';
 
@@ -83,7 +84,7 @@ export async function resolveSigner({ vault, address }) {
     if (source === 'hd' || source === 'imported-wif') {
         return { kind: 'software', address };
     }
-    if (source === 'trezor' || source === 'ledger') {
+    if (isDeviceAddressSource(source)) {
         if (!address.signerId) {
             throw new SignerResolutionError(
                 `resolveSigner: address "${address.address}" has source="${source}" but no signerId`,
@@ -150,7 +151,7 @@ export async function resolveSigner({ vault, address }) {
  * @returns {RemoteSigner}
  */
 export function buildRemoteSigner(descriptor, transport) {
-    if (!descriptor || (descriptor.kind !== 'trezor' && descriptor.kind !== 'ledger')) {
+    if (!descriptor || !isDeviceSignerKind(descriptor.kind)) {
         throw new SignerResolutionError(
             `buildRemoteSigner: descriptor must be HW (got kind="${descriptor?.kind}")`,
         );

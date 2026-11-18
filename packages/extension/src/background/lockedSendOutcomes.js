@@ -117,7 +117,7 @@ const PRE_BROADCAST = new Set(['composing', 'awaiting-signature', 'signed']);
  * a later write landed). A commit-landed action never retires as failed.
  *
  * @param {LockedSendOutcome} entry
- * @param {{ status?: string, txid?: string|null }} record
+ * @param {{ status?: string, txid?: string|null, revealTxHex?: string|null }} record
  * @returns {object|null}
  */
 export function finishPatchFor(entry, record) {
@@ -132,11 +132,19 @@ export function finishPatchFor(entry, record) {
     }
     if (entry.kind === 'queued') {
         if (!PRE_BROADCAST.has(status) && status !== 'broadcasting') return null;
+        const revealTxHex = typeof record?.revealTxHex === 'string' && record.revealTxHex
+            ? record.revealTxHex
+            : null;
         return {
             status: 'queued',
             txid: entry.txid ?? record.txid ?? null,
             ...(entry.commitLanded === true
-                ? { commitLanded: true, commitTxid: entry.commitTxid ?? null }
+                ? {
+                    commitLanded: true,
+                    commitTxid: entry.commitTxid ?? null,
+                    // A commit-landed queued record carries the reveal as txHex.
+                    ...(revealTxHex ? { txHex: revealTxHex } : {}),
+                }
                 : {}),
         };
     }

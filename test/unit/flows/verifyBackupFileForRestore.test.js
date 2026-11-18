@@ -53,6 +53,7 @@ async function backupFile({ walletPassword = WALLET_PASSWORD } = {}) {
         addresses: collection(),
         contacts: collection(),
         connectedSites: collection(),
+        signers: collection(),
         pendingTxs: collection(),
         settings: { get: async () => null, put: async () => {} },
     };

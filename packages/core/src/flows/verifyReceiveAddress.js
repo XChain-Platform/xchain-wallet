@@ -26,6 +26,7 @@
 // calls); the PRIMARY protection is the human comparing the device screen
 // to the address the wallet shows. The caller must surface both.
 
+import { isDeviceAddressSource } from '../schemas/constants.js';
 export class HardwareAddressMismatchError extends Error {
     /**
      * @param {{ expected: string, deviceAddress: string, path?: string }} info
@@ -106,7 +107,7 @@ export async function verifyReceiveAddress({
     if (!record) {
         throw new Error(`verifyReceiveAddress: no address record "${addressId}"`);
     }
-    if (record.source !== 'trezor' && record.source !== 'ledger') {
+    if (!isDeviceAddressSource(record.source)) {
         throw new NotHardwareAddressError(record.source);
     }
 

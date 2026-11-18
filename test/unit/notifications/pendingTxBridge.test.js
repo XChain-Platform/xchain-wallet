@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import {
     getBroadcastTxids,
     markPendingTxIndexed,
+    stampPendingTxAdsBooking,
 } from '../../../packages/core/src/notifications/pendingTxBridge.js';
 
 // Minimal in-memory stand-in for vault.pendingTxs (list / findBy / put).
@@ -20,6 +21,10 @@ function makeVault(rows) {
     return {
         pendingTxs: {
             async list() { return store.map((r) => ({ ...r })); },
+            async get(id) {
+                const row = store.find((r) => r.id === id);
+                return row ? { ...row } : null;
+            },
             async findBy(field, value) {
                 return store.filter((r) => r[field] === value).map((r) => ({ ...r }));
             },
@@ -65,6 +70,122 @@ describe('markPendingTxIndexed', () => {
         const vault = makeVault([{ id: '1', txid: 'a', status: 'indexed', confirmedAt: 'x' }]);
         expect(await markPendingTxIndexed(vault, 'a')).toBe(false);
         expect(await markPendingTxIndexed(vault, 'nope')).toBe(false);
+    });
+
+    it('restores a booked payout once when a donation-free replacement confirms', async () => {
+        const vault = makeVault([
+            {
+                id: 'original', txid: 'o', status: 'rbf-replaced', confirmedAt: null,
+                adsBooking: {
+                    id: 'original', fiat: '25', currency: 'USD', paid: true, booked: true,
+                },
+            },
+            {
+                id: 'cancel', txid: 'c', status: 'broadcast', confirmedAt: null,
+                adsBooking: {
+                    id: 'original', fiat: '25', currency: 'USD', paid: false, booked: false,
+                },
+            },
+        ]);
+        let settings = {
+            fiatCurrency: 'USD',
+            ads: {
+                perTransaction: '1', sendAt: '25', queued: '1', donated: '25',
+                donationCount: 1, currency: 'USD', recipient: 'protocol',
+            },
+        };
+        vault.settings = {
+            get: async () => settings,
+            put: async (next) => { settings = next; },
+        };
+
+        expect(await markPendingTxIndexed(vault, 'c')).toBe(true);
+        expect(settings.ads).toMatchObject({ queued: '26', donated: '0', donationCount: 0 });
+        expect(vault._store.find((row) => row.id === 'original').adsBooking.reversed).toBe(true);
+        expect(await markPendingTxIndexed(vault, 'c')).toBe(false);
+        expect(settings.ads).toMatchObject({ queued: '26', donated: '0', donationCount: 0 });
+    });
+
+    it('does not reverse a provisional payout whose accounting write failed', async () => {
+        const booking = {
+            id: 'original', fiat: '25', currency: 'USD', paid: true, booked: false,
+        };
+        const vault = makeVault([
+            { id: 'original', txid: 'o', status: 'rbf-replaced', adsBooking: booking },
+            {
+                id: 'cancel', txid: 'c', status: 'broadcast',
+                adsBooking: { ...booking, paid: false },
+            },
+        ]);
+        let settings = {
+            fiatCurrency: 'USD',
+            ads: {
+                perTransaction: '1', sendAt: '25', queued: '25', donated: '0',
+                donationCount: 0, currency: 'USD', recipient: 'protocol',
+            },
+        };
+        vault.settings = {
+            get: async () => settings,
+            put: async (next) => { settings = next; },
+        };
+
+        expect(await markPendingTxIndexed(vault, 'c')).toBe(true);
+        expect(settings.ads).toMatchObject({ queued: '25', donated: '0', donationCount: 0 });
+    });
+
+    it('does not reverse when the transaction that paid the payout confirms', async () => {
+        const booking = {
+            id: 'original', fiat: '25', currency: 'USD', paid: true, booked: true,
+        };
+        const vault = makeVault([
+            { id: 'original', txid: 'o', status: 'broadcast', adsBooking: booking },
+        ]);
+        let settings = {
+            ads: {
+                perTransaction: '1', sendAt: '25', queued: '1', donated: '25',
+                donationCount: 1, currency: 'USD', recipient: 'protocol',
+            },
+        };
+        vault.settings = {
+            get: async () => settings,
+            put: async (next) => { settings = next; },
+        };
+
+        expect(await markPendingTxIndexed(vault, 'o')).toBe(true);
+        expect(settings.ads).toMatchObject({ queued: '1', donated: '25', donationCount: 1 });
+        expect(vault._store[0].adsBooking.reversed).toBeUndefined();
+    });
+
+    it('keeps confirmation indexed when the reversal write fails', async () => {
+        const booking = {
+            id: 'original', fiat: '25', currency: 'USD', paid: true, booked: true,
+        };
+        const vault = makeVault([
+            { id: 'original', txid: 'o', status: 'rbf-replaced', adsBooking: booking },
+            { id: 'cancel', txid: 'c', status: 'broadcast', adsBooking: { ...booking, paid: false } },
+        ]);
+        vault.settings = {
+            get: async () => ({
+                ads: {
+                    perTransaction: '1', sendAt: '25', queued: '1', donated: '25',
+                    donationCount: 1, currency: 'USD', recipient: 'protocol',
+                },
+            }),
+            put: async () => { throw new Error('settings unavailable'); },
+        };
+
+        await expect(markPendingTxIndexed(vault, 'c')).resolves.toBe(true);
+        expect(vault._store.find((row) => row.id === 'cancel').status).toBe('indexed');
+        expect(vault._store.find((row) => row.id === 'original').adsBooking.reversed).toBe(true);
+    });
+
+    it('stamps a booking without reviving an indexed record', async () => {
+        const vault = makeVault([{ id: '1', txid: 'a', status: 'indexed', confirmedAt: 'x' }]);
+        expect(await stampPendingTxAdsBooking(vault, '1', { fiat: '25', currency: 'USD' })).toBe(true);
+        expect(vault._store[0]).toMatchObject({
+            status: 'indexed',
+            adsBooking: { id: '1', fiat: '25', currency: 'USD', paid: true, booked: true },
+        });
     });
 });
 

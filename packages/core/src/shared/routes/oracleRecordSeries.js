@@ -61,6 +61,18 @@ export function orderedMarkets(markets) {
 }
 
 /**
+ * Every market row the explorer lists for this address: the markets that
+ * opened plus the rejected creates, which the list still carries with an
+ * invalid status. The record's headline excludes the rejected ones, so a
+ * comparison with the loaded page needs both.
+ *
+ * @returns {number}
+ */
+export function listedMarketCount(record) {
+    return num(record?.total_feeds) + num(record?.rejected_feeds);
+}
+
+/**
  * The month this address opened its first market ("Jul 2026"), only when
  * the loaded page holds every market the record counts; otherwise the oldest
  * may be missing and the month would overstate how new the oracle is.
@@ -69,7 +81,7 @@ export function orderedMarkets(markets) {
  */
 export function sinceMonthText(record, markets) {
     const rows = Array.isArray(markets) ? markets : [];
-    if (rows.length === 0 || rows.length < num(record?.total_feeds)) return null;
+    if (rows.length === 0 || rows.length < listedMarketCount(record)) return null;
     let first = Infinity;
     for (const row of rows) {
         const created = secondsOf(row?.timestamp);

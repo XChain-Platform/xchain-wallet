@@ -107,6 +107,9 @@ export const CONFIRMED_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  * @property {string | null} [rbfReplacesPendingTxId]  on a fee-bump replacement, the
  *          id of the original PendingTx it evicts, so a queue rebuilt from the vault
  *          can retire that original. Additive and undefined-tolerant
+ * @property {{id: string, fiat: string, currency: string, paid: boolean, booked: boolean, reversed?: boolean} | null} [adsBooking]
+ *          the donation payout booked for this replacement family. `paid`
+ *          describes whether this record's own outputs still carry it.
  */
 
 /**
@@ -288,6 +291,20 @@ export function validatePendingTx(record) {
         r.rbfReplacesPendingTxId === undefined || r.rbfReplacesPendingTxId === null
             || isNonEmptyString(r.rbfReplacesPendingTxId),
         'must be null or a non-empty string',
+    );
+    check(
+        errors,
+        'adsBooking',
+        r.adsBooking === undefined || r.adsBooking === null || (
+            isPlainObject(r.adsBooking)
+            && isNonEmptyString(r.adsBooking.id)
+            && typeof r.adsBooking.fiat === 'string' && /^\d+(\.\d+)?$/.test(r.adsBooking.fiat)
+            && isNonEmptyString(r.adsBooking.currency)
+            && typeof r.adsBooking.paid === 'boolean'
+            && typeof r.adsBooking.booked === 'boolean'
+            && (r.adsBooking.reversed === undefined || typeof r.adsBooking.reversed === 'boolean')
+        ),
+        'must be null or a donation booking stamp',
     );
     return result(errors);
 }

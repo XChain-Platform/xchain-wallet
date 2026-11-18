@@ -52,13 +52,14 @@ function memSettings(initial = null) {
     };
 }
 
-function makeVault({ wallets = [], accounts = [], addresses = [], contacts = [], connectedSites = [], pendingTxs = [], settings = null } = {}) {
+function makeVault({ wallets = [], accounts = [], addresses = [], contacts = [], connectedSites = [], signers = [], pendingTxs = [], settings = null } = {}) {
     return {
         wallets: memCollection(wallets),
         accounts: memCollection(accounts),
         addresses: memCollection(addresses),
         contacts: memCollection(contacts),
         connectedSites: memCollection(connectedSites),
+        signers: memCollection(signers),
         pendingTxs: memCollection(pendingTxs),
         settings: memSettings(settings),
     };
@@ -162,6 +163,32 @@ describe('integration/flows/backup-add-mode', () => {
         expect(first.walletId).not.toBe(second.walletId);
         const wallets = await targetVault.wallets.list();
         expect(wallets).toHaveLength(2);
+    });
+
+    it('remaps active-address overrides and drops stale address ids', async () => {
+        const account = await sourceVault.accounts.get('acc-src');
+        account.activeAddressByChainId = {
+            'bitcoin-mainnet': 'addr-derived-1',
+            'litecoin-mainnet': 'addr-imp-src',
+            'dogecoin-mainnet': 'missing-address',
+        };
+        await sourceVault.accounts.put(account);
+        const next = await exportBackupFile({
+            vault: sourceVault, walletId: 'src', password, kdfParams: KDF_PARAMS,
+        });
+        const targetVault = makeVault();
+        const restored = await importBackupFile({
+            vault: targetVault, fileContent: next.fileContent, password, mode: 'add',
+        });
+        const [restoredAccount] = (await targetVault.accounts.list())
+            .filter((row) => row.walletId === restored.walletId);
+        const restoredAddresses = await targetVault.addresses.list();
+        const byAddress = new Map(restoredAddresses.map((row) => [row.address, row.id]));
+
+        expect(restoredAccount.activeAddressByChainId).toEqual({
+            'bitcoin-mainnet': byAddress.get('bc1qaddr-derived-1'),
+            'litecoin-mainnet': byAddress.get('bc1qaddr-imp-src'),
+        });
     });
 
     it('fresh mode keeps the original wallet id (default behavior unchanged)', async () => {

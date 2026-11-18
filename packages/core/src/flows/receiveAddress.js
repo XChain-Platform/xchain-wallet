@@ -19,7 +19,11 @@
 // receive address a second time.
 
 import { createAddress } from '../schemas/address.js';
-import { addressSourceForSignerKind } from '../schemas/constants.js';
+import {
+    addressSourceForSignerKind,
+    isDeviceAddressSource,
+    isDeviceSignerKind,
+} from '../schemas/constants.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
 import { unlockWallet } from './unlockWallet.js';
 import { hardwareWalletRecord, refuseHardwareWallet } from './hardwareWallet.js';
@@ -231,7 +235,7 @@ async function deriveReceiveAddress({
         // external index space per account, so a Trezor account keeps
         // allocating index+1 instead of colliding at 0. imported-wif /
         // watch-only have a null derivationPath and drop out below.
-        if (a.source !== 'hd' && a.source !== 'trezor' && a.source !== 'ledger') continue;
+        if (a.source !== 'hd' && !isDeviceAddressSource(a.source)) continue;
         if (typeof a.derivationPath !== 'string') continue;
         const parts = a.derivationPath.split('/');
         // BIP44-style path: m / purpose' / coin' / account' / change / index
@@ -261,7 +265,7 @@ async function deriveReceiveAddress({
     const ownsSigner = !providedSigner;
     const signerKind = signer.kind;
 
-    const isHardware = signerKind === 'trezor' || signerKind === 'ledger';
+    const isHardware = isDeviceSignerKind(signerKind);
     try {
         const addressSource = addressSourceForSignerKind(signerKind);
         let targetIndex = derivationIndex;
