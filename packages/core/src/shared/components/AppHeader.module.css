@@ -62,12 +62,6 @@
     display: block;
 }
 
-@media (max-height: 800px) {
-    :global([data-xc-rail='shown']) .bar {
-        padding-block: var(--xc-space-1);
-    }
-}
-
 /* Short landscape screens keep the persistent controls reachable while
    returning vertical space to the active route. */
 @media (orientation: landscape) and (max-height: 480px) and (min-aspect-ratio: 3/2) {

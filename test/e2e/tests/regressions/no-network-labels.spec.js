@@ -165,28 +165,6 @@ async function expectCleanShell(page, label, options) {
     await expectCompactSingleRowHeader(page, label);
 }
 
-async function expectDesktopSideMenuFits(page, label) {
-    const nav = page.getByRole('navigation', { name: 'Primary navigation' });
-    await expect(nav).toBeVisible();
-    const geometry = await nav.evaluate((element) => {
-        const navBox = element.getBoundingClientRect();
-        const lockBox = element.querySelector('[data-xc-lock-row]')?.getBoundingClientRect();
-        return {
-            clientHeight: element.clientHeight,
-            scrollHeight: element.scrollHeight,
-            scrollTop: element.scrollTop,
-            lockBottom: lockBox?.bottom ?? null,
-            navBottom: navBox.bottom,
-        };
-    });
-    expect(geometry.scrollHeight, `${label}: side menu needs vertical scrolling`)
-        .toBeLessThanOrEqual(geometry.clientHeight + 1);
-    expect(geometry.scrollTop, `${label}: side menu is not at its natural top`).toBe(0);
-    expect(geometry.lockBottom, `${label}: Lock wallet has no measurable box`).not.toBeNull();
-    expect(geometry.lockBottom, `${label}: Lock wallet is below the side menu fold`)
-        .toBeLessThanOrEqual(geometry.navBottom + 1);
-}
-
 test('a regtest demo wallet keeps network state and demo status out of the shell', async ({ page }) => {
     test.slow();
     await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
@@ -228,10 +206,4 @@ test('a regtest demo wallet keeps network state and demo status out of the shell
             await backToSettingsList(page);
         });
     }
-});
-
-test('the desktop side menu fits 1280x800 without scrolling', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
-    await expectDesktopSideMenuFits(page, 'side menu at 1280x800');
 });
