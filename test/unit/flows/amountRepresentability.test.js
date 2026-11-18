@@ -79,13 +79,11 @@ describe.skipIf(!installed)('settleAmountRepresentability', () => {
         expect(preflightCheckState(settled)).toBe(S.PARTIAL);
     });
 
-    it('drops the item beside MINT_ADDRESS_HEADROOM and leaves only the settle-time gap', async () => {
+    it('drops the item beside MINT_ADDRESS_HEADROOM, leaving the blue settle-time note', async () => {
         const headroom = { check: 'MINT_ADDRESS_HEADROOM', reason: 'server-side only' };
         const settled = await settle(reportWith([AMOUNT_ITEM, headroom]), 'MINT|0|XCP|1');
         expect(settled.unverified).toEqual([headroom]);
-        // settleChecks where that state exists on this base, partial before it lands.
-        const expected = S.SETTLE_CHECKS ?? S.PARTIAL;
-        expect(preflightCheckState(settled)).toBe(expected);
+        expect(preflightCheckState(settled)).toBe(S.SETTLE_CHECKS);
     });
 
     it('judges each amount against its own tick, DIVIDEND against the paid tick', async () => {
@@ -166,7 +164,7 @@ describe.skipIf(!engine)('settleAmountRepresentability on the SDK report', () =>
         expect(report.verdict).toBe('pass');
         expect(checks(report)).toEqual(['AMOUNT_REPRESENTABILITY', 'MINT_ADDRESS_HEADROOM']);
         expect(checks(settled)).toEqual(['MINT_ADDRESS_HEADROOM']);
-        expect(preflightCheckState(settled)).toBe(S.SETTLE_CHECKS ?? S.PARTIAL);
+        expect(preflightCheckState(settled)).toBe(S.SETTLE_CHECKS);
     });
 
     it('drops the item from a mainnet send; its server-side gaps keep it partial', async () => {
