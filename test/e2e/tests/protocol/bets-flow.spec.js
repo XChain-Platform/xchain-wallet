@@ -289,7 +289,8 @@ for (const viewport of VIEWPORTS) {
             .toBeVisible();
         await expectScreenLayout(page, `${viewport.name} feed detail`);
 
-        await page.getByRole('button', { name: /^Back/ }).click();
+        // Wide screens show the detail beside the list, so only phones have a Back.
+        if (viewport.name === 'phone') await page.getByRole('button', { name: /^Back/ }).click();
         await expect(page.getByRole('heading', { name: 'Prediction Markets' })).toBeVisible();
         await openCreateReview(page);
         await expectScreenLayout(page, `${viewport.name} create market`);
