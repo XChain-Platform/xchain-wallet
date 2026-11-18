@@ -84,36 +84,34 @@ async function pickersIfAny(page, form) {
     return readNames(buttons);
 }
 
+// The name a screen reader reads: the control's own label, or, for a select
+// whose field label sits outside it, "<field label>: <selection>".
 async function readNames(buttons) {
-    return Promise.all((await buttons.all()).map(async (b) => ({
-        name: (await b.getAttribute('aria-label'))
-            || (await b.textContent() || '').trim(),
-    })));
+    return buttons.evaluateAll((els) => els.map((b) => {
+        const own = b.getAttribute('aria-label');
+        if (own) return { name: own };
+        const text = (b.textContent || '').trim();
+        const label = (b.labels && b.labels[0] ? b.labels[0].textContent : '').trim();
+        return { name: label ? `${label}: ${text}` : text };
+    }));
 }
 
 test.describe('a11y: chip pickers name the field they answer for', () => {
     test('a cross-chain swap distinguishes its two chain pickers', async ({ page }) => {
         await createWallet(page, { password: PASSWORD });
-        await gotoPalette(page, 'Cross-chain swap');
+        await gotoPalette(page, 'Cross-chain swap', 'Cross-Chain Swap', 'Cross-chain swap');
 
-        const found = await pickers(page, 'Cross-chain swap');
-        const names = found.map((p) => p.name);
-
-        // The specific pair this defect was found for. Before the fix both of
-        // these announced as the chain they were showing, so a screen reader
-        // user could not tell which side of the swap they were editing.
-        expect(names.some((n) => /^Give network:/.test(n)),
-            `no picker announced itself as the give-chain field; saw ${JSON.stringify(names)}`)
-            .toBe(true);
-        expect(names.some((n) => /^Get network:/.test(n)),
-            `no picker announced itself as the get-chain field; saw ${JSON.stringify(names)}`)
-            .toBe(true);
+        // The swap's two sides are token pickers, one per side. Each must say
+        // which side it answers for, or a screen reader user cannot tell them apart.
+        const form = page.getByRole('form', { name: 'Cross-chain swap', exact: true });
+        const give = form.getByRole('button', { name: /^Give token:/ });
+        const get = form.getByRole('button', { name: /^Get token:/ });
+        await expect(give, 'no picker announced itself as the give-side field').toBeVisible();
+        await expect(get, 'no picker announced itself as the get-side field').toBeVisible();
 
         // And they must be DISTINCT, which is the whole point: two identical
         // names is the bug, whatever those names happen to be.
-        const give = names.find((n) => /^Give network:/.test(n));
-        const get = names.find((n) => /^Get network:/.test(n));
-        expect(give).not.toBe(get);
+        expect(await give.getAttribute('aria-label')).not.toBe(await get.getAttribute('aria-label'));
     });
 
     test('no picker anywhere announces only its selection', async ({ page }) => {
@@ -130,10 +128,10 @@ test.describe('a11y: chip pickers name the field they answer for', () => {
         // menu row's label, and a wrong title fails as "no palette command
         // matching", not as a picker problem.
         const routes = [
-            ['Cross-chain swap', 'Cross-chain swap', 'Cross-chain swap'],
-            ['Airdrop', 'Airdrop tokens', 'Token airdrop'],
-            ['Sign message', 'Sign message', 'Sign message'],
-            ['Verify a signature', 'Verify signature', 'Verify signature'],
+            ['Cross-chain swap', 'Cross-Chain Swap', 'Cross-chain swap'],
+            ['Airdrop', 'Airdrop Tokens', 'Token airdrop'],
+            ['Sign message', 'Sign Message', 'Sign message'],
+            ['Verify signature', 'Verify Signature', 'Verify Signature'],
             ['Send', 'Send', 'Send'],
         ];
         const checked = [];

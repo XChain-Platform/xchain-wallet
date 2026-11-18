@@ -136,8 +136,8 @@ test.describe('onboarding', () => {
         await page.getByLabel('Confirm password', { exact: true }).fill('xxxxxxxxxx');
         await page.getByRole('button', { name: 'Import' }).click();
 
-        await expect(page.getByRole('alert')).toContainText(
-            'Expected 12, 15, 18, 21, or 24 words, got 13.',
-        );
+        // The field error and the form-errors summary both carry the message.
+        await expect(page.getByRole('alert').filter({ hasText: 'Expected 12, 15, 18, 21, or 24 words, got 13.' }).first())
+            .toBeVisible();
     });
 });

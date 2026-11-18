@@ -40,10 +40,11 @@ test('Receive actions are one full-width action list inside the viewport', async
 
             const metrics = await rows.evaluateAll((controls) => {
                 const viewportWidth = document.documentElement.clientWidth;
-                const listBox = controls[0]?.closest('ul')?.getBoundingClientRect();
+                // Rows fill the list inside its border, so measure the inner width.
+                const listBox = controls[0]?.closest('ul');
                 return {
                     viewportWidth,
-                    listWidth: listBox?.width ?? 0,
+                    listWidth: listBox?.clientWidth ?? 0,
                     controls: controls.map((control) => {
                         const box = control.getBoundingClientRect();
                         return {

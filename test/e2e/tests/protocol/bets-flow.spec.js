@@ -8,6 +8,7 @@ import {
     expect,
     test,
 } from '../../fixtures/wallet.js';
+import { searchTokenPicker } from '../../fixtures/fields.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -21,7 +22,7 @@ const VIEWPORTS = [
     { name: 'desktop', width: 1280, height: 800 },
 ];
 
-// Betting is not a nav destination; it opens from the wallet menu.
+// Prediction markets opens from the wallet menu.
 async function gotoPalette(page, title) {
     await page.keyboard.press('ControlOrMeta+k');
     const dialog = page.getByRole('dialog', { name: 'Wallet menu' });
@@ -254,17 +255,19 @@ async function openCreateReview(page) {
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Open a market' })).toBeVisible();
 
-    await page.getByRole('button', { name: /^Token bets are placed in:/ }).click();
-    await expect(page.getByRole('heading', { name: 'Token bets are placed in' })).toBeVisible();
+    await page.getByRole('button', { name: /^Token:/ }).click();
+    await searchTokenPicker(page, 'Example');
+    await page.getByRole('button', { name: 'Filter coins and tokens', exact: true }).click();
     await page.getByRole('button', { name: /^Select Example Token on Bitcoin/ }).click();
 
     await page.getByLabel('Question', { exact: true }).fill('Will the XChain release ship this week?');
-    await page.getByLabel('Outcome 0', { exact: true }).fill('Yes');
-    await page.getByLabel('Outcome 1', { exact: true }).fill('No');
-    await page.getByLabel('Purchases Close', { exact: true }).fill(
+    await page.getByLabel('Outcome 1', { exact: true }).fill('Yes');
+    await page.getByLabel('Outcome 2', { exact: true }).fill('No');
+    await page.getByLabel('Closes', { exact: true }).fill(
         new Date(Date.now() + 86_400_000).toISOString().slice(0, 16),
     );
-    await page.getByLabel('Your fee', { exact: true }).fill('2.5');
+    await page.getByRole('button', { name: /^Default Terms/ }).click();
+    await page.getByLabel('Your Fee', { exact: true }).fill('2.5');
     await page.getByLabel('Minimum Purchase', { exact: true }).fill('25');
 }
 
@@ -276,22 +279,23 @@ for (const viewport of VIEWPORTS) {
         await createWallet(page);
         await installBetFixture(page);
 
-        await gotoPalette(page, 'Betting');
-        await expect(page.getByRole('button', { name: new RegExp(`^#${FEED_INDEX}\\b`) }))
+        await gotoPalette(page, 'Prediction markets');
+        await expect(page.getByRole('main').locator(`[data-market-index="${FEED_INDEX}"]`).first())
             .toBeVisible();
         await expectScreenLayout(page, `${viewport.name} bet feeds`);
 
-        await page.getByRole('button', { name: new RegExp(`^#${FEED_INDEX}\\b`) }).click();
+        await page.getByRole('main').locator(`[data-market-index="${FEED_INDEX}"]`).first().click();
         await expect(page.getByRole('heading', { name: 'Will the XChain release ship this week?' }))
             .toBeVisible();
         await expectScreenLayout(page, `${viewport.name} feed detail`);
 
-        await page.getByRole('button', { name: /^Back/ }).click();
-        await expect(page.getByRole('heading', { name: 'Betting' })).toBeVisible();
+        // Wide screens show the detail beside the list, so only phones have a Back.
+        if (viewport.name === 'phone') await page.getByRole('button', { name: /^Back/ }).click();
+        await expect(page.getByRole('heading', { name: 'Prediction Markets' })).toBeVisible();
         await openCreateReview(page);
         await expectScreenLayout(page, `${viewport.name} create market`);
 
-        const reviewButton = page.getByRole('button', { name: 'Open market', exact: true });
+        const reviewButton = page.getByRole('button', { name: 'Open Market', exact: true });
         await reviewButton.scrollIntoViewIfNeeded();
         await reviewButton.click();
         const confirm = page.getByTestId('confirm-modal');
@@ -313,7 +317,7 @@ for (const viewport of VIEWPORTS) {
         await page.keyboard.press('Escape');
         await expect(page.getByRole('heading', { name: 'Open a market' })).toBeVisible();
         await page.getByRole('button', { name: /^Back/ }).click();
-        await expect(page.getByRole('heading', { name: 'Betting' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Prediction Markets' })).toBeVisible();
         // My bets is the All list narrowed to the markets bet in (ruling
         // 2026-11-13): the same card, found by its market number.
         await page.getByRole('tab', { name: 'My predictions', exact: true }).click();
