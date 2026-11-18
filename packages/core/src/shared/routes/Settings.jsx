@@ -505,12 +505,19 @@ export function Settings({
     // close it before the surrounding route.
     useBackHandler(subpageId ? closeSubpage : undefined, false, 'screen');
 
+    // A closed page hands focus back to the row that opened it: the landing's
+    // group row, or the row on the group page Back returned to.
     useEffect(() => {
-        if (subpageId || !pendingFocusRestore.current) return;
+        if (!pendingFocusRestore.current) return;
         const openerId = pendingFocusRestore.current;
         pendingFocusRestore.current = null;
+        const opener = subpageId
+            ? [...document.querySelectorAll('main [data-settings-row-id]')]
+                .find((node) => node.getAttribute('data-settings-row-id') === openerId)
+                ?.querySelector('button')
+            : sectionOpenerRefs.current.get(openerId);
         // The Screen restores the list offset; focusing must not scroll it.
-        sectionOpenerRefs.current.get(openerId)?.focus({ preventScroll: true });
+        opener?.focus({ preventScroll: true });
     }, [subpageId]);
 
     useEffect(() => {
