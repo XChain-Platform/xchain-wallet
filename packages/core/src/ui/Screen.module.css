@@ -89,7 +89,7 @@
     /* A classic scrollbar's lane comes out of the end padding, so rows end on
        the header buttons' line (the gutter less the same 2px optical step).
        Overlay scrollbars measure zero. */
-    padding-inline-end: max(0px, calc(var(--xc-page-gutter) - 2px - var(--xc-frame-scrollbar, 0px)));
+    padding-inline-end: max(0px, calc(var(--xc-page-gutter) - var(--xc-body-end-step, 2px) - var(--xc-frame-scrollbar, 0px)));
     overflow-y: auto;
     overflow-x: hidden;
     /* A press could make native anchoring move a phone list under the pointer.
@@ -168,7 +168,7 @@
         flex: 1 0 220px;
         min-height: 220px;
         /* G80: the full 8px end gutter, less only a classic scrollbar's lane. */
-        padding-inline-end: max(0px, calc(var(--xc-page-gutter) - var(--xc-frame-scrollbar, 0px)));
+        --xc-body-end-step: 0px;
     }
 
     /* A footer row is route content too, so a body followed by one keeps a
