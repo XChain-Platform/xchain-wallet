@@ -322,7 +322,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // lane at all, not a workaround for a wallet problem.
             const nudger = setInterval(() => { mineIfPending(); }, 5_000);
             try {
-                await go.click();
+                await approveConfirm(page, 'starting the chunked run');
                 // ENTERING the lane is what this asserts. Completing all three legs
                 // needs the payer to hold XCHAIN for gas - the first live run landed
                 // a real v4 carrier (chunk_index 0 of total_chunks 2) that indexed
@@ -446,7 +446,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // for is a confirmation only this loop can produce.
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
-                await go.click();
+                await approveConfirm(page, 'the three-leg chunked run');
 
                 // D-124's regression guard, and the only thing the user sees for
                 // several minutes: the progress copy renders during `submitting`,
@@ -630,7 +630,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // guard withholds exactly the confirmations this loop must produce.
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
-                await go.click();
+                await approveConfirm(page, 'the chunked deploy');
                 const done = page.getByText(/Contract published/i);
                 // Counting ANY non-empty alert as a failure is too
                 // broad off Bitcoin: where the native fee is MANDATORY the
@@ -827,7 +827,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
 
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
-                await go.click();
+                await approveConfirm(page, 'the interrupted chunked run');
                 // Wait for the FIRST carrier to be indexed, then pull the rug. It
                 // has to be indexed and not merely broadcast, or the record holds
                 // no action_index and this is a test of the old bug rather than of
@@ -909,7 +909,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
 
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);
             try {
-                await go.click();
+                await approveConfirm(page, 'finishing the chunked run');
                 const done = page.getByText(/Contract published/i);
                 // Counting ANY non-empty alert as a failure is too
                 // broad off Bitcoin: where the native fee is MANDATORY the
