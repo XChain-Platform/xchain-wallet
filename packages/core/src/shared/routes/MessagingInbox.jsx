@@ -702,7 +702,7 @@ export function MessagingInbox({ walletId, activeAccountId, onCompose, onBack, i
                         <Button
                             type="button"
                             variant="secondary"
-                            size="sm"
+                            size="md"
                             icon={<Icon.PlusIcon />}
                             aria-label="New message"
                             title="New message"
