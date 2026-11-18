@@ -38,7 +38,7 @@ async function gotoPalette(page, title) {
     const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
     await palette.getByRole('combobox').fill(title);
-    await palette.getByRole('option', { name: new RegExp(`^${title}\\b`) }).first().click();
+    await palette.getByRole('option', { name: new RegExp(`^${title}\\b`, 'i') }).first().click();
     await expect(palette).toBeHidden();
 }
 
