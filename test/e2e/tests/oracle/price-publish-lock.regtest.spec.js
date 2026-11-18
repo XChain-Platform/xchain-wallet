@@ -265,8 +265,12 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(review, 'the review does not state that a first price prices nothing '
                 + 'for 24 hours')
                 .toContainText('will not price anything for 24 hours');
-            await expect(review, 'the review does not say who currently prices from this oracle')
-                .toContainText(`No open dispensers price ${TICK} from this oracle`);
+            // The review is a fact list: the row label names the consumers and
+            // its value says none are open on a first publish.
+            const affected = review.locator('dt', { hasText: /^Affected dispensers$/ })
+                .locator('xpath=following-sibling::dd[1]');
+            await expect(affected, 'the review does not say who currently prices from this oracle')
+                .toHaveText('None open');
 
             // The password box only renders when the signer is locked. An
             // in-session wallet is already unlocked here, so waiting for it
