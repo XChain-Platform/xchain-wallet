@@ -559,16 +559,15 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('THE CARET: still refused, and that is a decision rather than a defect', async () => {
-            // `createTicker` never inserts a literal `^…` row, so a caret ISSUE
-            // can land valid with a NULL ticker id. The venue prices it all the
-            // same, which is exactly why this is asserted against the venue: it
-            // is the one class where the wallet is deliberately narrower than
-            // the chain, and an unpinned deliberate narrowing is
-            // indistinguishable from an oversight.
+            // The chain refuses a caret ISSUE whose `^<id>` names no existing
+            // token (ISSUE_CARET_TICK_NO_CREATE, armed from genesis on regtest):
+            // a refused ISSUE still interns its ticker, so the id form could
+            // otherwise create a token. The wallet refuses the caret form too,
+            // and both refusals are pinned so a change on either side is seen.
             expect(await chainVerdict(CARET_TICK, source),
-                'the venue no longer prices the caret form, so the reason this class is held '
-                + 'closed may have changed. Re-read issue.js before opening it')
-                .toBe('valid');
+                'the venue no longer refuses a caret ISSUE naming no existing token, so '
+                + 'ISSUE_CARET_TICK_NO_CREATE may have changed. Re-read tick_rules.js')
+                .toBe('invalid: TICK (unknown)');
 
             const verdict = await submitWizardName(page, CARET_TICK);
             expect(verdict.refusedOnGrammar,
@@ -770,7 +769,9 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = await openWizardDetails(page);
             // The fee lane sits in the Fees section, closed until opened.
             await openIssueSection(main, 'Speed and Fees');
-            const xchainSwitch = main.getByRole('switch', { name: /instead of XCHAIN/ });
+            // The lane switch reads "Pay protocol fee in BTC" (the "instead of
+            // XCHAIN" tail was dropped).
+            const xchainSwitch = main.getByRole('switch', { name: /^Pay protocol fee in \S+$/ });
 
             if (NATIVE_FEE_MANDATORY) {
                 await expect(main.getByText(new RegExp(
@@ -893,7 +894,7 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             // it), so this is the lane an ordinary Bitcoin user composes in.
             // The switch sits in the Fees section, closed until opened.
             await openIssueSection(main, 'Speed and Fees');
-            await expect(main.getByRole('switch', { name: /instead of XCHAIN/ })).not.toBeChecked();
+            await expect(main.getByRole('switch', { name: /^Pay protocol fee in \S+$/ })).not.toBeChecked();
             await fieldByLabel(main, 'Ticker').fill(TICK);
             await fieldByLabel(main, 'Max supply').fill(String(SUPPLY));
             await submitTokenWizard(page);

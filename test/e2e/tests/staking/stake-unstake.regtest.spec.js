@@ -318,8 +318,10 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
 
-            const unstakeBtn = page.getByRole('group', { name: 'Stake actions' })
-                .getByRole('button', { name: 'Unstake', exact: true });
+            // The stake's actions are a list of action rows, each named by its
+            // title and description ("Unstake Start the cooldown...").
+            const unstakeBtn = page.getByRole('list', { name: 'Stake actions' })
+                .getByRole('button', { name: /^Unstake\b/ });
             await expect(unstakeBtn).toBeVisible({ timeout: 30_000 });
             await expect(unstakeBtn).toBeEnabled();
             await unstakeBtn.click();
