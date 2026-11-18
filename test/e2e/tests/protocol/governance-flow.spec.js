@@ -39,7 +39,7 @@ const POLL = Object.freeze({
 const FIXTURE_CHAIN = 'bitcoin-mainnet';
 const DELEGATE_ADDRESS = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
 const DEPOSIT = '125.5';
-const NORMAL_FEE = '0.000015 BTC (6 sat/vB)';
+const NORMAL_FEE = '0.000015 BTC';
 
 // Governance is not a nav destination; it opens from the wallet menu.
 async function gotoPalette(page, title) {
@@ -189,6 +189,8 @@ async function chooseGovernanceToken(page) {
     await page.getByRole('main').getByRole('button', { name: /^Governance token:/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Select token' })).toBeVisible();
     await searchTokenPicker(page, 'XCP');
+    // The open filter panel covers the first result row, so collapse it.
+    await page.getByRole('button', { name: 'Filter coins and tokens', exact: true }).click();
     await page.getByRole('button', { name: /^Select Counterparty on Bitcoin\b/ }).click();
     await expect(page.getByRole('button', { name: /^Governance token: XCP on Bitcoin\b/ }))
         .toBeVisible();
@@ -200,6 +202,12 @@ async function expectReviewAtTop(page, heading) {
     const scrollTop = await page.getByRole('main').evaluate((main) => main.scrollTop);
     expect(scrollTop, `${heading}: review opens below the top of its scroll container`)
         .toBeLessThanOrEqual(1);
+}
+
+// Creating a poll and delegating votes share one header menu.
+async function chooseNewAction(page, name) {
+    await page.getByRole('button', { name: 'New poll or delegation', exact: true }).click();
+    await page.getByRole('menuitem', { name }).click();
 }
 
 async function returnToGovernance(page, formHeading) {
@@ -222,36 +230,38 @@ for (const viewport of VIEWPORTS) {
         await expectScreen(page, `${viewport.name} poll list`, 'Governance');
 
         await page.getByRole('button', { name: /Fund the community governance portal/ }).click();
-        await expect(page.getByText(POLL.question, { exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: POLL.question })).toBeVisible();
         // Result, the closed poll's first tab: each final result row's figures.
-        await expect(page.getByText('987654321 weight, 17 voters', { exact: true })).toBeVisible();
+        await expect(page.getByText('987,654,321 weight, 17 voters', { exact: true })).toBeVisible();
         await expectScreen(page, `${viewport.name} poll detail`, 'Poll');
-        await page.getByRole('button', { name: 'Back to previous screen' }).click();
+        // Wide screens show the poll beside the list, so only phones go Back.
+        if (viewport.width < 640) await page.getByRole('button', { name: 'Back to previous screen' }).click();
 
-        await page.getByRole('button', { name: 'Create poll', exact: true }).click();
+        await chooseNewAction(page, /^Create poll/i);
         await expect(page.getByRole('main').getByRole('button', { name: /^Governance token:/ }))
             .toBeVisible();
         await chooseGovernanceToken(page);
         await page.getByLabel('Question', { exact: true }).fill(POLL.question);
         // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
-        await page.getByLabel('Option 0', { exact: true }).fill(POLL.options[0]);
-        await page.getByLabel('Option 1', { exact: true }).fill(POLL.options[1]);
+        await page.getByLabel('Option 1', { exact: true }).fill(POLL.options[0]);
+        await page.getByLabel('Option 2', { exact: true }).fill(POLL.options[1]);
         // Exact, so the field's 'About ...' help tip (U57) is not matched too.
+        await page.getByRole('button', { name: /^Voting\b/ }).click();
         await page.getByLabel('Closes at block', { exact: true }).fill('700100');
-        await page.getByRole('button', { name: 'Advanced (gates + deposit)' }).click();
+        await page.getByRole('button', { name: /^Deposit\b/ }).click();
         await page.getByLabel('Creation deposit (XCHAIN)', { exact: true }).fill(DEPOSIT);
         await expectScreen(page, `${viewport.name} create poll`, 'Create poll');
         await page.getByRole('main').getByRole('button', { name: 'Create Poll', exact: true }).click();
 
-        await expectReviewAtTop(page, 'Review Poll');
-        const pollReview = page.getByRole('form', { name: 'Review poll' });
+        await expectReviewAtTop(page, 'Confirm');
+        const pollReview = page.getByRole('main');
         await expect(pollReview.getByText(`${DEPOSIT} XCHAIN`, { exact: true })).toBeVisible();
         await expect(pollReview.getByText(NORMAL_FEE, { exact: true })).toBeVisible();
-        await expect(pollReview.getByText('XCP', { exact: true })).toBeVisible();
-        await expectScreen(page, `${viewport.name} poll review`, 'Review Poll');
+        await expect(pollReview.getByRole('img', { name: 'XCP on Bitcoin' })).toBeVisible();
+        await expectScreen(page, `${viewport.name} poll review`, 'Confirm');
         await returnToGovernance(page, 'Create Poll');
 
-        await page.getByRole('button', { name: 'Delegate votes', exact: true }).click();
+        await chooseNewAction(page, /^Delegate votes/i);
         await expect(page.getByRole('main').getByRole('button', { name: /^Governance token:/ }))
             .toBeVisible();
         await chooseGovernanceToken(page);
@@ -259,11 +269,11 @@ for (const viewport of VIEWPORTS) {
         await expectScreen(page, `${viewport.name} delegate vote`, 'Delegate Votes');
         await page.getByRole('main').getByRole('button', { name: 'Delegate Votes', exact: true }).click();
 
-        await expectReviewAtTop(page, 'Review Delegate Votes');
-        const delegateReview = page.getByRole('form', { name: 'Review delegate votes' });
+        await expectReviewAtTop(page, 'Confirm');
+        const delegateReview = page.getByRole('main');
         await expect(delegateReview.getByText(NORMAL_FEE, { exact: true })).toBeVisible();
-        await expect(delegateReview.getByText('XCP', { exact: true })).toBeVisible();
-        await expect(delegateReview.getByLabel(DELEGATE_ADDRESS)).toBeVisible();
-        await expectScreen(page, `${viewport.name} delegation review`, 'Review Delegate Votes');
+        await expect(delegateReview.getByRole('img', { name: 'XCP on Bitcoin' })).toBeVisible();
+        await expect(delegateReview.getByLabel(DELEGATE_ADDRESS, { exact: true })).toBeVisible();
+        await expectScreen(page, `${viewport.name} delegation review`, 'Confirm');
     });
 }

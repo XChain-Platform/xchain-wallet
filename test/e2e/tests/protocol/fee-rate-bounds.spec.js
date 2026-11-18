@@ -30,6 +30,12 @@ test('a custom fee rate above the chain maximum is refused on a 360 px compose f
     await page.getByRole('button', { name: 'New message', exact: true }).click();
 
     const main = page.getByRole('main');
+    // The estimate below assumes Bitcoin, so send from the Bitcoin address.
+    await main.getByRole('button', { name: /^From\b/ }).click();
+    await main.getByRole('button', { name: /^Network:/ }).click();
+    await page.getByRole('dialog', { name: 'Network' })
+        .getByRole('button', { name: /^Select Bitcoin\b/ }).first().click();
+    await expect(main.getByRole('button', { name: 'Network: Bitcoin' })).toBeVisible();
     await main.getByLabel('Address', { exact: true }).fill(RECIPIENT);
     await main.getByLabel('Message', { exact: true }).fill('Fee bound check.');
     // The Fees section starts closed; its slider's last stop is Custom, which
