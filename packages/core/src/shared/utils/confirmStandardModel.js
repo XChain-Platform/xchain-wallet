@@ -685,6 +685,11 @@ export function feeFacts(fees) {
  * @property {string} state             'checking', 'oracleFees' or a pre-flight state (pass, notChecked, partial, settleChecks, warn, fail)
  */
 
+// Each unverified check's plain line, once: several codes share a line.
+function uniqueHeadlines(unverified) {
+    return [...new Set(unverified.map((u) => unverifiedText(u).headline))];
+}
+
 /**
  * The status notice, the first thing on the page (G127 revised 2026-11-16).
  * It is green ("Checked: this will go through.") only on the indexer's own
@@ -721,8 +726,8 @@ export function confirmStatus({ report = null, applies = true, loading = false, 
         // The wallet's headline names which limits wait; the SDK's reason text
         // is report-reader wording, so it stays out of this note.
         const settlePoints = [{ key: 'settle-checks', text: t('confirmStandard.settleChecks.body') }];
-        report.unverified.forEach((u, i) => {
-            settlePoints.push({ key: `settle-${i}`, text: unverifiedText(u).headline });
+        uniqueHeadlines(report.unverified).forEach((text, i) => {
+            settlePoints.push({ key: `settle-${i}`, text });
         });
         return {
             tone: 'info',
@@ -782,9 +787,8 @@ export function confirmStatus({ report = null, applies = true, loading = false, 
             points.push({ key: 'partial', text: t('confirmStandard.warning.partialBody') });
         }
         if (report?.restricted) points.push({ key: 'restricted', text: t('confirmStandard.warning.restricted') });
-        (Array.isArray(report?.unverified) ? report.unverified : []).forEach((u, i) => {
-            const { headline, detail } = unverifiedText(u);
-            points.push({ key: `unverified-${i}`, text: headline, detail: detail || null });
+        uniqueHeadlines(Array.isArray(report?.unverified) ? report.unverified : []).forEach((text, i) => {
+            points.push({ key: `unverified-${i}`, text });
         });
     }
     // One short line, never a block (operator 2026-11-16).

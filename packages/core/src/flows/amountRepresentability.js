@@ -10,7 +10,7 @@
 
 // Settles the SDK's AMOUNT_REPRESENTABILITY gap, declared wherever the newer amount rule is unarmed.
 // Drops it only when every amount passes that rule under the SDK's own validator; anything
-// unreadable (unlisted action, batch, token lookup miss, no validator) keeps it.
+// unreadable (ORDER, SWAP, DISPENSER, a batch, a failed token read, no validator) keeps it.
 
 export const AMOUNT_REPRESENTABILITY = 'AMOUNT_REPRESENTABILITY';
 
@@ -22,6 +22,23 @@ const AMOUNT_TICK_FIELD = Object.freeze({
     AIRDROP: 'TICK',
     DIVIDEND: 'DIVIDEND_TICK',
 });
+
+// ISSUE's amount fields, each judged at the token row's decimals, else the wire
+// DECIMALS (xchain-sdk src/preflight/checks/issue/supply_rules.js ISSUE_AMOUNT_FIELDS).
+const ISSUE_AMOUNT_FIELDS = Object.freeze(['MAX_SUPPLY', 'MAX_MINT', 'MINT_SUPPLY',
+    'MINT_ADDRESS_MAX', 'MINT_START_BLOCK', 'MINT_STOP_BLOCK']);
+
+const isBlank = (v) => v === undefined || v === null || v === '';
+
+// An ISSUE's amounts, or null when one is measured against another tick (CALLBACK_AMOUNT).
+function issueAmounts(params) {
+    const tick = typeof params.TICK === 'string' ? params.TICK : '';
+    if (!tick || !isBlank(params.CALLBACK_AMOUNT)) return null;
+    const present = ISSUE_AMOUNT_FIELDS.filter((field) => !isBlank(params[field]));
+    if (present.some((field) => Array.isArray(params[field]))) return null;
+    const wireDecimals = isBlank(params.DECIMALS) ? null : String(params.DECIMALS);
+    return present.map((field) => ({ tick, amount: params[field], wireDecimals }));
+}
 
 /**
  * @typedef {Object} AmountRules
@@ -54,14 +71,17 @@ export function amountRulesFromSdk({ numeric, amountFormat } = {}) {
  * null when the wallet cannot say which amounts the action carries.
  *
  * @param {any} parsed  the SDK decoder's ParsedAction for the composed action string
- * @returns {Array<{ tick: string, amount: unknown }>|null}
+ * @returns {Array<{ tick: string, amount: unknown, wireDecimals?: string|null }>|null}
  */
 export function actionAmounts(parsed) {
-    if (!parsed || parsed.ok !== true || typeof parsed.action !== 'string') return null;
-    if (parsed.commands || String(parsed.version) !== '0') return null;
-    const tickField = AMOUNT_TICK_FIELD[parsed.action.toUpperCase()];
+    if (!parsed || parsed.ok !== true || typeof parsed.action !== 'string' || parsed.commands) return null;
     const params = parsed.params;
-    if (!tickField || !params || typeof params !== 'object') return null;
+    if (!params || typeof params !== 'object') return null;
+    const action = parsed.action.toUpperCase();
+    if (action === 'ISSUE') return issueAmounts(params);
+    if (String(parsed.version) !== '0') return null;
+    const tickField = AMOUNT_TICK_FIELD[action];
+    if (!tickField) return null;
     const ticks = [].concat(params[tickField] ?? []).map((t) => String(t ?? ''));
     const amounts = [].concat(params.AMOUNT ?? []);
     if (ticks.length === 0 || amounts.length === 0) return null;
@@ -97,17 +117,21 @@ export async function settleAmountRepresentability(report, { parsed, rules, toke
     if (!report || !Array.isArray(report.unverified) || !report.unverified.some(isAmountItem)) return report;
     if (!rules || typeof tokenFor !== 'function') return report;
     const legs = actionAmounts(parsed);
-    if (!legs) return report;
+    if (!legs || legs.length === 0) return report;
     try {
         const ticks = [...new Set(legs.map((leg) => leg.tick))];
-        const rows = await Promise.all(ticks.map((tick) => tokenFor(tick)));
+        const rows = await Promise.all(ticks.map((tick) => Promise.resolve().then(() => tokenFor(tick)).catch((err) => {
+            // An absent token is an answer (a new ISSUE), as the SDK reads a 404; any other failure keeps the item.
+            if (err?.code === 'EXPLORER_HTTP_404') return null;
+            throw err;
+        })));
         const decimalsByTick = new Map(ticks.map((tick, i) => {
             const row = tokenRow(rows[i]);
             return [tick, row ? rules.tokenDecimals(row) : null];
         }));
-        for (const { tick, amount } of legs) {
-            const decimals = decimalsByTick.get(tick);
-            if (decimals === null || decimals === undefined) return report;
+        for (const { tick, amount, wireDecimals } of legs) {
+            const decimals = decimalsByTick.get(tick) ?? wireDecimals ?? null;
+            if (decimals === null) return report;
             if (rules.isValidAmountFormatWhere(decimals, amount, true) !== true) return report;
         }
     } catch {

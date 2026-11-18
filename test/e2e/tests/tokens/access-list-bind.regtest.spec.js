@@ -539,8 +539,9 @@ async function expectPermittedSend(page, { source, tick, destination, senderStar
 
     // The dry-run ran the real handler against the bound list and let this
     // destination through. Anything else here means the gate is refusing traffic
-    // it should pass, which is worse than not gating at all.
-    await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'pass');
+    // it should pass, which is worse than not gating at all. The transfer rules a
+    // SEND always declares make an approval the settle-time note (operator 2026-11-18).
+    await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'settleChecks');
     await expect(page.getByTestId('ack-DRYRUN_INVALID')).toHaveCount(0);
 
     const permitted = await waitForIndexedAction(await approveAndGetTxid(page));

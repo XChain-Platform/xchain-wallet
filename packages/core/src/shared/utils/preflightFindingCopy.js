@@ -10,16 +10,19 @@
 
 // Signer-facing copy for the pre-flight warnings and the "Could not verify"
 // list (§5.2.4). The SDK writes both for a report reader, in wire field names
-// and protocol terms; the panel shows that text beneath as the detail and
-// leads with the line below.
+// and protocol terms: a warning shows that text beneath its line as the detail,
+// and an unverified check shows only its line (operator 2026-11-18).
 //
-// Zero dependencies on purpose: the extension approval root renders the
-// panel, and the SDK must stay out of that bundle, so codes are literals.
+// The extension approval root renders the panel and the SDK must stay out of
+// that bundle, so codes are literals and only the i18n store is imported.
 //
 // A headline must be true of EVERY state its code can carry, the rule the
 // panel's notice copy already follows. Several codes are raised by many
 // actions, so those lines stay action-neutral, and rules that bind only past a
 // network upgrade say "may", never "will".
+
+import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/preflightCopy.js';
 
 // The demotion the SDK stamps when the network accepted the action but a local
 // projection over the sender's other unconfirmed actions still flags the balance
@@ -75,86 +78,85 @@ export function warningText(f) {
 
 // Each entry names WHAT was not checked, so it stays true whatever the reason
 // was: a lookup that failed, a rule only the network can judge, or an upgrade
-// whose height the client cannot read. A consequence the signer needs to know
-// before signing stays in the line rather than only in the detail.
-const UNVERIFIED_FALLBACK = 'Other conditions the network checks when this transaction arrives';
+// whose height the client cannot read. Values are i18n keys (locales/en/preflightCopy.js).
+const UNVERIFIED_FALLBACK = 'preflightCopy.unverified.fallback';
 
-export const UNVERIFIED_COPY = Object.freeze({
-    // Per-action notes for actions with no dedicated client checks.
-    SWEEP_STATE: 'Whether your balance covers the fee for this sweep',
-    STAKE_STATE: 'Whether the stake target accepts this stake',
-    UNSTAKE_STATE: 'Whether you have an active stake to withdraw and its waiting period has passed',
-    DELEGATE_STATE: 'Whether you have an active stake to delegate',
-    VOTE_STATE: 'Whether the poll is open, your ballot is valid, and how much your vote counts',
-    COLLECT_STATE: 'Your unclaimed rewards, and whether the pool can pay them',
-    DEPLOY_STATE: 'Whether the contract code is complete and valid, and the gas its setup needs',
-    EXECUTE_STATE: 'The contract\'s state and the gas this call needs. A call that fails still charges its fee.',
-    DEPOSIT_STATE: 'Whether the contract is active and the token\'s rules allow this deposit',
-    WITHDRAW_STATE: 'Whether you may withdraw from this contract and the token\'s rules allow it',
-    COINPAY_STATE: 'Whether the payment request exists, matches this payment, and has not expired',
-    FILE_STATE: 'Ownership and escrow of the gated content',
-    LINK_STATE: 'Whether you own what this link points to',
-    LIST_STATE: 'Who owns this list, and its sharing and size limits',
-    ADDRESS_STATE: 'Whether the contract can be bound to this address',
-    PRICE_STATE: 'Whether this address may publish prices',
-    SLEEP_STATE: 'Ownership, locks and escrow on what this action pauses',
-    LIST_SET_META_FEE: 'Whether this list is shared. Editing a shared list charges an extra fee.',
+// Codes that share a line share its key. A plain object, so the key audit can read it.
+const UNVERIFIED_KEYS = {
+    TOKEN_LOOKUP: 'preflightCopy.unverified.tokenLookup',
+    BALANCE_LOOKUP: 'preflightCopy.unverified.balanceLookup',
+    NATIVE_BALANCE_LOOKUP: 'preflightCopy.unverified.nativeBalanceLookup',
+    SWEEP_STATE: 'preflightCopy.unverified.sweepState',
+    STAKE_STATE: 'preflightCopy.unverified.stakeState',
+    UNSTAKE_STATE: 'preflightCopy.unverified.unstakeState',
+    DELEGATE_STATE: 'preflightCopy.unverified.delegateState',
+    VOTE_STATE: 'preflightCopy.unverified.voteState',
+    COLLECT_STATE: 'preflightCopy.unverified.collectState',
+    DEPLOY_STATE: 'preflightCopy.unverified.deployState',
+    EXECUTE_STATE: 'preflightCopy.unverified.executeState',
+    DEPOSIT_STATE: 'preflightCopy.unverified.depositState',
+    WITHDRAW_STATE: 'preflightCopy.unverified.withdrawState',
+    COINPAY_STATE: 'preflightCopy.unverified.coinpayState',
+    FILE_STATE: 'preflightCopy.unverified.fileState',
+    LINK_STATE: 'preflightCopy.unverified.linkState',
+    LIST_STATE: 'preflightCopy.unverified.listState',
+    ADDRESS_STATE: 'preflightCopy.unverified.addressState',
+    PRICE_STATE: 'preflightCopy.unverified.priceState',
+    SLEEP_STATE: 'preflightCopy.unverified.sleepState',
+    LIST_SET_META_FEE: 'preflightCopy.unverified.listSetMetaFee',
+    BALANCE_INSUFFICIENT: 'preflightCopy.unverified.balanceInsufficient',
+    AMOUNT_FORMAT_INVALID: 'preflightCopy.unverified.amountFormatInvalid',
+    LEG_AMOUNT_CONSOLIDATION: 'preflightCopy.unverified.amountFormatInvalid',
+    AMOUNT_REPRESENTABILITY: 'preflightCopy.unverified.amountRepresentability',
+    AIRDROP_TOTAL_VS_BALANCE: 'preflightCopy.unverified.airdropTotalVsBalance',
+    DIVIDEND_DEBIT_TOTAL: 'preflightCopy.unverified.dividendDebitTotal',
+    SUPPLY_EXCEEDED: 'preflightCopy.unverified.supplyExceeded',
+    MINT_OVER_MAX: 'preflightCopy.unverified.mintOverMax',
+    MINT_ADDRESS_HEADROOM: 'preflightCopy.unverified.mintAddressHeadroom',
+    NOT_OWNER: 'preflightCopy.unverified.notOwner',
+    ISSUE_GAS_TICK: 'preflightCopy.unverified.issueGasTick',
+    ISSUE_TICK_NAMESPACE: 'preflightCopy.unverified.issueTickNamespace',
+    ISSUE_TICK_COIN_PREFIX: 'preflightCopy.unverified.issueTickCoinPrefix',
+    ISSUE_BRIDGE_ACTIVATION: 'preflightCopy.unverified.issueBridgeActivation',
+    ISSUE_LOCK_RATCHETS: 'preflightCopy.unverified.issueLockRatchets',
+    ISSUE_BRIDGE_POLICY_EXCLUSION: 'preflightCopy.unverified.issueBridgePolicyExclusion',
+    SEND_RESTRICTIONS: 'preflightCopy.unverified.sendRestrictions',
+    DESTROY_BRIDGE_SUPPLY: 'preflightCopy.unverified.destroyBridgeSupply',
+    DESTROY_RESTRICTIONS: 'preflightCopy.unverified.destroyRestrictions',
+    CARET_REF_UNRESOLVABLE: 'preflightCopy.unverified.caretRefUnresolvable',
+    LIST_NOT_FOUND: 'preflightCopy.unverified.listNotFound',
+    LIST_REFERENCE_VALIDITY: 'preflightCopy.unverified.listReferenceValidity',
+    ORDER_REFERENCE: 'preflightCopy.unverified.orderReference',
+    SWAP_REFERENCE: 'preflightCopy.unverified.swapReference',
+    ORDER_RESTRICTIONS: 'preflightCopy.unverified.orderRestrictions',
+    SWAP_RESTRICTIONS: 'preflightCopy.unverified.orderRestrictions',
+    DISPENSER_NOT_FOUND: 'preflightCopy.unverified.dispenserNotFound',
+    DISPENSER_LIFECYCLE: 'preflightCopy.unverified.dispenserLifecycle',
+    DISPENSER_NOT_OPEN: 'preflightCopy.unverified.dispenserLifecycle',
+    DISPENSER_EMPTY: 'preflightCopy.unverified.dispenserEmpty',
+    DISPENSER_MAX_REFILLS: 'preflightCopy.unverified.dispenserMaxRefills',
+    DISPENSER_ORACLE_FEE: 'preflightCopy.unverified.dispenserOracleFee',
+    DISPENSER_SETTLEMENT_PRICE: 'preflightCopy.unverified.dispenserSettlementPrice',
+    DISPENSE_SETTLEMENT_MATCH: 'preflightCopy.unverified.dispenseSettlementMatch',
+    GATED_HANDOFF_REF: 'preflightCopy.unverified.gatedHandoffRef',
+    DISPENSER_RESTRICTIONS: 'preflightCopy.unverified.dispenserRestrictions',
+};
 
-    // Balances, amounts and limits.
-    BALANCE_INSUFFICIENT: 'Whether your balance covers this action',
-    AMOUNT_FORMAT_INVALID: 'Whether each amount fits its token\'s decimal places',
-    LEG_AMOUNT_CONSOLIDATION: 'Whether each amount fits its token\'s decimal places',
-    AMOUNT_REPRESENTABILITY: 'Whether every amount is written in a form the network accepts',
-    AIRDROP_TOTAL_VS_BALANCE: 'Who receives this airdrop, and so its total cost',
-    DIVIDEND_DEBIT_TOTAL: 'Who receives this dividend, and so its total cost',
-    SUPPLY_EXCEEDED: 'Whether this mint stays within the token\'s supply limit',
-    MINT_OVER_MAX: 'Whether this mint stays within the token\'s mint limits',
-    MINT_ADDRESS_HEADROOM: 'Per-address mint limits, allow and block lists, and the token\'s own rules',
-
-    // Tokens and their rules.
-    NOT_OWNER: 'Whether this address owns the token',
-    ISSUE_GAS_TICK: 'Whether this token name is reserved on this network',
-    ISSUE_TICK_NAMESPACE: 'Whether this token name is available',
-    ISSUE_TICK_COIN_PREFIX: 'Whether this token name is allowed',
-    ISSUE_BRIDGE_ACTIVATION: 'Whether the network supports this bridging option yet',
-    ISSUE_LOCK_RATCHETS: 'Whether the token\'s locks allow this change',
-    ISSUE_BRIDGE_POLICY_EXCLUSION: 'Whether the token\'s bridging and transfer rules allow this change',
-    SEND_RESTRICTIONS: 'Transfer rules on the token and on both addresses',
-    DESTROY_BRIDGE_SUPPLY: 'Whether this token can be destroyed on this network',
-    DESTROY_RESTRICTIONS: 'Burn rules on the token and on your address',
-    CARET_REF_UNRESOLVABLE: 'Which address a short address reference points to',
-
-    // Lists, trading and dispensers.
-    LIST_NOT_FOUND: 'Whether the list this action names exists',
-    LIST_REFERENCE_VALIDITY: 'Whether the list this action names is valid',
-    ORDER_REFERENCE: 'Whether the order this action changes exists',
-    SWAP_REFERENCE: 'Whether the swap this action changes exists',
-    ORDER_RESTRICTIONS: 'Trading rules on the token',
-    SWAP_RESTRICTIONS: 'Trading rules on the token',
-    DISPENSER_NOT_FOUND: 'Whether the dispenser exists',
-    DISPENSER_LIFECYCLE: 'Whether the dispenser is still open',
-    DISPENSER_NOT_OPEN: 'Whether the dispenser is still open',
-    DISPENSER_EMPTY: 'Whether the dispenser still has enough to sell',
-    DISPENSER_MAX_REFILLS: 'Whether this dispenser has refills left',
-    DISPENSER_ORACLE_FEE: 'Whether the oracle usage fee is paid',
-    DISPENSER_SETTLEMENT_PRICE: 'Whether a price is available for this dispenser when the transaction confirms',
-    DISPENSE_SETTLEMENT_MATCH: 'Whether your payment exactly matches what the dispenser expects',
-});
+export const UNVERIFIED_COPY = Object.freeze(UNVERIFIED_KEYS);
 
 // Checks the wallet itself writes, whose reason is already signer copy and
 // stays the headline (routes/DispenserDetail.jsx).
 const WALLET_AUTHORED_CHECKS = new Set(['dispenser_state']);
 
 /**
- * Resolve one "Could not verify" entry into its headline and the producer's
- * own reason beneath it.
+ * The plain headline for one "Could not verify" entry. The SDK's reason is
+ * report-reader text, so it stays on the report and is never drawn.
  *
  * @param {{ check?: string, reason?: string }} u
- * @returns {{ headline: string, detail: string | null }}
+ * @returns {{ headline: string, detail: null }}
  */
 export function unverifiedText(u) {
     const reason = typeof u?.reason === 'string' ? u.reason : '';
     if (WALLET_AUTHORED_CHECKS.has(u?.check) && reason) return { headline: reason, detail: null };
-    const headline = UNVERIFIED_COPY[u?.check] || UNVERIFIED_FALLBACK;
-    return { headline, detail: reason && reason !== headline ? reason : null };
+    return { headline: t(UNVERIFIED_KEYS[u?.check] || UNVERIFIED_FALLBACK), detail: null };
 }

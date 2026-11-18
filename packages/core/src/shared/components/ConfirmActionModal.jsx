@@ -164,7 +164,7 @@ function isKnownFreeAction(composed) {
     return !FEE_BEARING_ACTIONS.some((fee) => name.startsWith(`${fee}_`));
 }
 
-function reportWithoutUnverifiedNativeFeeWarning(report) {
+export function reportWithoutUnverifiedNativeFeeWarning(report) {
     if (!Array.isArray(report?.findings)) return report;
     const findings = report.findings.filter((finding) => (
         finding?.code !== 'NATIVE_FEE_FORFEIT'

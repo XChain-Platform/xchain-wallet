@@ -38,11 +38,27 @@ export const PREFLIGHT_CHECK_STATES = Object.freeze({
     FAIL: 'fail',
 });
 
-// Unverified checks the network decides only when the action settles, by SDK
-// code (xchain-sdk src/preflight/checks/mint.js is the one emit site). A report
-// whose only shortfall is these is not a partial check (operator 2026-11-17).
-// Matched by code, never by reason text; every other code stays partial.
-export const SETTLE_TIME_UNVERIFIED_CHECKS = Object.freeze(['MINT_ADDRESS_HEADROOM']);
+// Unverified checks the SDK declares on every action of its kind, whatever the
+// token or address state, for rules the network decides at the including block.
+// Each has one emit site in xchain-sdk src/preflight/checks (named per entry). A
+// report whose only shortfall is these is not a partial check (operator
+// 2026-11-17, widened 2026-11-18). Matched by code, never by reason text; a
+// failed read, an unknowable state or any other code stays partial.
+export const SETTLE_TIME_UNVERIFIED_CHECKS = Object.freeze([
+    'LEG_AMOUNT_CONSOLIDATION',        // send.js, every SEND and DESTROY
+    'SEND_RESTRICTIONS',               // send.js, every SEND
+    'GATED_HANDOFF_REF',               // send.js, every SEND
+    'DESTROY_RESTRICTIONS',            // send.js, every DESTROY
+    'MINT_ADDRESS_HEADROOM',           // mint.js, every MINT of a token the lookup found
+    'AIRDROP_TOTAL_VS_BALANCE',        // airdrop.js, every AIRDROP
+    'DIVIDEND_DEBIT_TOTAL',            // dividend.js, every DIVIDEND
+    'DISPENSER_RESTRICTIONS',          // dispenser.js, every DISPENSER action
+    'DISPENSE_SETTLEMENT_MATCH',       // dispenser.js, every DISPENSE
+    'ORDER_RESTRICTIONS',              // trading.js, every ORDER create
+    'SWAP_RESTRICTIONS',               // trading.js, every SWAP create
+    'ISSUE_LOCK_RATCHETS',             // issue.js, every edit of a token the lookup found
+    'ISSUE_BRIDGE_POLICY_EXCLUSION',   // issue.js, same
+]);
 
 /**
  * Whether an unverified entry is a check only settlement can decide.

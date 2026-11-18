@@ -108,6 +108,7 @@ import palette from './palette.js';
 import panic from './panic.js';
 import parallelComposer from './parallelComposer.js';
 import pending from './pending.js';
+import preflightCopy from './preflightCopy.js';
 import projectRoster from './projectRoster.js';
 import publishFile from './publishFile.js';
 import receive from './receive.js';
@@ -190,6 +191,7 @@ export const en = {
     ...panic,
     ...parallelComposer,
     ...pending,
+    ...preflightCopy,
     ...projectRoster,
     ...publishFile,
     ...receive,

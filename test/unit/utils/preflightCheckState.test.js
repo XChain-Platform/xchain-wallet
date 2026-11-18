@@ -257,9 +257,26 @@ describe('preflightCheckState settle-time checks', () => {
 
     it('matches the check code, never the reason text', () => {
         expect(isSettleTimeUnverified(HEADROOM)).toBe(true);
-        expect(isSettleTimeUnverified({ check: 'SEND_RESTRICTIONS', reason: HEADROOM.reason })).toBe(false);
+        expect(isSettleTimeUnverified({ check: 'TOKEN_LOOKUP', reason: HEADROOM.reason })).toBe(false);
         expect(isSettleTimeUnverified({ reason: HEADROOM.reason })).toBe(false);
         expect(isSettleTimeUnverified(null)).toBe(false);
+    });
+
+    // Operator 2026-11-18: every fixed declaration for a rule the network decides at
+    // settlement counts; failed reads and states the SDK could not judge never do.
+    it('counts the fixed settle-time declarations and nothing read-driven', () => {
+        for (const check of ['LEG_AMOUNT_CONSOLIDATION', 'SEND_RESTRICTIONS', 'GATED_HANDOFF_REF',
+            'DESTROY_RESTRICTIONS', 'AIRDROP_TOTAL_VS_BALANCE', 'DIVIDEND_DEBIT_TOTAL', 'DISPENSER_RESTRICTIONS',
+            'DISPENSE_SETTLEMENT_MATCH', 'ORDER_RESTRICTIONS', 'SWAP_RESTRICTIONS', 'ISSUE_LOCK_RATCHETS',
+            'ISSUE_BRIDGE_POLICY_EXCLUSION']) {
+            expect(isSettleTimeUnverified({ check, reason: 'x' }), check).toBe(true);
+        }
+        for (const check of ['AMOUNT_REPRESENTABILITY', 'TOKEN_LOOKUP', 'BALANCE_LOOKUP', 'NATIVE_BALANCE_LOOKUP',
+            'BALANCE_INSUFFICIENT', 'AMOUNT_FORMAT_INVALID', 'MINT_OVER_MAX', 'SUPPLY_EXCEEDED', 'NOT_OWNER',
+            'LIST_REFERENCE_VALIDITY', 'ORDER_REFERENCE', 'DISPENSER_MAX_REFILLS', 'DISPENSER_ORIGIN_STANDING',
+            'ISSUE_BRIDGE_ACTIVATION', 'CARET_REF_UNRESOLVABLE', 'STAKE_STATE']) {
+            expect(isSettleTimeUnverified({ check, reason: 'x' }), check).toBe(false);
+        }
     });
 
     it('lets warn, fail and not checked outrank settle-time items', () => {

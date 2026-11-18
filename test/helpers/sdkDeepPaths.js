@@ -65,6 +65,7 @@ export const SDK_DEEP_PATHS = {
     protocolValidator: ['src/protocol/validator.js', 'src/validator.js'],
     utility: ['src/utils/utility.js', 'src/utility.js'],
     wallet: ['src/wallet.js'],
+    xchainSdkIndex: ['index.js'],
 };
 
 /** Is the SDK installed at all? Asked of package.json, the one path a

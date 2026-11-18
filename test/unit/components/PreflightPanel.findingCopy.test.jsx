@@ -17,6 +17,7 @@ import {
     unverifiedText,
     warningText,
 } from '../../../packages/core/src/shared/utils/preflightFindingCopy.js';
+import { t } from '../../../packages/core/src/i18n/index.js';
 
 const preflightConstants = sdkInstalled() ? requireSdkDeep('preflightConstants') : null;
 
@@ -153,13 +154,14 @@ describe('PreflightPanel warning copy (§5.2.4)', () => {
 });
 
 describe('PreflightPanel "Could not verify" copy (§5.2.4)', () => {
-    it('names what was not checked and keeps the SDK note as the detail', () => {
+    // Operator 2026-11-18: the SDK note is report-reader text and is never drawn.
+    it('names what was not checked and leaves the SDK note off the screen', () => {
         const note = 'obligation existence/match/expiry resolve server-side; Tier 1 gives NO verdict (feeExempt)';
         mount(reportWith({ verdict: 'pass', unverified: [{ check: 'COINPAY_STATE', reason: note }] }));
-        const [headline, detail] = screen.getByTestId('preflight-unverified-COINPAY_STATE').querySelectorAll('span');
-        expect(headline.textContent).toBe(UNVERIFIED_COPY.COINPAY_STATE);
-        expect(headline.textContent).not.toMatch(INTERNAL_TERMS);
-        expect(detail.textContent).toBe(note);
+        const row = screen.getByTestId('preflight-unverified-COINPAY_STATE');
+        expect(row.textContent).toBe(t(UNVERIFIED_COPY.COINPAY_STATE));
+        expect(row.textContent).not.toMatch(INTERNAL_TERMS);
+        expect(row.textContent).not.toContain(note);
     });
 
     it('keeps the fee a failed contract call still charges in the headline', () => {
@@ -171,7 +173,7 @@ describe('PreflightPanel "Could not verify" copy (§5.2.4)', () => {
             check: 'NEW_ACTION_STATE', reason: 'no client-side state checks are certified for this action',
         });
         expect(headline).not.toMatch(INTERNAL_TERMS);
-        expect(detail).toBe('no client-side state checks are certified for this action');
+        expect(detail).toBeNull();
     });
 
     it('keeps the wallet\'s own dispenser note as the headline', () => {
@@ -180,9 +182,10 @@ describe('PreflightPanel "Could not verify" copy (§5.2.4)', () => {
     });
 
     it('writes every mapped check headline without code names or internal terms', () => {
-        const entries = Object.entries(UNVERIFIED_COPY);
+        const entries = Object.entries(UNVERIFIED_COPY).map(([check, key]) => [check, t(key)]);
         expect(entries.length).toBeGreaterThan(20);
         for (const [check, line] of entries) {
+            expect(line, check).not.toMatch(/^preflightCopy\./);
             expect(line, check).not.toMatch(CODE_SHAPED);
             expect(line, check).not.toMatch(INTERNAL_TERMS);
         }

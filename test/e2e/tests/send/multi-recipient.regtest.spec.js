@@ -262,8 +262,10 @@ test.describe('multi-recipient SEND on regtest', () => {
             // A real dry-run against the indexer, on a three-leg action. The
             // §4.7 reservation covers the SUM of the primary tick; reserving
             // only the first row would leave this affordable-looking and fail
-            // later, so a "Will likely fail" here is a real finding.
-            await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'pass');
+            // later, so a "Will likely fail" here is a real finding. A token SEND always
+            // carries the transfer rules the network judges at settlement, so an approval
+            // reads as the blue settle-time note (operator 2026-11-18).
+            await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'settleChecks');
 
             // The footer action names what it signs: one verb over the SUM of
             // the legs, so a leg dropped from the composed action shows here too.

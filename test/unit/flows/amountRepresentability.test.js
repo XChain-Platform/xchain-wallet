@@ -72,11 +72,36 @@ describe.skipIf(!installed)('settleAmountRepresentability', () => {
         expect(preflightCheckState(settled)).toBe(S.PARTIAL);
     });
 
-    it('keeps every other unverified item, so the check stays partial', async () => {
-        const restrictions = { check: 'SEND_RESTRICTIONS', reason: 'server-side only' };
-        const settled = await settle(reportWith([AMOUNT_ITEM, restrictions]), 'SEND|0|XCP|1|bc1qdest');
-        expect(settled.unverified).toEqual([restrictions]);
+    it('keeps every other unverified item, so a failed read stays partial', async () => {
+        const failedRead = { check: 'TOKEN_LOOKUP', reason: 'timeout of 8000ms exceeded' };
+        const settled = await settle(reportWith([AMOUNT_ITEM, failedRead]), 'SEND|0|XCP|1|bc1qdest');
+        expect(settled.unverified).toEqual([failedRead]);
         expect(preflightCheckState(settled)).toBe(S.PARTIAL);
+    });
+
+    it('judges an ISSUE at the token row decimals, else the wire DECIMALS', async () => {
+        const fresh = await settle(reportWith([AMOUNT_ITEM]), 'ISSUE|0|NEWTOK|1000|10|2|x|1000', {});
+        expect(fresh.unverified).toEqual([]);
+        const tooFine = reportWith([AMOUNT_ITEM]);
+        expect(await settle(tooFine, 'ISSUE|0|NEWTOK|1000.5||0||1000', {})).toBe(tooFine);
+        // An edit is judged at the row: XCP carries 8 decimals whatever the wire says.
+        const edit = await settle(reportWith([AMOUNT_ITEM]), 'ISSUE|0|XCP|1000.25||0||');
+        expect(edit.unverified).toEqual([]);
+        // A callback amount is measured against another tick, so the wallet cannot say.
+        const callback = reportWith([AMOUNT_ITEM]);
+        expect(await settle(callback, 'ISSUE|0|NEWTOK|1000||0||1000|||||||||OTHER|5', {})).toBe(callback);
+    });
+
+    it('reads an explorer 404 as an absent token and any other failure as unknown', async () => {
+        const report = reportWith([AMOUNT_ITEM]);
+        const absent = async () => { throw Object.assign(new Error('404'), { code: 'EXPLORER_HTTP_404' }); };
+        const settledIssue = await settleAmountRepresentability(report, {
+            parsed: decoder.parse('ISSUE|0|NEWTOK|1000||0||1000'), rules, tokenFor: absent,
+        });
+        expect(settledIssue.unverified).toEqual([]);
+        expect(await settleAmountRepresentability(report, {
+            parsed: decoder.parse('SEND|0|XCP|1|bc1qdest'), rules, tokenFor: absent,
+        })).toBe(report);
     });
 
     it('drops the item beside MINT_ADDRESS_HEADROOM, leaving the blue settle-time note', async () => {
@@ -147,6 +172,7 @@ describe.skipIf(!engine)('settleAmountRepresentability on the SDK report', () =>
         explorer: {
             coin,
             getToken: async () => XCP,
+            getBalances: async () => ({ data: [{ tick: 'XCP', quantity: '1000' }] }),
             getPreflight: async () => ({ supported: true, valid: true, status: 'valid' }),
         },
     });
@@ -167,11 +193,11 @@ describe.skipIf(!engine)('settleAmountRepresentability on the SDK report', () =>
         expect(preflightCheckState(settled)).toBe(S.SETTLE_CHECKS);
     });
 
-    it('drops the item from a mainnet send; its server-side gaps keep it partial', async () => {
+    it('drops the item from a mainnet send, leaving its settle-time declarations', async () => {
         const { report, settled, checks } = await run('mainnet', 'BTC', 'SEND|0|XCP|1.5|bc1qdest');
         expect(checks(report)).toContain('AMOUNT_REPRESENTABILITY');
         expect(checks(settled)).toEqual(checks(report).filter((c) => c !== 'AMOUNT_REPRESENTABILITY'));
-        expect(preflightCheckState(settled)).toBe(S.PARTIAL);
+        expect(preflightCheckState(settled)).toBe(S.SETTLE_CHECKS);
     });
 
     it('keeps the item on a mainnet send in exponent form, which the legacy rule passes', async () => {
