@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Store listing screenshots and the promo tile are refreshed for v0.343.0.
 
 ### Changed
+- The desktop side menu no longer has a Search button; search lives in the wallet menu, opened from the top bar or with Cmd/Ctrl+K.
 - Every screen is redesigned with shared cards, buttons, fields, tabs, spacing and icons.
 - Settings are regrouped, and every page keeps one title and one help line.
 - Pages and forms use two-panel layouts where the screen is wide enough.
@@ -56,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Security updates are taken for Electron, sharp, vite, hono, undici, qs, pbkdf2, ip-address and several build tools.
 
 ### Fixed
+- Encrypted, token-gated file publishes sent by Taproot upload reach review instead of being refused as a mismatch.
 - Send Max prices only the coins the send will spend.
 - A send to your own address is shown as costing only the fee.
 - A balance the wallet cannot read is shown as unknown instead of zero.
