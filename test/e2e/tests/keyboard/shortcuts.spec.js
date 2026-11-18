@@ -72,7 +72,7 @@ test.describe('keyboard shortcut residuals', () => {
         await expect(unlockButton(page)).toBeVisible();
     });
 
-    test('History: / and e stay inert on an empty history (§34.2)', async ({ page }) => {
+    test('History: / opens the filter search and e stays inert on an empty history (§34.2)', async ({ page }) => {
         await createWallet(page);
         await page.keyboard.press('g');
         await page.keyboard.press('h');
@@ -82,12 +82,19 @@ test.describe('keyboard shortcut residuals', () => {
         // screen (and its shortcut listener) has mounted, so wait for it.
         await expect(page.getByRole('list', { name: 'History' })).toBeAttached();
 
-        // A new wallet has no history rows, so the search and the ⋯ menu's
-        // Export item are not rendered (Refresh stays) and neither shortcut has a target. History
-        // with rows is covered by test/unit/routes/History.filters.test.jsx and
-        // History.export.test.jsx, and the key bindings by
-        // test/unit/keyboard/useScreenShortcuts.test.jsx.
-        await expect(page.getByRole('searchbox', { name: 'Search history' })).toHaveCount(0);
+        // A context shortcut follows its on-screen trigger (History.jsx's
+        // useScreenShortcuts). A new wallet has no history rows, so the ⋯
+        // menu offers Refresh but no Export item, and 'e' has no target. The
+        // search lives in the title-line filter panel (G04), whose button
+        // stays on the loaded page even while the list is empty, so '/'
+        // opens that panel with the caret in its search box, as a click on
+        // the button would. History with rows is covered by
+        // test/unit/routes/History.filters.test.jsx and History.export.test.jsx,
+        // and the key bindings by test/unit/keyboard/useScreenShortcuts.test.jsx.
+        const filterButton = page.getByRole('button', { name: 'History filters', exact: true });
+        const search = page.getByRole('searchbox', { name: 'Search history' });
+        await expect(filterButton).toBeEnabled();
+        await expect(search).toHaveCount(0);
         await page.getByRole('button', { name: 'More actions' }).click();
         const moreMenu = page.getByRole('menu');
         await expect(moreMenu.getByRole('menuitem', { name: 'Refresh history' })).toBeVisible();
@@ -95,7 +102,12 @@ test.describe('keyboard shortcut residuals', () => {
         await page.keyboard.press('Escape');
         await expect(moreMenu).toHaveCount(0);
         await page.keyboard.press('/');
-        await expect(page.getByRole('searchbox', { name: 'Search history' })).toHaveCount(0);
+        await expect(search).toBeFocused();
+        // Escape closes the panel and hands focus back to its button, off
+        // any text field, so the next key reaches the shortcut dispatcher.
+        await page.keyboard.press('Escape');
+        await expect(search).toHaveCount(0);
+        await expect(filterButton).toBeFocused();
         await page.keyboard.press('e');
         await expect(page.getByRole('dialog', { name: 'Export history' })).toHaveCount(0);
     });
