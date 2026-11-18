@@ -72,13 +72,19 @@ for (const size of SIZES) {
             });
         }
 
-        test('panic mode confirmation takes focus on Cancel and Escape returns to Activate', async ({ page }) => {
-            await openSubpage(page, 'Safety');
-            await page.getByRole('main').getByRole('button', { name: 'Activate' }).focus();
+        // The freeze confirmation is its own page: a notice and one Confirm
+        // button, no Cancel; Back or Escape leaves it.
+        test('panic mode confirmation is one page and Escape returns to its row', async ({ page }) => {
+            await openSubpage(page, 'Security');
+            const row = page.getByRole('main').getByRole('button', { name: /^Panic mode\b/ }).first();
+            await row.focus();
             await page.keyboard.press('Enter');
-            await expect(page.getByRole('main').getByRole('button', { name: 'Cancel' })).toBeFocused();
+            await expect(page.getByRole('heading', { level: 1, name: 'Panic Mode', exact: true })).toBeVisible();
+            await expect(page.getByRole('main').getByRole('button', { name: 'Confirm 24-Hour Freeze' })).toBeVisible();
+            await expect(page.getByRole('main').getByRole('button', { name: 'Cancel' })).toHaveCount(0);
             await page.keyboard.press('Escape');
-            await expect(page.getByRole('main').getByRole('button', { name: 'Activate' })).toBeFocused();
+            await expect(page.getByRole('heading', { level: 1, name: 'Security', exact: true })).toBeVisible();
+            await expect(row).toBeFocused();
         });
     });
 }
