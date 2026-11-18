@@ -120,7 +120,7 @@ async function checkPrivateKeyScrubbing(page, label) {
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Import wallet' }).click();
     await page.getByRole('tab', { name: 'Private key' }).click();
-    await expectScreenLayout(page, /Import (?:a )?private key/, `${label} private-key import`);
+    await expectScreenLayout(page, /Import (?:a )?Private Key/, `${label} private-key import`);
 
     await wifField(page).fill(TEST_WIF);
     await page.getByRole('tab', { name: 'Recovery phrase' }).click();
@@ -158,15 +158,16 @@ for (const viewport of VIEWPORTS) {
         const main = page.getByRole('main');
         await expect(main.getByRole('form', { name: 'Sweep address' }))
             .toBeVisible({ timeout: 30_000 });
-        await expectScreenLayout(page, 'Sweep address', `${viewport.name} sweep form`);
+        await expectScreenLayout(page, 'Sweep Address', `${viewport.name} sweep form`);
 
         const source = await (await openFromAddress(main)).inputValue();
         expect(source.length, `${viewport.name}: sweep source is empty`).toBeGreaterThan(0);
         await main.getByRole('textbox', { name: 'Destination address' }).fill(DESTINATION);
 
-        await expect(main.getByRole('checkbox', { name: /^Token balances \(\d+\)$/ }))
+        // What to sweep is a card of switch rows (G118).
+        await expect(main.getByRole('switch', { name: /^Token balances \(\d+\)$/ }))
             .toBeVisible({ timeout: 30_000 });
-        await expect(main.getByRole('checkbox', { name: /^Token ownerships \(\d+\)$/ }))
+        await expect(main.getByRole('switch', { name: /^Token ownerships \(\d+\)$/ }))
             .toBeVisible({ timeout: 30_000 });
         // Each category shows only its checkbox, count and description, with
         // no item list (ruling U83), so the held tokens are not named here.
@@ -175,7 +176,7 @@ for (const viewport of VIEWPORTS) {
         // (U57), not in a loose notice on the form.
         await expect(main.getByText('The counts are a snapshot; the sweep moves whatever the address holds when it confirms.'))
             .toHaveCount(0);
-        await expectScreenLayout(page, 'Sweep address', `${viewport.name} populated sweep preview`);
+        await expectScreenLayout(page, 'Sweep Address', `${viewport.name} populated sweep preview`);
 
         const scrolled = await main.evaluate((element) => {
             element.scrollTop = element.scrollHeight;
@@ -185,18 +186,17 @@ for (const viewport of VIEWPORTS) {
             .toBeGreaterThan(0);
         await main.getByRole('button', { name: 'Sweep', exact: true }).click();
 
-        const review = main.getByRole('form', { name: 'Review sweep' });
+        // The sweep reviews on the shared Confirm page (G127).
+        const review = page.getByTestId('confirm-modal');
         await expect(review).toBeVisible({ timeout: 30_000 });
         await settle(page);
         expect(await main.evaluate((element) => element.scrollTop),
             `${viewport.name}: sweep review did not open at the top`).toBeLessThanOrEqual(1);
-        // The chain shows as its icon badge, named for screen readers.
-        await expect(detailValue(review, 'Network').getByRole('img', { name: 'Bitcoin' })).toBeVisible();
+        await expect(detailValue(review, 'Network')).toHaveText('Bitcoin');
         // Addresses are middle-truncated on screen; the accessible name is the full value.
         await expect(detailValue(review, 'From').getByLabel(source, { exact: true })).toBeVisible();
-        await expect(detailValue(review, 'Destination').getByLabel(DESTINATION, { exact: true })).toBeVisible();
-        await expect(detailValue(review, 'Sweeps'))
-            .toHaveText('Token balances, Token ownerships');
-        await expectScreenLayout(page, 'Review sweep', `${viewport.name} sweep review`);
+        await expect(detailValue(review, 'To').getByLabel(DESTINATION, { exact: true })).toBeVisible();
+        await expect(detailValue(review, 'Sweeps')).toHaveText('balances, ownerships');
+        await expectScreenLayout(page, 'Confirm', `${viewport.name} sweep review`);
     });
 }

@@ -49,12 +49,11 @@ async function expectNoHorizontalOverflow(page, label) {
     ).toBeLessThanOrEqual(clientWidth + 1);
 }
 
-async function openPhoneFilters(page) {
-    const toggle = page.getByRole('button', { name: /^Filters \(\d+\)$/ });
-    if (await toggle.isVisible()) {
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    }
+// The filters are a popover opened from the title bar at every width.
+async function openFilters(page) {
+    const toggle = page.getByRole('button', { name: 'History filters', exact: true });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 }
 
 function historyRow(page, chainId, actionIndex) {
@@ -94,7 +93,7 @@ for (const viewport of VIEWPORTS) {
                 .toContainText(`-0.05 ${amount.outgoingTick}`);
         }
 
-        await openPhoneFilters(page);
+        await openFilters(page);
         const datePresets = page.getByRole('group', { name: 'Date range presets' });
         for (const preset of ['7 days', '30 days', 'All dates']) {
             const button = datePresets.getByRole('button', { name: preset, exact: true });
@@ -121,7 +120,8 @@ for (const viewport of VIEWPORTS) {
                 .toContainText(`-0.05 ${amount.outgoingTick}`);
         }
         await expectNoHorizontalOverflow(page, `${viewport.name} searched History list`);
-        await page.getByRole('button', { name: 'Clear history search' }).click();
+        // The search box clears with its native clear control, so empty it directly.
+        await search.fill('');
         await expectTimelineCount(page, 27);
 
         const grouped = page.getByRole('radio', { name: 'Grouped' });
@@ -144,7 +144,8 @@ for (const viewport of VIEWPORTS) {
         const exportDialog = page.getByRole('dialog', { name: 'Export history' });
         await expect(exportDialog).toBeVisible();
         await expect(exportDialog.getByText('33 history items will be exported.')).toBeVisible();
-        await expect(exportDialog.getByLabel(/^CSV/)).toBeChecked();
+        // Format is a dropdown (G119) that defaults to CSV.
+        await expect(exportDialog.getByRole('button', { name: /^Format: CSV/ })).toBeVisible();
         await expect(exportDialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
         await expectNoHorizontalOverflow(page, `${viewport.name} export dialog`);
         await exportDialog.getByRole('button', { name: 'Cancel' }).click();
@@ -160,7 +161,10 @@ for (const viewport of VIEWPORTS) {
         await expect(amountCell).toContainText('-0.05');
         await expectNoHorizontalOverflow(page, `${viewport.name} transaction detail`);
 
-        await page.getByRole('button', { name: 'Back to history' }).click();
+        // Wide layouts show the detail beside the list, so only a phone has Back.
+        const back = page.getByRole('banner').getByRole('button', { name: /^Back\b/ });
+        if (viewport.name === 'phone') await back.first().click();
+        else await expect(back).toHaveCount(0);
         await expect(page.getByRole('heading', { name: 'History' })).toBeVisible();
         await expectTimelineCount(page, 27);
         await expectNoHorizontalOverflow(page, `${viewport.name} History after back`);
