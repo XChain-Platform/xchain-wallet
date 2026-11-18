@@ -155,40 +155,48 @@ test.describe('connected sites flow', () => {
                 if (index > 0) await gotoSection(page, 'Home');
                 await resetConnectedSitesFixture(page);
                 await openSettings(page);
+                // Settings may reopen on the last sub-page, so step back to the landing first.
+                await expect(page.getByRole('banner').getByRole('heading', { level: 1 })).toBeVisible();
+                const landing = page.getByRole('heading', { level: 1, name: 'Settings', exact: true });
+                for (let i = 0; i < 5 && !(await landing.isVisible().catch(() => false)); i += 1) {
+                    await page.getByRole('banner').getByRole('button', { name: /^Back\b/ }).first().click();
+                }
+                await page.getByRole('main').getByRole('button', { name: /^Privacy and Sites\b/ }).click();
 
                 const settingsMain = page.getByRole('main');
                 const connectedSitesRow = settingsMain.getByRole('button', { name: /^Connected sites/ });
-                await expect(connectedSitesRow).toContainText('1 site');
+                await expect(connectedSitesRow).toContainText('1 connected');
                 await connectedSitesRow.click();
 
                 const main = page.getByRole('main');
-                await expect(page.getByRole('heading', { level: 1, name: 'Connected sites' })).toBeVisible();
+                await expect(page.getByRole('heading', { level: 1, name: 'Connected Sites', exact: true })).toBeVisible();
                 expect(
                     await main.evaluate((element) => element.scrollTop),
                     `${viewport.name}: Connected sites did not open at the top`,
                 ).toBe(0);
 
-                const site = main.getByRole('region', { name: SITE.appName });
-                await expect(site.getByRole('heading', { level: 3, name: SITE.appName })).toBeVisible();
-                await expect(site).toContainText(SITE.origin);
+                // A site row opens its detail page: identity, read-only permissions and the site actions.
+                const siteRow = main.getByRole('list', { name: 'Allowed sites' })
+                    .getByRole('button', { name: new RegExp(`^${SITE.appName}`) });
+                await expect(siteRow).toContainText(SITE.origin);
                 await expectNoHorizontalOverflow(page, `${viewport.name} connected sites list`);
-                await expectSharedLineHeights(site.getByRole('button'), `${viewport.name} site actions`);
+                await siteRow.click();
 
-                const permissions = site.getByRole('button', { name: 'Permissions' });
-                await expect(permissions).toHaveAttribute('aria-expanded', 'false');
-                await permissions.click();
-
-                await expect(site.getByRole('button', { name: 'Hide' })).toHaveAttribute('aria-expanded', 'true');
-                await expect(site).toContainText('bitcoin-mainnet, litecoin-mainnet');
-                await expect(site).toContainText('demo-account-1');
-                await expect(site.getByText('Always allow', { exact: true })).toHaveCount(2);
-                await expect(site.getByText('Never allow', { exact: true })).toHaveCount(1);
-                await expect(site.getByRole('listitem').filter({ hasText: 'Send: Always allow' })).toHaveCount(1);
-                await expect(site.getByRole('listitem').filter({ hasText: 'Sweep: Never allow' })).toHaveCount(1);
+                const identity = main.getByRole('region', { name: 'Site identity' });
+                await expect(identity.getByRole('heading', { level: 2, name: SITE.appName })).toBeVisible();
+                await expect(identity).toContainText(SITE.origin);
+                const permissions = main.getByRole('list', { name: 'Permissions', exact: true });
+                await expect(permissions).toContainText('bitcoin-mainnet, litecoin-mainnet');
+                await expect(permissions).toContainText('demo-account-1');
+                await expect(permissions.getByText('Always allow', { exact: true })).toHaveCount(2);
+                await expect(permissions.getByText('Never allow', { exact: true })).toHaveCount(1);
+                await expect(permissions.getByRole('listitem').filter({ hasText: 'Send' }).filter({ hasText: 'Always allow' })).toHaveCount(1);
+                await expect(permissions.getByRole('listitem').filter({ hasText: 'Sweep' }).filter({ hasText: 'Never allow' })).toHaveCount(1);
                 await expectNoHorizontalOverflow(page, `${viewport.name} site permissions`);
-                await expectSharedLineHeights(site.getByRole('button'), `${viewport.name} expanded site actions`);
+                const siteActions = main.getByRole('list', { name: 'Site actions' }).getByRole('button');
+                await expectSharedLineHeights(siteActions, `${viewport.name} site actions`, { requireSharedLine: false });
 
-                await site.getByRole('button', { name: 'Disconnect' }).click();
+                await main.getByRole('button', { name: 'Disconnect', exact: true }).click();
                 const review = page.getByRole('dialog', { name: `Disconnect ${SITE.appName}?` });
                 await expect(review).toBeVisible();
                 await expect(review).toContainText(SITE.appName);
@@ -209,9 +217,9 @@ test.describe('connected sites flow', () => {
                 });
                 await review.getByRole('button', { name: 'Disconnect site' }).click();
 
-                await expect(main.getByRole('region', { name: SITE.appName })).toHaveCount(0);
+                await expect(main.getByRole('list', { name: 'Allowed sites' })).toHaveCount(0);
                 await expect(main.getByText('No sites connected yet', { exact: true })).toBeVisible();
-                await expect(page.getByRole('heading', { level: 1, name: 'Connected sites' })).toBeVisible();
+                await expect(page.getByRole('heading', { level: 1, name: 'Connected Sites', exact: true })).toBeVisible();
                 await expectNoHorizontalOverflow(page, `${viewport.name} revoked site list`);
                 await expect.poll(() => page.evaluate(() => globalThis.__connectedSitesE2E.deletedIds))
                     .toEqual([SITE.id]);
