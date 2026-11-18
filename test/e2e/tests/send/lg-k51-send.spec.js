@@ -48,13 +48,23 @@ async function expectFitsWithReachableAction(page, label, action) {
     expect(await page.evaluate(() => window.scrollX), `${label}: the page moved sideways`).toBe(0);
 }
 
+/** The exact fee sits in the Speed and Fees section, which opens on demand. */
+async function readFormFee(page) {
+    const feeButton = page.getByRole('button', { name: 'Edit exact fee amount' });
+    if (!(await feeButton.isVisible())) {
+        await page.getByRole('main').getByRole('button', { name: /^Speed and Fees\b/ }).click();
+    }
+    return feeButton.innerText();
+}
+
 async function expectReviewAndReject(page, expectedAmount, expectedFee, label) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible();
     const fee = page.getByTestId('confirm-fee-network');
     // The dev SDK quotes a rate-table fee, which review labels as an estimate.
     await expect(page.getByText('Network fee (estimate)', { exact: true })).toBeVisible();
-    await expect(fee).toHaveText(`${expectedFee} BTC`);
+    // The review adds the fiat value after the coin amount.
+    await expect(fee).toHaveText(new RegExp(`^${expectedFee.replace(/\./g, '\\.')} BTC\\b`));
     const feeAmount = Number((await fee.innerText()).match(/[\d.]+/)?.[0]);
     expect(feeAmount, `${label}: review shows no positive network fee`).toBeGreaterThan(0);
 
@@ -105,7 +115,8 @@ test.describe('LG K51 send review', { tag: '@lg-k51' }, () => {
         await expect(page.getByText(CONTACT_NAME).first()).toBeVisible();
 
         await gotoSection(page, 'Home');
-        const homeSend = mainButton(page, 'Send');
+        // Home has no Send button of its own; the bottom navigation carries it.
+        const homeSend = page.getByRole('navigation', { name: 'Bottom navigation' }).getByRole('button', { name: 'Send', exact: true });
         await expectFitsWithReachableAction(page, 'Home', homeSend);
         await homeSend.click();
 
@@ -116,7 +127,7 @@ test.describe('LG K51 send review', { tag: '@lg-k51' }, () => {
 
         const send = mainButton(page, 'Send');
         await expectFitsWithReachableAction(page, 'Send with entered amount', send);
-        const enteredFee = await page.getByRole('button', { name: 'Edit exact fee amount' }).innerText();
+        const enteredFee = await readFormFee(page);
         await send.click();
         await expectReviewAndReject(page, FORMATTED_AMOUNT, enteredFee, 'entered amount');
 
@@ -129,7 +140,7 @@ test.describe('LG K51 send review', { tag: '@lg-k51' }, () => {
             .toBeGreaterThan(0);
 
         await expectFitsWithReachableAction(page, 'Send with Max', send);
-        const maxFee = await page.getByRole('button', { name: 'Edit exact fee amount' }).innerText();
+        const maxFee = await readFormFee(page);
         await send.click();
         await expectReviewAndReject(page, maxAmount, maxFee, 'Max');
 
