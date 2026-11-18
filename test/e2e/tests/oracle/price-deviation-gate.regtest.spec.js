@@ -66,6 +66,8 @@ import {
 import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
+/** The wallet menu row that opens the oracle price form (the grouped menu's title). */
+const ORACLE_COMMAND = 'My oracle';
 /** Three publishes, each paying a real coin protocol fee here. */
 const FUNDING = 3;
 const TICK = 'XCHAIN';
@@ -133,7 +135,7 @@ async function stagePublish(page, value) {
     // Home first: a palette command for the route already mounted is a no-op
     // (D-117), and after a publish this route sits on its own result screen.
     await page.getByRole('button', { name: 'Home', exact: true }).first().click();
-    await openPaletteCommand(page, 'Publish oracle price');
+    await openPaletteCommand(page, ORACLE_COMMAND);
     const main = page.getByRole('main');
     await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
     // D-145: this form published on the wallet's first chain until it grew a
@@ -184,7 +186,7 @@ test.describe(`the PRICE v1 deviation gate on ${REGTEST_CHAIN_LABEL}`, () => {
                 await createWallet(page, { password: PASSWORD, name: 'Deviation Operator' });
                 await switchToRegtest(page, PASSWORD);
 
-                await openPaletteCommand(page, 'Publish oracle price');
+                await openPaletteCommand(page, ORACLE_COMMAND);
                 const main = page.getByRole('main');
                 await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(main);

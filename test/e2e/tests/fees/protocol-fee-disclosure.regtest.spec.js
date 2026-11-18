@@ -497,7 +497,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
             await createWallet(page, { password: PASSWORD, name: 'Zero Fee Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await openPaletteCommand(page, 'Post an announcement');
+            await openPaletteCommand(page, 'Broadcast');
             const main = page.getByRole('main');
             await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
             source = await (await openFromAddress(main)).inputValue();
@@ -520,7 +520,7 @@ test.describe('what a fee-bearing action costs: the confirm screen against the c
         });
 
         const composeBroadcast = async (message) => {
-            await openPaletteCommand(page, 'Post an announcement');
+            await openPaletteCommand(page, 'Broadcast');
             const main = page.getByRole('main');
             await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
             await fieldByLabel(main, 'Message').fill(message);

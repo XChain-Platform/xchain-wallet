@@ -214,7 +214,8 @@ async function exportEnvelope(page, walletName) {
     await openSettingsViaPalette(page);
     await page.getByRole('main').getByRole('button', { name: /^Backup/ }).first().click();
 
-    const exportRow = page.getByRole('main').getByRole('button', { name: 'Export…', exact: true });
+    // Backup and Recovery's Encrypted backup file row lands straight on the form.
+    const exportRow = page.getByRole('main').getByRole('button', { name: /^Encrypted backup file\b/ });
     await expect(exportRow, 'the Backup section offers no export action')
         .toBeVisible({ timeout: 30_000 });
     await exportRow.click();
@@ -225,7 +226,7 @@ async function exportEnvelope(page, walletName) {
     await page.evaluate(() => { window.showSaveFilePicker = undefined; });
     const [download] = await Promise.all([
         page.waitForEvent('download', { timeout: 120_000 }),
-        page.getByRole('button', { name: 'Export', exact: true }).click(),
+        page.getByRole('main').getByRole('button', { name: 'Export Backup', exact: true }).click(),
     ]);
     const envelope = await readFile(await download.path(), 'utf8');
 

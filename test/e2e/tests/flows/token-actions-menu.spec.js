@@ -13,6 +13,7 @@
 // The screen must still list the catalogue's entries and each one must still
 // open its form.
 
+import { fieldByLabel } from '../../fixtures/fields.js';
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 
 test('All actions lists the catalogue and opens the chosen form', async ({ page }) => {
@@ -28,10 +29,10 @@ test('All actions lists the catalogue and opens the chosen form', async ({ page 
     await expect(main.getByText('Choose a template for a new token, including full custom settings.')).toBeVisible();
     await expect(main.getByRole('button', { name: /^Sign message/ })).toBeVisible();
 
-    // Issue token opens the template wizard, and its Custom template opens
-    // the full Issue token form (ruling U79).
+    // Issue token opens the Issue Token form, where the template is an optional
+    // selector above the full set of fields.
     await issue.click();
-    await expect(page.getByRole('heading', { name: 'Issue a token', level: 1 })).toBeVisible();
-    await main.getByRole('button', { name: /^Custom\b/ }).click();
-    await expect(page.getByRole('heading', { name: 'Issue token', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Issue Token', level: 1 })).toBeVisible();
+    await expect(main.getByRole('button', { name: /^Select template/ })).toBeVisible();
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible();
 });
