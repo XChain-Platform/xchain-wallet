@@ -29,10 +29,10 @@ async function enterDemoWallet(page) {
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
 }
 
-async function openDisplaySettings(page) {
+async function openAppearanceSettings(page) {
     await gotoSection(page, 'Settings');
-    await page.getByRole('main').getByRole('button', { name: /^Display\b/ }).click();
-    await expect(page.getByRole('heading', { name: 'Display', exact: true })).toBeVisible();
+    await page.getByRole('main').getByRole('button', { name: /^Appearance\b/ }).click();
+    await expect(page.getByRole('heading', { name: 'Appearance', exact: true })).toBeVisible();
 }
 
 async function openPaletteRoute(page, name) {
@@ -67,6 +67,7 @@ test('kit navigation and filter controls work on populated routes', async ({ pag
 
     await test.step('History chips and the segmented view expose their selected state', async () => {
         await gotoSection(page, 'History');
+        await page.getByRole('button', { name: 'History filters', exact: true }).click();
         const datePresets = page.getByRole('group', { name: 'Date range presets' });
         const sevenDays = datePresets.getByRole('button', { name: '7 days' });
         await sevenDays.click();
@@ -83,24 +84,27 @@ test('kit navigation and filter controls work on populated routes', async ({ pag
         await expect.poll(() => rows.count()).toBeGreaterThan(groupedRowCount);
     });
 
-    await test.step('Markets view tabs expose their selected state on the real list', async () => {
+    await test.step('Markets view select exposes its selected option on the real list', async () => {
         await gotoSection(page, 'DEX');
-        // The Markets view is the kit Tabs control, so selection is aria-selected.
-        const views = page.getByRole('tablist', { name: 'Markets view' });
-        const all = views.getByRole('tab', { name: 'All', exact: true });
-        const popular = views.getByRole('tab', { name: 'Popular', exact: true });
+        // The view choice is the Show markets select inside the Filter markets menu.
+        await page.getByRole('button', { name: 'Filter markets', exact: true }).click();
+        const show = page.getByRole('combobox', { name: 'Show markets' });
         // The demo wallet may restore another view, so select All first.
-        await all.click();
-        await expect(all).toHaveAttribute('aria-selected', 'true');
-        await popular.click();
-        await expect(popular).toHaveAttribute('aria-selected', 'true');
-        await expect(all).toHaveAttribute('aria-selected', 'false');
+        await show.click();
+        await page.getByRole('option', { name: 'Show all' }).click();
+        await show.click();
+        await expect(page.getByRole('option', { name: 'Show all' })).toHaveAttribute('aria-selected', 'true');
+        await page.getByRole('option', { name: 'Show popular' }).click();
+        await show.click();
+        await expect(page.getByRole('option', { name: 'Show popular' })).toHaveAttribute('aria-selected', 'true');
+        await expect(page.getByRole('option', { name: 'Show all' })).toHaveAttribute('aria-selected', 'false');
+        await page.keyboard.press('Escape');
     });
 
-    await test.step('Display switches retain their saved values after reload', async () => {
-        await openDisplaySettings(page);
-        const pin = page.getByRole('switch', { name: 'Show pin button on rows' });
-        const hide = page.getByRole('switch', { name: 'Show hide button on rows' });
+    await test.step('Appearance switches retain their saved values after reload', async () => {
+        await openAppearanceSettings(page);
+        const pin = page.getByRole('switch', { name: 'Pin button on rows' });
+        const hide = page.getByRole('switch', { name: 'Hide button on rows' });
         const pinAfter = !(await pin.isChecked());
         const hideAfter = !(await hide.isChecked());
 
@@ -111,9 +115,9 @@ test('kit navigation and filter controls work on populated routes', async ({ pag
 
         await page.reload();
         await expect(nav(page)).toBeVisible({ timeout: kdfStepTimeout() });
-        await openDisplaySettings(page);
-        await expectChecked(page.getByRole('switch', { name: 'Show pin button on rows' }), pinAfter);
-        await expectChecked(page.getByRole('switch', { name: 'Show hide button on rows' }), hideAfter);
+        await openAppearanceSettings(page);
+        await expectChecked(page.getByRole('switch', { name: 'Pin button on rows' }), pinAfter);
+        await expectChecked(page.getByRole('switch', { name: 'Hide button on rows' }), hideAfter);
     });
 });
 
