@@ -374,7 +374,7 @@ test.describe('BET unhappy stakes', () => {
             await main.getByRole('list', { name: 'Outcome to back' })
                 .getByRole('button', { name: /^Buy Yes,/ }).click();
             await expect(main.getByRole('form', { name: 'Buy a position' })).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel(/^Stake/).fill('0');
+            await main.getByRole('form', { name: 'Buy a position' }).getByRole('textbox', { name: /^Amount/ }).fill('0');
             await fillPasswordIfPresent(main);
 
             const review = main.locator('button[type="submit"]');
@@ -404,7 +404,7 @@ test.describe('BET unhappy stakes', () => {
             await main.getByRole('list', { name: 'Outcome to back' })
                 .getByRole('button', { name: /^Buy Yes,/ }).click();
             await expect(main.getByRole('form', { name: 'Buy a position' })).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel(/^Stake/).fill(OVER_STAKE);
+            await main.getByRole('form', { name: 'Buy a position' }).getByRole('textbox', { name: /^Amount/ }).fill(OVER_STAKE);
             await fillPasswordIfPresent(main);
             await main.locator('button[type="submit"]').click();
 

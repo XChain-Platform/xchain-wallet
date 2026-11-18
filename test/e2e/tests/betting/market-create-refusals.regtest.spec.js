@@ -239,7 +239,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
                 'a market with no wager token was not refused');
             await expect(page.getByRole('alert'),
                 'the refusal does not explain that the network coin cannot be wagered')
-                .toContainText('the network coin cannot be wagered');
+                .toContainText('token-only: the network coin cannot be used');
         });
 
         await test.step('a single outcome, which nobody could lose', async () => {

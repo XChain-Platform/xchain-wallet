@@ -1993,20 +1993,29 @@ async function readApproveOutcome(page, approve, windowMs = 1_500) {
     const blocked = page.getByTestId('confirm-blocked');
     const failed = page.getByTestId('confirm-error').or(page.getByTestId('confirm-notice'));
     const deadline = Date.now() + windowMs;
+    // A taken tap on regtest can sign, broadcast and close the review inside
+    // one poll (about 200 ms), so every read here is bounded: a bare
+    // getAttribute on a button that has just unmounted waits the 30 s action
+    // timeout for it to come back, which outlasts the window and reads a taken
+    // tap as ignored.
+    const quick = { timeout: 250 };
     for (;;) {
         if (await approve.count() === 0 || !(await approve.isVisible().catch(() => false))) {
             return { kind: 'accepted' };
         }
-        if (await approve.getAttribute('aria-busy').catch(() => null) === 'true') return { kind: 'accepted' };
+        const busy = await approve.getAttribute('aria-busy', quick).catch(() => undefined);
+        if (busy === 'true') return { kind: 'accepted' };
+        // Undefined: the button left between the two reads; the next pass sees it gone.
+        if (busy === undefined && Date.now() < deadline) continue;
         if (await blocked.isVisible().catch(() => false)) {
             return {
                 kind: 'blocked',
-                reason: await blocked.getAttribute('data-reason').catch(() => null),
-                text: (await blocked.innerText().catch(() => '')).trim(),
+                reason: await blocked.getAttribute('data-reason', quick).catch(() => null),
+                text: (await blocked.innerText(quick).catch(() => '')).trim(),
             };
         }
         if (await failed.first().isVisible().catch(() => false)) {
-            return { kind: 'error', text: (await failed.first().innerText().catch(() => '')).trim() };
+            return { kind: 'error', text: (await failed.first().innerText(quick).catch(() => '')).trim() };
         }
         if (Date.now() >= deadline) return { kind: 'ignored' };
         await page.waitForTimeout(100);
@@ -2049,9 +2058,6 @@ export async function approveConfirm(page, what = 'this action', timeoutMs = 120
         await expect(approve).toBeVisible({ timeout: Math.max(1_000, deadline - Date.now()) })
             .catch(() => {});
         if (!(await approve.isVisible().catch(() => false))) {
-            // A tap taken after the outcome window closed takes Approve away
-            // before the next pass, which readApproveOutcome reads as taken.
-            if (last) return;
             await fail('the Approve button is not on screen');
         }
         await approve.click();

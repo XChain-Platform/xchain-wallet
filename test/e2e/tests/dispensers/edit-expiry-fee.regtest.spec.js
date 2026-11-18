@@ -306,6 +306,8 @@ async function submitExpirationEdit(page, index, targetUnix, { coinFee = false }
     // Bitcoin the coin lane is mandatory and the control is a statement, not a
     // switch, so there is nothing to turn on.
     if (coinFee && REGTEST_COIN === 'RBTC') {
+        // The switch sits in the Speed and Fees section, closed by default.
+        await openFormSection(main, 'Speed and Fees');
         const toggle = main.getByRole('switch', { name: /^Pay protocol fee in \S+/ })
             .or(main.getByRole('checkbox', { name: /^Pay protocol fee in \S+/ })).first();
         await expect(toggle, 'Bitcoin did not offer its native-fee choice on the edit form')

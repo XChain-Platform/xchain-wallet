@@ -421,7 +421,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
                 .fill(PRICE_PER_FILL);
 
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Create', exact: true }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
             await approveConfirm(seller, `the DISPENSER create for ${GIVE_TICK}`);
 
             dispenserRow = await waitForDispenser(sellerAddress, GIVE_TICK);

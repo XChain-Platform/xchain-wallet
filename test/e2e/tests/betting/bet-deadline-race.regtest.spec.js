@@ -457,7 +457,7 @@ test.describe('BET deadline race', () => {
             await main.getByRole('list', { name: 'Outcome to back' })
                 .getByRole('button', { name: new RegExp(`^Buy ${OUTCOME.label},`) }).click();
             await expect(main.getByRole('form', { name: 'Buy a position' })).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel(/^Stake/).fill(STAKE);
+            await main.getByRole('form', { name: 'Buy a position' }).getByRole('textbox', { name: /^Amount/ }).fill(STAKE);
             await fillPasswordIfPresent(main);
 
             // Warmed in the same breath as the compose it is warming for: the

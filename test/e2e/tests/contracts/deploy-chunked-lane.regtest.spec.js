@@ -123,11 +123,12 @@ function uniqueChunkedSource(tag) {
  * screen (`confirm-modal`), and only the chunked review lists its legs, so this
  * is what tells the chunked review from a single-shot confirm.
  */
-// No leading \b: the review's "Transactions" fact sits right against its value
-// in the confirm's textContent ("Transactions2 chunks ..."), so a word boundary
-// before the count never matches there, and `hasNotText` would then count the
-// chunked review as a single-transaction confirm.
-const REVIEW_SUMMARY = /\d+ chunks and 1 assembling transaction\b/;
+// No \b at either end: the facts sit flush against their neighbours in the
+// confirm's textContent ("Transactions2 chunks and 1 assembling
+// transactionSigning with"), so a word boundary on either side never matches
+// there, and `hasNotText` would then count the chunked review as a
+// single-transaction confirm.
+const REVIEW_SUMMARY = /\d+ chunks and 1 assembling transaction/;
 
 const codeHashOf = (source) => createHash('sha256').update(Buffer.from(source, 'utf8')).digest('hex');
 

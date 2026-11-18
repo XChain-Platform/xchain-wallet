@@ -262,7 +262,7 @@ test.describe('BET across two wallets', () => {
             await main.getByRole('list', { name: 'Outcome to back' })
                 .getByRole('button', { name: /^Buy Yes,/ }).click();
             await expect(main.getByRole('form', { name: 'Buy a position' })).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel(/^Stake/).fill(STAKE);
+            await main.getByRole('form', { name: 'Buy a position' }).getByRole('textbox', { name: /^Amount/ }).fill(STAKE);
             await fillPasswordIfPresent(main);
             await main.locator('button[type="submit"]').click();
             // On Bitcoin a bet pays its protocol fee in XCHAIN, out of the same

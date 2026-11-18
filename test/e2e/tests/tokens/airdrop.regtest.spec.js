@@ -358,7 +358,9 @@ async function approveAndGetTxid(page, not = null) {
         // fresh, idle Approve on screen is that second confirm, taken here.
         const approve = page.getByTestId('confirm-approve');
         if (await approve.isVisible().catch(() => false)
-            && (await approve.getAttribute('aria-busy').catch(() => null)) !== 'true') {
+            // Bounded: a button that unmounts between the two reads must not
+            // hold this loop for the 30 s action timeout.
+            && (await approve.getAttribute('aria-busy', { timeout: 250 }).catch(() => 'gone')) === 'false') {
             await approveConfirm(page, 'the airdrop leg\'s signing confirm');
             continue;
         }

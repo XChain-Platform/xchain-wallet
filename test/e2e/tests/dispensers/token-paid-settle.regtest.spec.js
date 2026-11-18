@@ -324,26 +324,43 @@ test.describe(`the token-paid dispenser lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 + "searching its seller's address")
                 .toBeVisible({ timeout: 60_000 });
             await row.click();
-            // The dispenser page opens on Actions (G102); the buy panel is the
-            // Buy page a buyer's first action row opens.
-            await page.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
-
-            const buySection = page.getByRole('main');
-            await expect(fieldByLabel(buySection, 'Fills'),
-                'the buy panel never rendered for a dispenser this wallet does not own')
+            // On a wide screen the list keeps the dispenser in its side panel,
+            // with the buy form inline under the identity card. Narrower, the
+            // dispenser page opens on Actions (G102) and the buy form is the
+            // page a buyer's first action row (Buy) opens.
+            const buyForm = page.getByTestId('dispenser-buy-form');
+            const buyRow = page.getByTestId('dispenser-buy-row');
+            await expect(buyForm.or(buyRow).first(),
+                'the dispenser opened with neither a buy form nor a Buy row for a wallet that does not own it')
                 .toBeVisible({ timeout: 30_000 });
-            // The panel must know what the buyer holds of the PAYMENT token;
-            // a wrong read here is what disables the button.
-            await expect(page.getByTestId('buy-balance'))
-                .toContainText(new RegExp(`1,?000\\s*${PAY_TICK}`), { timeout: 60_000 });
+            if (!(await buyForm.isVisible().catch(() => false))) await buyRow.click({ timeout: 30_000 });
+
+            const dispenses = buyForm.getByRole('textbox', { name: /^(?:How Many )?Dispenses$/ });
+            await expect(dispenses,
+                'the buy form never rendered for a dispenser this wallet does not own')
+                .toBeVisible({ timeout: 30_000 });
+            // The form must know what the buyer holds of the PAYMENT token: a
+            // wrong read raises the underfunded warning. The full page also
+            // prints the balance; the side panel does not.
+            const balance = page.getByTestId('buy-balance');
+            if (await balance.count() > 0) {
+                await expect(balance)
+                    .toContainText(new RegExp(`1,?000\\s*${PAY_TICK}`), { timeout: 60_000 });
+            }
 
             // The buyer already holds XCHAIN (the gas mint, less the ISSUE
             // fee), so the fill is measured as a delta from this figure.
             buyerXchainBefore = await tokenBalance(buyer, 'XCHAIN');
-            await fieldByLabel(buySection, 'Fills').fill('1');
-            const buyButton = buySection.getByRole('button', { name: /^Buy 1 fill$/ });
-            await expect(buyButton, 'the Buy button is disabled for a funded buyer').toBeEnabled();
-            await buyButton.click();
+            await dispenses.fill('1');
+            await expect(buyForm.getByTestId('buy-totals'),
+                'one dispense is not priced at the dispenser\'s per-fill price')
+                .toContainText(new RegExp(`You pay\\s*${PRICE_PER_FILL}\\s*${PAY_TICK}`), { timeout: 30_000 });
+            await expect(buyForm.getByRole('alert'),
+                'a buyer holding 1,000 of the payment token is warned it cannot pay for one dispense')
+                .toHaveCount(0);
+            // Never disabled (G130): the side panel reads "Buy", the page
+            // "Buy 1 Dispense".
+            await buyForm.getByRole('button', { name: /^Buy(?: 1 Dispense)?$/ }).click();
 
             // A purchase signs through the shared Confirm screen (dry-run, From
             // row and the dispenser purchase notice), whose approve button is
