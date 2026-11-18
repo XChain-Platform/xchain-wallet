@@ -9,6 +9,7 @@ import {
     readRecoveryPhrase,
     test,
 } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import { measureInPage } from '../../layout/sweep.js';
 
 const PASSWORD = 'responsive-onboarding-1234';
@@ -43,6 +44,9 @@ async function expectReachableLayout(page, label, action) {
             if (!text) continue;
             const style = getComputedStyle(node);
             if (style.display === 'none' || style.visibility === 'hidden') continue;
+            // Screen-reader-only text (the import tabs' full lane names) is
+            // clipped to 1px by design and never painted.
+            if (node.closest('.sr-only')) continue;
             if (node.scrollWidth <= node.clientWidth + 1) continue;
             // A 1px-wide clipped span is the visually hidden full name behind a short tab label.
             if (node.clientWidth <= 1) continue;
@@ -146,8 +150,10 @@ for (const viewport of VIEWPORTS) {
             page.getByRole('button', { name: 'Restore', exact: true }),
         );
 
+        // FreeWallet import is a Wallet type on the Import Wallet page.
         await returnToWelcome(page);
-        await page.getByRole('button', { name: 'Import FreeWallet' }).click();
+        await page.getByRole('button', { name: 'Import wallet' }).click();
+        await pickOption(page.getByRole('button', { name: /^Wallet type:/ }), { label: /FreeWallet/ });
         await expectReachableLayout(
             page,
             `${viewport.name} FreeWallet import`,
