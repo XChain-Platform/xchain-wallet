@@ -71,16 +71,16 @@ for (const key of ['adsNotice.title', 'adsNotice.subtitle', 'adsNotice.defaultBe
     assert.doesNotMatch(en[key], /Donation System|\bADS\b/, `${key} uses the Automatic Donations name`);
 }
 assert.match(en['adsNotice.defaultBehavior'], /mainnet transaction/, 'says only mainnet transactions add to the queue');
-// U21: no amounts on the notice, neither typed into the copy nor filled in
-// from the schema defaults; Settings is where the amounts show.
+assert.match(en['adsNotice.defaultBehavior'], /\{perTransaction\}[\s\S]*\{sendAt\}/, 'states the default amounts from the code defaults');
+assert.match(notice, /ADS_DEFAULT_PER_TRANSACTION[\s\S]*ADS_DEFAULT_SEND_AT/, 'fills them from the schema defaults');
+
+// No fixed amounts in this copy: the defaults are filled in from the schema,
+// so a retune never leaves stale numbers here.
 const noticeCopy = Object.entries(en)
     .filter(([key]) => key.startsWith('adsNotice.'))
     .map(([, value]) => value)
     .join(' ');
-assert.doesNotMatch(noticeCopy, /\{[A-Za-z]+\}/, 'the notice copy takes no amount placeholders');
-assert.doesNotMatch(noticeCopy, /[$€£]|[0-9]/, 'the notice copy states no amount or count');
-assert.doesNotMatch(noticeCopy, /\bsats\b|\bLTC\b|\bDOGE\b|\bBTC\b|\bUSD\b/, 'no per-chain amounts on the notice');
-assert.doesNotMatch(notice, /ADS_DEFAULT_PER_TRANSACTION|ADS_DEFAULT_SEND_AT|formatFiatAmount/, 'the notice fills in no amounts');
+assert.doesNotMatch(noticeCopy, /\bsats\b|\bLTC\b|\bDOGE\b|[0-9],[0-9]{3}/, 'no per-chain amounts on the notice');
 
 // --- Create: persist advances to the notice, not to onCreated --------
 

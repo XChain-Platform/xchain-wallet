@@ -208,10 +208,9 @@ describe('normalizeAdsAmount', () => {
 });
 
 describe('onboarding notice', () => {
-    // U21: the notice describes the rule but states no amounts.
-    it('describes the same rule without amounts', () => {
+    it('describes the same rule with the default amounts', () => {
         render(<AdsNotice onContinue={() => {}} />);
-        const behavior = screen.getByText(/Each mainnet transaction you send adds a small donation to one queue, and when the queue is full/);
+        const behavior = screen.getByText(/Each mainnet transaction you send adds \$0\.05 to one queue, and when the queue reaches \$5\.00/);
         const notice = behavior.closest('[data-tone]');
         const form = screen.getByRole('form', { name: 'Automatic Donations' });
         const continueButton = screen.getByRole('button', { name: 'Continue' });
@@ -220,7 +219,7 @@ describe('onboarding notice', () => {
         expect(form).toContainElement(notice);
         expect(form).toContainElement(continueButton);
         expect(screen.getByText(/XChain Platform includes automatic donations/)).toBeTruthy();
-        expect(form.textContent).not.toMatch(/[$€£]|[0-9]/);
+        expect(behavior).toHaveTextContent('At the defaults, that is about 100 transactions.');
         expect(screen.getByText(/Settings → Automatic Donations/)).toBeTruthy();
     });
 });

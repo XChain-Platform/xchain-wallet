@@ -41,7 +41,9 @@ const SHELLS = [
 ];
 
 const DECLINE_COPY = /decline|skip|not now|no thanks|maybe later|turn off|disable|opt out|cancel/i;
-const AMOUNT_COPY = /\b(sats?|satoshis?|LTC|DOGE|BTC|XCP|USD)\b|[$€£]\s?\d|\d[\d,.]*\s?%?\s?(sats?|LTC|DOGE|BTC)\b|\d,\d{3}/i;
+// The approved notice states the wallet-wide fiat defaults (Held 2 ruling,
+// 2026-11-17); a per-chain coin amount would still be wrong.
+const CHAIN_AMOUNT_COPY = /\b(sats?|satoshis?|LTC|DOGE|BTC|XCP)\b|\d,\d{3}/i;
 
 const noticeHeading = (page) =>
     page.getByRole('heading', { name: 'Automatic Donations', exact: true });
@@ -76,9 +78,11 @@ async function assertNotice(page) {
     );
     expect(await controls.count(), 'form controls on the notice').toBe(0);
 
-    // No per-chain amount or currency figure.
+    // The fiat defaults from the schema, and no per-chain amount.
     const text = await form.innerText();
-    expect(text, 'notice text carries an amount').not.toMatch(AMOUNT_COPY);
+    expect(text, 'notice states the per-transaction default').toContain('$0.05');
+    expect(text, 'notice states the send-at default').toContain('$5.00');
+    expect(text, 'notice text carries a per-chain amount').not.toMatch(CHAIN_AMOUNT_COPY);
 
     // A notice: the title, a subtitle, a bullet list of statements, one action.
     expect(await form.locator('ul > li').count(), 'statement bullets').toBe(3);
