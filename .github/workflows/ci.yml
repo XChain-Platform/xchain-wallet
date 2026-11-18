@@ -52,8 +52,8 @@ jobs:
   # Unit + security + smoke. `pnpm run ci` is the same gate bin/ci-all.sh and the
   # pre-push hook run, so local and CI cannot disagree about what "green" means.
   #
-  # SHARDED FOR WALL TIME. The unit tier is about 30 of the gate's 36 minutes,
-  # so it runs as vitest `--shard` legs beside one leg that runs every other
+  # SHARDED FOR WALL TIME. The unit tier is about 30 of the gate's 36 minutes
+  # (50 of 51 on 2026-11-18), so it runs as vitest `--shard` legs beside one leg that runs every other
   # step of `pnpm run ci`. That leg derives its command list from the `ci`
   # script itself rather than restating it, so a tier added to `ci` lands here
   # without a workflow edit, and a `ci` script that stops running
@@ -68,12 +68,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - leg: unit shard 1/3
-            unit_shard: 1/3
-          - leg: unit shard 2/3
-            unit_shard: 2/3
-          - leg: unit shard 3/3
-            unit_shard: 3/3
+          - leg: unit shard 1/4
+            unit_shard: 1/4
+          - leg: unit shard 2/4
+            unit_shard: 2/4
+          - leg: unit shard 3/4
+            unit_shard: 3/4
+          - leg: unit shard 4/4
+            unit_shard: 4/4
           - leg: rest of the gate
             unit_shard: ''
     env:
@@ -309,21 +311,19 @@ jobs:
   # The thresholds live in test/vitest/unit.config.js and sit just under today's
   # numbers, so this job goes red on a REGRESSION, not on an aspiration.
   #
-  # SHARDED FOR WALL TIME. The instrumented run took 26 minutes on one runner,
-  # so it runs as vitest `--shard` legs that each write a blob report carrying
+  # SHARDED FOR WALL TIME. The instrumented run took 26 minutes on one runner
+  # (48 on 2026-11-18), so it runs as vitest `--shard` legs that each write a blob report carrying
   # their raw coverage, and `coverage-merge` merges the blobs and checks the
-  # thresholds once over the whole suite. The legs turn thresholds off: a third
-  # of the suite cannot reach a floor set for all of it. Measured before this
-  # landed: the merged totals match an unsharded run's covered and total counts
-  # on all four metrics.
+  # thresholds once over the whole suite. The legs turn thresholds off: a quarter
+  # of the suite cannot reach a floor set for all of it.
   coverage-shard:
     name: coverage shard ${{ matrix.shard }}/${{ matrix.total }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
-        total: [3]
+        shard: [1, 2, 3, 4]
+        total: [4]
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm (corepack)
