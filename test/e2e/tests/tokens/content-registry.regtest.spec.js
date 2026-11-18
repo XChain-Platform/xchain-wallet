@@ -31,6 +31,7 @@
 
 import {
     clickManageTokenAction,
+    expectManageTokenView,
     createWallet,
     expect,
     expectMyTokensRow,
@@ -124,7 +125,7 @@ async function openManageTokenAction(page, tick, label) {
     const row = main.getByRole('button').filter({ hasText: tick }).first();
     await expectMyTokensRow(main, row, `${tick} is on chain but My Tokens does not list it`);
     await row.click();
-    await expect(page.getByText('Manage Token').first()).toBeVisible({ timeout: 30_000 });
+    await expectManageTokenView(page);
 
     await clickManageTokenAction(main, label);
 }

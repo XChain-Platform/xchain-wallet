@@ -345,7 +345,8 @@ test.describe('BET deadline race', () => {
             // fails several steps later looking like a wallet bug, which is how
             // this was found.
             await selectVenueChain(page, 'Coin');
-            await page.getByRole('button', { name: /^Generate/ }).click();
+            // The Add addresses form submits with "Add Address" in its footer.
+            await page.getByRole('button', { name: /^(?:Generate|Add Address(?:es)?$)/ }).click();
 
             const generated = (await listed()).filter((a) => !before.has(a));
             expect(generated.length, 'generating added exactly one address to the list').toBe(1);

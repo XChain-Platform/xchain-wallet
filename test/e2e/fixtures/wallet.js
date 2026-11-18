@@ -669,6 +669,29 @@ export async function clickManageTokenAction(main, label, { timeout = 30_000 } =
 }
 
 /**
+ * Waits for a token opened from My Tokens to show its management view and
+ * puts it on the Actions tab, where the owner groups (Supply, Distribute,
+ * Token page, Ownership, Rules and automation) list the issuer actions.
+ *
+ * The view is the region "<TICK> token management" beside the token list;
+ * there is no "Manage Token" heading any more.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} [message]
+ * @returns {Promise<import('@playwright/test').Locator>} the management region
+ */
+export async function expectManageTokenView(page, message = 'the token did not open its management view') {
+    const view = page.getByRole('region', { name: / token management$/ }).first();
+    await expect(view, message).toBeVisible({ timeout: 30_000 });
+    const actionsTab = view.getByRole('tab', { name: 'Actions', exact: true });
+    if (await actionsTab.isVisible().catch(() => false)
+        && (await actionsTab.getAttribute('aria-selected')) !== 'true') {
+        await actionsTab.click();
+    }
+    return view;
+}
+
+/**
  * Waits for a My Tokens row, pressing the screen's own Try again while its
  * owned-tokens read has failed.
  *
@@ -716,8 +739,15 @@ export async function pickIssueParent(main, parent) {
     // Ownership comes from the explorer, so a just-issued parent can take a
     // moment to list.
     const row = main.page().getByRole('button', { name: new RegExp(`^Select ${escaped} on `) });
-    await expect(row, `the Parent token picker does not list ${parent} as owned by this wallet`)
-        .toBeVisible({ timeout: 90_000 });
+    // The picker reads the owned tokens once on open and does not retry a
+    // rate-limited read itself, so its own Try Again is pressed while that
+    // failed-read state shows.
+    const retry = main.page().getByRole('main').getByRole('button', { name: /^Try again$/i });
+    await expect(async () => {
+        if (await retry.first().isVisible().catch(() => false)) await retry.first().click();
+        await expect(row).toBeVisible({ timeout: 5_000 });
+    }, `the Parent token picker does not list ${parent} as owned by this wallet`)
+        .toPass({ timeout: 90_000, intervals: [2_000, 5_000, 10_000] });
     await row.click();
     await expect(main.page().getByRole('button', { name: new RegExp(`^Parent token: ${escaped} on `) }))
         .toBeVisible({ timeout: 30_000 });

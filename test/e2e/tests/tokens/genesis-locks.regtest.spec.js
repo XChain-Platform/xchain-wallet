@@ -44,6 +44,7 @@
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     clickManageTokenAction,
+    expectManageTokenView,
     createWallet,
     expect,
     openIssueSection,
@@ -256,9 +257,7 @@ async function openManageToken(page, tick = TICK) {
         .toBeVisible({ timeout: 60_000 });
     await row.click();
 
-    await expect(page.getByRole('heading', { name: 'Manage Token' })
-        .or(page.getByText('Manage Token').first()))
-        .toBeVisible({ timeout: 30_000 });
+    await expectManageTokenView(page);
 }
 
 async function openTokenAdmin(page, item, tick = TICK) {
@@ -490,18 +489,19 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // token does not need it anyway: the edition template writes
             // LOCK_MAX_SUPPLY at genesis, so the prior is real rather than
             // absent.
-            await openTokenAdmin(page, 'Lock', MINTABLE_TICK);
+            // The action is "Lock settings" under Supply; each flag is a switch.
+            await openTokenAdmin(page, 'Lock settings', MINTABLE_TICK);
             const form = page.getByRole('main');
             const submit = form.getByRole('button', { name: 'Lock token' });
             await expect(submit).toBeVisible({ timeout: 30_000 });
 
-            const descriptionLock = form.getByRole('checkbox', { name: /^Description/ });
+            const descriptionLock = form.getByRole('switch', { name: /^Description/ });
             await expect(descriptionLock,
                 'the Lock form does not offer the Description flag on this token')
                 .toBeEnabled();
             // Already locked at genesis by the edition template, and the form
             // says so rather than offering it again.
-            await expect(form.getByRole('checkbox', { name: /^Max supply/ })).toBeDisabled();
+            await expect(form.getByRole('switch', { name: /^Max supply/ })).toBeDisabled();
 
             // D-165, asserted in both directions. The typed confirmation used to
             // render only in the legacy review stage, which the wallet shows to
@@ -554,20 +554,19 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             const row = list.getByRole('button').filter({ hasText: MINTABLE_TICK }).first();
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
-            await expect(page.getByRole('heading', { name: 'Manage Token' })
-                .or(page.getByText('Manage Token').first()))
-                .toBeVisible({ timeout: 30_000 });
+            await expectManageTokenView(page);
 
-            // Issuer actions stay hidden until the page has confirmed this
-            // address created the token, so the heading alone is too early.
-            const mintAction = page.getByRole('button', { name: 'Mint', exact: true })
-                .or(page.getByRole('menuitem', { name: 'Mint', exact: true }));
-            await expect.poll(() => mintAction.count(), {
-                message: 'Manage Token hides Mint on a token the chain will happily mint, because its coarse '
+            // Issuer actions stay locked until the page has confirmed this
+            // address created the token, so the view alone is too early. The
+            // Mint row is always listed under Supply; a mint lock shows it
+            // aria-disabled with its reason, so "offered" means enabled.
+            const mintAction = page.getByRole('main').locator('[data-action-id="mint"]');
+            await expect(mintAction, 'Manage Token lists no Mint action').toBeVisible({ timeout: 30_000 });
+            await expect(mintAction,
+                'Manage Token locks Mint on a token the chain will happily mint, because its coarse '
                     + '`locked` flag ORs LOCK_DESCRIPTION together with the supply and mint locks - '
-                    + 'freezing the metadata should not retire the mint button',
-                timeout: 60_000,
-            }).toBeGreaterThan(0);
+                    + 'freezing the metadata should not retire the mint button')
+                .not.toHaveAttribute('aria-disabled', 'true', { timeout: 60_000 });
         });
     });
 
@@ -602,7 +601,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('lock MINTING, which is the one flag that forbids it', async () => {
-            await openTokenAdmin(page, 'Lock', LOCKMINT_TICK);
+            await openTokenAdmin(page, 'Lock settings', LOCKMINT_TICK);
             const form = page.getByRole('main');
             const submit = form.getByRole('button', { name: 'Lock token' });
             await expect(submit).toBeVisible({ timeout: 30_000 });
@@ -610,7 +609,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // D-165's gate again, on a different flag: the typed word is
             // required whichever lock is being set, not just the one it was
             // first driven with.
-            await form.getByRole('checkbox', { name: /^Minting/ }).check();
+            await form.getByRole('switch', { name: /^Minting/ }).check();
             await expect(submit).toBeDisabled();
             await fieldByLabel(form, 'Type LOCK to confirm').fill('LOCK');
             await expect(submit).toBeEnabled();
@@ -646,16 +645,20 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             const row = list.getByRole('button').filter({ hasText: LOCKMINT_TICK }).first();
             await expect(row).toBeVisible({ timeout: 60_000 });
             await row.click();
-            await expect(page.getByRole('heading', { name: 'Manage Token' })
-                .or(page.getByText('Manage Token').first()))
-                .toBeVisible({ timeout: 30_000 });
+            await expectManageTokenView(page);
 
-            const mintAction = page.getByRole('main').getByRole('button', { name: 'Mint', exact: true })
-                .or(page.getByRole('menuitem', { name: 'Mint', exact: true }));
-            expect(await mintAction.count(),
+            // A mint-locked token still lists the Mint row, locked with its
+            // reason in place of the description: that is "offers nothing".
+            const mintAction = page.getByRole('main').locator('[data-action-id="mint"]');
+            await expect(mintAction, 'Manage Token lists no Mint action').toBeVisible({ timeout: 30_000 });
+            await expect(mintAction,
                 'Manage Token still offers Mint on a token the chain has permanently locked against '
                 + 'it, so D-166 traded a false absence for a false presence')
-                .toBe(0);
+                .toHaveAttribute('aria-disabled', 'true', { timeout: 30_000 });
+            // A row is also locked while the owner read is pending, so the
+            // reason pins it to the mint lock itself.
+            await expect(mintAction, 'the locked Mint row does not name the mint lock as its reason')
+                .toContainText(/permanently locked/i, { timeout: 60_000 });
         });
 
         await test.step('and the Mint form itself refuses rather than advertising supply', async () => {
