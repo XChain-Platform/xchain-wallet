@@ -682,13 +682,15 @@ export function feeFacts(fees) {
  * @property {Array<{ key: string, text: string, detail?: string|null }>} points
  * @property {Array<any>} overrides     error findings the user may sign anyway, each with its own box
  * @property {'alert'|'status'|null} role
- * @property {string} state             'checking', 'oracleFees' or a pre-flight state (pass, notChecked, partial, warn, fail)
+ * @property {string} state             'checking', 'oracleFees' or a pre-flight state (pass, notChecked, partial, settleChecks, warn, fail)
  */
 
 /**
  * The status notice, the first thing on the page (G127 revised 2026-11-16).
  * It is green ("Checked: this will go through.") only on the indexer's own
- * full approval (preflightCheckState pass) and red for anything short of it.
+ * full approval (preflightCheckState pass) and red for anything short of it,
+ * except an approval whose only gaps are checks settlement decides, which is
+ * a blue note (settleChecks, operator 2026-11-17).
  * While the check runs it shows the checking line. It is null where no
  * network check applies (a message, a bare coin payment), so the page then
  * claims nothing either way. A failure carries its Sign anyway boxes, which
@@ -709,8 +711,28 @@ export function confirmStatus({ report = null, applies = true, loading = false, 
         return { tone: 'info', title: t('confirmStandard.checking'), points: [], overrides: [], role: 'status', state: 'checking' };
     }
     const S = PREFLIGHT_CHECK_STATES;
-    const state = preflightCheckState(report);
     const findings = Array.isArray(report?.findings) ? report.findings : [];
+    const oracleOwed = findings.find((f) => f?.code === DRYRUN_ORACLE_FEES_OWED) || null;
+    const checkState = preflightCheckState(report);
+    // Owed oracle fees keep the red notice they raise today, so the calm
+    // settlement note never carries them.
+    const state = checkState === S.SETTLE_CHECKS && oracleOwed ? S.PARTIAL : checkState;
+    if (state === S.SETTLE_CHECKS) {
+        // The wallet's headline names which limits wait; the SDK's reason text
+        // is report-reader wording, so it stays out of this note.
+        const settlePoints = [{ key: 'settle-checks', text: t('confirmStandard.settleChecks.body') }];
+        report.unverified.forEach((u, i) => {
+            settlePoints.push({ key: `settle-${i}`, text: unverifiedText(u).headline });
+        });
+        return {
+            tone: 'info',
+            title: t('confirmStandard.settleChecks.title'),
+            points: settlePoints,
+            overrides: [],
+            role: 'status',
+            state: S.SETTLE_CHECKS,
+        };
+    }
     const unavailable = findings.find((f) => f?.code === DRYRUN_UNAVAILABLE) || null;
     // The notice's data-state: the check state, or 'oracleFees' when only
     // owed oracle fees raise it on a passing check.
@@ -769,7 +791,6 @@ export function confirmStatus({ report = null, applies = true, loading = false, 
     if (state === S.NOT_CHECKED) title = t('confirmStandard.warning.notCheckedLine');
     // A batch's oracle usage fees are a disclosure, not a verdict: the probe
     // carries no outputs, so the amounts owed are said whatever the state.
-    const oracleOwed = findings.find((f) => f?.code === DRYRUN_ORACLE_FEES_OWED) || null;
     if (oracleOwed) {
         points.push({ key: 'oracle-owed', text: t('confirmStandard.warning.oracleFeesOwed'), detail: String(oracleOwed.message || '').trim() || null });
         if (!title) {

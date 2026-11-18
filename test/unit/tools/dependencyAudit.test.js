@@ -43,10 +43,10 @@ describe('dependency audit', () => {
                 name: 'fixture',
                 scripts: { build: 'fixture-cli build' },
                 dependencies: {
-                    'used-package': '1.0.0',
-                    'config-package': '1.0.0',
-                    'script-package': '1.0.0',
-                    'unused-package': '1.0.0',
+                    'used-package': '9.8.7',
+                    'config-package': '9.8.7',
+                    'script-package': '9.8.7',
+                    'unused-package': '9.8.7',
                 },
             },
         }];
@@ -106,7 +106,7 @@ describe('dependency audit', () => {
                 directory: '',
                 package: {
                     name: 'fixture',
-                    dependencies: { renderer: '1.0.0', react: '1.0.0' },
+                    dependencies: { renderer: '9.8.7', react: '9.8.7' },
                 },
             }],
             files: [{ path: 'index.js', source: "import 'renderer';" }],

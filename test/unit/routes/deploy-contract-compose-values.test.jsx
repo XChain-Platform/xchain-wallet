@@ -21,7 +21,7 @@ import { DeployContractForm } from '../../../packages/core/src/shared/routes/Dep
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = [
     'module.exports = {',
-    "  meta: { name: 'Review Contract', description: 'Exercises the publish review.', version: '1.0.0' },",
+    "  meta: { name: 'Review Contract', description: 'Exercises the publish review.', version: '9.8.7' },",
     '  run() { return 1; }',
     '};',
 ].join('\n');
@@ -46,7 +46,7 @@ function harness() {
         listContractTemplates: () => Promise.resolve({ templates: [], patterns: [] }),
         listPendingDeploys: () => Promise.resolve([]),
         planDeploy: () => Promise.resolve({ single: true, totalChunks: 0, codeHash: 'ab' }),
-        getContractExportedMeta: () => Promise.resolve({ status: 'present', name: 'Review Contract', description: 'x', version: '1.0.0' }),
+        getContractExportedMeta: () => Promise.resolve({ status: 'present', name: 'Review Contract', description: 'x', version: '9.8.7' }),
         validateContractCode: () => Promise.resolve({ valid: true }),
         composeForConfirm: (args) => {
             composed.push(args);

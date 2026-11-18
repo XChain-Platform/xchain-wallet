@@ -44,7 +44,7 @@ const HD_ADDRESS = Object.freeze({
 });
 
 const NAMED_SOURCE = "module.exports = { meta: { name: 'Escrow', description: "
-    + "'Two-party escrow with an arbiter', version: '1.0.0' }, release(x) {} };";
+    + "'Two-party escrow with an arbiter', version: '9.8.7' }, release(x) {} };";
 const NAMELESS_SOURCE = 'module.exports = { release(x) {} };';
 
 function harness(overrides = {}) {
@@ -136,7 +136,7 @@ describe('the deploy form no longer asks for a name', () => {
                 status: 'present',
                 name: 'Escrow',
                 description: 'Two-party escrow with an arbiter',
-                version: '1.0.0',
+                version: '9.8.7',
             }),
         });
         let utils;
@@ -151,7 +151,7 @@ describe('the deploy form no longer asks for a name', () => {
         const panel = utils.container.querySelector('[aria-label="Contract identity"]');
         expect(panel).not.toBeNull();
         expect(panel.textContent).toContain('Escrow');
-        expect(panel.textContent).toContain('1.0.0');
+        expect(panel.textContent).toContain('9.8.7');
         expect(panel.textContent).toContain('Two-party escrow with an arbiter');
         // Read-only: nothing in the panel is an input the user could edit.
         expect(panel.querySelectorAll('input, textarea').length).toBe(0);
@@ -234,7 +234,7 @@ describe('the contracts list names a contract off the chain', () => {
                     source: HD_ADDRESS.address,
                     status: 'valid',
                     meta_name: 'Escrow',
-                    meta_version: '1.0.0',
+                    meta_version: '9.8.7',
                 }],
             }),
         });
@@ -248,7 +248,7 @@ describe('the contracts list names a contract off the chain', () => {
             fireEvent.click(utils.getByRole('tab', { name: 'My Contracts' }));
             await drain();
         });
-        expect(utils.container.textContent).toContain('Escrow v1.0.0 (C:BTC:12)');
+        expect(utils.container.textContent).toContain('Escrow v9.8.7 (C:BTC:12)');
     });
 
     it('reads "Unnamed contract" for a contract deployed before the flag day', async () => {
@@ -326,7 +326,7 @@ describe('the contract detail page reads its identity off the contract row', () 
                     source: HD_ADDRESS.address,
                     status: 'valid',
                     meta_name: 'Escrow',
-                    meta_version: '1.0.0',
+                    meta_version: '9.8.7',
                     meta_description: 'Two-party escrow with an arbiter',
                 },
             }),
@@ -336,7 +336,7 @@ describe('the contract detail page reads its identity off the contract row', () 
             utils = mount(ContractDetail, messaging, { chainId: CHAIN, contractActionIndex: '42' });
             await drain();
         });
-        expect(utils.container.textContent).toContain('Escrow v1.0.0 (C:BTC:42)');
+        expect(utils.container.textContent).toContain('Escrow v9.8.7 (C:BTC:42)');
         expect(utils.container.textContent).toContain('Two-party escrow with an arbiter');
         // The rename control is gone: nothing on this device can change what the
         // chain recorded.
@@ -392,11 +392,11 @@ describe('a history row names the contract it touched', () => {
         );
     }
 
-    it('reads "Escrow v1.0.0 (C:BTC:12)" on an EXECUTE row', () => {
+    it('reads "Escrow v9.8.7 (C:BTC:12)" on an EXECUTE row', () => {
         const utils = renderRow(historyEntry('EXECUTE', {
-            contract_index: '12', contract_meta_name: 'Escrow', contract_meta_version: '1.0.0',
+            contract_index: '12', contract_meta_name: 'Escrow', contract_meta_version: '9.8.7',
         }));
-        expect(utils.container.textContent).toContain('Escrow v1.0.0 (C:BTC:12)');
+        expect(utils.container.textContent).toContain('Escrow v9.8.7 (C:BTC:12)');
     });
 
     // Under deferred assembly the contract does not necessarily sit at the

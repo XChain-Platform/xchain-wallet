@@ -89,13 +89,13 @@ describe('signers/checkFirmware', () => {
     });
 
     it('distinguishes unknown vendors and models', () => {
-        expect(checkFirmware({ vendor: 'missing', model: 'keyOne', version: '1.0.0', manifest }))
-            .toMatchObject({ status: 'unknown', updateUrl: null, version: '1.0.0' });
-        expect(checkFirmware({ vendor: 'acme', model: 'missing', version: '1.0.0', manifest }))
+        expect(checkFirmware({ vendor: 'missing', model: 'keyOne', version: '9.8.7', manifest }))
+            .toMatchObject({ status: 'unknown', updateUrl: null, version: '9.8.7' });
+        expect(checkFirmware({ vendor: 'acme', model: 'missing', version: '9.8.7', manifest }))
             .toMatchObject({
                 status: 'unknown',
                 updateUrl: 'https://example.test/update',
-                version: '1.0.0',
+                version: '9.8.7',
             });
     });
 

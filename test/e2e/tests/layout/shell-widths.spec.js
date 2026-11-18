@@ -135,8 +135,22 @@ function measure(page) {
                     if (getComputedStyle(p).overflowX !== 'visible') { clipped = true; break; }
                 }
                 if (clipped) continue;
-                if (r.left < minLeft) { minLeft = r.left; minLeftEl = describe(el); }
-                if (r.right > maxRight) { maxRight = r.right; maxRightEl = describe(el); }
+                // A decorative full-bleed line (wide Home's section divider: no
+                // text, not a control or image) is judged on what paints: its box
+                // clipped by #xc-main's overflow-x clip. Its layout box ends 6px past
+                // #xc-main by design (operator-approved look), and the clip hides
+                // that. Elements with text, and controls and images, keep their raw
+                // box, so real content that overflows, or text that is cut, fails.
+                let left = r.left;
+                let right = r.right;
+                const decorative = !el.textContent.trim() && !el.getAttribute('aria-label') && !/^(img|svg|canvas|input|button|a|video)$/i.test(el.tagName);
+                if (decorative && mainStyle.overflowX !== 'visible') {
+                    left = Math.max(left, mainBox.left + main.clientLeft);
+                    right = Math.min(right, mainBox.left + main.clientLeft + main.clientWidth);
+                    if (right <= left) continue;
+                }
+                if (left < minLeft) { minLeft = left; minLeftEl = describe(el); }
+                if (right > maxRight) { maxRight = right; maxRightEl = describe(el); }
             }
         }
 
