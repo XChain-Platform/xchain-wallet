@@ -140,20 +140,20 @@ describe('IssueTokenForm amount fields follow the Divisible precision', () => {
         expect(field('Max supply')).not.toHaveAttribute('aria-invalid', 'true');
     });
 
-    it('shows one in the exact format of each Divisible mode', async () => {
+    it('shows one as a whole number in each Divisible mode', async () => {
         mountForm();
         await typeTicker();
         type('Max supply', '1');
         expect(field('Max supply')).toHaveValue('1');
 
         fireEvent.blur(field('Max supply'));
-        expect(field('Max supply')).toHaveValue('1.00000000');
+        expect(field('Max supply')).toHaveValue('1');
 
         fireEvent.click(screen.getByLabelText(DIVISIBLE));
         expect(field('Max supply')).toHaveValue('1');
 
         fireEvent.click(screen.getByLabelText(DIVISIBLE));
-        expect(field('Max supply')).toHaveValue('1.00000000');
+        expect(field('Max supply')).toHaveValue('1');
     });
 
     it('shows a field error at once when Divisible turns off under a fractional Max supply and Initial mint', async () => {
@@ -189,7 +189,7 @@ describe('IssueTokenForm amount fields follow the Divisible precision', () => {
 
         expect(screen.getByLabelText('Initial mint')).toHaveValue('1.12345678');
         expect(screen.getByLabelText('Initial mint')).not.toHaveAttribute('aria-invalid', 'true');
-        expect(field('Max supply')).toHaveValue('15.00000000');
+        expect(field('Max supply')).toHaveValue('15');
 
         await submit();
         const params = await composedParams();

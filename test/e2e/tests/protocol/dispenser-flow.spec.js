@@ -97,9 +97,9 @@ async function fillDispenserAndReject(page, label) {
 
     await reject.click();
     await expect(confirm).toHaveCount(0);
-    // PEPECASH is divisible, so both amounts show its 8-decimal format (U61).
-    await expect(main.getByRole('textbox', { name: /^Give amount per fill/ })).toHaveValue('25.00000000');
-    await expect(main.getByRole('textbox', { name: /^Escrow amount/ })).toHaveValue('100.00000000');
+    // A whole amount shows as typed, without decimals (U61, operator 2026-11-17).
+    await expect(main.getByRole('textbox', { name: /^Give amount per fill/ })).toHaveValue('25');
+    await expect(main.getByRole('textbox', { name: /^Escrow amount/ })).toHaveValue('100');
 }
 
 async function exerciseOwnedDispensers(page, label) {

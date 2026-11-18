@@ -103,6 +103,6 @@ describe('Issue token while the host composes', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Issue Token' }));
         fireEvent.click(await screen.findByTestId('confirm-reject'));
         expect(await screen.findByRole('textbox', { name: 'Max supply' })).toBeEnabled();
-        expect(screen.getByRole('textbox', { name: 'Max supply' }).value).toBe('5.00000000');
+        expect(screen.getByRole('textbox', { name: 'Max supply' }).value).toBe('5');
     });
 });

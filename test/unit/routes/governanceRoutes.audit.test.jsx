@@ -299,8 +299,8 @@ describe('governance route audit', () => {
         expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
-        expect(screen.getByLabelText('Creation deposit (XCHAIN)')).toHaveValue('3.00');
-        expect(screen.getByLabelText('Escrow to fund the call (XCHAIN)')).toHaveValue('2.00');
+        expect(screen.getByLabelText('Creation deposit (XCHAIN)')).toHaveValue('3');
+        expect(screen.getByLabelText('Escrow to fund the call (XCHAIN)')).toHaveValue('2');
 
         fireEvent.click(screen.getByRole('button', { name: /^Create poll$/i }));
         fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
