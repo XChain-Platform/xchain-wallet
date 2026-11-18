@@ -140,10 +140,17 @@ async function classifyPaste(page, text) {
     const failed = scanStatus(page);
     const verdictText = (raw) => raw.split('\n').map((line) => line.trim())
         .filter((line) => line && !/\bcamera\b/i.test(line)).join('\n');
+    // allInnerTexts reads without waiting: the route can unmount between the
+    // count and the read, and a waiting innerText would then spend the whole
+    // action timeout on a node that is gone, starving the poll.
     let outcome = null;
     await expect.poll(async () => {
-        if (await routed.count() === 0) outcome = 'routed';
-        else if (await failed.count() > 0) outcome = verdictText(await failed.first().innerText()) || null;
+        if (await routed.count() === 0) {
+            outcome = 'routed';
+        } else {
+            const [notice] = await failed.allInnerTexts();
+            outcome = notice === undefined ? null : verdictText(notice) || null;
+        }
         return outcome;
     }, {
         timeout: 30_000,
