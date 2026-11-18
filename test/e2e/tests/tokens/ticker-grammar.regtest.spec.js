@@ -774,17 +774,24 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             const xchainSwitch = main.getByRole('switch', { name: /^Pay protocol fee in \S+$/ });
 
             if (NATIVE_FEE_MANDATORY) {
-                await expect(main.getByText(new RegExp(
-                    `${NATIVE_TICKER} is the only way to pay a protocol fee on this network`)),
-                    `the Create token form does not tell a ${REGTEST_CHAIN_LABEL} user that the `
-                    + 'protocol fee can only be paid in coin here')
+                // Off Bitcoin the switch shows on and locked (ruling U55): the
+                // coin output is the fee, and the user cannot turn it off.
+                const lockedSwitch = main.getByRole('switch', {
+                    name: new RegExp(`^Pay protocol fee in ${NATIVE_TICKER}$`),
+                });
+                await expect(lockedSwitch,
+                    `the Create token form does not show a ${REGTEST_CHAIN_LABEL} user that the `
+                    + 'protocol fee is paid in coin here')
                     .toBeVisible({ timeout: 30_000 });
-                expect(await xchainSwitch.count(),
+                await expect(lockedSwitch,
+                    'the coin fee lane is off on a chain where it is the only lane')
+                    .toBeChecked();
+                await expect(lockedSwitch,
                     'the form offers an XCHAIN fee lane on a chain that has none. The indexer '
                     + 'answers "rejected" for a fee-bearing action with no fee output on any coin '
                     + 'but BTC (utility.detectFeePaymentMode), so the transaction would be '
                     + 'broadcast, the miner fee spent, and the action never indexed')
-                    .toBe(0);
+                    .toBeDisabled();
             } else {
                 // The BTC shape, and the precondition the XCHAIN-fee test needs.
                 await expect(xchainSwitch,
