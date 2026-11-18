@@ -24,6 +24,7 @@ import {
 import { registry as registryLib } from '@xchain-wallet/core';
 import { useMessaging, screenVariantFor } from '../useMessaging.js';
 import { isDemoWallet } from '../../flows/demoMode.js';
+import { synthesizeDemoOwnedTokens } from '../../flows/demoFixtures.js';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { TickerIcon } from '../components/TickerIcon.jsx';
 import { ListFilterMenu } from '../components/ListFilterMenu.jsx';
@@ -113,10 +114,15 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick, r
         if (!addressesByChain) return undefined;
         setTokens(null);
         setTokensError(null);
-        // A demo wallet issued nothing, and a demo wallet's addresses never go
-        // to an explorer (issue #82).
+        // A demo wallet's addresses never go to an explorer (issue #82), so its
+        // issued tokens come from the fixtures.
         if (isDemoWallet(walletId)) {
-            setTokens([]);
+            const owned = [];
+            for (const [chainId, addrs] of Object.entries(addressesByChain)) {
+                const ownerAddress = Array.isArray(addrs) && typeof addrs[0]?.address === 'string' ? addrs[0].address : '';
+                for (const row of synthesizeDemoOwnedTokens(chainId)) owned.push({ ...row, chainId, ownerAddress });
+            }
+            setTokens(owned);
             return undefined;
         }
         if (typeof messaging?.getOwnedTokens !== 'function') {
@@ -333,7 +339,7 @@ export function MyTokens({ walletId, accountId, onBack, onIssue, onSelectTick, r
                                     aria-current={twoPanel && row === shownToken ? 'true' : undefined}
                                     aria-label={`Open ${row.tick} token details`}
                                     leading={<span className={styles.rowChain} aria-hidden="true">
-                                        <TickerIcon chainId={row.chainId} tick={row.tick} size={40} />
+                                        <TickerIcon chainId={row.chainId} tick={row.tick} size={40} imageUrl={row.imageUrl || null} />
                                     </span>}
                                     title={(
                                         <span className={styles.rowTick}>

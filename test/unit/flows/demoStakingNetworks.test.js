@@ -31,7 +31,8 @@ describe('demo staking fixtures', () => {
 
         it(`populate the contract stakes and their deploy metadata on ${chainId}`, () => {
             const { stakes, unstakes, slashEvents } = synthesizeDemoContractStakes(chainId);
-            expect(stakes.map((s) => s.target_contract_index)).toEqual(['1024', '2048']);
+            // 2048 holds the PEPECASH stake plus its later top-up.
+            expect(stakes.map((s) => s.target_contract_index)).toEqual(['1024', '2048', '2048']);
             expect(unstakes).toHaveLength(1);
             expect(slashEvents).toHaveLength(1);
             expect(synthesizeDemoContractMeta(chainId, 1024)).toMatchObject({ cooldown_blocks: 144 });
