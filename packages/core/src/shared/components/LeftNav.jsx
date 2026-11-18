@@ -10,7 +10,7 @@
 
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Icon } from '@xchain-wallet/core/ui';
+import { Icon } from '@xchain-wallet/core/ui';
 import { showsBottomBar, showsSidebar } from '../styles/breakpoints.js';
 import { useLayoutTier } from '../styles/useLayoutTier.js';
 import {
@@ -119,7 +119,6 @@ export function isNavItemActive(itemId, currentView) {
  * @param {(view: string) => void} props.onSelect
  * @param {() => void} [props.onLock]
  * @param {() => void} [props.onOpenSettings]
- * @param {() => void} [props.onCommandPalette]   when provided, renders a search row at the top that opens the §33 command palette (Cmd/Ctrl+K); shells with their own header search (web) leave it unset
  * @param {boolean} [props.hasVmAddress] gates the Contracts row (the registry carries DEPLOY in COMMON_ACTIONS, so LTC and DOGE qualify too)
  * @param {boolean} [props.hasBtcAddress] gates the Staking row
  * @param {boolean} [props.hasGovernanceAddress] gates the Governance row
@@ -131,7 +130,6 @@ export function LeftNav({
     onSelect,
     onLock,
     onOpenSettings,
-    onCommandPalette,
     hasVmAddress = false,
     hasBtcAddress = false,
     hasGovernanceAddress = false,
@@ -204,21 +202,6 @@ export function LeftNav({
             onKeyDown={handleKeyDown}
         >
             <div className={styles.brand}>{t('components.leftNav.xchainWallet')}</div>
-            {onCommandPalette ? (
-                <div className={styles.search}>
-                    <Button
-                        variant="secondary"
-                        block
-                        icon={<Icon.SearchIcon />}
-                        onClick={onCommandPalette}
-                        aria-label={t('components.leftNav.openCommandPalette')}
-                        aria-keyshortcuts="Meta+K Control+K"
-                        title={t('components.leftNav.searchCmdCtrlK')}
-                    >
-                        <span className={styles.label}>{t('routes.addressList.search')}</span>
-                    </Button>
-                </div>
-            ) : null}
             <div className={styles.groups}>
                 {groups.map((group, index) => (
                     <div key={group.id}>
@@ -646,7 +629,7 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
             ref={layoutRef}
             // A rail-width window showing names lays out as the full tier.
             data-xc-tier={onRail && menuState === 'full' ? 'full' : tier}
-            // Marks a visible rail, whose Search makes a search-only header menu redundant.
+            // Marks a visible side menu, which lays the shell out as a grid under the app bar.
             data-xc-rail={sidebar ? 'shown' : undefined}
             data-xc-side-menu={menuState ?? undefined}
             data-xc-side-menu-motion={sidebar && animate && dragExtra === null ? 'on' : undefined}

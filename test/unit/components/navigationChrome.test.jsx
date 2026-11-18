@@ -316,7 +316,6 @@ describe('navigation Tab order', () => {
                 <LeftNav
                     currentView="home"
                     onSelect={() => {}}
-                    onCommandPalette={() => {}}
                     onOpenWalletPicker={() => {}}
                     onOpenSettings={() => {}}
                     onLock={() => {}}
@@ -331,7 +330,7 @@ describe('navigation Tab order', () => {
         screen.getByRole('button', { name: 'Before navigation' }).focus();
 
         const order = [
-            'Open the wallet menu', 'Home', 'Send', 'Receive', 'My Tokens', 'History',
+            'Home', 'Send', 'Receive', 'My Tokens', 'History',
             'Exchange (DEX)', 'Marketplace', 'Dispensers', 'Prediction markets',
             'Governance', 'Staking', 'Contracts', 'My Agents', 'Messaging', 'Contacts',
             'Settings', 'Lock wallet',
