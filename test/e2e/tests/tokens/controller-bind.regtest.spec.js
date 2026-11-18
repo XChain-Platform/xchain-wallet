@@ -652,7 +652,7 @@ async function gotoUnbindControllerForm(page, tick) {
     await clickManageTokenAction(page.getByRole('main'), 'Unbind controller');
 
     const form = page.getByRole('main');
-    await expect(form.getByRole('group', { name: 'Action class' }),
+    await expect(form.getByRole('combobox', { name: 'Action class' }),
         'Unbind controller did not open the Unbind form')
         .toBeVisible({ timeout: 30_000 });
     return form;
@@ -674,7 +674,7 @@ async function unbindController(page, source, tick = TICK) {
     await expect(form.getByLabel(/^Cooldown blocks/),
         'the Unbind form still offers a cooldown field, which a drop cannot set')
         .toHaveCount(0);
-    await chooseActionClass(form, 'transfer');
+    await chooseUnbindActionClass(form, 'transfer');
     await form.getByRole('button', { name: 'Unbind', exact: true }).click();
 
     await expectConfirmModal(page);
@@ -744,6 +744,22 @@ async function chooseActionClass(form, actionClass) {
         `exactly \`${actionClass}\` must stay ticked`).toHaveCount(1);
 }
 
+/**
+ * Picks `actionClass` in the Unbind form's Action class select. One unbind
+ * removes one class, so the Unbind form offers a single-choice themed select
+ * (a combobox showing its pick) where the Bind form offers checkboxes. A class
+ * the chain does not offer has no option, and the visibility assertion fails
+ * the test instead of silently dropping the wrong class.
+ */
+async function chooseUnbindActionClass(form, actionClass) {
+    const select = form.getByRole('combobox', { name: 'Action class' });
+    await select.click();
+    const option = form.page().getByRole('option', { name: actionClass, exact: true });
+    await expect(option, `the Action class select carries no \`${actionClass}\` option`).toBeVisible();
+    await option.click();
+    await expect(select).toHaveText(new RegExp(`^\\s*${actionClass}\\s*$`));
+}
+
 /** Binds `contractIndex` to `source` itself (ADDRESS v1) and waits for the chain. */
 async function bindAddressController(page, source, contractIndex) {
     const form = await gotoAddressControllerForm(page, source);
@@ -803,7 +819,7 @@ async function unbindAddressController(page, source) {
         .toHaveText(/^\s*Address\s*$/);
     await selectVenueChain(form);
     await readChainAddresses(page, source);
-    await chooseActionClass(form, 'transfer');
+    await chooseUnbindActionClass(form, 'transfer');
     await form.getByRole('button', { name: 'Unbind', exact: true }).click();
 
     await expectConfirmModal(page);
