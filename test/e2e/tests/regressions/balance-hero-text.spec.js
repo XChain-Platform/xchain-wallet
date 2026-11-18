@@ -24,8 +24,24 @@ async function settle(page) {
     }));
 }
 
+// A resize to a desktop width moves the hero into wide Home's split layout,
+// which mounts a new hero, and on a slow runner Home can show its loading
+// rows while it does. That remount can land between Playwright resolving the
+// sentence and reading it: a detached node has no computed font size (NaN)
+// and a hidden one has no lines. So the read repeats until it lands on a node
+// that is in the page and rendered; every assertion then runs on that reading.
 async function textMetrics(amount) {
+    let metrics = null;
+    await expect.poll(async () => {
+        metrics = await readTextMetrics(amount);
+        return metrics.live;
+    }, { message: 'the hero sentence was read from a rendered node in the page' }).toBe(true);
+    return metrics;
+}
+
+async function readTextMetrics(amount) {
     return amount.evaluate((element) => {
+        if (!element.isConnected || element.getClientRects().length === 0) return { live: false };
         const text = element.querySelector('span');
         const range = document.createRange();
         range.selectNodeContents(text);
@@ -41,6 +57,7 @@ async function textMetrics(amount) {
             return Number.parseFloat(getComputedStyle(probe).fontSize);
         };
         const metrics = {
+            live: true,
             fontSize: Number.parseFloat(getComputedStyle(element).fontSize),
             bodyFontSize: resolveSize('--xc-type-body-size'),
             secondaryFontSize: resolveSize('--xc-text-lg'),
@@ -51,23 +68,35 @@ async function textMetrics(amount) {
     });
 }
 
+// The overlap reading counts the live, rendered buttons it measured, so a
+// read that lands on a hero mid-remount (every button detached, no boxes)
+// retries instead of passing with nothing measured.
 async function buttonsOverlappingLabel(hero, label) {
-    const labelBox = await label.boundingBox();
-    expect(labelBox, 'the hero label has no rendered box').not.toBeNull();
-
-    return hero.getByRole('button').evaluateAll((buttons, target) => buttons.flatMap((button) => {
-        const style = getComputedStyle(button);
-        const box = button.getBoundingClientRect();
-        if (style.display === 'none' || style.visibility === 'hidden'
-            || box.width === 0 || box.height === 0) return [];
-        const intersects = box.left < target.x + target.width
-            && box.right > target.x
-            && box.top < target.y + target.height
-            && box.bottom > target.y;
-        return intersects
-            ? [button.getAttribute('aria-label') || button.textContent.trim() || '<unnamed>']
-            : [];
-    }), labelBox);
+    let reading = { names: [], measured: 0 };
+    await expect.poll(async () => {
+        const labelBox = await label.boundingBox();
+        if (!labelBox) return 0;
+        reading = await hero.getByRole('button').evaluateAll((buttons, target) => {
+            const names = [];
+            let measured = 0;
+            for (const button of buttons) {
+                if (!button.isConnected) continue;
+                const style = getComputedStyle(button);
+                const box = button.getBoundingClientRect();
+                if (style.display === 'none' || style.visibility === 'hidden'
+                    || box.width === 0 || box.height === 0) continue;
+                measured += 1;
+                const intersects = box.left < target.x + target.width
+                    && box.right > target.x
+                    && box.top < target.y + target.height
+                    && box.bottom > target.y;
+                if (intersects) names.push(button.getAttribute('aria-label') || button.textContent.trim() || '<unnamed>');
+            }
+            return { names, measured };
+        }, labelBox);
+        return reading.measured;
+    }, { message: 'the hero label and its buttons were measured on a rendered hero' }).toBeGreaterThan(0);
+    return reading.names;
 }
 
 test('balance hero sentences stay secondary and clear of actions', async ({ page }) => {
