@@ -135,6 +135,9 @@ describe('<AddressText> default fit (G99)', () => {
             else if (this.hasAttribute('aria-label')) {
                 width = this.firstChild?.nodeType === 3 ? this.firstChild.data.length * 10 : this.textContent.length * 10;
                 left = Number(this.parentElement?.closest('[data-address-left]')?.dataset.addressLeft || 0);
+                // A browser holds an inline-block address to its box width, however long the text.
+                const clamp = this.parentElement?.closest('[data-address-clamp]')?.dataset.addressClamp;
+                if (clamp) width = Math.min(width, Number(clamp));
             }
             return { width, height: 20, top: 0, right: left + width, bottom: 20, left, x: left, y: 0, toJSON() {} };
         });
@@ -203,6 +206,25 @@ describe('<AddressText> default fit (G99)', () => {
         render(
             <div style={{ display: 'flex' }}>
                 <span style={{ display: 'block' }} data-fit-width="380" data-address-left="90">
+                    Bitcoin, <AddressText address={ADDRESS} />
+                </span>
+                <span data-testid="chevron" />
+            </div>,
+        );
+        // 290px of room: 14 + … + 14.
+        expect(screen.getByLabelText(ADDRESS))
+            .toHaveTextContent(`${ADDRESS.slice(0, 14)}…${ADDRESS.slice(-14)}`);
+    });
+
+    it('keeps the prefix off the room when the whole value is held to the summary width', () => {
+        // The whole value reads as the summary's full width less a rounding sliver
+        // (Send's From at 360), not wider, and the prefix must still come off the room.
+        mockLayout({
+            lineRects: () => [{ left: 0, right: 90, width: 90, top: 0, bottom: 20 }],
+        });
+        render(
+            <div style={{ display: 'flex' }}>
+                <span style={{ display: 'block' }} data-fit-width="380" data-address-left="90" data-address-clamp="379.98">
                     Bitcoin, <AddressText address={ADDRESS} />
                 </span>
                 <span data-testid="chevron" />

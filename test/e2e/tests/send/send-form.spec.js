@@ -227,17 +227,18 @@ test('a zero-balance wallet whose balances could not be checked says so once', a
     await serveZeroBalances(page);
     await createWallet(page, { password: PASSWORD });
     // No dev services run here, so the check fails once its startup grace
-    // ends; Home's empty Coins tab is the first place that says so.
-    const unchecked = page.getByText("Balances couldn't be checked", { exact: true });
-    await expect(unchecked.first()).toBeVisible({ timeout: 90_000 });
+    // ends. Home's empty tab keeps Fund your wallet (walk ruling 2026-11-16);
+    // Send is the page that says the balances could not be checked.
+    await expect(page.getByText('Fund your wallet', { exact: true })).toBeVisible({ timeout: 90_000 });
     await gotoSection(page, 'Send');
 
-    await expect(page.getByRole('heading', { name: "Balances couldn't be checked", exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: "Balances couldn't be checked", exact: true }))
+        .toBeVisible({ timeout: 90_000 });
     await expect(page.getByText('Your balance may be out of date. Try again to refresh it.')).toBeVisible();
     // One message: no "Nothing to send yet" and no stale-balances notice beside it.
     await expect(page.getByText('Nothing to send yet')).toHaveCount(0);
     await expect(page.getByText('Some balances may be out of date')).toHaveCount(0);
     await expect(page.getByText('Some information may be out of date')).toHaveCount(0);
-    await expect(mainButton(page, 'Try again')).toBeVisible();
+    await expect(mainButton(page, 'Try Again')).toBeVisible();
     await expect(mainButton(page, 'Receive')).toBeVisible();
 });

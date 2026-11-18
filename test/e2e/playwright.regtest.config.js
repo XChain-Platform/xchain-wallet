@@ -90,6 +90,8 @@ export default defineConfig({
     use: {
         baseURL: `http://localhost:${PREVIEW_PORT}`,
         outboundStubHosts: XCHAIN_SERVICE_HOSTS,
+        // The chain moves under these specs between loads; see fixtures/wallet.js.
+        freshReadsOnLoad: true,
         // Bounds every click and fill that names no timeout of its own. Without
         // it an action inherits the 30 minute TEST budget above, so one locator
         // that no longer matches the screen waits out the whole test and eats

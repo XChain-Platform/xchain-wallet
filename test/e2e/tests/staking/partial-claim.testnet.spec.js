@@ -113,8 +113,8 @@ test.describe('partial validator reward claim on Bitcoin testnet', () => {
             const row = page.getByRole('button', { name: /^Open (Validator stake), / }).first();
             await expect(row).toBeVisible({ timeout: 120_000 });
             await row.click();
-            const claim = page.getByRole('group', { name: 'Stake actions' })
-                .getByRole('button', { name: 'Claim', exact: true });
+            const claim = page.getByRole('list', { name: 'Stake actions' })
+                .getByRole('button', { name: /^Claim\b/ });
             await expect(claim).toBeEnabled({ timeout: 120_000 });
             await claim.click();
 

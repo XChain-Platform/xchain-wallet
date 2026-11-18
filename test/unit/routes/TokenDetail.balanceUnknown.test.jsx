@@ -18,6 +18,7 @@ import React from 'react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { TokenDetail } from '../../../packages/core/src/shared/routes/TokenDetail.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { writeBalanceCache } from '../../../packages/core/src/shared/utils/balanceCache.js';
 
 const CHAIN = 'bitcoin-regtest';
 
@@ -53,6 +54,24 @@ function renderDetail(getWalletBalances, { kind = 'token', tick = 'UNKNOWNBAL' }
 }
 
 describe('TokenDetail balance that is not known', () => {
+    it('reads the amount from Home\'s saved balances while they are under five minutes old', async () => {
+        writeBalanceCache('w1', null, {
+            balances: { [CHAIN]: [{
+                address: 'bcrt1qsaved',
+                error: null,
+                balances: { native: null, tokens: [{ tick: 'UNKNOWNBAL', quantity: '7', divisibility: 0 }] },
+            }] },
+            activeByChain: {},
+            fetchedAt: Date.now() - 60_000,
+        }, 'mainnet');
+        const getWalletBalances = vi.fn().mockResolvedValue({});
+        renderDetail(getWalletBalances);
+        await waitFor(() => expect(screen.queryByText('Loading balance…')).toBeNull());
+        expect(screen.queryByText('Balance is unavailable.')).toBeNull();
+        expect(screen.queryByText('No balance to send.')).toBeNull();
+        expect(getWalletBalances).not.toHaveBeenCalled();
+    });
+
     it('says the balance is unavailable after a failed read, not that there is none', async () => {
         renderDetail(vi.fn().mockRejectedValue(new Error('offline')));
         expect(await screen.findByText('Balance is unavailable.')).toBeTruthy();

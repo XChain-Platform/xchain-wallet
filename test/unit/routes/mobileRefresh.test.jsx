@@ -6,7 +6,7 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { BALANCE_MAX_AGE_MS } from '../../../packages/core/src/flows/balances.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ToastHost } from '../../../packages/core/src/shared/components/ToastHost.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
@@ -73,9 +73,9 @@ describe('mobile refresh', () => {
         // and the eye), so the reload is the poll beat: one beat starts the
         // read and the next beat, while it is pending, does not double it.
         try {
-            await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_POLL_INTERVAL_MS); });
+            await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_MAX_AGE_MS); });
             expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
-            await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_POLL_INTERVAL_MS); });
+            await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_MAX_AGE_MS); });
             expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2);
 
             await act(async () => { held.reject(new Error('Failed to fetch')); });
@@ -159,7 +159,7 @@ describe('mobile refresh', () => {
 
         expect(await screen.findByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeInTheDocument();
         try {
-            await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_POLL_INTERVAL_MS); });
+            await act(async () => { await vi.advanceTimersByTimeAsync(BALANCE_MAX_AGE_MS); });
         } finally {
             vi.useRealTimers();
         }

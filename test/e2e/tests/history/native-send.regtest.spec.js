@@ -63,7 +63,7 @@ const FUNDING = 1;
 const SEND_AMOUNT = '0.25';
 
 /**
- * History polls its pending set every 20s (BALANCE_POLL_INTERVAL_MS) and on
+ * History polls its pending set every 20s (PENDING_POLL_INTERVAL_MS) and on
  * focus. "Within one poll" is asserted against three beats: one that may
  * already be in flight when the block lands, one that reads the new view,
  * and one of slack for the tracker's own commit of that block.

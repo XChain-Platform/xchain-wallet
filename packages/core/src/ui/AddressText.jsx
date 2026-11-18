@@ -350,7 +350,9 @@ function lineOthersWidth(box, element, content) {
     // whole value in place (wider than the box, as in a one-line summary's
     // "Bitcoin, <address>") has no such room to hold, so the text beside it
     // still counts in full or the prefix would be given back to the address.
-    if (mine.width > content) return others;
+    // The browser holds an inline-block address to the box width, so a value
+    // that reads as wide as the box (within clientWidth's rounding) is that case too.
+    if (mine.width >= content - 1) return others;
     return Math.min(others, Math.max(0, content - mine.width));
 }
 
