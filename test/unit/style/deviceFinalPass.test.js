@@ -65,10 +65,12 @@ describe('device pass layout guards', () => {
         expect(jsx).not.toMatch(/actionsFull/);
     });
 
-    it('hides a search-only header menu when the rail shows Search', () => {
+    it('never hides the header menu button for a side menu Search', () => {
+        // The side menu has no Search row (U99, operator 2026-11-18), so the header
+        // menu button is the visible wallet menu trigger at every width.
         const css = read('packages/core/src/shared/components/LeftNav.module.css');
-        // G100: a collapsed side menu shows no Search, so the trigger stays there.
-        expect(css).toMatch(/\.layout\[data-xc-rail='shown'\]:not\(\[data-xc-side-menu='collapsed'\]\) :global\(\[data-header-menu='search-only'\]\)\s*\{\s*display:\s*none;/);
+        expect(css).not.toMatch(/data-header-menu/);
+        expect(css).not.toMatch(/\.search\b/);
     });
 
     it('shows no reachability notice for a demo wallet in any shell', () => {

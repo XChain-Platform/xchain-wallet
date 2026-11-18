@@ -3637,7 +3637,6 @@ function AppInner() {
                             onLock={handleNavLock}
                             onOpenWalletPicker={handleOpenWalletPicker}
                             onOpenSettings={handleOpenSettings}
-                            onCommandPalette={palette.openPalette}
                             walletName={activeWalletName}
                             hasVmAddress={hasVmAddress}
                             hasBtcAddress={hasBtcAddress}

@@ -23,10 +23,9 @@
 //   - mounts <CommandPalette ... commands={...}> with the palette open/close
 //     state, so it actually renders
 //   - builds its command list via buildCommands(...) (the shared catalogue)
-// Plus visible triggers: web via AppHeader.onCommandPalette, desktop via
-// LeftNav.onCommandPalette. The extension popup has no shared header/nav, so
-// its palette is reachable by Cmd/Ctrl+K only (a visible popup trigger is a
-// tracked follow-up); its wiring is still pinned above.
+// Plus visible triggers: every shell's AppHeader menu button, and the popup's
+// Home search button. The side menu carries no Search row (U99,
+// operator 2026-11-18): it opened the wallet menu while looking like a text field.
 
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
@@ -235,18 +234,22 @@ assert.ok(/aria-haspopup="dialog"/.test(headerMenu) && /aria-expanded=\{menuOpen
     'the header menu button toggles the wallet menu and labels itself walletMenu.openMenu');
 
 const leftNav = read('packages/core/src/shared/components/LeftNav.jsx');
-assert.ok(/onCommandPalette\b/.test(leftNav) && OPEN_MENU_LABEL.test(leftNav),
-    'LeftNav renders an "Open the wallet menu" search row (desktop trigger)');
+assert.ok(!/onCommandPalette\b/.test(leftNav) && !OPEN_MENU_LABEL.test(leftNav),
+    'LeftNav renders no search row: the wallet menu opens from the header button and Cmd/Ctrl+K');
 
-// Every shell passes the header menu toggle and open state; desktop also keeps the nav search row.
+// Every shell passes the header menu toggle and open state.
 for (const label of ['web', 'desktop', 'extension popup']) {
     const src = read(shells[label]);
     assert.ok(/onMenuToggle=\{palette\.togglePalette\}/.test(src) && /menuOpen=\{palette\.open\}/.test(src),
         `${label} App wires the AppHeader wallet menu toggle`);
     assert.ok(/<CommandPalette[\s\S]*?\bmenu=\{/.test(src), `${label} App mounts the palette with the wallet menu catalogue`);
 }
-assert.ok(/onCommandPalette=\{palette\.openPalette\}/.test(read(shells.desktop)),
-    'desktop App wires the LeftNav palette trigger');
+for (const label of ['web', 'desktop']) {
+    const src = read(shells[label]);
+    const leftNavProps = src.slice(src.indexOf('<LeftNav'), src.indexOf('/>', src.indexOf('<LeftNav')));
+    assert.ok(src.includes('<LeftNav') && !/onCommandPalette=/.test(leftNavProps),
+        `${label} App passes LeftNav no palette trigger`);
+}
 
 // --- destination parity: every navigate command lands somewhere ----------
 //
