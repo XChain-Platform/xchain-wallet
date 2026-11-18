@@ -186,7 +186,7 @@ export function MultiRecipientList({
                                 <ListRow
                                     className={styles.row}
                                     contentClassName={styles.rowContent}
-                                    chevron={expanded ? <Icon.ChevronDownIcon /> : true}
+                                    chevron
                                     onClick={() => onToggleEdit(row.id)}
                                     aria-expanded={expanded}
                                     aria-controls={panelId}
