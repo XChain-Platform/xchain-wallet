@@ -231,7 +231,6 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
             if (await reviewPassword.count() > 0 && await reviewPassword.isVisible().catch(() => false)) {
                 await reviewPassword.fill(PASSWORD);
             }
-            await main.getByRole('button', { name: 'Sign and Publish' }).click();
             await expectConfirmModal(issuer, 'the gated publish', 60_000);
             await approveWhenReady(issuer);
 
