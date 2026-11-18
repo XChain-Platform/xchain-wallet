@@ -23,7 +23,7 @@ import { HwFirmwareBanner } from '../../../packages/core/src/shared/components/H
 const SIGNER_INFO = {
     vendor: 'ledger',
     model: 'nano-x',
-    firmwareVersion: '1.0.0',
+    firmwareVersion: '9.8.7',
 };
 
 function setVerdict(status, overrides = {}) {
@@ -52,8 +52,8 @@ afterAll(() => { vi.doUnmock('@xchain-wallet/core'); });
 describe('HwFirmwareBanner visibility', () => {
     it.each([
         ['no signer information', undefined],
-        ['no vendor', { model: 'nano-x', firmwareVersion: '1.0.0' }],
-        ['no model', { vendor: 'ledger', firmwareVersion: '1.0.0' }],
+        ['no vendor', { model: 'nano-x', firmwareVersion: '9.8.7' }],
+        ['no model', { vendor: 'ledger', firmwareVersion: '9.8.7' }],
     ])('renders nothing with %s', (_label, signerInfo) => {
         const { container } = renderBanner(signerInfo);
 
@@ -69,7 +69,7 @@ describe('HwFirmwareBanner visibility', () => {
         expect(checkFirmware).toHaveBeenCalledWith({
             vendor: 'ledger',
             model: 'nano-x',
-            version: '1.0.0',
+            version: '9.8.7',
         });
     });
 });

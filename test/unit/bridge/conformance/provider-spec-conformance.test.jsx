@@ -170,13 +170,13 @@ describe('provider interface conformance', () => {
     });
 
     it('matches wallet version negotiation on the reference mock', async () => {
-        for (const range of ['^0.1.0', '0.1.0', '~0.1.0', '^1.0.0', 'garbage', '', undefined]) {
+        for (const range of ['^0.1.0', '0.1.0', '~0.1.0', '^9.8.7', 'garbage', '', undefined]) {
             const result = await new MockXChainProvider().connect({ requiredBridgeVersion: range });
             expect(result.ok, String(range)).toBe(runtime.isBridgeVersionSupported(range));
             if (!result.ok) expect(result.error).toBe('BRIDGE_VERSION_MISMATCH');
         }
         const refused = new MockXChainProvider();
-        await expect(refused.connect({ requiredBridgeVersion: '^1.0.0' }))
+        await expect(refused.connect({ requiredBridgeVersion: '^9.8.7' }))
             .resolves.toEqual({ ok: false, error: 'BRIDGE_VERSION_MISMATCH' });
         await expect(refused.getAccounts()).rejects.toMatchObject({ code: 'NOT_CONNECTED' });
     });

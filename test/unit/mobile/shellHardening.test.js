@@ -167,14 +167,14 @@ describe('update feed validation', () => {
         expect(parseUpdateFeed({ version: '0.334.0' })).toBe('0.334.0');
         // Extra keys are ignored, not rejected: rejecting them would let
         // whoever writes the feed break every old client on purpose.
-        expect(parseUpdateFeed({ version: '1.0.0', '//': 'a comment' })).toBe('1.0.0');
+        expect(parseUpdateFeed({ version: '9.8.7', '//': 'a comment' })).toBe('9.8.7');
     });
 
     it('refuses everything that is not a plain version', () => {
         for (const bad of [
             null, undefined, 'string', [], 42,
-            {}, { version: 1 }, { version: '1.0' }, { version: '1.0.0-rc.1' },
-            { version: '1.0.0+build' }, { version: '01.0.0' }, { version: ' 1.0.0 ' },
+            {}, { version: 1 }, { version: '1.0' }, { version: '9.8.7-rc.1' },
+            { version: '9.8.7+build' }, { version: '09.8.7' }, { version: ' 9.8.7 ' },
         ]) {
             expect(() => parseUpdateFeed(bad), JSON.stringify(bad)).toThrow(UpdateFeedError);
         }
@@ -192,7 +192,7 @@ describe('update feed validation', () => {
     it('compares versions numerically, not lexically', () => {
         expect(isNewerVersion('0.334.0', '0.333.1')).toBe(true);
         expect(isNewerVersion('0.9.0', '0.10.0')).toBe(false);   // lexical says otherwise
-        expect(isNewerVersion('1.0.0', '0.999.99')).toBe(true);
+        expect(isNewerVersion('9.8.7', '0.999.99')).toBe(true);
         expect(isNewerVersion('0.333.1', '0.333.1')).toBe(false);
         expect(isNewerVersion('0.333.0', '0.333.1')).toBe(false);
     });

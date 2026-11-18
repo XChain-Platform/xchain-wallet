@@ -96,7 +96,7 @@ describe('ContractsList states', () => {
                     source: ADDRESS,
                     status: 'valid',
                     meta_name: 'Escrow',
-                    meta_version: '1.0.0',
+                    meta_version: '9.8.7',
                 }],
             }),
         });
