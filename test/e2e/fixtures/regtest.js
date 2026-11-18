@@ -70,6 +70,8 @@ import { pickOption } from './pickOption.js';
 import { fieldByLabel, searchTokenPicker } from './fields.js';
 import { selectNamedToken } from './crossChain.js';
 import { compareDecimal, subtractDecimal } from '../../../packages/core/src/shared/utils/mintHeadroom.js';
+import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
+import { nativeDecimalsFor } from '../../../packages/core/src/registry/coinTicker.js';
 import {
     MIN_SEED_MARGIN_SECONDS,
     XCHAIN_PAIR,
@@ -195,6 +197,12 @@ export const REGTEST_TICKER = VENUE.ticker;
 
 /** Address shape this chain's regtest params produce. */
 export const REGTEST_ADDRESS_RE = VENUE.addressRe;
+
+/**
+ * The native coin's decimal places on the chain this run drives, read from
+ * the bundled chain registry the wallet itself formats amounts with.
+ */
+export const REGTEST_NATIVE_DECIMALS = nativeDecimalsFor(defaultRegistry().get(REGTEST_CHAIN_ID));
 
 /**
  * A deterministic, checksum-valid regtest destination FOR THE CHAIN THIS RUN
