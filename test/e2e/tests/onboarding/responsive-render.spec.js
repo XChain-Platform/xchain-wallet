@@ -44,6 +44,8 @@ async function expectReachableLayout(page, label, action) {
             const style = getComputedStyle(node);
             if (style.display === 'none' || style.visibility === 'hidden') continue;
             if (node.scrollWidth <= node.clientWidth + 1) continue;
+            // A 1px-wide clipped span is the visually hidden full name behind a short tab label.
+            if (node.clientWidth <= 1) continue;
             if (style.overflowX !== 'hidden' && style.overflowX !== 'clip') continue;
             result.push({ text: text.slice(0, 80), hiddenBy: style.overflowX });
         }
