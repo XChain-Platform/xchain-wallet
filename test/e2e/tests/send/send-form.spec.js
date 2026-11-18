@@ -238,6 +238,6 @@ test('a zero-balance wallet whose balances could not be checked says so once', a
     await expect(page.getByText('Nothing to send yet')).toHaveCount(0);
     await expect(page.getByText('Some balances may be out of date')).toHaveCount(0);
     await expect(page.getByText('Some information may be out of date')).toHaveCount(0);
-    await expect(mainButton(page, 'Try again')).toBeVisible();
+    await expect(mainButton(page, 'Try Again')).toBeVisible();
     await expect(mainButton(page, 'Receive')).toBeVisible();
 });
