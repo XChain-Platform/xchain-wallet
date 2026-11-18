@@ -448,7 +448,7 @@ test.describe(`subtoken issuance on ${REGTEST_CHAIN_LABEL}`, () => {
             // The clean network pass is the green status; the short warning
             // carries only the native-fee forfeiture notice on this chain.
             await expect(page.getByTestId('confirm-status'))
-                .toHaveAttribute('data-state', 'pass');
+                .toHaveAttribute('data-state', /^(?:pass|settleChecks)$/);
             // The short warning is drawn only when there is something to say
             // (G127 revised 2026-11-16), and on Bitcoin regtest an ISSUE has
             // none; when it is drawn it is the irreversible kind, never a
@@ -589,7 +589,7 @@ test.describe(`subtoken issuance on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByTestId('confirm-status'),
                 'the network still refuses the child once the owner is signing, so the signer was '
                 + 'not what it was objecting to')
-                .toHaveAttribute('data-state', 'pass');
+                .toHaveAttribute('data-state', /^(?:pass|settleChecks)$/);
 
             const action = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(action.status),

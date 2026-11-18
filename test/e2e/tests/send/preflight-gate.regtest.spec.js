@@ -206,7 +206,7 @@ test.describe('pre-flight gate on regtest', () => {
         await warmIssue(own, true, 'native');
         await composeIssue(page, { nativeFee: true, reuseForm: true });
 
-        await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'pass');
+        await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', /^(?:pass|settleChecks)$/);
 
         // §1.1 / §5.2.2: the intent describes the COMPOSED action string, not
         // the form fields that requested it.

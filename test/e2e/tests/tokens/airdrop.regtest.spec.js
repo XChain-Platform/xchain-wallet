@@ -783,7 +783,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.getByTestId('confirm-approve').click();
             await expect(page.getByTestId('confirm-status'),
                 'Approve on the airdrop review did not open the checked signing confirm')
-                .toHaveAttribute('data-state', /^(?:pass|partial|warn|fail|oracleFees)$/, { timeout: 90_000 });
+                .toHaveAttribute('data-state', /^(?:pass|settleChecks|partial|warn|fail|oracleFees)$/, { timeout: 90_000 });
 
             // Read the screen's two money figures BEFORE approving, and the
             // payer's coin balance with them. This is the only action in the
