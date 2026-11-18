@@ -20,6 +20,7 @@ import { PrivacyBlurGate } from './PrivacyBlurGate.jsx';
 import { LocaleSync } from './LocaleSync.jsx';
 import { DisplayPrefsGate } from './DisplayPrefsGate.jsx';
 import { getLocale, onLocaleChange } from '../i18n/index.js';
+import { withRecordChanges } from './utils/recordChanges.js';
 
 function reconcileForLocale(node) {
     if (!isValidElement(node)) return node;
@@ -50,7 +51,9 @@ export function MessagingProvider({ shell, messaging, children }) {
     // Locale is part of the shared render context so a runtime switch
     // invalidates mounted screens while preserving their local state.
     const locale = useSyncExternalStore(onLocaleChange, getLocale, getLocale);
-    const value = useMemo(() => ({ shell, messaging, locale }), [shell, messaging, locale]);
+    // Record writes made through the shared screens tell mounted lists to read again.
+    const tracked = useMemo(() => withRecordChanges(messaging), [messaging]);
+    const value = useMemo(() => ({ shell, messaging: tracked, locale }), [shell, tracked, locale]);
     const renderedChildren = useMemo(
         () => Children.map(children, reconcileForLocale),
         [children, locale],

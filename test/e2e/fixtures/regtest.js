@@ -1171,6 +1171,87 @@ export async function selectVenueChain(scope, field = 'Network') {
 }
 
 /**
+ * Points a LIST page's Network filter at the chain this run drives.
+ *
+ * List pages (Prediction markets, Contracts, Dispensers) keep their Network
+ * field in the title bar's filter menu, outside `main` and closed until its
+ * button is pressed, so `selectVenueChain(main)` finds nothing there. The menu
+ * button and its panel share one name ("Filter prediction markets"). The panel
+ * stays open under the full-screen network list, and is closed again here so
+ * the list below it takes clicks.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} filterLabel  the filter menu's accessible name
+ * @param {string} [field]  the Network field's visible label
+ */
+export async function selectListNetwork(page, filterLabel, field = 'Network') {
+    const panel = await openListFilter(page, filterLabel);
+    await selectVenueChain(panel, field);
+    await closeListFilter(page, filterLabel);
+}
+
+/**
+ * Opens a list page's title-bar filter menu and returns its panel.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} filterLabel  the filter menu's accessible name
+ * @returns {Promise<import('@playwright/test').Locator>}
+ */
+export async function openListFilter(page, filterLabel) {
+    const button = page.getByRole('button', { name: filterLabel, exact: true });
+    const panel = page.getByRole('dialog', { name: filterLabel, exact: true });
+    await expect(button, `the page has no "${filterLabel}" menu`).toBeVisible({ timeout: 30_000 });
+    if (!(await panel.isVisible())) await button.click();
+    await expect(panel, `"${filterLabel}" did not open`).toBeVisible({ timeout: 15_000 });
+    return panel;
+}
+
+/**
+ * Closes a list page's filter menu if it is still open (a pick in a portaled
+ * select can close it already), so the list below takes clicks.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} filterLabel  the filter menu's accessible name
+ */
+export async function closeListFilter(page, filterLabel) {
+    const panel = page.getByRole('dialog', { name: filterLabel, exact: true });
+    if (await panel.isVisible()) {
+        await page.getByRole('button', { name: filterLabel, exact: true }).click();
+    }
+    await expect(panel, `"${filterLabel}" did not close`).toBeHidden({ timeout: 15_000 });
+}
+
+/**
+ * Narrows My Tokens to `query`. Its search sits in the title bar's "Filter
+ * tokens" menu, outside `main`; the query stays applied once the menu closes.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} query  a ticker or description text
+ */
+export async function searchMyTokens(page, query) {
+    const panel = await openListFilter(page, 'Filter tokens');
+    const search = panel.getByLabel('Search your tokens by ticker or description', { exact: true });
+    await expect(search, 'My Tokens never rendered its search field').toBeVisible({ timeout: 30_000 });
+    await search.fill(query);
+    await closeListFilter(page, 'Filter tokens');
+}
+
+/**
+ * Sets one of a list page's filter-menu selects (Status, Sort) to `option`.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} filterLabel  the filter menu's accessible name
+ * @param {string} select  the select's label, e.g. "Status"
+ * @param {string} option  the option's visible text, e.g. "All markets"
+ */
+export async function selectListFilterOption(page, filterLabel, select, option) {
+    const panel = await openListFilter(page, filterLabel);
+    await panel.getByRole('combobox', { name: select }).click();
+    await page.getByRole('option', { name: option, exact: true }).click();
+    await closeListFilter(page, filterLabel);
+}
+
+/**
  * Puts the open form's protocol fee on the coin lane.
  *
  * Bitcoin offers two lanes and defaults to XCHAIN, so a spec that measures the

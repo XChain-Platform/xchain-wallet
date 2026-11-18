@@ -800,14 +800,15 @@ export async function submitTokenWizard(page) {
 }
 
 /**
- * The visible Lock control: the sidebar foot's "Lock wallet" button, or the
- * app header's "Lock wallet" button where no sidebar shows (never both). The
- * wallet menu's own "Lock wallet" row lives in a closed dialog, so it is not
- * visible here. The whole-name anchor excludes longer labels.
+ * The "Lock wallet" controls: the sidebar foot's row where the sidebar shows
+ * (LeftNav), Home's balance card icon button (TotalBalanceHero), and the
+ * Wallet menu's banner button, inside a dialog that is closed until opened
+ * (its old `data-wallet-menu-row="lock"` row is gone). The app header no
+ * longer carries one, so a narrow screen off Home shows none until the menu
+ * opens; `lockWallet` handles that. The whole-name anchor excludes longer
+ * labels such as Home's "Lock Wallet" action row title.
  */
 export function lockButton(page) {
-    // The side navigation foot and the wallet menu read "Lock wallet", the
-    // header icon button carries the same name.
     return page.getByRole('button', { name: /^Lock wallet$/ });
 }
 
@@ -1159,7 +1160,18 @@ export function unlockButton(page) {
 
 /** Locks an unlocked wallet and waits for the locked screen. */
 export async function lockWallet(page) {
-    await lockButton(page).click();
+    // A Lock already on screen (sidebar foot, Home's card), otherwise the
+    // Wallet menu banner's.
+    let shown = null;
+    for (const button of await lockButton(page).all()) {
+        if (await button.isVisible().catch(() => false)) { shown = button; break; }
+    }
+    if (shown) {
+        await shown.click();
+    } else {
+        const menu = await openPaletteSearch(page, '');
+        await menu.getByRole('button', { name: /^Lock wallet$/ }).click();
+    }
     await expect(unlockButton(page)).toBeVisible();
 }
 
@@ -1167,8 +1179,10 @@ export async function lockWallet(page) {
 export async function unlockWallet(page, password = DEFAULT_PASSWORD) {
     await page.getByLabel('Password', { exact: true }).fill(password);
     await unlockButton(page).click();
-    // Argon2id again: unlocking derives the master key. Same budget.
-    await expect(lockButton(page)).toBeVisible({ timeout: KDF_STEP_MS });
+    // Argon2id again: unlocking derives the master key. Same budget. The
+    // unlock resumes the last view, which need not be Home, so this waits for
+    // any unlocked screen rather than for Home's Lock button.
+    await expect(unlockedAnyScreen(page)).toBeVisible({ timeout: KDF_STEP_MS });
 }
 
 /**
