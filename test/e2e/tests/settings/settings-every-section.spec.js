@@ -99,14 +99,12 @@ test.describe('Settings: every section', () => {
             await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
         }
 
-        // Pin and hide buttons is a row on the Appearance group page.
+        // The pin switch sits under Tokens and lists on the Appearance page.
         await settingsRow(page, 'Appearance').click();
-        await settingsRow(page, 'Pin and hide buttons').click();
-        const displaySwitch = page.getByRole('switch', { name: 'Show pin button on rows', exact: true });
+        const displaySwitch = page.getByRole('switch', { name: 'Pin button on rows', exact: true });
         await expect(displaySwitch).toBeVisible();
         const expectedDisplay = await flipSwitch(displaySwitch);
         const backToSettings = page.getByRole('button', { name: 'Back to settings', exact: true }).filter({ visible: true }).first();
-        await backToSettings.click();
         await backToSettings.click();
 
         await settingsRow(page, 'Notifications').click();
@@ -118,10 +116,10 @@ test.describe('Settings: every section', () => {
         const expectedNotification = await flipSwitch(notificationSwitch);
         await backToSettings.click();
 
-        // Wide layouts lock from the side navigation ('Lock'); the phone header carries 'Lock wallet'.
-        await page.getByRole('button', { name: 'Lock', exact: true })
-            .or(page.getByRole('button', { name: 'Lock wallet', exact: true }))
-            .first().click();
+        // The phone locks from the Wallet menu's 'Lock wallet' button.
+        await page.getByRole('button', { name: 'Open menu' }).click();
+        await page.getByRole('dialog', { name: 'Wallet menu' })
+            .getByRole('button', { name: 'Lock wallet', exact: true }).click();
         const unlock = page.getByRole('button', { name: 'Unlock Wallet', exact: true });
         await expect(unlock, 'the wallet did not lock').toBeVisible();
         await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
@@ -137,9 +135,8 @@ test.describe('Settings: every section', () => {
         await backToSettings.click();
 
         await settingsRow(page, 'Appearance').click();
-        await settingsRow(page, 'Pin and hide buttons').click();
         await expect(page.getByRole('switch', {
-            name: 'Show pin button on rows',
+            name: 'Pin button on rows',
             exact: true,
         })).toBeChecked({ checked: expectedDisplay });
     });

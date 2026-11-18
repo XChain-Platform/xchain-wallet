@@ -118,10 +118,20 @@ const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183
 const FUNDING = 1;
 const SEND_AMOUNT = '0.01';
 
-/** Opens Settings via the wallet menu, then the Backup sub-page. */
-async function openBackupSection(page) {
+/**
+ * Opens Settings via the wallet menu, then Backup and Recovery, then its
+ * Encrypted backup file row, which lands straight on the export form.
+ */
+async function openBackupExport(page) {
     await openPaletteCommand(page, 'Settings');
-    await page.getByRole('main').getByRole('button', { name: /^Backup/ }).first().click();
+    const main = page.getByRole('main');
+    const group = main.getByRole('button', { name: /^Backup and Recovery\b/ }).first();
+    await expect(group, 'Settings has no Backup and Recovery row').toBeVisible({ timeout: 30_000 });
+    await group.click();
+    const exportRow = main.getByRole('button', { name: /^Encrypted backup file\b/ });
+    await expect(exportRow, 'the Backup section offers no export action')
+        .toBeVisible({ timeout: 30_000 });
+    await exportRow.click();
 }
 
 /**
@@ -135,12 +145,7 @@ async function openBackupSection(page) {
  * @returns {Promise<string>} the raw §19.4 envelope
  */
 async function exportEnvelope(page, { walletName, words }) {
-    await openBackupSection(page);
-
-    const exportRow = page.getByRole('main').getByRole('button', { name: 'Export…', exact: true });
-    await expect(exportRow, 'the Backup section offers no export action')
-        .toBeVisible({ timeout: 30_000 });
-    await exportRow.click();
+    await openBackupExport(page);
 
     await fieldByLabel(page, 'Backup password').fill(BACKUP_PASSWORD);
     await fieldByLabel(page, 'Confirm backup password').fill(BACKUP_PASSWORD);
@@ -148,7 +153,7 @@ async function exportEnvelope(page, { walletName, words }) {
     await page.evaluate(() => { window.showSaveFilePicker = undefined; });
     const [download] = await Promise.all([
         page.waitForEvent('download', { timeout: 120_000 }),
-        page.getByRole('button', { name: 'Export', exact: true }).click(),
+        page.getByRole('main').getByRole('button', { name: 'Export Backup', exact: true }).click(),
     ]);
     const envelope = await readFile(await download.path(), 'utf8');
     // A browser download is not proof the file was kept, so the wallet asks

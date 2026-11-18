@@ -217,7 +217,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(3_600_000);
 
-    test('the flag reaches the wire on the confirm path and on the watcher build', async ({ page }) => {
+    test('the flag reaches the wire on the confirm path and on the watcher build', async ({ page, otherPhone }) => {
         let source;
         let quotedSats;
         let phrase;
@@ -288,18 +288,26 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
 
         await test.step('LANE 2: the watcher build changes when the flag is set', async () => {
             // A wallet's mode is fixed at setup, so the watcher lane mirrors
-            // the funded wallet's addresses as a second, watch-only wallet.
-            await addWalletFromPhrase(page, phrase, {
+            // the funded wallet's addresses as a second, watch-only wallet. It
+            // lives on a second phone because one app refuses a phrase it
+            // already holds ("already in this app as ..."); there it sees the
+            // same funded address and XCHAIN, which a watcher cannot mint. That
+            // phone opens its vault with a Normal wallet of its own, reaches
+            // the venue, then pairs.
+            const watcherPhone = otherPhone;
+            await createWallet(watcherPhone, { password: PASSWORD, name: 'Second Phone' });
+            await switchToRegtest(watcherPhone, PASSWORD);
+            await addWalletFromPhrase(watcherPhone, phrase, {
                 password: PASSWORD, name: 'Fee Lane Watcher', walletMode: 'watcher',
             });
 
             const build = async (tick, nativeFee) => {
-                const main = await fillIssueForm(page, tick, { nativeFee });
+                const main = await fillIssueForm(watcherPhone, tick, { nativeFee });
                 await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
                 await main.getByRole('button', { name: 'Create Transaction for Signing', exact: true }).click();
                 // By ROLE: the panel also carries a "Copy unsigned transaction
                 // hex" button, so the label alone matches two elements.
-                const hex = page.getByRole('textbox', { name: 'Unsigned transaction code' });
+                const hex = watcherPhone.getByRole('textbox', { name: 'Unsigned transaction code' });
                 await expect(hex, 'the watcher build produced no unsigned transaction')
                     .toBeVisible({ timeout: 120_000 });
                 const value = await hex.inputValue();
@@ -331,7 +339,7 @@ test.describe(`the native-fee flag on each submit lane on ${REGTEST_CHAIN_LABEL}
             // starts. Same shape as D-117 on the betting hub - a command for the
             // route you are already on is a no-op - and here the wallet offers
             // "Build another" precisely for this.
-            await page.getByRole('button', { name: 'Build Another', exact: true }).click();
+            await watcherPhone.getByRole('button', { name: 'Build Another', exact: true }).click();
             const on = await build(`${ISSUE_TICK}B`, true);
 
             // Differential, so no transaction parsing is needed: a dropped flag

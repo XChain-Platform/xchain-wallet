@@ -73,7 +73,7 @@
 //       npx playwright test --config=playwright.regtest.config.js \
 //       tests/settings/connected-sites.regtest.spec.js
 
-import { createWallet, expect, openSettings, test } from '../../fixtures/wallet.js';
+import { backToSettingsList, createWallet, expect, openSettings, test } from '../../fixtures/wallet.js';
 import { unlockAfterReload } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -89,13 +89,22 @@ const WILDCARD = '*.wild-e2e.example';
 // This page shows no block history, so the blocklist assertions read no
 // audit log.
 
-/** Opens Settings and walks into the Connected Sites sub-page. */
+/**
+ * Opens Settings and walks into the Connected Sites page: Settings, Privacy
+ * and Sites, Connected sites (the grouped Settings list since 2026-11-13).
+ */
 async function openConnectedSites(page) {
     await openSettings(page);
+    // Back out of a page left open by an earlier step: the Settings tab keeps
+    // its sub-page, and Back pops one level at a time.
+    await backToSettingsList(page);
     // Scoped to `main` and asserted visible BEFORE the click: the primary
     // navigation carries same-named destinations, and a Playwright click has no
     // default action timeout, so a miss hangs out the whole test budget rather
     // than failing.
+    const group = page.getByRole('main').getByRole('button', { name: /^Privacy and Sites\b/ }).first();
+    await expect(group, 'Settings has no Privacy and Sites row').toBeVisible({ timeout: 30_000 });
+    await group.click();
     const row = page.getByRole('main').getByRole('button', { name: /^Connected sites\b/ }).first();
     await expect(row, 'Settings has no Connected Sites row').toBeVisible({ timeout: 30_000 });
     await row.click();
