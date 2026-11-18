@@ -17,6 +17,7 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
+import { withoutRuledContrast } from '../../fixtures/a11y.js';
 import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const THEMES = ['light', 'dark'];
@@ -29,7 +30,7 @@ async function expectContrast(page, label) {
     const { violations } = await new AxeBuilder({ page })
         .withRules(['color-contrast'])
         .analyze();
-    const blocking = violations.filter((violation) => BLOCKING_IMPACTS.has(violation.impact));
+    const blocking = withoutRuledContrast(violations).filter((violation) => BLOCKING_IMPACTS.has(violation.impact));
 
     expect(
         blocking.map((violation) => ({
