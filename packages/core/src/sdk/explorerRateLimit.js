@@ -19,7 +19,10 @@
 //   - after a transient failure one trial request goes first and the rest wait;
 //   - identical GETs already in flight share one network request;
 //   - when `ratelimit-remaining` runs low, requests are spaced out over what
-//     is left of the window instead of spending it in one burst.
+//     is left of the window instead of spending it in one burst. The explorer
+//     keeps a separate bucket per route family and names it in
+//     `ratelimit-policy`, so that window is tracked per bucket: a drained
+//     batch-balance bucket must never slow a dry run drawn from another one.
 //
 // The layer wraps SDK service transports and leaves unknown encoder methods
 // single-attempt. A browser only sees rate-limit headers when the server lists
@@ -156,6 +159,34 @@ function requestKey(method, base, url, params) {
     return `${method} ${base}${url}?${query}`;
 }
 
+/** The host-wide window: answers that name no policy, and routes not yet seen. */
+const DEFAULT_BUCKET = '';
+
+// Two windows with the same policy whose resets lie this close together are
+// one bucket. `ratelimit-reset` is whole seconds, so one bucket read twice
+// can drift by about a second plus the request time.
+const SAME_WINDOW_MS = 2_000;
+
+function newBucket(policy) {
+    return { policy, remaining: null, resetAt: null, nextSlotAt: 0, blockedUntil: 0 };
+}
+
+/**
+ * The route class a request is bucketed by: its method and the first path
+ * segment below the explorer's `/<COIN>/api` prefix (`POST balances`,
+ * `GET preflight`). The coin is left out because the explorer counts every
+ * chain on its host against the same per-IP buckets.
+ *
+ * @param {string} method
+ * @param {unknown} url
+ * @returns {string}
+ */
+export function routeClass(method, url) {
+    const parts = String(url ?? '').split(/[?#]/)[0].split('/').filter(Boolean);
+    const segment = parts[1] === 'api' ? parts[2] : parts[0];
+    return `${method} ${segment || ''}`;
+}
+
 /**
  * Per-host request gate shared by every SDK instance in the process.
  */
@@ -184,6 +215,8 @@ export class HostRateLimiter {
         this.random = random || Math.random;
         /** @type {Map<string, any>} per-host window, pause and backoff state */
         this.hosts = new Map();
+        /** Numbers each named bucket, so two with one policy string stay apart. */
+        this.bucketSeq = 0;
         /** @type {Map<string, Promise<any>>} */
         this.inFlight = new Map();
         /** @type {Map<string, { at: number, res: any }>} */
@@ -210,7 +243,11 @@ export class HostRateLimiter {
         let st = this.hosts.get(host);
         if (!st) {
             st = {
-                blockedUntil: 0, rateBlockedUntil: 0, remaining: null, resetAt: null, nextSlotAt: 0,
+                blockedUntil: 0, rateBlockedUntil: 0,
+                // Rate-limit windows by bucket id, and the bucket each route
+                // class last answered from. Bucket "" is the host-wide window
+                // for answers that name no policy.
+                buckets: new Map([[DEFAULT_BUCKET, newBucket('')]]), routes: new Map(),
                 strikes: 0, lastStrikeAt: 0, needsTrial: false, trial: null,
                 active: 0, waiters: [],
                 retryActive: 0, retryQueue: [],
@@ -290,8 +327,14 @@ export class HostRateLimiter {
         }
     }
 
-    /** Record what a response says about the host's window. */
-    observe(host, headers) {
+    /**
+     * Record what a response says about the window of the bucket it drew from.
+     *
+     * @param {string} host
+     * @param {any} headers
+     * @param {string} [route]  the request's route class (see routeClass)
+     */
+    observe(host, headers, route = DEFAULT_BUCKET) {
         const t = this.now();
         const remainingRaw = readHeader(headers, 'ratelimit-remaining');
         const resetMs = parseRateLimitResetMs(readHeader(headers, 'ratelimit-reset'), t);
@@ -299,14 +342,62 @@ export class HostRateLimiter {
         const remaining = Number.parseInt(String(remainingRaw), 10);
         if (!Number.isFinite(remaining)) return;
         const st = this.state(host);
-        st.remaining = Math.max(0, remaining);
-        st.resetAt = t + resetMs;
+        const policy = String(readHeader(headers, 'ratelimit-policy') ?? '').trim();
+        const resetAt = t + resetMs;
+        const id = policy ? this.bucketFor(st, route, policy, resetAt, t) : DEFAULT_BUCKET;
+        st.routes.set(route, id);
+        this.pruneBuckets(st);
+        const bucket = st.buckets.get(id);
+        bucket.remaining = Math.max(0, remaining);
+        bucket.resetAt = resetAt;
+        if (bucket.remaining > 0) return;
         // An empty window is a block until it resets, even before any 429.
-        if (st.remaining === 0) {
-            st.blockedUntil = Math.max(st.blockedUntil, st.resetAt);
-            st.rateBlockedUntil = Math.max(st.rateBlockedUntil, st.resetAt);
-            this.releasePausedWaiters(st);
+        // A named bucket blocks only the routes that draw from it; a window
+        // with no policy cannot be told apart, so it blocks the host.
+        if (id !== DEFAULT_BUCKET) {
+            bucket.blockedUntil = Math.max(bucket.blockedUntil, resetAt);
+            return;
         }
+        st.blockedUntil = Math.max(st.blockedUntil, resetAt);
+        st.rateBlockedUntil = Math.max(st.rateBlockedUntil, resetAt);
+        this.releasePausedWaiters(st);
+    }
+
+    /**
+     * The bucket a response naming `policy` drew from.
+     *
+     * The policy string alone is not an identity: the explorer gives several
+     * buckets the same `60;w=60`. Each bucket's window started when it was
+     * first hit, so a live bucket with the same policy whose reset matches is
+     * the same one, and a route whose own window has rolled over keeps its
+     * bucket. Anything else is a bucket not seen before.
+     */
+    bucketFor(st, route, policy, resetAt, t) {
+        for (const [id, b] of st.buckets) {
+            if (id !== DEFAULT_BUCKET && b.policy === policy && b.resetAt !== null && b.resetAt > t
+                && Math.abs(b.resetAt - resetAt) <= SAME_WINDOW_MS) return id;
+        }
+        const own = st.routes.get(route);
+        const ownBucket = own !== undefined && own !== DEFAULT_BUCKET ? st.buckets.get(own) : null;
+        if (ownBucket && ownBucket.policy === policy && !(ownBucket.resetAt > t)) return own;
+        this.bucketSeq += 1;
+        const id = `${policy}#${this.bucketSeq}`;
+        st.buckets.set(id, newBucket(policy));
+        return id;
+    }
+
+    /** Drop named buckets no route answers from any more, so the map stays small. */
+    pruneBuckets(st) {
+        const used = new Set(st.routes.values());
+        for (const id of st.buckets.keys()) {
+            if (id !== DEFAULT_BUCKET && !used.has(id)) st.buckets.delete(id);
+        }
+    }
+
+    /** The window a request on `route` draws from; a route not yet answered for uses the host's. */
+    windowFor(host, route = DEFAULT_BUCKET) {
+        const st = this.state(host);
+        return st.buckets.get(st.routes.get(route) ?? DEFAULT_BUCKET) || st.buckets.get(DEFAULT_BUCKET);
     }
 
     /** Fail every queued single-attempt request once the host is paused. */
@@ -342,7 +433,28 @@ export class HostRateLimiter {
     }
 
     /**
-     * Wait until a request to `host` may go out.
+     * Sleep out a pause that ends at `until`, unless it runs past what the
+     * request will wait.
+     *
+     * @returns {Promise<number>} 0 when cleared, or the seconds still to wait
+     *          when the pause is longer than the layer will sit through
+     */
+    async waitOut(until, deadline, signal) {
+        const t = this.now();
+        if (until <= t) return 0;
+        const left = until - t;
+        if (left > Math.min(this.opts.maxWaitMs, deadline - t)) return Math.ceil(left / 1000);
+        // Jitter spreads the wake-up so paused requests do not all land at once.
+        await this.sleepUntil(
+            left + Math.round(this.random() * Math.min(1000, left * 0.2 + 100)),
+            signal,
+        );
+        return 0;
+    }
+
+    /**
+     * Wait until the host itself lets a request go out (after a 429 or a
+     * transport failure's backoff).
      *
      * @param {string} host
      * @param {number} [deadline]  clock time past which the request stops waiting
@@ -351,45 +463,64 @@ export class HostRateLimiter {
      */
     async gate(host, deadline = Infinity, signal) {
         if (signal?.aborted) throw abortError();
-        const st = this.state(host);
-        const t = this.now();
-        if (st.blockedUntil > t) {
-            const left = st.blockedUntil - t;
-            if (left > Math.min(this.opts.maxWaitMs, deadline - t)) return Math.ceil(left / 1000);
-            // Jitter spreads the wake-up so paused requests do not all land at once.
-            await this.sleepUntil(
-                left + Math.round(this.random() * Math.min(1000, left * 0.2 + 100)),
-                signal,
-            );
-        }
-        const slot = this.pace(host) - this.now();
-        if (slot > 0) await this.sleepUntil(Math.min(slot, this.opts.maxWaitMs), signal);
-        return 0;
+        return this.waitOut(this.state(host).blockedUntil, deadline, signal);
     }
 
     /**
-     * Reserve a send slot, spaced over the window once remaining runs low.
+     * Wait until the bucket a request on `route` draws from lets it go out:
+     * past the bucket's empty-window pause, then at its paced slot.
+     *
+     * Answers synchronously when there is nothing to wait for, so a request
+     * on a bucket with room joins the host queue in the tick it was made, and
+     * a host pause raised later in that tick still finds it queued.
+     *
+     * @param {string} host
+     * @param {string} route  the request's route class
+     * @param {number} [deadline]  clock time past which the request stops waiting
+     * @returns {number|Promise<number>} 0 when cleared, or the seconds still to
+     *          wait when the pause is longer than the layer will sit through
+     */
+    paceGate(host, route, deadline = Infinity, signal) {
+        if (signal?.aborted) throw abortError();
+        const blockedUntil = this.windowFor(host, route).blockedUntil;
+        if (blockedUntil > this.now()) {
+            return this.waitOut(blockedUntil, deadline, signal)
+                .then((waitSeconds) => (waitSeconds > 0 ? waitSeconds : this.paceSlot(host, route, signal)));
+        }
+        return this.paceSlot(host, route, signal);
+    }
+
+    /** Take the next paced slot in `route`'s bucket, sleeping until it comes round. */
+    paceSlot(host, route, signal) {
+        const slot = this.pace(host, route) - this.now();
+        if (slot <= 0) return 0;
+        return this.sleepUntil(Math.min(slot, this.opts.maxWaitMs), signal).then(() => 0);
+    }
+
+    /**
+     * Reserve a send slot in the bucket `route` draws from, spaced over its
+     * window once remaining runs low.
      *
      * @returns {number} the clock time the request may go out at
      */
-    pace(host) {
-        const st = this.state(host);
+    pace(host, route = DEFAULT_BUCKET) {
+        const w = this.windowFor(host, route);
         const t = this.now();
-        if (st.resetAt !== null && st.resetAt <= t) {
+        if (w.resetAt !== null && w.resetAt <= t) {
             // The window has rolled over; the old count says nothing about the new one.
-            st.remaining = null;
-            st.resetAt = null;
+            w.remaining = null;
+            w.resetAt = null;
         }
-        if (st.remaining === null || st.resetAt === null) return t;
-        if (st.remaining > this.opts.lowWater) {
-            st.remaining -= 1;
+        if (w.remaining === null || w.resetAt === null) return t;
+        if (w.remaining > this.opts.lowWater) {
+            w.remaining -= 1;
             return t;
         }
         // Spread what is left of the window evenly over the time left in it.
-        const spacing = (st.resetAt - t) / Math.max(1, st.remaining);
-        const slot = Math.max(t, st.nextSlotAt);
-        st.nextSlotAt = slot + spacing;
-        st.remaining = Math.max(0, st.remaining - 1);
+        const spacing = (w.resetAt - t) / Math.max(1, w.remaining);
+        const slot = Math.max(t, w.nextSlotAt);
+        w.nextSlotAt = slot + spacing;
+        w.remaining = Math.max(0, w.remaining - 1);
         return slot;
     }
 
@@ -439,13 +570,15 @@ export class HostRateLimiter {
      * @param {number} [maxRetries] retries available to this HTTP method
      * @param {AbortSignal} [signal] cancels rate-limit and pacing waits
      * @param {(err: any) => boolean} [retryable] classifies a failure as transient
-     * @param {{ singleAttempt?: boolean }} [policy]  `singleAttempt` sends at
-     *        most once and fails at once while the host is paused, instead of
-     *        retrying or sleeping out the pause (the caller asked for noRetry)
+     * @param {{ singleAttempt?: boolean, route?: string }} [policy]
+     *        `singleAttempt` sends at most once and fails at once while the
+     *        host is paused, instead of retrying or sleeping out the pause (the
+     *        caller asked for noRetry); `route` is the request's route class,
+     *        which picks the rate-limit bucket it is paced by
      */
     async request(
         host, key, send, tooLong, maxRetries = this.opts.maxRetries, signal,
-        retryable = isTransientReadError, { singleAttempt = false } = {},
+        retryable = isTransientReadError, { singleAttempt = false, route = DEFAULT_BUCKET } = {},
     ) {
         if (signal?.aborted) throw abortError();
         const configuredCap = Number.isFinite(this.opts.maxRetries)
@@ -470,7 +603,7 @@ export class HostRateLimiter {
             const pending = this.inFlight.get(key);
             if (pending) return pending.then(cloneResponse);
         }
-        const run = this.attempt(host, send, tooLong, retryBudget, signal, retryable, singleAttempt);
+        const run = this.attempt(host, send, tooLong, retryBudget, signal, retryable, singleAttempt, route);
         if (!key) return run;
         this.inFlight.set(key, run);
         try {
@@ -490,7 +623,7 @@ export class HostRateLimiter {
         for (const [k, v] of this.recent) if (v.at < cutoff) this.recent.delete(k);
     }
 
-    async attempt(host, send, tooLong, maxRetries, signal, retryable, singleAttempt = false) {
+    async attempt(host, send, tooLong, maxRetries, signal, retryable, singleAttempt = false, route = DEFAULT_BUCKET) {
         const st = this.state(host);
         const deadline = this.now() + this.opts.maxTotalMs;
         const paused = () => tooLong(this.blockedSeconds(host), this.pausedSeconds(host) > 0);
@@ -499,6 +632,17 @@ export class HostRateLimiter {
             // A single-attempt read never queues behind a host pause it would
             // only fail at, so it is refused before it takes a send slot.
             if (singleAttempt && this.blockedSeconds(host) > 0) throw paused();
+            // The bucket's own pause and pacing are waited out before a send
+            // slot is taken: a slot held through that sleep would queue every
+            // other bucket's request behind this one. An empty bucket is a
+            // rate limit, so a refusal for it reads as one.
+            let bucketWait = this.paceGate(host, route, singleAttempt ? this.now() : deadline, signal);
+            if (typeof bucketWait !== 'number') {
+                bucketWait = await bucketWait;
+                // The host may have been paused while this request slept.
+                if (singleAttempt && this.blockedSeconds(host) > 0) throw paused();
+            }
+            if (bucketWait > 0) throw tooLong(bucketWait, true);
             // The send slot wraps the gate, the trial wait and the send, so
             // queued requests observe a host pause before reaching the network.
             const release = await this.acquire(host, signal, singleAttempt ? paused : null);
@@ -527,12 +671,12 @@ export class HostRateLimiter {
                 const sentAt = this.now();
                 try {
                     const res = await send();
-                    this.observe(host, res && res.headers);
+                    this.observe(host, res && res.headers, route);
                     st.strikes = 0;
                     st.needsTrial = false;
                     return res;
                 } catch (err) {
-                    if (err && err.response) this.observe(host, err.response.headers);
+                    if (err && err.response) this.observe(host, err.response.headers, route);
                     const status = statusOf(err);
                     const transient = retryable(err);
                     if (status !== 429 && !transient) {
@@ -689,7 +833,8 @@ function wrapExplorerAxios(client, limiter, maxRetries, isCurrent = () => true) 
         return limiter.request(
             host, key, () => currentResponse(() => get(url, sent), isCurrent),
             (s, rateLimited) => pausedError(s, config, rateLimited),
-            maxRetries, config?.signal, undefined, { singleAttempt: isSingleAttempt(config) },
+            maxRetries, config?.signal, undefined,
+            { singleAttempt: isSingleAttempt(config), route: routeClass('GET', url) },
         );
     };
     if (post) {
@@ -700,7 +845,8 @@ function wrapExplorerAxios(client, limiter, maxRetries, isCurrent = () => true) 
             return limiter.request(
                 host, null, () => currentResponse(() => post(url, body, sent), isCurrent),
                 (s, rateLimited) => pausedError(s, config, rateLimited),
-                maxRetries, config?.signal, undefined, { singleAttempt: isSingleAttempt(config) },
+                maxRetries, config?.signal, undefined,
+                { singleAttempt: isSingleAttempt(config), route: routeClass('POST', url) },
             );
         };
     }

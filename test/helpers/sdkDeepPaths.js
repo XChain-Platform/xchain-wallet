@@ -58,6 +58,7 @@ export const SDK_DEEP_PATHS = {
     preflightAmountFormat: ['src/preflight/checks/amount_format.js'],
     preflightNumeric: ['src/preflight/numeric.js'],
     preflightConstants: ['src/preflight/constants.js'],
+    preflightContext: ['src/preflight/context.js'],
     preflightEngine: ['src/preflight/index.js'],
     preflightTier1Findings: ['src/preflight/index/tier1_findings.js'],
     protocolConstants: ['src/protocol/constants.js'],

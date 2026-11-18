@@ -25,15 +25,15 @@ describe('explorer rate limiter edge branches', () => {
         const limiter = new HostRateLimiter({ now: () => now, lowWater: 5 });
 
         limiter.observe('host', { 'ratelimit-remaining': 'not-a-number', 'ratelimit-reset': '10' });
-        expect(limiter.state('host').remaining).toBeNull();
+        expect(limiter.windowFor('host').remaining).toBeNull();
 
         limiter.observe('host', { 'ratelimit-remaining': '2' });
-        expect(limiter.state('host').remaining).toBeNull();
+        expect(limiter.windowFor('host').remaining).toBeNull();
 
         limiter.observe('host', { 'ratelimit-remaining': '2', 'ratelimit-reset': '1' });
         now = 2_001;
         expect(limiter.pace('host')).toBe(now);
-        expect(limiter.state('host')).toMatchObject({ remaining: null, resetAt: null });
+        expect(limiter.windowFor('host')).toMatchObject({ remaining: null, resetAt: null });
     });
 
     it('prunes expired reuse entries once the cache reaches its maintenance threshold', () => {
