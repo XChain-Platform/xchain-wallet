@@ -33,6 +33,7 @@ import { xchainProtocolFeeLine } from '../../flows/protocolFeeDisclosure.js';
 import { FEE_BEARING_ACTIONS, isFeeBearingAction } from '../../flows/feeBearingActions.js';
 import { oracleUsageFeeLine } from '../../flows/oracleFeeDisclosure.js';
 import { envelopeTransactionLines } from '../../flows/envelopeFeeDisclosure.js';
+import { isSettleTimeUnverified } from '../utils/preflightCheckState.js';
 import { automaticDonationLine } from '../utils/adsDonationLine.js';
 import { actionWarningLines, actionWarningTitle, withoutCoveredWarnings } from '../../flows/actionWarnings.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
@@ -172,7 +173,9 @@ export function reportWithoutUnverifiedNativeFeeWarning(report) {
     if (findings.length === report.findings.length) return report;
     const hasVisibleConcern = findings.some((finding) => (
         finding?.severity === 'warning' || finding?.severity === 'error'
-    )) || report.restricted || (report.unverified?.length > 0);
+    )) || report.restricted
+        // A check settlement decides is the blue note, never a concern that holds warn.
+        || (report.unverified || []).some((u) => !isSettleTimeUnverified(u));
     return {
         ...report,
         findings,

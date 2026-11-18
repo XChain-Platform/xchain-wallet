@@ -23,6 +23,8 @@ const AMOUNT_TICK_FIELD = Object.freeze({
     DIVIDEND: 'DIVIDEND_TICK',
 });
 
+const LEG_ACTIONS = new Set(['SEND', 'DESTROY']);
+
 // ISSUE's amount fields, each judged at the token row's decimals, else the wire
 // DECIMALS (xchain-sdk src/preflight/checks/issue/supply_rules.js ISSUE_AMOUNT_FIELDS).
 const ISSUE_AMOUNT_FIELDS = Object.freeze(['MAX_SUPPLY', 'MAX_MINT', 'MINT_SUPPLY',
@@ -79,7 +81,8 @@ export function actionAmounts(parsed) {
     if (!params || typeof params !== 'object') return null;
     const action = parsed.action.toUpperCase();
     if (action === 'ISSUE') return issueAmounts(params);
-    if (String(parsed.version) !== '0') return null;
+    // SEND and DESTROY name TICK and AMOUNT per leg in every format; the rest are read at format 0.
+    if (String(parsed.version) !== '0' && !LEG_ACTIONS.has(action)) return null;
     const tickField = AMOUNT_TICK_FIELD[action];
     if (!tickField) return null;
     const ticks = [].concat(params[tickField] ?? []).map((t) => String(t ?? ''));

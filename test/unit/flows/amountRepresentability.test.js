@@ -124,7 +124,7 @@ describe.skipIf(!installed)('settleAmountRepresentability', () => {
         // Unlisted actions, batches and other versions.
         expect(await settle(report, 'ORDER|0|XCP|1|ABC|2|100')).toBe(report);
         expect(await settle(report, 'BATCH|0|SEND|0|XCP|1|bc1q;MINT|0|XCP|1')).toBe(report);
-        expect(await settle(report, 'SEND|1|XCP|1|bc1qdest')).toBe(report);
+        expect(await settle(report, 'MINT|1|XCP|1')).toBe(report);
         // A token the explorer does not know, a failed lookup, a row without decimals.
         expect(await settle(report, 'SEND|0|NOPE|1|bc1qdest')).toBe(report);
         expect(await settleAmountRepresentability(report, {
@@ -153,6 +153,18 @@ describe.skipIf(!installed)('settleAmountRepresentability', () => {
         expect(out).toBe(report);
         expect(asked).toBe(0);
         expect(await settleAmountRepresentability(null, { rules })).toBeNull();
+    });
+
+    it('judges every leg of a multi-recipient send, in each format', async () => {
+        const SEND_V1 = 'SEND|1|XCP|1|bc1qa|2.5|bc1qb|3|bc1qc';
+        expect((await settle(reportWith([AMOUNT_ITEM]), SEND_V1)).unverified).toEqual([]);
+        const ABC = { tick: 'ABC', info: { decimals: 0 } };
+        expect((await settle(reportWith([AMOUNT_ITEM]), 'SEND|2|XCP|1|bc1qa|ABC|2|bc1qb', { XCP, ABC })).unverified).toEqual([]);
+        expect((await settle(reportWith([AMOUNT_ITEM]), 'SEND|3|XCP|1|bc1qa|x|ABC|2|bc1qb|y', { XCP, ABC })).unverified).toEqual([]);
+        // One leg too fine for its token keeps the item for the whole send.
+        const fine = reportWith([AMOUNT_ITEM]);
+        expect(await settle(fine, 'SEND|2|XCP|1|bc1qa|ABC|2.5|bc1qb', { XCP, ABC })).toBe(fine);
+        expect((await settle(reportWith([AMOUNT_ITEM]), 'DESTROY|1|XCP|1|XCP|2')).unverified).toEqual([]);
     });
 
     it('pairs legs by index and repeats the last tick', () => {

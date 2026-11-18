@@ -59,7 +59,7 @@ beforeAll(async () => {
 });
 afterEach(() => ui?.cleanup());
 
-const XCP = { tick: 'XCP', info: { tick: 'XCP', decimals: 8 }, supply: { max: '0', current: '1000000', decimals: 8 } };
+const XCP = { tick: 'XCP', info: { tick: 'XCP', decimals: 8, owner: 'own-address' }, supply: { max: '0', current: '1000000', decimals: 8 } };
 const EDITION = { tick: 'EDITION', info: { tick: 'EDITION', decimals: 0 }, supply: { max: '100', current: '40', decimals: 0 }, max_mint: '1' };
 const OPEN_MINT = { tick: 'OPENMINT', info: { tick: 'OPENMINT', decimals: 0 }, supply: { max: '0', current: '40', decimals: 0 }, max_mint: '5' };
 const TOKENS = { XCP, EDITION, OPENMINT: OPEN_MINT };
@@ -160,6 +160,12 @@ describe.skipIf(!installed)('Confirm status on the real pre-flight path', () => 
         expect(out.text).not.toMatch(/server-side|flag-day|activation|_[A-Z]{3,}/);
     }, 30_000);
 
+    it.each(CHAINS)('a three-recipient token send on %s is checked when it settles', async (chainId) => {
+        const out = await confirmNotice(chainId, action('SEND|1|XCP|1|dest-a|2.5|dest-b|3|dest-c'));
+        expect(out.unverified).not.toContain('AMOUNT_REPRESENTABILITY');
+        expect(out.state).toBe('settleChecks');
+    }, 30_000);
+
     it.each(CHAINS)('an edition mint on %s is checked when it settles', async (chainId) => {
         const out = await confirmNotice(chainId, action('MINT|0|EDITION|1'));
         expect(out.unverified).toEqual(['MINT_ADDRESS_HEADROOM']);
@@ -170,6 +176,23 @@ describe.skipIf(!installed)('Confirm status on the real pre-flight path', () => 
         const out = await confirmNotice(chainId, action('ISSUE|0|NEWTOK|1000||0||1000'));
         expect(out.unverified).toEqual([]);
         expect(out.state).toBe('pass');
+    }, 30_000);
+
+    // A fee-bearing action also carries the fee-forfeit warning the modal strips;
+    // its settle-time checks must still reach the blue note, not hold it at warn.
+    it.each(CHAINS)('a dividend and an ISSUE edit on %s are checked when they settle', async (chainId) => {
+        const dividend = await confirmNotice(chainId, action('DIVIDEND|0|XCP|XCP|0.001'));
+        expect(dividend.unverified).toEqual(['DIVIDEND_DEBIT_TOTAL']);
+        expect(dividend.state).toBe('settleChecks');
+        const edit = await confirmNotice(chainId, action('ISSUE|0|XCP|||||||1'));
+        expect(edit.unverified).toEqual(['ISSUE_LOCK_RATCHETS', 'ISSUE_BRIDGE_POLICY_EXCLUSION']);
+        expect(edit.state).toBe('settleChecks');
+    }, 60_000);
+
+    it.each(CHAINS)('an airdrop whose list read fails on %s never reads as checked', async (chainId) => {
+        const out = await confirmNotice(chainId, action('AIRDROP|0|XCP|1|7'));
+        expect(out.unverified).toContain('LIST_LOOKUP');
+        expect(['settleChecks', 'pass']).not.toContain(out.state);
     }, 30_000);
 
     it('shows no network claim for a native coin payment', async () => {
