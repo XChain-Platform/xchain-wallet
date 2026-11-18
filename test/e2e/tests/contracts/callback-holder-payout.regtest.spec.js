@@ -7,6 +7,7 @@ import {
     clickManageTokenAction,
     createWallet,
     expect,
+    expectManageTokenView,
     expectMyTokensRow,
     gotoSection,
     LICENSE_ACCEPTED_AT_KEY,
@@ -98,11 +99,10 @@ async function openManageToken(page) {
     const row = main.getByRole('button', { name: `Open ${TICK} token details`, exact: true }).first();
     await expectMyTokensRow(main, row, `${TICK} is missing from My Tokens`);
     await row.click();
-    // The token page names its asset in the window title; its header has no heading.
-    await expect(page).toHaveTitle(new RegExp(`\\b${TICK}\\b`), { timeout: 30_000 });
-    // The token page's own filter menu says the detail, not the list, is open.
-    await expect(page.getByRole('button', { name: 'Filter token content', exact: true }))
-        .toBeVisible({ timeout: 30_000 });
+    // The token opens as the "<TICK> token management" view beside the list.
+    await expectManageTokenView(page);
+    await expect(page.getByRole('region', { name: `${TICK} token management`, exact: true }),
+        `the management view is not showing ${TICK}`).toBeVisible({ timeout: 30_000 });
     return main;
 }
 
@@ -110,15 +110,14 @@ async function openExecuteCallbackWhenConfigured(page, timeoutMs = 180_000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
         const main = await openManageToken(page);
-        const more = main.getByRole('button', { name: 'More', exact: true });
-        await expect(more).toBeVisible({ timeout: 30_000 });
-        await more.click();
-        const execute = main.getByRole('menuitem', { name: 'Recall tokens', exact: true });
-        if (await execute.isVisible()) {
+        // "Recall tokens" is an Actions row that stays aria-disabled until
+        // the token's callback config has been read back from the chain.
+        const execute = main.locator('[data-action-id="execute-callback"]').first();
+        await expect(execute, 'Manage Token has no "Recall tokens" action').toBeVisible({ timeout: 30_000 });
+        if ((await execute.getAttribute('aria-disabled')) !== 'true') {
             await execute.click();
             return main;
         }
-        await page.keyboard.press('Escape');
         await nudgeChain();
         await new Promise((resolve) => setTimeout(resolve, 5_000));
     }

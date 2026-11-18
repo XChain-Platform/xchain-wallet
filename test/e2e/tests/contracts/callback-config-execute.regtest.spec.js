@@ -49,6 +49,7 @@ import {
     clickManageTokenAction,
     createWallet,
     expect,
+    expectManageTokenView,
     openPaletteCommand,
     test,
 } from '../../fixtures/wallet.js';
@@ -126,12 +127,10 @@ async function openManageToken(page, tick) {
     const row = main.getByRole('button', { name: `Open ${tick} token details`, exact: true });
     await expect(row.first(), `My Tokens does not list ${tick}`).toBeVisible({ timeout: 60_000 });
     await row.first().click();
-    // The token page names its asset in the window title; its header has no heading.
-    await expect(page, 'Manage Token did not open on this ticker')
-        .toHaveTitle(new RegExp(`\\b${tick}\\b`), { timeout: 30_000 });
-    // The token page's own filter menu says the detail, not the list, is open.
-    await expect(page.getByRole('button', { name: 'Filter token content', exact: true }))
-        .toBeVisible({ timeout: 30_000 });
+    // The token opens as the "<TICK> token management" view beside the list.
+    await expectManageTokenView(page, 'Manage Token did not open on this ticker');
+    await expect(page.getByRole('region', { name: `${tick} token management`, exact: true }),
+        `the management view is not showing ${tick}`).toBeVisible({ timeout: 30_000 });
     return main;
 }
 
@@ -139,15 +138,14 @@ async function openExecuteCallbackWhenConfigured(page, tick, timeoutMs = 180_000
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
         const main = await openManageToken(page, tick);
-        const more = main.getByRole('button', { name: 'More', exact: true });
-        await expect(more, 'Manage Token has no "More" overflow menu').toBeVisible({ timeout: 30_000 });
-        await more.click();
-        const execute = main.getByRole('menuitem', { name: 'Recall tokens', exact: true });
-        if (await execute.isVisible()) {
+        // "Recall tokens" is an Actions row that stays aria-disabled until
+        // the token's callback config has been read back from the chain.
+        const execute = main.locator('[data-action-id="execute-callback"]').first();
+        await expect(execute, 'Manage Token has no "Recall tokens" action').toBeVisible({ timeout: 30_000 });
+        if ((await execute.getAttribute('aria-disabled')) !== 'true') {
             await execute.click();
             return main;
         }
-        await page.keyboard.press('Escape');
         await nudgeChain();
         await new Promise((resolve) => setTimeout(resolve, 5_000));
     }

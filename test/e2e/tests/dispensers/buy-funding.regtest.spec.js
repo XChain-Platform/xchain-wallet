@@ -412,8 +412,9 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // Buyers pay with is an asset picker (a token field), so the
             // payment token is picked on it, never typed.
             await main.getByRole('button', { name: /^Buyers pay with:/ }).click();
-            await searchTokenPicker(page, 'XCHAIN');
-            await page.getByRole('button', { name: /^Select XCHAIN on / }).first().click({ timeout: 30_000 });
+            // The picker opens on the seller's own page, not the buyer's.
+            await searchTokenPicker(seller, 'XCHAIN');
+            await seller.getByRole('button', { name: /^Select XCHAIN on / }).first().click({ timeout: 30_000 });
             await expect(main.getByRole('button', { name: /^Buyers pay with: XCHAIN on / }))
                 .toBeVisible({ timeout: 30_000 });
             await fieldByLabel(main, 'Payment amount per fill')

@@ -1475,6 +1475,26 @@ export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
 }
 
 /**
+ * Opens Dispensers on its My Dispensers view, the owner's own list.
+ *
+ * With a market token picked the page opens on All, which lists other
+ * addresses' dispensers for that token, so the owned list is chosen
+ * explicitly. Its rows are labelled "Open <TICK> dispenser #<index>".
+ *
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<import('@playwright/test').Locator>} the page's main region
+ */
+export async function openMyDispensers(page) {
+    await openPaletteCommand(page, 'Dispensers');
+    const views = page.getByRole('radiogroup', { name: 'Dispenser views' });
+    const mine = views.getByRole('radio', { name: 'My Dispensers', exact: true });
+    await expect(mine, 'Dispensers offers no My Dispensers view').toBeVisible({ timeout: 30_000 });
+    if (!(await mine.isChecked())) await mine.click();
+    await expect(mine).toBeChecked();
+    return page.getByRole('main');
+}
+
+/**
  * Puts the Create dispenser form's dispenser on its own Source address, and
  * returns that address.
  *

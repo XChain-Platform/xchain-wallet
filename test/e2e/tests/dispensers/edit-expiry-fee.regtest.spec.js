@@ -56,7 +56,7 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/dispensers/edit-expiry-fee.regtest.spec.js
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     expectConfirmModal as sharedConfirmModal,
     EXPLORER_URL,
@@ -74,6 +74,7 @@ import {
     selectPickerAsset,
     approveConfirm,
     FROM_ADDRESS_LABEL,
+    openMyDispensers,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -272,8 +273,7 @@ async function approveAndGetTxid(page) {
  * and re-entering is what an owner making a second change actually does.
  */
 async function openDispenserDetail(page, index) {
-    await openPaletteCommand(page, 'Dispensers');
-    const main = page.getByRole('main');
+    const main = await openMyDispensers(page);
     // The owner's list labels the row rather than printing the index in its
     // text ("Open XCHAIN dispenser #1699"), so filtering on visible text finds
     // nothing - campaign §"Dispensers", Session 31.
@@ -373,7 +373,9 @@ test.describe(`dispenser expiration-edit fee on ${REGTEST_CHAIN_LABEL}`, () => {
             // default window is exactly 90 days, which leaves no room for an
             // extension that is still free - and that extension is this run's
             // control.
-            // Expiration is the icon dropdown (G44), not radio buttons.
+            // Expiration is the icon dropdown (G44), not radio buttons, inside
+            // the closed Dispenser Terms section.
+            await openFormSection(main, 'Dispenser Terms');
             await main.getByRole('combobox', { name: /Expiration/ }).click();
             await page.getByRole('option', { name: /Expire at a specific time/ }).click();
             const nowSec = Math.floor(Date.now() / 1000);

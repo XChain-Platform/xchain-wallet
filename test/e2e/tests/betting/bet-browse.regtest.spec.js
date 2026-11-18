@@ -69,6 +69,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
     approveConfirm,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -232,7 +233,7 @@ test.describe('BET browse', () => {
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            oracle = await fieldByLabel(main, 'Your oracle address').inputValue();
+            oracle = await (await openFromAddress(main)).inputValue();
             expect(oracle, `this wallet has no ${REGTEST_COIN} address`).toMatch(REGTEST_ADDRESS_RE);
 
             await fundAddress(oracle, FUNDING);
@@ -262,18 +263,18 @@ test.describe('BET browse', () => {
             const main = page.getByRole('main');
             await selectVenueChain(main);
 
-            const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
+            const tokenField = main.getByRole('button', { name: /^Token:/ });
             await expect(tokenField).toBeVisible({ timeout: 30_000 });
             await tokenField.click();
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
             await fieldByLabel(main, 'Question').fill(`Browse pills ${RUN_TAG}`);
-            await fieldByLabel(main, 'Outcome 0').fill('Yes');
-            await fieldByLabel(main, 'Outcome 1').fill('No');
-            await fieldByLabel(main, 'Purchases Close')
+            await fieldByLabel(main, 'Outcome 1').fill('Yes');
+            await fieldByLabel(main, 'Outcome 2').fill('No');
+            await fieldByLabel(main, /^(?:Closes|Purchases Close)$/)
                 .fill(toLocalDateTimeInput((await chainTime()) + DEADLINE_LEAD_SEC));
             await fillPasswordIfPresent(main);
-            await main.getByRole('button', { name: 'Open market', exact: true }).click();
+            await main.getByRole('button', { name: 'Open Market', exact: true }).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await approveConfirm(page);
 
