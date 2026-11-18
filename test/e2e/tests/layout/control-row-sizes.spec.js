@@ -85,12 +85,19 @@ async function openPaletteRoute(page, query, option) {
 async function showHomeFilters(page) {
     await gotoSection(page, 'Home');
     // Token search and the network filter live in the list header's Filter
-    // and sort menu (U72).
-    const main = page.getByRole('main');
-    const panel = main.getByRole('dialog', { name: 'Filter and sort' });
+    // and sort menu (U72), a panel outside main.
+    const panel = page.getByRole('dialog').filter({ has: page.getByRole('searchbox', { name: /^Search coins/ }) });
     if (await panel.count() === 0) {
-        await main.getByRole('button', { name: 'Filter and sort' }).click();
+        await page.getByRole('button', { name: 'Filter and sort' }).click();
     }
+    return panel;
+}
+
+/** Opens a list page's title bar filter button and returns its panel (G95). */
+async function openFilterPanel(page, name) {
+    await page.getByRole('button', { name, exact: true }).click();
+    const panel = page.getByRole('dialog', { name, exact: true });
+    await expect(panel).toBeVisible();
     return panel;
 }
 
@@ -123,7 +130,7 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
             // The menu stacks the token search over the network filter Chip;
             // the two controls keep one height, radius and type size.
             await expectMatchingControlSizes(`Home filter menu at ${width}px`, [
-                ['token search', panel.getByRole('searchbox', { name: 'Search tokens by name' })],
+                ['token search', panel.getByRole('searchbox', { name: /^Search coins/ })],
                 ['network filter', panel.getByRole('button', { name: /^Filter by network/ })],
             ]);
             await page.keyboard.press('Escape');
@@ -132,65 +139,71 @@ test('controls sharing a row match at phone and desktop widths', async ({ page }
 
         await test.step(`${width}px / Encrypted inbox`, async () => {
             await gotoSection(page, 'Messaging');
-            // The network filter moved into the title bar's filter icon, so
-            // the title bar's two actions are the matched pair.
+            // The title bar's two actions (the filter icon and the More menu holding New message) are the matched pair.
             await expectMatchingControlSizes(`Encrypted inbox at ${width}px`, [
-                ['new message plus', page.getByRole('button', { name: 'New message', exact: true })],
-                ['filter icon', page.getByRole('button', { name: 'Filter', exact: true })],
+                ['title bar action', page.getByRole('button', { name: 'More', exact: true }).or(page.getByRole('button', { name: 'New message', exact: true }))],
+                ['filter icon', page.getByRole('button', { name: /^Filter (?:messaging|conversations)$/ })],
             ]);
         });
 
         await test.step(`${width}px / Your dispensers`, async () => {
             await gotoSection(page, 'Dispensers');
+            const panel = await openFilterPanel(page, 'Filter dispensers');
             await expectMatchingControlSizes(`Your dispensers at ${width}px`, [
-                ['dispenser search', main.getByRole('searchbox', { name: 'Search dispensers' })],
-                ['network filter', main.getByRole('button', { name: /^Filter by network/ })],
+                ['dispenser search', panel.getByRole('searchbox', { name: 'Search dispensers' })],
+                ['network filter', panel.getByRole('button', { name: /^Filter by network/ })],
             ]);
+            await page.keyboard.press('Escape');
         });
 
         await test.step(`${width}px / Address lists`, async () => {
             await gotoSection(page, 'Lists');
             // Search, Network and Show sit in the title bar filter panel (G95).
-            await page.getByRole('button', { name: 'Filter lists', exact: true }).click();
-            const panel = page.getByRole('dialog', { name: 'Filter lists' });
+            const panel = await openFilterPanel(page, 'Filter lists');
             await expectMatchingControlSizes(`Address lists at ${width}px`, [
                 ['list search', panel.getByRole('searchbox', { name: 'Search lists' })],
                 ['network filter', panel.getByRole('button', { name: /^Filter by network/ })],
-                ['show', panel.getByRole('combobox', { name: 'Show' })],
+                ['show', panel.locator('[aria-label="Show lists"]')],
             ]);
             await page.keyboard.press('Escape');
         });
 
         await test.step(`${width}px / Staking`, async () => {
             await openStaking(page);
+            const panel = await openFilterPanel(page, 'Filter staking');
             await expectMatchingControlSizes(`Staking at ${width}px`, [
-                ['position search', main.getByRole('searchbox', { name: 'Search staking positions' })],
-                ['network filter', main.getByRole('button', { name: /^Filter by network/ })],
+                ['position search', panel.getByRole('searchbox', { name: 'Search staking positions' })],
+                ['network filter', panel.getByRole('button', { name: /^Filter by network/ })],
             ]);
+            await page.keyboard.press('Escape');
         });
 
         await test.step(`${width}px / Contacts`, async () => {
             await gotoSection(page, 'Contacts');
             // Search, Network and Sort sit in the title bar filter panel (G95).
-            await page.getByRole('button', { name: 'Filter contacts', exact: true }).click();
-            const panel = page.getByRole('dialog', { name: 'Filter contacts' });
+            const panel = await openFilterPanel(page, 'Filter contacts');
             await expectMatchingControlSizes(`Contacts at ${width}px`, [
                 ['contact search', panel.getByRole('searchbox', { name: 'Search contacts' })],
                 ['network filter', panel.getByRole('button', { name: /^Filter by network/ })],
-                ['sort', panel.getByRole('combobox', { name: 'Sort contacts' })],
+                ['sort', panel.locator('[aria-label="Sort contacts"]')],
             ]);
             await page.keyboard.press('Escape');
         });
 
         await test.step(`${width}px / Smart contracts`, async () => {
             await gotoSection(page, 'Contracts');
+            // The title bar holds the filter icon and Publish contract; the filter panel holds the search.
             await expectMatchingControlSizes(`Smart contracts at ${width}px`, [
-                ['contract filter', main.getByRole('searchbox', { name: 'Filter contracts' })],
-                ['all chains', main.getByRole('tab', { name: 'All', exact: true })],
+                ['filter icon', page.getByRole('button', { name: 'Filter contracts', exact: true })],
                 // Empty chain sections carry their own smaller Publish buttons; the
                 // toolbar action is the first one.
-                ['publish contract', main.getByRole('button', { name: 'Publish contract' }).first()],
+                ['publish contract', page.getByRole('button', { name: 'Publish contract' }).first()],
             ]);
+            const panel = await openFilterPanel(page, 'Filter contracts');
+            await expectMatchingControlSizes(`Smart contracts filter at ${width}px`, [
+                ['contract search', panel.getByRole('searchbox', { name: 'Search contracts' })],
+            ]);
+            await page.keyboard.press('Escape');
         });
 
         await test.step(`${width}px / Settings price alerts`, async () => {
