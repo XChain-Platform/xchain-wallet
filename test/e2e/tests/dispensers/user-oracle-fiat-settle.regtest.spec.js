@@ -268,7 +268,7 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
             const row = (body?.data || []).find((r) => String(r.tick) === ORACLE.tick);
             expect(row, `the PRICE v1 quote this spec settles against is gone from the venue. It `
                 + `was published by Session 33 from ${ORACLE.address} and the campaign doc records `
-                + 'it; a venue reset would remove it. Republish (palette: "Publish oracle price", '
+                + 'it; a venue reset would remove it. Republish (palette: "My oracle", '
                 + `${ORACLE.price} ${ORACLE.fiat} per ${ORACLE.tick}, usage fee `
                 + `${ORACLE.feeFraction}) and re-run this spec 24 hours later.`)
                 .toBeTruthy();

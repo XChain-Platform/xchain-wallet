@@ -283,7 +283,7 @@ test.describe(`the mandatory native-fee lane on ${REGTEST_CHAIN_LABEL}`, () => {
                 'BROADCAST is priced on this venue, so it cannot serve as the zero-fee case')
                 .toBe(0);
 
-            await openPaletteCommand(page, 'Post an announcement');
+            await openPaletteCommand(page, 'Broadcast');
             const main = page.getByRole('main');
             await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);

@@ -68,6 +68,8 @@ async function expectSharedLineControlsMatch(page, label) {
         const controls = [...Array.from(main.querySelectorAll(
             'button, input:not([type="hidden"]), select, textarea, [role="button"]',
         )).filter((el) => !el.closest('[aria-hidden="true"]'))]
+            // The wide layout lists the agents beside the open account; the two panes are not one control row.
+            .filter((control) => !control.closest('ul[aria-label="Agent accounts"]'))
             .filter((control) => {
                 const style = getComputedStyle(control);
                 const box = control.getBoundingClientRect();
@@ -124,9 +126,16 @@ async function openAgentAccounts(page) {
     await page.keyboard.press('ControlOrMeta+k');
     const palette = page.getByRole('dialog', { name: 'Wallet menu' });
     await expect(palette).toBeVisible();
-    await palette.getByRole('combobox').fill('All actions');
-    await palette.getByRole('option', { name: /^All actions\b/ }).first().click();
-    await page.getByRole('main').getByRole('button', { name: /^Agent accounts\b/ }).click();
+    await palette.getByRole('combobox').fill('My Agents');
+    await palette.getByRole('option', { name: /^My Agents\b/ }).first().click();
+}
+
+// The optional policy sections are collapsible regions that start closed.
+async function openRegion(page, name) {
+    const region = page.getByRole('region', { name, exact: true });
+    const header = region.locator('button[aria-expanded]').first();
+    if (await header.getAttribute('aria-expanded') !== 'true') await header.click();
+    return region;
 }
 
 async function configurePolicy(page) {
@@ -140,19 +149,19 @@ async function configurePolicy(page) {
     await page.getByRole('checkbox', { name: 'Send', exact: true }).check();
     await page.getByRole('checkbox', { name: 'Issue', exact: true }).check();
 
-    const perAction = page.getByRole('group', { name: 'Per-action amount limits' });
+    const perAction = await openRegion(page, 'Per-action amount limits');
     await perAction.getByRole('button', { name: 'Add Limit', exact: true }).click();
     await pickOption(perAction.getByLabel('Action', { exact: true }), 'SEND');
     await perAction.getByLabel('Token', { exact: true }).fill('BTC');
     await perAction.getByRole('textbox', { name: /^Max amount/ }).fill('0.25');
 
-    const rolling = page.getByRole('group', { name: 'Rolling limit' });
+    const rolling = await openRegion(page, 'Rolling limit');
     // The kit Switch exposes the switch role.
     await rolling.getByRole('switch', { name: 'Enforce a rolling limit' }).check();
     await rolling.getByLabel('Window length (hours)', { exact: true }).fill('12');
     await rolling.getByLabel('Max actions per window', { exact: true }).fill('4');
 
-    const threshold = page.getByRole('group', { name: 'Extra-confirmation threshold' });
+    const threshold = await openRegion(page, 'Extra-confirmation threshold');
     await threshold.getByRole('button', { name: 'Add Threshold', exact: true }).click();
     await threshold.getByLabel('Token', { exact: true }).fill('BTC');
     await threshold.getByLabel('Warn above', { exact: true }).fill('1.5');
@@ -174,6 +183,8 @@ async function expectReviewAtTop(page, label) {
 }
 
 async function walkCoSignerScreens(page, viewport) {
+    // A wide window shows the agent list and the account side by side, so the page title stays My Agents.
+    const accountTitle = viewport.width >= 1024 ? 'My Agents' : 'Agent Account';
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await installCoSignerDerivationStub(page);
     // Demo wallets hide create and multisig commands, so this walk
@@ -181,7 +192,7 @@ async function walkCoSignerScreens(page, viewport) {
     await createWallet(page);
 
     await openAgentAccounts(page);
-    await expectScreen(page, 'Agent accounts', `${viewport.name} account list`);
+    await expectScreen(page, 'My Agents', `${viewport.name} account list`);
     await expect(page.getByText('No agent accounts yet', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'New agent account', exact: true }).click();
@@ -201,13 +212,13 @@ async function walkCoSignerScreens(page, viewport) {
     await expectReviewAtTop(page, `${viewport.name} provisioning`);
 
     await page.getByRole('button', { name: 'View Account', exact: true }).click();
-    await expectScreen(page, 'Agent account', `${viewport.name} account detail`);
-    await expect(page.getByText(ACCOUNT_NAME, { exact: true })).toBeVisible();
+    await expectScreen(page, accountTitle, `${viewport.name} account detail`);
+    await expect(page.getByRole('heading', { level: 2, name: ACCOUNT_NAME, exact: true })).toBeVisible();
     // The account page no longer shows Allowed actions or Rolling limit rows
     // (ruling 2026-11-15); the rules editor below checks the stored values.
 
-    await page.getByRole('button', { name: 'Edit policy', exact: true }).click();
-    await expectScreen(page, 'Agent account', `${viewport.name} policy editor`);
+    await page.getByRole('button', { name: /^Edit rules\b/ }).click();
+    await expectScreen(page, accountTitle, `${viewport.name} policy editor`);
     await expect(page.getByRole('form', { name: 'Edit agent account' })).toBeVisible();
     await expect(page.getByLabel('Account name', { exact: true })).toHaveValue(ACCOUNT_NAME);
     await expect(page.getByRole('checkbox', { name: 'Send', exact: true })).toBeChecked();
@@ -216,13 +227,15 @@ async function walkCoSignerScreens(page, viewport) {
     await expect(page.getByLabel('Max actions per window', { exact: true })).toHaveValue('4');
 
     await page.getByLabel('Account name', { exact: true }).fill(UPDATED_ACCOUNT_NAME);
+    await openRegion(page, 'Rolling limit');
     await page.getByLabel('Max actions per window', { exact: true }).fill('6');
     await page.getByRole('button', { name: 'Update Policy', exact: true }).click();
-    await expectScreen(page, 'Agent account', `${viewport.name} updated account detail`);
-    await expect(page.getByText(UPDATED_ACCOUNT_NAME, { exact: true })).toBeVisible();
+    await expectScreen(page, accountTitle, `${viewport.name} updated account detail`);
+    await expect(page.getByRole('heading', { level: 2, name: UPDATED_ACCOUNT_NAME, exact: true })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Back to previous screen' }).click();
-    await expectScreen(page, 'Agent accounts', `${viewport.name} populated account list`);
+    // The wide layout keeps the list beside the account, so there is no list screen to go back to.
+    if (viewport.width < 1024) await page.getByRole('button', { name: 'Back to previous screen' }).click();
+    await expectScreen(page, 'My Agents', `${viewport.name} populated account list`);
     await expect(page.getByRole('button', { name: new RegExp(`^${UPDATED_ACCOUNT_NAME}`) }))
         .toBeVisible();
 }
