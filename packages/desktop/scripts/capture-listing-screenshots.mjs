@@ -158,6 +158,15 @@ function pngSize(file) {
  */
 async function switchToMainnet(win) {
     await openSettings(win);
+    await win.getByRole('button', { name: /^Network and Fees\b/ }).click();
+    const already = win.getByRole('button', { name: /^Network\s*Mainnet$/ });
+    if (await already.isVisible().catch(() => false)) {
+        // Demo lands on Mainnet; the picker now lives on a sub-page, so leave it.
+        await win.reload();
+        await win.waitForLoadState('load', { timeout: 30_000 }).catch(() => {});
+        return;
+    }
+    await win.getByRole('button', { name: /^Network\s*(?:Mainnet|Testnet|Regtest|-)$/ }).click();
     const select = win.getByLabel('Active network');
     await select.waitFor({ state: 'visible', timeout: 30_000 });
     await select.selectOption('mainnet');
@@ -244,21 +253,31 @@ async function main() {
         const shots = [
             {
                 name: 'screenshot-home.png',
-                take: async () => {},
-            },
-            {
-                name: 'screenshot-tokens.png',
                 take: async () => {
-                    await win.getByRole('tab', { name: 'Tokens' }).click();
-                    await win.waitForTimeout(1500);
+                    // Wide Home with the platform token selected, so its detail
+                    // panel shows beside the list.
+                    await win.getByRole('button', { name: /XChain/ }).filter({ hasText: 'XCHAIN' }).first().click();
+                    await win.waitForTimeout(2500);
                 },
             },
             {
-                name: 'screenshot-settings.png',
+                name: 'screenshot-exchange.png',
                 take: async () => {
-                    await openSettings(win);
-                    await win.getByLabel('Active network').waitFor({ state: 'visible', timeout: 30_000 });
-                    await win.waitForTimeout(800);
+                    // The Exchange (DEX) at wide width; its first market is
+                    // selected on arrival, with the chart and order book filled
+                    // from the demo's sample trades.
+                    await win.getByRole('button', { name: /Exchange \(DEX\)/ }).first().click();
+                    await win.waitForTimeout(3000);
+                },
+            },
+            {
+                name: 'screenshot-my-tokens.png',
+                take: async () => {
+                    // My Tokens at wide width: the first issued token selected, its
+                    // hero and chart on top and the owner actions (supply,
+                    // distribute, token page) leading the list below.
+                    await win.getByRole('button', { name: /^My Tokens/ }).first().click();
+                    await win.waitForTimeout(3500);
                 },
             },
         ];

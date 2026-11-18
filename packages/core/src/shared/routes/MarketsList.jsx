@@ -793,24 +793,24 @@ export function readMarketSeries({ markets, demo }) {
 const SAMPLE_MARKETS = {
     BTC: [
         { tick1: 'PEPECASH',     tick2: 'BTC', lastPrice: '0.00000089', change24h: '+5.2%',  depth: 14 },
-        { tick1: 'XCP',          tick2: 'BTC', lastPrice: '0.00012450', change24h: '-2.1%',  depth: 22 },
+        { tick1: 'XCP',          tick2: 'BTC', lastPrice: '0.00012450', change24h: '+2.1%',  depth: 22 },
         { tick1: 'RAREPEPE',     tick2: 'BTC', lastPrice: '0.00078900', change24h: '+12.3%', depth: 18 },
         { tick1: 'BITCRYSTAL',   tick2: 'BTC', lastPrice: '0.00000045', change24h: '+1.8%',  depth: 6 },
-        { tick1: 'LTBCOIN',      tick2: 'BTC', lastPrice: '0.00000034', change24h: '0.0%',   depth: 9 },
-        { tick1: 'MEMECASH',     tick2: 'BTC', lastPrice: '0.00000890', change24h: '-5.7%',  depth: 11 },
+        { tick1: 'LTBCOIN',      tick2: 'BTC', lastPrice: '0.00000034', change24h: '+0.6%',   depth: 9 },
+        { tick1: 'MEMECASH',     tick2: 'BTC', lastPrice: '0.00000890', change24h: '+5.7%',  depth: 11 },
         { tick1: 'WAVEY',        tick2: 'BTC', lastPrice: '0.00002300', change24h: '+3.4%',  depth: 8 },
-        { tick1: 'TOKENLY',      tick2: 'BTC', lastPrice: '0.00001500', change24h: '-1.2%',  depth: 7 },
+        { tick1: 'TOKENLY',      tick2: 'BTC', lastPrice: '0.00001500', change24h: '+1.2%',  depth: 7 },
         { tick1: 'PEPECREATURE', tick2: 'BTC', lastPrice: '0.00000067', change24h: '+8.9%',  depth: 13 },
         { tick1: 'COIN',         tick2: 'BTC', lastPrice: '0.00045000', change24h: '+0.5%',  depth: 5 },
     ],
     LTC: [
         { tick1: 'LTBPLUS',  tick2: 'LTC', lastPrice: '0.00012300', change24h: '+2.1%',  depth: 4 },
-        { tick1: 'PEPELITE', tick2: 'LTC', lastPrice: '0.00000456', change24h: '-1.4%',  depth: 6 },
+        { tick1: 'PEPELITE', tick2: 'LTC', lastPrice: '0.00000456', change24h: '+1.4%',  depth: 6 },
         { tick1: 'LITECASH', tick2: 'LTC', lastPrice: '0.00001100', change24h: '+4.7%',  depth: 8 },
     ],
     DOGE: [
         { tick1: 'DOGEFREN',  tick2: 'DOGE', lastPrice: '0.00050000', change24h: '+15.0%', depth: 12 },
-        { tick1: 'WOWTOKEN',  tick2: 'DOGE', lastPrice: '0.00120000', change24h: '-3.2%',  depth: 7 },
+        { tick1: 'WOWTOKEN',  tick2: 'DOGE', lastPrice: '0.00120000', change24h: '+3.2%',  depth: 7 },
         { tick1: 'SHIBOGECOIN', tick2: 'DOGE', lastPrice: '0.00002300', change24h: '+8.4%', depth: 5 },
     ],
 };

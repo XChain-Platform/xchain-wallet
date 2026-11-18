@@ -11,6 +11,7 @@ vi.mock('@xchain-wallet/core', () => ({
     branding: {
         chainIconLargeUrl: (chainId) => `/icons/${chainId}-large.png`,
         chainIconSmallUrl: (chainId) => `/icons/${chainId}-small.png`,
+        platformTokenIconUrl: (tick) => (String(tick).toUpperCase() === 'XCHAIN' ? '/icons/xchain-token.png' : null),
     },
     registry: {
         defaultRegistry: () => ({
@@ -70,6 +71,15 @@ describe('TickerIcon', () => {
             'src',
             '/icons/litecoin-mainnet-large.png',
         );
+    });
+
+    it('draws the bundled platform mark for XCHAIN and lets a token image win', () => {
+        const { container, rerender } = render(<TickerIcon chainId="bitcoin-mainnet" tick="xchain" />);
+        expect(container.querySelector('img[src="/icons/xchain-token.png"]')).not.toBeNull();
+
+        rerender(<TickerIcon chainId="bitcoin-mainnet" tick="XCHAIN" imageUrl="/art/xchain.png" />);
+        expect(container.querySelector('img[src="/art/xchain.png"]')).not.toBeNull();
+        expect(container.querySelector('img[src="/icons/xchain-token.png"]')).toBeNull();
     });
 
     it('renders a token initial with a scaled chain pip', () => {

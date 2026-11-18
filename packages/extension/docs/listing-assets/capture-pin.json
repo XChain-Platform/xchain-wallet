@@ -2,35 +2,35 @@
     "_comment": "Written by tools/release/verify-listing-assets.mjs (--write --set extension), normally from the end of a successful packages/extension/scripts/capture-listing-screenshots.mjs run. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
     "set": "extension",
     "capturedFrom": {
-        "commit": "786ce0790d1f94f0aef3d054d7510bc4e5bca1c7",
-        "version": "0.341.2",
-        "how": "capture"
+        "commit": "a7c8cac7ab1f6a63751963ef5f2f8543e86dd11d",
+        "version": "0.342.1",
+        "how": "derived"
     },
-    "observedAt": "2026-10-08T12:43:43.049Z",
+    "observedAt": "2026-11-18T00:24:21.018Z",
     "assets": {
         "screenshot-popup.png": {
-            "sha256": "0f0ebe6e8d8679314838f33d82a56d53fd228a54dd46314af59966a7c6957efa",
+            "sha256": "081a22513e374cfaeecc3bfeaab71d0d15d3c5ca16f6ad9bb0e6937b5e90dafb",
             "width": 1280,
             "height": 800,
             "shows": "Toolbar popup, Home view"
         },
         "screenshot-sidepanel.png": {
-            "sha256": "55c0d2ffeced9820cd46075ef2d8948816997f006dcfcef34ceadd54ed7326dd",
+            "sha256": "67346cd99c9f321f199b30a6f56caf70b6c79e1d74766a93512cdcc656da1a6c",
             "width": 1280,
             "height": 800,
-            "shows": "Side panel, Tokens view"
+            "shows": "Side panel, DeFi view"
         },
         "screenshot-sign-approval.png": {
-            "sha256": "c9e7d618ef31b33923cafd5ef48dc9a6ca7929a872be3d1e109ea4a7c43f2f56",
+            "sha256": "cfaf281d7f00f7bdbd2ab658de44cbbe1a373983c36d8324400f62e03413f3f4",
             "width": 1280,
             "height": 800,
             "shows": "Sign-approval window (dApp message signature)"
         },
         "promo-tile-440x280.png": {
-            "sha256": "e02213324b4727ad0b9c2203382ecc65ad1580435ee0a160beb662de0edc7c5f",
+            "sha256": "fcb84e6548ee2ab92c3969abbe32806aaba127de354d5e66994a5633ada97b57",
             "width": 440,
             "height": 280,
-            "shows": "Brand logo and wordmark on the accent gradient"
+            "shows": "Designed tile: logo, \"One wallet for everything blockchain\", coin icons"
         }
     }
 }

@@ -65,8 +65,10 @@ assert.equal(
 
 // One list at a time, picked by the operator-ruled icon tabs above it.
 assert.ok(/<Icon\.GridIcon \/>All</.test(listSrc), 'All contracts tab');
+// The smoke runner's English-copy loader swaps t('key') for its English text,
+// and a bare node run reads the call itself, so either form passes.
 assert.ok(
-    /<Icon\.UserIcon \/>\{t\('routes\.contractsList\.myContracts'\)\}</.test(listSrc),
+    /<Icon\.UserIcon \/>(?:\{t\('routes\.contractsList\.myContracts'\)\}|My Contracts)</.test(listSrc),
     'My Contracts tab uses its translation key',
 );
 assert.ok(/<Icon\.DollarIcon \/>Interactions</.test(listSrc), 'Interactions tab');

@@ -333,18 +333,21 @@ function hashStringFor(s) {
 
 /**
  * Synthesize a price walk that ends at `currentPrice`. Seeded by
- * `assetKey` so the line is stable across re-renders. Used by
- * TokenDetail when no real price history is available, and by Home's
- * PortfolioChart for ranges longer than the CoinGecko sparkline window
- * (30d / 90d / All).
+ * `assetKey`, so every asset, range and series gets its own shape and the
+ * line is stable across re-renders. Used by the demo wallet's charts only
+ * (Home value, coin and token heroes).
  *
- * Trend is bounded to ±30% over the window; per-step noise is ±1.5%
- * of the running value. The final point is clamped to `currentPrice`
- * so the line ends exactly where the KPI reads.
+ * A demo never advertises a loss, so the walk starts 8% to 30% below
+ * `currentPrice` and climbs. Between those ends it moves like a market: a
+ * few slow swells and dips of different sizes (a low-frequency sine mix with
+ * random phase), plus a bridged random walk for the day-to-day wobble.
+ * Both are pinned to zero at either end, so the first point is the start,
+ * the final point is exactly `currentPrice`, and the last day always reads
+ * as a gain.
  *
  * @param {string} assetKey
  * @param {number} currentPrice
- * @param {number} [points=168]   default 168 = 1/hr × 7d
+ * @param {number} [points=168]   default 168 = 1/hr x 7d
  * @returns {{ sparkline: number[] | null, change24hPct: number | null }}
  */
 export function synthesizeTokenChart(assetKey, currentPrice, points = 168) {
@@ -356,20 +359,56 @@ export function synthesizeTokenChart(assetKey, currentPrice, points = 168) {
         rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0;
         return (rng / 0xffffffff) * 2 - 1;
     };
-    const trendPct = advance() * 30;
-    const start = currentPrice / (1 + trendPct / 100);
+    // The first draws of an LCG are correlated across nearby seeds; burn a few.
+    for (let i = 0; i < 6; i += 1) advance();
     const n = Math.max(2, points | 0);
-    const series = new Array(n);
-    series[0] = start;
-    for (let i = 1; i < n; i += 1) {
-        const drift = (currentPrice - series[i - 1]) / (n - i);
-        const noise = advance() * 0.015 * series[i - 1];
-        series[i] = Math.max(0.0000001, series[i - 1] + drift + noise);
+    const trend = 0.08 + (advance() + 1) * 0.11;
+    const end = currentPrice;
+    const start = end / (1 + trend);
+    const rise = end - start;
+    // Swells: three slow components (1 to 4 half-waves), up to 0.6x, 0.4x and
+    // 0.25x the rise in size, each signed so some are dips and some rallies.
+    const swells = [0.6, 0.4, 0.25].map((amp, k) => ({
+        k: k + 1 + (advance() > 0 ? 1 : 0),
+        amp: amp * advance(),
+    }));
+    // Wobble: random walk with its drift removed (a Brownian bridge).
+    const walk = new Array(n);
+    walk[0] = 0;
+    for (let i = 1; i < n; i += 1) walk[i] = walk[i - 1] + advance();
+    const span = Math.sqrt(n);
+    const bridge = (i) => (walk[i] - (i / (n - 1)) * walk[n - 1]) / span;
+    const raw = new Array(n);
+    for (let i = 0; i < n; i += 1) {
+        const x = i / (n - 1);
+        let dev = 0;
+        for (const sw of swells) dev += sw.amp * Math.sin(sw.k * Math.PI * x);
+        dev += 0.5 * bridge(i);
+        raw[i] = start + rise * (x + dev);
     }
-    series[n - 1] = currentPrice;
-    // 24h change derived from the last 24 hourly samples (only meaningful
-    // when the series is 168-pt hourly; otherwise this is best-effort).
-    const back = series[Math.max(0, n - 25)] || start;
-    const change24hPct = back > 0 ? ((currentPrice - back) / back) * 100 : null;
+    // The last day eases in: the deviation fades over the final 24 samples
+    // (about one hourly day) so the 24h figure is a gain.
+    const fade = Math.min(n - 1, 24);
+    const series = raw.map((v, i) => {
+        const x = i / (n - 1);
+        const line = start + rise * x;
+        const tail = i >= n - fade ? (n - 1 - i) / fade : 1;
+        return Math.max(start * 0.35, line + (v - line) * tail);
+    });
+    series[0] = start;
+    series[n - 1] = end;
+    // The fade starts one sample after the 24h reference point, so a swell
+    // cresting there can still sit above the end. Only then, pull the last
+    // day under the midpoint between the trend line and the end, which keeps
+    // every walk that already rises unchanged.
+    const backIndex = Math.max(0, n - 25);
+    if (series[backIndex] >= end) {
+        for (let i = backIndex; i < n - 1; i += 1) {
+            const line = start + rise * (i / (n - 1));
+            series[i] = Math.min(series[i], line + (end - line) * 0.5);
+        }
+    }
+    const back = series[backIndex] || start;
+    const change24hPct = back > 0 ? ((end - back) / back) * 100 : null;
     return { sparkline: series, change24hPct };
 }
