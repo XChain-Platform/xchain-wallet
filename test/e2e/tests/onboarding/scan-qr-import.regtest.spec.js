@@ -216,11 +216,11 @@ test.describe('QR scan on the import screen (§15.4)', () => {
                 await expect(page.getByRole('status').filter({ hasText: /Backup pointer loaded/ }),
                     'a recovery phrase was accepted AS a backup pointer')
                     .toHaveCount(0);
-                const backupBox = page.getByPlaceholder('{"version":1');
-                expect((await backupBox.inputValue()).length === 0,
-                    'the scanned recovery phrase was written into the backup-content box, so a '
-                    + 'stray scan of a seed ends up in a field the user is about to submit')
-                    .toBe(true);
+                // The backup arrives as a chosen file; a scan must not load one.
+                await expect(page.getByRole('region', { name: 'Chosen backup file' }),
+                    'the scanned recovery phrase was loaded as the backup to restore, so a '
+                    + 'stray scan of a seed ends up in what the user is about to submit')
+                    .toHaveCount(0);
             } finally {
                 await close();
             }
