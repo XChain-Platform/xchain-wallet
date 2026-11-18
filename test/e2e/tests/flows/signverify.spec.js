@@ -120,9 +120,9 @@ async function signAndVerify(page, viewportName) {
 
     await copySignature.click();
     // The copied state renames the button to its confirmation ("Copied:
-    // signature") for about 1.5 s, so it is found by that name; a failed copy
+    // Signature", the subject is the label minus "Copy") for about 1.5 s, so it is found by that name; a failed copy
     // keeps the "Copy Signature" name with data-state="failed".
-    await expect(page.getByRole('button', { name: 'Copied: signature', exact: true }))
+    await expect(page.getByRole('button', { name: 'Copied: Signature', exact: true }))
         .toHaveAttribute('data-state', 'copied');
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()))
         .toBe(signature);
