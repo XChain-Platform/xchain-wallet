@@ -242,7 +242,8 @@ function TokenDetailContent({
     const [balanceFailed, setBalanceFailed] = useState(false);
     // Home's saved balances answer while fresh, so the network is known first.
     const settingsReady = Boolean(settings) || Boolean(settingsError);
-    const balanceNetwork = settings?.activeNetwork || null;
+    // Home's default when the setting is unset.
+    const balanceNetwork = settingsReady ? (settings?.activeNetwork || 'mainnet') : null;
     useEffect(() => {
         setBalanceFailed(false);
         if (typeof suppliedQuantity === 'string') {

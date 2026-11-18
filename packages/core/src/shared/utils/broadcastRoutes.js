@@ -88,3 +88,20 @@ export const BROADCAST_MESSAGE_TYPES = new Set([
 export function isBroadcastMessageType(type) {
     return typeof type === 'string' && BROADCAST_MESSAGE_TYPES.has(type);
 }
+
+// Writes that change which addresses a wallet read covers or heads: an
+// imported key can arrive funded, and a hidden, deleted, restored or newly
+// active address changes the rows Home shows.
+const ADDRESS_SET_MESSAGE_TYPES = new Set([
+    'wallet.importWif',
+    'addresses.setActive',
+    'addresses.setHidden',
+    'addresses.delete',
+    'addresses.restore',
+]);
+
+/** Does a resolved message of this type make saved wallet reads stale? */
+export function isWalletDataWriteType(type) {
+    return isBroadcastMessageType(type)
+        || (typeof type === 'string' && ADDRESS_SET_MESSAGE_TYPES.has(type));
+}

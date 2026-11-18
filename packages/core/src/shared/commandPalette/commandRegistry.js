@@ -444,8 +444,9 @@ export function buildCommands(ctx) {
 
     // ---- Wallet verbs (only when the shell wires the handler) -----------
     if (typeof ctx.refresh === 'function') {
-        // An explicit refresh reads past every saved wallet read, whatever its age.
-        list.push({ id: 'wallet-refresh', category: 'Wallet', title: t('components.tradeHistoryPanel.refresh'), subtitle: t('palette.walletRefresh.subtitle'), keywords: ['reload', 'sync', 'update'], Icon: Icon.RefreshIcon, run: () => { markWalletDataStale(); ctx.refresh(); } });
+        // An explicit refresh reads past every saved wallet read, whatever its
+        // age. The shell refresh remounts the screens, so the mark wakes no one.
+        list.push({ id: 'wallet-refresh', category: 'Wallet', title: t('components.tradeHistoryPanel.refresh'), subtitle: t('palette.walletRefresh.subtitle'), keywords: ['reload', 'sync', 'update'], Icon: Icon.RefreshIcon, run: () => { markWalletDataStale({ notify: false }); ctx.refresh(); } });
     }
     if (typeof ctx.switchWallet === 'function') {
         list.push({ id: 'wallet-switch', category: 'Wallet', title: t('components.bottomTabBar.switchWallet'), subtitle: t('palette.walletSwitch.subtitle'), keywords: ['wallet', 'account', 'change'], Icon: Icon.UsersIcon, run: () => ctx.switchWallet() });

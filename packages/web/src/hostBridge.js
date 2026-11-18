@@ -100,7 +100,7 @@ import {
 } from '../../extension/src/background/walletCreate.js';
 import { addHardwareWallet } from '../../core/src/flows/hardwareWallet.js';
 import { WALLET_VERSION } from '@xchain-wallet/core/buildInfo.js';
-import { isBroadcastMessageType } from '@xchain-wallet/core/shared/utils/broadcastRoutes.js';
+import { isWalletDataWriteType } from '@xchain-wallet/core/shared/utils/broadcastRoutes.js';
 import { markWalletDataStale } from '@xchain-wallet/core/shared/utils/walletDataFreshness.js';
 import {
     fakeBalanceFor,
@@ -2505,8 +2505,8 @@ export async function sendMessage(type, request) {
     const active = host;
     const response = await runRouteHoldingLease(broadcastQueueStore, type, () => active.handle({ type, request }));
     if (response.ok) {
-        // A broadcast changed this wallet's balances; saved reads are stale.
-        if (isBroadcastMessageType(type)) markWalletDataStale();
+        // A broadcast or an address write changed this wallet's reads; saved ones are stale.
+        if (isWalletDataWriteType(type)) markWalletDataStale();
         return response.result;
     }
     // Keeps `code` and the THROTTLED hints the envelope now carries; rebuilding

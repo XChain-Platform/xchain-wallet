@@ -139,7 +139,7 @@ describe('My Tokens reuses a fresh ownership read', () => {
         writeOwnedTokensCache('w-other', key, [TOKEN], Date.now());
         expect(readFreshOwnedTokens('w-other', key)).toEqual([TOKEN]);
         expect(readFreshOwnedTokens('w-other', `${key},bitcoin-regtest|mnew`)).toBeNull();
-        markWalletDataStale(Date.now() + 1);
+        markWalletDataStale({ now: Date.now() + 1 });
         expect(readFreshOwnedTokens('w-other', key)).toBeNull();
     });
 });

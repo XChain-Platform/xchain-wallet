@@ -43,7 +43,7 @@ function seedCache(accountId, ageMs, network = 'mainnet') {
     }, network);
 }
 
-function mountHome({ accountId = ACCOUNT_A.id } = {}) {
+function mountHome({ accountId = ACCOUNT_A.id, discovery = null } = {}) {
     const messaging = {
         listWallets: vi.fn().mockResolvedValue([WALLET]),
         listAccounts: vi.fn().mockResolvedValue([ACCOUNT_A, ACCOUNT_B]),
@@ -51,6 +51,7 @@ function mountHome({ accountId = ACCOUNT_A.id } = {}) {
         getAddressesByChain: vi.fn().mockResolvedValue({}),
         getActiveAddresses: vi.fn().mockResolvedValue({}),
         getSettings: vi.fn().mockResolvedValue({ activeNetwork: 'mainnet' }),
+        ...(discovery ? { addressDiscoveryStatus: vi.fn().mockResolvedValue(discovery) } : {}),
     };
     const view = (id) => React.createElement(
         MessagingProvider,
@@ -164,6 +165,27 @@ describe('Home reuses saved balances for five minutes', () => {
         await act(async () => { await desktopSendMessage('action.send', { chainId: 'bitcoin-mainnet' }); });
         await settle();
         expect(reads(messaging)).toBe(1);
+
+        // That read counts as fresh: the next check and a remount read nothing.
+        await wait(BALANCE_CHECK_INTERVAL_MS);
+        expect(reads(messaging)).toBe(1);
+        cleanup();
+        const reopened = mountHome();
+        await settle();
+        expect(reads(reopened.messaging)).toBe(0);
+    });
+
+    it('an address write through the shell transport reads once at once', async () => {
+        useClock();
+        seedCache(ACCOUNT_A.id, MINUTE);
+        const { messaging } = mountHome();
+        await settle();
+        globalThis.xchainWalletBridge = {
+            sendMessage: vi.fn().mockResolvedValue({ ok: true, result: { ok: true } }),
+        };
+        await act(async () => { await desktopSendMessage('addresses.setHidden', { id: 'addr-1', hidden: true }); });
+        await settle();
+        expect(reads(messaging)).toBe(1);
     });
 
     it('a broadcast while Home is unmounted makes the next open read', async () => {
@@ -186,12 +208,35 @@ describe('Home reuses saved balances for five minutes', () => {
         await settle();
         expect(reads(messaging)).toBe(0);
 
-        const shellRefresh = vi.fn();
+        // The shell's refresh remounts Home after a session read; here it remounts directly.
+        let reopened = null;
+        const shellRefresh = vi.fn(() => {
+            cleanup();
+            reopened = mountHome();
+        });
         const refresh = buildCommands({ navigate: vi.fn(), refresh: shellRefresh })
             .find((command) => command.id === 'wallet-refresh');
         act(() => { refresh.run(); });
         await settle();
         expect(shellRefresh).toHaveBeenCalledTimes(1);
+        // The unmounted Home read nothing; the remounted one reads once.
+        expect(reads(messaging)).toBe(0);
+        expect(reads(reopened.messaging)).toBe(1);
+
+        await wait(BALANCE_CHECK_INTERVAL_MS);
+        expect(reads(reopened.messaging)).toBe(1);
+    });
+
+    it('an address scan that finished while Home was closed reads once on open', async () => {
+        useClock();
+        seedCache(ACCOUNT_A.id, MINUTE);
+        const { messaging } = mountHome({
+            discovery: {
+                id: 7, status: 'done', found: 2, chainsDone: 1, chainsTotal: 1,
+                failedChains: [], walletIds: [WALLET.id], dismissed: false,
+            },
+        });
+        await settle();
         expect(reads(messaging)).toBe(1);
     });
 

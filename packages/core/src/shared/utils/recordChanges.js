@@ -17,8 +17,6 @@
 // surface has reads without a get/list prefix, and a missed read refetching
 // a list on every call is worse than a write that needs adding here.
 
-import { markWalletDataStale } from './walletDataFreshness.js';
-
 /** Each record write the shared screens make, and the record list it changes. */
 export const RECORD_WRITES = Object.freeze({
     updateCoSignerAccount: 'cosigner-accounts',
@@ -29,10 +27,6 @@ export const RECORD_WRITES = Object.freeze({
     deleteAddress: 'addresses',
     restoreAddress: 'addresses',
 });
-
-// Writes that change which addresses a balance read covers or heads; saved
-// wallet reads go stale with them.
-const ADDRESS_SET_WRITES = new Set(['setActiveAddress', 'setAddressHidden', 'deleteAddress', 'restoreAddress']);
 
 /** A tile look saved on this device (walletTile.js), for lists that draw tiles. */
 export const TILE_TOPIC = 'tiles';
@@ -92,16 +86,12 @@ export function withRecordChanges(messaging) {
             // Rebuilt only when the module swaps the function (a test spy).
             const cached = writers.get(prop);
             if (cached && cached.fn === value) return cached.writer;
-            const changed = () => {
-                if (ADDRESS_SET_WRITES.has(prop)) markWalletDataStale();
-                publishRecordChange(topic);
-            };
             const writer = function recordWrite(...args) {
                 const result = value.apply(messaging, args);
                 if (result && typeof result.then === 'function') {
-                    result.then(changed, () => {});
+                    result.then(() => publishRecordChange(topic), () => {});
                 } else {
-                    changed();
+                    publishRecordChange(topic);
                 }
                 return result;
             };

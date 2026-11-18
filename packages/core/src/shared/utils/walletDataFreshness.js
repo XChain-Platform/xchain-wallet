@@ -52,7 +52,8 @@ export function isWalletDataFresh(readAt, now = Date.now(), maxAgeMs = BALANCE_M
     const age = now - readAt;
     // A read stamped in the future means the clock moved; trust it no longer.
     if (age < 0 || age >= maxAgeMs) return false;
-    return readAt > readWalletDataStaleAt();
+    // A tie is a read the mark itself started, so it counts as after it.
+    return readAt >= readWalletDataStaleAt();
 }
 
 /**
@@ -64,7 +65,7 @@ export function isWalletDataFresh(readAt, now = Date.now(), maxAgeMs = BALANCE_M
  * @param {number} [now]
  */
 export function readTimeOf(startedAt, now = Date.now()) {
-    return readWalletDataStaleAt() >= startedAt ? startedAt : now;
+    return readWalletDataStaleAt() > startedAt ? startedAt : now;
 }
 
 function notify() {
@@ -75,13 +76,19 @@ function notify() {
     }
 }
 
-/** A transaction left this device: every saved wallet read is now out of date. */
-export function markWalletDataStale(now = Date.now()) {
+/**
+ * A transaction left this device, or the user asked for a refresh: every saved
+ * wallet read is now out of date. `notify: false` only stamps the time, for a
+ * caller that remounts the readers itself.
+ *
+ * @param {{ now?: number, notify?: boolean }} [options]
+ */
+export function markWalletDataStale({ now = Date.now(), notify: tell = true } = {}) {
     memoryStaleAt = Math.max(memoryStaleAt, now);
     try {
         globalThis.localStorage?.setItem(WALLET_DATA_STALE_KEY, String(memoryStaleAt));
     } catch { /* the memory copy still covers this window */ }
-    notify();
+    if (tell) notify();
 }
 
 function onStorage(event) {

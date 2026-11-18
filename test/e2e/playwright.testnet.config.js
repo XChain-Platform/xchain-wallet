@@ -51,6 +51,8 @@ export default defineConfig({
         : [['list'], ['json', { outputFile: './test-results-testnet/results.json' }]],
     use: {
         baseURL: suiteOrigin(),
+        // The chain moves under these specs between loads; see fixtures/wallet.js.
+        freshReadsOnLoad: true,
         trace: 'retain-on-failure',
         video: 'retain-on-failure',
         screenshot: 'only-on-failure',

@@ -43,7 +43,7 @@ import { humanizeError } from '../utils/humanizeError.js';
 import { writeActiveWallet } from '../utils/activeWalletMemory.js';
 import { takeInterruptedView } from '../utils/lastViewMemory.js';
 import { isBalanceCacheFresh, readBalanceCache, writeBalanceCache } from '../utils/balanceCache.js';
-import { isWalletDataFresh, readTimeOf, subscribeWalletDataStale } from '../utils/walletDataFreshness.js';
+import { isWalletDataFresh, markWalletDataStale, readTimeOf, subscribeWalletDataStale } from '../utils/walletDataFreshness.js';
 import { readHistoryCache } from '../utils/historyCache.js';
 import { historyResponseRows, normalizeHistoryRow, recentActivityEntries } from '../utils/historyRow.js';
 import { loadDefiPositions as readDefiPositions } from '../hooks/useDefiPositions.js';
@@ -692,7 +692,12 @@ export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onO
         reportError = false,
         savedReadAt = null,
     }) => {
-        if (!activeNetwork) return;
+        if (!activeNetwork) {
+            // Settings are still loading: release any slot the caller claimed;
+            // the mount effect reads once the network is known.
+            pollThrottleRef.current.fail();
+            return;
+        }
         // The saved copy of this pair's balances; only a clean fresh read
         // replaces it. activeForCache starts from the saved active addresses.
         let activeForCache = readBalanceCache(walletId, accountId, activeNetwork)?.activeByChain || {};
@@ -710,6 +715,8 @@ export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onO
                 setCachedBalancesUpdating(false);
                 setBalanceLoadFailed(false);
                 setLoadError(null);
+                // A countdown from the previous scope must not fire a read here.
+                setRateLimitRetryAt(null);
             }
         } else if (offline || !isNavigatorOnline()) {
             // A device-offline signal or corroborated service outage avoids
@@ -1256,7 +1263,12 @@ export function Home({ onReceive, onExchange, onHistory, onOpenWalletPicker, onO
                     the controls that raised it. */}
                 <AddressDiscoveryNotice
                     dismissOnLeave
-                    onFinished={(job) => { if (job?.found > 0) void refreshPortfolio(); }}
+                    onFinished={(job) => {
+                        if (!(job?.found > 0)) return;
+                        // New addresses: no saved read covers them.
+                        markWalletDataStale({ notify: false });
+                        void refreshPortfolio();
+                    }}
                 />
                 {interruptedAction ? (
                     <StatusMessage variant="warning">
