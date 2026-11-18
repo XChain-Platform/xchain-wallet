@@ -160,29 +160,32 @@ async function expectReview(page, {
     details,
     label,
 }) {
-    await expect(page.getByRole('heading', { level: 1, name: heading, exact: true }))
+    await expect(page.getByRole('heading', { level: 1, name: 'Confirm', exact: true }))
         .toBeVisible();
     await expect.poll(
         () => page.getByRole('main').evaluate((main) => main.scrollTop),
         { message: `${label}: review did not open at the top` },
     ).toBeLessThanOrEqual(1);
 
-    const form = page.getByRole('form', { name: formName, exact: true });
+    const form = page.getByLabel(`Confirm ${summary}`, { exact: true });
     await expect(form).toBeVisible();
     await expect(form.getByText(summary, { exact: true })).toBeVisible();
     expect(await reviewDetails(form)).toMatchObject(details);
-    await expectScreenLayout(page, heading, label);
+    await expectScreenLayout(page, 'Confirm', label);
 }
 
 async function openManagedToken(page) {
     await gotoPalette(page, 'My tokens');
-    await expectScreenLayout(page, 'My tokens', 'My tokens');
-    await page.getByLabel('Search your tokens by ticker or description').fill('XCP');
+    await expectScreenLayout(page, 'My Tokens', 'My tokens');
+    // Search sits in the Filter tokens panel in the title bar.
+    await page.getByRole('banner').getByRole('button', { name: 'Filter tokens', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Filter tokens' }).getByLabel('Search your tokens by ticker or description').fill('XCP');
+    await page.keyboard.press('Escape');
     const row = page.getByRole('button', { name: 'Open XCP token details' }).first();
     await expect(row).toBeVisible();
     await row.click();
-    await expectScreenLayout(page, 'Manage token', 'Manage token');
-    await expect(page.getByRole('main').getByText('XCP', { exact: true }).first()).toBeVisible();
+    await // The token page is titled by the ticker.
+    await expectScreenLayout(page, 'XCP', 'Manage token');
 }
 
 for (const viewport of VIEWPORTS) {
@@ -219,20 +222,17 @@ for (const viewport of VIEWPORTS) {
             await fieldByLabel(main, 'Max per transaction').fill('50');
             await openSection('Description');
             await fieldByLabel(main, 'Token description').fill('Responsive token admin fixture');
-            await expectScreenLayout(page, 'Issue token', `${viewport.name} Issue token with sections open`);
+            await expectScreenLayout(page, 'Issue Token', `${viewport.name} Issue token with sections open`);
             await page.waitForTimeout(450);
             await scrollFormToBottom(page);
             // With a supply set the main button reads Issue token (ruling U80).
             await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
             await expectReview(page, {
-                heading: 'Review issue',
-                formName: 'Review token issue',
-                summary: `Create token ${issueTick} with max supply 1000 on Bitcoin`,
+                summary: `Issue a new token, ${issueTick}`,
                 details: {
-                    Token: issueTick,
                     // Review amounts carry their unit.
-                    'Max supply': `1000 ${issueTick}`,
+                    'Max supply': `1,000 ${issueTick}`,
                     'Max mint per tx': `50 ${issueTick}`,
                     Description: 'Responsive token admin fixture',
                     'Initial mint': `250 ${issueTick}`,
