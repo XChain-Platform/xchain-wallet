@@ -31,18 +31,15 @@ test.describe('demo wallet', () => {
 
     test('Receive shows the whole address without clipping it', async ({ page }) => {
         await gotoSection(page, 'Receive');
-        const preview = page.getByRole('main').locator('[class*="readOnlyValue"] > span').first();
+        // The address is a read-only field; its whole value must fit without scrolling.
+        const preview = page.getByRole('main').getByRole('textbox', { name: /Address/ }).first();
         await expect(preview).toBeVisible();
         const metrics = await preview.evaluate((node) => ({
-            text: node.textContent,
-            full: node.getAttribute('aria-label'),
+            value: node.value,
             scrollWidth: node.scrollWidth,
             clientWidth: node.clientWidth,
-            whiteSpace: getComputedStyle(node).whiteSpace,
         }));
-        expect(metrics.full?.length ?? 0).toBeGreaterThan(25);
-        expect(metrics.text).toBe(metrics.full);
-        expect(metrics.whiteSpace).not.toBe('nowrap');
+        expect(metrics.value.length).toBeGreaterThan(25);
         expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
     });
 

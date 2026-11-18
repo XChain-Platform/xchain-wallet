@@ -136,6 +136,9 @@ export async function selectNamedToken(page, field, {
     // has been typed, because discovery is a search. The search sits behind
     // the picker's Filter button.
     await searchTokenPicker(page, tick);
+    // On a narrow screen the open filter panel floats over the results, so close it.
+    const filter = page.getByRole('button', { name: 'Filter coins and tokens', exact: true });
+    if (await filter.getAttribute('aria-expanded') === 'true') await filter.click();
 
     const row = page.locator(`[data-balance-key="${chainId}:${tick}"]`).first();
     await expect(row, `the asset picker lists no ${tick} on ${chainLabel}. On the GIVE side that `
