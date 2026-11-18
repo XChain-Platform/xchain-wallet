@@ -674,7 +674,7 @@ async function unbindController(page, source, tick = TICK) {
     await expect(form.getByLabel(/^Cooldown blocks/),
         'the Unbind form still offers a cooldown field, which a drop cannot set')
         .toHaveCount(0);
-    await chooseUnbindActionClass(form, 'transfer');
+    await chooseActionClass(form, 'transfer');
     await form.getByRole('button', { name: 'Unbind', exact: true }).click();
 
     await expectConfirmModal(page);
@@ -726,12 +726,19 @@ async function gotoAddressControllerForm(page, source) {
 }
 
 /**
- * Leaves exactly `actionClass` ticked in the form's Action class checkboxes.
- * The form opens with `transfer` ticked, so every other ticked box is cleared
- * first. A class the chain does not offer has no checkbox, and the visibility
- * assertion fails the test instead of silently binding the wrong class.
+ * Leaves exactly `actionClass` chosen in the form's Action class control.
+ * The Bind form offers checkboxes and opens with `transfer` ticked, so every
+ * other ticked box is cleared first. The Unbind form removes one class, so it
+ * offers a single-choice themed select instead. A class the chain does not
+ * offer has no checkbox or option, and the visibility assertion fails the test
+ * instead of silently acting on the wrong class.
  */
 async function chooseActionClass(form, actionClass) {
+    const select = form.getByRole('combobox', { name: 'Action class' });
+    if (await select.count() > 0) {
+        await chooseUnbindActionClass(form, select, actionClass);
+        return;
+    }
     const group = form.getByRole('group', { name: 'Action class' });
     const target = group.getByRole('checkbox', { name: actionClass, exact: true });
     await expect(target, `the Action class checkboxes carry no \`${actionClass}\` option`).toBeVisible();
@@ -744,15 +751,8 @@ async function chooseActionClass(form, actionClass) {
         `exactly \`${actionClass}\` must stay ticked`).toHaveCount(1);
 }
 
-/**
- * Picks `actionClass` in the Unbind form's Action class select. One unbind
- * removes one class, so the Unbind form offers a single-choice themed select
- * (a combobox showing its pick) where the Bind form offers checkboxes. A class
- * the chain does not offer has no option, and the visibility assertion fails
- * the test instead of silently dropping the wrong class.
- */
-async function chooseUnbindActionClass(form, actionClass) {
-    const select = form.getByRole('combobox', { name: 'Action class' });
+/** Picks `actionClass` in the Unbind form's Action class select (a combobox showing its pick). */
+async function chooseUnbindActionClass(form, select, actionClass) {
     await select.click();
     const option = form.page().getByRole('option', { name: actionClass, exact: true });
     await expect(option, `the Action class select carries no \`${actionClass}\` option`).toBeVisible();
@@ -819,7 +819,7 @@ async function unbindAddressController(page, source) {
         .toHaveText(/^\s*Address\s*$/);
     await selectVenueChain(form);
     await readChainAddresses(page, source);
-    await chooseUnbindActionClass(form, 'transfer');
+    await chooseActionClass(form, 'transfer');
     await form.getByRole('button', { name: 'Unbind', exact: true }).click();
 
     await expectConfirmModal(page);
