@@ -22,7 +22,7 @@ vi.mock('../../../packages/core/src/i18n/index.js', async (importOriginal) => {
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { History } from '../../../packages/core/src/shared/routes/History.jsx';
-import { BALANCE_POLL_INTERVAL_MS } from '../../../packages/core/src/flows/balances.js';
+import { BALANCE_MAX_AGE_MS } from '../../../packages/core/src/flows/balances.js';
 import { slowTimeout } from '../../helpers/testEnvSpeed.js';
 import { EXPORT_ITEM, chooseHistoryMenuItem } from './historyMoreMenu.js';
 
@@ -166,7 +166,7 @@ describe('History large-list performance', () => {
             ...original.slice(100),
         ];
         vi.useFakeTimers({ toFake: ['Date'] });
-        vi.setSystemTime(Date.now() + BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + BALANCE_MAX_AGE_MS);
         act(() => { window.dispatchEvent(new Event('focus')); });
 
         await waitFor(() => expect(messaging.getAddressHistory).toHaveBeenCalledTimes(2));

@@ -33,6 +33,7 @@ import { UNCONFIRMED_COMMITTED_STATUSES } from './pendingDeltas.js';
 import { explorerFreshScope, explorerReadFresh } from '../sdk/explorerRateLimit.js';
 import { probeTxInclusion } from './txInclusionProbe.js';
 import { markPendingTxIndexed } from '../notifications/pendingTxBridge.js';
+import { BALANCE_MAX_AGE_MS, BALANCE_CHECK_INTERVAL_MS } from '../shared/utils/walletDataFreshness.js';
 
 const LIVE_PENDING_STATUSES = new Set(UNCONFIRMED_COMMITTED_STATUSES);
 
@@ -121,23 +122,23 @@ export function _resetBatchSupportMemo() {
 }
 
 /**
- * How often Home re-runs the whole balance load while the wallet is open.
+ * Home's balance cadence. Nothing pushes balance changes to the wallet, so
+ * an open Home checks every BALANCE_CHECK_INTERVAL_MS and reads again only
+ * once its data is BALANCE_MAX_AGE_MS old; a broadcast, an explicit refresh
+ * or a switch to a scope with no fresh saved copy reads at once.
  *
- * Nothing pushes balance changes to the wallet (an incoming send, a mint
- * landing, a token someone else sent you), so Home polls: 20s balances
- * catching an incoming token promptly against hammering the SDK/indexer on
- * every open tab. The polling effect in Home.jsx also refires immediately on
- * focus/visibility and pauses while the document is hidden.
- *
- * It lives HERE, next to the aggregator it re-runs, rather than as a private
- * const in Home.jsx, because it is not only a UI cadence: it is the wallet's
- * SUSTAINED request rate against the public endpoints, and
- * tools/release/cold-open-profile.mjs has to read the same number the app
- * uses when it works out what the zone rate limits must clear. A profile that
- * restated the interval would go quietly wrong the first time someone tuned
- * it.
+ * Exported here, beside the aggregator they gate, because they are the
+ * wallet's SUSTAINED request rate against the public endpoints and
+ * tools/release/cold-open-profile.mjs reads the same numbers the app uses.
  */
-export const BALANCE_POLL_INTERVAL_MS = 20000;
+export { BALANCE_MAX_AGE_MS, BALANCE_CHECK_INTERVAL_MS };
+
+/**
+ * How often a screen watching this wallet's own unconfirmed transactions
+ * (History's pending rows, a pending action's detail) reads again. Only
+ * pending watching runs at this rate; settled data follows the age rule above.
+ */
+export const PENDING_POLL_INTERVAL_MS = 20000;
 
 // D-6: the explorer `/balances/` endpoint is the XChain TOKEN ledger only; it
 // never carries the chain's NATIVE coin (BTC/LTC/DOGE) balance, which lives at
@@ -1154,7 +1155,7 @@ export async function walletBalances({
     //
     //    One request per chain rather than two per address is the whole point:
     //    a five-address wallet on three chains asked the explorer for 30 reads
-    //    every 20s poll, which is the sustained rate the zone rate limits have
+    //    on every balance refresh, which is the sustained rate the zone rate limits have
     //    to clear. When the SDK carries `getBalancesBatch` and the explorer
     //    answers it, the same poll is 3 requests. Both halves are conditions,
     //    not assumptions: an SDK older than the method, or an explorer older

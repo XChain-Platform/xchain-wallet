@@ -80,7 +80,7 @@ describe('Home offline behavior', () => {
         // A failed background read leaves the last successful rows and sync
         // time intact instead of returning Home to a loading state.
         messaging.getWalletBalances.mockRejectedValueOnce(new Error('Failed to fetch'));
-        vi.setSystemTime(Date.now() + flows.BALANCE_POLL_INTERVAL_MS);
+        vi.setSystemTime(Date.now() + flows.BALANCE_MAX_AGE_MS);
         act(() => { window.dispatchEvent(new Event('focus')); });
         await waitFor(() => expect(messaging.getWalletBalances).toHaveBeenCalledTimes(2));
         expect(screen.getByText('Bitcoin', { selector: '[title="Bitcoin"]' })).toBeTruthy();
