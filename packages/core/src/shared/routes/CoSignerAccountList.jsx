@@ -15,7 +15,7 @@
 // detail / policy edit / enable-disable.
 
 import { userFacingMessage } from '../utils/userFacingMessage.js';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     Screen,
     PageHeader,
@@ -41,6 +41,8 @@ import { formatAtomicAmount, formatTokenQuantity } from '../utils/amountFormat.j
 // Agents wear the same initials tile as wallets and accounts, stored by id.
 import { IdentityAvatar } from '../components/WalletIdentity.jsx';
 import { readWalletTile, tileRadius, walletTileText } from '../utils/walletTile.js';
+import { TILE_TOPIC } from '../utils/recordChanges.js';
+import { useRecordRevision } from '../hooks/useRecordRevision.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/coSigner.js';
 import '../../i18n/locales/en/send.js';
@@ -119,16 +121,43 @@ export function CoSignerAccountList({
     const [query, setQuery] = useState('');
     const [localPick, setLocalPick] = useState(/** @type {string | null} */ (null));
 
+    // A write to an agent (rename, turn off, a new one) reads the rows again
+    // in place, so the open detail beside them stays mounted.
+    const accountsRevision = useRecordRevision('cosigner-accounts');
+    // Edit look stores the tile on this device; the rows draw it on render.
+    useRecordRevision(TILE_TOPIC);
+    const readScope = useRef(/** @type {object | null} */ (null));
+
+    useEffect(() => {
+        if (!listShown) {
+            readScope.current = null;
+            return undefined;
+        }
+        let cancelled = false;
+        const refresh = readScope.current?.walletId === walletId && readScope.current?.messaging === messaging;
+        readScope.current = { walletId, messaging };
+        if (!refresh) {
+            setAccounts(null);
+            setError(null);
+        }
+        Promise.resolve()
+            .then(() => messaging.listCoSignerAccounts({ walletId }))
+            .then((list) => {
+                if (cancelled) return;
+                setAccounts(Array.isArray(list) ? list : []);
+                setError(null);
+            })
+            .catch((err) => {
+                // A failed refresh keeps the rows already shown.
+                if (!cancelled && !refresh) setError(userFacingMessage(err, 'Failed to load agent accounts.'));
+            });
+        return () => { cancelled = true; };
+    }, [walletId, messaging, listShown, accountsRevision]);
+
     useEffect(() => {
         if (!listShown) return undefined;
         let cancelled = false;
-        setAccounts(null);
-        setError(null);
         setBalances(null);
-        Promise.resolve()
-            .then(() => messaging.listCoSignerAccounts({ walletId }))
-            .then((list) => { if (!cancelled) setAccounts(Array.isArray(list) ? list : []); })
-            .catch((err) => { if (!cancelled) setError(userFacingMessage(err, 'Failed to load agent accounts.')); });
         // A shell without the balances route shows each row's balance as unavailable.
         Promise.resolve()
             .then(() => (typeof messaging.getCoSignerAccountBalances === 'function'
