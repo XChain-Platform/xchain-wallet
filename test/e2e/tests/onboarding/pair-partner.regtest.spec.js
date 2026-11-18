@@ -87,6 +87,9 @@ const FOREIGN_MNEMONIC =
 /** The wire prefix from `flows/pairPartner.js`. */
 const PAIR_PREFIX = 'XCW-PAIR:';
 
+/** The shell's offline sentence (reachability.notice.offline), which joins a form's notice box. */
+const OFFLINE_NOTICE = /You['’]re offline\./;
+
 /** A camera-equipped browser is launched outside the project, so it needs the absolute URL. */
 const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183}`;
 
@@ -141,13 +144,31 @@ async function pairLaneToExchange(page, { role, mnemonic, name, url = '/' }) {
 
     // Argon2id on the import, then the host derives an account node per active
     // chain. Both are slow enough to need the long budget. Race the code box
-    // against the error row so a lane that CANNOT build a payload reports why
-    // in seconds instead of timing out two minutes later with no diagnosis.
+    // against the code slot's own failed state so a lane that CANNOT build a
+    // payload reports why in seconds instead of timing out two minutes later.
+    //
+    // NOT AGAINST ANY ALERT. A fresh device sits on mainnet, which the venue
+    // runner cannot reach, so the form's notice box carries the shell's
+    // "You're offline" line beside its Public Codes note, and that box is an
+    // alert while the code is still building. The slot itself says "No
+    // pairing code yet." once a build ends without a code, and "Building…"
+    // while it runs; it reads "No pairing code yet." for one render before
+    // the build starts, so a failure is two reads in a row a second apart.
     const codeBox = page.getByText(new RegExp(`^${PAIR_PREFIX}`));
-    const failed = page.getByRole('alert');
-    await codeBox.or(failed).first().waitFor({ state: 'visible', timeout: 120_000 });
+    const noCode = page.getByText('No pairing code yet.', { exact: true });
+    let noCodeReads = 0;
+    await expect.poll(async () => {
+        if (await codeBox.count() > 0) return 'code';
+        noCodeReads = (await noCode.isVisible()) ? noCodeReads + 1 : 0;
+        return noCodeReads >= 2 ? 'failed' : 'pending';
+    }, {
+        timeout: 120_000,
+        intervals: [1_000],
+        message: 'the pairing lane neither showed this device\'s code nor ended its build',
+    }).not.toBe('pending');
     if (await codeBox.count() === 0) {
-        throw new Error(`the pairing lane could not build this device's code: ${(await failed.first().innerText()).trim()}`);
+        const notice = page.locator('[data-form-status]').first();
+        throw new Error(`the pairing lane could not build this device's code: ${(await notice.innerText()).trim()}`);
     }
 
     const code = (await codeBox.innerText()).trim();
@@ -165,8 +186,11 @@ async function pairLaneToExchange(page, { role, mnemonic, name, url = '/' }) {
  */
 async function submitPartnerCode(page, { partnerCode, cta }) {
     const paired = page.getByText(/^Paired\./);
-    // `StatusMessage variant="error"` is the only role="alert" on this screen.
-    const failed = page.getByRole('alert');
+    // A refusal is the form's error summary, an alert of its own. The notice
+    // box above it is an alert too on a device the venue leaves offline, and
+    // its Try Again label changes while the shell re-checks, so it is left out
+    // or a re-check would read as a new refusal.
+    const failed = page.getByRole('alert').filter({ hasNotText: OFFLINE_NOTICE });
 
     // A REFUSAL FROM THE PREVIOUS ATTEMPT IS STILL ON SCREEN when this runs
     // again, and it would satisfy a plain "wait for an alert" instantly - which

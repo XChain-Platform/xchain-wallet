@@ -87,6 +87,8 @@ import {
 import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
+/** The wallet menu row that opens the oracle price form (the grouped menu's title). */
+const ORACLE_COMMAND = 'My oracle';
 /** The publish and the mint both pay a real coin protocol fee here. */
 const FUNDING = 2;
 /** The token the quote prices. Free-mintable on regtest, which is the point. */
@@ -205,7 +207,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Oracle Operator' });
             await switchToRegtest(page, PASSWORD);
 
-            await openPaletteCommand(page, 'Publish oracle price');
+            await openPaletteCommand(page, ORACLE_COMMAND);
             let main = page.getByRole('main');
             await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
             // D-145: this form mounted no chain picker at all until this
@@ -222,7 +224,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await unlockAfterReload(page, PASSWORD);
             await seedPrices();
 
-            await openPaletteCommand(page, 'Publish oracle price');
+            await openPaletteCommand(page, ORACLE_COMMAND);
             main = page.getByRole('main');
             await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
@@ -361,7 +363,7 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
                     .toBe(true);
                 await mineIfPending();
                 await page.getByRole('button', { name: /^Back/ }).first().click();
-                await openPaletteCommand(page, 'Publish oracle price');
+                await openPaletteCommand(page, ORACLE_COMMAND);
                 await expect(main.getByRole('button', { name: /^Token:/ })).toBeVisible({ timeout: 30_000 });
                 await selectVenueChain(main);
             }
