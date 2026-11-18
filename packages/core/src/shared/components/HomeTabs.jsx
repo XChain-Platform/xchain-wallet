@@ -32,7 +32,6 @@ import { useWalletHistory } from '../hooks/useWalletHistory.js';
 import { DEMO_CHART_SEED } from '../../flows/demoCapture.js';
 import { RouteErrorBoundary } from './RouteErrorBoundary.jsx';
 import { HomeListFilterMenu } from './HomeListFilterMenu.jsx';
-import { BalancesUncheckedState, useBalancesUnchecked } from './BalancesUncheckedState.jsx';
 import { activityRowAmount, activityRowAmountQualifier, activityRowTick } from '../utils/activityAmount.js';
 import { ActivityRow as SharedActivityRow, actionIconForAction } from './ActivityRow.jsx';
 import { isDemoWallet } from '@xchain-wallet/core/flows';
@@ -573,11 +572,6 @@ export const HomeTabs = memo(function HomeTabs({ onWideChange, walletName = '', 
     // unfiltered list; a query that matches nothing reads as no matches.
     // Narrowed to Tokens there is no first funding (the old Tokens tab's rule).
     const balancesFirstFunding = showFirstFunding && balanceType !== 'tokens';
-    // An empty read while the balance check failed proves nothing, so the
-    // first-funding slot says the balances could not be checked, as Send does.
-    // A load in flight or cached balances keep Home's own notice (quietEmpty).
-    const { unchecked: balancesUnchecked, recheck: recheckBalances } = useBalancesUnchecked();
-    const balancesUncheckedEmpty = balancesFirstFunding && balancesUnchecked && !isDemo;
     const balancesQuiet = quietEmpty && !tokenQueryTrim
         && (balancesFirstFunding || balanceRows.length === 0);
     // NFTs = tokens matching the canonical NFT pattern (NFT_Standard.md:
@@ -751,15 +745,7 @@ export const HomeTabs = memo(function HomeTabs({ onWideChange, walletName = '', 
                 aria-labelledby={`${tabsId}-tab-${active}`}
             >
                 {active === 'balances' && !balancesQuiet ? (
-                    balancesUncheckedEmpty ? (
-                        <BalancesUncheckedState
-                            onRetry={() => {
-                                recheckBalances();
-                                onRefresh?.();
-                            }}
-                            onReceive={hasAddresses ? onReceive : undefined}
-                        />
-                    ) : balancesFirstFunding ? (
+                    balancesFirstFunding ? (
                         <EmptyState
                             title={t('home.tabs.fundYourWallet')}
                             body={hasAddresses

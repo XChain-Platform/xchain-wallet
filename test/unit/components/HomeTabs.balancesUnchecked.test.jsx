@@ -8,19 +8,14 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Home's empty Balances tab says "Balances couldn't be checked" in the
-// first-funding slot only when the balance check failed; a check that
-// passed keeps "Fund your wallet". An empty tab stays quiet while Home's own
-// balance notice is up (a load in flight, cached balances), for a demo
-// wallet exactly as for a real one.
+// Home's empty tabs never show a "Balances couldn't be checked" state or its
+// Try again: the operator ruled that notice unhelpful on Home. An empty tab
+// shows its ordinary empty state, and stays quiet while Home's own balance
+// notice is up, for a demo wallet exactly as for a real one.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
-const reachability = vi.hoisted(() => ({ overall: 'normal' }));
-vi.mock('../../../packages/core/src/shared/hooks/useReachability.js', () => ({
-    useReachability: () => ({ overall: reachability.overall, loading: false, perChain: [], lastChecked: null, refresh: () => {}, error: null }),
-}));
 vi.mock('../../../packages/core/src/shared/components/TotalBalanceHero.jsx', () => ({
     TotalBalanceHero: () => null,
 }));
@@ -60,42 +55,25 @@ function mount(overrides = {}) {
 
 afterEach(() => {
     cleanup();
-    reachability.overall = 'normal';
     clearDemoWalletId();
     globalThis.localStorage?.clear();
 });
 
 describe('HomeTabs empty tabs', () => {
-    it('shows the first-funding nudge when the balance check passed', () => {
-        mount();
+    it('shows the first-funding nudge and never an unchecked state or Try again', () => {
+        // The old unchecked props are ignored if a caller still passes them.
+        mount({ balancesUnchecked: true, onRecheckBalances: vi.fn() });
         expect(screen.getByText('Fund your wallet')).toBeInTheDocument();
         expect(screen.queryByText("Balances couldn't be checked")).toBeNull();
-        expect(screen.queryByRole('button', { name: /^Try again$/i })).toBeNull();
-    });
-
-    it('says the balances could not be checked in that slot when the check failed', () => {
-        reachability.overall = 'degraded';
-        mount();
-        expect(screen.getByText("Balances couldn't be checked")).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /^Try again$/i })).toBeInTheDocument();
-        expect(screen.queryByText('Fund your wallet')).toBeNull();
-    });
-
-    it('keeps the first-funding nudge for a demo wallet whatever the check says', () => {
-        reachability.overall = 'degraded';
-        markDemoWallet('demo-wallet-1');
-        mount({ walletId: 'demo-wallet-1' });
-        expect(screen.getByText('Fund your wallet')).toBeInTheDocument();
-        expect(screen.queryByText("Balances couldn't be checked")).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     });
 
     it('shows the ordinary empty Tokens state with no unchecked state', () => {
-        reachability.overall = 'degraded';
-        mount();
+        mount({ balancesUnchecked: true, onRecheckBalances: vi.fn() });
         showHomeBalances('tokens');
         expect(screen.getByText('No tokens yet')).toBeInTheDocument();
         expect(screen.queryByText("Balances couldn't be checked")).toBeNull();
-        expect(screen.queryByRole('button', { name: /^Try again$/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     });
 
     it('keeps a search miss as a search miss', () => {
@@ -105,9 +83,7 @@ describe('HomeTabs empty tabs', () => {
     });
 
     it('stays quiet while Home shows its own balance notice', () => {
-        reachability.overall = 'degraded';
         mount({ balanceNoticeShown: true });
-        expect(screen.queryByText("Balances couldn't be checked")).toBeNull();
         expect(screen.queryByText('Fund your wallet')).toBeNull();
         showHomeBalances('tokens');
         expect(screen.queryByText('No tokens yet')).toBeNull();
