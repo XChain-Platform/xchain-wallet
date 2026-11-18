@@ -69,4 +69,35 @@ describe('withRecordChanges', () => {
         await tracked.setAddressLabel();
         expect(messaging.calls).toBe(1);
     });
+
+    // A production bundle emits `import * as messaging` as a frozen,
+    // null-prototype object, whose members a proxy may not swap.
+    it('tracks writes on a frozen module and still lists, spreads and re-wraps it', async () => {
+        const read = vi.fn().mockResolvedValue([]);
+        const messaging = Object.freeze({
+            __proto__: null,
+            listCoSignerAccounts: read,
+            updateCoSignerAccount: vi.fn().mockResolvedValue({ id: 'a' }),
+        });
+        const topics = listen();
+        const tracked = withRecordChanges(messaging);
+
+        await expect(tracked.updateCoSignerAccount({ id: 'a', patch: {} })).resolves.toEqual({ id: 'a' });
+        await flush();
+        expect(topics).toEqual(['cosigner-accounts']);
+        expect('listCoSignerAccounts' in tracked).toBe(true);
+        expect('renameWallet' in tracked).toBe(false);
+        expect(Object.keys(tracked).sort()).toEqual(['listCoSignerAccounts', 'updateCoSignerAccount']);
+        const spread = { ...tracked };
+        expect(spread.listCoSignerAccounts).toBe(read);
+        await spread.updateCoSignerAccount({ id: 'a', patch: {} });
+        await flush();
+        expect(topics).toEqual(['cosigner-accounts', 'cosigner-accounts']);
+
+        // A screen may layer its own proxy on the module it was handed.
+        const layered = new Proxy(tracked, {
+            get(target, prop) { return prop === 'listCoSignerAccounts' ? () => 'layered' : target[prop]; },
+        });
+        expect(layered.listCoSignerAccounts()).toBe('layered');
+    });
 });

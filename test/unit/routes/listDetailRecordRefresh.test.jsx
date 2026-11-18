@@ -226,4 +226,28 @@ describe('address list after Set active in its detail', () => {
         expect(within(rowFor(FIRST)).queryByText('Active')).toBeNull();
         expect(messaging.getActiveAddresses).toHaveBeenCalledTimes(2);
     });
+
+    it('reads the badges once more for a label save, not once per signal', async () => {
+        const messaging = {
+            ...addressMessaging(),
+            setAddressLabel: vi.fn().mockResolvedValue({ ok: true }),
+        };
+        render(
+            <MessagingProvider shell="web" messaging={messaging}>
+                <AddressShell />
+            </MessagingProvider>,
+        );
+        await waitFor(() => expect(within(rowFor(FIRST)).getByText('Active')).toBeInTheDocument());
+        expect(messaging.getActiveAddresses).toHaveBeenCalledTimes(1);
+
+        fireEvent.click(rowFor(SECOND));
+        fireEvent.click(await screen.findByRole('button', { name: /^Edit label/ }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Address label' }), { target: { value: 'Savings' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save Label', exact: true }));
+
+        await waitFor(() => expect(messaging.setAddressLabel).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(messaging.getActiveAddresses).toHaveBeenCalledTimes(2));
+        await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 20); }); });
+        expect(messaging.getActiveAddresses).toHaveBeenCalledTimes(2);
+    });
 });

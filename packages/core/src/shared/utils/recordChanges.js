@@ -65,25 +65,29 @@ const wrapped = new WeakMap();
  * The messaging module with each record write publishing its topic once it
  * resolves. Every other member is the module's own, called on the module.
  *
+ * The proxy stands on an empty object and forwards to the module, because a
+ * production bundle freezes `import * as messaging`, and a proxy over a
+ * frozen object may not hand back a different function for a member.
+ *
  * @template {object} T
  * @param {T} messaging
  * @returns {T}
  */
 export function withRecordChanges(messaging) {
-    if (!messaging || (typeof messaging !== 'object' && typeof messaging !== 'function')) return messaging;
+    if (!messaging || typeof messaging !== 'object') return messaging;
     const known = wrapped.get(messaging);
     if (known) return known;
     const writers = new Map();
-    const proxy = new Proxy(messaging, {
-        get(target, prop) {
-            const value = Reflect.get(target, prop, target);
+    const proxy = new Proxy(Object.create(null), {
+        get(_standIn, prop) {
+            const value = Reflect.get(messaging, prop, messaging);
             const topic = typeof prop === 'string' && Object.prototype.hasOwnProperty.call(RECORD_WRITES, prop) ? RECORD_WRITES[prop] : null;
             if (!topic || typeof value !== 'function') return value;
             // Rebuilt only when the module swaps the function (a test spy).
             const cached = writers.get(prop);
             if (cached && cached.fn === value) return cached.writer;
             const writer = function recordWrite(...args) {
-                const result = value.apply(target, args);
+                const result = value.apply(messaging, args);
                 if (result && typeof result.then === 'function') {
                     result.then(() => publishRecordChange(topic), () => {});
                 } else {
@@ -94,6 +98,15 @@ export function withRecordChanges(messaging) {
             writers.set(prop, { fn: value, writer });
             return writer;
         },
+        set: (_standIn, prop, value) => Reflect.set(messaging, prop, value),
+        has: (_standIn, prop) => Reflect.has(messaging, prop),
+        ownKeys: () => Reflect.ownKeys(messaging),
+        // Reported configurable, as the empty stand-in requires; values still come from get.
+        getOwnPropertyDescriptor(_standIn, prop) {
+            const descriptor = Reflect.getOwnPropertyDescriptor(messaging, prop);
+            return descriptor ? { ...descriptor, configurable: true } : undefined;
+        },
+        getPrototypeOf: () => Reflect.getPrototypeOf(messaging),
     });
     wrapped.set(messaging, proxy);
     return proxy;

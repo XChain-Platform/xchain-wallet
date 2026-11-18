@@ -126,7 +126,7 @@ export function CoSignerAccountList({
     const accountsRevision = useRecordRevision('cosigner-accounts');
     // Edit look stores the tile on this device; the rows draw it on render.
     useRecordRevision(TILE_TOPIC);
-    const readScope = useRef(/** @type {object | null} */ (null));
+    const readScope = useRef(/** @type {{ walletId: string, messaging: any } | null} */ (null));
 
     useEffect(() => {
         if (!listShown) {
