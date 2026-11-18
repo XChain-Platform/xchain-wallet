@@ -597,9 +597,11 @@ describe('Confirm Standard status notice and short warning', () => {
         expect(notices[0].getAttribute('data-state')).toBe('settleChecks');
         expect(notices[0].getAttribute('data-tone')).toBe('info');
         expect(notices[0].getAttribute('role')).not.toBe('alert');
-        expect(notices[0].textContent).toContain('Checked by the Network');
+        expect(notices[0].textContent).toContain('Limits Checked at Settlement');
         expect(notices[0].textContent).toContain("Some of this token's limits are checked when it settles.");
         expect(notices[0].textContent).not.toContain('Only partly checked');
+        // Never the full approval's green claim.
+        expect(notices[0].textContent).not.toContain('this will go through');
     });
 
     it('a settle-time gap beside any other cause keeps the red partly checked status', () => {
