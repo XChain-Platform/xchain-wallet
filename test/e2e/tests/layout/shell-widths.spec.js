@@ -167,6 +167,9 @@ function measure(page) {
             // A visible G128 list-and-detail split, whose panels bleed past
             // the gutter by design (PanelSplit.module.css, operator 2026-11-16).
             twoPanel: Boolean(main && Array.from(main.querySelectorAll('[class*="_twoPanel_"]')).some(visible)),
+            // A mouse keeps no scrollbar lane in a split body (PanelSplit.module.css:
+            // scrollbar-gutter auto, no end padding), so its end padding is 0.
+            pointerFine: matchMedia("(hover: hover) and (pointer: fine)").matches,
             mainRight: mainBox ? mainBox.right : 0,
             padLeft: main ? parseFloat(mainStyle.paddingLeft) : null,
             padRight: main ? parseFloat(mainStyle.paddingRight) : null,
@@ -252,7 +255,13 @@ test('the shell keeps its rulings at every width and route', async ({ page }) =>
                 expect.soft(m.padLeft, at('start gutter')).toBe(PAGE_GUTTER);
                 // The end padding is the gutter less the 2px optical step and any
                 // classic scrollbar lane, so rows end on the header buttons' line.
-                expect.soft(m.padRight, at('end gutter')).toBe(Math.max(0, PAGE_GUTTER - 2 - m.frameScrollbar));
+                // A two-panel split on a pointer-fine device is the approved
+                // exception (operator 2026-11-16): no reserved lane and no end
+                // padding, the panels carry their own 8px end gap.
+                const expectedPadRight = m.twoPanel && m.pointerFine
+                    ? 0
+                    : Math.max(0, PAGE_GUTTER - 2 - m.frameScrollbar);
+                expect.soft(m.padRight, at('end gutter')).toBe(expectedPadRight);
                 expect.soft(m.minLeft, at(`content not past start gutter (${m.minLeftEl})`)).toBeGreaterThanOrEqual(m.contentLeft - 0.5 - bleed);
                 const endEdge = m.twoPanel ? m.mainRight : m.contentRight;
                 expect.soft(m.maxRight, at(`content not past end gutter (${m.maxRightEl})`)).toBeLessThanOrEqual(endEdge + 0.5);

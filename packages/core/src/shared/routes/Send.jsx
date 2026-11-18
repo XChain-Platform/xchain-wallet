@@ -810,6 +810,8 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
     const [tokenPickerRecipientId, setTokenPickerRecipientId] = useState(
         /** @type {string | null} */ (null),
     );
+    // The Asset picker's network filter; null follows the form's chain (G63).
+    const [assetPickerNetwork, setAssetPickerNetwork] = useState(/** @type {string | null} */ (null));
     const [fiatAmount, setFiatAmount] = useState('');
     const [password, setPassword] = useState('');
     // Live mirror of `password` so the confirm-modal's onApprove closure
@@ -4403,10 +4405,15 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
         );
     }
 
-    // The Token field opens the standard TokenPicker on the form's network. A
-    // pick on another chain moves the form there first; onTickInputChange then
-    // clears amounts and says so, as typing a new ticker does.
+    // The Token field opens the standard TokenPicker on the form's network. Its
+    // network filter can widen to another chain (G63); a pick there moves the
+    // form first (G62). onTickInputChange clears amounts and says so, as
+    // typing a new ticker does.
     if (tokenPickerRecipientId === PRIMARY_TOKEN_PICKER) {
+        const closeAssetPicker = () => {
+            setAssetPickerNetwork(null);
+            setTokenPickerRecipientId(null);
+        };
         return (
             <TokenPicker
                 purpose="send"
@@ -4414,8 +4421,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                 accountId={accountId}
                 // A picker offering the native coin and tokens is "Asset".
                 title={t('send.asset')}
-                networkFilter={coinFromChainId(chainId)}
-                chainIdFilter={chainId || undefined}
+                networkFilter={assetPickerNetwork ?? coinFromChainId(chainId)}
+                onNetworkFilterChange={setAssetPickerNetwork}
+                chainIdFilter={assetPickerNetwork ? undefined : (chainId || undefined)}
                 onSelect={(selection) => {
                     const picked = String(selection.tick || '').toUpperCase();
                     if (selection.chainId && selection.chainId !== chainId) {
@@ -4424,9 +4432,9 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                     } else {
                         onTickInputChange(picked);
                     }
-                    setTokenPickerRecipientId(null);
+                    closeAssetPicker();
                 }}
-                onBack={() => setTokenPickerRecipientId(null)}
+                onBack={closeAssetPicker}
             />
         );
     }
