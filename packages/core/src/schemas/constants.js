@@ -11,6 +11,8 @@
 // Shared enums used across multiple schemas. Schema-specific enums
 // (Wallet.origin, PendingTx.status, etc.) live next to their owning schema.
 
+import { SIGNER_KINDS } from './signer.js';
+
 export const NETWORKS = /** @type {const} */ (['mainnet', 'testnet', 'regtest']);
 
 export const ACTION_PERMISSIONS = /** @type {const} */ (['always', 'ask', 'never']);
@@ -22,6 +24,11 @@ export const ADDRESS_SOURCES = /** @type {const} */ ([
     'trezor',
     'ledger',
 ]);
+
+/** @param {unknown} source */
+export function isDerivedAddressSource(source) {
+    return source === 'hd' || isDeviceAddressSource(source);
+}
 
 const ADDRESS_SOURCE_BY_SIGNER_KIND = Object.freeze({
     software: 'hd',
@@ -41,6 +48,21 @@ export function addressSourceForSignerKind(kind) {
         throw new Error(`Signer kind "${String(kind)}" has no Address.source mapping`);
     }
     return /** @type {typeof ADDRESS_SOURCES[number]} */ (ADDRESS_SOURCE_BY_SIGNER_KIND[kind]);
+}
+
+export const DEVICE_SIGNER_KINDS = Object.freeze([...SIGNER_KINDS]);
+export const DEVICE_ADDRESS_SOURCES = Object.freeze(
+    DEVICE_SIGNER_KINDS.map(addressSourceForSignerKind),
+);
+
+/** @param {unknown} kind */
+export function isDeviceSignerKind(kind) {
+    return typeof kind === 'string' && DEVICE_SIGNER_KINDS.includes(kind);
+}
+
+/** @param {unknown} source */
+export function isDeviceAddressSource(source) {
+    return typeof source === 'string' && DEVICE_ADDRESS_SOURCES.includes(source);
 }
 
 // Derivation role of an HD address (§16). 'receive' and 'change' mirror

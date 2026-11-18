@@ -126,6 +126,7 @@ function makeVault({ wallets = [], accounts = [], addresses = [] } = {}) {
         addresses: memCollection(addresses),
         contacts: memCollection([]),
         connectedSites: memCollection([]),
+        signers: memCollection([]),
         pendingTxs: memCollection([]),
         settings: memSettings(null),
     };

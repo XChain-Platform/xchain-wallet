@@ -14,6 +14,8 @@
 // actually broadcast, and (b) a confirmation flips the record to 'indexed',
 // keeping the tx-status timeline in sync with the live WS event.
 
+import { reverseAdsBookingInVault } from '../flows/ads.js';
+
 const ledgerWriteChains = new WeakMap();
 
 /**
@@ -76,9 +78,10 @@ export async function markPendingTxIndexed(vault, txid, opts = {}) {
     const stamp = typeof opts.now === 'function' ? opts.now : () => new Date().toISOString();
     const inclusion = opts.inclusion && typeof opts.inclusion === 'object' ? opts.inclusion : null;
     const block = Number(inclusion?.blockIndex);
-    return serializeLedgerWrite(vault, async () => {
+    const result = await serializeLedgerWrite(vault, async () => {
         const matches = await vault.pendingTxs.findBy('txid', txid);
         let changed = false;
+        const reversals = new Map();
         for (const rec of matches) {
             if (rec.status === 'indexed') continue;
             await vault.pendingTxs.put({
@@ -91,9 +94,55 @@ export async function markPendingTxIndexed(vault, txid, opts = {}) {
                 } : {}),
             });
             changed = true;
+            if (rec.adsBooking?.paid === false && typeof rec.adsBooking.id === 'string') {
+                const original = typeof vault.pendingTxs.get === 'function'
+                    ? await vault.pendingTxs.get(rec.adsBooking.id)
+                    : null;
+                const booking = original?.adsBooking;
+                if (booking?.booked === true && booking.reversed !== true) {
+                    await vault.pendingTxs.put({
+                        ...original,
+                        adsBooking: { ...booking, reversed: true },
+                    });
+                    reversals.set(booking.id, booking);
+                }
+            }
             await failSupersededReplacements(vault, rec);
         }
-        return changed;
+        return { changed, reversals: [...reversals.values()] };
+    });
+    // Settings and pending records use separate stores. Reverse only after the
+    // indexed transition is durable, and do not retry: missing one correction
+    // leaves the old under-donation, while applying one twice can over-donate.
+    for (const booking of result.reversals) {
+        try {
+            await reverseAdsBookingInVault({ vault, booking });
+        } catch { /* confirmation handling remains authoritative */ }
+    }
+    return result.changed;
+}
+
+/**
+ * Add the booking credited for a PendingTx without overwriting a concurrent
+ * confirmation transition. A missing record is a no-op.
+ *
+ * @param {import('../storage/Vault.js').Vault} vault
+ * @param {string} pendingTxId
+ * @param {{fiat: string, currency: string}} booking
+ * @returns {Promise<boolean>}
+ */
+export async function stampPendingTxAdsBooking(vault, pendingTxId, booking) {
+    if (!vault || typeof pendingTxId !== 'string' || !pendingTxId || !booking) return false;
+    return serializeLedgerWrite(vault, async () => {
+        const record = await vault.pendingTxs.get(pendingTxId);
+        if (!record) return false;
+        await vault.pendingTxs.put({
+            ...record,
+            adsBooking: {
+                id: pendingTxId, fiat: booking.fiat, currency: booking.currency, paid: true, booked: true,
+            },
+        });
+        return true;
     });
 }
 

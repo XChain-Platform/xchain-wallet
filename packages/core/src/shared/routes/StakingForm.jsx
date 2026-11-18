@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/routes.js';
 import '../../i18n/locales/en/components.js';
@@ -1110,7 +1111,7 @@ export function StakingForm({
     }, [isRevoke, fromAddressId, addressesByChain, chainId, messaging, demoGuard.blocked]);
 
     // --- Signing -------------------------------------------------------------
-    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const isHwSource = isDeviceAddressSource(fromAddress?.source);
     // Only Unstake and Claim read the hardware signer's record (null otherwise).
     const hwSignerInfo = useSignerInfo({
         walletId: isPosition ? walletId : null,

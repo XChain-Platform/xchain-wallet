@@ -48,8 +48,6 @@ import {
 } from './messageAction.js';
 import { gatedKeyId } from '../schemas/gatedKey.js';
 import { isDemoGatedActionIndex } from './demoGatedContent.js';
-import { indexerWatermark } from './balances.js';
-import { resolveGateMinAmountActive } from './protocolActivations.js';
 
 const PROTOCOL_COIN_TICKER = {
     bitcoin: 'BTC',
@@ -116,8 +114,8 @@ export function clearGatedGroupsCache() {
 }
 
 // ---------------------------------------------------------------------------
-// PC-29 unlock-threshold lane (GATE_MIN_AMOUNT; inert until the
-// flag day pins activation heights). Post-activation SEND rule: a pack's
+// PC-29 unlock-threshold lane (GATE_MIN_AMOUNT). The send side follows
+// thresholds returned by the indexer. A pack's
 // key-handoff MESSAGE is required only when the destination's POST-SEND
 // balance of the gate tick meets the pack's threshold; below it, a plain
 // SEND is valid and deliberately carries no key (the publisher chose the
@@ -154,6 +152,28 @@ function decimalToScaled(s) {
 }
 
 /**
+ * A `/balances/` row's held amount at THRESHOLD_SCALE. The explorer serves
+ * `amount` at human scale (3000 means 3000 whole tokens whatever the decimals);
+ * only a row that carries `quantity` holds raw atomic units at its `divisibility`.
+ * An absent row is a zero balance; a row that cannot be read throws, so the caller
+ * keeps every group required instead of under-reading the recipient.
+ *
+ * @param {any} row
+ * @returns {bigint}
+ */
+function heldScaled(row) {
+    if (!row) return 0n;
+    if (row.quantity != null) {
+        const div = Number(row.divisibility ?? row.decimals ?? 0);
+        if (!Number.isInteger(div) || div < 0 || div > THRESHOLD_SCALE) throw new Error('bad divisibility');
+        return BigInt(String(row.quantity)) * 10n ** BigInt(THRESHOLD_SCALE - div);
+    }
+    const held = decimalToScaled(String(row.amount ?? '0'));
+    if (held === null) throw new Error('bad amount');
+    return held;
+}
+
+/**
  * Effective unlock threshold for a gated group: the minimum across its
  * files, where a file WITHOUT a threshold makes the whole pack
  * unconditional (that file's handoff rule always applies, and the pack
@@ -180,39 +200,25 @@ export function gatedGroupThreshold(group) {
 /**
  * Split a tick's gated groups into the packs whose key handoff the send
  * MUST carry and the packs the destination's post-send balance does not
- * qualify for. Pre-activation (every chain until the train pins
- * heights) this returns all groups as required with zero network calls.
- * Failure policy while active: an unreadable destination balance treats
+ * qualify for. Groups without a recorded threshold return as required
+ * with zero network calls. An unreadable destination balance treats
  * every pack as required - that direction always composes a VALID send
  * (an extra handoff never invalidates one), whereas guessing "below
  * threshold" could compose a plain SEND the indexer rejects.
  *
  * @param {{
- *   sdkRegistry: import('../sdk/SDKRegistry.js').SDKRegistry,
- *   chainId: string,
  *   sdk: object,
  *   to: string,
  *   tick: string,
  *   amount: string | number,
  *   groups: any[],
- *   heights?: Record<string, number | null>,   test-only activation override
  * }} params
  * @returns {Promise<{ requiredGroups: any[], belowThresholdKeyHashes: string[] }>}
  */
-export async function splitGroupsByThreshold({ sdkRegistry, chainId, sdk, to, tick, amount, groups, heights }) {
+export async function splitGroupsByThreshold({ sdk, to, tick, amount, groups }) {
     const allRequired = { requiredGroups: groups, belowThresholdKeyHashes: [] };
     const thresholds = groups.map((g) => gatedGroupThreshold(g));
     if (!thresholds.some((t) => t !== null)) return allRequired;
-
-    const active = await resolveGateMinAmountActive({
-        chainId,
-        heights,
-        getBlockHeight: async () => {
-            const { watermark } = await indexerWatermark({ sdkRegistry, chainId });
-            return watermark;
-        },
-    });
-    if (!active) return allRequired;
 
     const amountScaled = decimalToScaled(String(amount));
     if (amountScaled === null) return allRequired;
@@ -225,10 +231,7 @@ export async function splitGroupsByThreshold({ sdkRegistry, chainId, sdk, to, ti
         const row = rows.find((r) => String(r?.tick || '').toUpperCase() === tickUpper);
         // No row = zero balance (a first-time recipient), which is a real
         // answer, not a failure.
-        const div = Number(row?.divisibility ?? row?.decimals ?? 0);
-        const qty = BigInt(String(row?.quantity ?? row?.amount ?? '0'));
-        if (!Number.isInteger(div) || div < 0 || div > THRESHOLD_SCALE) throw new Error('bad divisibility');
-        postSendScaled = qty * 10n ** BigInt(THRESHOLD_SCALE - div) + amountScaled;
+        postSendScaled = heldScaled(row) + amountScaled;
     } catch (_e) {
         return allRequired;
     }
@@ -369,8 +372,8 @@ export async function prepareGatedSend({
     // PC-29 threshold lane: packs the destination's post-send balance
     // does not qualify for are dropped from the handoff set (their key
     // deliberately stays with the sender). If NO pack qualifies, the
-    // whole send goes out as a plain SEND - post-activation that is the
-    // protocol's below-threshold lane. Inert until the flag day.
+    // whole send goes out as a plain SEND through the protocol's
+    // below-threshold lane.
     const { requiredGroups: groups, belowThresholdKeyHashes } = await splitGroupsByThreshold({
         sdkRegistry, chainId, sdk, to, tick: tickUpper, amount, groups: allGroups,
         heights: _activationHeights,

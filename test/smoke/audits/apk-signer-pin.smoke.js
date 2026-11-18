@@ -15,7 +15,9 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -84,13 +86,14 @@ try {
     chmodSync(join(bin, 'apksigner'), 0o755);
     const apk = join(work, 'xchain-wallet-v0.0.1.apk');
     writeFileSync(apk, 'not-a-real-apk');
-    const drive = (env) => spawnSync(process.execPath, [VERIFIER, apk], {
+    const drive = (env, verifier = VERIFIER) => spawnSync(process.execPath, [verifier, apk], {
         encoding: 'utf8',
         env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, ...env },
     });
 
     const good = drive({ STUB_DIGEST: pin });
     assert.equal(good.status, 0, `the pinned signer passes: ${good.stderr}`);
+    assert.match(good.stdout, /signed by the pinned K10 certificate/, 'and prints its success line');
 
     const wrong = drive({ STUB_DIGEST: WRONG });
     assert.equal(wrong.status, 1, 'a wrong-keystore APK is refused');
@@ -98,6 +101,23 @@ try {
 
     const unreadable = drive({ STUB_DIGEST: pin, STUB_FAIL: '1' });
     assert.equal(unreadable.status, 1, 'an APK apksigner cannot read is refused, not waved through');
+
+    // A checkout reached through a symlinked directory must still run the check:
+    // the entry guard compares the resolved module URL, so an unresolved argv
+    // path would skip main() and exit 0 having verified nothing.
+    const real = join(work, 'real');
+    mkdirSync(join(real, 'tools/release'), { recursive: true });
+    copyFileSync(VERIFIER, join(real, 'tools/release/verify-apk-signer.mjs'));
+    copyFileSync(join(root, 'SECURITY.md'), join(real, 'SECURITY.md'));
+    symlinkSync(real, join(work, 'linked'));
+    const linkedVerifier = join(work, 'linked/tools/release/verify-apk-signer.mjs');
+    const linkedWrong = drive({ STUB_DIGEST: WRONG }, linkedVerifier);
+    assert.equal(linkedWrong.status, 1, `a wrong signer is refused through a symlinked path: ${linkedWrong.stdout}`);
+    assert.match(linkedWrong.stderr, /not the K10 certificate SECURITY\.md pins/);
+    const linkedGood = drive({ STUB_DIGEST: pin }, linkedVerifier);
+    assert.equal(linkedGood.status, 0, `the pinned signer passes through a symlinked path: ${linkedGood.stderr}`);
+    assert.match(linkedGood.stdout, /signed by the pinned K10 certificate/,
+        'and a symlinked run still prints its success line');
 
     const ceremony = readFileSync(join(root, 'tools/release/android-ceremony.sh'), 'utf8');
     const calls = ceremony.split('\n').filter((l) => !/^\s*#/.test(l) && l.includes('verify-apk-signer.mjs'));

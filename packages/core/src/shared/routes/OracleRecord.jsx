@@ -22,7 +22,7 @@ import styles from './IssueTokenForm.module.css';
 // The identity card, the fact rows shared with the bet market page, and
 // this page's own market rows.
 import { OracleRecordHero } from './OracleRecordHero.jsx';
-import { ORACLE_MARKET_STATUSES, feeRangeText, marketStatusKind, orderedMarkets } from './oracleRecordSeries.js';
+import { ORACLE_MARKET_STATUSES, feeRangeText, listedMarketCount, marketStatusKind, orderedMarkets } from './oracleRecordSeries.js';
 import betLocal from './BetFeedDetail.module.css';
 import local from './OracleRecord.module.css';
 
@@ -263,7 +263,8 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
     const fees = Array.isArray(record.fees_earned) ? record.fees_earned : [];
 
     const openRows = rows.filter((m) => m.feed_status === 'open');
-    const partial = markets !== null && !marketsError && rows.length < total;
+    const listed = listedMarketCount(record);
+    const partial = markets !== null && !marketsError && rows.length < listed;
     const feeText = markets ? feeRangeText(rows) : null;
 
     // One fact per row (label, value), as on the bet market page.
@@ -336,7 +337,7 @@ export function OracleRecord({ chainId, address, onOpenMarket, onBack, walletId,
                 </ul>
             )}
             {partial ? (
-                <p className={styles.hint}>Showing the latest {rows.length} of this address&apos;s {total} markets.</p>
+                <p className={styles.hint}>Showing the latest {rows.length} of this address&apos;s {listed} markets.</p>
             ) : null}
         </>
     );

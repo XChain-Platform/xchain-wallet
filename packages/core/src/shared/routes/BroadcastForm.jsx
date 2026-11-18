@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { t } from '../../i18n/index.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -287,7 +288,7 @@ export function BroadcastForm({ walletId, onBack, onDone, initialChainId, initia
         setStage('review');
     }
 
-    const isHwSource = fromAddress?.source === 'trezor' || fromAddress?.source === 'ledger';
+    const isHwSource = isDeviceAddressSource(fromAddress?.source);
     // §18.4 / Cluster N FOLLOWUP 2: surface firmware advisories when
     // the source is HW. Hook handles the SignerRecord lookup + cache.
     const hwSignerInfo = useSignerInfo({

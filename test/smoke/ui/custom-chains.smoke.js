@@ -354,4 +354,22 @@ assert.match(sectionSrc, /chainRegistry\(\)\.addCustom\(accepted\)/,
 assert.match(sectionSrc, /chainRegistry\(\)\.removeCustom\((?:chainId|descriptor\.id)\)/,
     'Remove network mirrors a removal into the local registry');
 
+// Sibling windows and surfaces hear a custom-network change as a payload-free
+// event and reconcile their own registry from a fresh settings read. Behaviour
+// lives in test/unit/extension/customChainsSurfaceEvent.test.js and
+// test/unit/registry/hydrateCustomChains.test.js; this pins the wiring.
+assert.match(hostSrc, /host\.register\('chainRegistry\.addCustomChain'[\s\S]+?publishSurfaceState\('custom-chains', \{\}\)/,
+    'the add route announces custom-chains');
+assert.match(hostSrc, /host\.register\('chainRegistry\.removeCustomChain'[\s\S]+?publishSurfaceState\('custom-chains', \{\}\)/,
+    'the remove route announces custom-chains');
+assert.match(hostSrc, /if \(r\.writes\?\.settings\) await rehydrateAfterSettingsRestore\(vault, chainRegistry, sdkRegistry\);/,
+    'a settings-writing restore re-hydrates the running registry');
+const multiWindowSrc = readFileSync(join(wsRoot, 'packages/desktop/main/multiWindowState.js'), 'utf8');
+assert.match(multiWindowSrc, /chainRegistry\.addCustomChain[\s\S]+?kind: 'custom-chains'/,
+    'desktop main broadcasts custom-chains for an add');
+for (const shellApp of ['packages/extension/src/popup/App.jsx', 'packages/desktop/renderer/App.jsx']) {
+    assert.match(readFileSync(join(wsRoot, shellApp), 'utf8'), /createCustomChainSync\(/,
+        `${shellApp}: reconciles its registry on a custom-chains event`);
+}
+
 console.log('OK: custom chain registry flow + schema + host + shells + UI + per-realm hydration');

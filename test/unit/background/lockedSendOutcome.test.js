@@ -97,6 +97,8 @@ const RECORD = {
     status: 'broadcasting',
     txid: 'aa'.repeat(32),
     txHex: 'beef',
+    revealTxHex: 'feed',
+    revealTxid: 'reveal-txid',
     fromAddress: 'bcrt1qsource',
     actionSummary: 'Send 0.0003 BTC to bcrt1qdest',
 };
@@ -129,6 +131,22 @@ describe('finishPatchFor', () => {
             });
         expect(finishPatchFor({ kind: 'queued', at: 1, txid: 'single-txid' }, { status: 'broadcasting' }))
             .toEqual({ status: 'queued', txid: 'single-txid' });
+    });
+
+    it('promotes stored reveal bytes on a commit-landed queued failure', () => {
+        const patch = finishPatchFor(
+            { ...entry, kind: 'queued', txid: 'reveal-txid' },
+            { status: 'broadcasting', txHex: 'commit-hex', revealTxHex: 'reveal-hex' },
+        );
+        expect(patch).toMatchObject({ commitLanded: true, txHex: 'reveal-hex' });
+    });
+
+    it('does not overwrite txHex when an older record has no reveal bytes', () => {
+        const patch = finishPatchFor(
+            { ...entry, kind: 'queued', txid: 'reveal-txid' },
+            { status: 'broadcasting', txHex: 'commit-hex' },
+        );
+        expect(patch).not.toHaveProperty('txHex');
     });
 });
 
@@ -226,7 +244,8 @@ describe('a send that settles after another surface locks the wallet', () => {
         await makeHost(vaultOver(rows), area)('send.lockedOutcomes.list', { walletId: W });
 
         expect(rows.get(RECORD.id)).toMatchObject({
-            status: 'queued', txid: 'reveal-txid', commitLanded: true, commitTxid: RECORD.txid,
+            status: 'queued', txid: 'reveal-txid', txHex: RECORD.revealTxHex,
+            commitLanded: true, commitTxid: RECORD.txid,
         });
     });
 

@@ -91,3 +91,18 @@ describe('removeCustomChain drops the chain\'s fee entry', () => {
         expect(vault.read().fees['bitcoin-mainnet']).toEqual(BTC_FEES);
     });
 });
+
+describe('addCustomChain clears a fee entry left for its id', () => {
+    it('does not let a re-added chain inherit an orphaned rate', async () => {
+        const vault = createVaultStub({
+            fees: {
+                'bitcoin-mainnet': { ...BTC_FEES },
+                [DESCRIPTOR.id]: { strategy: 'custom', customSatsPerKb: 100000000, rbfByDefault: null },
+            },
+        });
+
+        await addCustomChain({ vault, chainRegistry: new ChainRegistry(), descriptor: DESCRIPTOR });
+
+        expect(Object.keys(vault.read().fees)).toEqual(['bitcoin-mainnet']);
+    });
+});

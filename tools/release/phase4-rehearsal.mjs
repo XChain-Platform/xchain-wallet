@@ -63,6 +63,8 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { mirrorInput } from './probe-mirror.mjs';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WALLET_ROOT = resolve(HERE, '..', '..');
 export const PIN_PATH = join(WALLET_ROOT, 'tools', 'release', 'pins', 'phase4-rehearsal-pin.json');
@@ -239,12 +241,22 @@ export function dirtySigningPath(root = WALLET_ROOT, files = SIGNING_SCRIPTS) {
     return dirty;
 }
 
+// Whether xr_lane_scope itself refused: a --lane run that never printed the PARTIAL line and whose
+// output carries one of that function's own lines. xr_check_shipped_lanes repeats the status, feed
+// and no-glob wording after lane scope has passed, and a full release never calls xr_lane_scope,
+// so the words alone prove nothing about the step.
+function laneScopeRefused(output, lane) {
+    if (!lane || /PARTIAL release - gating against lane\(s\): /.test(output)) return false;
+    return /^release\/lib\.sh: .*: lane '[^']*' declares (status|feed|no artifact glob)/m.test(output)
+        || /^release\/lib\.sh: the requested lane\(s\) claim no artifact globs/m.test(output);
+}
+
 // Classify sign.sh's own refusal into the step it died at. The strings are
 // matched against the script's OWN messages, so a reworded refusal falls
 // through to the conservative answer rather than silently claiming depth: an
 // unrecognised failure reports the step BEFORE the shallowest thing it could
 // be, never a deeper one.
-export function classify(output) {
+export function classify(output, { lane = null } = {}) {
     // Match the pristine-clone and ceremony-record refusals first: they run after the GPG key is named and
     // before the dev-mock gate, sign.sh exits right after each, and the free text they echo (absent-field
     // 'missing', marker bodies, porcelain paths) is indented, so only sign.sh itself can start these lines.
@@ -253,6 +265,9 @@ export function classify(output) {
     if (/^sign\.sh: .* is not checked out at /m.test(output)) return 'gpg-key-named';
     if (/^sign\.sh: tag '[^']*' does not exist in /m.test(output)) return 'gpg-key-named';
     if (/is not a lane declared in/.test(output)) return 'dev-mock-gate';
+    if (laneScopeRefused(output, lane)) return 'dev-mock-gate';
+    // The manifest and signature refusals sit after the dev-mock gate and before lane scope.
+    if (/^sign\.sh: .* already exists\. Pass --force to overwrite\.$/m.test(output)) return 'dev-mock-gate';
     if (/dev-mock gate exited 0 without saying it read anything/.test(output)) return 'gpg-key-named';
     // Match sign.sh's own dev-mock refusal before any vocabulary test: sign.sh exits right after it,
     // and the gate output it echoes says "missing", which the generic match below reads as lane scope.
@@ -343,10 +358,29 @@ function refuseConflicts(args) {
 
 /**
  * Drive sign.sh's preconditions and report how deep they got.
- * Never writes anything; `pin` is what records an observation.
+ * Never writes into `input`: sign.sh runs against a throwaway copy of it that is removed
+ * afterwards, with the copy's path mapped back to `input` in everything returned.
+ * `pin` is what records an observation.
  */
-export function probe({ repo, tag, input, lane, staging = false, env = {}, timeoutMs = 120000 }) {
-    const signSh = join(WALLET_ROOT, 'tools', 'release', 'sign.sh');
+export function probe(opts) {
+    const mirror = mirrorInput(opts.input, opts.repo);
+    try {
+        const result = driveSign({ ...opts, input: mirror ? mirror.dir : opts.input });
+        if (!mirror) return result;
+        return {
+            ...result,
+            blocker: result.blocker === null ? null : mirror.restore(result.blocker),
+            output: mirror.restore(result.output),
+        };
+    } finally {
+        mirror?.cleanup();
+    }
+}
+
+function driveSign({
+    repo, tag, input, lane, staging = false, env = {}, timeoutMs = 120000,
+    signSh = join(WALLET_ROOT, 'tools', 'release', 'sign.sh'),
+}) {
     const args = ['--tag', tag, '--input', input, '--repo', repo];
     if (lane) args.unshift('--lane', lane);
     // WITHOUT THIS A REHEARSAL CANNOT REACH THE MANIFEST AT ALL, and that is
@@ -389,7 +423,7 @@ export function probe({ repo, tag, input, lane, staging = false, env = {}, timeo
             output,
         };
     }
-    const reached = r.status === 0 ? 'signature' : classify(output);
+    const reached = r.status === 0 ? 'signature' : classify(output, { lane });
     return {
         reached,
         exitCode: r.status,

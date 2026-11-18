@@ -131,6 +131,7 @@ export const AUTO_LOCK_REPORT_TYPE = 'session.autolock';
  *   signerPool: import('@xchain-wallet/core').signers.SignerPool,
  *   idleLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
  *   autoLockCleanupPending: boolean,
+ *   autoLockStoreLane: Promise<unknown>,
  *   systemLockInFlight: Promise<{ locked: boolean, reason: string }> | null,
  *   broadcastQueueStore: ReturnType<typeof createBroadcastQueueStore>,
  * }} DesktopRuntime
@@ -199,8 +200,11 @@ export function createRuntime(deps) {
         // The windowless idle check in flight, shared by concurrent callers.
         idleLockInFlight: null,
         // Fail closed if an auto-lock cannot remove the persisted session key.
-        // The durable auto-lock record drives a later cleanup retry.
+        // The in-memory pending flag drives a later cleanup retry.
         autoLockCleanupPending: false,
+        // Record loads and writes are ordered so a late activity stamp cannot
+        // recreate a record after a lock clears it.
+        autoLockStoreLane: Promise.resolve(),
         // OS lock and suspend can arrive together, so they share one lock.
         systemLockInFlight: null,
         // One broadcast-queue store for every host this process builds, as the
@@ -212,6 +216,23 @@ export function createRuntime(deps) {
             deps.broadcastQueuePrunedLedger,
         ),
     };
+}
+
+/** Serialize auto-lock record reads and writes for one runtime. */
+function withAutoLockStoreLane(runtime, task) {
+    const run = runtime.autoLockStoreLane.then(task);
+    runtime.autoLockStoreLane = run.catch(() => {});
+    return run;
+}
+
+/** Clear the record in order, logging but never surfacing storage faults. */
+async function clearAutoLockRecord(runtime, store) {
+    if (!store) return;
+    try {
+        await withAutoLockStoreLane(runtime, () => store.clear());
+    } catch (err) {
+        console.error('[xchain] auto-lock record could not be cleared:', err);
+    }
 }
 
 /**
@@ -345,6 +366,7 @@ export function enforceIdleAutoLock(runtime, now = Date.now()) {
 // The body of enforceIdleAutoLock, without the single-flight wrapper.
 async function runIdleAutoLock(runtime, now) {
     const store = runtime.autoLockStore;
+    if (runtime.autoLockCleanupPending) return lockRuntimeForAutoLock(runtime, store, 'cleanup-retry');
     if (!store) return { locked: false, reason: 'no-store' };
     let state = null;
     try { state = await store.load(); } catch { state = null; }
@@ -379,6 +401,7 @@ export function enforceSystemAutoLock(runtime) {
 
 async function runSystemAutoLock(runtime) {
     const store = runtime.autoLockStore;
+    if (runtime.autoLockCleanupPending) return lockRuntimeForAutoLock(runtime, store, 'cleanup-retry');
     if (!store) return { locked: false, reason: 'no-store' };
     let state = null;
     try { state = await store.load(); } catch { state = null; }
@@ -400,11 +423,12 @@ async function lockRuntimeForAutoLock(runtime, store, reason) {
         runtime.autoLockCleanupPending = false;
     } catch (err) {
         console.error('[xchain] auto-lock could not clear the cached session key:', err);
-        // Keep the expired record so the next windowless check retries the
-        // clear. Vault-backed IPC remains closed while this flag is set.
+        // Drop the record so a relaunch fails closed. The pending flag drives
+        // the in-process retry while vault-backed IPC remains closed.
+        await clearAutoLockRecord(runtime, store);
         return { locked: true, reason: 'session-clear-failed' };
     }
-    try { await store.clear(); } catch { /* best-effort */ }
+    await clearAutoLockRecord(runtime, store);
     return { locked: true, reason };
 }
 
@@ -871,22 +895,20 @@ export async function handleIpcMessage(runtime, message) {
             // Drop every report while an undeletable cached key is on disk: a
             // disarm or activity stamp written now would let the next launch
             // reopen that key with no password. A password unlock ends this.
-            if (runtime.autoLockCleanupPending) {
-                return { ok: true, result: { armed: false } };
-            }
             try {
-                await applyAutoLockReport(runtime.autoLockStore, message.request, Date.now());
+                const applied = await withAutoLockStoreLane(runtime, async () => {
+                    if (runtime.autoLockCleanupPending) return false;
+                    await applyAutoLockReport(runtime.autoLockStore, message.request, Date.now());
+                    return true;
+                });
+                if (!applied) return { ok: true, result: { armed: false } };
             } catch (err) {
                 const refusedArm = message.request?.armed === true
                     && message.request?.activity !== true;
                 if (!refusedArm) throw err;
                 console.error('[xchain] auto-lock arm could not be saved:', err);
                 await lockRuntimeForAutoLock(runtime, runtime.autoLockStore, 'arm-refused');
-                try {
-                    await runtime.autoLockStore?.clear();
-                } catch (clearErr) {
-                    console.error('[xchain] refused auto-lock arm record could not be cleared:', clearErr);
-                }
+                await clearAutoLockRecord(runtime, runtime.autoLockStore);
                 return { ok: true, result: { ok: false, reason: AUTO_LOCK_UNSAVED } };
             }
             return { ok: true, result: { armed: message.request?.armed === true } };
@@ -912,10 +934,10 @@ export async function handleIpcMessage(runtime, message) {
         // Every other message is renderer activity, and the idle clock has
         // to advance from it or a user who is actively using the app would
         // come back to a locked wallet. Throttled inside the helper.
-        if (!runtime.autoLockCleanupPending) {
-            stampAutoLockActivity(runtime.autoLockStore, Date.now())
-                .catch(() => { /* best-effort; never blocks the message */ });
-        }
+        withAutoLockStoreLane(runtime, async () => {
+            if (runtime.autoLockCleanupPending) return;
+            await stampAutoLockActivity(runtime.autoLockStore, Date.now());
+        }).catch(() => { /* best-effort; never blocks the message */ });
 
         if (preHostMessage) {
             const result = await dispatchPreHost(message.type, message.request, {
@@ -932,7 +954,7 @@ export async function handleIpcMessage(runtime, message) {
                     // A fresh password-authenticated unlock supersedes a
                     // failed cleanup attempt and starts a new idle window.
                     runtime.autoLockCleanupPending = false;
-                    try { await runtime.autoLockStore?.clear(); } catch { /* best-effort */ }
+                    await clearAutoLockRecord(runtime, runtime.autoLockStore);
                     try { await ensureHost(runtime); } catch (err) {
                         // Logged but not thrown: the unlock itself
                         // succeeded; the host-build failure will
@@ -951,9 +973,7 @@ export async function handleIpcMessage(runtime, message) {
                     await captureLockedAutopay(runtime);
                     tearDownHost(runtime);
                     // An explicit lock ends the window the stamp described.
-                    if (!runtime.autoLockCleanupPending) {
-                        runtime.autoLockStore?.clear().catch(() => { /* best-effort */ });
-                    }
+                    await clearAutoLockRecord(runtime, runtime.autoLockStore);
                 },
                 // The Locked screen's auto pay line and Stop, and the end of
                 // locked auto pay before any unlock, create or import.

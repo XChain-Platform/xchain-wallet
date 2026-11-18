@@ -54,6 +54,7 @@
 // signing, background broadcasts. Only the one round-trip to ask the
 // device for a signature crosses the boundary.
 
+import { isDeviceSignerKind } from '../schemas/constants.js';
 import { Signer, SignerStatusError, assertCannotSignEnvelopeReveal } from './Signer.js';
 import { SignatureMismatchError } from './verifyInputSignatures.js';
 
@@ -77,7 +78,7 @@ export class RemoteSigner extends Signer {
         super();
         if (!id) throw new Error('RemoteSigner: id is required');
         if (!displayName) throw new Error('RemoteSigner: displayName is required');
-        if (kind !== 'trezor' && kind !== 'ledger') {
+        if (!isDeviceSignerKind(kind)) {
             throw new Error(`RemoteSigner: kind must be 'trezor' or 'ledger' (got "${kind}")`);
         }
         if (typeof transport !== 'function') {

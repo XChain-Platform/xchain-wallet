@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     importedAddressIdsFor,
     importedAddressIdsForStrict,
+    importedAddressIdsOfWallet,
 } from '../../../packages/core/src/flows/_importedAddressIds.js';
 
 describe('importedAddressIdsFor', () => {
@@ -56,5 +57,17 @@ describe('importedAddressIdsFor', () => {
 
         await expect(importedAddressIdsForStrict(vault, 'wallet-1')).rejects.toBe(failure);
         await expect(importedAddressIdsForStrict({}, 'wallet-1')).rejects.toThrow(/unreadable/);
+    });
+
+    it('applies the same rule to a wallet record the caller already holds', async () => {
+        const wallet = {
+            importedKeys: [{ addressId: 'a' }, null, { addressId: '' }, { addressId: 7 }, { addressId: 'b' }],
+        };
+        expect(importedAddressIdsOfWallet(wallet)).toEqual(new Set(['a', 'b']));
+        expect(importedAddressIdsOfWallet(null)).toEqual(new Set());
+        expect(importedAddressIdsOfWallet({ importedKeys: 'a' })).toEqual(new Set());
+        const get = vi.fn(async () => wallet);
+        await expect(importedAddressIdsForStrict({ wallets: { get } }, 'wallet-1'))
+            .resolves.toEqual(importedAddressIdsOfWallet(wallet));
     });
 });

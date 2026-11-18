@@ -21,8 +21,9 @@
 //    so there is no pre-extension history left there to protect. When a
 //    mainnet height is finally pinned, update this assertion IN THE SAME
 //    CHANGE.
-// 2. The wallet leg is fully wired behind the gate: publish flow
-//    emission + form field, send-guard below-threshold plain-SEND lane,
+// 2. The publish leg is wired behind the deployment interlock, while the
+//    send guard follows thresholds the indexer has already recorded:
+//    publish flow emission + form field, below-threshold plain-SEND lane,
 //    readiness mirroring, and the TokenDetail display leg.
 
 import { strict as assert } from 'node:assert';
@@ -71,8 +72,10 @@ assert.match(limits, /gateMinAmount != null && String\(gateMinAmount\)\.length >
 const guard = read('packages', 'core', 'src', 'flows', 'gatedSendGuard.js');
 assert.match(guard, /export function gatedGroupThreshold/, 'pack-minimum threshold helper exported');
 assert.match(guard, /export async function splitGroupsByThreshold/, 'threshold split helper exported');
-assert.match(guard, /splitGroupsByThreshold\(\{\s*\n?\s*sdkRegistry, chainId, sdk, to/,
+assert.match(guard, /splitGroupsByThreshold\(\{\s*\n?\s*sdk, to/,
     'prepareGatedSend routes groups through the threshold lane');
+assert.doesNotMatch(guard, /resolveGateMinAmountActive/,
+    'send-side threshold decisions follow indexer records, not the publish interlock');
 assert.ok(guard.split('splitGroupsByThreshold({').length >= 3,
     'gatedSendReadiness mirrors the same lane');
 assert.match(guard, /if \(groups\.length === 0\) return null;/,

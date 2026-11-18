@@ -60,6 +60,7 @@ import { fundActiveWalletFromMiner } from '../../../flows/regtestFaucet.js';
 import { MAX_CUSTOM_DESCRIPTOR_CHARS } from '../../../flows/customChains.js';
 import { useMessaging, screenVariantFor } from '../../useMessaging.js';
 import { useSettings } from '../../hooks/useSettings.js';
+import { useSupportedChains } from '../../hooks/useSupportedChains.js';
 import { useSignerReady } from '../../hooks/useSignerReady.js';
 import { useToast } from '../ToastHost.jsx';
 import { ActionList, ActionListItem } from '../ActionList.jsx';
@@ -186,9 +187,13 @@ export function customChainErrorText(err, fallback) {
     return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
 }
 
-/** The custom networks the vault holds, re-read on demand. */
+/**
+ * The custom networks the vault holds, re-read on demand and whenever the
+ * registry changes, so a network another window added or removed shows here.
+ */
 function useCustomNetworks() {
     const { messaging } = useMessaging();
+    const registeredChains = useSupportedChains();
     const [state, setState] = useState({ chains: [], loading: true, error: null });
     const load = useCallback(async () => {
         if (typeof messaging?.listCustomChains !== 'function') {
@@ -202,7 +207,7 @@ function useCustomNetworks() {
             setState({ chains: [], loading: false, error: userFacingMessage(err, t('settings.testNetworks.loadFailed')) });
         }
     }, [messaging]);
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => { load(); }, [load, registeredChains]);
     return { ...state, reload: load };
 }
 

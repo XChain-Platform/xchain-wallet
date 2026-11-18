@@ -261,3 +261,18 @@ describe('desktop window bounds memory', () => {
         expect(normalizeWindowBounds({ width: 360, height: 599 })).toBeNull();
     });
 });
+
+describe('desktop custom-network notifications', () => {
+    it('announces an add and a removal that took effect, with no settings record', () => {
+        expect(stateChangeForMessage({ type: 'chainRegistry.addCustomChain' }, { ok: true, result: { descriptor: {} } }))
+            .toEqual({ kind: 'custom-chains' });
+        expect(stateChangeForMessage({ type: 'chainRegistry.removeCustomChain' }, { ok: true, result: { removed: true } }))
+            .toEqual({ kind: 'custom-chains' });
+    });
+
+    it('announces nothing for a removal that changed nothing or a failed message', () => {
+        expect(stateChangeForMessage({ type: 'chainRegistry.removeCustomChain' }, { ok: true, result: { removed: false } })).toBeNull();
+        expect(stateChangeForMessage({ type: 'chainRegistry.removeCustomChain' }, { ok: true })).toBeNull();
+        expect(stateChangeForMessage({ type: 'chainRegistry.addCustomChain' }, { ok: false })).toBeNull();
+    });
+});
