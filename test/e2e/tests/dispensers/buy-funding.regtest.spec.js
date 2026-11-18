@@ -92,6 +92,7 @@ import {
     unlockAfterReload,
     selectPickerAsset,
     approveConfirm as approveWhenReady,
+    FROM_ADDRESS_LABEL,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel, searchTokenPicker } from '../../fixtures/fields.js';
 
@@ -392,7 +393,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // which the next assertion then reports as the form signing with
             // the wrong address, several steps after the real cause.
             await selectVenueChain(main, 'Network');
-            expect(await fieldByLabel(main, 'Source').inputValue(),
+            expect(await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue(),
                 'the dispenser form still signs with the funded address').toBe(sellerAddress);
 
             // The give tick comes from a picker, so it can only ever be one

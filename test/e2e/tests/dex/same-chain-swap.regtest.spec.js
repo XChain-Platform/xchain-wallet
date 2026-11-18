@@ -121,7 +121,10 @@ test.describe(`same-chain SWAP on ${REGTEST_CHAIN_LABEL}`, () => {
             });
             await main.getByRole('textbox', { name: /^Give amount/ }).fill(String(GIVE_AMOUNT));
             await main.getByRole('textbox', { name: /^Get amount/ }).fill(String(GET_AMOUNT));
-            await main.getByRole('button', { name: 'Swap', exact: true }).click();
+            // The submit is "Create Swap". A bare "Swap" is now the open Swap
+            // section's header (its summary shows only while closed), and
+            // clicking it folds the form away instead of submitting it.
+            await main.getByRole('button', { name: 'Create Swap', exact: true }).click();
 
             await expectConfirmModal(page, 'the same-chain SWAP');
             await expect(page.getByTestId('confirm-sentence'))

@@ -19,7 +19,6 @@ async function openManagedToken(page) {
     await palette.getByRole('combobox').fill('My tokens');
     await palette.getByRole('option', { name: /^My tokens\b/ }).first().click();
     await expect(palette).toBeHidden();
-    await page.getByLabel('Search your tokens by ticker or description').fill('XCP');
     await page.getByRole('button', { name: 'Open XCP token details' }).first().click();
     await expect(page.getByRole('heading', { name: 'XCP', exact: true })).toBeVisible();
 }

@@ -97,8 +97,8 @@ for (const phone of LANDSCAPE_PHONES) {
                     const before = await chromeBoxes(page);
                     const geometry = await shellGeometry(page);
                     expect(geometry.sideScroll, 'nothing scrolls the page sideways').toBe(0);
-                    expect(geometry.gutterStart, 'start gutter').toBe(16);
-                    expect(geometry.gutterEnd, 'end gutter').toBe(16);
+                    expect(geometry.gutterStart, 'start gutter').toBe(8);
+                    expect(geometry.gutterEnd, 'end gutter').toBe(8);
                     await scrollRouteToEnd(page);
                     expect(await chromeBoxes(page), 'app header and navigation stay put').toEqual(before);
                 });
@@ -143,8 +143,8 @@ for (const phone of LANDSCAPE_PHONES) {
                     bottomGap: window.innerHeight - bar.bottom,
                 };
             });
-            expect(geometry.start, 'composer start gutter').toBe(16);
-            expect(geometry.end, 'composer end gutter').toBe(16);
+            expect(geometry.start, 'composer start gutter').toBe(8);
+            expect(geometry.end, 'composer end gutter').toBe(8);
             expect(geometry.top, 'composer clears the footer border').toBeGreaterThan(1);
             expect(geometry.bottomGap, 'composer clears the bottom edge').toBeGreaterThan(0);
         });

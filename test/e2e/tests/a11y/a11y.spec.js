@@ -131,7 +131,7 @@ test.describe('a11y: WCAG 2.1 A/AA', () => {
         await dismissIntroCarousel(page);
         await page.getByRole('button', { name: 'Import wallet' }).click();
         await expect(
-            page.getByRole('heading', { name: 'Import an existing wallet' }),
+            page.getByRole('heading', { name: 'Import Wallet', level: 1 }),
         ).toBeVisible();
         await scan(page, 'ImportWallet');
     });

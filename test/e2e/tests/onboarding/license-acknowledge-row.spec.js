@@ -20,7 +20,8 @@ async function measureAcknowledgement(checkbox) {
     return checkbox.evaluate((input) => {
         const row = input.closest('label');
         const box = input.nextElementSibling;
-        const text = box.nextElementSibling.firstElementChild;
+        // The label span itself: its line also holds the help button.
+        const text = box.nextElementSibling.querySelector('[id$="-label"]');
         const rect = (element) => {
             const bounds = element.getBoundingClientRect();
             return {
@@ -49,6 +50,12 @@ async function scrollTermsToEnd(terms) {
         element.scrollTop = element.scrollHeight;
         element.dispatchEvent(new Event('scroll', { bubbles: true }));
     });
+}
+
+// Accept stays tappable and refuses until the terms are read and agreed to.
+async function expectAcceptRefused(form, accept) {
+    await accept.click();
+    await expect(form).toBeVisible();
 }
 
 for (const viewport of VIEWPORTS) {
@@ -100,7 +107,7 @@ for (const viewport of VIEWPORTS) {
             expect(gapBelowTerms).toBeLessThanOrEqual(96);
         }
 
-        await expect(accept).toBeDisabled();
+        await expectAcceptRefused(form, accept);
 
         const requiresScroll = await terms.evaluate(
             (element, tolerance) => element.scrollHeight > element.clientHeight + tolerance,
@@ -114,13 +121,13 @@ for (const viewport of VIEWPORTS) {
                 element.dispatchEvent(new Event('scroll', { bubbles: true }));
             });
             await expect(checkbox).toBeDisabled();
-            await expect(accept).toBeDisabled();
+            await expectAcceptRefused(form, accept);
         }
 
         await scrollTermsToEnd(terms);
         await expect(checkbox).toBeEnabled();
         await expect(checkbox).toHaveAccessibleName('I have read and agree to these terms.');
-        await expect(accept).toBeDisabled();
+        await expectAcceptRefused(form, accept);
 
         const acknowledgement = await measureAcknowledgement(checkbox);
         expect(acknowledgement.text.left)

@@ -26,7 +26,9 @@ test('a lock removes the notification toasts from the screen', async ({ page }) 
     for (let index = 1; index <= 6; index += 1) await fire(page, `${index}.25 LOCKAMT received`);
     await expect(page.getByText('1.25 LOCKAMT received', { exact: false })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Lock wallet' }).first().click();
+    // At 320px the lock control is the wallet menu's row, not a header button.
+    await page.getByRole('button', { name: 'Open menu' }).first().click();
+    await page.getByRole('dialog', { name: 'Wallet menu' }).getByRole('button', { name: 'Lock wallet' }).click();
     await expect(unlockButton(page)).toBeVisible();
     // One read, no retry: a retrying assertion would wait out the toast timers.
     expect(await page.locator('body').innerText()).not.toContain('LOCKAMT');

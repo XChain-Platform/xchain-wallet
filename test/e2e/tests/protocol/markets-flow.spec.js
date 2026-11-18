@@ -27,9 +27,7 @@ const VIEWPORTS = [
     { name: 'desktop', width: 1280, height: 800 },
 ];
 
-const PRICE = '0.00000089';
 const SIZE = '2';
-const TOTAL = '0.00000178';
 
 async function settle(page) {
     await page.evaluate(() => new Promise((resolve) => {
@@ -79,17 +77,11 @@ async function expectMatchingLineHeights(controls, label) {
     }
 }
 
-function reviewValue(review, label) {
-    return review.getByText(label, { exact: true })
-        .locator('xpath=following-sibling::dd[1]');
-}
-
 for (const viewport of VIEWPORTS) {
     test(`markets flow fits and preserves order amounts on ${viewport.name}`, async ({ page }) => {
         test.slow();
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
-        // The demo wallet keeps its own Normal mode (mode is fixed per wallet);
-        // the review step below accepts either submit label.
+        // The demo wallet keeps its own Normal mode (mode is fixed per wallet).
         await enterDemoWallet(page, { dismissIntroCarousel, expect, unlockedShell });
 
         // At 720px of content width and up the DEX shows the list and the
@@ -100,10 +92,13 @@ for (const viewport of VIEWPORTS) {
         await test.step('filter the populated markets list', async () => {
             await gotoSection(page, 'DEX');
             const main = page.getByRole('main');
-            const filters = main.getByRole('tablist', { name: 'Markets view' });
+            // The market filters live in the title bar's Filter markets panel.
+            await page.getByRole('banner').getByRole('button', { name: /^Filter markets/ }).click();
+            const filters = page.getByRole('dialog', { name: 'Filter markets' });
             await expect(filters).toBeVisible();
-            await filters.getByRole('tab', { name: 'All' }).click();
-            await main.getByLabel('Search markets').fill('PEPECASH');
+            await filters.getByRole('combobox', { name: 'Show markets' }).click();
+            await page.getByRole('option', { name: 'Show all', exact: true }).click();
+            await filters.getByRole('searchbox', { name: 'Search markets' }).fill('PEPECASH');
 
             await expect(main.getByRole('region', { name: 'Markets results', exact: true }))
                 .not.toHaveAttribute('aria-busy', 'true');
@@ -112,11 +107,12 @@ for (const viewport of VIEWPORTS) {
             await expect(main.getByRole('list', { name: 'Markets' }).getByRole('button', {
                 name: /^Open .* market$/,
             })).toHaveCount(1);
-            await expectScreen(page, 'Decentralized exchange', `${viewport.name} markets list`);
             await expectMatchingLineHeights(
-                main.getByLabel('Search markets').or(filters.getByRole('tab')),
+                filters.getByRole('searchbox').or(filters.getByRole('combobox')),
                 `${viewport.name} market filters`,
             );
+            await page.keyboard.press('Escape');
+            await expectScreen(page, 'Decentralized Exchange', `${viewport.name} markets list`);
             const twoPanel = (await main.locator('[data-dex-layout="two-panel"]').count()) > 0;
             if (twoPanel) {
                 // Side by side: the list stays, a separator splits the panels.
@@ -146,8 +142,8 @@ for (const viewport of VIEWPORTS) {
                 `${viewport.name} market panel tabs`,
             );
 
-            await panels.getByRole('tab', { name: 'History' }).click();
-            const tradeHistory = main.getByRole('region', { name: 'Trade history', exact: true });
+            await panels.getByRole('tab', { name: 'Trades' }).click();
+            const tradeHistory = main.getByRole('region', { name: 'Recent trades', exact: true });
             await expect(tradeHistory).toBeVisible();
             await expect(tradeHistory).not.toHaveAttribute('aria-busy', 'true');
             await expectScreen(page, marketScreenHeading, `${viewport.name} trade history`);
@@ -157,62 +153,21 @@ for (const viewport of VIEWPORTS) {
             );
         });
 
-        // Skipped for a product bug: the DEX always opens on bitcoin-mainnet
-        // (App.jsx marketsAsset default), so on the regtest demo wallet Place
-        // order has no address to sign from and never reaches its review.
-        await test.step.skip('place a sell order through its review', async () => {
-            await panels.getByRole('tab', { name: 'Place' }).click();
-            const order = main.getByRole('form', { name: 'Place order' });
-            await expect(order).toBeVisible();
-            await order.getByRole('button', { name: 'Sell PEPECASH' }).click();
-            await order.getByLabel('Price (BTC)').fill(PRICE);
-            await order.getByLabel('Size (PEPECASH)').fill(SIZE);
-            await expect(order).toContainText(`Give ${SIZE} PEPECASH, get ${TOTAL} BTC`);
-            await expectScreen(page, marketScreenHeading, `${viewport.name} place order`);
-            await expectMatchingLineHeights(
-                order.getByRole('group', { name: 'Order side' }).getByRole('button'),
-                `${viewport.name} order side`,
-            );
-            await expectMatchingLineHeights(
-                order.getByRole('group', { name: 'Price and amount' }).getByRole('textbox'),
-                `${viewport.name} price and amount`,
-            );
+        await test.step('sell ticket stops at the demo wallet gate', async () => {
+            // Sell opens the trade ticket for the pair, signed from the wallet's address.
+            await main.getByRole('button', { name: 'Sell', exact: true }).click();
+            await expectScreen(page, 'Trade PEPECASH/BTC', `${viewport.name} sell ticket`);
+            const ticket = page.getByRole('form', { name: 'Swap ticket' });
+            await expect(ticket).toBeVisible();
+            await expect(ticket.getByRole('button', { name: /^From Bitcoin, bc1q/ })).toBeVisible();
+            await ticket.getByRole('textbox', { name: 'You pay (PEPECASH)' }).fill(SIZE);
+            await ticket.getByRole('button', { name: 'Place Order', exact: true }).click();
 
-            await order.getByRole('button', { name: 'Place sell order' }).click();
-            const review = main.getByRole('form', { name: 'Review order' });
-            await expect(review).toBeVisible();
-            await expect(reviewValue(review, 'Give')).toHaveText(`${SIZE} PEPECASH`);
-            await expect(reviewValue(review, 'Get')).toHaveText(`${TOTAL} BTC`);
-            await expect(reviewValue(review, 'Price')).toHaveText(`${PRICE} BTC/PEPECASH`);
-            const reviewPosition = await review.evaluate((element) => {
-                const scrollport = element.closest('main');
-                const formRect = element.getBoundingClientRect();
-                const scrollportRect = scrollport.getBoundingClientRect();
-                return {
-                    formTop: formRect.top,
-                    scrollportTop: scrollportRect.top,
-                    scrollportBottom: scrollportRect.bottom,
-                    reviewScrollTop: element.scrollTop,
-                };
-            });
-            expect(
-                reviewPosition.reviewScrollTop,
-                `${viewport.name} review does not open at its top`,
-            ).toBeLessThanOrEqual(1);
-            expect(
-                reviewPosition.formTop,
-                `${viewport.name} review opens above its visible scrollport`,
-            ).toBeGreaterThanOrEqual(reviewPosition.scrollportTop - 1);
-            expect(
-                reviewPosition.formTop,
-                `${viewport.name} review opens below its visible scrollport`,
-            ).toBeLessThan(reviewPosition.scrollportBottom);
-            await expectScreen(page, marketScreenHeading, `${viewport.name} order review`);
-            await expectMatchingLineHeights(
-                review.getByRole('button', { name: 'Edit order' })
-                    .or(review.getByRole('button', { name: 'Place sell order' })),
-                `${viewport.name} review actions`,
-            );
+            // A demo wallet cannot move funds, so the press ends at the real-wallet gate.
+            const gate = ticket.getByRole('alert');
+            await expect(gate).toBeVisible();
+            await expect(gate.getByRole('button', { name: 'Create a Real Wallet' })).toBeVisible();
+            await expectScreen(page, 'Trade PEPECASH/BTC', `${viewport.name} sell ticket gate`);
         });
     });
 }

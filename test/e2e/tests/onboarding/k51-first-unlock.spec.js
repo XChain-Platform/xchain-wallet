@@ -122,11 +122,12 @@ test.describe('LG K51 first wallet unlock', { tag: '@lg-k51' }, () => {
 
         await page.getByRole('button', { name: 'Open menu' }).click();
         const lock = page.getByRole('dialog', { name: 'Wallet menu' })
-            .locator('[data-wallet-menu-row="lock"]');
+            .getByRole('button', { name: 'Lock wallet' });
         await expectActionReachable(page, 'wallet menu', lock);
         await lock.click();
 
-        await expect(page.getByRole('heading', { name: WALLET_NAME })).toBeVisible();
+        // The unlock screen names the app, not the wallet.
+        await expect(page.getByRole('form', { name: 'Unlock wallet' })).toBeVisible();
         await page.getByRole('textbox', { name: 'Password' }).fill(PASSWORD);
         const unlock = page.getByRole('button', { name: 'Unlock Wallet' });
         await expectActionReachable(page, 'first unlock', unlock);

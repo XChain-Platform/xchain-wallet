@@ -141,7 +141,7 @@ function toLocalDateTimeInput(unixSec) {
  * itself one of the cases.
  */
 async function openValidForm(page, { label, pickToken = true, deadlineOffsetSec = 2 * 86_400 }) {
-    await openPaletteCommand(page, 'Betting');
+    await openPaletteCommand(page, 'Prediction markets');
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     const main = page.getByRole('main');
     await selectVenueChain(main);
@@ -200,7 +200,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             await createWallet(page, { password: PASSWORD, name: 'Market Refusal Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await openPaletteCommand(page, 'Betting');
+            await openPaletteCommand(page, 'Prediction markets');
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
@@ -316,7 +316,7 @@ test.describe(`refusing a bad market, and the promise that it cannot be edited (
             // would live if one existed: it is the surface that offers the two
             // things that DO exist for a market you created. Reached from the
             // hub's "My markets" card, then the market's Actions tab.
-            await openPaletteCommand(page, 'Betting');
+            await openPaletteCommand(page, 'Prediction markets');
             await page.getByRole('tab', { name: 'My markets' }).click();
             const console_ = page.getByRole('main');
             const card = console_.getByRole('button', { name: label, exact: false }).first();
