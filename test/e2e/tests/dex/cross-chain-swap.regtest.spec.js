@@ -86,6 +86,7 @@ import {
     waitForTokenBalance,
     waitForValidAction,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const TICK = 'XCHAIN';
@@ -240,15 +241,15 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
                 chainId: GET.chainId, chainLabel: GET.chainLabel, tick: TICK,
             });
 
-            await main.getByLabel('Give amount').fill(GIVE_AMOUNT);
-            await main.getByLabel('Get amount').fill(GET_AMOUNT);
+            await fieldByLabel(main, 'Give amount').fill(GIVE_AMOUNT);
+            await fieldByLabel(main, 'Get amount').fill(GET_AMOUNT);
         });
 
         let receiveAt;
 
         await test.step('the receiving address is on the GET chain, not this one', async () => {
             const main = page.getByRole('main');
-            const field = main.getByLabel('Receive at');
+            const field = fieldByLabel(main, 'Receive at');
             await expect(field, 'the form never auto-filled a receiving address on the get chain; '
                 + 'a wallet derives an address on every chain of the network it switches to, so an '
                 + 'empty field here means that derivation did not happen')
@@ -286,7 +287,7 @@ test.describe(`cross-chain SWAP from ${REGTEST_CHAIN_LABEL}`, () => {
             // signer pool is already rehydrated, and the submit gate agrees
             // (`!signerReady && password.length === 0`), so an unconditional
             // fill would wait out the full budget on a screen ready to sign.
-            const password = main.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(main, 'Password');
             if (await password.count() > 0 && await password.isVisible()) {
                 await password.fill(PASSWORD);
             }

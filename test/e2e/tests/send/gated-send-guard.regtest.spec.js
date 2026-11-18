@@ -73,7 +73,10 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm as approveWhenReady,
+    expectApproveRefused,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -109,12 +112,11 @@ async function newDevice(browser) {
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
         await password.fill(PASSWORD);
     }
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
 /** The txid off whatever success screen the confirm flow lands on. */
@@ -191,7 +193,7 @@ test.describe('the PC-26 gated SEND guard', () => {
         await test.step('the issuer issues the tick that will be gated', async () => {
             await openPaletteCommand(issuer, 'Issue token');
             const main = issuer.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await readIssueSource(main);
             await issuePlainToken(main, { ticker: TICK, supply: SUPPLY, password: PASSWORD });
 
@@ -219,22 +221,21 @@ test.describe('the PC-26 gated SEND guard', () => {
             await issuer.getByRole('listitem').filter({ hasText: TICK }).click();
 
             const main = issuer.getByRole('main');
-            await expect(main.getByLabel('File to publish')).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('File to publish').setInputFiles({
+            await expect(fieldByLabel(main, 'File to publish')).toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'File to publish').setInputFiles({
                 name: 'unlock-me.txt',
                 mimeType: 'text/plain',
                 buffer: Buffer.from('gated content payload for the e2e guard spec'),
             });
             await main.getByRole('button', { name: 'Publish File', exact: true }).click();
 
-            const reviewPassword = main.getByLabel('Password', { exact: true });
+            const reviewPassword = fieldByLabel(main, 'Password');
             if (await reviewPassword.count() > 0 && await reviewPassword.isVisible().catch(() => false)) {
                 await reviewPassword.fill(PASSWORD);
             }
             await main.getByRole('button', { name: 'Sign and Publish' }).click();
             await expectConfirmModal(issuer, 'the gated publish', 60_000);
-            await expect(issuer.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            await issuer.getByTestId('confirm-approve').click();
+            await approveWhenReady(issuer);
 
             await expect(main.getByText('Encrypted file published')).toBeVisible({ timeout: 120_000 });
             const txt = await main.innerText();
@@ -255,7 +256,7 @@ test.describe('the PC-26 gated SEND guard', () => {
 
             await gotoSection(issuer, 'Send');
             await selectVenueSendAsset(issuer, TICK);
-            await issuer.getByLabel('To', { exact: true }).fill(holderAddr);
+            await fieldByLabel(issuer, 'To').fill(holderAddr);
             await issuer.getByRole('textbox', { name: /^Amount/ }).fill(SEND_AMOUNT);
 
             // The 'ready' readiness banner: the issuer holds the pack key it
@@ -289,7 +290,7 @@ test.describe('the PC-26 gated SEND guard', () => {
         await test.step('the holder, having never recovered the key, is blocked client-side', async () => {
             await gotoSection(holder, 'Send');
             await selectVenueSendAsset(holder, TICK);
-            await holder.getByLabel('To', { exact: true }).fill(issuerAddr);
+            await fieldByLabel(holder, 'To').fill(issuerAddr);
             await holder.getByRole('textbox', { name: /^Amount/ }).fill(HOLDER_FORWARD_AMOUNT);
 
             // Both the 'blocked' banner (a raw role="alert" div) and, after
@@ -313,7 +314,7 @@ test.describe('the PC-26 gated SEND guard', () => {
 
             await openPaletteCommand(holder, 'Advanced action');
             await selectVenueChain(holder);
-            await pickOption(holder.getByLabel('Action', { exact: true }), 'SEND');
+            await pickOption(fieldByLabel(holder, 'Action'), 'SEND');
 
             // The tick-specific "HAS active gated content" line only renders
             // once `useGatedTickNotice` has a TICK to check (it is debounced
@@ -349,10 +350,13 @@ test.describe('the PC-26 gated SEND guard', () => {
                     .toBeVisible({ timeout: 60_000 });
                 const override = refusal.getByRole('checkbox', { name: 'Sign anyway' });
                 await expect(override, 'the SDK override policy was ignored').toBeVisible();
-                const approve = holder.getByTestId('confirm-approve');
-                await expect(approve, 'Approve was enabled before explicit consent').toBeDisabled();
+                // Approve keeps its colour (G130): before explicit consent a
+                // tap is refused with "Tick Sign anyway" and sends nothing.
+                await expectApproveRefused(holder, 'signAnyway', 'the bypassed raw SEND before explicit consent');
                 await override.check();
-                await expect(approve, 'Approve stayed disabled after explicit consent').toBeEnabled();
+                await expect(holder.getByTestId('confirm-blocked').and(holder.locator('[data-reason="signAnyway"]')),
+                    'the Sign anyway refusal stayed after explicit consent')
+                    .toHaveCount(0);
                 await holder.getByTestId('confirm-reject').click();
                 await expect(confirm).toHaveCount(0);
             }

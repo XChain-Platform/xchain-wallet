@@ -47,6 +47,7 @@ import {
     unlockAfterReload,
     warmPreflight,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'a11yconfirmpassword';
 const FUNDING_BTC = 1;
@@ -66,9 +67,9 @@ function feeToggle(scope) {
 async function composeIssue(page, { nativeFee }) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Ticker').fill(ISSUE_TICK);
-    await main.getByLabel('Max supply', { exact: true }).fill(ISSUE_SUPPLY);
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await fieldByLabel(main, 'Ticker').fill(ISSUE_TICK);
+    await fieldByLabel(main, 'Max supply').fill(ISSUE_SUPPLY);
     // The fee switch sits in the Network fee section, closed until opened.
     await openIssueSection(main, 'Network fee');
     const toggle = feeToggle(main);

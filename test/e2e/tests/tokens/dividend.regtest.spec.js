@@ -38,7 +38,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -65,13 +67,11 @@ async function newDevice(browser) {
 
 async function approveAndReadTxid(page, what) {
     await expectConfirmModal(page, what);
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
         await password.fill(PASSWORD);
     }
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
 
     // The Send success screen draws the id truncated; waitForShownTxid reads
     // the full id from its accessible name, and from the text on screens
@@ -95,7 +95,7 @@ async function fundWithFees(page, address) {
 async function issueHolderToken(page, source) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     await readIssueSource(main);
     await issuePlainToken(main, { ticker: HOLDER_TICK, supply: HOLDER_SUPPLY });
 
@@ -108,7 +108,7 @@ async function issueHolderToken(page, source) {
 async function sendHolderUnits(page, destination) {
     await gotoSection(page, 'Send');
     await selectVenueSendAsset(page, HOLDER_TICK);
-    await page.getByLabel('To', { exact: true }).fill(destination);
+    await fieldByLabel(page, 'To').fill(destination);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(String(HOLDER_UNITS));
     await mainButton(page, 'Send').click();
 

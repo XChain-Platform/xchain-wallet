@@ -88,8 +88,11 @@ import {
     selectDispenserOnSource,
     selectPickerAsset,
     openFromAddress,
+    approveConfirm,
+    expectApproveRefused,
 } from '../../fixtures/regtest.js';
 import { fundXchain } from '../../fixtures/gasToken.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /**
@@ -154,8 +157,7 @@ async function expectConfirmModal(page) {
 }
 
 async function approveAndGetTxid(page) {
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -283,7 +285,7 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // from a random seed, so the spec cannot know it in advance.
             await openPaletteCommand(page, 'Create dispenser');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             source = await main.getByRole('textbox', { name: 'Source' }).inputValue();
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
@@ -302,7 +304,7 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
 
             await openPaletteCommand(page, 'Create dispenser');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Give amount per fill')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
             // The dispenser opens on the Source, so the sweep of that address has a
             // dispenser to force-close.
@@ -310,9 +312,9 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
 
             await main.getByRole('button', { name: /^Token/ }).click();
             await selectPickerAsset(page, TICK);
-            await main.getByLabel('Give amount per fill').fill(String(GIVE_PER_FILL));
-            await main.getByLabel('Escrow amount').fill(String(ESCROW));
-            await main.getByLabel(/Trigger price/).fill(TRIGGER);
+            await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
+            await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
+            await fieldByLabel(main, /^Trigger price/).fill(TRIGGER);
 
             await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
             await expectConfirmModal(page);
@@ -421,13 +423,13 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
 
             // Screen fact: SWEEP rides the typed-word rail DESTROY uses, and the
             // confirm screen's copy carries the word in quotes ('Type "SWEEP" to
-            // confirm') while the legacy review stage's does not. Approve stays
-            // disabled until it is typed - which is asserted BEFORE typing, or
-            // the gate would be untested.
-            const approve = page.getByTestId('confirm-approve');
-            await expect(approve, 'Approve is live before the confirmation word was typed, so the '
-                + 'typed gate on the most destructive action in the wallet does nothing')
-                .toBeDisabled();
+            // confirm') while the legacy review stage's does not. Approve is
+            // never disabled (G130): until the word is typed a tap is refused
+            // with a notice at the top and sends nothing - which is asserted
+            // BEFORE typing, or the gate would be untested.
+            await expectApproveRefused(page, 'credentials',
+                'a SWEEP with no confirmation word typed (the typed gate on the most destructive '
+                + 'action in the wallet does nothing)');
 
             const typed = modal.getByRole('textbox', { name: /^Type .?SWEEP.? to confirm$/ });
             await expect(typed, 'the confirm screen carries no typed-confirmation field')
@@ -438,8 +440,12 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // balance it moves, so the destination receives the free balance
             // less this fee. It is read off the screen the user approved: the
             // fee is a hub setting, and on a coin-fee lane there is no line.
-            await expect(approve, 'Approve never went live after the confirmation word was typed')
-                .toBeEnabled({ timeout: 120_000 });
+            await expect(page.getByTestId('confirm-checking'),
+                'the confirm screen\'s network check never finished')
+                .toHaveCount(0, { timeout: 120_000 });
+            await expect(page.getByTestId('confirm-blocked'),
+                'the typed SWEEP did not clear the confirm screen\'s refusal')
+                .toHaveCount(0, { timeout: 30_000 });
             const feeLine = page.getByTestId('confirm-fee-protocol');
             if (await feeLine.count() > 0) {
                 const said = await feeLine.innerText();

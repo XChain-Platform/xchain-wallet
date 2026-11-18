@@ -60,7 +60,10 @@ import {
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    approveConfirm,
+    expectApproveRefused,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Three publishes, each paying a real coin protocol fee here. */
@@ -149,10 +152,9 @@ async function stagePublish(page, value) {
 
 /** Signs the staged publish and returns the indexed action. */
 async function signPublish(page, review) {
-    const pw = review.getByLabel('Password', { exact: true });
+    const pw = fieldByLabel(review, 'Password');
     if (await pw.count() > 0) await pw.fill(PASSWORD);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const done = page.getByRole('main');
     await expect(done, 'no transaction id ever appeared after approving the publish')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -264,26 +266,24 @@ test.describe(`the PRICE v1 deviation gate on ${REGTEST_CHAIN_LABEL}`, () => {
                     .toBeVisible({ timeout: 30_000 });
 
                 // THE ASSERTION THAT MATTERS: the button is not merely
-                // accompanied by a box, it is BLOCKED by it.
-                const publish = page.getByTestId('confirm-approve');
-                await expect(publish,
-                    'the typed confirm is decorative: Publish is enabled with the box empty')
-                    .toBeDisabled();
+                // accompanied by a box, it is BLOCKED by it. Approve keeps its
+                // colour (G130), so the block is what a tap does: refused with
+                // a notice at the top (confirm-blocked), nothing sent.
+                await expectApproveRefused(page, 'credentials',
+                    'a +100% publish with the typed confirm empty (the typed confirm is decorative)');
 
                 // A near miss must not pass: neither a different word nor the
                 // right word in another case, since every typed confirmation
                 // matches its word exactly.
                 await box.fill('PUBLICH');
-                await expect(publish, 'a wrong word unlocked the publish')
-                    .toBeDisabled();
+                await expectApproveRefused(page, 'credentials', 'a +100% publish typed "PUBLICH"');
                 await box.fill('publish');
-                await expect(publish, 'a lower-case word unlocked the publish')
-                    .toBeDisabled();
+                await expectApproveRefused(page, 'credentials', 'a +100% publish typed in lower case');
 
                 await box.fill('PUBLISH');
-                await expect(publish,
+                await expect(page.getByTestId('confirm-blocked'),
                     'the form rejects the exact word it asks for')
-                    .toBeEnabled({ timeout: 15_000 });
+                    .toHaveCount(0, { timeout: 15_000 });
 
                 const published = await signPublish(page, review);
                 expect(String(published.status),

@@ -14,6 +14,7 @@ import {
     documentOverflow,
     overflowingElements,
 } from '../../fixtures/responsive.js';
+import { searchTokenPicker } from '../../fixtures/fields.js';
 
 const CONTRACT_INDEX = '4242';
 const CONTRACT_NAME = 'E2E Escrow';
@@ -215,7 +216,7 @@ async function walkExecute(page, viewport) {
     await main.getByLabel('amount (amount)', { exact: true }).fill(CALL_AMOUNT);
     await main.getByRole('button', { name: /^Deposit:/ }).click();
     await expectScreen(page, viewport, 'Token to deposit');
-    await main.getByLabel('Search coins or tokens').fill(DEPOSIT_TICK);
+    await searchTokenPicker(page, DEPOSIT_TICK);
     await main.locator(`[data-balance-key="${FIXTURE_CHAIN}:${DEPOSIT_TICK}"]`).first().click();
     await main.getByRole('textbox', { name: /^Deposit amount/ }).fill(DEPOSIT_AMOUNT);
 

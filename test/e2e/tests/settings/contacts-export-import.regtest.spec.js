@@ -70,6 +70,7 @@ import { readFile } from 'node:fs/promises';
 
 import { createWallet, expect, openPaletteCommand, openSettings, test } from '../../fixtures/wallet.js';
 import { REGTEST_DESTINATION } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -187,7 +188,7 @@ test.describe('Settings: contacts export / import', () => {
 
             await test.step('Import restores it, with the address intact', async () => {
                 await gotoContactsSettings(page);
-                await page.getByLabel('Import contacts JSON').setInputFiles(exported);
+                await fieldByLabel(page, 'Import contacts JSON').setInputFiles(exported);
                 // Every import asks first, because records with a matching id
                 // are overwritten.
                 const ask = page.getByRole('dialog', { name: 'Import contacts?' });

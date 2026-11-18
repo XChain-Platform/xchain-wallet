@@ -88,9 +88,11 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForConfirmedUtxo,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const DEVICE_PASSWORD = 'regtestpassword123';
 /** Deliberately NOT the device password: the two are independent by design. */
@@ -140,8 +142,8 @@ async function exportEnvelope(page, { walletName, words }) {
         .toBeVisible({ timeout: 30_000 });
     await exportRow.click();
 
-    await page.getByLabel('Backup password', { exact: true }).fill(BACKUP_PASSWORD);
-    await page.getByLabel('Confirm backup password').fill(BACKUP_PASSWORD);
+    await fieldByLabel(page, 'Backup password').fill(BACKUP_PASSWORD);
+    await fieldByLabel(page, 'Confirm backup password').fill(BACKUP_PASSWORD);
     // Take the download route: a headless browser cannot answer the save picker.
     await page.evaluate(() => { window.showSaveFilePicker = undefined; });
     const [download] = await Promise.all([
@@ -204,8 +206,8 @@ async function exportEnvelope(page, { walletName, words }) {
  * user's ability to tell the three apart breaks here too.
  */
 async function fillRestorePasswords(page, { backup, wallet, device, mode = 'fresh' }) {
-    await page.getByLabel('Backup password', { exact: true }).fill(backup);
-    await page.getByLabel('Password of the wallet in this backup', { exact: true }).fill(wallet);
+    await fieldByLabel(page, 'Backup password').fill(backup);
+    await fieldByLabel(page, 'Password of the wallet in this backup').fill(wallet);
     await page.getByLabel(
         mode === 'add' ? 'Your password on this device' : 'Password for this device',
         { exact: true },
@@ -563,7 +565,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     // signature the chain accepted - and a self-send is the
                     // only destination that is valid on every venue chain
                     // without a per-chain literal.
-                    await two.getByLabel('To', { exact: true }).fill(ownAddress);
+                    await fieldByLabel(two, 'To').fill(ownAddress);
                     await two.getByRole('textbox', { name: /^Amount/ }).fill(SEND_AMOUNT);
                     await mainButton(two, 'Send').click();
 
@@ -583,12 +585,7 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     // dead button. Asserted separately from the click so a
                     // future red run says WHY instead of timing out inside
                     // Playwright's retry loop.
-                    await expect(two.getByTestId('confirm-approve'),
-                        'the restored wallet composed a payment it cannot approve, which is'
-                        + 'exactly - the seed is still sealed under the password of the device it '
-                        + 'was backed up from, so this device holds no signer for its own address')
-                        .toBeEnabled({ timeout: 60_000 });
-                    await two.getByTestId('confirm-approve').click();
+                    await approveConfirm(two);
 
                     await expect(two.getByRole('heading', { name: 'Broadcast pending' }),
                         'the restored wallet approved a payment that never reached the node')

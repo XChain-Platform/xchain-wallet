@@ -61,7 +61,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm as approveWhenReady,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -113,12 +115,11 @@ async function validLegs(txid) {
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
         await password.fill(PASSWORD);
     }
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
 async function readBroadcastTxid(page) {
@@ -171,7 +172,7 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
         await test.step('the issuer issues the tick', async () => {
             await openPaletteCommand(issuer, 'Issue token');
             const main = issuer.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await readIssueSource(main);
             await issuePlainToken(main, { ticker: TICK, supply: SUPPLY, password: PASSWORD });
 
@@ -200,19 +201,19 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
             await issuer.getByRole('listitem').filter({ hasText: TICK }).click();
 
             const main = issuer.getByRole('main');
-            await expect(main.getByLabel('File to publish')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'File to publish')).toBeVisible({ timeout: 30_000 });
 
             // The live assertion this spec exists to make: `thresholdActive`
             // is derived from THIS venue's real indexer watermark
             // (`messaging.getIndexerWatermark`), not a stub, and it must stay
             // false because `bitcoin-regtest` (or whichever chain this run
             // drives) is pinned `null` in GATE_MIN_AMOUNT_ACTIVATION_HEIGHTS.
-            await expect(main.getByLabel('Unlock threshold'), 'the unlock-threshold field rendered on '
+            await expect(fieldByLabel(main, 'Unlock threshold'), 'the unlock-threshold field rendered on '
                 + 'regtest, which means GATE_MIN_AMOUNT read as ACTIVE on a chain the activation map pins '
                 + 'null - a premature-emission hazard the map exists to prevent')
                 .toHaveCount(0);
 
-            await main.getByLabel('File to publish').setInputFiles({
+            await fieldByLabel(main, 'File to publish').setInputFiles({
                 name: 'no-threshold.txt',
                 mimeType: 'text/plain',
                 buffer: Buffer.from('gated content with no unlock threshold, by construction on this venue'),
@@ -224,14 +225,13 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
             // invariant the form-stage assertion above already covers.
             await expect(main.getByText('Unlock threshold', { exact: true })).toHaveCount(0);
 
-            const reviewPassword = main.getByLabel('Password', { exact: true });
+            const reviewPassword = fieldByLabel(main, 'Password');
             if (await reviewPassword.count() > 0 && await reviewPassword.isVisible().catch(() => false)) {
                 await reviewPassword.fill(PASSWORD);
             }
             await main.getByRole('button', { name: 'Sign and Publish' }).click();
             await expectConfirmModal(issuer, 'the gated publish', 60_000);
-            await expect(issuer.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            await issuer.getByTestId('confirm-approve').click();
+            await approveWhenReady(issuer);
 
             await expect(main.getByText('Encrypted file published')).toBeVisible({ timeout: 120_000 });
             const txt = await main.innerText();
@@ -262,7 +262,7 @@ test.describe('the PC-29 unlock threshold stays inert on regtest', () => {
 
             await gotoSection(issuer, 'Send');
             await selectVenueSendAsset(issuer, TICK);
-            await issuer.getByLabel('To', { exact: true }).fill(holderAddr);
+            await fieldByLabel(issuer, 'To').fill(holderAddr);
             await issuer.getByRole('textbox', { name: /^Amount/ }).fill(TINY_SEND_AMOUNT);
 
             // If a below-threshold lane had somehow activated, an amount this

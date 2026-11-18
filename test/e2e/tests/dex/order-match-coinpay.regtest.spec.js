@@ -54,7 +54,9 @@ import {
     tokenBalance,
     unlockAfterReload,
     openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Wallet A needs miner fees only; wallet B also has to pay the ask. */
@@ -185,7 +187,7 @@ async function waitForBalanceAtLeast(address, tick, min, timeoutMs = 180_000) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -208,7 +210,7 @@ async function issueRunToken(page, owner, tick) {
     await seedPrices();
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     await readIssueSource(main);
     await issuePlainToken(main, { ticker: tick, supply: TOKEN_SUPPLY });
     await expectConfirmModal(page, 'this action', 60_000);
@@ -259,9 +261,9 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
 
             const { main } = await openCreateOrder(page);
             // Defaults are give-a-token / get-native, which is this side exactly.
-            await main.getByLabel('Ticker', { exact: true }).fill(tick);
-            await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
-            await main.getByLabel(`Amount (${COIN})`).fill(ASK);
+            await fieldByLabel(main, 'Ticker').fill(tick);
+            await fieldByLabel(main, 'Amount').fill(String(GIVE_TOKENS));
+            await fieldByLabel(main, `Amount (${COIN})`).fill(ASK);
             await main.getByRole('button', { name: /^Place order/ }).click();
 
             await expectConfirmModal(page, 'this action', 60_000);
@@ -304,9 +306,9 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('radio', { name: `Native ${COIN}` }).first().check();
             await main.getByRole('radio', { name: 'A token' }).last().check();
 
-            await main.getByLabel(`Amount (${COIN})`).fill(ASK);
-            await main.getByLabel('Ticker', { exact: true }).fill(tick);
-            await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
+            await fieldByLabel(main, `Amount (${COIN})`).fill(ASK);
+            await fieldByLabel(main, 'Ticker').fill(tick);
+            await fieldByLabel(main, 'Amount').fill(String(GIVE_TOKENS));
 
             // A native GIVE is the only shape that can arm auto-pay, and this
             // spec wants the MANUAL queue. Turning it off also removes the
@@ -381,7 +383,7 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await main.getByRole('button', { name: 'Pay Order', exact: true }).click();
             await page.getByRole('button', { name: /^Pay \d/ }).click();
             await expectConfirmModal(page, 'the matched order payment', 60_000);
-            const password = page.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
             await approveAndGetTxid(page);
@@ -465,9 +467,9 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             await unlockAfterReload(page, PASSWORD);
 
             const { main } = await openCreateOrder(page);
-            await main.getByLabel('Ticker', { exact: true }).fill(tick);
-            await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
-            await main.getByLabel(`Amount (${COIN})`).fill(ASK);
+            await fieldByLabel(main, 'Ticker').fill(tick);
+            await fieldByLabel(main, 'Amount').fill(String(GIVE_TOKENS));
+            await fieldByLabel(main, `Amount (${COIN})`).fill(ASK);
             await main.getByRole('button', { name: /^Place order/ }).click();
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -488,9 +490,9 @@ test.describe(`ORDER match + CoinPay on ${REGTEST_CHAIN_LABEL}`, () => {
             const { main } = await openCreateOrder(page);
             await main.getByRole('radio', { name: `Native ${COIN}` }).first().check();
             await main.getByRole('radio', { name: 'A token' }).last().check();
-            await main.getByLabel(`Amount (${COIN})`).fill(ASK);
-            await main.getByLabel('Ticker', { exact: true }).fill(tick);
-            await main.getByLabel('Amount', { exact: true }).fill(String(GIVE_TOKENS));
+            await fieldByLabel(main, `Amount (${COIN})`).fill(ASK);
+            await fieldByLabel(main, 'Ticker').fill(tick);
+            await fieldByLabel(main, 'Amount').fill(String(GIVE_TOKENS));
 
             // Left ON this time: this is the arming the rest of the test
             // depends on. The web shell's keep-open fact is a confirm notice.

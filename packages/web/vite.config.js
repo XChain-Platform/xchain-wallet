@@ -341,6 +341,9 @@ const uint8ArrayToolsCjs = createRequire(sdkRequire.resolve('bitcoinjs-lib'))
     .resolve('uint8array-tools');
 
 export default defineConfig({
+    ...(process.env.XCHAIN_VITE_CACHE_DIR
+        ? { cacheDir: process.env.XCHAIN_VITE_CACHE_DIR }
+        : {}),
     define: {
         'require.main': 'undefined',
         'import.meta.env.XCHAIN_TREZOR_PAIRING': JSON.stringify(

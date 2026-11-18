@@ -57,6 +57,7 @@ import {
 import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -168,7 +169,7 @@ test.describe('QR scan on the import screen (§15.4)', () => {
                     'the recovery-phrase scanner never read the QR in front of it')
                     .toBe(true);
 
-                const box = page.getByLabel('Recovery phrase', { exact: true });
+                const box = fieldByLabel(page, 'Recovery phrase');
                 // Compared as a boolean: a failing string matcher would print
                 // the phrase into the run log.
                 expect((await box.inputValue()).trim() === PHRASE,
@@ -176,8 +177,8 @@ test.describe('QR scan on the import screen (§15.4)', () => {
                     + 'it or the `bip39:` prefix some generators emit was not stripped')
                     .toBe(true);
 
-                await page.getByLabel('Wallet name').fill('Scanned Wallet');
-                await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+                await fieldByLabel(page, 'Wallet name').fill('Scanned Wallet');
+                await fieldByLabel(page, 'Password').fill(PASSWORD);
                 await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
                 await page.getByRole('button', { name: 'Import', exact: true }).click();
                 // The import ends on the donation notice, not the shell.
@@ -257,7 +258,7 @@ test.describe('QR scan on the import screen (§15.4)', () => {
             try {
                 expect(await scan(page, 'Scan QR'), 'the phrase scanner never read the QR')
                     .toBe(true);
-                await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+                await fieldByLabel(page, 'Password').fill(PASSWORD);
                 await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
                 await page.getByRole('button', { name: 'Import', exact: true }).click();
 

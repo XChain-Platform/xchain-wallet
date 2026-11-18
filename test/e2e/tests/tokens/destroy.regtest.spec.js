@@ -24,9 +24,9 @@
 //
 // TWO THINGS ASSERTED THAT FORM STATE ALONE CANNOT SHOW
 //
-// 1. THE TYPED-CONFIRMATION GATE ACTUALLY GATES. Approve stays disabled with
-//    no text and with a near-miss typed, and only enables once the word is
-//    DESTROY - checked against the live button state, not against the source
+// 1. THE TYPED-CONFIRMATION GATE ACTUALLY GATES. A tap on Approve is refused
+//    with no text and with a near-miss typed, and the refusal clears only once
+//    the word is DESTROY - checked against what a live tap does, not against the source
 //    that defines it. The match is case-insensitive and trimmed by design
 //    (DestroyForm.jsx `typedConfirmOk`, the same rule CallbackForm and
 //    OracleForm use), so the near-miss here is a misspelling, not a lowercase.
@@ -49,7 +49,10 @@ import {
     waitForTokenBalance,
     waitForValidAction,
     selectPickerAsset,
+    approveConfirm,
+    expectApproveRefused,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -126,17 +129,16 @@ test.describe('DESTROY on regtest', () => {
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await readIssueSource(main);
             await issuePlainToken(main, { ticker: TICK, supply: SUPPLY, password: PASSWORD });
 
             await expectConfirmModal(page, 'the ISSUE');
-            const issuePassword = page.getByLabel('Password', { exact: true });
+            const issuePassword = fieldByLabel(page, 'Password');
             if (await issuePassword.count() > 0 && await issuePassword.isVisible().catch(() => false)) {
                 await issuePassword.fill(PASSWORD);
             }
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
 
             await expect(page.getByRole('main')).toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
             const issueTxid = (await page.getByRole('main').innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
@@ -172,21 +174,25 @@ test.describe('DESTROY on regtest', () => {
         });
 
         await test.step('the typed "DESTROY" gate stays closed until the word is right', async () => {
-            const password = page.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
                 await password.fill(PASSWORD);
             }
-            const typed = page.getByLabel('Type "DESTROY" to confirm');
-            const approve = page.getByTestId('confirm-approve');
-
-            await expect(approve, 'Approve is enabled with no typed confirmation at all').toBeDisabled();
+            const typed = fieldByLabel(page, 'Type "DESTROY" to confirm');
+            // G130: Approve keeps its colour; a tap before the word is right
+            // says why at the top (confirm-blocked, reason credentials) and
+            // sends nothing.
+            await expectApproveRefused(page, 'credentials', 'a DESTROY with no typed confirmation at all');
 
             await typed.fill('DESTORY');
-            await expect(approve, 'Approve is enabled on a misspelled confirmation').toBeDisabled();
+            await expectApproveRefused(page, 'credentials', 'a DESTROY with a misspelled confirmation');
 
             await typed.fill('');
             await typed.fill('DESTROY');
-            await expect(approve).toBeEnabled({ timeout: 30_000 });
+            // The right word clears the reason, and the notice with it.
+            await expect(page.getByTestId('confirm-blocked'),
+                'the typed DESTROY did not clear the confirm screen\'s refusal')
+                .toHaveCount(0, { timeout: 30_000 });
         });
 
         await test.step('approve, and the chain shows the exact amount burned, once', async () => {
@@ -194,7 +200,7 @@ test.describe('DESTROY on regtest', () => {
             expect(before, 'the ISSUE balance was not what the Destroy form is about to spend from')
                 .toBe(SUPPLY);
 
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             await expect(page.getByRole('main')).toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
             const txid = (await page.getByRole('main').innerText()).match(/\b[0-9a-f]{64}\b/)?.[0];
             expect(txid, 'success screen showed no transaction id').toBeTruthy();

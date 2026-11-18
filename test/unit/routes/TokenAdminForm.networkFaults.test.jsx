@@ -89,6 +89,22 @@ afterEach(() => {
 });
 
 describe('TokenAdminForm token record read faults', () => {
+    it('explains a failed owner lookup and retries it from the notice', async () => {
+        const getTokenInfo = vi.fn()
+            .mockRejectedValueOnce(new Error('explorer unreachable'))
+            .mockResolvedValueOnce({
+                chainId: CHAIN, tick: 'TOKEN', creator: SOURCE.address, locks: {},
+            });
+        mount('description', { getTokenInfo });
+
+        expect(await screen.findByText(/issuer could not be confirmed/i)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
+
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(screen.queryByText(/issuer could not be confirmed/i)).toBeNull());
+        expect(adminAction()).not.toHaveAttribute('aria-disabled');
+    });
+
     for (const mode of ['lock', 'access-lists']) {
         it(`keeps ${mode} closed and composes nothing when the token read fails`, async () => {
             const target = mount(mode, {

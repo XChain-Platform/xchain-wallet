@@ -360,6 +360,7 @@ function AppInner() {
     // §34.1: settings carry the keyboard-shortcut overrides threaded into
     // the palette hook, the dispatcher, and the help modal below.
     const { settings } = useSettings();
+    const activeNetwork = settings ? (settings.activeNetwork || 'mainnet') : undefined;
     const [status, setStatus] = useState(/** @type {any} */ ({ state: 'loading' }));
     useClearToastsOnLock(status.state);
     // A wipe in another tab leaves this one holding a session for a vault that is gone.
@@ -388,6 +389,7 @@ function AppInner() {
         capture: () => navContext.current.capture(),
         restore: (ctx) => navContext.current.restore(ctx),
         itemKey: navItemKey,
+        network: activeNetwork,
     });
     const unlockedView = nav.view;
     const setUnlockedView = nav.navigate;
@@ -497,7 +499,6 @@ function AppInner() {
     );
     // Last-view persistence and DEX defaults stay scoped to the wallet's
     // active network once the encrypted settings record is available.
-    const activeNetwork = settings ? (settings.activeNetwork || 'mainnet') : undefined;
     // Asset-kind filter: surfaced via the global filter popover on the
     // send-picker route so the user can narrow the spendable list to
     // all / coins / tokens. Lifted here so the popover and SendPicker

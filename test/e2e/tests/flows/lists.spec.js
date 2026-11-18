@@ -242,7 +242,7 @@ for (const viewport of VIEWPORTS) {
             exact: true,
         });
         await expect(listRow).toBeVisible();
-        await expectListScreen(page, 'My lists', 'My lists');
+        await expectListScreen(page, 'My Lists','My lists');
 
         await page.getByRole('button', { name: 'Create list', exact: true }).first().click();
         await expect(page.getByLabel('Addresses', { exact: true })).toBeVisible();
@@ -264,7 +264,7 @@ for (const viewport of VIEWPORTS) {
         await goBack(page);
 
         await expect(listRow).toBeVisible();
-        await expectListScreen(page, 'My lists', 'My lists after create');
+        await expectListScreen(page, 'My Lists','My lists after create');
         await listRow.click();
         await expect(page.getByRole('list', { name: 'List actions' }).getByRole('button', { name: /^Edit(?! look)\b/ })).toBeVisible();
         await expectListScreen(page, 'Address list', 'List detail');
@@ -334,7 +334,7 @@ for (const viewport of VIEWPORTS) {
         await expectListScreen(page, 'Transfer list', 'Transfer list');
         await page.getByLabel('New owner', { exact: true }).fill(TRANSFER_DESTINATION);
         await page.getByLabel('Memo', { exact: true }).fill('transfer-review');
-        await page.getByLabel('Type TRANSFER to confirm', { exact: true }).fill('TRANSFER');
+        // No typed TRANSFER word on this form any more (ListCreateForm, 2026-11-16).
         await scrollScreenToEnd(page);
         await page.getByRole('form', { name: 'Transfer list' })
             .getByRole('button', { name: 'Transfer List', exact: true }).click();

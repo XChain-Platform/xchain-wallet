@@ -136,6 +136,7 @@ import {
     waitForValidAction,
     openFromAddress,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Native coin, to pay miner fees for the mint and the send. */
@@ -238,7 +239,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
             await pickAssetByChainAndTick(page, TICK, REGTEST_CHAIN_ID, TICK);
             await expect(await openFromAddress(page.getByRole('main')))
                 .toHaveValue(own);
-            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await fieldByLabel(page, 'To').fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
 
@@ -495,7 +496,7 @@ test.describe(`Pending transaction lifecycle on ${REGTEST_CHAIN_LABEL} regtest`,
         await test.step(`send ${SEND_AMOUNT} ${TICK} with the chain held still`, async () => {
             await gotoSection(page, 'Send');
             await pickAssetByChainAndTick(page, TICK, REGTEST_CHAIN_ID, TICK);
-            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await fieldByLabel(page, 'To').fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
             await expectConfirmModal(page, 'this action', 30_000);

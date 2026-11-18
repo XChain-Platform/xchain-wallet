@@ -70,7 +70,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm as approveWhenReady,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel, searchTokenPicker } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -98,11 +100,9 @@ async function explorerJson(path) {
  */
 async function approveConfirm(page, what = 'this action') {
     const modal = await expectConfirmModal(page, what, 90_000);
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve, 'Approve never became enabled on the confirm screen').toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveWhenReady(page);
     return modal;
 }
 
@@ -120,7 +120,7 @@ async function readDoneTxid(page, timeoutMs = 180_000) {
 async function openManageToken(page, tick) {
     await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
-    const search = main.getByLabel('Search your tokens by ticker or description');
+    const search = fieldByLabel(main, 'Search your tokens by ticker or description');
     await expect(search, 'My Tokens never rendered its search field').toBeVisible({ timeout: 30_000 });
     await search.fill(tick);
     const row = main.getByRole('button', { name: `Open ${tick} token details`, exact: true });
@@ -194,7 +194,7 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             let main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             owner = await readIssueSource(main);
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`).toMatch(REGTEST_ADDRESS_RE);
 
@@ -213,7 +213,7 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             expect(await readIssueSource(main), 'still signing with the funded address').toBe(owner);
             await issuePlainToken(main, { ticker: TICK, supply: SUPPLY });
 
@@ -229,15 +229,24 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
             await clickManageTokenAction(main, 'Callback settings');
 
             main = page.getByRole('main');
-            await expect(main.getByLabel('Callback token'), 'Callback settings never rendered its fields')
+            // Callback token is a token field: a button that opens the token
+            // picker, never a typed box.
+            const callbackToken = main.getByRole('button', { name: /^Callback token:/ });
+            await expect(callbackToken, 'Callback settings never rendered its fields')
                 .toBeVisible({ timeout: 30_000 });
 
             const currentHeight = await readCurrentHeightFromForm(main);
             cbBlock = await callbackBlockAhead(currentHeight);
 
-            await main.getByLabel('Callback token').fill(PAYOUT_TICK);
-            await main.getByLabel('Payout per unit').fill(PAYOUT_AMOUNT);
-            await main.getByLabel('Callback allowed from block').fill(String(cbBlock));
+            await callbackToken.click();
+            await searchTokenPicker(page, PAYOUT_TICK);
+            await page.getByRole('button', { name: new RegExp(`^Select ${PAYOUT_TICK} on `) }).first()
+                .click({ timeout: 30_000 });
+            main = page.getByRole('main');
+            await expect(main.getByRole('button', { name: new RegExp(`^Callback token: ${PAYOUT_TICK} on `) }))
+                .toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'Payout per unit').fill(PAYOUT_AMOUNT);
+            await fieldByLabel(main, 'Callback allowed from block').fill(String(cbBlock));
             await main.getByRole('button', { name: 'Update callback settings', exact: true }).click();
 
             await approveConfirm(page, 'the callback settings update');
@@ -298,15 +307,12 @@ test.describe(`Callback config and execute on ${REGTEST_CHAIN_LABEL}`, () => {
  */
 async function approveConfirmWithTypedCallback(page) {
     const modal = await expectConfirmModal(page, 'the callback recall', 90_000);
-    const typed = page.getByLabel('Type "RECALL" to confirm');
+    const typed = fieldByLabel(page, 'Type "RECALL" to confirm');
     await expect(typed, 'the confirm screen carries no typed-confirmation field for RECALL')
         .toBeVisible({ timeout: 30_000 });
     await typed.fill('RECALL');
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve, 'Approve never became enabled for the typed RECALL confirmation')
-        .toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveWhenReady(page);
     return modal;
 }

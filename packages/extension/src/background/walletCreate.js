@@ -664,7 +664,9 @@ export async function readHardwareWalletBalances({ items, chainRegistry, sdkRegi
                 ? resp[address]
                 : null;
             try {
-                const shape = shapeFromReads({ ...readsFromBatchEntry(slot, address), nativeTicker, address });
+                const shape = shapeFromReads({
+                    ...readsFromBatchEntry(slot, address), nativeTicker, descriptor, address,
+                });
                 reads.set(key(chainId, address), shape.native
                     ? { quantity: String(shape.native.quantity), error: null }
                     : { quantity: null, error: String(shape.unavailableReason || 'balance unavailable') });

@@ -150,10 +150,11 @@ describe('ListRenameForm: every stage renders inside FormPage', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: 'Publish Edit' }));
 
-        const notice = await screen.findByText('List rename submitted.');
+        const notice = await screen.findByText('List rename submitted');
         expect(laneRun).toHaveBeenCalledTimes(1);
         const page = renamePage(notice, container);
-        expect(notice.closest('[data-form-status]'), 'success notice in the status region').not.toBeNull();
+        // Issue 114: the success notice is the page title, never a status notice.
+        expect(notice.closest('[data-form-status]'), 'success title outside the status region').toBeNull();
 
         const txid = within(page).getByText(TXID);
         expect(txid.closest('dl'), 'transaction id in the details list').not.toBeNull();

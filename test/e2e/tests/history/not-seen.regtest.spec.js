@@ -86,6 +86,7 @@ import {
     waitForValidAction,
     openFromAddress,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Native coin, to pay miner fees for the mint and the send. */
@@ -170,7 +171,7 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
             await gotoSection(page, 'Send');
             await pickAssetByChainAndTick(page, TICK, REGTEST_CHAIN_ID, TICK);
             await expect(await openFromAddress(page.getByRole('main'))).toHaveValue(own);
-            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await fieldByLabel(page, 'To').fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
             await expectConfirmModal(page, 'this action', 30_000);
@@ -258,7 +259,7 @@ test.describe(`A send the network never reports, on ${REGTEST_CHAIN_LABEL} regte
             // Details repeats no status timeline (operator ruling 2026-11-13):
             // the bar is the one reader of the state on this page.
             await page.getByRole('tab', { name: 'Details' }).click();
-            await expect(page.getByLabel('Transaction status', { exact: true }),
+            await expect(fieldByLabel(page, 'Transaction status'),
                 'Details still draws a second status timeline')
                 .toHaveCount(0);
             await page.getByRole('button', { name: 'Back to history' }).click();

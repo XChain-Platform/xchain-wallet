@@ -30,8 +30,10 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
 import { formatBytes } from '../../../../packages/core/src/shared/utils/formatBytes.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 // Well over the legacy 8,192-byte compiled ceiling of a plain data carrier.
@@ -72,14 +74,14 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
             // The form offers the envelope ceiling on this chain and says why.
             await expect(main).toContainText('compact Taproot encoding', { timeout: 30_000 });
 
-            await main.getByLabel('File to publish').setInputFiles({
+            await fieldByLabel(main, 'File to publish').setInputFiles({
                 name: FILE_NAME,
                 mimeType: 'application/octet-stream',
                 buffer: randomBytes(FILE_BYTES),
             });
             await expect(main).toContainText(`Size${formatBytes(FILE_BYTES)}`);
-            await main.getByLabel('Title', { exact: true }).fill(TITLE);
-            await main.getByLabel('Memo', { exact: true }).fill(MEMO);
+            await fieldByLabel(main, 'Title').fill(TITLE);
+            await fieldByLabel(main, 'Memo').fill(MEMO);
             await main.getByRole('button', { name: 'Publish File', exact: true }).click();
         });
 
@@ -91,7 +93,7 @@ test.describe(`Publish file over 8 KB on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(modal.getByTestId('confirm-envelope-reveal')).toContainText(/Reveal transaction: .*fee [\d.]+ BTC/);
             await expect(modal.getByTestId('confirm-fee-network')).toContainText(/BTC/);
             await expect(modal.getByText('Network fee, both transactions', { exact: true })).toBeVisible();
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
 
             await expect(main.getByRole('heading', { name: 'File published' }),
                 'Approve did not end on the published screen')

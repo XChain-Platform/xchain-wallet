@@ -75,6 +75,7 @@
 
 import { createWallet, expect, openSettings, test } from '../../fixtures/wallet.js';
 import { unlockAfterReload } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Same length and shape as the real one, and emphatically not it. */
@@ -113,7 +114,7 @@ async function openBackup(page) {
 /** Opens the Recovery phrase page, which rests on its password step. */
 async function openPhrasePage(page) {
     await backupRow(page, 'Recovery phrase').click();
-    await expect(page.getByLabel('Wallet password'),
+    await expect(fieldByLabel(page, 'Wallet password'),
         'asking to see the seed phrase raised no password prompt at all')
         .toBeVisible({ timeout: 30_000 });
 }
@@ -183,7 +184,7 @@ test.describe('Settings: backup sub-page', () => {
             });
 
             await test.step('CLAIM 2: a wrong password reveals nothing', async () => {
-                await page.getByLabel('Wallet password').fill(WRONG_PASSWORD);
+                await fieldByLabel(page, 'Wallet password').fill(WRONG_PASSWORD);
                 await page.getByRole('main').getByRole('button', { name: 'Reveal Phrase', exact: true }).click();
 
                 // Wait for the attempt to SETTLE rather than racing it. Both
@@ -209,13 +210,13 @@ test.describe('Settings: backup sub-page', () => {
                     'a WRONG wallet password put the seed phrase into the page. The password prompt on '
                     + 'this row is the only thing standing between a borrowed laptop and the wallet')
                     .toBe(false);
-                await expect(page.getByLabel('Wallet password'),
+                await expect(fieldByLabel(page, 'Wallet password'),
                     'the password prompt did not survive a failed attempt, so the user cannot retry')
                     .toBeVisible({ timeout: 30_000 });
             });
 
             await test.step('CLAIM 3: the right password reveals THIS wallet\'s phrase, blurred', async () => {
-                await page.getByLabel('Wallet password').fill(PASSWORD);
+                await fieldByLabel(page, 'Wallet password').fill(PASSWORD);
                 await page.getByRole('main').getByRole('button', { name: 'Reveal Phrase', exact: true }).click();
 
                 await expect(page.getByText('Your recovery phrase', { exact: true }),
@@ -277,7 +278,7 @@ test.describe('Settings: backup sub-page', () => {
                 await page.getByRole('main').getByRole('button', { name: 'Done', exact: true }).click();
 
                 // Done returns the direct page to its password step.
-                await expect(page.getByLabel('Wallet password'),
+                await expect(fieldByLabel(page, 'Wallet password'),
                     'the page did not return to its password step after Done')
                     .toBeVisible({ timeout: 30_000 });
                 expect(await phraseInPage(page, phrase),
@@ -298,7 +299,7 @@ test.describe('Settings: backup sub-page', () => {
                     .toBe(false);
 
                 await backupRow(page, 'Recovery phrase').click();
-                await expect(page.getByLabel('Wallet password'),
+                await expect(fieldByLabel(page, 'Wallet password'),
                     'the seed-phrase row stopped asking for the password after it had been given once, '
                     + 'so the "requires the wallet password every time" promise on this row is false')
                     .toBeVisible({ timeout: 30_000 });

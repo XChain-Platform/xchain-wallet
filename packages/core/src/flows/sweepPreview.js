@@ -177,7 +177,7 @@ export async function sweepPreview({ sdkRegistry, chainId, address }) {
     const trimmed = address.trim();
 
     const [balances, ownerships, offers] = await Promise.all([
-        leg(async () => tokensFromBalances(await sdk.getBalances(trimmed))
+        leg(async () => tokensFromBalances(await sdk.getBalances(trimmed), { address: trimmed })
             .filter((t) => t.quantity != null && String(t.quantity) !== '0' && Number(t.quantity) > 0)
             .map((t) => ({ tick: t.tick, quantity: t.quantity, divisibility: t.divisibility }))),
         leg(async () => rowsOf(await sdk.getTokens(trimmed, 'address'))

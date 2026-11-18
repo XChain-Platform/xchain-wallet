@@ -291,6 +291,7 @@ function AppInner() {
     // Keyboard-binding overrides for the palette + shortcuts live in
     // settings; null-safe reads below tolerate the pre-load window.
     const { settings } = useSettings();
+    const activeNetwork = settings ? (settings.activeNetwork || 'mainnet') : undefined;
     // A demo graduation wipes the vault and reloads, so the lane
     // the user picked (create / import / FreeWallet) is handed across the
     // reload here. One-shot read: it never survives to hijack a later visit.
@@ -307,6 +308,7 @@ function AppInner() {
         capture: () => navContext.current.capture(),
         restore: (ctx) => navContext.current.restore(ctx),
         itemKey: navItemKey,
+        network: activeNetwork,
     });
     const unlockedView = nav.view;
     const setUnlockedView = nav.navigate;

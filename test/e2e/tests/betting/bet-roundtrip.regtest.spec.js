@@ -54,7 +54,9 @@ import {
     switchToRegtest,
     unlockAfterReload,
     betDetailRefusal,
+    approveConfirm as approveWhenReady,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -132,13 +134,12 @@ function toLocalDateTimeInput(unixSec) {
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
 /** Fills a password field only when the form is asking for one. */
 async function fillPasswordIfPresent(scope) {
-    const field = scope.getByLabel('Password', { exact: true });
+    const field = fieldByLabel(scope, 'Password');
     if (await field.count() > 0 && await field.isVisible()) await field.fill(PASSWORD);
 }
 
@@ -319,7 +320,7 @@ test.describe('BET round trip on regtest', () => {
             // a previous run had left coins on it, and would fail on a clean chain.
             // Fund the address the form will actually sign with.
             await openCreateMarket(page);
-            oracle = await page.getByRole('main').getByLabel('Your oracle address', { exact: true }).inputValue();
+            oracle = await fieldByLabel(page.getByRole('main'), 'Your oracle address').inputValue();
             // The VENUE's address shape, not Bitcoin's: a hardcoded `bcrt1`
             // alternative passes on Litecoin only because `[mn2]` also matches
             // there, and fails outright on a chain whose bech32 HRP differs.
@@ -354,7 +355,7 @@ test.describe('BET round trip on regtest', () => {
             const main = page.getByRole('main');
             // The address that will sign must still be the one that was funded: the
             // default is derived from wallet state, so assert it rather than trust it.
-            expect(await main.getByLabel('Your oracle address', { exact: true }).inputValue(),
+            expect(await fieldByLabel(main, 'Your oracle address').inputValue(),
                 'the form still signs with the funded address').toBe(oracle);
 
             // The token field is a chip rather than an input, and its accessible
@@ -369,18 +370,18 @@ test.describe('BET round trip on regtest', () => {
             // by their stable data key rather than by role.
             await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
-            await main.getByLabel('Question', { exact: true }).fill(`Round trip ${RUN_TAG}`);
-            await main.getByLabel('Outcome 0', { exact: true }).fill('Yes');
-            await main.getByLabel('Outcome 1', { exact: true }).fill('No');
+            await fieldByLabel(main, 'Question').fill(`Round trip ${RUN_TAG}`);
+            await fieldByLabel(main, 'Outcome 0').fill('Yes');
+            await fieldByLabel(main, 'Outcome 1').fill('No');
 
             // Venue fact 1: from the CHAIN's clock. Far enough out that the bet
             // below lands while the market is still open, short enough that the
             // close step's wall-clock wait stays small (see DEADLINE_LEAD_SEC).
             const now = await chainTime();
             deadlineSec = now + DEADLINE_LEAD_SEC;
-            await main.getByLabel('Purchases Close', { exact: true }).fill(toLocalDateTimeInput(deadlineSec));
+            await fieldByLabel(main, 'Purchases Close').fill(toLocalDateTimeInput(deadlineSec));
 
-            await main.getByLabel('Your fee', { exact: true }).fill(FEE_PCT);
+            await fieldByLabel(main, 'Your fee').fill(FEE_PCT);
             await fillPasswordIfPresent(main);
             await main.getByRole('button', { name: 'Open market', exact: true }).click();
             await approveConfirm(page);
@@ -489,7 +490,7 @@ test.describe('BET round trip on regtest', () => {
                 .filter((a) => a && a !== oracle);
             expect(onThisChain.length, 'a second address ON THIS CHAIN exists to bet from').toBeGreaterThan(0);
             await page.getByRole('button', { name: `View address ${onThisChain[0]}` }).click();
-            const willSignAs = await page.getByRole('main').getByLabel('Your oracle address', { exact: true }).inputValue();
+            const willSignAs = await fieldByLabel(page.getByRole('main'), 'Your oracle address').inputValue();
             expect(willSignAs, 'the form did not take the oracle address just chosen').toBe(onThisChain[0]);
             expect(willSignAs, 'the wallet now signs as some other address').not.toBe(oracle);
             punter = willSignAs;

@@ -72,6 +72,7 @@ import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import {
     encodeXcwChunks, createXcwCollector, addChunkToCollector,
 } from '../../../../packages/core/src/uri/psbtQr.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -176,7 +177,7 @@ async function submitPartnerCode(page, { partnerCode, cta }) {
     // consecutive messages are equal.)
     const previous = (await failed.count()) > 0 ? (await failed.first().innerText()).trim() : null;
 
-    await page.getByLabel('Paste the other wallet\'s code').fill(partnerCode);
+    await fieldByLabel(page, 'Paste the other wallet\'s code').fill(partnerCode);
     await page.getByRole('button', { name: cta, exact: true }).click();
 
     let result = null;
@@ -545,7 +546,7 @@ test.describe('watcher/signer pairing lane (§20.5, )', () => {
                 + 'the collector was bypassed')
                 .toBeVisible({ timeout: 60_000 });
 
-            const box = page.getByLabel('Paste the other wallet\'s code');
+            const box = fieldByLabel(page, 'Paste the other wallet\'s code');
             await expect.poll(async () => (await box.inputValue()).length, {
                 timeout: 180_000,
                 message: 'the capture never completed: the partner-code box stayed empty while the '

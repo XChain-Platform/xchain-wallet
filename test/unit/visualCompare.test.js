@@ -19,6 +19,7 @@ import {
     SCREENS,
     screenSelected,
     SIZES,
+    viteServerEnvironment,
 } from '../../tools/visual-compare.mjs';
 import { VISUAL_REPORT_GENERATOR } from '../../tools/visual-report-files.mjs';
 
@@ -53,6 +54,19 @@ describe('visual compare argument and target selection', () => {
         expect(screenSelected('settings', 'home, set')).toBe(true);
         expect(screenSelected('history', 'home, set')).toBe(false);
         expect(screenSelected('history', true)).toBe(true);
+    });
+
+    it('assigns each server its own cache outside shared node_modules', () => {
+        const outDir = join('/tmp', 'visual-report-fixture');
+        const inherited = { SENTINEL: 'kept' };
+
+        const baseline = viteServerEnvironment(outDir, 'baseline', inherited);
+        const candidate = viteServerEnvironment(outDir, 'candidate', inherited);
+
+        expect(baseline.SENTINEL).toBe('kept');
+        expect(baseline.XCHAIN_VITE_CACHE_DIR).toBe(join(outDir, 'vite-cache', 'baseline'));
+        expect(candidate.XCHAIN_VITE_CACHE_DIR).toBe(join(outDir, 'vite-cache', 'candidate'));
+        expect(candidate.XCHAIN_VITE_CACHE_DIR).not.toBe(baseline.XCHAIN_VITE_CACHE_DIR);
     });
 });
 

@@ -104,7 +104,7 @@ const SLOTS = [
     {
         name: 'Network field caret',
         file: 'ui/ChainPicker.module.css',
-        selector: '.wrap .trigger',
+        selector: '.trigger',
         property: 'padding-inline',
         value: 'var(--chain-picker-padding-x) calc(var(--chain-picker-glyph-inset) - var(--xc-field-border))',
         local: { name: '--chain-picker-glyph-inset', token: 'glyph' },
@@ -120,7 +120,7 @@ const SLOTS = [
     {
         name: 'IconSelect chevron',
         file: 'ui/IconSelect.module.css',
-        selector: '.wrap .trigger',
+        selector: '.trigger',
         property: 'padding-inline',
         value: 'var(--xc-control-padding-x) calc(var(--icon-select-glyph-inset) - var(--xc-field-border))',
         local: { name: '--icon-select-glyph-inset', token: 'glyph' },

@@ -31,13 +31,18 @@ export const NAV_HOME = 'home';
 /** Most entries kept; the oldest above Home drop first. */
 export const NAV_HISTORY_LIMIT = 64;
 
-/** @typedef {{ view: string, ctx: object | null, root?: true }} NavEntry */
+/** @typedef {{ view: string, ctx: object | null, root?: true, network?: string }} NavEntry */
 
 /**
- * @param {string} view @param {object | null} [ctx] @param {boolean} [root]
+ * @param {string} view @param {object | null} [ctx] @param {boolean} [root] @param {string} [network]
  * @returns {NavEntry}
  */
-const entry = (view, ctx = null, root = false) => (root ? { view, ctx, root: true } : { view, ctx });
+const entry = (view, ctx = null, root = false, network) => ({
+    view,
+    ctx,
+    ...(root ? { root: true } : {}),
+    ...(typeof network === 'string' && network ? { network } : {}),
+});
 
 const top = (stack) => stack[stack.length - 1];
 
@@ -46,10 +51,13 @@ const top = (stack) => stack[stack.length - 1];
  * entry, so the system Back from any root page lands on Home.
  *
  * @param {string} [view]
+ * @param {string} [network]
  * @returns {NavEntry[]}
  */
-export function createNavStack(view = NAV_HOME) {
-    return view === NAV_HOME ? [entry(NAV_HOME, null, true)] : [entry(NAV_HOME, null, true), entry(view, null, true)];
+export function createNavStack(view = NAV_HOME, network) {
+    return view === NAV_HOME
+        ? [entry(NAV_HOME, null, true)]
+        : [entry(NAV_HOME, null, true), entry(view, null, true, network)];
 }
 
 /**
@@ -93,17 +101,21 @@ export function InPageScreen({ children }) {
  * @param {NavEntry[]} stack
  * @param {string} view
  * @param {object | null} [leavingCtx]
+ * @param {string} [network]
  * @returns {NavEntry[]}
  */
-export function pushView(stack, view, leavingCtx = null) {
+export function pushView(stack, view, leavingCtx = null, network) {
     // Opening the page already on screen adds nothing to go back through.
     if (top(stack).view === view) return stack;
     if (view === NAV_HOME) return createNavStack(NAV_HOME);
-    const { view: leaving, root } = top(stack);
+    const { view: leaving, root, network: leavingNetwork } = top(stack);
     const next = stack.slice(0, -1);
     // Home shows no single item, so it keeps no context to restore. The page
     // left stays a root, so Back to it shows no chevron of its own.
-    next.push(entry(leaving, leaving === NAV_HOME ? null : leavingCtx, root), entry(view));
+    next.push(
+        entry(leaving, leaving === NAV_HOME ? null : leavingCtx, root, leavingNetwork),
+        entry(view, null, false, network),
+    );
     return withinLimit(next);
 }
 
@@ -119,22 +131,44 @@ function withinLimit(next) {
  *
  * @param {NavEntry[]} stack
  * @param {object | null} leavingCtx
+ * @param {string} [network]
  * @returns {NavEntry[]}
  */
-export function pushItem(stack, leavingCtx) {
-    const { view, root } = top(stack);
+export function pushItem(stack, leavingCtx, network) {
+    const { view, root, network: leavingNetwork } = top(stack);
     if (view === NAV_HOME) return stack;
-    return withinLimit([...stack.slice(0, -1), entry(view, leavingCtx, root), entry(view)]);
+    return withinLimit([
+        ...stack.slice(0, -1),
+        entry(view, leavingCtx, root, leavingNetwork),
+        entry(view, null, false, network),
+    ]);
 }
+
+const fitsNetwork = (item, network) => (
+    // An entry made before settings loaded carries no stamp; it is not known
+    // to belong to another network, so it stays reachable.
+    item.view === NAV_HOME || network == null || item.network == null || item.network === network
+);
+
+const previousIndex = (stack, network) => {
+    for (let index = stack.length - 2; index >= 0; index -= 1) {
+        if (fitsNetwork(stack[index], network)) return index;
+    }
+    return -1;
+};
 
 /**
  * Go back one page. With nothing left to pop the user lands on Home.
  *
  * @param {NavEntry[]} stack
+ * @param {string} [network]
  * @returns {NavEntry[]}
  */
-export function popView(stack) {
-    if (stack.length > 1) return stack.slice(0, -1);
+export function popView(stack, network) {
+    if (stack.length > 1) {
+        const index = previousIndex(stack, network);
+        return index >= 0 ? stack.slice(0, index + 1) : createNavStack(NAV_HOME);
+    }
     return top(stack).view === NAV_HOME ? stack : createNavStack(NAV_HOME);
 }
 
@@ -146,13 +180,16 @@ export function popView(stack) {
  *
  * @param {NavEntry[]} stack
  * @param {string} view
+ * @param {string} [network]
  * @returns {NavEntry[]}
  */
-export function replaceView(stack, view) {
+export function replaceView(stack, view, network) {
     if (top(stack).view === view) return stack;
     if (view === NAV_HOME) return createNavStack(NAV_HOME);
-    if (stack.length > 1 && stack[stack.length - 2].view === view) return stack.slice(0, -1);
-    return [...stack.slice(0, -1), entry(view, null, top(stack).root)];
+    if (stack.length > 1 && stack[stack.length - 2].view === view && fitsNetwork(stack[stack.length - 2], network)) {
+        return stack.slice(0, -1);
+    }
+    return [...stack.slice(0, -1), entry(view, null, top(stack).root, network)];
 }
 
 /**
@@ -162,15 +199,16 @@ export function replaceView(stack, view) {
  *
  * @param {NavEntry[]} stack
  * @param {string} view
+ * @param {string} [network]
  * @returns {NavEntry[]}
  */
-export function landView(stack, view) {
+export function landView(stack, view, network) {
     // Already there: an earlier item of the same page below is not a landing.
     if (top(stack).view === view) return stack;
     for (let i = stack.length - 2; i >= 0; i -= 1) {
-        if (stack[i].view === view) return stack.slice(0, i + 1);
+        if (stack[i].view === view && fitsNetwork(stack[i], network)) return stack.slice(0, i + 1);
     }
-    return replaceView(stack, view);
+    return replaceView(stack, view, network);
 }
 
 /**
@@ -180,12 +218,14 @@ export function landView(stack, view) {
  * @param {NavEntry[]} stack
  * @param {string} view
  * @param {object | null} [leavingCtx]
+ * @param {string} [network]
  * @returns {NavEntry[]}
  */
-export function syncView(stack, view, leavingCtx = null) {
+export function syncView(stack, view, leavingCtx = null, network) {
     if (top(stack).view === view) return stack;
-    if (stack.length > 1 && stack[stack.length - 2].view === view) return popView(stack);
-    return pushView(stack, view, leavingCtx);
+    const index = previousIndex(stack, network);
+    if (index >= 0 && stack[index].view === view) return stack.slice(0, index + 1);
+    return pushView(stack, view, leavingCtx, network);
 }
 
 /**
@@ -288,17 +328,20 @@ export function navItemKey(view, ctx) {
  * @param {() => object | null} [opts.capture]
  * @param {(ctx: object) => void} [opts.restore]
  * @param {(view: string, ctx: object | null) => string | null} [opts.itemKey]
+ * @param {string} [opts.network]
  */
-export function useNavHistory({ initialView = NAV_HOME, capture, restore, itemKey } = {}) {
+export function useNavHistory({ initialView = NAV_HOME, capture, restore, itemKey, network } = {}) {
     const stackRef = useRef(/** @type {NavEntry[] | null} */ (null));
-    if (stackRef.current === null) stackRef.current = createNavStack(initialView);
+    if (stackRef.current === null) stackRef.current = createNavStack(initialView, network);
     const [stack, setStack] = useState(stackRef.current);
     const captureRef = useRef(capture);
     const restoreRef = useRef(restore);
     const itemKeyRef = useRef(itemKey);
+    const networkRef = useRef(network);
     captureRef.current = capture;
     restoreRef.current = restore;
     itemKeyRef.current = itemKey;
+    networkRef.current = network;
     // Back steps taken (a Back, a landing that unwound), so the browser
     // history can follow them backwards; opening Home or a tab root is not one.
     const [backs, setBacks] = useState(0);
@@ -329,7 +372,7 @@ export function useNavHistory({ initialView = NAV_HOME, capture, restore, itemKe
         const below = current.length > 1 ? current[current.length - 2] : null;
         const next = below && below.view === view && keyOf(view, below.ctx) === key
             ? current.slice(0, -1)
-            : pushItem(current, shown.ctx);
+            : pushItem(current, shown.ctx, networkRef.current);
         commit(next);
         shownRef.current = { stack: stackRef.current, key, ctx };
     });
@@ -348,13 +391,13 @@ export function useNavHistory({ initialView = NAV_HOME, capture, restore, itemKe
         const view = resolve(viewOrUpdate);
         if (!valid(view)) return;
         if (top(stackRef.current).view === view) return;
-        commit(pushView(stackRef.current, view, captureRef.current?.() ?? null));
+        commit(pushView(stackRef.current, view, captureRef.current?.() ?? null, networkRef.current));
     }, [commit]);
 
     /** Back: return to the page the user came from, or Home when there is none. */
     const back = useCallback(() => {
         const current = stackRef.current;
-        const next = popView(current);
+        const next = popView(current, networkRef.current);
         commit(next, { restoreTop: true });
         if (next !== current) setBacks((count) => count + 1);
     }, [commit]);
@@ -363,14 +406,14 @@ export function useNavHistory({ initialView = NAV_HOME, capture, restore, itemKe
     const replace = useCallback((viewOrUpdate) => {
         const view = resolve(viewOrUpdate);
         if (!valid(view)) return;
-        commit(replaceView(stackRef.current, view));
+        commit(replaceView(stackRef.current, view, networkRef.current));
     }, [commit]);
 
     /** Finish a form on `view`, unwinding to it when the user came through it. */
     const land = useCallback((view) => {
         if (!valid(view)) return;
         const current = stackRef.current;
-        const next = landView(current, view);
+        const next = landView(current, view, networkRef.current);
         commit(next, { restoreTop: true });
         // Unwinding keeps the entry landed on, so it is a Back step.
         if (next.length < current.length && top(next) === current[next.length - 1]) setBacks((count) => count + 1);
@@ -379,7 +422,7 @@ export function useNavHistory({ initialView = NAV_HOME, capture, restore, itemKe
     /** Start over on `view` as a root page: lock, unlock, a resume. */
     const reset = useCallback((view = NAV_HOME) => {
         if (!valid(view)) return;
-        commit(createNavStack(view));
+        commit(createNavStack(view, networkRef.current));
     }, [commit]);
 
     /**
@@ -391,7 +434,7 @@ export function useNavHistory({ initialView = NAV_HOME, capture, restore, itemKe
     const navigateRoot = useCallback((viewOrUpdate) => {
         const view = resolve(viewOrUpdate);
         if (!valid(view)) return;
-        commit(createNavStack(view));
+        commit(createNavStack(view, networkRef.current));
     }, [commit]);
 
     /** Follow a browser Back or Forward that arrived at `view`. */
@@ -399,8 +442,9 @@ export function useNavHistory({ initialView = NAV_HOME, capture, restore, itemKe
         if (!valid(view)) return;
         const current = stackRef.current;
         if (top(current).view === view) return;
-        const popping = current.length > 1 && current[current.length - 2].view === view;
-        commit(syncView(current, view, captureRef.current?.() ?? null), { restoreTop: popping });
+        const index = previousIndex(current, networkRef.current);
+        const popping = index >= 0 && current[index].view === view;
+        commit(syncView(current, view, captureRef.current?.() ?? null, networkRef.current), { restoreTop: popping });
     }, [commit]);
 
     /** Drop every page `keep` refuses, keeping Home and the page on screen. */
@@ -411,12 +455,15 @@ export function useNavHistory({ initialView = NAV_HOME, capture, restore, itemKe
     /** True when `view` is the page directly below the current one. */
     const isPrevious = useCallback((view) => {
         const current = stackRef.current;
-        return current.length > 1 && current[current.length - 2].view === view;
+        const index = previousIndex(current, networkRef.current);
+        return index >= 0 && current[index].view === view;
     }, []);
+
+    const previous = previousIndex(stack, network);
 
     return {
         view: top(stack).view,
-        previousView: stack.length > 1 ? stack[stack.length - 2].view : null,
+        previousView: previous >= 0 ? stack[previous].view : null,
         depth: stack.length,
         canGoBack: canGoBackIn(stack),
         backs,

@@ -75,6 +75,7 @@
 
 import { createWallet, expect, openSettings, test } from '../../fixtures/wallet.js';
 import { unlockAfterReload } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -127,7 +128,7 @@ async function blockEntry(page, entry) {
     await expect(plus, 'the Connected Sites header offers no way to block an origin')
         .toBeVisible({ timeout: 30_000 });
     await plus.click();
-    const field = page.getByLabel('Origin or wildcard to block');
+    const field = fieldByLabel(page, 'Origin or wildcard to block');
     await expect(field, 'the plus did not open the Block Site form').toBeVisible({ timeout: 30_000 });
     await field.fill(entry);
     const submit = page.getByRole('main').getByRole('button', { name: 'Block Site', exact: true });
@@ -182,7 +183,7 @@ test.describe('Settings: connected sites', () => {
                     'blocking an origin did not put it on the blocked list')
                     .toBeVisible({ timeout: 30_000 });
                 await page.getByRole('button', { name: 'Block a site', exact: true }).click();
-                await expect(page.getByLabel('Origin or wildcard to block'),
+                await expect(fieldByLabel(page, 'Origin or wildcard to block'),
                     'the manual-block field kept its text after a successful block, so a second '
                     + 'submit would re-block the same origin')
                     .toHaveValue('');

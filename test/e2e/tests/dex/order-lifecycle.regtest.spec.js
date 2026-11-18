@@ -54,7 +54,9 @@ import {
     tokenBalance,
     unlockAfterReload,
     openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -190,7 +192,7 @@ async function waitForBalanceAtLeast(address, tick, min, timeoutMs = 180_000) {
 
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     // No \b anchors: this screen renders the id with no separators around it.
     await expect(main, 'no transaction id ever appeared after Approve')
@@ -244,12 +246,12 @@ async function placeOrder(page) {
     // `exact` matters on both fields: the give side also carries a "Trade
     // ownership of this ticker" checkbox, and the get side an "Amount (LTC)"
     // - a loose label match resolves to two elements.
-    await expect(main.getByLabel('Ticker', { exact: true }),
+    await expect(fieldByLabel(main, 'Ticker'),
         'the give side no longer defaults to a token, so nothing would be escrowed')
         .toBeVisible();
-    await main.getByLabel('Ticker', { exact: true }).fill('XCHAIN');
-    await main.getByLabel('Amount', { exact: true }).fill(String(GIVE));
-    await main.getByLabel(`Amount (${COIN})`).fill(GET);
+    await fieldByLabel(main, 'Ticker').fill('XCHAIN');
+    await fieldByLabel(main, 'Amount').fill(String(GIVE));
+    await fieldByLabel(main, `Amount (${COIN})`).fill(GET);
 
     await main.getByRole('button', { name: /^Place order/ }).click();
 
@@ -284,7 +286,7 @@ async function openOrderAction(page, orderIndex, action) {
     const main = page.getByRole('main');
     // The order number sits in the facts under Details (G102).
     await main.getByRole('tab', { name: 'Details' }).click({ timeout: 30_000 });
-    await expect(main.getByLabel('Order details'), `the detail page for #${orderIndex} never opened`)
+    await expect(fieldByLabel(main, 'Order details'), `the detail page for #${orderIndex} never opened`)
         .toContainText(`#${orderIndex}`, { timeout: 30_000 });
     await main.getByRole('tab', { name: 'Actions' }).click();
     await main.getByRole('button', { name: new RegExp(`^${action} order`) }).click();
@@ -353,8 +355,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByTestId('confirm-action-warnings'),
                 'the review never said what the cancel does')
                 .toContainText(/Cancelling closes the order and returns any escrowed side/);
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             await expect(page.getByText('Cancel broadcast'),
                 'the cancel never reported being broadcast')
                 .toBeVisible({ timeout: 120_000 });
@@ -423,7 +424,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await openOrderAction(page, orderIndex, 'Edit');
 
             const main = page.getByRole('main');
-            const expiration = main.getByLabel('New expiration', { exact: true });
+            const expiration = fieldByLabel(main, 'New expiration');
             await expect(expiration, 'the edit panel never opened for this order')
                 .toBeVisible({ timeout: 30_000 });
             await expect(main, 'the edit panel is pointed at a different order')
@@ -442,8 +443,7 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             await expiration.fill(localInput);
             await main.getByRole('button', { name: 'Update Order' }).click();
             await expectConfirmModal(page, 'this action', 60_000);
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             await expect(page.getByText('Edit broadcast'),
                 'the edit never reported being broadcast')
                 .toBeVisible({ timeout: 120_000 });

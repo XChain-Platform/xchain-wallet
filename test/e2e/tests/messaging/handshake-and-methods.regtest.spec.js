@@ -112,6 +112,7 @@ import {
     waitForValidAction,
     openFromAddress,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 4;
@@ -163,7 +164,7 @@ async function onboardFundedWallet(page, walletName) {
 
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
 
     const address = await (await openFromAddress(main)).inputValue();
@@ -224,7 +225,7 @@ async function gotoNewConversation(page) {
     await compose.click();
 
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Address', { exact: true }),
+    await expect(fieldByLabel(main, 'Address'),
         'the compose screen never rendered its Address field').toBeVisible({ timeout: 30_000 });
     await pickDeliveryNetwork(main);
     return main;
@@ -347,9 +348,9 @@ async function waitForIndexedPubkey(address, timeoutMs = 300_000) {
 
 /** Fills the recipient, and the body when one is given. */
 async function fillRecipient(scope, address, message) {
-    await scope.getByLabel('Address', { exact: true }).fill(address);
+    await fieldByLabel(scope, 'Address').fill(address);
     if (message !== undefined) {
-        await scope.getByLabel('Message', { exact: true }).fill(message);
+        await fieldByLabel(scope, 'Message').fill(message);
     }
 }
 
@@ -438,12 +439,9 @@ async function approveAndCaptureTxid(page, txids) {
     await expect(confirm, 'the compose form never reached a confirm screen')
         .toBeVisible({ timeout: 90_000 });
     const before = txids.length;
-    const approve = page.getByTestId('confirm-approve');
-    // Approve stays disabled while pre-flight is in flight; waiting on the
-    // button rather than on a sleep is what keeps this off the venue's clock.
-    await expect(approve, 'Approve never became clickable on the confirm screen')
-        .toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    // A tap while pre-flight is in flight is dropped (G130), so the fixture
+    // taps until the confirm screen takes it.
+    await approveConfirm(page);
 
     const notice = page.getByRole('dialog', { name: 'Message sent', exact: true });
     await expect(notice, 'the wallet never reported the message as sent')
@@ -767,7 +765,7 @@ test.describe(`Messaging: first contact on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await gotoSection(page, 'Send');
             await selectVenueSendAsset(page, 'XCHAIN');
-            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await fieldByLabel(page, 'To').fill(REGTEST_DESTINATION);
             await page.getByRole('main').getByRole('textbox', { name: /^Amount/ }).fill(KEY_SEND);
             const before = txids.length;
             await mainButton(page, 'Send').click();

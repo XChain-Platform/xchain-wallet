@@ -126,3 +126,50 @@ export function measureButtonEdges() {
     }
     return out;
 }
+
+/**
+ * Runs inside any wallet shell and records button geometry without canvas or
+ * hit testing. Layout sweeps use this smaller record so browser mobile,
+ * extension and Electron runs all report the buttons they actually rendered.
+ * `kind` separates full-surface navigation, row, slider, help and card targets
+ * from ordinary actions while keeping their native button semantics visible.
+ */
+export function measureButtonSizes() {
+    const classes = (el) => [...el.classList];
+    const hasModuleClass = (el, local) => classes(el).some((name) => (
+        name === local || new RegExp(`^_?${local}_`).test(name) || name.endsWith(`_${local}`)
+    ));
+    const describedTooltip = (el) => {
+        const ids = (el.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+        return ids.some((id) => document.getElementById(id)?.getAttribute('role') === 'tooltip');
+    };
+    const kindOf = (el) => {
+        if (el.getAttribute('role') === 'tab' || el.hasAttribute('data-bottom-tab')) return 'tab';
+        if (el.closest('[aria-hidden="true"]') && hasModuleClass(el, 'sliderTick')) return 'slider-tick';
+        if (describedTooltip(el)) return 'help';
+        if (el.closest('nav, [role="navigation"]')) return 'navigation';
+        if (hasModuleClass(el, 'row') || hasModuleClass(el, 'interactive') || hasModuleClass(el, 'drillRow')) return 'row';
+        if (classes(el).some((name) => /card/i.test(name))) return 'card';
+        return 'action';
+    };
+    const out = [];
+    for (const el of document.querySelectorAll('button, [role="button"]')) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 2 || rect.height < 2) continue;
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+        const name = (el.getAttribute('aria-label') || el.innerText || el.textContent || el.getAttribute('title') || '')
+            .trim().replace(/\s+/g, ' ').slice(0, 60);
+        out.push({
+            name,
+            tag: el.tagName.toLowerCase(),
+            role: el.getAttribute('role') || '',
+            kind: kindOf(el),
+            shared: hasModuleClass(el, 'btn'),
+            sizes: ['sm', 'md', 'lg'].filter((size) => hasModuleClass(el, size)),
+            width: Math.round(rect.width * 10) / 10,
+            height: Math.round(rect.height * 10) / 10,
+        });
+    }
+    return out;
+}

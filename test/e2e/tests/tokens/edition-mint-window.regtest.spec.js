@@ -72,7 +72,10 @@ import {
     expectConfirmModal as sharedConfirmModal,
     REGTEST_CHAIN_ID,
     openFromAddress,
+    approveConfirm,
+    expectApproveRefused,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** The ISSUE pays a real coin fee; the MINTs pay only miner fees. */
@@ -245,9 +248,7 @@ async function expectConfirmScreen(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // Success screens may draw the id truncated; waitForShownTxid reads the
     // full id from its accessible name, and from the text where it is whole.
     return waitForShownTxid(page.getByRole('main'), {
@@ -302,9 +303,12 @@ async function generateVenueAddress(page) {
 /** Opens the Mint form's token picker and selects `tick`. */
 async function pickToken(page, tick) {
     await page.getByRole('button', { name: /^Token:/ }).click();
-    await expect(page.getByLabel('Search coins or tokens'),
-        'the Select token screen never opened').toBeVisible({ timeout: 30_000 });
-    await page.getByLabel('Search coins or tokens').fill(tick);
+    // The search box sits behind the picker's Filter button.
+    const filter = page.getByRole('button', { name: 'Filter coins and tokens', exact: true });
+    await expect(filter, 'the Select token screen never opened').toBeVisible({ timeout: 30_000 });
+    const search = page.getByLabel('Search coins or tokens', { exact: true });
+    if (!(await search.isVisible().catch(() => false))) await filter.click();
+    await search.fill(tick);
     const row = page.locator(`[data-balance-key="${REGTEST_CHAIN_ID}:${tick}"]`).first();
     await expect(row,
         `the token picker cannot reach ${tick}. It runs the platform-wide discovery for exactly `
@@ -368,14 +372,14 @@ async function onboardAndCreateEdition(page, {
 
     await openPaletteCommand(page, 'Issue token');
     const probe = page.getByRole('main');
-    await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
     // The network and the signer sit in the From section, closed until opened.
     await openIssueSection(probe, 'From');
     await selectVenueChain(probe);
-    await expect.poll(async () => probe.getByLabel('From address').inputValue().catch(() => ''),
+    await expect.poll(async () => fieldByLabel(probe, 'From address').inputValue().catch(() => ''),
         { timeout: 30_000, message: 'the Issue Token form names no signing address' })
         .toMatch(REGTEST_ADDRESS_RE);
-    const source = await probe.getByLabel('From address').inputValue();
+    const source = await fieldByLabel(probe, 'From address').inputValue();
     expect(source, `the wallet has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
 
@@ -401,23 +405,23 @@ async function onboardAndCreateEdition(page, {
     await openIssueSection(main, 'From');
     await selectVenueChain(main);
 
-    await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Ticker', { exact: true }).fill(tick);
-    await main.getByLabel('Max supply', { exact: true }).fill(String(EDITION));
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await fieldByLabel(main, 'Ticker').fill(tick);
+    await fieldByLabel(main, 'Max supply').fill(String(EDITION));
     // The per-transaction and per-address caps and the window blocks sit in
     // the Public minting section.
     await openIssueSection(main, 'Public minting');
-    await main.getByLabel('Max per transaction', { exact: true }).fill(String(PER_TX));
-    await main.getByLabel('Max per address', { exact: true }).fill(String(PER_ADDRESS));
+    await fieldByLabel(main, 'Max per transaction').fill(String(PER_TX));
+    await fieldByLabel(main, 'Max per address').fill(String(PER_ADDRESS));
     if (startBlock !== null) {
-        await main.getByLabel('Start block', { exact: true }).fill(String(startBlock));
+        await fieldByLabel(main, 'Start block').fill(String(startBlock));
     }
     if (stopBlock !== null) {
-        await main.getByLabel('Stop block', { exact: true }).fill(String(stopBlock));
+        await fieldByLabel(main, 'Stop block').fill(String(stopBlock));
     }
     // The artwork URL sits in the Description section.
     await openIssueSection(main, 'Description');
-    await main.getByLabel('Image URL').fill(IMAGE_URL);
+    await fieldByLabel(main, 'Image URL').fill(IMAGE_URL);
     await submitTokenWizard(page);
 
     await expectConfirmScreen(page);
@@ -570,9 +574,10 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
                 await expect(warning,
                     'the wallet did not quote the network\'s verdict for the per-address cap')
                     .toContainText(/would be refused because .*MINT_ADDRESS_MAX/i);
-                await expect(page.getByTestId('confirm-approve'),
-                    'a mint past the address cap can be approved without overriding the refusal')
-                    .toBeDisabled();
+                // Approve keeps its colour (G130): a tap without overriding
+                // the refusal is answered at the top and sends nothing.
+                await expectApproveRefused(page, ['signAnyway', 'fails'],
+                    'a mint past the address cap, with the refusal not overridden');
                 await page.getByTestId('confirm-reject').click();
                 await expect(page.getByTestId('confirm-modal')).toBeHidden({ timeout: 30_000 });
             } else {

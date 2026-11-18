@@ -10,6 +10,7 @@ import {
     openFromSection,
 } from '../../fixtures/wallet.js';
 import { pickOption } from '../../fixtures/pickOption.js';
+import { searchTokenPicker } from '../../fixtures/fields.js';
 import {
     describeOffenders,
     documentOverflow,
@@ -134,7 +135,7 @@ async function fillAirdrop(page) {
     await expect(main.getByRole('form', { name: 'Token airdrop' })).toBeVisible({ timeout: 30_000 });
 
     await main.getByRole('button', { name: /^Token to drop:/ }).click();
-    await page.getByLabel('Search coins or tokens').fill('XCHAINGOV');
+    await searchTokenPicker(page, 'XCHAINGOV');
     // Picker rows are named "Select <token name> on <chain>, <balance>, <value>".
     const token = page.getByRole('button', { name: /^Select XChain Governance on Bitcoin\b/ }).first();
     await expect(token, 'the dev wallet did not expose its XCHAINGOV balance').toBeVisible({ timeout: 30_000 });

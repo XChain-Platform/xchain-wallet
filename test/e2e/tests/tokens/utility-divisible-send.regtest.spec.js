@@ -83,7 +83,10 @@ import {
     waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
     selectVenueSendAsset,
+    approveConfirm,
+    expectApproveRefused,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** The ISSUE pays a real coin fee; the sends are free. */
@@ -207,9 +210,7 @@ async function expectConfirmScreen(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // The Send success screen draws the id truncated; waitForShownTxid reads
     // the full id from its accessible name, and from the text on screens
     // that print it whole.
@@ -256,7 +257,7 @@ async function fillSend(page, amount) {
     // Picking the token is also what retargets the form's chain, which is why
     // no separate network step is needed here (§3.5 bullet 2).
     await selectVenueSendAsset(page, TICK);
-    await page.getByLabel('To', { exact: true }).fill(destination);
+    await fieldByLabel(page, 'To').fill(destination);
     await page.getByRole('textbox', { name: /^Amount/ }).fill(amount);
     await mainButton(page, 'Send').click();
 }
@@ -274,14 +275,14 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
             // The network and the signer sit in the From section, closed until opened.
             await openIssueSection(probe, 'From');
             await selectVenueChain(probe);
-            await expect.poll(async () => probe.getByLabel('From address').inputValue().catch(() => ''),
+            await expect.poll(async () => fieldByLabel(probe, 'From address').inputValue().catch(() => ''),
                 { timeout: 30_000, message: 'the Issue Token form names no signing address' })
                 .toMatch(REGTEST_ADDRESS_RE);
-            owner = await probe.getByLabel('From address').inputValue();
+            owner = await fieldByLabel(probe, 'From address').inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -302,19 +303,19 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
             // The network and the signer sit in the From section, closed until opened.
             await openIssueSection(main, 'From');
             await selectVenueChain(main);
-            await expect.poll(async () => main.getByLabel('From address').inputValue().catch(() => ''),
+            await expect.poll(async () => fieldByLabel(main, 'From address').inputValue().catch(() => ''),
                 { timeout: 30_000, message: 'the Issue Token form names no signing address' })
                 .toMatch(REGTEST_ADDRESS_RE);
 
-            await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Ticker', { exact: true }).fill(TICK);
-            await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'Ticker').fill(TICK);
+            await fieldByLabel(main, 'Max supply').fill(String(SUPPLY));
             // The Utility preset turns Divisible on; checking it here keeps the
             // spec stating the DECIMALS it expects rather than trusting the preset.
             await main.getByRole('switch', { name: /^Divisible/ }).check();
             // The per-transaction cap sits in the Public minting section.
             await openIssueSection(main, 'Public minting');
-            await main.getByLabel('Max per transaction', { exact: true }).fill(String(MAX_MINT));
+            await fieldByLabel(main, 'Max per transaction').fill(String(MAX_MINT));
             await submitTokenWizard(page);
 
             await expectConfirmScreen(page);
@@ -402,7 +403,6 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
             // What is NOT acceptable is a signable transaction, because this
             // action can only ever confirm as `invalid` and burn the miner fee.
             const confirm = page.getByTestId('confirm-modal');
-            const approve = page.getByTestId('confirm-approve');
             const formAlert = page.getByRole('alert');
 
             await confirm.or(formAlert).first()
@@ -411,12 +411,13 @@ test.describe(`utility token divisibility on ${REGTEST_CHAIN_LABEL}`, () => {
             if (await confirm.count() > 0) {
                 // The gate blocks by default (tests/send/preflight-gate), and
                 // is deliberately overridable - so this asserts the DEFAULT,
-                // which is the state a user actually meets.
-                await expect(approve,
-                    'an amount the chain will refuse as AMOUNT (format) reached a signable confirm '
-                    + 'screen: overriding this can only burn the miner fee, since no chain state '
-                    + 'can ever make 9 digits legal on an 8-decimal token')
-                    .toBeDisabled({ timeout: 90_000 });
+                // which is the state a user actually meets. Approve keeps its
+                // colour (G130), so the default is what a tap does: refused,
+                // nothing sent.
+                await expectApproveRefused(page, ['signAnyway', 'fails'],
+                    'an amount the chain will refuse as AMOUNT (format): overriding this can only '
+                    + 'burn the miner fee, since no chain state can ever make 9 digits legal on an '
+                    + '8-decimal token');
             } else {
                 await expect(formAlert.first()).toBeVisible();
             }

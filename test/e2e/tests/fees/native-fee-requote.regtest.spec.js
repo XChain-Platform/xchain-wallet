@@ -55,6 +55,7 @@ import {
 import { freshMempoolSize } from '../../fixtures/venueHealth.js';
 import { feeQuoteAtCoinPriceFactor } from '../../fixtures/feeQuoteAtPrice.js';
 import { EXPLORER_RATE_LIMIT_DEFAULTS } from '../../../../packages/core/src/sdk/explorerRateLimit.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 100;
@@ -169,7 +170,7 @@ test.describe(`§11.5: the protocol fee moving on ${REGTEST_CHAIN_LABEL}`, () =>
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(main);
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
@@ -192,13 +193,13 @@ test.describe(`§11.5: the protocol fee moving on ${REGTEST_CHAIN_LABEL}`, () =>
             // route back to Home - so the form has to be re-opened, not reused.
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await readIssueSource(main);
-            await main.getByLabel('Ticker').fill(TICK);
-            await main.getByLabel('Max supply', { exact: true }).fill(SUPPLY);
+            await fieldByLabel(main, 'Ticker').fill(TICK);
+            await fieldByLabel(main, 'Max supply').fill(SUPPLY);
             await enableNativeFee(main);
 
-            const password = main.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(main, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
 

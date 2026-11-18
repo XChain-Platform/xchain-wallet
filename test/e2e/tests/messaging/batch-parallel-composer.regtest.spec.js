@@ -52,7 +52,9 @@ import {
     unlockAfterReload,
     waitForValidAction,
     openFromAddress,
+    approveConfirm as approveWhenReady,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -83,7 +85,7 @@ async function onboardFundedWallet(page, walletName, { utxos = 1 } = {}) {
 
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
     const address = await (await openFromAddress(main)).inputValue();
     expect(address, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`).toMatch(REGTEST_ADDRESS_RE);
@@ -154,11 +156,9 @@ async function gotoParallelComposer(page) {
 /** Fills the password when the confirm screen asks for one and approves. */
 async function approveConfirm(page, what = 'this action') {
     await expectConfirmModal(page, what, 90_000);
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve, 'Approve never became enabled on the confirm screen').toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveWhenReady(page);
 }
 
 /**
@@ -172,7 +172,7 @@ async function approveConfirm(page, what = 'this action') {
 async function signParallelRow(main) {
     const sign = main.getByRole('button', { name: 'Sign', exact: true });
     await expect(sign, 'the signing stage shows no Sign button').toBeVisible({ timeout: 15_000 });
-    const password = main.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(main, 'Password');
     if (await password.count() > 0 && await password.isVisible() && !(await password.inputValue())) {
         await password.fill(PASSWORD);
     }
@@ -278,7 +278,7 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the batch composer never built a 2-step COMMAND host-side')
                 .toBeVisible({ timeout: 60_000 });
 
-            const password = main.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(main, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
 
             await main.getByRole('button', { name: 'Sign Batch', exact: true }).click();
@@ -331,7 +331,7 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = await gotoParallelComposer(page);
             const firstRow = parallelRow(main, 1);
             await selectVenueChain(firstRow, 'Network');
-            await expect(firstRow.getByLabel('From', { exact: true }),
+            await expect(fieldByLabel(firstRow, 'From'),
                 'row 1 defaulted to a different address than the one this run funded')
                 .toHaveValue(owner);
             await pickOption(picker(firstRow, 'Action'), 'BROADCAST');
@@ -342,7 +342,7 @@ test.describe(`Batch and Parallel composers on ${REGTEST_CHAIN_LABEL}`, () => {
             const secondRow = parallelRow(main, 2);
             await expect(secondRow).toBeVisible();
             await selectVenueChain(secondRow, 'Network');
-            await expect(secondRow.getByLabel('From', { exact: true }),
+            await expect(fieldByLabel(secondRow, 'From'),
                 'row 2 defaulted to a different address than the one this run funded')
                 .toHaveValue(owner);
             await pickOption(picker(secondRow, 'Action'), 'BROADCAST');

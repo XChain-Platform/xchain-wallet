@@ -56,6 +56,7 @@
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { switchToRegtest } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -87,7 +88,7 @@ async function openDryRunForm(page) {
     const open = main.getByRole('button', { name: /^Test backup\b/ }).first();
     await expect(open, 'Backup and Recovery offers no "Test backup" row').toBeVisible({ timeout: 30_000 });
     await open.click();
-    await expect(page.getByLabel('Recovery phrase to test')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(page, 'Recovery phrase to test')).toBeVisible({ timeout: 30_000 });
 }
 
 /**
@@ -98,8 +99,8 @@ async function openDryRunForm(page) {
  * a phrase.
  */
 async function runDryRun(page, { mnemonic, passphrase = '' }) {
-    await page.getByLabel('Recovery phrase to test').fill(mnemonic);
-    if (passphrase) await page.getByLabel('Extra passphrase').fill(passphrase);
+    await fieldByLabel(page, 'Recovery phrase to test').fill(mnemonic);
+    if (passphrase) await fieldByLabel(page, 'Extra passphrase').fill(passphrase);
     await page.getByRole('button', { name: 'Run Test', exact: true }).click();
 
     const matched = page.getByText(MATCH_TEXT);
@@ -112,7 +113,7 @@ async function runDryRun(page, { mnemonic, passphrase = '' }) {
 async function resetToForm(page) {
     await page.getByRole('button', { name: 'Done', exact: true }).click();
     // Done returns the direct page to its form; there is no Test button to press.
-    await expect(page.getByLabel('Recovery phrase to test')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(page, 'Recovery phrase to test')).toBeVisible({ timeout: 30_000 });
 }
 
 test.describe('backup dry-run restore (§19.6)', () => {

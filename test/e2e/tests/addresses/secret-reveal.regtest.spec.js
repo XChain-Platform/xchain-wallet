@@ -56,6 +56,7 @@ import {
     readFromAddress,
     switchToRegtest,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -143,7 +144,7 @@ test.describe('revealing an address private key', () => {
                 // addressed by its exact accessible name.
                 await openPaletteCommand(page, 'Issue token');
                 const form = page.getByRole('main');
-                await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+                await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
                 address = await readFromAddress(form);
                 expect(address, `no ${REGTEST_CHAIN_LABEL} address in this wallet`)
                     .toMatch(REGTEST_ADDRESS_RE);

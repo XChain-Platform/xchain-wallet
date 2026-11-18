@@ -20,6 +20,7 @@ import {
     waitForTokenBalance,
     waitForValidAction,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const XCHAIN_AMOUNT = 20;
@@ -59,8 +60,8 @@ test.describe(`SLEEP v0 address self-lock on ${REGTEST_CHAIN_LABEL}`, () => {
             // The screen title sits in the page banner, outside main.
             await expect(page.getByRole('banner').getByRole('heading', { name: 'Lock address' }))
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.getByLabel('Address to lock')).toHaveValue(source);
-            await main.getByLabel('Memo', { exact: true }).fill(MEMO);
+            await expect(fieldByLabel(main, 'Address to lock')).toHaveValue(source);
+            await fieldByLabel(main, 'Memo').fill(MEMO);
             await main.getByRole('button', { name: 'Lock address', exact: true }).click();
 
             // The form no longer shows an end line; the review's wake condition names the block.
@@ -71,7 +72,7 @@ test.describe(`SLEEP v0 address self-lock on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await expect(main.getByTestId('confirm-action-warnings'))
                 .toContainText("While locked, this address can't create any XChain action");
-            await main.getByLabel('Type LOCK to confirm').fill('LOCK');
+            await fieldByLabel(main, 'Type LOCK to confirm').fill('LOCK');
             const approve = main.getByRole('button', {
                 name: 'Lock address',
                 exact: true,

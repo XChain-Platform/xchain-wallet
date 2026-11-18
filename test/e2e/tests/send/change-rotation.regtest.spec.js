@@ -52,14 +52,16 @@ import {
     switchToRegtest,
     unlockAfterReload,
     waitForConfirmedUtxo,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
 const SEND_BTC = '0.01';
 
 function toField(page) {
-    return page.getByLabel('To', { exact: true });
+    return fieldByLabel(page, 'To');
 }
 
 function amountField(page) {
@@ -148,7 +150,7 @@ async function sendAndBroadcast(page) {
 
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
 
     await expect(page.getByRole('heading', { name: 'Broadcast pending' }))
         .toBeVisible({ timeout: 120_000 });

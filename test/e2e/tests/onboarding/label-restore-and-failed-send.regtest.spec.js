@@ -49,7 +49,6 @@ import {
     test,
     openedWalletHome,
 } from '../../fixtures/wallet.js';
-import { pickOption } from '../../fixtures/pickOption.js';
 import {
     approveConfirm,
     expectConfirmModal,
@@ -57,9 +56,9 @@ import {
     fundAddress,
     readReceiveAddress,
     REGTEST_ADDRESS_RE,
-    REGTEST_CHAIN_ID,
     REGTEST_CHAIN_LABEL,
     REGTEST_DESTINATION,
+    selectVenueChain,
     selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
@@ -67,6 +66,7 @@ import {
 } from '../../fixtures/regtest.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** One FILE publish (miner fees only) plus one native send that never broadcasts. */
@@ -97,9 +97,9 @@ async function importFromPhrase(page, words, name) {
     await page.goto(BASE_URL);
     await dismissIntroCarousel(page);
     await page.getByRole('button', { name: 'Import wallet' }).click();
-    await page.getByLabel('Recovery phrase', { exact: true }).fill(words.join(' '));
-    await page.getByLabel('Wallet name').fill(name);
-    await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+    await fieldByLabel(page, 'Recovery phrase').fill(words.join(' '));
+    await fieldByLabel(page, 'Wallet name').fill(name);
+    await fieldByLabel(page, 'Password').fill(PASSWORD);
     await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
     await page.getByRole('button', { name: 'Import', exact: true }).click();
     await acknowledgeDonationNotice(page, 'off');
@@ -153,14 +153,13 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
             const main = page.getByRole('main');
             // The Publish labels page opens straight on its form (no Publish Now button).
             await main.getByRole('button', { name: /^Publish labels on-chain\b/ }).first().click();
-            const chain = page.getByLabel('Publish network');
-            await expect(chain, 'the publish form has no chain picker').toBeVisible({ timeout: 30_000 });
-            await pickOption(chain, REGTEST_CHAIN_ID);
+            // The network is the standard Network field and its full-screen list.
+            await selectVenueChain(main, 'Network');
             // An unlocked session publishes with its pooled signer and asks no
             // password (2026-11-14); fill it only when the form shows it.
-            const password = page.getByLabel('Wallet password');
+            const password = fieldByLabel(page, 'Wallet password');
             if (await password.count()) await password.fill(PASSWORD);
-            await page.getByRole('button', { name: 'Publish', exact: true }).click();
+            await main.getByRole('button', { name: 'Publish Labels', exact: true }).click();
             // The publish signs through the shared confirm screen, which opens
             // in place of the form. When it never opens, the fixture reports
             // the error the form put above it instead of a missing locator.
@@ -202,11 +201,11 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
             await gotoSection(page, 'Send');
             await selectVenueSendAsset(page);
             await failBroadcast(page, 'permanent');
-            await page.getByLabel('To', { exact: true }).fill(REGTEST_DESTINATION);
+            await fieldByLabel(page, 'To').fill(REGTEST_DESTINATION);
             await page.getByRole('textbox', { name: /^Amount/ }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
             await expectConfirmModal(page, 'this action', 30_000);
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             await expect(page.getByRole('alert').first(), 'the rejected broadcast raised no error')
                 .toBeVisible({ timeout: 120_000 });
             await page.unroute(/.*/);

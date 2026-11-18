@@ -72,7 +72,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** A parent ISSUE, a child ISSUE and an ORDER, each paying a real coin fee. */
@@ -199,9 +201,7 @@ async function expectConfirmScreen(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // Success screens may draw the id truncated; waitForShownTxid reads the
     // full id from its accessible name, and from the text where it is whole.
     return waitForShownTxid(page.getByRole('main'), {
@@ -225,13 +225,13 @@ async function fillSubtoken(page, { parent, child, supply }) {
     // The network and the signer sit in the From section, closed until opened.
     await openIssueSection(main, 'From');
     await selectVenueChain(main);
-    await expect.poll(async () => main.getByLabel('From address').inputValue().catch(() => ''),
+    await expect.poll(async () => fieldByLabel(main, 'From address').inputValue().catch(() => ''),
         { timeout: 30_000, message: 'the Issue Token form names no signing address' })
         .toMatch(REGTEST_ADDRESS_RE);
 
     await pickIssueParent(main, parent);
-    await main.getByLabel('Subtoken name').fill(child);
-    await main.getByLabel('Max supply', { exact: true }).fill(String(supply));
+    await fieldByLabel(main, 'Subtoken name').fill(child);
+    await fieldByLabel(main, 'Max supply').fill(String(supply));
     // The coin lane on Bitcoin, for the control and the refused leg alike:
     // the native-fee pre-flight is what answers a refused ISSUE on the form.
     // On the XCHAIN lane the same verdict surfaces on the confirm screen.
@@ -252,7 +252,7 @@ test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () 
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
             owner = await readIssueSource(probe);
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
@@ -270,7 +270,7 @@ test.describe(`subtoken under an escrowed parent on ${REGTEST_CHAIN_LABEL}`, () 
 
             await openPaletteCommand(page, 'Issue token');
             const form = page.getByRole('main');
-            await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await readIssueSource(form);
             await issuePlainToken(form, { ticker: PARENT, supply: PARENT_SUPPLY });
 

@@ -46,7 +46,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 2;
@@ -91,7 +93,7 @@ async function waitForIndexedAction(txid, timeoutMs = 300_000) {
 }
 
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -103,9 +105,9 @@ async function fillNativeGiveOrder(main) {
     // Radios come in DOM order: the "You give" group first, "You get" second.
     await main.getByRole('radio', { name: `Native ${COIN}` }).first().check();
     await main.getByRole('radio', { name: 'A token' }).last().check();
-    await main.getByLabel(`Amount (${COIN})`).fill(GIVE_COIN);
-    await main.getByLabel('Ticker', { exact: true }).fill(TICK);
-    await main.getByLabel('Amount', { exact: true }).fill(String(WANT_TOKENS));
+    await fieldByLabel(main, `Amount (${COIN})`).fill(GIVE_COIN);
+    await fieldByLabel(main, 'Ticker').fill(TICK);
+    await fieldByLabel(main, 'Amount').fill(String(WANT_TOKENS));
 }
 
 test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
@@ -122,7 +124,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(main);
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
@@ -138,7 +140,7 @@ test.describe(`PC-16 auto-pay arming on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const form = page.getByRole('main');
-            await expect(form.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(form, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await readIssueSource(form);
             await issuePlainToken(form, { ticker: TICK, supply: SUPPLY });
             await expectConfirmModal(page, 'this action', 60_000);

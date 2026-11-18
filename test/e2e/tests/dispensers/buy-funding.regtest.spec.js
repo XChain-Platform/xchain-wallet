@@ -91,7 +91,9 @@ import {
     switchToRegtest,
     unlockAfterReload,
     selectPickerAsset,
+    approveConfirm as approveWhenReady,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel, searchTokenPicker } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -175,13 +177,12 @@ async function approveConfirm(page, what = 'this action') {
     // from one that never ran. `expectConfirmModal` reads the screen's own
     // alert on the way out.
     await expectConfirmModal(page, what, 60_000);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
 /** Fills a password field only when the form is asking for one. */
 async function fillPasswordIfPresent(scope) {
-    const field = scope.getByLabel('Password', { exact: true });
+    const field = fieldByLabel(scope, 'Password');
     if (await field.count() > 0 && await field.isVisible()) await field.fill(PASSWORD);
 }
 
@@ -281,7 +282,7 @@ async function openDispenserAsBuyer(page, sellerAddress) {
     // matches GIVE_TICK and GET_TICK both, so a search for XCHAIN would drag
     // in every unrelated dispenser on this shared chain.
     await byAddress.check();
-    await page.getByLabel('Address', { exact: true }).fill(sellerAddress);
+    await fieldByLabel(page, 'Address').fill(sellerAddress);
     await page.getByRole('button', { name: 'Search', exact: true }).click();
 
     // The row's label leads with the give tick, which is unique to this run.
@@ -367,8 +368,8 @@ test.describe('dispenser buy funding gate on regtest', () => {
             expect(await readIssueSource(main),
                 'the issue form still signs with the funded address').toBe(sellerAddress);
 
-            await main.getByLabel('Ticker', { exact: true }).fill(GIVE_TICK);
-            await main.getByLabel('Max supply', { exact: true }).fill(GIVE_SUPPLY);
+            await fieldByLabel(main, 'Ticker').fill(GIVE_TICK);
+            await fieldByLabel(main, 'Max supply').fill(GIVE_SUPPLY);
             // "Initial mint" left blank mints the whole supply now, and
             // "Divisible" is unchecked by default, so the token carries 0
             // decimals and every amount below stays a whole number.
@@ -391,7 +392,7 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // which the next assertion then reports as the form signing with
             // the wrong address, several steps after the real cause.
             await selectVenueChain(main, 'Network');
-            expect(await main.getByLabel('Source', { exact: true }).inputValue(),
+            expect(await fieldByLabel(main, 'Source').inputValue(),
                 'the dispenser form still signs with the funded address').toBe(sellerAddress);
 
             // The give tick comes from a picker, so it can only ever be one
@@ -407,9 +408,14 @@ test.describe('dispenser buy funding gate on regtest', () => {
             // THE FIXTURE'S WHOLE POINT: token-priced, not coin-priced. A
             // native-coin dispenser renders the pay-here panel, which has no
             // funding check, and every assertion below would be vacuous.
-            await main.getByRole('radio', { name: 'A token' }).check();
-            await main.getByLabel('Payment token', { exact: true }).fill('XCHAIN');
-            await main.getByLabel('Payment amount per fill', { exact: true })
+            // Buyers pay with is an asset picker (a token field), so the
+            // payment token is picked on it, never typed.
+            await main.getByRole('button', { name: /^Buyers pay with:/ }).click();
+            await searchTokenPicker(page, 'XCHAIN');
+            await page.getByRole('button', { name: /^Select XCHAIN on / }).first().click({ timeout: 30_000 });
+            await expect(main.getByRole('button', { name: /^Buyers pay with: XCHAIN on / }))
+                .toBeVisible({ timeout: 30_000 });
+            await fieldByLabel(main, 'Payment amount per fill')
                 .fill(PRICE_PER_FILL);
 
             await fillPasswordIfPresent(main);

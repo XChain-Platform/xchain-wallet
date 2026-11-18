@@ -54,7 +54,9 @@ import {
     waitForTokenBalance,
     waitForValidAction,
     openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const GAS_LIMIT = '50000';
@@ -187,7 +189,7 @@ async function openDeployForm(page) {
     const deploy = main.getByRole('button', { name: 'Publish contract', exact: true });
     await expect(deploy, 'the Contracts route offers no Publish contract control').toBeVisible({ timeout: 30_000 });
     await deploy.click();
-    await expect(main.getByLabel('Gas limit'), 'the deploy form did not open')
+    await expect(fieldByLabel(main, 'Gas limit'), 'the deploy form did not open')
         .toBeVisible({ timeout: 30_000 });
     // DeployContractForm picks its chain with a NetworkField, and re-opening the
     // form re-defaults it to Bitcoin - so this belongs here, in the opener, not
@@ -227,7 +229,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
 
         await test.step('CONTROL: a small source is planned as one transaction', async () => {
             await setSource(main, SMALL_SOURCE);
-            await main.getByLabel('Gas limit').fill(GAS_LIMIT);
+            await fieldByLabel(main, 'Gas limit').fill(GAS_LIMIT);
             await expect(main.getByText(/fits in a single transaction/i),
                 'the planner never reported on the small source, so the summary this spec reads is not live')
                 .toBeVisible({ timeout: 60_000 });
@@ -235,7 +237,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
 
         await test.step('THE CASE: an oversized source is planned as two, and the form says so', async () => {
             await setSource(main, CHUNKED_SOURCE);
-            await main.getByLabel('Gas limit').fill(GAS_LIMIT);
+            await fieldByLabel(main, 'Gas limit').fill(GAS_LIMIT);
             await expect(main.getByText(/too large for one transaction/i),
                 'the planner did not flip to chunked, so the payload no longer crosses the inline cap '
                 + '(re-derive it from chunkHelper.planDeploy)')
@@ -297,7 +299,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
         });
 
         await test.step('the chunked run actually starts from that screen', async () => {
-            const password = page.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await expect(page.getByText(REVIEW_SUMMARY), 'the review screen that starts a chunked run never appeared')
                 .toBeVisible({ timeout: 60_000 });
@@ -389,7 +391,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
         await test.step('the wallet plans this source as 2 chunks plus an assembler', async () => {
             main = await openDeployForm(page);
             await setSource(main, source);
-            await main.getByLabel('Gas limit').fill(GAS_LIMIT);
+            await fieldByLabel(main, 'Gas limit').fill(GAS_LIMIT);
             const promise = main.getByText(/too large for one transaction/i);
             await expect(promise,
                 'the planner did not flip to chunked, so this source no longer crosses the inline cap '
@@ -414,7 +416,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             const go = page.getByRole('button', { name: 'Publish', exact: true });
             await expect(go, 'the review screen that starts a chunked run never appeared')
                 .toBeVisible({ timeout: 60_000 });
-            const password = page.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await expect(go).toBeEnabled({ timeout: 30_000 });
 
@@ -601,7 +603,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
         await test.step('deploy it chunked', async () => {
             main = await openDeployForm(page);
             await setSource(main, source);
-            await main.getByLabel('Gas limit').fill(CHUNKED_DEPLOY_GAS);
+            await fieldByLabel(main, 'Gas limit').fill(CHUNKED_DEPLOY_GAS);
             await expect(main.getByText(/too large for one transaction/i),
                 'the padded counter no longer crosses the inline cap')
                 .toBeVisible({ timeout: 60_000 });
@@ -611,7 +613,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 .toBeVisible({ timeout: 60_000 });
             const go = page.getByRole('button', { name: 'Publish', exact: true });
             await expect(go, 'the review screen never appeared').toBeVisible({ timeout: 60_000 });
-            const password = page.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
 
             // Direct mining, for the reason recorded on the run above: the lag
@@ -698,16 +700,15 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await expect(await openFromAddress(scope),
                 `the call form is not signing from this run's ${REGTEST_COIN} address`)
                 .toHaveValue(payer, { timeout: 30_000 });
-            await scope.getByLabel('Method', { exact: true }).fill('inc');
+            await fieldByLabel(scope, 'Method').fill('inc');
             // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
             await scope.getByRole('button', { name: 'Call Contract', exact: true }).click();
 
             const confirm = page.getByTestId('confirm-modal');
             await expect(confirm).toBeVisible({ timeout: 60_000 });
-            const pw = page.getByLabel('Password', { exact: true });
+            const pw = fieldByLabel(page, 'Password');
             if (await pw.count() > 0 && await pw.isVisible()) await pw.fill(PASSWORD);
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
 
             await expect(scope.getByText('Method call broadcast.')).toBeVisible({ timeout: 120_000 });
             const txid = (await scope.locator('dl dd').first().innerText()).trim();
@@ -799,7 +800,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
         await test.step('start the run, then interrupt it once chunk 0 is on chain', async () => {
             main = await openDeployForm(page);
             await setSource(main, source);
-            await main.getByLabel('Gas limit').fill(GAS_LIMIT);
+            await fieldByLabel(main, 'Gas limit').fill(GAS_LIMIT);
             await expect(main.getByText(/too large for one transaction/i)).toBeVisible({ timeout: 60_000 });
 
             await main.getByRole('button', { name: 'Publish', exact: true }).first().click();
@@ -807,7 +808,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 .toBeVisible({ timeout: 60_000 });
             const go = page.getByRole('button', { name: 'Publish', exact: true });
             await expect(go).toBeVisible({ timeout: 60_000 });
-            const password = page.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
 
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);
@@ -867,7 +868,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
             // would mean the review screen describes a different transaction than
             // the one being signed. Measured before the fix: "" against an
             // original 50000, which fell through to the auto-suggested value.
-            resumedGas = await main.getByLabel('Gas limit').inputValue();
+            resumedGas = await fieldByLabel(main, 'Gas limit').inputValue();
             // eslint-disable-next-line no-console
             console.log(`[§11.3 resume] gas limit after resume: ${JSON.stringify(resumedGas)} `
                 + `(original ${GAS_LIMIT})`);
@@ -889,7 +890,7 @@ test.describe('§11.3: the chunked deploy lane', () => {
                 .toBeVisible({ timeout: 60_000 });
             const go = page.getByRole('button', { name: 'Publish', exact: true });
             await expect(go).toBeVisible({ timeout: 60_000 });
-            const password = page.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
 
             const nudger = setInterval(() => { mineIfPending(); }, 3_000);

@@ -15,7 +15,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const STAMP = Date.now().toString().slice(-6);
@@ -25,13 +27,11 @@ const XCHAIN_MINT = 50;
 
 async function approveAndReadTxid(page) {
     await expectConfirmModal(page, 'the Meme token creation');
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
         await password.fill(PASSWORD);
     }
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
 
     const main = page.getByRole('main');
     await expect(main).toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -65,8 +65,8 @@ test.describe(`Meme token wizard template on ${REGTEST_CHAIN_LABEL}`, () => {
         await openIssueSection(main, 'From');
         await selectVenueChain(main);
 
-        await main.getByLabel('Ticker', { exact: true }).fill(TICK);
-        await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+        await fieldByLabel(main, 'Ticker').fill(TICK);
+        await fieldByLabel(main, 'Max supply').fill(String(SUPPLY));
         await submitTokenWizard(page);
 
         const txid = await approveAndReadTxid(page);

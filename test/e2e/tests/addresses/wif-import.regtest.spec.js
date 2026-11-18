@@ -85,6 +85,7 @@ import {
     switchToRegtest,
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 
@@ -168,7 +169,7 @@ async function openImportForm(page) {
     // `aria-haspopup="menu"` over a `role="menu"` list. Asking for a button
     // here matches nothing and waits out the full timeout.
     await page.getByRole('menuitem', { name: 'Import address' }).click();
-    await expect(page.getByLabel('WIF private key'), 'the + menu did not reach the import form')
+    await expect(fieldByLabel(page, 'WIF private key'), 'the + menu did not reach the import form')
         .toBeVisible({ timeout: 30_000 });
 }
 
@@ -198,13 +199,13 @@ async function submitImport(page, { wif, label }) {
     await selectImportChain(page);
     // Pinned, not defaulted: the assertion downstream is an EXACT address, and
     // the chain default is free to move.
-    await pickOption(page.getByLabel('Address type'), 'p2wpkh');
-    await page.getByLabel('WIF private key').fill(wif);
-    if (label) await page.getByLabel('Label', { exact: true }).fill(label);
+    await pickOption(fieldByLabel(page, 'Address type'), 'p2wpkh');
+    await fieldByLabel(page, 'WIF private key').fill(wif);
+    if (label) await fieldByLabel(page, 'Label').fill(label);
     // The password field renders only while the signer is NOT ready: unlocked,
     // the vault key is already in hand. Conditional rather than assumed, so
     // this spec does not depend on which side of that fork the shell is on.
-    const password = page.getByLabel('Wallet password', { exact: true });
+    const password = fieldByLabel(page, 'Wallet password');
     if (await password.count() > 0) await password.fill(PASSWORD);
     await page.getByRole('checkbox', { name: /backed up by my recovery phrase/i }).check();
     await page.getByRole('button', { name: 'Import', exact: true }).click();

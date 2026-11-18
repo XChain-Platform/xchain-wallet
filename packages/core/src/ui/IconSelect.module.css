@@ -96,26 +96,6 @@
     transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
 }
 
-/* A module that `composes` from Button.module.css (TokenField does) inlines a
-   copy of it, and once that copy loads after this sheet its one-class .btn
-   rules outrank .trigger: the border went transparent and the padding, type
-   and alignment took the button's. Two classes outrank that copy wherever it
-   lands. The caret keeps the inherited icon size rather than .btn's md size. */
-.wrap .trigger {
-    --xc-icon-size: inherit;
-    display: flex;
-    justify-content: flex-start;
-    min-height: var(--xc-control-height);
-    padding-block: 0;
-    padding-inline: var(--xc-control-padding-x) calc(var(--icon-select-glyph-inset) - var(--xc-field-border));
-    border: 1px solid var(--xc-border-strong);
-    font-size: var(--xc-control-font-size);
-    font-weight: 400;
-    line-height: normal;
-    text-align: start;
-    transition: border-color var(--xc-transition), box-shadow var(--xc-transition);
-}
-
 /* G112: with an option icon showing, the icon sits as far from the start
    edge as from the top and bottom; the label follows one icon gap after it. */
 .wrap .trigger.leadIcon {
@@ -126,7 +106,7 @@
     border-color: var(--xc-text-muted);
 }
 
-.wrap .trigger:focus-visible {
+.trigger:focus-visible {
     outline: none;
     border-color: var(--xc-accent-primary);
     box-shadow: 0 0 0 3px var(--xc-focus-ring);
@@ -325,20 +305,20 @@
 
 /* Select marks a field error on the trigger the way Input marks its control:
    its own error adds .invalid, a caller's aria-invalid marks it the same. */
-.wrap .trigger.invalid,
-.wrap .trigger[aria-invalid='true'] {
+.trigger.invalid,
+.trigger[aria-invalid='true'] {
     border-color: var(--xc-danger);
 }
 
-.wrap .trigger.invalid:focus-visible,
-.wrap .trigger[aria-invalid='true']:focus-visible {
+.trigger.invalid:focus-visible,
+.trigger[aria-invalid='true']:focus-visible {
     box-shadow: 0 0 0 3px var(--xc-danger-bg);
 }
 
 /* Box-shadow focus rings are not painted in forced-colors mode, so give
  * this control a real outline there (WCAG 2.4.7). */
 @media (forced-colors: active) {
-    .wrap .trigger:focus-visible {
+    .trigger:focus-visible {
         outline: 2px solid Highlight;
         outline-offset: 2px;
     }

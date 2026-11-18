@@ -139,8 +139,10 @@ import {
     waitForTokenBalance,
     waitForValidAction,
     openFromAddress,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
 import { pickAssetByChainAndTick, waitForShownTxid } from '../../fixtures/pendingHistory.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Native coin, to pay miner fees for both broadcasts. */
@@ -218,15 +220,10 @@ async function reloadToHome(page) {
 
 /** Approves the open confirm modal and returns the txid the wallet reports. */
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    // Generous, because Approve stays disabled until the pre-flight report
-    // resolves and a COLD dry-run on this shared venue has been measured at
-    // several seconds. A real blocking verdict fails here too, which is why
-    // the message names both possibilities rather than guessing.
-    await expect(approve, 'Approve never became enabled: either the pre-flight report never '
-        + 'arrived, or the venue really does refuse this action')
-        .toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    // Approve is never disabled (G130), but a tap during the pre-flight check
+    // or just after the review opens is dropped, so the fixture taps until the
+    // confirm screen takes it, and names a refusal if one comes back.
+    await approveConfirm(page);
 
     // SUCCESS DOES NOT HAVE ONE HEADING, AND IT DOES NOT HAVE TWO EITHER.
     // This helper waited for "Broadcast pending" and reported a SUCCESSFUL
@@ -290,10 +287,10 @@ async function openHistoryWidened(page) {
 async function widenDateWindow(page) {
     const iso = (offsetDays) =>
         new Date(Date.now() + offsetDays * 86_400_000).toISOString().slice(0, 10);
-    await expect(page.getByLabel('Search history'), 'History did not render its filter bar')
+    await expect(fieldByLabel(page, 'Search history'), 'History did not render its filter bar')
         .toBeVisible({ timeout: 30_000 });
-    await page.getByLabel('From date').fill(iso(-30));
-    await page.getByLabel('To date').fill(iso(2));
+    await fieldByLabel(page, 'From date').fill(iso(-30));
+    await fieldByLabel(page, 'To date').fill(iso(2));
 }
 
 /** One row of ActionDetail's Details tab, found by the label that heads it. */
@@ -369,7 +366,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await pickAssetByChainAndTick(page, TICK, REGTEST_CHAIN_ID, TICK);
             await expect(await openFromAddress(page.getByRole('main')))
                 .toHaveValue(own);
-            await page.getByLabel('To', { exact: true }).fill(DESTINATION);
+            await fieldByLabel(page, 'To').fill(DESTINATION);
             await page.getByRole('textbox', { name: `Amount (${TICK})` }).fill(SEND_AMOUNT);
             await mainButton(page, 'Send').click();
 
@@ -478,7 +475,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
             await page.getByRole('button', { name: 'Back to history' }).click();
             await widenDateWindow(page);
 
-            const search = page.getByLabel('Search history');
+            const search = fieldByLabel(page, 'Search history');
 
             await search.fill('zzz-no-such-history-row-zzz');
             await expect(historyRows(page), 'a search that matches nothing still left rows on screen, '
@@ -618,7 +615,7 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
         const mintTick = async (amount) => {
             await openPaletteCommand(page, 'Advanced action');
             await selectVenueChain(page);
-            await pickOption(page.getByLabel('Action', { exact: true }), 'MINT');
+            await pickOption(fieldByLabel(page, 'Action'), 'MINT');
             await page.getByRole('textbox', { name: 'TICK', exact: true }).fill(tick);
             await page.getByRole('textbox', { name: 'AMOUNT', exact: true }).fill(String(amount));
             await page.getByRole('button', { name: 'Sign action' }).click();
@@ -640,12 +637,12 @@ test.describe(`History on ${REGTEST_CHAIN_LABEL} regtest`, () => {
         await test.step('issue a token, leaving headroom to mint', async () => {
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await readIssueSource(main);
-            await main.getByLabel('Ticker').fill(tick);
-            await main.getByLabel('Max supply', { exact: true }).fill(ISSUE_SUPPLY);
+            await fieldByLabel(main, 'Ticker').fill(tick);
+            await fieldByLabel(main, 'Max supply').fill(ISSUE_SUPPLY);
             await openIssueSection(main, 'Initial mint');
-            await main.getByLabel('Initial mint', { exact: true }).fill(INITIAL_MINT);
+            await fieldByLabel(main, 'Initial mint').fill(INITIAL_MINT);
             await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
             await expectConfirmModal(page, 'this action', 30_000);
             await waitForValidAction(await approveAndGetTxid(page));

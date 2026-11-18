@@ -71,7 +71,9 @@ import {
     waitForTokenBalance,
     waitForValidAction,
     openFromAddress,
+    approveConfirm as approveWhenReady,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -111,10 +113,9 @@ async function stakesForSource(address) {
 async function approveConfirm(page) {
     const confirm = page.getByTestId('confirm-modal');
     await expect(confirm).toBeVisible({ timeout: 60_000 });
-    const password = page.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(page, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveWhenReady(page);
 }
 
 /** Navigates through the wallet menu, the way a returning user reaches
@@ -267,7 +268,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await validatorOption.click();
 
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Signing public key', { exact: true }))
+            await expect(fieldByLabel(main, 'Signing public key'))
                 .toBeVisible({ timeout: 30_000 });
 
             // The address that will sign must be the one that was funded and
@@ -275,7 +276,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             expect(await (await openFromAddress(main)).inputValue(),
                 'the stake form signs with the funded address').toBe(staker);
 
-            await main.getByLabel('Signing public key', { exact: true }).fill(pubkey);
+            await fieldByLabel(main, 'Signing public key').fill(pubkey);
             // Auto-detect (new-vs-topup) is what StakeForm actually gates the
             // wire's VERSION on; wait for it rather than trusting the radio's
             // default, so a detection regression would fail HERE, not silently
@@ -326,7 +327,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             const main = page.getByRole('main');
             // Prefilled from the stake this address owns; asserting it is the
             // same guard as the STAKE step's From check.
-            await expect(main.getByLabel('Signing public key', { exact: true }))
+            await expect(fieldByLabel(main, 'Signing public key'))
                 .toHaveValue(pubkey, { timeout: 30_000 });
 
             // The encoder is faked from here, deliberately breaking the ONLY
@@ -339,7 +340,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await main.getByRole('button', { name: 'Unstake', exact: true }).click();
 
             const confirm = await expectConfirmModal(page, 'the (faked-failure) partial UNSTAKE');
-            const password = page.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(page, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await approveConfirmBounded(page, 'the (faked-failure) partial UNSTAKE');
 
@@ -382,7 +383,7 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await amountField(main).fill(UNSTAKE_PARTIAL);
             await main.getByRole('button', { name: 'Unstake', exact: true }).click();
             await expectConfirmModal(page, 'the real partial UNSTAKE');
-            const realPassword = page.getByLabel('Password', { exact: true });
+            const realPassword = fieldByLabel(page, 'Password');
             if (await realPassword.count() > 0 && await realPassword.isVisible()) await realPassword.fill(PASSWORD);
             await approveConfirmBounded(page, 'the real partial UNSTAKE');
 
@@ -441,9 +442,9 @@ test.describe('STAKE -> UNSTAKE lifecycle on regtest (partial unstake, re-driven
             await validatorOption.click();
 
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Signing public key', { exact: true }))
+            await expect(fieldByLabel(main, 'Signing public key'))
                 .toBeVisible({ timeout: 30_000 });
-            await main.getByLabel('Signing public key', { exact: true }).fill(pubkey);
+            await fieldByLabel(main, 'Signing public key').fill(pubkey);
 
             // The original stake (still active) plus the just-unstaked residual
             // both carry this pubkey, so detection must find SOME active row and

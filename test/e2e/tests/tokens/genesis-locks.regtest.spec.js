@@ -67,7 +67,9 @@ import {
     waitForTokenBalance,
     expectConfirmModal as sharedConfirmModal,
     selectPickerAsset,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 3;
@@ -196,9 +198,7 @@ async function expectConfirmScreen(page) {
 }
 
 async function approveAndGetTxid(page) {
-    const approve = page.getByTestId('confirm-approve');
-    await expect(approve).toBeEnabled({ timeout: 120_000 });
-    await approve.click();
+    await approveConfirm(page);
     // Success screens may draw the id truncated; waitForShownTxid reads the
     // full id from its accessible name, and from the text where it is whole.
     return waitForShownTxid(page.getByRole('main'), {
@@ -277,10 +277,10 @@ async function openTokenAdmin(page, item, tick = TICK) {
 async function readIssueSource(probe) {
     await openIssueSection(probe, 'From');
     await selectVenueChain(probe);
-    await expect.poll(async () => probe.getByLabel('From address').inputValue().catch(() => ''),
+    await expect.poll(async () => fieldByLabel(probe, 'From address').inputValue().catch(() => ''),
         { timeout: 30_000, message: 'the Issue Token form names no signing address' })
         .toMatch(REGTEST_ADDRESS_RE);
-    return probe.getByLabel('From address').inputValue();
+    return fieldByLabel(probe, 'From address').inputValue();
 }
 
 /**
@@ -294,14 +294,14 @@ async function fillEdition(main, tick) {
     await pickIssuePreset(main, /^Limited edition/);
     await openIssueSection(main, 'From');
     await selectVenueChain(main);
-    await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Ticker', { exact: true }).fill(tick);
-    await main.getByLabel('Max supply', { exact: true }).fill(String(EDITION_SIZE));
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await fieldByLabel(main, 'Ticker').fill(tick);
+    await fieldByLabel(main, 'Max supply').fill(String(EDITION_SIZE));
     await openIssueSection(main, 'Public minting');
-    await main.getByLabel('Max per transaction', { exact: true }).fill(String(EDITION_PER_TX));
-    await main.getByLabel('Max per address', { exact: true }).fill(String(EDITION_SIZE));
+    await fieldByLabel(main, 'Max per transaction').fill(String(EDITION_PER_TX));
+    await fieldByLabel(main, 'Max per address').fill(String(EDITION_SIZE));
     await openIssueSection(main, 'Description');
-    await main.getByLabel('Image URL').fill(EDITION_IMAGE_URL);
+    await fieldByLabel(main, 'Image URL').fill(EDITION_IMAGE_URL);
 }
 
 /**
@@ -314,7 +314,7 @@ async function onboardAndCreateLocked(page) {
 
     await openPaletteCommand(page, 'Issue token');
     const probe = page.getByRole('main');
-    await expect(probe.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
     const source = await readIssueSource(probe);
     expect(source, `the wallet has no ${REGTEST_CHAIN_LABEL} address to sign with`)
         .toMatch(REGTEST_ADDRESS_RE);
@@ -331,13 +331,13 @@ async function onboardAndCreateLocked(page) {
     await openIssueSection(main, 'From');
     await selectVenueChain(main);
 
-    await expect(main.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Ticker', { exact: true }).fill(TICK);
-    await main.getByLabel('Max supply', { exact: true }).fill(String(SUPPLY));
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await fieldByLabel(main, 'Ticker').fill(TICK);
+    await fieldByLabel(main, 'Max supply').fill(String(SUPPLY));
     await openIssueSection(main, 'Description');
-    await main.getByLabel('Token description', { exact: true }).fill(DESCRIPTION);
+    await fieldByLabel(main, 'Token description').fill(DESCRIPTION);
     await openIssueSection(main, 'Public minting');
-    await main.getByLabel('Max per transaction', { exact: true }).fill(String(MAX_MINT));
+    await fieldByLabel(main, 'Max per transaction').fill(String(MAX_MINT));
 
     // The Locks section. Each lock is its own switch, so exactly one flag is set
     // here and the other fields stay editable and can act as the control.
@@ -388,7 +388,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('CONTROL: an UNLOCKED field still edits, so ISSUE edits work at all', async () => {
             await openTokenAdmin(page, 'Mint settings');
             const form = page.getByRole('main');
-            const field = form.getByLabel('Max mint per transaction', { exact: true });
+            const field = fieldByLabel(form, 'Max mint per transaction');
             await expect(field).toBeVisible({ timeout: 30_000 });
             await field.fill(String(MAX_MINT_EDITED));
             await form.getByRole('button', { name: /^(Save|Update|Sign)/ }).first().click();
@@ -445,7 +445,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(probe);
             expect(source).toMatch(REGTEST_ADDRESS_RE);
 
@@ -511,7 +511,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(submit,
                 'a permanent lock is submittable without the typed confirmation')
                 .toBeDisabled();
-            const typed = form.getByLabel('Type LOCK to confirm');
+            const typed = fieldByLabel(form, 'Type LOCK to confirm');
             await expect(typed, 'the Lock form has no typed confirmation at all on this path')
                 .toBeVisible({ timeout: 15_000 });
             await typed.fill('LOOK');
@@ -580,7 +580,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await openPaletteCommand(page, 'Issue token');
             const probe = page.getByRole('main');
-            await expect(probe.getByLabel('Ticker', { exact: true })).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(probe, 'Ticker')).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(probe);
             expect(source).toMatch(REGTEST_ADDRESS_RE);
 
@@ -612,7 +612,7 @@ test.describe(`genesis lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             // first driven with.
             await form.getByRole('checkbox', { name: /^Minting/ }).check();
             await expect(submit).toBeDisabled();
-            await form.getByLabel('Type LOCK to confirm').fill('LOCK');
+            await fieldByLabel(form, 'Type LOCK to confirm').fill('LOCK');
             await expect(submit).toBeEnabled();
             await submit.click();
 

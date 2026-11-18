@@ -35,7 +35,9 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING = 1;
@@ -50,7 +52,7 @@ const LOCK_AHEAD_BLOCKS = 1000;
 
 /** Approves the open confirm screen and returns the broadcast txid. */
 async function approveAndGetTxid(page) {
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const main = page.getByRole('main');
     await expect(main, 'no transaction id ever appeared after Approve')
         .toContainText(/[0-9a-f]{64}/, { timeout: 180_000 });
@@ -79,7 +81,7 @@ async function openLockAddress(page) {
     const entry = page.getByRole('main').getByRole('button', { name: /^Lock this address/ });
     await expect(entry, 'All actions has no "Lock this address" entry').toBeVisible({ timeout: 30_000 });
     await entry.click();
-    await expect(page.getByLabel('Address to lock')).toBeVisible({ timeout: 30_000 });
+    await expect(fieldByLabel(page, 'Address to lock')).toBeVisible({ timeout: 30_000 });
 }
 
 /**
@@ -130,7 +132,7 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(main);
             expect(source, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
@@ -145,7 +147,7 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
             await unlockAfterReload(page, PASSWORD);
 
             await openPaletteCommand(page, 'Issue token');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             await readIssueSource(main);
             await issuePlainToken(main, { ticker: TICK, supply: SUPPLY, password: PASSWORD });
 
@@ -183,7 +185,7 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
             // tick pauses included; the lock form must not read the tick pause
             // above as a lock on the owner's own address.
             await openLockAddress(page);
-            await expect(page.getByLabel('Address to lock')).toHaveValue(source);
+            await expect(fieldByLabel(page, 'Address to lock')).toHaveValue(source);
             await expectAddressAwake(page);
         });
 
@@ -212,13 +214,13 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
         await test.step('lock the signing address until a block (SLEEP v0)', async () => {
             await openLockAddress(page);
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Address to lock'),
+            await expect(fieldByLabel(main, 'Address to lock'),
                 'the lock form offers a different address than the one that signed the rest of this test')
                 .toHaveValue(source);
             await expectAddressAwake(page);
 
             await main.getByRole('slider', { name: 'Duration' }).fill('4');
-            await main.getByLabel('Blocks').fill(String(LOCK_AHEAD_BLOCKS));
+            await fieldByLabel(main, 'Blocks').fill(String(LOCK_AHEAD_BLOCKS));
             await main.getByRole('button', { name: 'Lock address', exact: true }).click();
 
             // The form no longer shows an end line; the review's wake condition names the block.
@@ -232,9 +234,9 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
                 .toContainText("While locked, this address can't create any XChain action", { timeout: 30_000 });
             const sign = main.getByRole('button', { name: 'Lock address', exact: true });
             await expect(sign, 'Sign is live before LOCK was typed').toBeDisabled();
-            const password = main.getByLabel('Password', { exact: true });
+            const password = fieldByLabel(main, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-            await main.getByLabel('Type LOCK to confirm').fill('LOCK');
+            await fieldByLabel(main, 'Type LOCK to confirm').fill('LOCK');
             await expect(sign).toBeEnabled({ timeout: 15_000 });
             await sign.click();
 

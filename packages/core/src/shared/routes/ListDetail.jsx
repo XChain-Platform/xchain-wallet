@@ -45,6 +45,12 @@ const MEMBERS_PAGE_SIZE = 25;
 // Source lists of a union read at once, as ListPickerScreen reads lists.
 const SOURCE_READ_CONCURRENCY = 4;
 
+function listRowForChain(row, chainId) {
+    const reportedChain = row?.chainId ?? row?.chain_id;
+    if (reportedChain && reportedChain !== chainId) return null;
+    return row;
+}
+
 /**
  * PC-10 "My Lists" detail page for one LIST action: the identity card (the
  * list's own look, which the user sets as for a wallet), then three tabs.
@@ -109,7 +115,10 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onEdit, onEdi
         setData(undefined);
         setOwner(undefined);
         setLoadError(null);
-        const readList = (index) => messaging.getListByActionIndex({ chainId, actionIndex: index });
+        const readList = async (index) => listRowForChain(
+            await messaging.getListByActionIndex({ chainId, actionIndex: index }),
+            chainId,
+        );
         readList(actionIndex)
             .then(async (row) => {
                 const nextOwner = row ? await findListOwner({ detail: row, readList }) : null;
@@ -152,7 +161,10 @@ export function ListDetail({ chainId, actionIndex, onBack, onFork, onEdit, onEdi
                 const index = unionIndexes[at];
                 try {
                     // eslint-disable-next-line no-await-in-loop
-                    const row = await messaging.getListByActionIndex({ chainId, actionIndex: index });
+                    const row = listRowForChain(
+                        await messaging.getListByActionIndex({ chainId, actionIndex: index }),
+                        chainId,
+                    );
                     rows[at] = { index, row: row || null };
                 } catch {
                     rows[at] = { index, row: undefined };

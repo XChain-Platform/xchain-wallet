@@ -58,6 +58,7 @@ import {
     unlockAfterReload,
 } from '../../fixtures/regtest.js';
 import { freshMempoolSize } from '../../fixtures/venueHealth.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const SUPPLY = '1000';
@@ -116,9 +117,9 @@ function feeToggle(scope) {
 async function submitIssue(page, tick, { nativeFee }) {
     await openPaletteCommand(page, 'Issue token');
     const main = page.getByRole('main');
-    await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
-    await main.getByLabel('Ticker').fill(tick);
-    await main.getByLabel('Max supply', { exact: true }).fill(SUPPLY);
+    await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
+    await fieldByLabel(main, 'Ticker').fill(tick);
+    await fieldByLabel(main, 'Max supply').fill(SUPPLY);
 
     // The fee switch sits in the Fees section, closed until opened.
     await openIssueSection(main, 'Speed and Fees');
@@ -128,7 +129,7 @@ async function submitIssue(page, tick, { nativeFee }) {
     if (nativeFee !== (await toggle.isChecked())) await toggle.click();
     await expect(toggle).toBeChecked({ checked: nativeFee });
 
-    const password = main.getByLabel('Password', { exact: true });
+    const password = fieldByLabel(main, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
     await main.getByRole('button', { name: 'Issue Token', exact: true }).click();
     return main;
@@ -161,7 +162,7 @@ test.describe('§11.5 fee failure paths: the payer cannot afford the protocol fe
 
             await openPaletteCommand(page, 'Issue token');
             const main = page.getByRole('main');
-            await expect(main.getByLabel('Ticker')).toBeVisible({ timeout: 30_000 });
+            await expect(fieldByLabel(main, 'Ticker')).toBeVisible({ timeout: 30_000 });
             source = await readIssueSource(main);
             expect(source, 'the form has no Bitcoin address to sign with').toMatch(REGTEST_ADDRESS_RE);
 

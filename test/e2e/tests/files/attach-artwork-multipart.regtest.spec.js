@@ -34,6 +34,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     waitForValidAction,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
 
 const UNLOCK_VALUE = ['regtest', 'pass', 'word123'].join('');
@@ -91,8 +92,7 @@ async function issueToken(page, source) {
     await fillUnlock(main);
     await main.getByRole('button', { name: 'Issue token', exact: true }).click();
     await expectConfirmModal(page, 'the multipart artwork token', 90_000);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const txid = await waitForShownTxid(main, { message: 'the ISSUE transaction id never appeared' });
     return waitForValidAction(txid);
 }
@@ -218,8 +218,7 @@ async function approveLink(page, source, issueIndex, manifestIndex) {
     await fillUnlock(main);
     await linkButton.click();
     await expectConfirmModal(page, 'the completed artwork link', 120_000);
-    await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
-    await page.getByTestId('confirm-approve').click();
+    await approveConfirm(page);
     const txid = await readLabelledTxid(page, 'Artwork attached', 'Link transaction');
     await waitForValidAction(txid);
     const linked = (await artworkLinks(source, issueIndex)).find((row) => row.tx_hash === txid);

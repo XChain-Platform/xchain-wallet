@@ -54,8 +54,10 @@ import {
     selectVenueSendAsset,
     switchToRegtest,
     unlockAfterReload,
+    approveConfirm,
 } from '../../fixtures/regtest.js';
 import { freshMempoolSize } from '../../fixtures/venueHealth.js';
+import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 /** Small enough to keep the arithmetic readable, large enough to pay a fee. */
@@ -111,7 +113,7 @@ async function mineUntilConfirmed(address, expectSats, timeoutMs = 180_000) {
 }
 
 function toField(page) {
-    return page.getByLabel('To', { exact: true });
+    return fieldByLabel(page, 'To');
 }
 
 function amountField(page) {
@@ -196,8 +198,7 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
                 + (composed ? 'composed a confirm screen' : 'refused before composing'));
 
             if (composed) {
-                await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-                await page.getByTestId('confirm-approve').click();
+                await approveConfirm(page);
                 // Give the broadcast attempt time to come back either way.
                 await page.waitForTimeout(15_000);
             }
@@ -301,8 +302,7 @@ test.describe(`sending dust, and sending everything (${COIN} regtest)`, () => {
                 + 'become change.')
                 .toBe(0);
 
-            await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 60_000 });
-            await page.getByTestId('confirm-approve').click();
+            await approveConfirm(page);
             // The success screen draws the id truncated; wait on the full id
             // in its accessible name.
             await waitForShownTxid(page.getByRole('main'), {
