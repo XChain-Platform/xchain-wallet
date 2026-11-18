@@ -83,7 +83,13 @@ export function checkEnvelopeReveal({
     // verifier, not evidence of tampering, so it is told apart below, but only
     // once the binding rule has proved the reveal carries the approved bytes.
     const undecodableSize = decoded?.ok === false && UNDECODABLE_SIZE_REASONS.has(decoded.reason);
-    if (!undecodableSize && (!decoded?.ok || decoded.actionString !== actionString)) {
+    // The co-signer policy decoder refuses every BATCH by design, since its
+    // single-leg evaluator cannot bound a bundle. The wallet composed this
+    // BATCH itself, so that refusal says nothing about the bytes; the binding
+    // rule below must still prove the leaf carries exactly the approved BATCH.
+    const selfComposedBatch = decoded?.ok === false && decoded.reason === 'BATCH_UNSUPPORTED'
+        && typeof actionString === 'string' && actionString.startsWith('BATCH|');
+    if (!undecodableSize && !selfComposedBatch && (!decoded?.ok || decoded.actionString !== actionString)) {
         return { ok: false, reason: 'REVEAL_ACTION_MISMATCH' };
     }
 
