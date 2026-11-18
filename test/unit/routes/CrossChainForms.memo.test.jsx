@@ -42,7 +42,12 @@ async function mount(Form) {
         signerReady: () => Promise.resolve({ ready: true }),
         getSettings: () => Promise.resolve({ walletMode: 'full' }),
         getSignerStatus: () => Promise.resolve({ status: 'unlocked' }),
-        getWalletBalances: () => Promise.resolve({}),
+        // The give token is held in full. The form reads this balance after a
+        // 400 ms debounce, and a slow run lands it before the submit click: an
+        // empty answer then reads as 0 and refuses the give amount.
+        getWalletBalances: () => Promise.resolve({
+            [DOGE]: [{ address: DOGE_ADDRESS.address, balances: { tokens: [{ tick: 'AAA', quantity: '100', divisibility: 0 }] } }],
+        }),
         composeForConfirm,
         preflight: () => Promise.resolve({ verdict: 'pass', findings: [] }),
     };
