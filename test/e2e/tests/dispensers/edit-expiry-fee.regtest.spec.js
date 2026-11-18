@@ -381,7 +381,7 @@ test.describe(`dispenser expiration-edit fee on ${REGTEST_CHAIN_LABEL}`, () => {
                 unixToLocalInput(toMinute(nowSec + (CREATE_DAYS * 86_400) + MINUTE_MARGIN)),
             );
 
-            await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
             await expectConfirmModal(page);
             const created = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(created.status), 'the chain rejected the dispenser create').toBe('valid');

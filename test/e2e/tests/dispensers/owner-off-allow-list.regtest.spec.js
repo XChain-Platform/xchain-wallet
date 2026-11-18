@@ -366,7 +366,7 @@ async function openDispenser(page, listIndex, { expectSelfWarning }) {
             .toHaveCount(0);
     }
 
-    await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+    await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
     await expectConfirmModal(page);
     const created = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(created.status), 'the chain rejected the gated dispenser').toBe('valid');

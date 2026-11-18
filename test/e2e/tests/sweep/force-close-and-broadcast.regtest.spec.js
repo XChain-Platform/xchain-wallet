@@ -317,7 +317,7 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
             await fieldByLabel(main, /^Trigger price/).fill(TRIGGER);
 
-            await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
             await expectConfirmModal(page);
             const created = await waitForValidAction(await approveAndGetTxid(page));
             dispenserIndex = String(created.action_index);

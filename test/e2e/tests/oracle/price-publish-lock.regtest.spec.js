@@ -62,7 +62,7 @@
 //   cd test/e2e && XC_REGTEST_COIN=RLTC npx playwright test \
 //       --config=playwright.regtest.config.js tests/oracle/price-publish-lock.regtest.spec.js
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { pickFiatCurrency, pickToken } from '../../fixtures/pickerFields.js';
 import {
     EXPLORER_URL,
@@ -391,13 +391,14 @@ test.describe(`PRICE v1 oracle publishing on ${REGTEST_CHAIN_LABEL}`, () => {
             await fieldByLabel(main, 'Give amount per fill').fill(String(GIVE_PER_FILL));
             await fieldByLabel(main, 'Escrow amount').fill(String(ESCROW));
 
-            await main.getByRole('button', { name: /Advanced options/ }).click();
+            // The fiat and oracle fields sit in the closed Dispenser Terms section.
+            await openFormSection(main, 'Dispenser Terms');
             await pickFiatCurrency(main, FIAT);
             // Mode B: no fiat amount at all. The oracle prices the token; the
             // dispenser only names whose quote to use.
             await main.getByLabel(/^Oracle address/).fill(oracle);
 
-            await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
 
             // Refused, and refused BEFORE the confirm screen: the point of the
             // pre-flight is that the create never gets signed, so it costs

@@ -92,7 +92,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 360, height: 780 
         await expect(list.locator(`[data-swap-row$=":${OLDEST + 1}"]`)).toBeVisible();
 
         const cancelledRow = list.locator(`[data-swap-row$=":${OLDEST}"]`);
-        await expect(cancelledRow.getByText('Cancelled', { exact: true })).toBeVisible();
+        await expect(cancelledRow.getByText('Closed', { exact: true })).toBeVisible();
         // The row opens the swap's details; it holds no Cancel of its own.
         await expect(cancelledRow.getByRole('button')).toHaveCount(1);
         await expect(cancelledRow.getByRole('button', { name: /^Cancel swap/i })).toHaveCount(0);

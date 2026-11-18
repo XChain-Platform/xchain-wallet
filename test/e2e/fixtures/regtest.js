@@ -68,6 +68,7 @@ import { kdfStepTimeout } from '../timeout-budget.js';
 import { rateLimitDelayMs, venueVerdict } from './venueHealth.js';
 import { pickOption } from './pickOption.js';
 import { fieldByLabel, searchTokenPicker } from './fields.js';
+import { selectNamedToken } from './crossChain.js';
 import { compareDecimal, subtractDecimal } from '../../../packages/core/src/shared/utils/mintHeadroom.js';
 import {
     MIN_SEED_MARGIN_SECONDS,
@@ -1516,6 +1517,59 @@ export async function selectPickerAsset(page, tick, { search = tick, chainId = R
         .toBeVisible({ timeout: timeoutMs });
     await row.getByRole('button', { name: /^Select / }).first().click();
     await expect(filter, `picking ${tick} did not close the asset picker`).toBeHidden({ timeout: 15_000 });
+}
+
+/**
+ * Picks one side's asset on the open Create order form.
+ *
+ * The form has no coin/token radios and no Ticker field: each side is an
+ * amount box beside an asset button ("Give asset: Select an asset", "Get
+ * asset: BTC on Bitcoin") that opens the Asset picker, which lists the coin
+ * and the tokens together. The native coin is picked by this chain's ticker
+ * (`REGTEST_TICKER`). The give side defaults to an empty token pick and the
+ * get side to the coin, so a spec names both sides rather than leaning on
+ * either default. The pick is asserted on the button's name, which also
+ * proves the order sits on this run's chain.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {'give' | 'get'} side
+ * @param {string} tick  a token ticker, or REGTEST_TICKER for the coin
+ * @param {{ timeoutMs?: number }} [opts]  bounds the wait for the picker row
+ */
+export async function selectOrderAsset(page, side, tick, { timeoutMs = 60_000 } = {}) {
+    const main = page.getByRole('main');
+    // Quick and Full name their fields differently; the Quick cards are the
+    // ones this helper and fillOrderSide address.
+    const quick = main.getByRole('radio', { name: 'Quick', exact: true });
+    if (await quick.count() > 0 && !(await quick.isChecked())) await quick.check();
+    await selectNamedToken(page, side === 'give' ? 'Give asset' : 'Get asset', {
+        chainId: REGTEST_CHAIN_ID,
+        chainLabel: REGTEST_CHAIN_LABEL,
+        tick,
+        timeoutMs,
+    });
+}
+
+/**
+ * Sets one side of the open Create order form: its asset, then its amount.
+ * The amount box is named "Give amount" / "Get amount" plus the picked
+ * ticker ("Get amount (BTC)"). The asset goes first, because a new pick
+ * clears that side's amount.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {'give' | 'get'} side
+ * @param {string} tick  a token ticker, or REGTEST_TICKER for the coin
+ * @param {string | number} amount
+ */
+export async function fillOrderSide(page, side, tick, amount) {
+    await selectOrderAsset(page, side, tick);
+    const main = page.getByRole('main');
+    await fieldByLabel(main, side === 'give' ? 'Give amount' : 'Get amount').fill(String(amount));
+}
+
+/** The Create order form's submit button. */
+export function placeOrderButton(page) {
+    return page.getByRole('main').getByRole('button', { name: 'Place Order', exact: true });
 }
 
 /**

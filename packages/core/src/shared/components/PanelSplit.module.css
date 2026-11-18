@@ -211,6 +211,19 @@
             scrollbar-gutter: stable;
             margin-inline-end: calc(-1 * (var(--xc-space-2) - var(--xc-space-1) / 2));
         }
+        /* A split body never scrolls, so it keeps no lane of its own; the
+           detail panel's end margin that reached into that lane is dropped
+           with it, which leaves the panel where it was and stops it
+           overflowing the body by the lane's width. */
+        .twoPanelBody.twoPanelBody,
+        .splitBody.splitBody {
+            scrollbar-gutter: auto;
+            padding-inline-end: 0;
+        }
+        .twoPanelBody.twoPanelBody .detailPanel.detailPanel,
+        .splitBody.splitBody .detailPanel.detailPanel {
+            margin-inline-end: 0;
+        }
     }
 }
 

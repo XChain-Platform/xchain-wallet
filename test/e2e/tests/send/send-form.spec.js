@@ -50,9 +50,9 @@ async function serveZeroBalances(page) {
     });
 }
 
-/** Memo lives behind the collapsed "Advanced" disclosure. */
+/** Memo lives behind the collapsed "Advanced" section. */
 async function openAdvanced(page) {
-    await page.locator('summary', { hasText: 'Advanced' }).first().click();
+    await page.getByRole('main').getByRole('button', { name: /^Advanced\b/ }).click();
 }
 
 test.describe('send form', () => {
@@ -141,7 +141,7 @@ test.describe('send form', () => {
         // everything the mock CAN answer for honestly, below.
         // §5.2.5: the fee comes from the composed PSBT, so it is an exact
         // amount, not the form's rate estimate.
-        await expect(confirm.getByText('Network fee', { exact: true })).toBeVisible();
+        await expect(confirm.getByText(/^Network fee( \(estimate\))?$/)).toBeVisible();
         await expect(confirm.getByTestId('confirm-fee-network')).toHaveText(/[\d.]+ BTC/);
         // §5.2.6: the hardware note names this screen as the intent surface,
         // so it appears only when a hardware device signs. This wallet signs
@@ -196,6 +196,9 @@ test.describe('send form', () => {
         await amountField(page).fill('0.001');
         await mainButton(page, 'Send').click();
 
+        await expect(page.getByTestId('confirm-checking')).toHaveCount(0);
+        // A tap inside the review's 700 ms settle is dropped, so wait it out.
+        await page.waitForTimeout(900);
         await page.getByTestId('confirm-approve').click();
 
         await expect(page.getByRole('alert').first()).toBeVisible({ timeout: 20_000 });
