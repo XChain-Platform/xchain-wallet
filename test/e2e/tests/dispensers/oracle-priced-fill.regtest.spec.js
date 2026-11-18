@@ -41,7 +41,7 @@
 //       --config=playwright.regtest.config.js tests/dispensers/oracle-priced-fill.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
 import { pickFiatCurrency } from '../../fixtures/pickerFields.js';
 import {
     expectConfirmModal as sharedConfirmModal,
@@ -63,6 +63,7 @@ import {
     selectPickerAsset,
     openFromAddress,
     approveConfirm,
+    FROM_ADDRESS_LABEL,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -303,7 +304,7 @@ test.describe(`user-oracle dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             let main = page.getByRole('main');
             await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            seller = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+            seller = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
             expect(seller, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -335,14 +336,15 @@ test.describe(`user-oracle dispensers on ${REGTEST_CHAIN_LABEL}`, () => {
             // The lane under test. Fiat code AND an oracle address, with the
             // fiat amount left EMPTY: that combination is what selects the
             // user-oracle path over the validator one (DispenserForm.jsx:493).
-            await main.getByRole('button', { name: /Advanced options/ }).click();
+            // The fiat and oracle fields sit in the closed Dispenser Terms section.
+            await openFormSection(main, 'Dispenser Terms');
             await pickFiatCurrency(main, FIAT_CODE);
             await main.getByLabel(/^Oracle address/).fill(ORACLE_ADDRESS);
             await expect(main.getByLabel(/^Fiat amount/),
                 'the fiat amount must stay empty, or this composes the Mode A validator path')
                 .toHaveValue('');
 
-            await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
             await expectConfirmModal(page);
             const created = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(created.action)).toBe('DISPENSER');

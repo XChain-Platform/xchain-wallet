@@ -50,8 +50,10 @@ test.describe('license gate', () => {
     test('blocks onboarding until the terms are acknowledged', async ({ page }) => {
         await page.goto('/');
 
-        // The gate stands in front of the Welcome screen.
-        await expect(page.getByRole('button', { name: ACCEPT })).toBeDisabled();
+        // The gate stands in front of the Welcome screen. Accept stays tappable
+        // and refuses an unacknowledged gate, so tapping it must go nowhere.
+        await page.getByRole('button', { name: ACCEPT }).click();
+        await expect(page.getByRole('form', { name: 'License agreement' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Create new wallet' })).toHaveCount(0);
 
         await acknowledgeTerms(page);

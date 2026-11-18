@@ -144,7 +144,6 @@ test.describe('route error boundary in a real browser', () => {
         await main.getByLabel('To', { exact: true }).fill(VALID_BTC);
         await main.getByRole('textbox', { name: /^Amount/ }).fill('0.01');
         await setGate(page, 'ConfirmActionModal');
-        await main.locator('summary', { hasText: 'Advanced' }).click();
         await main.getByRole('button', { name: 'Send', exact: true }).click();
         await expectBoundary(page);
         expect(await messages(page, 'action.reserve')).toEqual([]);
@@ -160,9 +159,11 @@ test.describe('route error boundary in a real browser', () => {
         const main = page.getByRole('main');
         await main.getByLabel('To', { exact: true }).fill(VALID_BTC);
         await main.getByRole('textbox', { name: /^Amount/ }).fill('0.01');
-        await main.locator('summary', { hasText: 'Advanced' }).click();
         await main.getByRole('button', { name: 'Send', exact: true }).click();
         await expect(page.getByRole('heading', { level: 1, name: 'Confirm' })).toBeVisible();
+        await expect(page.getByTestId('confirm-checking')).toHaveCount(0);
+        // A tap inside the review's 700 ms settle is dropped, so wait it out.
+        await page.waitForTimeout(900);
         await setGate(page, 'ConfirmActionModal', true);
         await page.getByRole('button', { name: 'Approve' }).click();
         await expectBoundary(page);

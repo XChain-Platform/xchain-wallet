@@ -59,8 +59,9 @@
 //      `getByRole('button', { name: 'Import address' })` matches nothing here
 //      and burns its whole budget; the earlier draft died one step later, at
 //      `getByLabel('WIF private key')`, with the page still on the list.
-//   3. The filter strip is a `role="tablist"` of `role="tab"`s. Same trap:
-//      "Imported" is not a button.
+//   3. The address-type filter lives in the title bar's "Filter addresses"
+//      menu, outside `main`, as a dropdown whose rows are `role="option"`.
+//      Same trap: "Imported" is not a button or a tab.
 //   4. **Use NAVIGATES AWAY.** `setAsActive` persists, then calls `onBack()` on
 //      purpose, so Home remounts and refetches balances against the new active
 //      address. The detail screen the button lives on is gone by the time the
@@ -79,6 +80,8 @@ import * as ecc from 'tiny-secp256k1';
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { pickOption } from '../../fixtures/pickOption.js';
 import {
+    closeListFilter,
+    openListFilter,
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
     REGTEST_COIN,
@@ -88,6 +91,8 @@ import {
 import { fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
+/** The address list's title-bar filter menu, button and panel alike. */
+const ADDRESS_FILTER = 'Filter addresses';
 
 /**
  * A throwaway regtest key, from a fixed scalar so the vector never moves.
@@ -140,9 +145,12 @@ function expectedP2wpkh(wif, hrp) {
  * already on Addresses changes nothing, the list never renders, and the wait
  * that follows burns its whole budget on a screen that was never coming. Both
  * inner screens carry a header Back, which is the only control that pops them.
+ *
+ * The list is recognised by its title-bar "Filter addresses" menu button,
+ * which only the list screen carries (it sits in the banner, outside main).
  */
 async function gotoAddressList(page) {
-    const filters = page.getByRole('tablist', { name: 'Filter by address type' });
+    const filters = page.getByRole('button', { name: ADDRESS_FILTER, exact: true });
     for (let i = 0; i < 3 && await filters.count() === 0; i++) {
         const back = page.getByRole('button', { name: 'Back to previous screen', exact: true });
         if (await back.count() > 0) await back.first().click();
@@ -154,11 +162,22 @@ async function gotoAddressList(page) {
         + 'palette cannot leave the detail or the import form').toBeVisible({ timeout: 60_000 });
 }
 
-/** Opens the Imported filter on the address list. */
+/**
+ * Opens the Imported filter on the address list. The address-type filter is a
+ * dropdown ("Filter by address type: All addresses") inside the title bar's
+ * "Filter addresses" menu, and the pick stays applied once the menu closes.
+ */
 async function showImportedOnly(page) {
     await gotoAddressList(page);
-    await page.getByRole('tablist', { name: 'Filter by address type' })
-        .getByRole('tab', { name: 'Imported', exact: true }).click();
+    const panel = await openListFilter(page, ADDRESS_FILTER);
+    const type = panel.getByRole('button', { name: /^Filter by address type: / });
+    if ((await type.getAttribute('aria-label')) !== 'Filter by address type: Imported') {
+        await type.click();
+        await panel.getByRole('option', { name: 'Imported', exact: true }).click();
+    }
+    await expect(type, 'the address list did not take the Imported filter')
+        .toHaveAttribute('aria-label', 'Filter by address type: Imported', { timeout: 15_000 });
+    await closeListFilter(page, ADDRESS_FILTER);
 }
 
 /** Walks to Addresses and opens the Import-address page. */

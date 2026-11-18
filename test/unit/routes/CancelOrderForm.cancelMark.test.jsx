@@ -28,6 +28,7 @@ vi.mock('../../../packages/core/src/shared/hooks/useOwnerActionLane.js', () => (
 }));
 
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
+import { withRecordChanges } from '../../../packages/core/src/shared/utils/recordChanges.js';
 import { CancelOrderForm } from '../../../packages/core/src/shared/routes/CancelOrderForm.jsx';
 import { CancelSwapForm } from '../../../packages/core/src/shared/routes/CancelSwapForm.jsx';
 import { hasOrderCancelBroadcast, orderKey } from '../../../packages/core/src/shared/utils/orderCancelMarks.js';
@@ -84,6 +85,8 @@ describe('a cancel route leaves the Cancelling mark once it broadcasts', () => {
     ])('%s', async (_route, Component, actionIndex, button, marked) => {
         ownerRun.mockResolvedValue({ txid: TXID });
         const m = messaging();
+        // Marks are held per client: the module the provider hands its screens.
+        const client = withRecordChanges(m);
         let utils;
         await domAct(async () => {
             utils = render(
@@ -93,7 +96,7 @@ describe('a cancel route leaves the Cancelling mark once it broadcasts', () => {
             );
             await drain();
         });
-        expect(marked(m)).toBe(false);
+        expect(marked(client)).toBe(false);
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: button }));
             await drain();
@@ -104,6 +107,6 @@ describe('a cancel route leaves the Cancelling mark once it broadcasts', () => {
         expect(actionData.params).toMatchObject({ VERSION: '1' });
         expect(encoderOpts).toHaveProperty('feePerKb');
         expect(utils.getByText('Cancel broadcast')).toBeTruthy();
-        expect(marked(m)).toBe(true);
+        expect(marked(client)).toBe(true);
     });
 });

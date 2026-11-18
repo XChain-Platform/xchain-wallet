@@ -172,7 +172,7 @@ function toLocalDateTimeInput(unixSec) {
  * deadline is the only thing that differs between the two legs.
  */
 async function composeMarket(page, { label, daysOut }) {
-    await openPaletteCommand(page, 'Betting');
+    await openPaletteCommand(page, 'Prediction markets');
     await page.getByRole('button', { name: 'Create market', exact: true }).click();
     const main = page.getByRole('main');
 
@@ -237,7 +237,7 @@ test.describe(`what opening a market costs on ${REGTEST_CHAIN_LABEL}`, () => {
             await createWallet(page, { password: PASSWORD, name: 'Market Fee Wallet' });
             await switchToRegtest(page, PASSWORD);
 
-            await openPaletteCommand(page, 'Betting');
+            await openPaletteCommand(page, 'Prediction markets');
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);

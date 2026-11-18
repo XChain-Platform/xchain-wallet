@@ -62,9 +62,10 @@ for (const scenario of CASES) {
 
             if (scenario.destination === 'wallets') {
                 const main = page.getByRole('main');
-                await activate(main.getByRole('button', { name: /^This wallet\b/ }), scenario.hasTouch);
-                await activate(main.getByRole('button', { name: /^Switch \/ rename/ }), scenario.hasTouch);
-                await expect(page.getByRole('heading', { name: 'Wallets', level: 1 })).toBeVisible();
+                // Settings groups its rows: Wallets, then My Wallets.
+                await activate(main.getByRole('button', { name: /^Wallets\b/ }), scenario.hasTouch);
+                await activate(main.getByRole('button', { name: /^My Wallets\b/ }), scenario.hasTouch);
+                await expect(page.getByRole('heading', { name: /^(My )?Wallets$/, level: 1 })).toBeVisible();
             }
 
             await expect(menu).toBeHidden();

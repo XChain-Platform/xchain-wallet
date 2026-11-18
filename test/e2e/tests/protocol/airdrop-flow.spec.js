@@ -136,6 +136,8 @@ async function fillAirdrop(page) {
 
     await main.getByRole('button', { name: /^Token to drop:/ }).click();
     await searchTokenPicker(page, 'XCHAINGOV');
+    // The open filter panel covers the first result row, so collapse it.
+    await page.getByRole('button', { name: 'Filter coins and tokens', exact: true }).click();
     // Picker rows are named "Select <token name> on <chain>, <balance>, <value>".
     const token = page.getByRole('button', { name: /^Select XChain Governance on Bitcoin\b/ }).first();
     await expect(token, 'the dev wallet did not expose its XCHAINGOV balance').toBeVisible({ timeout: 30_000 });
@@ -200,18 +202,18 @@ for (const viewport of VIEWPORTS) {
         await test.step('airdrop compose and review', async () => {
             const main = await fillAirdrop(page);
             const label = `airdrop compose at ${viewport.width}x${viewport.height}`;
-            await expectScreenLayout(page, 'Airdrop tokens', label);
+            await expectScreenLayout(page, 'Airdrop Tokens', label);
             await scrollMainToBottom(page, label);
-            await main.getByRole('button', { name: 'Review recipients', exact: true }).click();
+            await main.getByRole('button', { name: 'Review Recipients', exact: true }).click();
 
-            await expect(main.getByRole('form', { name: 'Review recipient list' }))
+            await expect(main.getByText('Create address list of 3 items', { exact: true }))
                 .toBeVisible({ timeout: 30_000 });
             await expectReviewAtTop(page, 'airdrop review');
             await expect(main).toContainText(/recipients\s*3\b/i, { useInnerText: true });
             await expect(main.getByText('~21 XCHAINGOV', { exact: true })).toBeVisible();
             await expectScreenLayout(
                 page,
-                'Review address list',
+                'Confirm',
                 `airdrop review at ${viewport.width}x${viewport.height}`,
             );
         });

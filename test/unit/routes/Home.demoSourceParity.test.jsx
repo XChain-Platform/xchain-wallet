@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, renderHook, screen, within } from '@testing
 import { clearDemoWalletId, markDemoWallet } from '../../../packages/core/src/flows/demoMode.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { useWalletSource } from '../../../packages/core/src/shared/hooks/useDemoGuard.jsx';
+import { withRecordChanges } from '../../../packages/core/src/shared/utils/recordChanges.js';
 import { Home } from '../../../packages/core/src/shared/routes/Home.jsx';
 
 const DEMO_WALLET = 'demo-wallet';
@@ -114,7 +115,8 @@ describe('wallet data source', () => {
         const base = messaging();
         const { result } = renderHook(() => useWalletSource(REAL_WALLET), { wrapper: wrapper(base) });
 
-        expect(result.current.messaging).toBe(base);
+        // The provider's module itself, with no demo source layered on.
+        expect(result.current.messaging).toBe(withRecordChanges(base));
         await result.current.messaging.getAddressHistory({
             chainId: 'bitcoin-mainnet', address: ADDRESS,
         });

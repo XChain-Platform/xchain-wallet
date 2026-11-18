@@ -68,6 +68,7 @@ import { kdfStepTimeout } from '../timeout-budget.js';
 import { rateLimitDelayMs, venueVerdict } from './venueHealth.js';
 import { pickOption } from './pickOption.js';
 import { fieldByLabel, searchTokenPicker } from './fields.js';
+import { selectNamedToken } from './crossChain.js';
 import { compareDecimal, subtractDecimal } from '../../../packages/core/src/shared/utils/mintHeadroom.js';
 import {
     MIN_SEED_MARGIN_SECONDS,
@@ -1171,6 +1172,87 @@ export async function selectVenueChain(scope, field = 'Network') {
 }
 
 /**
+ * Points a LIST page's Network filter at the chain this run drives.
+ *
+ * List pages (Prediction markets, Contracts, Dispensers) keep their Network
+ * field in the title bar's filter menu, outside `main` and closed until its
+ * button is pressed, so `selectVenueChain(main)` finds nothing there. The menu
+ * button and its panel share one name ("Filter prediction markets"). The panel
+ * stays open under the full-screen network list, and is closed again here so
+ * the list below it takes clicks.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} filterLabel  the filter menu's accessible name
+ * @param {string} [field]  the Network field's visible label
+ */
+export async function selectListNetwork(page, filterLabel, field = 'Network') {
+    const panel = await openListFilter(page, filterLabel);
+    await selectVenueChain(panel, field);
+    await closeListFilter(page, filterLabel);
+}
+
+/**
+ * Opens a list page's title-bar filter menu and returns its panel.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} filterLabel  the filter menu's accessible name
+ * @returns {Promise<import('@playwright/test').Locator>}
+ */
+export async function openListFilter(page, filterLabel) {
+    const button = page.getByRole('button', { name: filterLabel, exact: true });
+    const panel = page.getByRole('dialog', { name: filterLabel, exact: true });
+    await expect(button, `the page has no "${filterLabel}" menu`).toBeVisible({ timeout: 30_000 });
+    if (!(await panel.isVisible())) await button.click();
+    await expect(panel, `"${filterLabel}" did not open`).toBeVisible({ timeout: 15_000 });
+    return panel;
+}
+
+/**
+ * Closes a list page's filter menu if it is still open (a pick in a portaled
+ * select can close it already), so the list below takes clicks.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} filterLabel  the filter menu's accessible name
+ */
+export async function closeListFilter(page, filterLabel) {
+    const panel = page.getByRole('dialog', { name: filterLabel, exact: true });
+    if (await panel.isVisible()) {
+        await page.getByRole('button', { name: filterLabel, exact: true }).click();
+    }
+    await expect(panel, `"${filterLabel}" did not close`).toBeHidden({ timeout: 15_000 });
+}
+
+/**
+ * Narrows My Tokens to `query`. Its search sits in the title bar's "Filter
+ * tokens" menu, outside `main`; the query stays applied once the menu closes.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} query  a ticker or description text
+ */
+export async function searchMyTokens(page, query) {
+    const panel = await openListFilter(page, 'Filter tokens');
+    const search = panel.getByLabel('Search your tokens by ticker or description', { exact: true });
+    await expect(search, 'My Tokens never rendered its search field').toBeVisible({ timeout: 30_000 });
+    await search.fill(query);
+    await closeListFilter(page, 'Filter tokens');
+}
+
+/**
+ * Sets one of a list page's filter-menu selects (Status, Sort) to `option`.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} filterLabel  the filter menu's accessible name
+ * @param {string} select  the select's label, e.g. "Status"
+ * @param {string} option  the option's visible text, e.g. "All markets"
+ */
+export async function selectListFilterOption(page, filterLabel, select, option) {
+    const panel = await openListFilter(page, filterLabel);
+    await panel.getByRole('combobox', { name: select }).click();
+    await page.getByRole('option', { name: option, exact: true }).click();
+    await closeListFilter(page, filterLabel);
+}
+
+/**
  * Puts the open form's protocol fee on the coin lane.
  *
  * Bitcoin offers two lanes and defaults to XCHAIN, so a spec that measures the
@@ -1435,6 +1517,59 @@ export async function selectPickerAsset(page, tick, { search = tick, chainId = R
         .toBeVisible({ timeout: timeoutMs });
     await row.getByRole('button', { name: /^Select / }).first().click();
     await expect(filter, `picking ${tick} did not close the asset picker`).toBeHidden({ timeout: 15_000 });
+}
+
+/**
+ * Picks one side's asset on the open Create order form.
+ *
+ * The form has no coin/token radios and no Ticker field: each side is an
+ * amount box beside an asset button ("Give asset: Select an asset", "Get
+ * asset: BTC on Bitcoin") that opens the Asset picker, which lists the coin
+ * and the tokens together. The native coin is picked by this chain's ticker
+ * (`REGTEST_TICKER`). The give side defaults to an empty token pick and the
+ * get side to the coin, so a spec names both sides rather than leaning on
+ * either default. The pick is asserted on the button's name, which also
+ * proves the order sits on this run's chain.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {'give' | 'get'} side
+ * @param {string} tick  a token ticker, or REGTEST_TICKER for the coin
+ * @param {{ timeoutMs?: number }} [opts]  bounds the wait for the picker row
+ */
+export async function selectOrderAsset(page, side, tick, { timeoutMs = 60_000 } = {}) {
+    const main = page.getByRole('main');
+    // Quick and Full name their fields differently; the Quick cards are the
+    // ones this helper and fillOrderSide address.
+    const quick = main.getByRole('radio', { name: 'Quick', exact: true });
+    if (await quick.count() > 0 && !(await quick.isChecked())) await quick.check();
+    await selectNamedToken(page, side === 'give' ? 'Give asset' : 'Get asset', {
+        chainId: REGTEST_CHAIN_ID,
+        chainLabel: REGTEST_CHAIN_LABEL,
+        tick,
+        timeoutMs,
+    });
+}
+
+/**
+ * Sets one side of the open Create order form: its asset, then its amount.
+ * The amount box is named "Give amount" / "Get amount" plus the picked
+ * ticker ("Get amount (BTC)"). The asset goes first, because a new pick
+ * clears that side's amount.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {'give' | 'get'} side
+ * @param {string} tick  a token ticker, or REGTEST_TICKER for the coin
+ * @param {string | number} amount
+ */
+export async function fillOrderSide(page, side, tick, amount) {
+    await selectOrderAsset(page, side, tick);
+    const main = page.getByRole('main');
+    await fieldByLabel(main, side === 'give' ? 'Give amount' : 'Get amount').fill(String(amount));
+}
+
+/** The Create order form's submit button. */
+export function placeOrderButton(page) {
+    return page.getByRole('main').getByRole('button', { name: 'Place Order', exact: true });
 }
 
 /**

@@ -77,6 +77,10 @@ async function measureLandscapeLayout(page) {
         return {
             height: contentRect.height,
             overflowY: getComputedStyle(element).overflowY,
+            // A list page keeps main fixed and scrolls its list body, so the tallest inner scroller counts too.
+            innerScrollHeight: Math.max(0, ...[...element.querySelectorAll('*')]
+                .filter((node) => /auto|scroll/.test(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight)
+                .map((node) => node.clientHeight)),
             titleInset: titleRect.top - (screenRect?.top ?? titleRect.top),
         };
     });
@@ -130,9 +134,10 @@ for (const viewport of VIEWPORTS) {
                         .toBeLessThanOrEqual(1);
                     expect(layout.header.controlLineSpread, `${label}: app header controls wrap`)
                         .toBeLessThanOrEqual(1);
-                    expect(['auto', 'scroll'], `${label}: content pane is not scrollable`)
-                        .toContain(layout.content.overflowY);
-                    expect(layout.content.height, `${label}: scrollable content pane height`)
+                    const mainScrolls = ['auto', 'scroll'].includes(layout.content.overflowY);
+                    expect(mainScrolls || layout.content.innerScrollHeight > 0, `${label}: content pane is not scrollable`)
+                        .toBe(true);
+                    expect(mainScrolls ? layout.content.height : layout.content.innerScrollHeight, `${label}: scrollable content pane height`)
                         .toBeGreaterThanOrEqual(MIN_CONTENT_HEIGHT);
                     expect(layout.content.titleInset, `${label}: title row starts above the route`)
                         .toBeGreaterThanOrEqual(-1);

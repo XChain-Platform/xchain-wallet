@@ -76,6 +76,7 @@ import {
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
+    FROM_ADDRESS_LABEL,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -250,7 +251,7 @@ test.describe(`on-chain label publish on ${REGTEST_CHAIN_LABEL}`, () => {
             const main = page.getByRole('main');
             await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            owner = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+            owner = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
             expect(owner, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 

@@ -132,6 +132,11 @@ async function restoreWith(page, password) {
     await page.getByRole('button', { name: 'Restore' }).click();
 }
 
+// The field-level sentence; the form-errors summary above it repeats it.
+function fieldError(page) {
+    return page.getByRole('alert').filter({ hasNotText: 'Fix 1 thing to continue' });
+}
+
 test.describe('restore: one password, and the role that refused it', () => {
     test('the screen asks for one password and shows the chosen file\'s summary', async ({ page }) => {
         await openRestoreScreen(page, await buildEnvelope());
@@ -148,7 +153,7 @@ test.describe('restore: one password, and the role that refused it', () => {
         await openRestoreScreen(page, await buildEnvelope());
         await restoreWith(page, UNRELATED_PASSWORD);
 
-        const error = page.getByRole('alert').first();
+        const error = fieldError(page);
         await expect(error).toHaveText("That password doesn't open this backup.", { timeout: KDF_STEP_MS });
         await expect(page.getByLabel('Backup password', { exact: true })).toHaveAttribute('aria-invalid', 'true');
         // Nothing was created, and no second field was offered for a file
@@ -172,7 +177,7 @@ test.describe('restore: one password, and the role that refused it', () => {
         // The wrong wallet password is named on the wallet field, not the file's.
         await walletField.fill(UNRELATED_PASSWORD);
         await page.getByRole('button', { name: 'Restore' }).click();
-        await expect(page.getByRole('alert').first())
+        await expect(fieldError(page))
             .toHaveText("That password doesn't open the wallet in this backup.", { timeout: KDF_STEP_MS });
     });
 });
