@@ -55,6 +55,7 @@ export const SETTLE_TIME_UNVERIFIED_CHECKS = Object.freeze([
     'SWAP_RESTRICTIONS',               // trading.js, every SWAP create
     'ISSUE_LOCK_RATCHETS',             // issue.js, every edit of a token the lookup found
     'ISSUE_BRIDGE_POLICY_EXCLUSION',   // issue.js, same
+    'PRICE_STATE',                     // misc.js, every PRICE; the wallet's v1 needs no stake
 ]);
 
 /**

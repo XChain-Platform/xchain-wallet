@@ -229,6 +229,17 @@ describe('preflightCheckState settle-time checks', () => {
         expect(preflightCleanPass(report)).toBe(false);
     });
 
+    // PRICE_STATE is declared on every PRICE (xchain-sdk misc.js); a PRICE v1 has
+    // no authority rule at all. The other per-action notes there name state the
+    // network judges per address (stakes, polls, contracts), so they stay partial.
+    it('settles a PRICE publish, and keeps the rest of the per-action notes partial', () => {
+        const price = { check: 'PRICE_STATE', reason: 'oracle authority (capability stake) resolves server-side' };
+        expect(preflightCheckState({ verdict: 'pass', findings: [approval()], unverified: [price] })).toBe('settleChecks');
+        for (const check of ['STAKE_STATE', 'UNSTAKE_STATE', 'VOTE_STATE', 'EXECUTE_STATE', 'COINPAY_STATE', 'SLEEP_STATE']) {
+            expect(preflightCheckState({ verdict: 'pass', findings: [approval()], unverified: [{ check, reason: 'declared' }] })).toBe('partial');
+        }
+    });
+
     it('stays partial when a settle-time item sits beside any other', () => {
         expect(preflightCheckState({
             verdict: 'pass', findings: [approval()],

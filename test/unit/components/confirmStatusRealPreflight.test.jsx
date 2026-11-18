@@ -214,6 +214,28 @@ describe.skipIf(!installed)('Confirm status on the real pre-flight path', () => 
         expect(out.state).toBe('partial');
     }, 30_000);
 
+    // PRICE v1 is the oracle publish the wallet composes (flows/oraclePriceAction.js).
+    // The SDK declares PRICE_STATE on every PRICE whatever the address; v1 itself
+    // needs no stake (xchain-indexer src/actions/price/index.js), so no state the
+    // wallet could read would refuse it, and the review is the blue settle note.
+    it.each(CHAINS)('a first oracle price publish on %s is checked when it settles, with no SDK text', async (chainId) => {
+        const out = await confirmNotice(chainId, action('PRICE|1|BTC|XCHAIN|USD|1.50|0.01|'));
+        expect(out.unverified).toEqual(['PRICE_STATE']);
+        expect(out.state).toBe('settleChecks');
+        expect(out.text).toContain('Checked When It Settles');
+        expect(out.text).toContain('Whether this address may publish prices');
+        expect(out.text).not.toContain('Only partly checked');
+        for (const reason of out.reasons) expect(out.text).not.toContain(reason);
+        expect(out.text).not.toMatch(/server-side|capability|_[A-Z]{3,}/);
+    }, 30_000);
+
+    it.each(CHAINS)('an oracle price republish at double the last price on %s is checked when it settles', async (chainId) => {
+        const out = await confirmNotice(chainId, action('PRICE|1|BTC|XCHAIN|USD|3.00|0.01|'));
+        expect(out.unverified).toEqual(['PRICE_STATE']);
+        expect(out.state).toBe('settleChecks');
+        expect(out.text).not.toMatch(/server-side|capability|_[A-Z]{3,}/);
+    }, 30_000);
+
     it('a mainnet send in exponent form keeps the amount rule red', async () => {
         const out = await confirmNotice('bitcoin-mainnet', action('SEND|0|XCP|1e2|own-dest'));
         expect(out.unverified).toContain('AMOUNT_REPRESENTABILITY');
