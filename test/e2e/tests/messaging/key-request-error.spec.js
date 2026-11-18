@@ -122,14 +122,12 @@ const UNKNOWN_RECIPIENT = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 /**
  * Opens a fresh compose screen.
  *
- * SCREEN FACT: the Messaging inbox offers compose once: "New conversation"
- * in its actions row when it lists conversations, or the empty state's "New
- * message" when it has none (a fresh wallet).
+ * SCREEN FACT: the Messaging title bar carries one "New message" plus (G95).
  */
 async function gotoNewConversation(page) {
     await gotoSection(page, 'Messaging');
-    const compose = page.getByRole('main').getByRole('button', { name: /^(New conversation|New message)$/ });
-    await expect(compose, 'no "New conversation" entry point on the Messaging screen')
+    const compose = page.getByRole('banner').getByRole('button', { name: 'New message', exact: true });
+    await expect(compose, 'no "New message" entry point on the Messaging screen')
         .toBeVisible({ timeout: 30_000 });
     await compose.click();
 
