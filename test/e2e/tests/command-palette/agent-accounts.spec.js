@@ -8,7 +8,8 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
-// Agent accounts opens from the wallet menu at phone and desktop widths.
+// My Agents (the agent accounts page) opens from the wallet menu at phone
+// and desktop widths.
 
 import { createWallet, expect, test } from '../../fixtures/wallet.js';
 
@@ -16,16 +17,16 @@ for (const { name, width, height } of [
     { name: 'phone 360', width: 360, height: 640 },
     { name: 'desktop 1440', width: 1440, height: 900 },
 ]) {
-    test(`the wallet menu opens Agent accounts at ${name}`, async ({ page }) => {
+    test(`the wallet menu opens My Agents at ${name}`, async ({ page }) => {
         test.slow();
         await page.setViewportSize({ width, height });
         await createWallet(page);
         await page.keyboard.press('ControlOrMeta+k');
         const palette = page.getByRole('dialog', { name: 'Wallet menu' });
         await expect(palette).toBeVisible();
-        await palette.getByRole('combobox').fill('Agent accounts');
-        await palette.getByRole('option', { name: /^Agent accounts\b/ }).first().click();
+        await palette.getByRole('combobox').fill('My Agents');
+        await palette.getByRole('option', { name: /^My Agents\b/ }).first().click();
         await expect(palette).toBeHidden();
-        await expect(page.getByRole('heading', { level: 1, name: 'Agent accounts' })).toBeVisible();
+        await expect(page.getByRole('heading', { level: 1, name: 'My Agents' })).toBeVisible();
     });
 }
