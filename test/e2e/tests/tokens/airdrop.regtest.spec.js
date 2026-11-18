@@ -78,6 +78,7 @@
 
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import { pickOption } from '../../fixtures/pickOption.js';
+import { VENUE_DUST_SATS } from '../../fixtures/priceSeed.js';
 import {
     encoderRpc,
     expectConfirmModal as sharedConfirmModal,
@@ -357,7 +358,9 @@ async function approveAndGetTxid(page, not = null) {
         // fresh, idle Approve on screen is that second confirm, taken here.
         const approve = page.getByTestId('confirm-approve');
         if (await approve.isVisible().catch(() => false)
-            && (await approve.getAttribute('aria-busy').catch(() => null)) !== 'true') {
+            // Bounded: a button that unmounts between the two reads must not
+            // hold this loop for the 30 s action timeout.
+            && (await approve.getAttribute('aria-busy', { timeout: 250 }).catch(() => 'gone')) === 'false') {
             await approveConfirm(page, 'the airdrop leg\'s signing confirm');
             continue;
         }
@@ -419,6 +422,9 @@ async function reloadToHome(page) {
  * THEM - an address holding no coin and no supply. See D-140 for what that costs.
  */
 async function readChainAddresses(page, keep) {
+    // The picker trigger sits on the From address, inside the From section,
+    // which a Form Standard form keeps closed until opened.
+    await openFromAddress(page.getByRole('main'));
     await page.getByRole('button', { name: 'Choose source address' }).click();
     const rows = page.getByRole('button', { name: /^View address / });
     await expect(rows.first(), 'the From picker listed no addresses at all')
@@ -857,8 +863,16 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('the per-recipient fee is what the screen projected, to the satoshi', async () => {
             const dropped = await waitForIndexedAction(airdropTxid);
             expectPerRecipientFee(dropped, recipients.length);
-            expect(Math.round(Number(dropped.fee.native_coin_amount) * 1e8),
-                `the coin fee on chain is not the ${projectedFeeSats} sats the screen projected`)
+            // The chain records the share of the fee output this AIRDROP owed
+            // (the native-fee tally draws `expectedNative`), not the output's
+            // value. The wallet pads a quote below the relay dust floor up to
+            // that floor, so the screen shows what leaves the wallet: the
+            // owed share, or the floor when the share is smaller.
+            const owedSats = Math.round(Number(dropped.fee.native_coin_amount) * 1e8);
+            expect(Math.max(owedSats, VENUE_DUST_SATS[REGTEST_COIN]),
+                `the chain says this drop owed ${owedSats} sats, which the wallet pays as `
+                + `max(owed, ${VENUE_DUST_SATS[REGTEST_COIN]}-sat dust floor); the screen projected `
+                + `${projectedFeeSats}`)
                 .toBe(projectedFeeSats);
 
             // What the payer actually lost: the miner fee plus the protocol
@@ -1172,8 +1186,11 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             // it sends is unverifiable by the person signing it.
             await expect(main, 'the form does not name the list it is airdropping to')
                 .toContainText(`List #${listIndex}`);
-            await expect(main, 'the form did not recognise the pick as an ADDRESS list')
-                .toContainText(/address list/i);
+            // An address list is described by its member count ("1 address on
+            // this list."); a token list reads "Token list: ..." instead.
+            await expect(main.getByText(/^1 address on this list\.$/),
+                'the form did not recognise the pick as an ADDRESS list')
+                .toBeVisible({ timeout: 30_000 });
 
             await payProtocolFeeInCoin(main);
             // 'existing' skips the LIST leg entirely, so the submit button is

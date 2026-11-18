@@ -65,6 +65,7 @@ import {
     mintXchain,
     readReceiveAddress,
     REGTEST_COIN,
+    selectPickerAsset,
     selectVenueChain,
     selectVenueSendAsset,
     switchToRegtest,
@@ -213,15 +214,19 @@ test.describe('the PC-26 gated SEND guard', () => {
             // Publish as is the themed dropdown (G119).
             await issuer.getByRole('button', { name: /^Publish as: / }).click();
             await issuer.getByRole('option', { name: /^Encrypted & token-gated/ }).click();
-            // PublishFileForm pins role="listitem" on this owned-token row (it
-            // sits inside a role="list" container), so it answers to
-            // 'listitem', not 'button', in the accessibility tree. A listitem
-            // takes no accessible name from its content, so the row is found by
-            // its text rather than by name.
-            await issuer.getByRole('listitem').filter({ hasText: TICK }).click();
+            // The gate token is the form's Token field ("Token: Select a
+            // token"), which opens the standard token picker over the tokens
+            // this wallet owns; the pick is asserted on the field's name.
+            await issuer.getByRole('button', { name: /^Token: / }).click();
+            await selectPickerAsset(issuer, TICK);
 
             const main = issuer.getByRole('main');
-            await expect(fieldByLabel(main, 'File to publish')).toBeVisible({ timeout: 30_000 });
+            await expect(main.getByRole('button', { name: new RegExp(`^Token: ${TICK} on `) }),
+                'the token picker closed without putting the gate token on the form')
+                .toBeVisible({ timeout: 30_000 });
+            // The file input sits hidden behind the File field's Choose a file
+            // button, so it is found attached, not visible.
+            await expect(fieldByLabel(main, 'File to publish')).toBeAttached({ timeout: 30_000 });
             await fieldByLabel(main, 'File to publish').setInputFiles({
                 name: 'unlock-me.txt',
                 mimeType: 'text/plain',

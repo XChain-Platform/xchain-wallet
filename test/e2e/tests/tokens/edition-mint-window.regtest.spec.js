@@ -353,7 +353,7 @@ async function composeMint(page, amount, tick = TICK, signAs = null) {
     // headroom, the per-address cap and the window notice at different moments,
     // and a regex that only knew the first of those reported the fix as absent.
     const footer = await main
-        .getByText(/available to mint|No supply cap|opens at block|closed at block/).first()
+        .getByText(/available to mint|reached its per-address cap|No supply cap|opens at block|closed at block/).first()
         .innerText().catch(() => '');
 
     await main.getByRole('textbox', { name: /^Amount/ }).fill(String(amount));
@@ -555,26 +555,33 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
             }
         });
 
-        await test.step('PAST the address cap: refused again, and the footer still offers a full transaction', async () => {
+        await test.step('PAST the address cap: refused again, and the footer names the cap', async () => {
             const quote = await feeQuote(PER_TX, source);
             expect(String(quote.status)).toMatch(/MINT_ADDRESS_MAX/i);
 
             const footer = await composeMint(page, PER_TX);
 
-            // The second missing dimension. This address has minted its whole
-            // MINT_ADDRESS_MAX and can never mint another unit of this token;
-            // the footer is sized off min(MAX_MINT, MAX_SUPPLY - supply), and
-            // 80 of the 100 edition remains, so it advertises a full ten.
-            // The per-address cap cannot become a remaining figure - it is
-            // cumulative over this address's whole MINT history and nothing the
-            // wallet reads carries that total - so it is STATED beside the
-            // headroom rather than subtracted from it. A form that silently
-            // offered ten again, with this address permanently unable to mint
-            // one, is what this replaces.
+            // This address has minted its whole MINT_ADDRESS_MAX. With its mint
+            // history read, the footer says the cap is reached and the form
+            // refuses; without it, the cap is stated beside the supply headroom
+            // and the network refuses. Either way nothing is sent.
             expect(footer, 'the amount field says nothing about the per-address cap')
-                .toMatch(new RegExp(`${PER_TX} ${TICK} available to mint, ${PER_ADDRESS} per address in total`));
+                .toMatch(new RegExp('This address has reached its per-address cap'
+                    + `|${PER_TX} ${TICK} available to mint, ${PER_ADDRESS} per address in total`));
 
-            if (REGTEST_COIN === 'RBTC') {
+            // Which side answers depends on whether the history read landed
+            // before the tap, so the branch follows the screen, not the footer.
+            const capAlert = page.getByRole('alert').filter({ hasText: /reached its per-address cap/ }).first();
+            const networkAlert = page.getByRole('alert').filter({ hasText: /MINT_ADDRESS_MAX/i }).first();
+            await expect(capAlert.or(page.getByTestId('confirm-modal')).or(networkAlert).first(),
+                'a mint past the address cap drew neither a form refusal nor a confirm screen')
+                .toBeVisible({ timeout: 60_000 });
+            if (await capAlert.isVisible()) {
+                await page.waitForTimeout(1_000);
+                expect(await page.getByTestId('confirm-modal').count(),
+                    'a mint past the address cap reached the confirm screen')
+                    .toBe(0);
+            } else if (REGTEST_COIN === 'RBTC') {
                 // Bitcoin defaults to the XCHAIN fee lane, where no native-fee
                 // quote runs on the form, so the network's verdict arrives as
                 // the confirm screen's pre-send check. That check must name the
@@ -592,7 +599,7 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
                 await page.getByTestId('confirm-reject').click();
                 await expect(page.getByTestId('confirm-modal')).toBeHidden({ timeout: 30_000 });
             } else {
-                await expect(page.getByRole('alert').filter({ hasText: /MINT_ADDRESS_MAX/i }),
+                await expect(networkAlert,
                     'the wallet did not quote the network\'s verdict for the per-address cap')
                     .toBeVisible({ timeout: 90_000 });
                 expect(await page.getByTestId('confirm-modal').count(),

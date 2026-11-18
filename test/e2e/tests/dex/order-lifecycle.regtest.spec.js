@@ -377,10 +377,13 @@ test.describe(`the DEX ORDER lane on ${REGTEST_CHAIN_LABEL}`, () => {
             const row = orderRow(page, orderIndex);
             await expect(row, `#${orderIndex} vanished from My orders after being cancelled`)
                 .toBeVisible({ timeout: 60_000 });
+            // A cancelled order reads "Closed": the stored status stays
+            // cancelled, the list shows the short word (ORDER_STATUS_LABELS,
+            // operator 2026-11-14).
             await expect(row,
                 'a cancelled order still reads as open, which is an invitation to wait for a match '
                 + 'that can never come')
-                .toContainText('Cancelled', { timeout: 60_000 });
+                .toContainText('Closed', { timeout: 60_000 });
         });
     });
 

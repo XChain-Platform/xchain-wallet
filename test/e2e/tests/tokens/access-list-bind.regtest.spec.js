@@ -242,6 +242,9 @@ async function reloadToHome(page) {
  * filter applied, so the scoping is the wallet's own.
  */
 async function readChainAddresses(page, keep) {
+    // The picker trigger sits on the From address, inside the From section,
+    // which a Form Standard form keeps closed until opened.
+    await openFromAddress(page.getByRole('main'));
     await page.getByRole('button', { name: 'Choose source address' }).click();
     const rows = page.getByRole('button', { name: /^View address / });
     await expect(rows.first(), 'the From picker listed no addresses at all')
@@ -446,7 +449,7 @@ async function bindAccessList(page, tick, kind, listIndex, memberCount) {
     await expect(form).toContainText(`List #${listIndex}`);
     await expect(form).toContainText(`${memberCount} member${memberCount === 1 ? '' : 's'}`);
 
-    await form.getByRole('button', { name: 'Update access lists', exact: true }).click();
+    await form.getByRole('button', { name: 'Update Access Lists', exact: true }).click();
     await expectConfirmModal(page);
     const bound = await waitForIndexedAction(await approveAndGetTxid(page));
     expect(String(bound.action)).toBe('ISSUE');

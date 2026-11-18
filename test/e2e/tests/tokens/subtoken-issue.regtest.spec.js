@@ -565,13 +565,16 @@ test.describe(`subtoken issuance on ${REGTEST_CHAIN_LABEL}`, () => {
             // THE GOOD HALF, and it is why this was a dead end rather than a
             // loss: the wallet's parent lookup refuses the wrong signer on the
             // Details form, so no confirm screen opens and no fee is attached.
+            // The refusal shows twice, in the Form errors summary and on the
+            // Parent field; the field's own alert is the one asserted.
             const alert = page.getByRole('alert')
-                .filter({ hasText: /owned by another address in this wallet/i });
+                .filter({ hasText: /owned by another address in this wallet/i })
+                .and(page.locator(':not([data-form-errors])'));
             await expect(alert,
                 'the wizard neither refused this nor explained it, so a doomed action reached the '
                 + 'signing screen')
                 .toBeVisible({ timeout: 90_000 });
-            await expect(alert).toContainText(/Go back and choose it as the address that pays the fee/i);
+            await expect(alert).toContainText(/Choose it in From as the address that pays the fee/i);
             expect(await page.getByTestId('confirm-modal').count(),
                 'a subtoken the network has already refused reached the confirm screen')
                 .toBe(0);

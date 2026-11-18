@@ -38,6 +38,7 @@ import {
     readReceiveAddress,
     REGTEST_CHAIN_LABEL,
     REGTEST_DESTINATION,
+    REGTEST_NATIVE_DECIMALS,
     REGTEST_TICKER,
     selectVenueSendAsset,
     switchToRegtest,
@@ -45,7 +46,7 @@ import {
     waitForConfirmedUtxo,
     approveConfirm,
 } from '../../fixtures/regtest.js';
-import { fieldByLabel } from '../../fixtures/fields.js';
+import { amountAsShown, fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -159,7 +160,8 @@ test.describe('confirm -> broadcast on regtest', () => {
 
         await page.getByTestId('confirm-reject').click();
         await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
-        await expect(amountField(page)).toHaveValue(SEND_BTC);
+        // Back on the form, the amount reads in the coin's format (U61).
+        await expect(amountField(page)).toHaveValue(amountAsShown(SEND_BTC, REGTEST_NATIVE_DECIMALS));
 
         // Re-composing the same payment must still work: if Reject stranded a
         // reservation or left an in-flight report attached, the second attempt

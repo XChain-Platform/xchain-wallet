@@ -558,14 +558,17 @@ test.describe('BET round trip on regtest', () => {
                     'Use never completed, so the active-address write is still in flight')
                     .toBeHidden({ timeout: 30_000 });
 
-                // Use navigates back to Home on success, so the badge has to be read
-                // by walking in again - the same §5 screen fact the WIF-import spec
-                // recorded about this control.
-                await openPaletteCommand(page, 'Addresses');
-                await page.getByRole('button', { name: `View address ${punter}` }).click();
             }
-            await expect(page.getByRole('main').getByText('Active', { exact: true }),
-                'the bettor did not become the active address, so the market screen will '
+            // Use navigates back on success, so the badge is read by walking in
+            // again - the same §5 screen fact the WIF-import spec recorded
+            // about this control.
+            await openPaletteCommand(page, 'Addresses');
+            // The address LIST marks the active address with an "Active" badge
+            // on its row (AddressList addrActive); the detail screen carries no
+            // badge, it only stops offering Set active.
+            await expect(page.getByRole('button', { name: `View address ${punter}` })
+                .getByText('Active', { exact: true }),
+            'the bettor did not become the active address, so the market screen will '
                 + 'refuse the bet as a self-bet').toBeVisible({ timeout: 15_000 });
         });
 
@@ -597,7 +600,7 @@ test.describe('BET round trip on regtest', () => {
             await yes.click();
             await expect(main.getByRole('form', { name: 'Buy a position' }), 'tapping the outcome did not open Place Bet')
                 .toBeVisible({ timeout: 30_000 });
-            await main.getByLabel(/^Stake/).fill(STAKE);
+            await main.getByRole('form', { name: 'Buy a position' }).getByRole('textbox', { name: /^Amount/ }).fill(STAKE);
             await fillPasswordIfPresent(main);
             await main.locator('button[type="submit"]').click();
             await approveConfirm(page);

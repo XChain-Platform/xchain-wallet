@@ -168,6 +168,10 @@ test.describe('BET oracle record against a live explorer', () => {
             await expect(row, `market #${feedIndex} is listed`).toBeVisible({ timeout: 60_000 });
             await row.click();
 
+            // The market's number and its Run by oracle link are facts on the
+            // Details tab; the page opens on Buy.
+            await main.getByRole('tablist', { name: 'Market sections' })
+                .getByRole('tab', { name: 'Details', exact: true }).click();
             await expect(main.getByText(`#${feedIndex}`, { exact: false }).first()).toBeVisible();
         });
 

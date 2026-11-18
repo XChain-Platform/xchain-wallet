@@ -17,6 +17,7 @@
 
 import {
     clickManageTokenAction,
+    openFromSection,
     createWallet,
     expect,
     openPaletteCommand,
@@ -81,7 +82,12 @@ async function openLockAddress(page) {
     const entry = page.getByRole('main').getByRole('button', { name: /^Lock this address/ });
     await expect(entry, 'All actions has no "Lock this address" entry').toBeVisible({ timeout: 30_000 });
     await entry.click();
-    await expect(fieldByLabel(page, 'Address to lock')).toBeVisible({ timeout: 30_000 });
+    // The address being locked is the form's From address, inside the From
+    // section, which the form keeps closed until opened.
+    const main = page.getByRole('main');
+    await expect(main.getByRole('form', { name: 'Lock address' })).toBeVisible({ timeout: 30_000 });
+    await openFromSection(main);
+    await expect(fieldByLabel(main, 'Address to lock')).toBeVisible({ timeout: 30_000 });
 }
 
 /**
@@ -231,16 +237,20 @@ test.describe(`SLEEP (tick pause/resume and address lock) on ${REGTEST_CHAIN_LAB
             const resumeBlock = Number((await wakeLine.first().innerText()).match(/at block ([\d,]+)/)?.[1]?.replace(/,/g, ''));
             expect(Number.isFinite(resumeBlock) && resumeBlock > 0, 'unreadable wake block on the lock review').toBe(true);
 
-            // Legacy review stage: irreversibility warning, typed confirm, sign.
-            await expect(page.getByTestId('confirm-action-warnings'))
-                .toContainText("While locked, this address can't create any XChain action", { timeout: 30_000 });
-            const sign = main.getByRole('button', { name: /^Lock address$/i });
-            await expect(sign, 'Sign is live before LOCK was typed').toBeDisabled();
+            // The confirm page's own warning slot states what the lock means.
+            await expect(page.getByTestId('confirm-warning'))
+                .toContainText('Nothing can lift the lock before its resume block', { timeout: 30_000 });
+            // Approve never disables (G130): a tap before LOCK is typed is
+            // answered at the top of the page and sends nothing.
+            const approve = page.getByTestId('confirm-approve');
+            await expect(page.getByTestId('confirm-checking')).toHaveCount(0, { timeout: 60_000 });
+            await approve.click();
+            await expect(page.getByTestId('confirm-blocked'), 'Approve was taken before LOCK was typed')
+                .toHaveAttribute('data-reason', 'credentials', { timeout: 15_000 });
             const password = fieldByLabel(main, 'Password');
             if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
             await fieldByLabel(main, 'Type LOCK to confirm').fill('LOCK');
-            await expect(sign).toBeEnabled({ timeout: 15_000 });
-            await sign.click();
+            await approveConfirm(page, 'the address lock');
 
             await expect(main.getByText('Lock address broadcast'), 'the lock never reported a broadcast')
                 .toBeVisible({ timeout: 180_000 });

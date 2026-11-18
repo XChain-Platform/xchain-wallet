@@ -405,6 +405,9 @@ async function reloadToHome(page) {
  * action signed by an address holding nothing.
  */
 async function readChainAddresses(page, keep) {
+    // The picker trigger sits on the From address, inside the From section,
+    // which a Form Standard form keeps closed until opened.
+    await openFromAddress(page.getByRole('main'));
     await page.getByRole('button', { name: 'Choose source address' }).click();
     const rows = page.getByRole('button', { name: /^View address / });
     await expect(rows.first(), 'the From picker listed no addresses at all')
@@ -590,13 +593,16 @@ async function bindController(page, source, contractIndex, { tick = TICK, action
         'the form opened from a token but did not default to protecting it')
         .toHaveText(/^\s*Token\s*$/);
 
-    // The form defaults From to the NEWEST HD address, which by now is the
-    // destination generated below - not the token owner. An ISSUE v6 signed by
-    // anyone but the owner is refused, so this is a correction, not a check.
-    await readChainAddresses(page, source);
-    expect(await (await openFromAddress(form)).inputValue(),
+    // A token bind anchors From to the token's recorded owner and locks the
+    // From picker, because an ISSUE v6 signed by anyone but the owner is
+    // refused. The wallet's newest HD address is the destination generated
+    // below, so a form that left From on it would sign with the wrong key.
+    await expect(await openFromAddress(form),
         'the bind would be signed by an address that does not own the token')
-        .toBe(source);
+        .toHaveValue(source, { timeout: 30_000 });
+    await expect(page.getByRole('button', { name: 'Choose source address' }),
+        'a token bind lets From move off the token owner')
+        .toHaveAttribute('aria-disabled', 'true');
 
     await fieldByLabel(form, 'Guard contract').fill(contractIndex);
     // A missing checkbox fails chooseActionClass, so this line is also the
@@ -605,7 +611,7 @@ async function bindController(page, source, contractIndex, { tick = TICK, action
     await chooseActionClass(form, actionClass);
     await openFormSection(form, 'Cooldown');
     await form.getByLabel(/^Cooldown blocks/).fill('0');
-    await form.getByRole('button', { name: 'Bind', exact: true }).click();
+    await form.getByRole('button', { name: 'Bind Token', exact: true }).click();
 
     await expectConfirmModal(page);
     const bound = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -646,7 +652,7 @@ async function gotoUnbindControllerForm(page, tick) {
     await clickManageTokenAction(page.getByRole('main'), 'Unbind controller');
 
     const form = page.getByRole('main');
-    await expect(form.getByRole('group', { name: 'Action class' }),
+    await expect(form.getByRole('combobox', { name: 'Action class' }),
         'Unbind controller did not open the Unbind form')
         .toBeVisible({ timeout: 30_000 });
     return form;
@@ -720,12 +726,19 @@ async function gotoAddressControllerForm(page, source) {
 }
 
 /**
- * Leaves exactly `actionClass` ticked in the form's Action class checkboxes.
- * The form opens with `transfer` ticked, so every other ticked box is cleared
- * first. A class the chain does not offer has no checkbox, and the visibility
- * assertion fails the test instead of silently binding the wrong class.
+ * Leaves exactly `actionClass` chosen in the form's Action class control.
+ * The Bind form offers checkboxes and opens with `transfer` ticked, so every
+ * other ticked box is cleared first. The Unbind form removes one class, so it
+ * offers a single-choice themed select instead. A class the chain does not
+ * offer has no checkbox or option, and the visibility assertion fails the test
+ * instead of silently acting on the wrong class.
  */
 async function chooseActionClass(form, actionClass) {
+    const select = form.getByRole('combobox', { name: 'Action class' });
+    if (await select.count() > 0) {
+        await chooseUnbindActionClass(form, select, actionClass);
+        return;
+    }
     const group = form.getByRole('group', { name: 'Action class' });
     const target = group.getByRole('checkbox', { name: actionClass, exact: true });
     await expect(target, `the Action class checkboxes carry no \`${actionClass}\` option`).toBeVisible();
@@ -738,6 +751,15 @@ async function chooseActionClass(form, actionClass) {
         `exactly \`${actionClass}\` must stay ticked`).toHaveCount(1);
 }
 
+/** Picks `actionClass` in the Unbind form's Action class select (a combobox showing its pick). */
+async function chooseUnbindActionClass(form, select, actionClass) {
+    await select.click();
+    const option = form.page().getByRole('option', { name: actionClass, exact: true });
+    await expect(option, `the Action class select carries no \`${actionClass}\` option`).toBeVisible();
+    await option.click();
+    await expect(select).toHaveText(new RegExp(`^\\s*${actionClass}\\s*$`));
+}
+
 /** Binds `contractIndex` to `source` itself (ADDRESS v1) and waits for the chain. */
 async function bindAddressController(page, source, contractIndex) {
     const form = await gotoAddressControllerForm(page, source);
@@ -745,7 +767,7 @@ async function bindAddressController(page, source, contractIndex) {
     await chooseActionClass(form, 'transfer');
     await openFormSection(form, 'Cooldown');
     await form.getByLabel(/^Cooldown blocks/).fill('0');
-    await form.getByRole('button', { name: 'Bind', exact: true }).click();
+    await form.getByRole('button', { name: 'Bind Address', exact: true }).click();
 
     await expectConfirmModal(page);
     const bound = await waitForIndexedAction(await approveAndGetTxid(page));
@@ -793,7 +815,8 @@ async function unbindAddressController(page, source) {
         .toBeVisible({ timeout: 30_000 });
     await expect(fieldByLabel(form, 'What to unbind'),
         'opened without a token, the Unbind form still defaults to a token')
-        .toHaveValue('address');
+        // "What to unbind" is a themed select (a combobox showing its pick).
+        .toHaveText(/^\s*Address\s*$/);
     await selectVenueChain(form);
     await readChainAddresses(page, source);
     await chooseActionClass(form, 'transfer');

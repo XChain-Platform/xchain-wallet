@@ -62,6 +62,7 @@ import {
     openFromAddress,
     approveConfirm,
     FROM_ADDRESS_LABEL,
+    openDispenserForBuy,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -427,32 +428,19 @@ test.describe(`dispenser allow lists on ${REGTEST_CHAIN_LABEL}`, () => {
 
         await test.step('and what the buyer is told BEFORE paying (D-148)', async () => {
             // The panel a buyer actually reaches, from the buyer's own wallet.
-            // It used to say "Any LTC wallet can trigger a fill" on every
-            // dispenser, gated or not, while reading neither list field - though
-            // the explorer serves both on the row it was already reading and the
-            // OWNER's view of the same page prints them. The step above measured
-            // what following that sentence costs.
-            await openPaletteCommand(page, 'All actions');
-            await page.getByRole('main').getByText('Browse dispensers', { exact: true })
-                .first().click();
-            const main = page.getByRole('main');
-            await expect(fieldByLabel(main, 'Token ticker')).toBeVisible({ timeout: 30_000 });
-            await fieldByLabel(main, 'Token ticker').fill(TICK);
-            await main.getByRole('button', { name: 'Search', exact: true }).click();
-
-            const row = main.getByRole('button').filter({ hasText: `#${dispenserIndex} ` });
-            await expect(row, `the gated dispenser #${dispenserIndex} is on chain but a buyer `
-                + 'searching the token it sells cannot find it')
-                .toBeVisible({ timeout: 60_000 });
-            await row.click();
-
-            const panel = page.getByRole('main');
-            // The dispenser page opens on Actions (G102); the buy panel is the
-            // Buy page a buyer's first action row opens.
-            await panel.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
-            await expect(panel, 'no pay-to-buy panel rendered at all')
-                .toContainText('Pay to buy', { timeout: 30_000 });
-            const text = await panel.innerText();
+            // D-148 guards against "Any LTC wallet can trigger a fill" on a
+            // gated dispenser: the explorer serves both list fields on the row
+            // the panel reads, and the OWNER's view of the same page prints
+            // them. The step above measured what following that sentence costs.
+            // The pay-here panel is on the dispenser's full page only, so the
+            // helper opens it there and reads it before the viewport widens.
+            const text = await openDispenserForBuy(page, {
+                seller, tick: TICK, index: dispenserIndex, what: `the gated dispenser #${dispenserIndex}`,
+            }, async (panel) => {
+                await expect(panel, 'no pay-to-buy panel rendered at all')
+                    .toContainText('Pay to buy', { timeout: 30_000 });
+                return panel.innerText();
+            });
 
             expect(/Any .* wallet can trigger a fill/i.test(text),
                 `the panel tells this buyer any wallet can trigger a dispenser that just refused `

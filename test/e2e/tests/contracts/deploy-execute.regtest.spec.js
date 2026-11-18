@@ -72,6 +72,7 @@ import {
     searchHistory,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 
 const PASSWORD = 'regtestpassword123';
 const FUNDING_BTC = 1;
@@ -93,6 +94,7 @@ const MINT_XCHAIN = 2000;
 const CONTRACT_SOURCE =
     "module.exports = { meta: { name: 'Wallet Counter', description: 'Increments a stored"
     + " counter and returns its new value.', version: '1.0.0' },"
+    + " abi: { version: 1, methods: { inc: { summary: 'Add one to the counter.', params: [] } } },"
     + " inc: function(){ var c = parseInt(xchain.state.get('n') || '0');"
     + " xchain.state.set('n', String(c + 1)); return String(c + 1); } };";
 
@@ -361,9 +363,10 @@ test.describe('contract DEPLOY + EXECUTE from the wallet, on regtest', () => {
             // its name carries the description too.
             await page.getByRole('button', { name: /^Call by name\b/ }).click();
 
-            // No ABI is declared, so the form is in its manual lane: a free-text
-            // method name and pipe-delimited params. `inc` takes none.
-            await fieldByLabel(main, 'Method').fill('inc');
+            // The form calls only what the contract declares in its abi block
+            // (no free-text lane), so `inc` is picked from the Method list; it
+            // takes no arguments.
+            await pickOption(fieldByLabel(main, 'Method'), 'inc');
             // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
             await main.getByRole('button', { name: 'Call Contract', exact: true }).click();
             await approveConfirm(page);

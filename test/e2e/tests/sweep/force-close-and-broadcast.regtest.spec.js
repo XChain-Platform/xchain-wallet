@@ -357,14 +357,14 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             //   - The page title ("Sweep address" free-entry, "Sweep to new
             //     wallet" in the MigrateToBip39 lane) is a PageHeader <span>
             //     inside <header>, NOT a heading and NOT inside <main>. Landing
-            //     is therefore asserted on the form's own top warning, which is
-            //     unique to this screen. Asking for a heading here costs the
+            //     is therefore asserted on the form itself, named "Sweep
+            //     address", which is unique to this screen. Asking for a heading here costs the
             //     whole action timeout and reports nothing useful.
             //   - The chain picker is a NetworkField, visible label "Network".
             //   - The source is a READ-ONLY AddressField labelled "From address" (in the From section) whose
             //     trailing icon ("Choose source address") opens the own-address
             //     picker; that picker's rows are labelled "View address <addr>".
-            await expect(main.getByText(/Sweep moves everything selected at once/).first(),
+            await expect(main.getByRole('form', { name: 'Sweep address' }),
                 'the palette did not land on the sweep form').toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
 
@@ -389,10 +389,10 @@ test.describe(`sweep force-close and broadcast on ${REGTEST_CHAIN_LABEL}`, () =>
             // "…" means it never resolved and "preview unavailable" means the
             // category's endpoint failed, so asserting the NUMBER proves the
             // host route reached this venue and saw the objects just created.
-            await expect(main.getByRole('checkbox', { name: /^Token balances \(1\)/ }),
+            await expect(main.getByRole('switch', { name: /^Token balances \(1\)/ }),
                 'the sweep preview does not see the token balance this address holds')
                 .toBeVisible({ timeout: 60_000 });
-            const dispensers = main.getByRole('checkbox', {
+            const dispensers = main.getByRole('switch', {
                 name: /^Open dispensers \(force-close\) \(1\)/,
             });
             await expect(dispensers,

@@ -119,6 +119,15 @@ function myListsRow(page, index) {
     });
 }
 
+/** Selects one of ListDetail's tabs (Actions, List, Details) and waits for it to show. */
+async function openListDetailTab(page, name) {
+    const tab = page.getByRole('tablist', { name: 'List detail view' })
+        .getByRole('tab', { name, exact: true });
+    await expect(tab, `ListDetail has no ${name} tab`).toBeVisible({ timeout: 30_000 });
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+}
+
 async function openManageTokenAction(page, tick, label) {
     await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
@@ -187,7 +196,13 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             issueActionIndex = issued.actionIndex;
 
             await openManageTokenAction(page, TICK, 'Artwork');
-            await expect(page.getByText(`Attach artwork to ${TICK}`)).toBeVisible({ timeout: 30_000 });
+            // The form names the token on its fixed Token field, not in a
+            // sentence, so the pin is that field reading this token.
+            const attachForm = page.getByRole('main').getByRole('form', { name: 'Attach artwork' });
+            await expect(attachForm).toBeVisible({ timeout: 30_000 });
+            await expect(attachForm.getByRole('button', { name: new RegExp(`^Token: ${TICK} on `) }),
+                'the Attach artwork form is not fixed to the token it was opened from')
+                .toBeVisible({ timeout: 30_000 });
 
             await page.setInputFiles('input[aria-label="Choose file to attach"]', {
                 name: 'nft.svg',
@@ -309,31 +324,36 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const listActionIndex = String(created.action_index);
             managedListIndex = listActionIndex;
 
-            await openPaletteCommand(page, 'My lists');
+            await openPaletteCommand(page, 'Lists');
             const listRow = myListsRow(page, listActionIndex);
             await expect(listRow, `the list just published (#${listActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
             await listRow.click();
 
-            await expect(page.getByText(/^Members as published \(1\)$|^Current members \(1\)$/))
+            // ListDetail opens on its Actions tab; the members are on the List
+            // tab, one row each, every address named in full by its label.
+            await openListDetailTab(page, 'List');
+            const members = page.getByRole('tabpanel');
+            await expect(members.getByLabel(source, { exact: true }),
+                `list #${listActionIndex} does not show the address it was published with`)
                 .toBeVisible({ timeout: 30_000 });
-            await expect(page.getByRole('main')).toContainText(source);
+            await expect(members.getByRole('listitem'),
+                `list #${listActionIndex} was published with one member`)
+                .toHaveCount(1);
 
+            await openListDetailTab(page, 'Actions');
             await page.getByRole('list', { name: 'List actions' }).getByRole('button', { name: /^Fork\b/ }).click();
             const forkMain = page.getByRole('main');
             await expect(forkMain.getByRole('button', { name: 'Publish Fork', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
             // The fork adds a member the parent does not already hold: the List form's Fork
             // drops additions that are already on the list, so re-adding `source`
-            // would leave nothing to publish and Publish Fork disabled.
+            // would leave nothing to publish.
             await fieldByLabel(forkMain, 'Addresses').fill(REGTEST_DESTINATION);
+            await expect(forkMain).toContainText('1 to add');
+            // An add-only fork is one transaction: Publish Fork goes straight
+            // to the confirm page.
             await forkMain.getByRole('button', { name: 'Publish Fork', exact: true }).click();
-
-            const publishAdd = forkMain.getByRole('button', { name: 'Publish Add', exact: true });
-            await expect(publishAdd).toBeVisible({ timeout: 30_000 });
-            const forkPassword = fieldByLabel(forkMain, 'Password');
-            if (await forkPassword.count() > 0 && await forkPassword.isVisible()) await forkPassword.fill(PASSWORD);
-            await publishAdd.click();
 
             await expectConfirmModal(page, 'this action', 60_000);
             await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -341,28 +361,29 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const forked = await waitForValidAction(forkTxid);
             const forkActionIndex = String(forked.action_index);
 
-            await openPaletteCommand(page, 'My lists');
+            await openPaletteCommand(page, 'Lists');
             const forkRow = myListsRow(page, forkActionIndex);
             await expect(forkRow, `the fork just published (#${forkActionIndex}) is not in My Lists`)
                 .toBeVisible({ timeout: 60_000 });
             await forkRow.click();
-            // "Forked from" lives in a <dt> and "#N (...)" in the sibling <dd>
-            // (ListDetail.jsx), two DOM nodes with no text of their own in
-            // common, so this locates the label then reads its own value
-            // rather than searching for one node holding both.
-            const forkedFromValue = page.locator('dt:has-text("Forked from") + dd');
-            await expect(forkedFromValue,
+            // "Forked from" is one row of the Details tab, its value at the
+            // row's trailing edge.
+            await openListDetailTab(page, 'Details');
+            const forkedFrom = page.getByRole('tabpanel').getByRole('listitem')
+                .filter({ hasText: 'Forked from' });
+            await expect(forkedFrom,
                 `ListDetail for fork #${forkActionIndex} does not name #${listActionIndex} as its parent`)
-                .toContainText(`#${listActionIndex}`, { timeout: 30_000 });
-            await expect(page.getByRole('main'),
+                .toContainText(`#${listActionIndex} (added items)`, { timeout: 30_000 });
+            await openListDetailTab(page, 'List');
+            await expect(page.getByRole('tabpanel').getByLabel(REGTEST_DESTINATION, { exact: true }),
                 `ListDetail for fork #${forkActionIndex} does not show the member it added`)
-                .toContainText(REGTEST_DESTINATION);
+                .toBeVisible({ timeout: 30_000 });
         });
 
         await test.step('the list manager: rename the list, then transfer it to another owner', async () => {
             const NAME = `Roster ${STAMP}`;
             const openManagedList = async () => {
-                await openPaletteCommand(page, 'My lists');
+                await openPaletteCommand(page, 'Lists');
                 const row = myListsRow(page, managedListIndex);
                 await expect(row, `list #${managedListIndex} is not in My Lists`).toBeVisible({ timeout: 60_000 });
                 await row.click();
@@ -373,7 +394,11 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             // read while the venue's per-IP limit is paused after a 429.
             // Renaming is the Edit action: its name and description sit in the
             // Details section, closed until used, and it publishes with Publish Edit.
-            await page.getByRole('button', { name: 'Edit', exact: true }).click({ timeout: 90_000 });
+            // The Actions tab row's name carries its description after the
+            // title, and "Edit look" shares the first word.
+            await openListDetailTab(page, 'Actions');
+            await page.getByRole('list', { name: 'List actions' })
+                .getByRole('button', { name: /^Edit\b(?! look\b)/ }).click({ timeout: 90_000 });
             const renameMain = page.getByRole('main');
             await openFormSection(renameMain, 'Details');
             await fieldByLabel(renameMain, 'Name').fill(NAME);
@@ -391,11 +416,14 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             }, { message: `the explorer never showed the new name on list #${managedListIndex}`, timeout: 120_000 })
                 .toBe(NAME);
             await openManagedList();
-            await expect(page.locator('dt:has-text("Name") + dd'),
+            // A named list's identity card is headed by its name.
+            await expect(page.getByRole('region', { name: 'List identity' }).getByRole('heading', { level: 2 }),
                 'ListDetail does not show the name the rename published')
-                .toContainText(NAME, { timeout: 30_000 });
+                .toHaveText(NAME, { timeout: 30_000 });
 
-            await page.getByRole('button', { name: 'Transfer List', exact: true }).click();
+            await openListDetailTab(page, 'Actions');
+            await page.getByRole('list', { name: 'List actions' })
+                .getByRole('button', { name: /^Transfer\b/ }).click();
             const transferMain = page.getByRole('main');
             // The Transfer List form has no typed TRANSFER word any more: the
             // new owner is the only field before review (ListCreateForm, 2026-11-16).
@@ -408,6 +436,16 @@ test.describe(`content and registry flows on ${REGTEST_CHAIN_LABEL}`, () => {
             const transferTxid = await approveAndGetTxid(page);
             const transferred = await waitForValidAction(transferTxid);
             expect(String(transferred.status ?? 'valid')).toBe('valid');
+
+            // The list's Details tab reads its owner off the chain, so the new
+            // owner showing there is the transfer having moved ownership.
+            await openManagedList();
+            await openListDetailTab(page, 'Details');
+            const currentOwner = page.getByRole('tabpanel').getByRole('listitem')
+                .filter({ hasText: 'Current owner' });
+            await expect(currentOwner.getByLabel(REGTEST_DESTINATION, { exact: true }),
+                `list #${managedListIndex} does not name ${REGTEST_DESTINATION} as its owner after the transfer`)
+                .toBeVisible({ timeout: 60_000 });
         });
 
         await test.step('the project roster: publish a token list and link it to the project', async () => {

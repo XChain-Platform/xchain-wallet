@@ -316,9 +316,12 @@ test.describe('BET in watcher mode', () => {
             await expect(main.getByRole('button', { name: 'Create Unsigned Transaction' }),
                 'a watcher-mode wallet is not offered the unsigned build')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main.locator('button[type="submit"]'),
-                'a watcher-mode wallet is still offered a signing review it cannot complete')
-                .toBeHidden({ timeout: 30_000 });
+            // The form has one submit action; in watcher mode that action IS
+            // the unsigned build, so any other submit is a signing review.
+            await expect(main.locator('button[type="submit"]')
+                .filter({ hasNotText: 'Create Unsigned Transaction' }),
+            'a watcher-mode wallet is still offered a signing review it cannot complete')
+                .toHaveCount(0, { timeout: 30_000 });
             await expect(fieldByLabel(main, 'Password'),
                 'a watcher-mode wallet asks for a password to sign nothing')
                 .toHaveCount(0);

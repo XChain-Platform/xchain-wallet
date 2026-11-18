@@ -57,6 +57,7 @@ import {
     approveConfirm,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 
 const PASSWORD = 'regtestpassword123';
 const GAS_LIMIT = '50000';
@@ -78,6 +79,7 @@ const MINT_XCHAIN = 1000;
 const COUNTER_BODY =
     "module.exports = { meta: { name: 'Wallet Counter', description: 'Increments a stored"
     + " counter and returns its new value.', version: '1.0.0' },"
+    + " abi: { version: 1, methods: { inc: { summary: 'Add one to the counter.', params: [] } } },"
     + " inc: function(){ var c = parseInt(xchain.state.get('n') || '0');"
     + " xchain.state.set('n', String(c + 1)); return String(c + 1); } };";
 
@@ -123,11 +125,12 @@ function uniqueChunkedSource(tag) {
  * screen (`confirm-modal`), and only the chunked review lists its legs, so this
  * is what tells the chunked review from a single-shot confirm.
  */
-// No leading \b: the review's "Transactions" fact sits right against its value
-// in the confirm's textContent ("Transactions2 chunks ..."), so a word boundary
-// before the count never matches there, and `hasNotText` would then count the
-// chunked review as a single-transaction confirm.
-const REVIEW_SUMMARY = /\d+ chunks and 1 assembling transaction\b/;
+// No \b at either end: the facts sit flush against their neighbours in the
+// confirm's textContent ("Transactions2 chunks and 1 assembling
+// transactionSigning with"), so a word boundary on either side never matches
+// there, and `hasNotText` would then count the chunked review as a
+// single-transaction confirm.
+const REVIEW_SUMMARY = /\d+ chunks and 1 assembling transaction/;
 
 const codeHashOf = (source) => createHash('sha256').update(Buffer.from(source, 'utf8')).digest('hex');
 
@@ -714,7 +717,9 @@ test.describe('§11.3: the chunked deploy lane', () => {
             await expect(await openFromAddress(scope),
                 `the call form is not signing from this run's ${REGTEST_COIN} address`)
                 .toHaveValue(payer, { timeout: 30_000 });
-            await fieldByLabel(scope, 'Method').fill('inc');
+            // Picked from the abi block the counter declares (the form has no
+            // free-text method lane).
+            await pickOption(fieldByLabel(scope, 'Method'), 'inc');
             // No gas-limit field: EXECUTE runs at the protocol gas ceiling.
             await scope.getByRole('button', { name: 'Call Contract', exact: true }).click();
 

@@ -96,6 +96,9 @@ import {
     openFromAddress,
     approveConfirm,
     FROM_ADDRESS_LABEL,
+    openDispenserForBuy,
+    openDispenserPanel,
+    readPayToBuySendTo,
 } from '../../fixtures/regtest.js';
 import { writeRowsScript } from '../../fixtures/priceSeed.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
@@ -263,6 +266,8 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
         let oracleFeeSats;
         /** The seller's spendable coin the moment before the buyer pays. */
         let sellerCoinBefore;
+        /** The dispenser payment address the phone page's Pay to buy names. */
+        let phoneSendTo;
 
         await test.step('the oracle Session 33 published is inside its one-day window', async () => {
             const body = await explorerJson(`oracle_prices/${ORACLE.address}/address`);
@@ -526,29 +531,22 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
             // price is not on the dispenser row at all, it is on the oracle's
             // published quote, which the explorer serves at
             // /oracle_prices/<address>/address.
-            await openPaletteCommand(page, 'All actions');
-            await page.getByRole('main').getByText('Browse dispensers', { exact: true })
-                .first().click();
-            const main = page.getByRole('main');
-            await expect(fieldByLabel(main, 'Token ticker')).toBeVisible({ timeout: 30_000 });
-            await fieldByLabel(main, 'Token ticker').fill(ORACLE.tick);
-            await main.getByRole('button', { name: 'Search', exact: true }).click();
-
-            const row = main.getByRole('button').filter({ hasText: `#${dispenserIndex} ` });
-            await expect(row, `the Mode B dispenser #${dispenserIndex} is on chain but a buyer `
-                + 'searching the token it sells cannot find it')
-                .toBeVisible({ timeout: 60_000 });
-            await row.click();
-
+            // This leg reads the phone layout: the helper narrows to the
+            // dispenser's full page, opens Buy and reads Pay to buy before the
+            // viewport widens. The desktop side panel is the next step.
             const coin = REGTEST_COIN.slice(1);
-            const panel = page.getByRole('main');
-            // The dispenser page opens on Actions (G102); the buy panel is the
-            // Buy page a buyer's first action row opens.
-            await panel.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
-            await expect(panel, 'no pay-to-buy panel rendered for a Mode B dispenser at all')
-                .toContainText('Pay to buy', { timeout: 30_000 });
-
-            const text = await panel.innerText();
+            const text = await openDispenserForBuy(page, {
+                seller, tick: ORACLE.tick, index: dispenserIndex, what: `the Mode B dispenser #${dispenserIndex}`,
+            }, async (panel) => {
+                await expect(panel, 'no pay-to-buy panel rendered for a Mode B dispenser at all')
+                    .toContainText('Pay to buy', { timeout: 30_000 });
+                phoneSendTo = await readPayToBuySendTo(panel);
+                return panel.innerText();
+            });
+            // The dispenser opened on the seller's Source and the buyer's
+            // payment to that address settled above.
+            expect(phoneSendTo, 'the phone Pay to buy names an address other than the dispenser the buyer paid')
+                .toBe(seller);
             // D-144's guard, restated for Mode B.
             expect(/(send|pay)[^\n]*\b0(\.0+)?\s*(LTC|BTC|DOGE)\b/i.test(text),
                 'the buy panel quotes a price of ZERO for an oracle-priced dispenser')
@@ -581,6 +579,42 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
                 + `${EXPECTED_TOKENS} ${ORACLE.tick} for ${PAY_COIN} coin, i.e. `
                 + `${ORACLE.price} ${ORACLE.fiat} per fill of ${GIVE_PER_FILL}`)
                 .not.toMatch(new RegExp(`${ORACLE.price * GIVE_PER_FILL}\\s*${ORACLE.fiat}`));
+        });
+
+        await test.step('and what a BUYER is shown in the desktop side panel', async () => {
+            // At the configured desktop width Browse dispensers opens a picked
+            // dispenser in the list's side panel, and that panel is the only
+            // buyer surface a desktop buyer reaches. An oracle price has no
+            // in-wallet form, so the panel carries the full page's Pay to buy
+            // block in place of the dead-end "no price this wallet can pay"
+            // line (#83).
+            await openDispenserPanel(page, {
+                seller, tick: ORACLE.tick, index: dispenserIndex, what: `the Mode B dispenser #${dispenserIndex}`,
+            }, async (panel) => {
+                await expect(panel.getByRole('heading', { name: 'Pay to buy', exact: true }),
+                    'the desktop side panel offers an oracle-priced dispenser no Pay to buy block, so a desktop '
+                    + 'buyer cannot buy it')
+                    .toBeVisible({ timeout: 30_000 });
+                const payToBuy = panel.getByRole('region', { name: 'Pay to buy', exact: true });
+                await expect(payToBuy.getByRole('button', { name: 'Copy Dispenser Payment Address', exact: true }),
+                    'the side panel Pay to buy offers no way to copy the payment address')
+                    .toBeVisible();
+                await expect(payToBuy.getByText('Price per fill', { exact: true }),
+                    'the side panel Pay to buy does not state a fill price').toBeVisible();
+                await expect(payToBuy.getByText('You receive per fill', { exact: true }),
+                    'the side panel Pay to buy does not state what a fill gives').toBeVisible();
+                await expect(panel.getByTestId('dispenser-buy-form'),
+                    'the side panel offers an in-wallet buy form for a price this wallet cannot size')
+                    .toHaveCount(0);
+                // Checked after the block rendered, so an unloaded panel cannot pass it.
+                await expect(panel.getByText('This dispenser has no price this wallet can pay.', { exact: true }),
+                    'the side panel still shows the dead-end line beside Pay to buy')
+                    .toHaveCount(0);
+
+                expect(await readPayToBuySendTo(panel),
+                    'the desktop side panel names a different payment address from the phone page')
+                    .toBe(phoneSendTo);
+            });
         });
     });
 });

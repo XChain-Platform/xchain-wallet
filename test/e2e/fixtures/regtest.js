@@ -70,6 +70,8 @@ import { pickOption } from './pickOption.js';
 import { fieldByLabel, searchTokenPicker } from './fields.js';
 import { selectNamedToken } from './crossChain.js';
 import { compareDecimal, subtractDecimal } from '../../../packages/core/src/shared/utils/mintHeadroom.js';
+import { defaultRegistry } from '../../../packages/core/src/registry/index.js';
+import { nativeDecimalsFor } from '../../../packages/core/src/registry/coinTicker.js';
 import {
     MIN_SEED_MARGIN_SECONDS,
     XCHAIN_PAIR,
@@ -195,6 +197,12 @@ export const REGTEST_TICKER = VENUE.ticker;
 
 /** Address shape this chain's regtest params produce. */
 export const REGTEST_ADDRESS_RE = VENUE.addressRe;
+
+/**
+ * The native coin's decimal places on the chain this run drives, read from
+ * the bundled chain registry the wallet itself formats amounts with.
+ */
+export const REGTEST_NATIVE_DECIMALS = nativeDecimalsFor(defaultRegistry().get(REGTEST_CHAIN_ID));
 
 /**
  * A deterministic, checksum-valid regtest destination FOR THE CHAIN THIS RUN
@@ -1552,6 +1560,147 @@ export async function openMyDispensers(page) {
 }
 
 /**
+ * The viewport width openDispenserForBuy narrows to. Dispensers keeps a picked
+ * dispenser in its list's side panel while the content is at least
+ * LIST_DETAIL_MIN_WIDTH (720) wide, and opens the dispenser page below that.
+ */
+export const DISPENSER_PAGE_VIEWPORT_WIDTH = 600;
+
+/**
+ * Opens a dispenser this wallet does not own on its full page, opens the Buy
+ * page from its Buy action row, and runs `check` there.
+ *
+ * A buyer reaches it from All actions, Browse dispensers. The Dispenser
+ * Explorer's search sits in its title bar's "Filter dispensers" menu and runs
+ * on Enter; a seller address searches the seller lane, which matches the
+ * dispenser's source or its own address, so a seller made fresh for the run
+ * keeps the results to this run's dispensers. A card is named
+ * "<give> <TICK> for <price>, <network>".
+ *
+ * On a wide screen a picked card opens in the list's side panel, which has no
+ * pay-here panel ("Pay to buy"), no payment-token balance (`buy-balance`) and
+ * no dispenser number, and offers no link to the page. So the viewport is
+ * narrowed below the split once the Explorer opens, and put back once
+ * `check` settles, whether or not it passes. The page opens on Actions (G102)
+ * under its hero, which names "Dispenser #<index>"; the hero closes once Buy
+ * opens, so the index is read first.
+ *
+ * @template T
+ * @param {import('@playwright/test').Page} page
+ * @param {{ seller: string, tick: string, index?: string | number, what?: string, timeoutMs?: number }} opts
+ *   `seller` is typed into the search; `tick` is the token the dispenser gives;
+ *   `index`, when given, must be the opened dispenser's number
+ * @param {(main: import('@playwright/test').Locator) => Promise<T>} check  runs with the Buy page open
+ * @returns {Promise<T>}
+ */
+export async function openDispenserForBuy(page, { seller, tick, index, what, timeoutMs = 60_000 }, check) {
+    const name = what || (index != null ? `dispenser #${index}` : `the ${tick} dispenser`);
+    await openPaletteCommand(page, 'All actions');
+    await page.getByRole('main').getByText('Browse dispensers', { exact: true }).first().click();
+    const main = page.getByRole('main');
+
+    // Narrowed before the search, so a re-layout cannot drop typed results.
+    const viewport = page.viewportSize();
+    const narrow = Boolean(viewport) && viewport.width > DISPENSER_PAGE_VIEWPORT_WIDTH;
+    if (narrow) await page.setViewportSize({ width: DISPENSER_PAGE_VIEWPORT_WIDTH, height: viewport.height });
+    try {
+        // Enter runs the search and leaves the menu open over the results.
+        const filters = await openListFilter(page, 'Filter dispensers');
+        const search = filters.getByLabel('Search a token or seller address', { exact: true });
+        await expect(search, 'the Dispenser Explorer offers no search').toBeVisible({ timeout: 30_000 });
+        await search.fill(seller);
+        await search.press('Enter');
+        await closeListFilter(page, 'Filter dispensers');
+
+        const tickPattern = String(tick).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const card = main.getByRole('button', { name: new RegExp(`^\\S+ ${tickPattern} for `) }).first();
+        await expect(card, `${name} is on chain but a buyer searching its seller's address cannot find it`)
+            .toBeVisible({ timeout: timeoutMs });
+        await card.click();
+        if (index != null) {
+            await expect(main, `the card opened a different dispenser from ${name}`)
+                .toContainText(new RegExp(`Dispenser #${index}(?!\\d)`), { timeout: 30_000 });
+        }
+        await main.getByTestId('dispenser-buy-row').click({ timeout: 30_000 });
+        return await check(main);
+    } finally {
+        if (narrow) await page.setViewportSize(viewport);
+    }
+}
+
+/**
+ * Opens a dispenser this wallet does not own in the Dispenser Explorer's side
+ * panel at the configured desktop width, and runs `check` on that panel.
+ *
+ * The desktop twin of openDispenserForBuy, which narrows to the full page.
+ * The Explorer's card opens the dispenser route, which DispensersList draws
+ * as a list-and-detail split (`data-list-detail="two-panel"`, PanelSplit's
+ * ListDetailSplit) while the content is at least LIST_DETAIL_MIN_WIDTH (720)
+ * wide; its detail region is named "<TICK> dispenser #<index>" or
+ * "Dispenser #<index>" (DispensersList's `detailLabel`). The split is
+ * required, so a run too narrow for it fails here rather than quietly reading
+ * the full page, and the panel is found by the dispenser's number when
+ * `index` is given. The viewport is never changed.
+ *
+ * @template T
+ * @param {import('@playwright/test').Page} page
+ * @param {{ seller: string, tick: string, index?: string | number, what?: string, timeoutMs?: number }} opts
+ *   `seller` is typed into the search; `tick` is the token the dispenser gives;
+ *   `index`, when given, must be the number the opened panel names
+ * @param {(panel: import('@playwright/test').Locator) => Promise<T>} check  runs on the side panel region
+ * @returns {Promise<T>}
+ */
+export async function openDispenserPanel(page, { seller, tick, index, what, timeoutMs = 60_000 }, check) {
+    const name = what || (index != null ? `dispenser #${index}` : `the ${tick} dispenser`);
+    await openPaletteCommand(page, 'All actions');
+    await page.getByRole('main').getByText('Browse dispensers', { exact: true }).first().click();
+    const main = page.getByRole('main');
+
+    // Enter runs the search and leaves the menu open over the results.
+    const filters = await openListFilter(page, 'Filter dispensers');
+    const search = filters.getByLabel('Search a token or seller address', { exact: true });
+    await expect(search, 'the Dispenser Explorer offers no search').toBeVisible({ timeout: 30_000 });
+    await search.fill(seller);
+    await search.press('Enter');
+    await closeListFilter(page, 'Filter dispensers');
+
+    const tickPattern = String(tick).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const card = main.getByRole('button', { name: new RegExp(`^\\S+ ${tickPattern} for `) }).first();
+    await expect(card, `${name} is on chain but a buyer searching its seller's address cannot find it`)
+        .toBeVisible({ timeout: timeoutMs });
+    await card.click();
+
+    const split = page.locator('[data-list-detail="two-panel"]');
+    const width = page.viewportSize()?.width;
+    await expect(split, `${name} opened with no list-and-detail split at ${width}px, so there is no side panel to read`)
+        .toBeVisible({ timeout: 30_000 });
+    const panelName = index != null
+        ? new RegExp(`dispenser #${index}$`, 'i')
+        : /dispenser #\d+$/i;
+    const panel = split.getByRole('region', { name: panelName });
+    await expect(panel, `${name} did not open in the Dispensers side panel`).toBeVisible({ timeout: 30_000 });
+    await expect(panel.getByTestId('embedded-dispenser-detail'),
+        `the side panel does not show ${name} in its buyer layout`)
+        .toBeVisible({ timeout: 30_000 });
+    return check(panel);
+}
+
+/**
+ * Reads the dispenser payment address a "Pay to buy" block prints on its
+ * "Send to" row, on the full page or in the side panel.
+ *
+ * @param {import('@playwright/test').Locator} scope  a locator holding one Pay to buy block
+ * @returns {Promise<string>}
+ */
+export async function readPayToBuySendTo(scope) {
+    const block = scope.getByRole('region', { name: 'Pay to buy', exact: true });
+    const sendTo = block.locator('dt', { hasText: /^Send to$/ })
+        .locator('xpath=following-sibling::dd[1]').locator('code');
+    await expect(sendTo, 'the Pay to buy block names no Send to address').toBeVisible({ timeout: 30_000 });
+    return (await sendTo.innerText()).trim();
+}
+
+/**
  * Puts the Create dispenser form's dispenser on its own Source address, and
  * returns that address.
  *
@@ -1993,20 +2142,29 @@ async function readApproveOutcome(page, approve, windowMs = 1_500) {
     const blocked = page.getByTestId('confirm-blocked');
     const failed = page.getByTestId('confirm-error').or(page.getByTestId('confirm-notice'));
     const deadline = Date.now() + windowMs;
+    // A taken tap on regtest can sign, broadcast and close the review inside
+    // one poll (about 200 ms), so every read here is bounded: a bare
+    // getAttribute on a button that has just unmounted waits the 30 s action
+    // timeout for it to come back, which outlasts the window and reads a taken
+    // tap as ignored.
+    const quick = { timeout: 250 };
     for (;;) {
         if (await approve.count() === 0 || !(await approve.isVisible().catch(() => false))) {
             return { kind: 'accepted' };
         }
-        if (await approve.getAttribute('aria-busy').catch(() => null) === 'true') return { kind: 'accepted' };
+        const busy = await approve.getAttribute('aria-busy', quick).catch(() => undefined);
+        if (busy === 'true') return { kind: 'accepted' };
+        // Undefined: the button left between the two reads; the next pass sees it gone.
+        if (busy === undefined && Date.now() < deadline) continue;
         if (await blocked.isVisible().catch(() => false)) {
             return {
                 kind: 'blocked',
-                reason: await blocked.getAttribute('data-reason').catch(() => null),
-                text: (await blocked.innerText().catch(() => '')).trim(),
+                reason: await blocked.getAttribute('data-reason', quick).catch(() => null),
+                text: (await blocked.innerText(quick).catch(() => '')).trim(),
             };
         }
         if (await failed.first().isVisible().catch(() => false)) {
-            return { kind: 'error', text: (await failed.first().innerText().catch(() => '')).trim() };
+            return { kind: 'error', text: (await failed.first().innerText(quick).catch(() => '')).trim() };
         }
         if (Date.now() >= deadline) return { kind: 'ignored' };
         await page.waitForTimeout(100);
@@ -2115,6 +2273,44 @@ export async function expectApproveRefused(page, reason, what = 'this action', t
     }
     throw new Error(`no tap on Approve for ${what} drew the ${reason} refusal within `
         + `${Math.round(timeoutMs / 1000)}s (last outcome: ${last ? last.kind : 'none'})`);
+}
+
+/**
+ * Taps a form's submit button and asserts the tap is REFUSED on the form: an
+ * alert naming `message` shows and no confirm screen opens.
+ *
+ * The form-side twin of `expectApproveRefused`. Submit is never disabled
+ * (G130), so a gate that lives on the form itself (a typed LOCK word, a
+ * missing required field) is proven by what a tap does: the form lists the
+ * problem at the top and on the field, and nothing reaches signing.
+ *
+ * A refusal's alert can still be showing from an earlier tap, so when the
+ * gate's `field` is given, the tap is also proven by the cursor: a refused
+ * press puts it back on the field that is missing (G22).
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {import('@playwright/test').Locator} submit
+ * @param {string | RegExp} message  the refusal text the alert must carry
+ * @param {string} [what]  names the gate in the failure message
+ * @param {{ field?: import('@playwright/test').Locator, timeoutMs?: number }} [opts]
+ */
+export async function expectSubmitRefused(page, submit, message, what = 'this action',
+    { field, timeoutMs = 15_000 } = {}) {
+    await expect(submit, `the submit button is not on screen for ${what}`).toBeVisible({ timeout: timeoutMs });
+    await submit.click();
+    await expect(page.getByRole('alert').filter({ hasText: message }).first(),
+        `a tap on submit for ${what} drew no refusal naming what is missing`)
+        .toBeVisible({ timeout: timeoutMs });
+    if (field) {
+        await expect(field, `a tap on submit for ${what} did not return the cursor to the missing field`)
+            .toBeFocused({ timeout: timeoutMs });
+    }
+    // The refusal is synchronous, so a confirm screen that opens at all opens
+    // within this beat.
+    await page.waitForTimeout(2_000);
+    await expect(page.getByTestId('confirm-modal'),
+        `${what} reached the confirm screen past its refusal`)
+        .toHaveCount(0);
 }
 
 /**

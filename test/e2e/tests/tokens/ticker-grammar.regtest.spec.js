@@ -707,9 +707,16 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
                 'the ticker hint still promises to uppercase what is typed, which is the one '
                 + 'place the coercion was ever disclosed')
                 .toBe(0);
-            await expect(main.getByText(/Case is kept exactly as typed/).first(),
-                'the ticker field no longer discloses its rule at all')
+            // The rule is the field's help tip, opened from "About Ticker".
+            const about = main.getByRole('button', { name: 'About Ticker', exact: true });
+            await expect(about, 'the ticker field has no help tip to carry its rule')
                 .toBeVisible({ timeout: 15_000 });
+            await about.click();
+            const tip = page.locator(`[id="${await about.getAttribute('aria-describedby')}"]`);
+            await expect(tip, 'the ticker field does not disclose its rule').toBeVisible({ timeout: 15_000 });
+            await expect(tip, 'the ticker field does not disclose its rule')
+                .toContainText(/Case is kept exactly as typed/);
+            await page.keyboard.press('Escape');
         });
 
         await test.step('the DIRECT Issue form widened identically, so the two surfaces agree', async () => {
@@ -753,7 +760,10 @@ test.describe(`ticker grammar on ${REGTEST_CHAIN_LABEL}`, () => {
             await fieldByLabel(second, 'Max supply').fill(String(SUPPLY));
             await second.getByRole('button', { name: 'Issue Token', exact: true }).click();
 
-            const alert = page.getByRole('alert').filter({ hasText: /Ticker cannot contain \^/ });
+            // The refusal shows twice, in the Form errors summary and on the
+            // Ticker field; the field's own alert is the one asserted.
+            const alert = page.getByRole('alert').filter({ hasText: /Ticker cannot contain \^/ })
+                .and(page.locator(':not([data-form-errors])'));
             await expect(alert,
                 'the direct Issue form now authors a caret ticker while the wizard refuses one')
                 .toBeVisible({ timeout: 60_000 });

@@ -27,6 +27,7 @@ import {
 import {
     explorerJson,
     expectConfirmModal,
+    expectSubmitRefused,
     fundAddress,
     mintXchain,
     nudgeChain,
@@ -190,10 +191,11 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
                 await checkbox.check();
             }
 
-            await expect(submit, 'the irreversible lock update bypassed its typed gate')
-                .toBeDisabled();
+            // Submit is never disabled (G130): without the typed word a tap
+            // is refused on the form and nothing reaches signing.
+            await expectSubmitRefused(page, submit, /Type LOCK to confirm the permanent lock/,
+                'the irreversible lock update with no LOCK typed');
             await fieldByLabel(main, 'Type LOCK to confirm').fill('LOCK');
-            await expect(submit).toBeEnabled();
             await submit.click();
 
             await expectConfirmModal(page, 'the four admin locks');
@@ -241,10 +243,10 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         await test.step('Pause token refuses SLEEP before composition', async () => {
             await openTokenAdmin(page, 'Pause token');
             const main = page.getByRole('main');
-            await expect(main.getByRole('alert').filter({ hasText: /Pausing and resuming are permanently locked/ }))
+            await expect(main.getByRole('alert').filter({ hasText: /Pause and resume are permanently locked for / }))
                 .toBeVisible({ timeout: 30_000 });
             await expect(main.getByRole('button', { name: /^Pause setting/ })).toBeDisabled();
-            await expect(main.getByRole('button', { name: 'Pause token', exact: true })).toBeDisabled();
+            await expect(main.getByRole('button', { name: 'Pause Token', exact: true })).toBeDisabled();
             await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
         });
 
@@ -256,7 +258,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(main.getByRole('button', { name: /^Callback token:/ })).toBeDisabled();
             await expect(fieldByLabel(main, 'Payout per unit')).toBeDisabled();
             await expect(fieldByLabel(main, 'Callback allowed from block')).toBeDisabled();
-            await expect(main.getByRole('button', { name: 'Update callback settings', exact: true }))
+            await expect(main.getByRole('button', { name: 'Update Callback Settings', exact: true }))
                 .toBeDisabled();
             await expect(page.getByTestId('confirm-modal')).toHaveCount(0);
         });
