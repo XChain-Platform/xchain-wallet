@@ -100,10 +100,13 @@ for (const viewport of VIEWPORTS) {
         await test.step('filter the populated markets list', async () => {
             await gotoSection(page, 'DEX');
             const main = page.getByRole('main');
-            const filters = main.getByRole('tablist', { name: 'Markets view' });
+            // The market filters live in the title bar's Filter markets panel.
+            await page.getByRole('banner').getByRole('button', { name: /^Filter markets/ }).click();
+            const filters = page.getByRole('dialog', { name: 'Filter markets' });
             await expect(filters).toBeVisible();
-            await filters.getByRole('tab', { name: 'All' }).click();
-            await main.getByLabel('Search markets').fill('PEPECASH');
+            await filters.getByRole('combobox', { name: 'Show markets' }).click();
+            await page.getByRole('option', { name: 'Show all', exact: true }).click();
+            await filters.getByRole('searchbox', { name: 'Search markets' }).fill('PEPECASH');
 
             await expect(main.getByRole('region', { name: 'Markets results', exact: true }))
                 .not.toHaveAttribute('aria-busy', 'true');
@@ -112,11 +115,12 @@ for (const viewport of VIEWPORTS) {
             await expect(main.getByRole('list', { name: 'Markets' }).getByRole('button', {
                 name: /^Open .* market$/,
             })).toHaveCount(1);
-            await expectScreen(page, 'Decentralized exchange', `${viewport.name} markets list`);
             await expectMatchingLineHeights(
-                main.getByLabel('Search markets').or(filters.getByRole('tab')),
+                filters.getByRole('searchbox').or(filters.getByRole('combobox')),
                 `${viewport.name} market filters`,
             );
+            await page.keyboard.press('Escape');
+            await expectScreen(page, 'Decentralized Exchange', `${viewport.name} markets list`);
             const twoPanel = (await main.locator('[data-dex-layout="two-panel"]').count()) > 0;
             if (twoPanel) {
                 // Side by side: the list stays, a separator splits the panels.
@@ -146,8 +150,8 @@ for (const viewport of VIEWPORTS) {
                 `${viewport.name} market panel tabs`,
             );
 
-            await panels.getByRole('tab', { name: 'History' }).click();
-            const tradeHistory = main.getByRole('region', { name: 'Trade history', exact: true });
+            await panels.getByRole('tab', { name: 'Trades' }).click();
+            const tradeHistory = main.getByRole('region', { name: 'Recent trades', exact: true });
             await expect(tradeHistory).toBeVisible();
             await expect(tradeHistory).not.toHaveAttribute('aria-busy', 'true');
             await expectScreen(page, marketScreenHeading, `${viewport.name} trade history`);
