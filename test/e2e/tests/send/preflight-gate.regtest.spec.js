@@ -90,7 +90,7 @@ async function warmIssue(source, expected, feeMode = 'xchain') {
 }
 
 function feeToggle(scope) {
-    const name = /^Pay protocol fee in BTC instead of XCHAIN/;
+    const name = /^Pay protocol fee in BTC\b/;
     return scope.getByRole('switch', { name }).or(scope.getByRole('checkbox', { name })).first();
 }
 

@@ -253,21 +253,12 @@ test.describe('keyboard form contracts at 1280 by 800', () => {
             const form = page.getByRole('form', { name: 'Receive payment' });
             await expect(form).toBeVisible();
             await expect(form.getByRole('textbox', { name: /^Amount/ })).toBeVisible();
-            await expect(form.getByRole('textbox', { name: 'Address label' })).toBeVisible();
             await expectVisualTabOrderAndFocusRings(page, form, 'Receive request amount');
-
-            // Exact or by role: each field's 'About ...' help tip (U57) carries its label too.
-            const addressType = form.getByLabel('Address type', { exact: true });
-            const originalType = await dropdownValue(addressType);
-            await addressType.focus();
-            await page.keyboard.press('Alt+ArrowDown');
-            await page.keyboard.press('Escape');
-            await expectDropdownValue(addressType, originalType);
-            await expect(form).toBeVisible();
 
             await expectEnterSubmissionBoundaries(page, {
                 form,
-                firstField: form.getByRole('textbox', { name: 'Address label' }),
+                // The address is the form's first field; the type picker and label field are retired.
+                firstField: form.getByLabel('Address', { exact: true }),
                 lastField: form.getByRole('textbox', { name: /^Amount/ }),
                 label: 'Receive request amount',
             });

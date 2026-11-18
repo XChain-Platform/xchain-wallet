@@ -87,6 +87,7 @@ import { OFFER_LIFECYCLE_REFUSAL } from '../../flows/marketExpiry.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import {
     blocksDurationText,
+    headerVoterCount,
     latestBallotRows,
     pollOutcome,
     pollResultSummary,
@@ -841,7 +842,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack, embedded = fa
         ? pollVotes.filter(isAcceptedVote)
         : null;
     const liveVoters = completeVotes ? new Set(completeVotes.map((row) => String(row?.source ?? ''))).size : null;
-    const voterCount = Number.isFinite(finalVoters) ? finalVoters : liveVoters;
+    const { voters: voterCount, ballotsListed } = headerVoterCount({ finalVoters, liveVoters, tally });
     const votersText = voterCount === null ? null
         : t(voterCount === 1 ? 'governance.detail.voter' : 'governance.detail.voters', { count: formatWithThousands(String(voterCount)) });
     // Votes: the accepted ballots in that same complete read. One ballot is
@@ -849,7 +850,7 @@ export function PollDetail({ walletId, chainId, pollIndex, onBack, embedded = fa
     // choice, so rows are counted once per action; a later ballot from the
     // same address is a vote of its own (only the latest counts at the
     // close, which the voter count already reflects).
-    const voteCount = completeVotes
+    const voteCount = completeVotes && ballotsListed
         ? new Set(completeVotes.map((row, n) => String(row?.action_index ?? row?.tx_hash ?? `row-${n}`))).size
         : null;
 

@@ -37,14 +37,14 @@ async function lockFromPhoneNavigation(page) {
     await expect(unlockedShell(page)).toBeVisible();
     await page.getByRole('button', { name: 'Open menu' }).click();
     const menu = page.getByRole('dialog', { name: 'Wallet menu' });
-    await menu.locator('[data-wallet-menu-row="lock"]').click();
+    await menu.getByRole('button', { name: 'Lock wallet', exact: true }).click();
     await expect(unlockButton(page)).toBeVisible();
 }
 
 async function expectBiometricUnlockOffIfOffered(page) {
     const main = page.getByRole('main');
     const label = main.getByText('Biometric unlock', { exact: true }).first();
-    await openSettingsSubpage(page, 'Safety', label);
+    await openSettingsSubpage(page, 'Security', label);
     await expect(main.getByText('Checking this device…', { exact: true }))
         .toHaveCount(0, { timeout: 30_000 });
 

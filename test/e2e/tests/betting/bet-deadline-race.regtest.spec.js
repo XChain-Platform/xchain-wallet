@@ -64,6 +64,7 @@ import {
     mintXchain,
     REGTEST_ADDRESS_RE,
     REGTEST_COIN,
+    selectListNetwork,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
@@ -182,14 +183,15 @@ async function waitForToken(address, tick, min, timeoutMs = 300_000) {
 }
 
 async function gotoBettingHub(page) {
-    await openPaletteCommand(page, 'Betting');
+    await openPaletteCommand(page, 'Prediction markets');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
     // The hub carries a Network picker of its OWN, separate from the one on the
     // create form, and it defaults to Bitcoin. Left alone it lists Bitcoin's
     // markets, so a Litecoin market simply is not there - which presents as the
-    // market the spec just created on chain having vanished.
-    await selectVenueChain(page.getByRole('main'));
+    // market the spec just created on chain having vanished. It sits in the
+    // title bar's filter menu.
+    await selectListNetwork(page, 'Filter prediction markets');
 }
 
 /**

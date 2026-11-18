@@ -56,6 +56,7 @@ import {
     mintXchain,
     REGTEST_ADDRESS_RE,
     REGTEST_COIN,
+    selectListNetwork,
     selectVenueChain,
     switchToRegtest,
     unlockAfterReload,
@@ -124,10 +125,10 @@ async function waitForToken(address, tick, min, timeoutMs = 300_000) {
 }
 
 async function gotoBettingHub(page) {
-    await openPaletteCommand(page, 'Betting');
+    await openPaletteCommand(page, 'Prediction markets');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
-    await selectVenueChain(page.getByRole('main'));
+    await selectListNetwork(page, 'Filter prediction markets');
 }
 
 async function fillPasswordIfPresent(scope) {

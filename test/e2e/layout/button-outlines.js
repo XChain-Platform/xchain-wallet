@@ -73,6 +73,8 @@ export function measureButtons() {
             tag: el.tagName.toLowerCase(),
             role: el.getAttribute('role') || '',
             shared,
+            // Select triggers, pickers and section headers are field controls, not action Buttons.
+            trigger: el.hasAttribute('aria-haspopup') || el.hasAttribute('aria-expanded') || hasModuleClass(el, 'control'),
             variants: VARIANTS.filter((v) => hasModuleClass(el, v)),
             sizes: SIZES.filter((s) => hasModuleClass(el, s)),
             iconOnly: hasModuleClass(el, 'iconOnly'),

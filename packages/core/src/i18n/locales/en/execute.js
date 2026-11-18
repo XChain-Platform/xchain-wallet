@@ -20,6 +20,7 @@ const messages = {
     'execute.loadingAddresses': 'Loading addresses…',
     'execute.success': 'Method call broadcast.',
     'execute.contract': 'Contract',
+    'execute.contractName': 'Contract name',
     // The form's fixed title; the contract shows as the main section's first field.
     'execute.title': 'Execute Contract',
     'execute.contractHelp': 'The contract whose method this calls. Use the list icon to pick another contract.',

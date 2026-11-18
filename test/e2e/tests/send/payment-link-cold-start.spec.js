@@ -77,6 +77,9 @@ test('a link delivered after Approve waits and is dropped when the user leaves b
     const main = page.getByRole('main');
     await main.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    await expect(page.getByTestId('confirm-checking')).toHaveCount(0);
+    // A tap inside the review's 700 ms settle is dropped, so wait it out.
+    await page.waitForTimeout(900);
     await page.getByTestId('confirm-approve').click();
     await page.evaluate((url) => globalThis.__deliverLink(url), `bitcoin:${OTHER}?amount=2`);
 
@@ -153,6 +156,9 @@ test('Done on a Send result opens the payment link that waited behind the approv
     const main = page.getByRole('main');
     await main.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByTestId('confirm-modal')).toBeVisible();
+    await expect(page.getByTestId('confirm-checking')).toHaveCount(0);
+    // A tap inside the review's 700 ms settle is dropped, so wait it out.
+    await page.waitForTimeout(900);
     await page.getByTestId('confirm-approve').click();
     await expect(page.getByRole('heading', { name: 'Broadcast pending' })).toBeVisible();
 

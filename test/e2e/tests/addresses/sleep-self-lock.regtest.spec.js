@@ -8,8 +8,10 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 import { readShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
+    approveConfirm,
+    expectConfirmModal,
     explorerJson,
     fundAddress,
     mintXchain,
@@ -61,24 +63,25 @@ test.describe(`SLEEP v0 address self-lock on ${REGTEST_CHAIN_LABEL}`, () => {
             await expect(page.getByRole('banner').getByRole('heading', { name: 'Lock address' }))
                 .toBeVisible({ timeout: 30_000 });
             await expect(fieldByLabel(main, 'Address to lock')).toHaveValue(source);
+            // Memo is its own closed optional section.
+            await openFormSection(main, 'Memo');
             await fieldByLabel(main, 'Memo').fill(MEMO);
-            await main.getByRole('button', { name: 'Lock address', exact: true }).click();
+            await main.getByRole('button', { name: 'Lock Address', exact: true }).click();
 
             // The form no longer shows an end line; the review's wake condition names the block.
-            const wakeLine = main.getByText(/Automatically at block [\d,]+/);
+            const confirm = await expectConfirmModal(page, 'the address lock');
+            const wakeLine = confirm.getByText(/Automatically at block [\d,]+/);
             await expect(wakeLine).toBeVisible({ timeout: 30_000 });
             resumeBlock = Number((await wakeLine.first().innerText()).match(/at block ([\d,]+)/)?.[1]?.replace(/,/g, ''));
             expect(Number.isFinite(resumeBlock) && resumeBlock > 0, 'the review has no readable wake block').toBe(true);
 
-            await expect(main.getByTestId('confirm-action-warnings'))
-                .toContainText("While locked, this address can't create any XChain action");
-            await fieldByLabel(main, 'Type LOCK to confirm').fill('LOCK');
-            const approve = main.getByRole('button', {
-                name: 'Lock address',
-                exact: true,
-            });
-            await expect(approve).toBeEnabled({ timeout: 30_000 });
-            await approve.click();
+            // The confirm page's own warning slot states what the lock means.
+            await expect(page.getByTestId('confirm-warning'))
+                .toContainText('Nothing can lift the lock before its resume block');
+            await fieldByLabel(page, 'Type LOCK to confirm').fill('LOCK');
+            // Approve never disables (G130), so the shared fixture presses it
+            // and reports the confirm screen's reason if the tap is refused.
+            await approveConfirm(page, 'the address lock');
         });
 
         await test.step('read the SLEEP v0 row back from the explorer', async () => {

@@ -71,7 +71,7 @@
 //       tests/dispensers/user-oracle-fiat-settle.regtest.spec.js
 
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
-import { createWallet, expect, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test, addWallet } from '../../fixtures/wallet.js';
 import { pickFiatCurrency } from '../../fixtures/pickerFields.js';
 import {
     encoderRpc,
@@ -95,6 +95,7 @@ import {
     selectPickerAsset,
     openFromAddress,
     approveConfirm,
+    FROM_ADDRESS_LABEL,
 } from '../../fixtures/regtest.js';
 import { writeRowsScript } from '../../fixtures/priceSeed.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
@@ -345,7 +346,7 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
             let main = page.getByRole('main');
             await expect(fieldByLabel(main, 'Give amount per fill')).toBeVisible({ timeout: 30_000 });
             await selectVenueChain(main);
-            seller = await main.getByRole('textbox', { name: 'Source' }).inputValue();
+            seller = await main.getByRole('textbox', { name: FROM_ADDRESS_LABEL }).inputValue();
             expect(seller, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 
@@ -375,11 +376,12 @@ test.describe(`user-oracle (Mode B) fiat dispensers on ${REGTEST_CHAIN_LABEL}`, 
             // Mode B: a fiat CODE and an ORACLE, and no fiat AMOUNT. The empty
             // amount is the mode selector - with one it is Mode A and the
             // validator prices the fill; without one the oracle does.
-            await main.getByRole('button', { name: /Advanced options/ }).click();
+            // The fiat and oracle fields sit in the closed Dispenser Terms section.
+            await openFormSection(main, 'Dispenser Terms');
             await pickFiatCurrency(main, ORACLE.fiat);
             await main.getByLabel(/^Oracle address/).fill(ORACLE.address);
 
-            await main.getByRole('button', { name: /^(Create|Preview)$/ }).click();
+            await main.getByRole('button', { name: 'Create Dispenser', exact: true }).click();
             await expectConfirmModal(page);
             const created = await waitForIndexedAction(await approveAndGetTxid(page));
             expect(String(created.action)).toBe('DISPENSER');
