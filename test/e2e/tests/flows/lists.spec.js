@@ -353,3 +353,9 @@ for (const viewport of VIEWPORTS) {
             .locator(`[aria-label="${TRANSFER_DESTINATION}"], [title="${TRANSFER_DESTINATION}"]`).first()).toBeVisible();
     });
 }
+
+// TEMPORARY, ci/e2e-shard-1118 only: a deliberately failing spec proving the
+// `e2e` aggregator goes red when one shard fails. Removed in the next commit.
+test('deliberate failure probe for the e2e shard aggregator', () => {
+    expect(1, 'deliberate failure: proves a red shard turns the e2e aggregator red').toBe(2);
+});
