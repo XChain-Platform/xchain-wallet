@@ -18,7 +18,7 @@ function rule(selector) {
 
 describe('Dispenser detail wide panel layout', () => {
     it('stacks the embedded hero and tabs in one full-width fluid column', () => {
-        expect(jsx).toContain('if (embedded) return page;');
+        expect(jsx).toMatch(/if \(embedded\) \{\s*return \(\s*<>\s*<h1 className="sr-only"[^>]*>\{DETAIL_TITLE\}<\/h1>\s*\{page\}/);
 
         const layout = rule('.layout');
         const column = rule('.layout > .column');
