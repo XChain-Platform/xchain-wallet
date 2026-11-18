@@ -336,7 +336,9 @@ describe('DispenserForm numeric validation', () => {
             walletMode: 'watcher',
             onBack,
             buildActionPsbtRequest,
-            getWalletBalances: holdingTokens(['PAY']),
+            // JDOG is held too: the escrow balance lands after a 400 ms debounce, and a
+            // slow run lands it before the submit click, where 0 JDOG refuses 100.
+            getWalletBalances: holdingTokens(['JDOG', 'PAY']),
             generateDispenserAddress: vi.fn().mockResolvedValue({
                 id: 'dispenser', address: 'bc1qdispenserdispenserdispenserdispens',
             }),
