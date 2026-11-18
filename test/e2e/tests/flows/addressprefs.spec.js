@@ -264,11 +264,6 @@ for (const viewport of VIEWPORTS) {
             await expect(page.getByRole('heading', { level: 1, name: 'Addresses', exact: true })).toBeVisible();
             await settle(page);
 
-            // The list keeps its Active badges from before Use, so leave through Home and reopen it fresh.
-            await page.getByRole('button', { name: 'Home', exact: true }).click();
-            await expect(page.getByRole('heading', { level: 1, name: 'Home', exact: true })).toBeVisible();
-            await settle(page);
-            await gotoPalette(page, 'Addresses');
             // The list row carries the Active badge; the detail only hides Set active.
             const activeRow = page.getByRole('button', {
                 name: `View address ${generatedAddress}`,
