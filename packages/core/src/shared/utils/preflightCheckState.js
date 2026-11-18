@@ -33,9 +33,26 @@ export const PREFLIGHT_CHECK_STATES = Object.freeze({
     PASS: 'pass',
     NOT_CHECKED: 'notChecked',
     PARTIAL: 'partial',
+    SETTLE_CHECKS: 'settleChecks',
     WARN: 'warn',
     FAIL: 'fail',
 });
+
+// Unverified checks the network decides only when the action settles, by SDK
+// code (xchain-sdk src/preflight/checks/mint.js is the one emit site). A report
+// whose only shortfall is these is not a partial check (operator 2026-11-17).
+// Matched by code, never by reason text; every other code stays partial.
+export const SETTLE_TIME_UNVERIFIED_CHECKS = Object.freeze(['MINT_ADDRESS_HEADROOM']);
+
+/**
+ * Whether an unverified entry is a check only settlement can decide.
+ *
+ * @param {any} u
+ * @returns {boolean}
+ */
+export function isSettleTimeUnverified(u) {
+    return typeof u?.check === 'string' && SETTLE_TIME_UNVERIFIED_CHECKS.includes(u.check);
+}
 
 /**
  * Whether a finding is the indexer's own valid verdict on this action.
@@ -81,13 +98,15 @@ export function networkApprovalIsPartial(f) {
  *               like an approval (no `dryrun` source, no `data`)
  *   partial     the indexer approved, but a batch was only partly judged, the
  *               report is restricted, or some checks could not be verified
- *   pass        the indexer approved all of it and nothing above applies
+ *   settleChecks  the indexer approved, and every unverified check is one only
+ *               settlement decides (SETTLE_TIME_UNVERIFIED_CHECKS)
+ *   pass       the indexer approved all of it and nothing above applies
  *
  * A thrown or failed pre-flight reaches the screen as a null report
  * (useConfirmAction), so it is notChecked.
  *
  * @param {any} report
- * @returns {'pass'|'notChecked'|'partial'|'warn'|'fail'}
+ * @returns {'pass'|'notChecked'|'partial'|'settleChecks'|'warn'|'fail'}
  */
 export function preflightCheckState(report) {
     const S = PREFLIGHT_CHECK_STATES;
@@ -103,6 +122,8 @@ export function preflightCheckState(report) {
     if (approvals.some(networkApprovalIsPartial)) return S.PARTIAL;
     if (findings.some((f) => f?.code === DRYRUN_SUBCOMMAND_UNJUDGED)) return S.PARTIAL;
     if (report.restricted) return S.PARTIAL;
-    if (Array.isArray(report.unverified) && report.unverified.length > 0) return S.PARTIAL;
+    if (Array.isArray(report.unverified) && report.unverified.length > 0) {
+        return report.unverified.every(isSettleTimeUnverified) ? S.SETTLE_CHECKS : S.PARTIAL;
+    }
     return S.PASS;
 }
