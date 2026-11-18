@@ -316,6 +316,12 @@ jobs:
   # their raw coverage, and `coverage-merge` merges the blobs and checks the
   # thresholds once over the whole suite. The legs turn thresholds off: a quarter
   # of the suite cannot reach a floor set for all of it.
+  #
+  # Measured 2026-11-18 on the full suite (3215 files), unsharded against four
+  # merged shards: covered counts equal, totals within 0.05 points on every
+  # metric. The merge counts the few source files no unit test imports at their
+  # real size where the unsharded run counts them 0/0, so it reads a hair lower,
+  # never higher.
   coverage-shard:
     name: coverage shard ${{ matrix.shard }}/${{ matrix.total }}
     runs-on: ubuntu-24.04
