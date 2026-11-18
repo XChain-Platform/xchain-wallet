@@ -51,7 +51,8 @@ import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
 import { LICENSE_VERSION } from '../../../../packages/core/src/buildInfo.js';
 import { encodeWif } from '../../../../packages/core/src/crypto/wif.js';
 import { encodeXcwChunks } from '../../../../packages/core/src/uri/psbtQr.js';
-import { fieldByLabel } from '../../fixtures/fields.js';
+import { nativeDecimalsFor } from '../../../../packages/core/src/registry/coinTicker.js';
+import { amountAsShown, fieldByLabel } from '../../fixtures/fields.js';
 
 const PASSWORD = 'regtestpassword123';
 const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183}`;
@@ -59,6 +60,8 @@ const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183
 /** BIP173 test vector: a valid mainnet P2WPKH address, owned by nobody. */
 const PAY_TO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 const PAY_AMOUNT = '0.125';
+/** PAY_AMOUNT as Send's Amount field shows it in BTC's format (U61). */
+const PAY_AMOUNT_SHOWN = amountAsShown(PAY_AMOUNT, nativeDecimalsFor('bitcoin'));
 const PAY_LABEL = 'Coffee money';
 const PAYMENT_QR = `bitcoin:${PAY_TO}?amount=${PAY_AMOUNT}&label=${encodeURIComponent(PAY_LABEL)}`;
 
@@ -201,10 +204,10 @@ test.describe('scan and classify (§24.3)', () => {
                 'Send was opened with a DIFFERENT destination than the QR carried, which is the '
                 + 'one way this surface loses a user their coins')
                 .toBe(PAY_TO);
-            expect(await page.getByLabel(AMOUNT_LABEL).first().inputValue(),
+            await expect(page.getByLabel(AMOUNT_LABEL).first(),
                 'the amount from the payment QR did not reach the Amount field, so the user pays '
                 + 'a number nobody asked for')
-                .toBe(PAY_AMOUNT);
+                .toHaveValue(PAY_AMOUNT_SHOWN);
 
             // BIP21 `label` becomes the memo. Present only when the form
             // renders one, so this is conditional rather than assumed.
@@ -309,9 +312,9 @@ test.describe('scan and classify (§24.3)', () => {
             expect(await fieldByLabel(page, 'To').inputValue(),
                 'the send intent opened Send with a different destination than the URI named')
                 .toBe(PAY_TO);
-            expect(await page.getByLabel(AMOUNT_LABEL).first().inputValue(),
+            await expect(page.getByLabel(AMOUNT_LABEL).first(),
                 'the send intent carried an amount and Send did not receive it')
-                .toBe(PAY_AMOUNT);
+                .toHaveValue(PAY_AMOUNT_SHOWN);
         });
 
         await test.step('a receive intent reaches Receive, not Send', async () => {

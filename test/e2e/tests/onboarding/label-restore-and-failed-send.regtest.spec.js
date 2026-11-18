@@ -220,20 +220,26 @@ test.describe(`contacts restore on import and failed sends in History, on ${REGT
                 .toBeVisible({ timeout: 60_000 });
             await expect(failedRow).toContainText(/failed, never sent/);
 
-            // Open it: the reason in plain words, the node's own text behind
-            // Technical details, and the way out.
+            // Open it: the action detail states the reason in plain words as
+            // its error notice, keeps the node's own text in the Details
+            // view's Failure details row, and offers the way out as the
+            // Actions view's "Remove from history" row (G101 rows are
+            // sentence case).
             await failedRow.locator('xpath=ancestor::button[1]').click();
-            const failedPanel = page.getByRole('region', { name: 'Failed transaction' });
-            await expect(failedPanel.getByText(/The network rejected this transaction\./),
+            const failedPanel = page.getByRole('region', { name: 'Transaction details' });
+            await expect(failedPanel.getByRole('alert').filter({ hasText: /The network rejected this transaction\./ }),
                 'the failed detail shows no reason')
                 .toBeVisible({ timeout: 30_000 });
             await expect(failedPanel.getByText(/^Reason: /), 'the raw reason is still in the prose')
                 .toHaveCount(0);
-            await failedPanel.getByText('Technical details', { exact: true }).click();
-            await expect(failedPanel.getByText(/bad-txns-inputs-missingorspent/),
-                'the technical details are not the node\'s rejection')
+            const views = failedPanel.getByRole('tablist', { name: 'Action View' });
+            await views.getByRole('tab', { name: 'Details' }).click();
+            await expect(failedPanel.getByRole('tabpanel', { name: 'Details' }).getByText(/bad-txns-inputs-missingorspent/),
+                'the Failure details row is not the node\'s rejection')
                 .toBeVisible();
-            await page.getByRole('button', { name: 'Remove from History', exact: true }).click();
+            await views.getByRole('tab', { name: 'Actions' }).click();
+            await failedPanel.getByRole('tabpanel', { name: 'Actions' })
+                .getByRole('button', { name: /^Remove from history\b/ }).click();
 
             // Gone from the list, and only that row.
             await expect(page.locator('[data-pending-state="failed"]'),

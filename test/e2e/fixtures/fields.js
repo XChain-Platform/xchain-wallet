@@ -63,3 +63,22 @@ export async function searchTokenPicker(scope, text) {
     await search.fill(text);
     return search;
 }
+
+/**
+ * The text an amount field shows for `amount` once it holds a token with
+ * `decimals` places (U61, operator 2026-11-17): a whole amount drops its
+ * decimals ("1.00000000" shows "1"), and an amount with a fractional part
+ * fills out to the token's full precision ("0.125" shows "0.12500000" for
+ * eight places). A spec that types or routes an amount reads it back
+ * through this, so the expectation follows the token's precision rather
+ * than a hardcoded string.
+ *
+ * @param {string} amount   a plain decimal string, as typed
+ * @param {number} decimals the token's decimal places
+ * @returns {string}
+ */
+export function amountAsShown(amount, decimals) {
+    const [whole, fraction = ''] = String(amount).split('.');
+    if (!/[1-9]/.test(fraction)) return whole || '0';
+    return `${whole || '0'}.${fraction.padEnd(decimals, '0')}`;
+}

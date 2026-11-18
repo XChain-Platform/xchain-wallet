@@ -248,16 +248,16 @@ test.describe('multi-recipient SEND on regtest', () => {
             // itemised below it.
             await expect(page.getByTestId('confirm-sentence'))
                 .toContainText(`Send ${TOTAL_SENT} XCHAIN to 3 recipients`);
-            // Each leg is its own fact row: the amount is the label and the
-            // full address is the value, so
-            // a mis-ordered or missing leg fails on its own row.
+            // The Confirm Standard's multi-send summary (G127): one fact row
+            // per asset, its total and recipient count, and no row per
+            // destination, so a list of any length stays one screen
+            // (ConfirmActionModal's unit test pins zero confirm-recipient
+            // rows). Each leg's address and amount is proven on chain below.
             const facts = page.getByTestId('confirm-facts');
-            const recipients = page.getByTestId('confirm-recipient');
-            await expect(recipients).toHaveCount(RECIPIENTS.length);
-            for (let i = 0; i < RECIPIENTS.length; i++) {
-                await expect(facts.locator('dt').nth(i)).toHaveText(`${RECIPIENTS[i].amount} XCHAIN`);
-                await expect(recipients.nth(i)).toHaveAttribute('title', RECIPIENTS[i].address);
-            }
+            await expect(facts.getByTestId('confirm-asset-label')).toHaveText(['XCHAIN']);
+            await expect(facts.getByTestId('confirm-asset-summary'))
+                .toHaveText([`${TOTAL_SENT} to ${RECIPIENTS.length} recipients`]);
+            await expect(page.getByTestId('confirm-recipient')).toHaveCount(0);
 
             // A real dry-run against the indexer, on a three-leg action. The
             // §4.7 reservation covers the SUM of the primary tick; reserving
@@ -267,10 +267,10 @@ test.describe('multi-recipient SEND on regtest', () => {
             // reads as the blue settle-time note (operator 2026-11-18).
             await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'settleChecks');
 
-            // The footer action names what it signs: one verb over the SUM of
-            // the legs, so a leg dropped from the composed action shows here too.
+            // The docked footer is Reject and Approve (G127); the sentence
+            // above states the SUM of the legs, so a dropped leg shows there.
             const approve = page.getByTestId('confirm-approve');
-            await expect(approve).toHaveText(`Send ${TOTAL_SENT} XCHAIN`);
+            await expect(approve).toHaveText('Approve');
             await approveConfirm(page);
 
             await expect(page.getByRole('heading', { name: 'Broadcast pending' }))

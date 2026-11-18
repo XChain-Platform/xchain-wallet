@@ -98,8 +98,7 @@ async function utxosFromTx(address, txid) {
 }
 
 /**
- * Every address the wallet's own address list renders, across all of its
- * filter tabs.
+ * Every address the wallet's own address list renders.
  *
  * Read off the rendered list rather than out of storage, because the
  * address the rotation derived is only useful if the wallet SHOWS it to
@@ -107,31 +106,32 @@ async function utxosFromTx(address, txid) {
  * address list as Change #N"). The row control's accessible name carries
  * the full address ("View address <addr>"), so nothing here depends on
  * how the row truncates it visually.
+ *
+ * The list's address-type filter is a title-bar menu ("Filter addresses")
+ * that opens on "All addresses", so the one rendered list already holds
+ * every receive and change address; the menu's button marks the LIST
+ * screen, as against an address's own detail page.
  */
 async function walletAddresses(page) {
-    const filters = page.getByRole('tablist', { name: 'Filter by address type' });
-    for (let i = 0; i < 3 && await filters.count() === 0; i++) {
+    const filterMenu = page.getByRole('button', { name: 'Filter addresses', exact: true });
+    for (let i = 0; i < 3 && await filterMenu.count() === 0; i++) {
         const back = page.getByRole('button', { name: 'Back to previous screen', exact: true });
         if (await back.count() > 0) await back.first().click();
         else await openPaletteCommand(page, 'Addresses');
-        await filters.or(page.getByRole('status', { name: 'Loading addresses' })).first()
+        await filterMenu.or(page.getByRole('status', { name: 'Loading addresses' })).first()
             .waitFor({ state: 'visible', timeout: 30_000 })
             .catch(() => {});
     }
-    await expect(filters, 'never reached the address LIST').toBeVisible({ timeout: 60_000 });
+    await expect(filterMenu, 'never reached the address LIST').toBeVisible({ timeout: 60_000 });
+    const list = page.getByRole('main').getByRole('list', { name: 'Addresses', exact: true });
+    await expect(list.getByRole('button', { name: /^View address / }).first(),
+        'the address LIST rendered no address rows')
+        .toBeVisible({ timeout: 60_000 });
 
-    const readTab = async () => (await page.getByRole('button', { name: /^View address / })
+    return (await list.getByRole('button', { name: /^View address / })
         .evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') || el.textContent || '')))
         .map((name) => name.replace(/^View address\s+/, '').trim())
         .filter((a) => REGTEST_ADDRESS_RE.test(a));
-
-    const found = new Set(await readTab());
-    const tabs = await filters.getByRole('tab').all();
-    for (const tab of tabs) {
-        await tab.click().catch(() => {});
-        for (const addr of await readTab()) found.add(addr);
-    }
-    return [...found];
 }
 
 /** Drives one send to REGTEST_DESTINATION and returns its txid. */
