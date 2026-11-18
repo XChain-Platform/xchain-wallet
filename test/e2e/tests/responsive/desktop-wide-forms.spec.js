@@ -12,6 +12,7 @@ import {
     createWallet,
     expect,
     gotoSection,
+    openFromSection,
     test,
 } from '../../fixtures/wallet.js';
 import { documentOverflow } from '../../fixtures/responsive.js';
@@ -59,6 +60,9 @@ async function expectNoHorizontalOverflow(page, label) {
 
 async function expectAlignedForm(form, label) {
     await expect(form).toBeVisible({ timeout: 30_000 });
+    // The Form Standard's From section starts closed; open it only when the form shows fewer than two controls without it.
+    if (!(await form.locator(CONTROL_SELECTOR).nth(1).isVisible())
+        && await form.getByRole('button', { name: /^(?:From|Signing with)\b/ }).count()) await openFromSection(form);
     await expect(
         form.locator(CONTROL_SELECTOR).nth(1),
         `${label}: the form did not finish rendering two controls`,
@@ -80,11 +84,20 @@ async function expectAlignedForm(form, label) {
             || node.getAttribute('name')
             || node.id
             || node.tagName.toLowerCase();
+        const groups = new Map();
+        const groupOf = (control) => {
+            let node = control.parentElement;
+            while (node && node !== element && parseFloat(getComputedStyle(node).borderLeftWidth) === 0) node = node.parentElement;
+            if (!groups.has(node)) groups.set(node, groups.size);
+            return groups.get(node);
+        };
         const controls = [...element.querySelectorAll(selector)]
             .filter(visible)
             .map((control) => ({
                 name: describe(control),
                 left: control.getBoundingClientRect().left,
+                // A section or nested group card (a bordered ancestor) insets its own controls.
+                group: groupOf(control),
             }));
         const labelPairs = [...element.querySelectorAll('label[for]')]
             .flatMap((fieldLabel) => {
@@ -102,12 +115,14 @@ async function expectAlignedForm(form, label) {
 
     expect(geometry.controls.length, `${label}: fewer than two form controls were measurable`)
         .toBeGreaterThanOrEqual(2);
-    const leftEdges = geometry.controls.map(({ left }) => left);
-    const spread = Math.max(...leftEdges) - Math.min(...leftEdges);
-    expect(
-        spread,
-        `${label}: form controls do not share a left edge: ${JSON.stringify(geometry.controls)}`,
-    ).toBeLessThanOrEqual(PIXEL_TOLERANCE);
+    for (const group of new Set(geometry.controls.map(({ group }) => group))) {
+        const leftEdges = geometry.controls.filter((control) => control.group === group).map(({ left }) => left);
+        const spread = Math.max(...leftEdges) - Math.min(...leftEdges);
+        expect(
+            spread,
+            `${label}: form controls do not share a left edge: ${JSON.stringify(geometry.controls)}`,
+        ).toBeLessThanOrEqual(PIXEL_TOLERANCE);
+    }
 
     expect(geometry.labelPairs.length, `${label}: no visible label and input pair was measurable`)
         .toBeGreaterThan(0);
@@ -162,14 +177,14 @@ test('desktop forms use the available width and keep shared geometry', async ({ 
             await gotoSection(page, 'Receive');
             const form = page.getByRole('form', { name: 'Receive payment', exact: true });
             await expectAlignedForm(form, `${viewport.name} Receive`);
-            const secondary = form.getByRole('button', {
-                name: /^Copy (QR code|payment link)$/,
-            }).first();
-            const secondaryHeight = await buttonHeight(secondary);
+            // Receive's actions are two-line list rows, so they are measured against each other.
+            const copyHeight = await buttonHeight(form.getByRole('button', { name: /^Copy QR code\b/ }));
+            const shareHeight = await buttonHeight(form.getByRole('button', { name: /^Share QR payment link\b/ }));
             expect(
-                Math.abs(primaryHeight - secondaryHeight),
-                `${viewport.name}: primary and secondary buttons have different heights`,
+                Math.abs(copyHeight - shareHeight),
+                `${viewport.name}: the Receive action rows have different heights`,
             ).toBeLessThanOrEqual(PIXEL_TOLERANCE);
+            expect(primaryHeight, `${viewport.name}: the Send button has no height`).toBeGreaterThan(0);
             await expectNoHorizontalOverflow(page, `${viewport.name} Receive`);
         });
 
@@ -177,10 +192,8 @@ test('desktop forms use the available width and keep shared geometry', async ({ 
             await gotoPalette(page, 'Create a token');
             await expect(page.getByRole('heading', { name: 'Issue Token', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
-            // Custom opens the full Issue form (ruling U79); the other
-            // templates keep the wizard's network step this walk measures.
-            await page.getByRole('button', { name: /^Utility token\b/ }).click();
-            const form = page.getByRole('form', { name: 'Choose token network', exact: true });
+            // Create a token opens the full Issue form; its template is a field on it.
+            const form = page.getByRole('form', { name: 'Issue Token', exact: true });
             await expectAlignedForm(form, `${viewport.name} Create token`);
             await expectNoHorizontalOverflow(page, `${viewport.name} Create token`);
         });
@@ -194,8 +207,8 @@ test('desktop forms use the available width and keep shared geometry', async ({ 
 
         await test.step(`${viewport.name} / Settings security`, async () => {
             await gotoSection(page, 'Settings');
-            await page.getByRole('main').getByRole('button', { name: /^Safety\b/ }).click();
-            await expect(page.getByRole('heading', { name: 'Safety', exact: true }))
+            await page.getByRole('main').getByRole('button', { name: /^Security\b/ }).click();
+            await expect(page.getByRole('heading', { name: 'Security', exact: true }))
                 .toBeVisible({ timeout: 30_000 });
             await expectNoHorizontalOverflow(page, `${viewport.name} Settings security`);
         });

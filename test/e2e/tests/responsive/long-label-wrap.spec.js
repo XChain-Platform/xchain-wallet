@@ -11,6 +11,7 @@ import {
     test,
     unlockedShell,
 } from '../../fixtures/wallet.js';
+import { pickOption } from '../../fixtures/pickOption.js';
 import { enterDemoWallet } from '../../fixtures/responsive.js';
 
 const VIEWPORT = { width: 360, height: 800 };
@@ -52,6 +53,8 @@ async function measureLongLabelLayout(page) {
                 seenButtonLabels.add(element);
                 const text = (element.textContent || '').trim();
                 if (!text || element.scrollWidth <= element.clientWidth + 1) continue;
+                // Asset marks are icons, and a 1px-wide clipped span is the visually hidden full name behind a short tab label.
+                if (element.closest('[data-asset-mark]') || element.querySelector('[data-asset-mark]') || element.clientWidth <= 1) continue;
                 buttonLabels.push({
                     ...describe(element),
                     clientWidth: element.clientWidth,
@@ -247,9 +250,11 @@ test.describe('long labels at 360px', () => {
         await expect(page.getByRole('button', { name: 'Restore', exact: true })).toBeVisible();
         await expectLongLabelsFit(page, 'onboarding encrypted backup import');
 
+        // FreeWallet import is a Wallet type on the Import Wallet page.
         await returnToWelcome(page);
-        await page.getByRole('button', { name: 'Import FreeWallet' }).click();
+        await page.getByRole('button', { name: 'Import wallet' }).click();
         await expect(page.getByRole('button', { name: 'Import', exact: true })).toBeVisible();
+        await pickOption(page.getByRole('button', { name: /^Wallet type:/ }), { label: /FreeWallet/ });
         await expectLongLabelsFit(page, 'onboarding FreeWallet import');
     });
 });
