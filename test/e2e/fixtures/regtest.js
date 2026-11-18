@@ -60,7 +60,7 @@ import { randomBytes } from 'node:crypto';
 
 import { expect } from '@playwright/test';
 import {
-    openSettings, gotoSection, openPaletteCommand, unlockedAnyScreen, openIssueSection, openFromSection, openFromAddress, revealChainPicker, FROM_ADDRESS_LABEL,
+    openSettings, gotoSection, openPaletteCommand, unlockedAnyScreen, openIssueSection, openFormSection, openFromSection, openFromAddress, revealChainPicker, FROM_ADDRESS_LABEL,
 } from './wallet.js';
 
 export { openFromAddress, FROM_ADDRESS_LABEL };
@@ -1406,10 +1406,19 @@ export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
             + `network, so there is no asset to pick. Fund the address and reload before choosing ${tick}.`);
     }
 
+    // Send's asset picker lists only the form's current Network's assets, so
+    // the Network (in the From section) is put on the venue chain first.
+    await selectVenueChain(main);
+
     const native = tick === REGTEST_TICKER;
-    const from = main.getByLabel('From', { exact: true });
-    const onVenueChain = async () => REGTEST_ADDRESS_RE.test(
-        (await from.inputValue({ timeout: 5_000 }).catch(() => '')) || '');
+    // Send's From address sits in the closed From section ("Bitcoin,
+    // bcrt1q..." in its summary), labelled "From address", so the section is
+    // opened before the field is read.
+    const from = main.getByLabel(FROM_ADDRESS_LABEL);
+    const onVenueChain = async () => {
+        await openFromSection(main).catch(() => {});
+        return REGTEST_ADDRESS_RE.test((await from.inputValue({ timeout: 5_000 }).catch(() => '')) || '');
+    };
     // Already showing this asset on the venue chain: nothing to do. Re-opening
     // the picker for an asset the form already holds races the re-render
     // behind it, and the row detaches mid-click.
@@ -1459,6 +1468,7 @@ export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
         .toBeVisible({ timeout: 15_000 });
     await expect(hero, `the Send form is not showing ${tick} after picking it`)
         .toHaveAttribute('aria-label', shows, { timeout: 15_000 });
+    await openFromSection(main);
     await expect(from, `the Send form's From address is not a ${REGTEST_CHAIN_LABEL} regtest address `
         + `after picking ${tick}, so the form is on another chain`)
         .toHaveValue(REGTEST_ADDRESS_RE, { timeout: 15_000 });
@@ -1481,11 +1491,16 @@ export async function selectVenueSendAsset(page, tick = REGTEST_TICKER) {
  */
 export async function selectDispenserOnSource(page) {
     const main = page.getByRole('main');
-    const sourceField = main.getByLabel('Source', { exact: true });
-    await expect(sourceField, 'the Create dispenser form names no Source').toBeVisible({ timeout: 30_000 });
+    // The source is the From section's "From address"; the dispenser address
+    // and its picker sit in the closed "Dispenser Terms" section.
+    await expect(main.getByRole('button', { name: /^From\b/ }).first(),
+        'the Create dispenser form has no From section').toBeVisible({ timeout: 30_000 });
+    const sourceField = await openFromAddress(main);
+    await expect(sourceField, 'the Create dispenser form names no From address').toBeVisible({ timeout: 30_000 });
     const source = await sourceField.inputValue();
-    expect(source, `the Create dispenser Source is not a ${REGTEST_CHAIN_LABEL} regtest address`)
+    expect(source, `the Create dispenser From address is not a ${REGTEST_CHAIN_LABEL} regtest address`)
         .toMatch(REGTEST_ADDRESS_RE);
+    await openFormSection(main, 'Dispenser Terms');
     await main.getByRole('button', { name: 'Change dispenser address', exact: true }).click();
     const row = page.getByRole('button', { name: `View address ${source}`, exact: true }).first();
     await expect(row, `the dispenser address picker does not offer the Source ${source}`)

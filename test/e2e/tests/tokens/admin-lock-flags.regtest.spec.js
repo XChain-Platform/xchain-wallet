@@ -171,7 +171,8 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('set LOCK_MAX_MINT, LOCK_MINT_SUPPLY, LOCK_SLEEP, and LOCK_CALLBACK', async () => {
-            await openTokenAdmin(page, 'Lock');
+            // The action is "Lock settings" under Supply; each flag is a switch.
+            await openTokenAdmin(page, 'Lock settings');
             const main = page.getByRole('main');
             const submit = main.getByRole('button', { name: 'Lock Token', exact: true });
             await expect(submit).toBeVisible({ timeout: 30_000 });
@@ -183,7 +184,7 @@ test.describe(`admin lock flags on ${REGTEST_CHAIN_LABEL}`, () => {
                 ['Callback', 'LOCK_CALLBACK'],
             ];
             for (const [label, field] of locks) {
-                const checkbox = main.getByRole('checkbox', { name: new RegExp(`^${label}`) });
+                const checkbox = main.getByRole('switch', { name: new RegExp(`^${label}`) });
                 await expect(checkbox, `${field} is absent from the admin lock matrix`)
                     .toBeEnabled({ timeout: 30_000 });
                 await checkbox.check();

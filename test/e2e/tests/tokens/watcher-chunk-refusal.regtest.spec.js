@@ -62,6 +62,7 @@
 import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     REGTEST_ADDRESS_RE,
+    approveConfirm,
     fundAddress,
     issuePlainToken,
     readIssueSource,
@@ -103,13 +104,27 @@ async function stageIssue(page, tick, description) {
     // Bitcoin. Skipping this composes on the contended chain instead of the one
     // the run was pointed at, which is a silently wrong-venue pass.
     await readIssueSource(main);
-    // Watcher mode is the branch that gets a review stage at all: full mode
-    // composes straight onto the confirm screen (single-encode).
+    // The watcher review is the shared confirm screen, which says another
+    // device signs; its Approve builds the unsigned transaction.
     await issuePlainToken(main, { ticker: tick, supply: SUPPLY, description });
-    await expect(main.getByRole('button', { name: 'Create Transaction for Signing', exact: true }),
+    await expect(page.getByTestId('confirm-modal').filter({ hasText: /Another phone signs for this wallet/i }),
         'the form did not reach the watcher review stage')
         .toBeVisible({ timeout: 30_000 });
     return main;
+}
+
+/**
+ * Builds the unsigned transaction from the watcher review (its Approve).
+ * approveConfirm re-taps through the settle window and pre-flight check, and
+ * throws when the screen shows an error; a build that is expected to be
+ * refused passes `refused` and the caller reads the refusal itself.
+ */
+async function createTransactionForSigning(page, { refused = false } = {}) {
+    if (refused) {
+        await approveConfirm(page, 'the watcher build').catch(() => {});
+        return;
+    }
+    await approveConfirm(page, 'the watcher build');
 }
 
 const hexBox = (page) => page.getByRole('textbox', { name: 'Unsigned transaction code' });
@@ -146,8 +161,8 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
         });
 
         await test.step('CONTROL: a short payload still exports an unsigned transaction', async () => {
-            const main = await stageIssue(page, TICK_SHORT, SHORT_DESCRIPTION);
-            await main.getByRole('button', { name: 'Create Transaction for Signing', exact: true }).click();
+            await stageIssue(page, TICK_SHORT, SHORT_DESCRIPTION);
+            await createTransactionForSigning(page);
 
             const hex = hexBox(page);
             await expect(hex, 'the watcher lane produced no unsigned transaction for a payload that '
@@ -169,10 +184,11 @@ test.describe('the watcher lane and an action the encoder chunks', () => {
             // the route is already mounted changes no state, so the form would
             // stay on its result screen (D-117's shape).
             await page.getByRole('button', { name: 'Build Another', exact: true }).click();
-            const main = await stageIssue(page, TICK_LONG, LONG_DESCRIPTION);
-            await main.getByRole('button', { name: 'Create Transaction for Signing', exact: true }).click();
+            await stageIssue(page, TICK_LONG, LONG_DESCRIPTION);
+            await createTransactionForSigning(page, { refused: true });
 
-            const alert = page.getByRole('main').getByRole('alert')
+            // The refusal may land on the confirm screen's own error slot.
+            const alert = page.getByRole('main').getByRole('alert').or(page.getByTestId('confirm-error'))
                 .filter({ hasText: /too large for one transaction/i }).first();
             await expect(alert, 'the wallet said nothing about an action it can only half-build')
                 .toBeVisible({ timeout: 120_000 });

@@ -352,10 +352,41 @@ async function approveAndGetTxid(page, not = null) {
             .match(/(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])/g) || []);
         const found = [...labelled, ...printed].filter((id) => id !== not);
         if (found.length) return found[0];
+        // Each leg's review stage is itself a confirm screen (the data
+        // review), and its Approve opens the encoded confirm that signs; so a
+        // fresh, idle Approve on screen is that second confirm, taken here.
+        const approve = page.getByTestId('confirm-approve');
+        if (await approve.isVisible().catch(() => false)
+            && (await approve.getAttribute('aria-busy').catch(() => null)) !== 'true') {
+            await approveConfirm(page, 'the airdrop leg\'s signing confirm');
+            continue;
+        }
         await new Promise((r) => setTimeout(r, 1_000));
     }
     throw new Error('no new transaction id ever appeared after Approve');
 }
+
+/**
+ * The list leg's review: a confirm screen that states it is the first of two
+ * transactions (there is no separate "Review address list" stage any more).
+ */
+function listReview(page) {
+    return page.getByTestId('confirm-modal').filter({ hasText: 'first of two transactions' });
+}
+
+/**
+ * The airdrop leg's review: the confirm screen for the AIRDROP itself, which
+ * replaced the "Review airdrop" stage. The list leg's review also mentions the
+ * airdrop, so it is told apart by its first-of-two notice.
+ */
+function airdropReview(page) {
+    return page.getByTestId('confirm-modal')
+        .filter({ hasText: /airdrop/i })
+        .filter({ hasNotText: 'first of two transactions' });
+}
+
+/** The wait-for-index stage's title ("Waiting for List to Be Indexed"). */
+const WAITING_FOR_INDEX = /^Waiting for list to be indexed$/i;
 
 /**
  * Reloads onto a clean, unlocked Home.
@@ -700,17 +731,13 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('sign leg 1: the LIST that names the recipients', async () => {
-            const main = page.getByRole('main');
-            // The stage titles live in PageHeader, which renders a <span> rather
-            // than a heading, so these are text matches by necessity.
-            await expect(page.getByText('Review address list', { exact: true }).first())
+            // "Review recipients" opens the list leg's review as a confirm
+            // screen ("Create address list of N items"); its Approve opens the
+            // signing confirm, which approveAndGetTxid also takes.
+            const review = listReview(page);
+            await expect(review, 'Review recipients did not open the address LIST review')
                 .toBeVisible({ timeout: 30_000 });
-            await expect(main, 'the review stage does not state that this costs two signatures')
-                .toContainText('Airdrop is a two-transaction flow');
-
-            const submit = main.getByRole('button', { name: /^Sign address list/ });
-            await submit.click();
-            await expectConfirmModal(page, submit);
+            await expect(review, 'the list review is not for an ADDRESS list').toContainText(/address list/i);
             listTxid = await approveAndGetTxid(page);
         });
 
@@ -718,11 +745,11 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             // THE STEP THIS LANE HAS BEEN OWED SINCE SESSION 19. The wallet's
             // own 10s poll is what has to resolve the LIST's ACTION_INDEX; the
             // spec supplies only the blocks, and never touches the form.
-            await expect(page.getByText('Waiting for list to be indexed', { exact: true }).first(),
+            await expect(page.getByText(WAITING_FOR_INDEX).first(),
                 'the wallet did not enter its own wait-for-index stage after the LIST broadcast')
                 .toBeVisible({ timeout: 30_000 });
 
-            const title = page.getByText('Review airdrop', { exact: true }).first();
+            const title = airdropReview(page);
             const deadline = Date.now() + SLOW_INDEXER_TIMEOUT;
             while (Date.now() < deadline) {
                 if (await title.isVisible().catch(() => false)) break;
@@ -748,9 +775,15 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toContainText(new RegExp(`recipients\\s*${recipients.length}\\b`, 'i'),
                     { useInnerText: true });
 
-            const submit = main.getByRole('button', { name: /^Sign airdrop/ });
-            await submit.click();
-            await expectConfirmModal(page, submit);
+            // The review is the airdrop's data-review confirm ("Not checked
+            // with the network", protocol fee not known yet); one Approve
+            // there opens the encoded confirm that quotes the real fees.
+            await expectConfirmModal(page, 'the AIRDROP review');
+            await page.waitForTimeout(1_000); // the review drops taps in its 700 ms settle
+            await page.getByTestId('confirm-approve').click();
+            await expect(page.getByTestId('confirm-status'),
+                'Approve on the airdrop review did not open the checked signing confirm')
+                .toHaveAttribute('data-state', /^(?:pass|partial|warn|fail|oracleFees)$/, { timeout: 90_000 });
 
             // Read the screen's two money figures BEFORE approving, and the
             // payer's coin balance with them. This is the only action in the
@@ -950,19 +983,18 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
 
             await payProtocolFeeInCoin(main);
             await main.getByRole('button', { name: 'Review recipients' }).click();
-            await expect(page.getByText('Review token list', { exact: true }).first(),
+            const review = listReview(page);
+            await expect(review, 'Review recipients did not open the list review')
+                .toBeVisible({ timeout: 30_000 });
+            await expect(review,
                 'a token-holder drop did not reach the TOKEN list review (it may have fallen '
                 + 'back to the address-list wording, which would mean the wrong LIST TYPE)')
-                .toBeVisible({ timeout: 30_000 });
-
-            const submit = page.getByRole('main').getByRole('button', { name: /^Sign token list/ });
-            await submit.click();
-            await expectConfirmModal(page, submit);
+                .toContainText(/holders \(current, not final\)/i);
             listTxid = await approveAndGetTxid(page);
         });
 
         await test.step('the wallet resolves the list index on its own and offers leg 2', async () => {
-            const title = page.getByText('Review airdrop', { exact: true }).first();
+            const title = airdropReview(page);
             const deadline = Date.now() + SLOW_INDEXER_TIMEOUT;
             while (Date.now() < deadline) {
                 if (await title.isVisible().catch(() => false)) break;
@@ -994,7 +1026,7 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
                 .toBeVisible({ timeout: 60_000 });
             await resume.click();
 
-            await expect(page.getByText('Review airdrop', { exact: true }).first(),
+            await expect(airdropReview(page),
                 'resuming did not land back on the airdrop review')
                 .toBeVisible({ timeout: 60_000 });
             // The preview has moved with the chain: three holders now, and the
@@ -1006,10 +1038,8 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
         });
 
         await test.step('sign the AIRDROP against the token list', async () => {
-            const main = page.getByRole('main');
-            const submit = main.getByRole('button', { name: /^Sign airdrop/ });
-            await submit.click();
-            await expectConfirmModal(page, submit);
+            // The resumed review is the airdrop's confirm screen itself.
+            await expectConfirmModal(page, 'the resumed AIRDROP review');
             airdropTxid = await approveAndGetTxid(page, listTxid);
             expect(airdropTxid).not.toBe(listTxid);
             await expect(page.getByRole('heading', { name: 'Airdrop sent' }))
@@ -1128,11 +1158,15 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.getByRole('textbox', { name: /^Per-recipient amount/ }).fill(String(AMOUNT));
             await pickOption(fieldByLabel(main, 'Airdrop to'), 'existing');
             await main.getByRole('button', { name: /^List:/ }).click();
-            const row = page.getByRole('button', { name: `Address list #${listIndex}` });
-            await expect(row, `the list picker does not offer list #${listIndex}, which this wallet `
+            // The picker names a list by its size and type ("1 address,
+            // address list, 1 address"), not its index; this wallet published
+            // one one-member address list, and the form naming List #N below
+            // proves the pick was that one.
+            const row = page.getByRole('main').getByRole('button', { name: /, address list, 1 address$/ });
+            await expect(row.first(), `the list picker does not offer list #${listIndex}, which this wallet `
                 + 'published from this chain minutes ago')
                 .toBeVisible({ timeout: 60_000 });
-            await row.click();
+            await row.first().click();
 
             // The form has to SHOW which list it is about to pay, or the number
             // it sends is unverifiable by the person signing it.
@@ -1145,19 +1179,16 @@ test.describe(`airdrop on ${REGTEST_CHAIN_LABEL}`, () => {
             // 'existing' skips the LIST leg entirely, so the submit button is
             // labelled for the airdrop rather than for a recipient review.
             await main.getByRole('button', { name: 'Review airdrop' }).click();
-            await expect(page.getByText('Review airdrop', { exact: true }).first())
+            await expect(airdropReview(page), 'the existing-list mode did not open the airdrop review')
                 .toBeVisible({ timeout: 30_000 });
-            expect(await page.getByText('Review address list', { exact: true }).count(),
+            expect(await listReview(page).count(),
                 'the existing-list mode reached the list review, so it is about to publish a '
                 + 'second list for a list that already exists')
                 .toBe(0);
-            expect(await page.getByText('Waiting for list to be indexed', { exact: true }).count(),
+            expect(await page.getByText(WAITING_FOR_INDEX).count(),
                 'the existing-list mode is waiting on an indexer it has no reason to wait for')
                 .toBe(0);
 
-            const submit = main.getByRole('button', { name: /^Sign airdrop/ });
-            await submit.click();
-            await expectConfirmModal(page, submit);
             airdropTxid = await approveAndGetTxid(page);
             await expect(page.getByRole('heading', { name: 'Airdrop sent' }))
                 .toBeVisible({ timeout: 30_000 });

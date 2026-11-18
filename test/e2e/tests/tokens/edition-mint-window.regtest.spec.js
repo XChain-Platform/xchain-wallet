@@ -288,7 +288,8 @@ async function generateVenueAddress(page) {
     await page.getByRole('button', { name: 'Add or import address' }).click();
     await page.getByRole('menuitem', { name: 'Add address' }).click();
     await selectVenueChain(page, 'Coin');
-    await page.getByRole('button', { name: /^Generate/ }).click();
+    // The Add addresses form submits with "Add Address" in its footer.
+    await page.getByRole('button', { name: /^(?:Generate|Add Address(?:es)?$)/ }).click();
     // The modal closes only once the address is stored; listing before then
     // can read the list as it was.
     await expect(page.getByTestId('add-address-generate'),
@@ -533,7 +534,15 @@ test.describe(`limited-edition mint window on ${REGTEST_CHAIN_LABEL}`, () => {
             for (const expected of [PER_TX, PER_TX * 2]) {
                 await composeMint(page, PER_TX);
                 await expectConfirmScreen(page);
-                await expect(page.getByTestId('confirm-status')).toHaveAttribute('data-state', 'pass');
+                // An edition mint's per-address headroom, lists and mint guard are
+                // checked only server-side, so the venue may report the check as
+                // partial; anything else partial, or a fail, is still a failure.
+                const status = page.getByTestId('confirm-status');
+                await expect(status).toHaveAttribute('data-state', /^(pass|partial)$/);
+                if ((await status.getAttribute('data-state')) === 'partial') {
+                    await expect(status, 'the check is partial for a reason other than the server-side-only edition limits')
+                        .toContainText(/per-address minted headroom, allow\/block lists, and mint-guard outcome are server-side only/);
+                }
 
                 const action = await waitForIndexedAction(await approveAndGetTxid(page));
                 expect(String(action.status),

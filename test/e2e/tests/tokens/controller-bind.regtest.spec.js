@@ -74,6 +74,8 @@
 import { waitForShownTxid } from '../../fixtures/pendingHistory.js';
 import {
     clickManageTokenAction,
+    expectManageTokenView,
+    openFormSection,
     createWallet,
     expect,
     openPaletteCommand,
@@ -557,9 +559,7 @@ async function gotoControllerForm(page, tick) {
         .toBeVisible({ timeout: 60_000 });
     await row.click();
 
-    await expect(page.getByRole('heading', { name: 'Manage Token' })
-        .or(page.getByText('Manage Token').first()))
-        .toBeVisible({ timeout: 30_000 });
+    await expectManageTokenView(page);
     await clickManageTokenAction(page.getByRole('main'), 'Controller');
 
     const form = page.getByRole('main');
@@ -588,7 +588,7 @@ async function bindController(page, source, contractIndex, { tick = TICK, action
     // account instead of this token, so the default is worth pinning.
     await expect(fieldByLabel(form, 'What to protect'),
         'the form opened from a token but did not default to protecting it')
-        .toHaveValue('token');
+        .toHaveText(/^\s*Token\s*$/);
 
     // The form defaults From to the NEWEST HD address, which by now is the
     // destination generated below - not the token owner. An ISSUE v6 signed by
@@ -603,6 +603,7 @@ async function bindController(page, source, contractIndex, { tick = TICK, action
     // browser-side proof of D-150: before the fix the picker carried five of the
     // chain's seven bindable classes and `all` was simply not there to choose.
     await chooseActionClass(form, actionClass);
+    await openFormSection(form, 'Cooldown');
     await form.getByLabel(/^Cooldown blocks/).fill('0');
     await form.getByRole('button', { name: 'Bind', exact: true }).click();
 
@@ -641,9 +642,7 @@ async function gotoUnbindControllerForm(page, tick) {
         .toBeVisible({ timeout: 60_000 });
     await row.click();
 
-    await expect(page.getByRole('heading', { name: 'Manage Token' })
-        .or(page.getByText('Manage Token').first()))
-        .toBeVisible({ timeout: 30_000 });
+    await expectManageTokenView(page);
     await clickManageTokenAction(page.getByRole('main'), 'Unbind controller');
 
     const form = page.getByRole('main');
@@ -662,7 +661,7 @@ async function unbindController(page, source, tick = TICK) {
     // there is no source to pick; the chain's verdict below proves the owner signed.
     await expect(fieldByLabel(form, 'What to unbind'),
         'opened from Manage Token, the Unbind form does not default to the token')
-        .toHaveValue('token');
+        .toHaveText(/^\s*Token\s*$/);
     // The cooldown field belongs to a bind and must not be offered on a drop:
     // the friction a drop serves was committed when the binding was made, so a
     // second field here would invite an owner to think they can lower it.
@@ -709,7 +708,8 @@ async function gotoAddressControllerForm(page, source) {
     // empty TICK.
     await expect(fieldByLabel(form, 'What to protect'),
         'opened without a token, the form still defaults to protecting one')
-        .toHaveValue('address');
+        // "What to protect" is a themed select (a combobox showing its pick).
+        .toHaveText(/^\s*Address\s*$/);
 
     await selectVenueChain(form);
     await readChainAddresses(page, source);
@@ -743,6 +743,7 @@ async function bindAddressController(page, source, contractIndex) {
     const form = await gotoAddressControllerForm(page, source);
     await fieldByLabel(form, 'Guard contract').fill(contractIndex);
     await chooseActionClass(form, 'transfer');
+    await openFormSection(form, 'Cooldown');
     await form.getByLabel(/^Cooldown blocks/).fill('0');
     await form.getByRole('button', { name: 'Bind', exact: true }).click();
 
