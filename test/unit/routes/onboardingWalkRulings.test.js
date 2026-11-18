@@ -123,7 +123,7 @@ describe('Locked screen field-to-button gap', () => {
     });
 
     it('keeps the idle error line below the actions, not between field and button', () => {
-        expect(rule(css, '.centreIdle::after')).toMatch(/block-size: calc\(var\(--xc-help-gap\) \+ var\(--xc-text-xs\) \* 1\.4\)/);
+        expect(rule(css, '.centreIdle::after')).toMatch(/block-size: calc\(var\(--xc-help-gap\) \+ var\(--xc-text-sm\) \* 1\.4\)/);
         expect(locked).toMatch(/The wrong-password message appears under the field/);
     });
 });
