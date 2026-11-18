@@ -46,6 +46,10 @@ async function expectReachableLayout(page, label, action) {
             if (node.scrollWidth <= node.clientWidth + 1) continue;
             // A 1px-wide clipped span is the visually hidden full name behind a short tab label.
             if (node.clientWidth <= 1) continue;
+            // A closed dropdown's option subtitle may end in an ellipsis (operator
+            // ruling 2026-11-17); its title, labels and buttons may not.
+            if (style.textOverflow === 'ellipsis' && /(^|\s)_sub_/.test(String(node.className))
+                && node.closest('button[aria-haspopup="listbox"]')) continue;
             if (style.overflowX !== 'hidden' && style.overflowX !== 'clip') continue;
             result.push({ text: text.slice(0, 80), hiddenBy: style.overflowX });
         }
