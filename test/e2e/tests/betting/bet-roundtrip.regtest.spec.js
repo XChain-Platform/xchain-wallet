@@ -558,6 +558,15 @@ test.describe('BET round trip on regtest', () => {
                     'Use never completed, so the active-address write is still in flight')
                     .toBeHidden({ timeout: 30_000 });
 
+            } else {
+                // No Set active means the detail is already showing the active
+                // address, and nothing navigated. The Addresses command does
+                // not leave this screen: AddressList keeps its selected row
+                // across a palette visit to its own route, so the list (and the
+                // badge) is only reached through the detail's own Back.
+                await page.getByRole('button', { name: 'Back to previous screen' }).first().click();
+                await expect(actions, 'Back did not leave the address detail')
+                    .toBeHidden({ timeout: 30_000 });
             }
             // Use navigates back on success, so the badge is read by walking in
             // again - the same §5 screen fact the WIF-import spec recorded

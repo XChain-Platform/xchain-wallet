@@ -360,7 +360,8 @@ test.describe('BET unhappy stakes', () => {
             // proof that it never reaches compose is the refusal plus no confirm
             // screen.
             await main.locator('button[type="submit"]').click();
-            await expect(page.getByRole('alert').filter({ hasText: /positive bet amount/ }),
+            // BetFeedDetail's stake check: "Enter a positive position amount ...".
+            await expect(page.getByRole('alert').filter({ hasText: /positive position amount/ }),
                 'a blank stake was not refused in words')
                 .toBeVisible({ timeout: 30_000 });
             await expect(page.getByTestId('confirm-modal'),

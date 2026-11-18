@@ -544,9 +544,11 @@ test.describe('BET deadline race', () => {
             // The earlier acknowledgement belongs only to the preflight report.
             // The form's fresh market read is a final safety gate and cannot be
             // overridden. It leaves the review visible and says exactly whether
-            // anything was sent.
+            // anything was sent. The copy is BetFeedDetail closedMarketRefusal:
+            // "This market no longer accepts purchases (<status>). Nothing was
+            // sent.", the same text the closedSincePageOpen unit test pins.
             const refusal = page.getByRole('alert').filter({
-                hasText: /market no longer takes bets.*Nothing was sent/i,
+                hasText: /market no longer accepts purchases.*Nothing was sent/i,
             });
             await expect(refusal, 'the final market re-check reports no outcome')
                 .toBeVisible({ timeout: 120_000 });
