@@ -48,7 +48,7 @@
 // only variable between free and priced - a market's life includes that window,
 // which is a real cost hiding in a field users read as a safety margin.
 
-import { createWallet, expect, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
 import {
     encoderRpc,
     expectConfirmModal,
@@ -64,6 +64,7 @@ import {
     unlockAfterReload,
     waitForTokenBalance,
     approveConfirm,
+    openFromAddress,
 } from '../../fixtures/regtest.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
 
@@ -183,27 +184,31 @@ async function composeMarket(page, { label, daysOut }) {
 
     // The wager tick is a picker, not free text, so it can only offer something
     // this address holds. Rows declare role="listitem", hence the data key.
-    const tokenField = main.getByRole('button', { name: /^Token bets are placed in:/ });
+    const tokenField = main.getByRole('button', { name: /^Token:/ });
     await expect(tokenField).toBeVisible({ timeout: 30_000 });
     await tokenField.click();
     await page.locator('[data-balance-key$=":XCHAIN"]').first().click();
 
     await fieldByLabel(main, 'Question').fill(label);
-    await fieldByLabel(main, 'Outcome 0').fill('Yes');
-    await fieldByLabel(main, 'Outcome 1').fill('No');
+    await fieldByLabel(main, 'Outcome 1').fill('Yes');
+    await fieldByLabel(main, 'Outcome 2').fill('No');
 
     const now = await chainTime();
-    await fieldByLabel(main, 'Purchases Close').fill(toLocalDateTimeInput(now + daysOut * 86_400));
+    await fieldByLabel(main, /^(?:Closes|Purchases Close)$/).fill(toLocalDateTimeInput(now + daysOut * 86_400));
 
     // The form's OWN projection, the first of the three numbers. Read before
     // submitting, because it is a property of the form rather than of the
     // composed transaction.
-    const quoteText = await main.getByText(/Opening this market (is free|costs about)/)
-        .first().innerText();
+    // The sentence sits in the Speed and Fees section, closed by default.
+    await openFormSection(main, 'Speed and Fees');
+    const quote = main.getByText(/Opening this market (is free|costs about)/).first();
+    await expect(quote, 'the form never stated what opening this market costs')
+        .toBeVisible({ timeout: 30_000 });
+    const quoteText = await quote.innerText();
 
     const password = fieldByLabel(main, 'Password');
     if (await password.count() > 0 && await password.isVisible()) await password.fill(PASSWORD);
-    await main.getByRole('button', { name: 'Open market', exact: true }).click();
+    await main.getByRole('button', { name: 'Open Market', exact: true }).click();
 
     await expectConfirmModal(page, 'this action', 60_000);
     await expect(page.getByTestId('confirm-approve')).toBeEnabled({ timeout: 120_000 });
@@ -241,7 +246,7 @@ test.describe(`what opening a market costs on ${REGTEST_CHAIN_LABEL}`, () => {
             await page.getByRole('button', { name: 'Create market', exact: true }).click();
             const main = page.getByRole('main');
             await selectVenueChain(main);
-            oracle = await fieldByLabel(main, 'Your oracle address').inputValue();
+            oracle = await (await openFromAddress(main)).inputValue();
             expect(oracle, `the form has no ${REGTEST_CHAIN_LABEL} address to sign with`)
                 .toMatch(REGTEST_ADDRESS_RE);
 

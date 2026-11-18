@@ -689,11 +689,15 @@ test.describe('§11.3: the chunked deploy lane', () => {
 
         await test.step('call inc() and read the state the VM wrote', async () => {
             await openPaletteCommand(page, 'Contracts');
-            await page.getByRole('tab', { name: REGTEST_CHAIN_LABEL, exact: true }).click();
+            // The list groups every chain in its own "Contracts on <network>"
+            // region, and a contract index is per chain, so the row is found
+            // inside this run's chain.
             // The label is "<meta.name> v<version> (C:<coin>:<index>)"; the list row prefixes it with "Open".
             const labelPattern = `Wallet Counter v1\\.0\\.0 \\(C:${REGTEST_TICKER}:${contractIndex}\\)`;
             const rowLabel = new RegExp(`^${labelPattern}$`);
-            const row = page.getByRole('button', { name: new RegExp(`^Open ${labelPattern}$`) });
+            const row = page.getByRole('main')
+                .getByRole('region', { name: `Contracts on ${REGTEST_CHAIN_LABEL}`, exact: true })
+                .getByRole('button', { name: new RegExp(`^Open ${labelPattern}$`) });
             await expect(row.first(), 'the deployed contract is not in the list')
                 .toBeVisible({ timeout: 60_000 });
             await row.first().click();

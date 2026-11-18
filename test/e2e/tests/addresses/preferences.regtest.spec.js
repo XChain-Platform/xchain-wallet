@@ -91,7 +91,18 @@ test.describe('ADDRESS v0 preferences on regtest', () => {
             if (await password.count() > 0 && await password.isVisible().catch(() => false)) {
                 await password.fill(PASSWORD);
             }
-            await approveConfirm(page);
+            await approveConfirm(page, 'the preferences review');
+
+            // Approving the review composes the transaction and opens the
+            // shared signing confirm, which runs its own network pre-flight and
+            // takes its own Approve. Its intent sentence ("Set address
+            // options: ...") is on that screen only, so the second tap cannot
+            // land on the review's busy Approve. "Only partly checked" there
+            // is a notice, not a gate: it offers no Sign anyway to tick.
+            const signing = await expectConfirmModal(page, 'signing the address preferences', 120_000);
+            await expect(signing, 'the review never handed over to the signing confirm')
+                .toContainText(/Set address options:/, { timeout: 120_000 });
+            await approveConfirm(page, 'signing the address preferences');
         });
 
         await test.step('read the exact ADDRESS row back from the explorer', async () => {
