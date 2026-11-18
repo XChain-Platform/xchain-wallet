@@ -1625,14 +1625,14 @@ export async function openDispenserForBuy(page, { seller, tick, index, what, tim
  * panel at the configured desktop width, and runs `check` on that panel.
  *
  * The desktop twin of openDispenserForBuy, which narrows to the full page.
- * While the content is at least LIST_DETAIL_MIN_WIDTH (720) wide, Dispensers
- * is a list-and-detail split (`data-list-detail="two-panel"`, PanelSplit's
- * ListDetailSplit) and a picked card fills its detail region, named
- * "<TICK> dispenser #<index>" (DispensersList's `detailLabel`). The split is
- * required before the search, so a run too narrow for it fails here rather
- * than quietly reading the full page. The wide split seeds its first row into
- * the panel before any click, so the panel is found by the picked dispenser's
- * number when `index` is given. The viewport is never changed.
+ * The Explorer's card opens the dispenser route, which DispensersList draws
+ * as a list-and-detail split (`data-list-detail="two-panel"`, PanelSplit's
+ * ListDetailSplit) while the content is at least LIST_DETAIL_MIN_WIDTH (720)
+ * wide; its detail region is named "<TICK> dispenser #<index>" or
+ * "Dispenser #<index>" (DispensersList's `detailLabel`). The split is
+ * required, so a run too narrow for it fails here rather than quietly reading
+ * the full page, and the panel is found by the dispenser's number when
+ * `index` is given. The viewport is never changed.
  *
  * @template T
  * @param {import('@playwright/test').Page} page
@@ -1647,10 +1647,6 @@ export async function openDispenserPanel(page, { seller, tick, index, what, time
     await openPaletteCommand(page, 'All actions');
     await page.getByRole('main').getByText('Browse dispensers', { exact: true }).first().click();
     const main = page.getByRole('main');
-    const split = main.locator('[data-list-detail="two-panel"]');
-    const width = page.viewportSize()?.width;
-    await expect(split, `Dispensers shows no list-and-detail split at ${width}px, so there is no side panel to read`)
-        .toBeVisible({ timeout: 30_000 });
 
     // Enter runs the search and leaves the menu open over the results.
     const filters = await openListFilter(page, 'Filter dispensers');
@@ -1661,12 +1657,15 @@ export async function openDispenserPanel(page, { seller, tick, index, what, time
     await closeListFilter(page, 'Filter dispensers');
 
     const tickPattern = String(tick).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const card = split.getByRole('region', { name: 'Dispensers', exact: true })
-        .getByRole('button', { name: new RegExp(`^\\S+ ${tickPattern} for `) }).first();
+    const card = main.getByRole('button', { name: new RegExp(`^\\S+ ${tickPattern} for `) }).first();
     await expect(card, `${name} is on chain but a buyer searching its seller's address cannot find it`)
         .toBeVisible({ timeout: timeoutMs });
     await card.click();
 
+    const split = page.locator('[data-list-detail="two-panel"]');
+    const width = page.viewportSize()?.width;
+    await expect(split, `${name} opened with no list-and-detail split at ${width}px, so there is no side panel to read`)
+        .toBeVisible({ timeout: 30_000 });
     const panelName = index != null
         ? new RegExp(`dispenser #${index}$`, 'i')
         : /dispenser #\d+$/i;
