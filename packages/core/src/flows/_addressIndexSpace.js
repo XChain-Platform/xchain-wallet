@@ -28,6 +28,8 @@
 // See also ./_defaultAddressType.js, the other place a legacy wallet's
 // derivation differs from a BIP39 one's.
 
+import { isDeviceAddressSource, isDeviceSignerKind } from '../schemas/constants.js';
+
 /**
  * @param {'bip39' | 'counterwallet-legacy' | 'wif-only' | undefined} format
  * @returns {boolean} true when every address type shares ONE index space
@@ -64,9 +66,9 @@ export async function indexSpaceSharedForAccount(
     vault, walletId, { account, addresses = [], signerKind } = {},
 ) {
     if (!(await indexSpaceSharedForWallet(vault, walletId))) return false;
-    if (signerKind === 'trezor' || signerKind === 'ledger') return false;
+    if (isDeviceSignerKind(signerKind)) return false;
     if (Number.isInteger(account?.index) && account.index !== 0) return false;
     if (account?.id && addresses.some((address) => address.accountId === account.id
-        && (address.source === 'trezor' || address.source === 'ledger'))) return false;
+        && isDeviceAddressSource(address.source))) return false;
     return true;
 }

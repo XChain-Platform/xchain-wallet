@@ -42,6 +42,7 @@
 // until the SHA-256-verified payload is reassembled; BBQr / hex /
 // base64 frames pass straight through to the paste pipeline.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     FieldIconButton,
@@ -896,7 +897,7 @@ export function PsbtSignForm({ walletId, onBack, initialPsbt }) {
     // signing address is paired to a Trezor / Ledger, the password input
     // is suppressed in favor of <HwSignBlock> and the submit branches to
     // the messaging.signPsbtUserInitiatedHw shim.
-    const isHwSource = selectedAddress?.source === 'trezor' || selectedAddress?.source === 'ledger';
+    const isHwSource = isDeviceAddressSource(selectedAddress?.source);
     const hwSignerInfo = useSignerInfo({
         walletId,
         signerId: isHwSource ? selectedAddress?.signerId : null,

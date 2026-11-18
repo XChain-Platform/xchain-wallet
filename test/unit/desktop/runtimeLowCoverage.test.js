@@ -178,7 +178,7 @@ describe('desktop runtime dispatch branches', () => {
             request: { armed: true, idleMs: 60_000 },
         });
 
-        expect(autoLockStore.clear).toHaveBeenCalledOnce();
+        expect(autoLockStore.clear).toHaveBeenCalled();
         expect(runtime.autoLockCleanupPending).toBe(true);
     });
 

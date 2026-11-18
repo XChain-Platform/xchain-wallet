@@ -158,12 +158,28 @@ function nativeFromAddress(addrResp, nativeTicker) {
     const pending = balances?.pending == null || !isExactNonnegativeDecimal(balances.pending)
         ? null
         : atomicFromHumanAmount(balances.pending, 8);
+    const outgoing = pendingOutgoingAtomic(balances?.pending);
     return {
         tick: nativeTicker,
         quantity: confirmed,
         divisibility: 8,
         ...(pending == null ? {} : { pendingQuantity: pending }),
+        ...(outgoing == null ? {} : { pendingOutgoingQuantity: outgoing }),
     };
+}
+
+// The tracker's `pending` is a signed net: a confirmed coin the mempool is
+// spending leaves `confirmed` untouched and takes its value off `pending`.
+// A negative figure is therefore coins already on their way out, in atomic
+// units, or null when the net is not negative or not an exact decimal string.
+// It is a net, so incoming coins in the same mempool make it understate the
+// outgoing side; it is never an incoming amount.
+function pendingOutgoingAtomic(pending) {
+    if (typeof pending !== 'string') return null;
+    const match = /^-(\d+(?:\.\d+)?)$/.exec(pending.trim());
+    if (!match) return null;
+    const atomic = atomicFromHumanAmount(match[1], 8, 'up');
+    return atomic == null || BigInt(atomic) === 0n ? null : atomic;
 }
 
 // `/balances/` returns { data: [...token rows], total }. Map the rows to the
@@ -404,6 +420,7 @@ export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
     // One transaction is one spend: signing an identical payment again leaves a
     // second record with the same txid, and netting both would debit it twice.
     const nettedTxids = new Set();
+    const locallyNetted = new Set();
     for (const pending of pendingTxs) {
         if (!pending || !LIVE_PENDING_STATUSES.has(pending.status)) continue;
         if (typeof pending.txid === 'string' && pending.txid) {
@@ -421,6 +438,7 @@ export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
             if (native && /^\d+$/.test(String(pending.nativeDebitSats ?? ''))) {
                 native.quantity = subtractAtomic(native.quantity, pending.nativeDebitSats);
                 appliedExactNativeDebit = true;
+                locallyNetted.add(native);
             }
             const debits = Array.isArray(pending.balanceDebits) && pending.balanceDebits.length > 0
                 ? pending.balanceDebits
@@ -433,7 +451,10 @@ export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
                 if (native && tick === nativeTick) {
                     if (!appliedExactNativeDebit) {
                         const atomic = atomicFromHumanAmount(debit.amount, native.divisibility ?? 8, 'up');
-                        if (atomic !== null) native.quantity = subtractAtomic(native.quantity, atomic);
+                        if (atomic !== null) {
+                            native.quantity = subtractAtomic(native.quantity, atomic);
+                            locallyNetted.add(native);
+                        }
                     }
                     continue;
                 }
@@ -445,7 +466,26 @@ export function applyPendingBalanceDeltas(byChain, pendingTxs, chainRegistry) {
             }
         }
     }
+    netTrackerOutgoing(byChain, locallyNetted);
     return byChain;
+}
+
+// A coin the tracker already books as leaving, with no live send of this wallet
+// netted against it (another device, a restored vault, a lost record), comes
+// off the spendable figure here. Where a local debit was netted the tracker's
+// figure describes the same spend, so it is dropped and never taken twice.
+// The marker never outlives the read: it is not part of the balance shape.
+function netTrackerOutgoing(byChain, locallyNetted) {
+    for (const entries of Object.values(byChain)) {
+        for (const entry of Array.isArray(entries) ? entries : []) {
+            const native = entry?.balances?.native;
+            if (!native || !Object.prototype.hasOwnProperty.call(native, 'pendingOutgoingQuantity')) continue;
+            if (!locallyNetted.has(native)) {
+                native.quantity = subtractAtomic(native.quantity, native.pendingOutgoingQuantity);
+            }
+            delete native.pendingOutgoingQuantity;
+        }
+    }
 }
 
 // D-6: fetch the { native, tokens } shape for ONE address: the TOKEN ledger

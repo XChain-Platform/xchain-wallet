@@ -40,10 +40,15 @@ const WALLET_ADD_TYPES = new Set([
  * removal names the wallet), and an account added or renamed as `accounts`,
  * so they read their wallet and account names again.
  *
+ * A custom network added or removed reaches them as `custom-chains`, with no
+ * record: a settings payload can be older than the change, so each window
+ * reads the saved settings itself.
+ *
  * @param {{ type?: unknown, request?: unknown }} message
  * @param {{ ok?: unknown, result?: unknown }} response
  * @returns {{ kind: 'session' } | { kind: 'active-wallet', walletId: string }
  *   | { kind: 'settings' | 'network', settings: Record<string, unknown> }
+ *   | { kind: 'custom-chains' }
  *   | { kind: 'wallets', change: 'added' }
  *   | { kind: 'wallets', change: 'renamed' | 'removed', walletId: string }
  *   | { kind: 'accounts', change: 'added' | 'renamed', walletId: string, accountId: string } | null}
@@ -56,6 +61,10 @@ export function stateChangeForMessage(message, response) {
     if (message.type === 'settings.setActiveNetwork') {
         const settings = /** @type {any} */ (response.result)?.settings;
         return isPlainObject(settings) ? { kind: 'network', settings } : null;
+    }
+    if (message.type === 'chainRegistry.addCustomChain') return { kind: 'custom-chains' };
+    if (message.type === 'chainRegistry.removeCustomChain') {
+        return /** @type {any} */ (response.result)?.removed === true ? { kind: 'custom-chains' } : null;
     }
     if (message.type === 'wallet.rename' || message.type === 'wallet.remove') {
         return walletRecordChange(message, response.result);

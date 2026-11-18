@@ -19,8 +19,10 @@ export const SURFACE_STATE_STORAGE_KEY = 'xchain:surface-state-event';
 
 // 'wallet' names the newly active wallet; 'wallets' reports a change to the
 // wallet records themselves (an added, renamed or removed wallet) and
-// 'accounts' one to a wallet's accounts.
-const KINDS = new Set(['session', 'wallet', 'wallets', 'accounts', 'settings', 'network']);
+// 'accounts' one to a wallet's accounts. 'custom-chains' carries no record:
+// a custom network was added or removed, and each surface reads the saved
+// settings itself, because a settings payload can be older than the change.
+const KINDS = new Set(['session', 'wallet', 'wallets', 'accounts', 'settings', 'network', 'custom-chains']);
 
 /**
  * @param {{
@@ -39,7 +41,7 @@ export function createSurfaceStateBroadcaster(deps = {}) {
 
     return {
         /**
-         * @param {'session' | 'wallet' | 'wallets' | 'accounts' | 'settings' | 'network'} kind
+         * @param {'session' | 'wallet' | 'wallets' | 'accounts' | 'settings' | 'network' | 'custom-chains'} kind
          * @param {Record<string, unknown>} [payload]
          * @returns {Promise<boolean>}
          */
@@ -71,7 +73,7 @@ export function createSurfaceStateBroadcaster(deps = {}) {
 }
 
 /**
- * @param {(event: { kind: 'session' | 'wallet' | 'wallets' | 'accounts' | 'settings' | 'network', payload: Record<string, unknown>, revision: string }) => void} onEvent
+ * @param {(event: { kind: 'session' | 'wallet' | 'wallets' | 'accounts' | 'settings' | 'network' | 'custom-chains', payload: Record<string, unknown>, revision: string }) => void} onEvent
  * @param {{ addListener: Function, removeListener: Function }} [storageChanges]
  * @returns {() => void}
  */
@@ -155,6 +157,7 @@ export const SURFACE_ID = globalThis.crypto?.randomUUID?.()
  *   accountsChanged?: (walletId: string) => unknown,
  *   settingsChanged?: (settings: Record<string, unknown>) => unknown,
  *   remountNetworkState?: () => unknown,
+ *   customChainsChanged?: () => unknown,
  * }} handlers
  */
 export function applySurfaceStateEvent(event, handlers) {
@@ -200,6 +203,7 @@ export function applySurfaceStateEvent(event, handlers) {
         if (typeof walletId !== 'string' || !walletId) return undefined;
         return handlers.accountsChanged?.(walletId);
     }
+    if (event?.kind === 'custom-chains') return handlers.customChainsChanged?.();
     if (event?.kind === 'settings' || event?.kind === 'network') {
         const settings = event.payload?.settings;
         if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return undefined;

@@ -512,18 +512,81 @@ export function stepAdsQueue(settings, {
 export async function commitAdsStep({
     vault, donationIncluded = false, donatedFiat = null, currency = null, mainnet = true, reservationId = null,
 }) {
+    return (await commitAdsStepWithBooking({
+        vault, donationIncluded, donatedFiat, currency, mainnet, reservationId,
+    })).settings;
+}
+
+/**
+ * Book one broadcast and report the payout that was actually credited. The
+ * booking stamp lets a later confirmed replacement correct a payout it
+ * removed without guessing from an address or a current exchange rate.
+ *
+ * @param {Parameters<typeof commitAdsStep>[0]} opts
+ * @returns {Promise<{settings: any, booking: {fiat: string, currency: string} | null}>}
+ */
+export async function commitAdsStepWithBooking({
+    vault, donationIncluded = false, donatedFiat = null, currency = null, mainnet = true, reservationId = null,
+}) {
     if (!vault) throw new Error('commitAdsStep: vault is required');
     try {
         return await serializeSettingsWrites(vault, async () => {
             const settings = await vault.settings.get();
-            if (!settings) return null;
+            if (!settings) return { settings: null, booking: null };
+            const ads = adsSettingsOf(settings);
+            const held = adsReservationOf(settings);
+            let paidFiat = null;
+            if (donationIncluded && reservationId && held?.id === reservationId && held.currency === ads.currency) {
+                paidFiat = held.fiat;
+            } else if (donationIncluded && !reservationId && mainnet !== false
+                && typeof donatedFiat === 'string' && DECIMAL_RE.test(donatedFiat)
+                && (currency == null || currency === ads.currency)) {
+                paidFiat = donatedFiat;
+            }
             const next = stepAdsQueue(settings, { donationIncluded, donatedFiat, currency, mainnet, reservationId });
             if (next !== settings) await vault.settings.put(next);
-            return next;
+            return {
+                settings: next,
+                booking: paidFiat === null ? null : { fiat: paidFiat, currency: ads.currency },
+            };
         });
     } finally {
         if (reservationId) inFlightReservations.delete(reservationId);
     }
+}
+
+/**
+ * Put a payout back on the queue after a confirmed replacement removed its
+ * output. Pure and idempotence-neutral: callers must invoke it once per
+ * booking, only after the replacement outcome is settled.
+ *
+ * @param {any} settings
+ * @param {{fiat?: string, currency?: string} | null | undefined} booking
+ */
+export function reverseAdsBooking(settings, booking) {
+    if (!settings || typeof booking?.fiat !== 'string' || !DECIMAL_RE.test(booking.fiat)) return settings;
+    const ads = adsSettingsOf(settings);
+    if (booking.currency !== ads.currency) return settings;
+    const donated = subtractDecimalStrings(ads.donated, booking.fiat);
+    const nextAds = {
+        ...ads,
+        queued: sumDecimalStrings([ads.queued, booking.fiat]),
+        donated: donated !== null && compareDecimalStrings(donated, '0') === 1 ? donated : '0',
+        donationCount: Math.max(0, ads.donationCount - 1),
+    };
+    return { ...settings, ads: nextAds };
+}
+
+/** Reverse one confirmed donation-free replacement under the settings queue. */
+export async function reverseAdsBookingInVault({ vault, booking }) {
+    if (!adsWritable(vault)) return false;
+    return serializeSettingsWrites(vault, async () => {
+        const settings = await vault.settings.get();
+        const next = reverseAdsBooking(settings, booking);
+        if (next === settings) return false;
+        await vault.settings.put(next);
+        return true;
+    });
 }
 
 function adsWritable(vault) {
@@ -625,15 +688,19 @@ export async function returnAdsReservationToReview({ vault, reservationId, revie
 
 // Clear the held claim named `reservationId`, paying it when `settle` is set.
 async function endReservation(vault, reservationId, settle) {
-    if (typeof reservationId !== 'string' || !reservationId) return false;
+    if (typeof reservationId !== 'string' || !reservationId) return { ended: false, booking: null };
     inFlightReservations.delete(reservationId);
-    if (!adsWritable(vault)) return false;
+    if (!adsWritable(vault)) return { ended: false, booking: null };
     return serializeSettingsWrites(vault, async () => {
         const settings = await vault.settings.get();
-        if (!settings || adsReservationOf(settings)?.id !== reservationId) return false;
+        const held = adsReservationOf(settings);
+        if (!settings || held?.id !== reservationId) return { ended: false, booking: null };
         const next = stepAdsQueue(settings, { donationIncluded: settle, reservationId, accrue: false });
         if (next !== settings) await vault.settings.put(next);
-        return true;
+        return {
+            ended: true,
+            booking: settle ? { fiat: held.fiat, currency: held.currency } : null,
+        };
     });
 }
 
@@ -645,7 +712,7 @@ async function endReservation(vault, reservationId, settle) {
  * @param {{ vault: import('../storage/Vault.js').Vault, reservationId: string | null | undefined }} opts
  */
 export async function releaseAdsReservation({ vault, reservationId }) {
-    return endReservation(vault, reservationId, false);
+    return (await endReservation(vault, reservationId, false)).ended;
 }
 
 /**
@@ -657,6 +724,11 @@ export async function releaseAdsReservation({ vault, reservationId }) {
  * @param {{ vault: import('../storage/Vault.js').Vault, reservationId: string | null | undefined }} opts
  */
 export async function settleAdsReservation({ vault, reservationId }) {
+    return (await endReservation(vault, reservationId, true)).ended;
+}
+
+/** Settle a held claim and return the payout credited by that settlement. */
+export async function settleAdsReservationWithBooking({ vault, reservationId }) {
     return endReservation(vault, reservationId, true);
 }
 

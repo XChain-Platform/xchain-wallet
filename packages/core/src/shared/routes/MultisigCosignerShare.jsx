@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { useEffect, useState } from 'react';
 import {
     CopyButton,
@@ -238,7 +239,7 @@ export function canShareAddress(address) {
 
 export function unavailableAddressReason(address) {
     if (address?.source === 'watch-only') return t('multisig.share.watchOnlyUnavailable');
-    if (address?.source === 'trezor' || address?.source === 'ledger') {
+    if (isDeviceAddressSource(address?.source)) {
         return t('multisig.share.hardwareUnavailable');
     }
     if (address?.source === 'imported-wif') return t('multisig.share.importedUnavailable');

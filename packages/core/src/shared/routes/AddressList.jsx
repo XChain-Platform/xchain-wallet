@@ -8,6 +8,7 @@
 // license (without AGPL source-disclosure terms) is available -
 // contact legal@dankest.llc.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressText, Button, ChainBadge, Checkbox, EmptyState, FormNotice, FormPage, Icon, Input, ListPage, ListRow, MultisigBadge, NetworkField, PageHeader, Screen, SectionHeader, Select, Skeleton, StatusMessage, useFormErrors } from '@xchain-wallet/core/ui';
 import { registry as registryLib, flows as flowsLib } from '@xchain-wallet/core';
@@ -83,7 +84,7 @@ export function wifPrefixHint(descriptor) {
     return typeof v === 'number' ? (WIF_PREFIX_BY_VERSION[v] || null) : null;
 }
 
-const DERIVED_SOURCES = new Set(['hd', 'trezor', 'ledger']);
+const isDerivedSource = (source) => source === 'hd' || isDeviceAddressSource(source);
 
 /**
  * Confirm-dialog copy for deleting one address, built only from what the
@@ -118,8 +119,8 @@ export function deleteAddressMessage({ record, holdings = [], balanceStatus = 'l
     if (last) {
         parts.push('It is the only address on this network, so the network leaves the wallet until you add one.');
     }
-    const derived = DERIVED_SOURCES.has(record?.source) && typeof record?.derivationPath === 'string';
-    const onDevice = record?.source === 'trezor' || record?.source === 'ledger';
+    const derived = isDerivedSource(record?.source) && typeof record?.derivationPath === 'string';
+    const onDevice = isDeviceAddressSource(record?.source);
     if (derived && onDevice) {
         parts.push('Its key stays on your hardware wallet, so it is not lost: Add address > Generate re-derives the lowest missing address before any new one.');
     } else if (derived) {
@@ -1041,7 +1042,7 @@ export function AddressList({
         const d = chainRegistry.get(selected.chainId);
         // A hardware wallet address keeps its key on the device, so it has no
         // private key page to open.
-        const onDevice = selected.record?.source === 'trezor' || selected.record?.source === 'ledger';
+        const onDevice = isDeviceAddressSource(selected.record?.source);
         const canSecret = !!(onShowPrivateKey && selected.record && !selected.multisig && !onDevice);
         const canDelete = !!selected.record?.id;
         // "SegWit (starts with bc1q)": the format in plain words with its prefix.

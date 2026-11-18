@@ -64,7 +64,7 @@ assert.match(host, /host\.register\('gatedContent\.scan',/, 'recovery-scan handl
 const content = read('packages', 'core', 'src', 'flows', 'gatedContent.js');
 assert.match(content, /export async function recoverGatedKeysForTick/, 'recovery scan flow exists');
 assert.match(content, /source: 'recovered'/, 'recovered keys persist with the recovered source tag');
-assert.match(content, /a\.source !== 'watch-only' && a\.source !== 'trezor' && a\.source !== 'ledger'/,
+assert.match(content, /a\.source !== 'watch-only' && !isDeviceAddressSource\(a\.source\)/,
     'scan skips signer types that cannot export keys');
 
 // ---- Messaging exports x3 shells ---------------------------------------

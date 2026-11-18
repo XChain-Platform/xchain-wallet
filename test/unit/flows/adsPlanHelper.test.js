@@ -139,6 +139,15 @@ describe('resolveAdsPayout', () => {
             settings: due(), chainId: 'bitcoin-mainnet', chainRegistry: registry, sdk, rateLoader: rateOf(100000),
         });
         expect(live).toMatchObject({ canSubmit: false, reason: 'dust' });
+        const unknownFloor = await resolveAdsPayout({
+            settings: due(),
+            chainId: 'custom-mainnet',
+            chainRegistry: {
+                get: () => ({ ...registry.get('bitcoin-mainnet'), coin: 'custom' }),
+            },
+            rateLoader: rateOf(100000),
+        });
+        expect(unknownFloor).toMatchObject({ canSubmit: false, reason: 'dust' });
     });
 
     it('never pays a placeholder or unknown address', async () => {

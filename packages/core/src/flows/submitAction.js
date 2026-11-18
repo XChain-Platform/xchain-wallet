@@ -30,7 +30,7 @@ import { submitWithSigner, BroadcastFailedError } from '../sdk/submitWithSigner.
 import { createPendingTx } from '../schemas/pendingTx.js';
 import {
     adsReservationOf,
-    commitAdsStep,
+    commitAdsStepWithBooking,
     forgetInFlightAdsReservation,
     isAdsCountedSend,
     newAdsReservationId,
@@ -535,6 +535,20 @@ export async function submitAction({
         // the donation dropped it, so its claim goes back before the send waits
         // on anything (an undo hold, the network).
         if (adsReservationId && !prebuiltPsbt && !adsAtEncode?.state.included) await releaseAdsClaim();
+        const carriedAds = adsVerdict();
+        if (pending && carriedAds.donationIncluded
+            && typeof carriedAds.donatedFiat === 'string'
+            && typeof carriedAds.currency === 'string') {
+            await writePending({
+                adsBooking: {
+                    id: pending.id,
+                    fiat: carriedAds.donatedFiat,
+                    currency: carriedAds.currency,
+                    paid: true,
+                    booked: false,
+                },
+            });
+        }
         // A hardware signer's commit PSBT gives the debit when signedPsbtHex is empty.
         const debitPsbtHex = transactions?.signed?.signedPsbtHex || transactions?.psbtHex;
         if (pending && debitPsbtHex) {
@@ -792,7 +806,12 @@ export async function submitAction({
     // per-transaction amount, and the donated amount when these bytes carried
     // the donation. Never before the broadcast.
     try {
-        await commitAdsStep({ vault, ...adsVerdict() });
+        const { booking } = await commitAdsStepWithBooking({ vault, ...adsVerdict() });
+        if (pending && booking) {
+            await writePending({
+                adsBooking: { id: pending.id, ...booking, paid: true, booked: true },
+            });
+        }
     } catch (e) {
         // ADS accounting is non-critical; don't let a write failure
         // here obscure the successful broadcast from the caller.

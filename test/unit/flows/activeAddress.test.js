@@ -120,6 +120,29 @@ describe('resolveActiveAddresses', () => {
         const out = await resolveActiveAddresses({ vault, accountId: 'acct-a', chainRegistry });
         expect(out['bitcoin-regtest'].id).toBe('recv');
     });
+
+    it.each(['trezor', 'ledger'])('defaults a %s account to its lowest external address', async (source) => {
+        const vault = makeVault({
+            account: baseAccount,
+            addresses: [
+                mkAddr('hw2', 2, { source }),
+                mkAddr('hw0', 0, { source }),
+                mkAddr('change', 0, { source, derivationPath: "m/84'/0'/0'/1/0" }),
+                mkAddr('disp', 0, { source, role: 'dispenser' }),
+            ],
+        });
+        const out = await resolveActiveAddresses({ vault, accountId: 'acct-a', chainRegistry });
+        expect(out['bitcoin-regtest']).toEqual({ id: 'hw0', address: 'addr_hw0' });
+    });
+
+    it('keeps the software default when hardware and software addresses are mixed', async () => {
+        const vault = makeVault({
+            account: baseAccount,
+            addresses: [mkAddr('hw0', 0, { source: 'trezor' }), mkAddr('hd1', 1)],
+        });
+        const out = await resolveActiveAddresses({ vault, accountId: 'acct-a', chainRegistry });
+        expect(out['bitcoin-regtest'].id).toBe('hd1');
+    });
 });
 
 describe('setActiveAddress', () => {

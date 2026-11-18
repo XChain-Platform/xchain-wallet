@@ -22,6 +22,7 @@
 // signers are NOT supported here yet; G024's HW counterpart lives in a
 // separate FOLLOWUP and will route through the signer bridge.
 
+import { isDeviceAddressSource } from '../../schemas/constants.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyButton, Icon, Input, ListPage, PageHeader, Screen, StatusMessage, Textarea } from '@xchain-wallet/core/ui';
 import { registry as registryLib } from '@xchain-wallet/core';
@@ -176,7 +177,7 @@ export function SignMessageForm({ walletId, onBack }) {
                 // address would take a password and then fail to sign.
                 const signingByChain = Object.fromEntries(
                     Object.entries(signingAddressesByChain(byChain))
-                        .map(([id, list]) => [id, list.filter((a) => a?.source !== 'trezor' && a?.source !== 'ledger')])
+                        .map(([id, list]) => [id, list.filter((a) => !isDeviceAddressSource(a?.source))])
                         .filter(([, list]) => list.length > 0),
                 );
                 setAddressesByChain(signingByChain);

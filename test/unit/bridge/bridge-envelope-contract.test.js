@@ -722,9 +722,7 @@ describe('the signing methods answer their published success shapes', () => {
         });
         flowMocks.passiveCoSignForAccount.mockResolvedValue({
             approved: true,
-            publicNonce: 'aa',
-            sig: 'bb',
-            msg: 'cc',
+            signatures: [{ index: 0, publicNonce: 'aa', sig: 'bb', msg: 'cc' }],
             action: 'SEND',
         });
         const host = buildHost(makeVault({ site: connectedSite() }));
@@ -735,7 +733,11 @@ describe('the signing methods answer their published success shapes', () => {
                 psbtHex: '70736274', agentPublicNonce: '02ff',
             },
         });
-        expect(result).toMatchObject({ ok: true, approved: true, sig: 'bb' });
+        expect(result).toMatchObject({
+            ok: true,
+            approved: true,
+            signatures: [{ index: 0, sig: 'bb' }],
+        });
     });
 
     it('coSign rejects a malformed core outcome instead of inventing a policy refusal', async () => {

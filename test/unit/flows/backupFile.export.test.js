@@ -72,6 +72,21 @@ function vaultFixture() {
     const otherPending = { id: 'pending-2', fromAddress: otherAddress.address };
     const contact = { id: 'contact-1' };
     const connectedSite = { id: 'site-1' };
+    const signerRecord = (id, walletId, kind) => ({
+        schemaVersion: 1,
+        id,
+        walletId,
+        kind,
+        vendor: kind,
+        model: kind === 'ledger' ? 'nanoX' : 'T2T1',
+        deviceIdentifier: `${id}-device`,
+        label: id,
+        firmwareVersion: null,
+        pairedAt: '2026-10-13T18:00:00.000Z',
+        lastSeenAt: '2026-10-13T18:00:00.000Z',
+    });
+    const ownSigner = signerRecord('signer-1', wallet.id, 'ledger');
+    const otherSigner = signerRecord('signer-2', 'wallet-2', 'trezor');
     const settings = { schemaVersion: 1, activeNetwork: 'mainnet' };
     return {
         wallet,
@@ -81,6 +96,7 @@ function vaultFixture() {
         ownPending,
         contact,
         connectedSite,
+        ownSigner,
         settings,
         vault: {
             wallets: collection([wallet]),
@@ -88,6 +104,7 @@ function vaultFixture() {
             addresses: collection([ownAddress, importedAddress, otherAddress]),
             contacts: collection([contact]),
             connectedSites: collection([connectedSite]),
+            signers: collection([ownSigner, otherSigner]),
             pendingTxs: collection([ownPending, otherPending]),
             settings: { get: vi.fn(async () => settings), put: vi.fn(async () => {}) },
         },
@@ -133,7 +150,7 @@ describe('exportBackupFile', () => {
             contacts: [fixture.contact],
             connectedSites: [fixture.connectedSite],
             settings: fixture.settings,
-            signers: [],
+            signers: [fixture.ownSigner],
             pendingTxs: [fixture.ownPending],
         });
         expect(typeof result.fileContent).toBe('string');
@@ -198,6 +215,7 @@ describe('exportBackupFile', () => {
         target.addresses = collection([]);
         target.contacts = collection([]);
         target.connectedSites = collection([]);
+        target.signers = collection([]);
         target.pendingTxs = collection([]);
         target.settings = { get: vi.fn(async () => null), put: vi.fn(async () => {}) };
 

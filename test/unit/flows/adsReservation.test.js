@@ -19,6 +19,7 @@ import {
     ADS_RESERVATION_TTL_MS,
     adsReservationOf,
     commitAdsStep,
+    commitAdsStepWithBooking,
     forgetInFlightAdsReservation,
     isAdsCountedSend,
     reconcileAdsReservation,
@@ -167,6 +168,18 @@ describe('reserveAdsPayout', () => {
 });
 
 describe('settling and releasing', () => {
+    it('reports a booking only when this call credits the held payout', async () => {
+        const w = wallet({ queued: '30.05', reserved: claim() });
+        const first = await commitAdsStepWithBooking({
+            vault: w.vault, donationIncluded: true, reservationId: 'tx-a',
+        });
+        expect(first.booking).toEqual({ fiat: '30', currency: 'USD' });
+        const replay = await commitAdsStepWithBooking({
+            vault: w.vault, donationIncluded: true, donatedFiat: '30', currency: 'USD', reservationId: 'tx-a',
+        });
+        expect(replay.booking).toBeNull();
+    });
+
     it('the broadcast that holds the claim takes the claimed amount off once', async () => {
         const w = wallet({ queued: '30.05', reserved: claim() });
         await commitAdsStep({ vault: w.vault, donationIncluded: true, donatedFiat: '30', currency: 'USD', mainnet: true, reservationId: 'tx-a' });
