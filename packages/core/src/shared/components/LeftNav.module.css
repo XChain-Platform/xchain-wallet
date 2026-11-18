@@ -410,32 +410,6 @@
     flex-direction: column;
 }
 
-@media (max-height: 800px) {
-    .layout[data-xc-rail='shown'] .nav {
-        padding-block: 0;
-    }
-
-    .layout[data-xc-rail='shown'] .list {
-        gap: 0;
-    }
-
-    .layout[data-xc-rail='shown'] .groupLabel,
-    .layout[data-xc-rail='shown'] .groupDivider {
-        display: none;
-    }
-
-    .layout[data-xc-rail='shown'][data-xc-side-menu='icons'] .groupDivider,
-    .layout[data-xc-rail='shown'][data-xc-tier='rail'] .groupDivider {
-        display: none;
-    }
-
-    .layout[data-xc-rail='shown'] .footer {
-        border-top: 0;
-        margin-top: 0;
-        padding-top: 0;
-    }
-}
-
 /* Forced colors paints a transparent border in CanvasText, which would outline
    every row. Idle rows take the canvas colour and the active row takes the
    selection colour, so only the current destination shows an edge. */
