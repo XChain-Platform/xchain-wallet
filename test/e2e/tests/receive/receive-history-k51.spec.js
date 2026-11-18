@@ -152,14 +152,17 @@ test.describe('Receive to History on LG K51', { tag: '@lg-k51' }, () => {
             await gotoSection(page, 'History');
             await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
 
-            // A phone folds the History filters behind one Filters button.
+            // A phone folds the History filters behind the title bar's filters button.
             const search = page.getByRole('searchbox', { name: 'Search history' });
             if (!(await search.isVisible())) {
-                await page.getByRole('button', { name: /^Filters/ }).click();
+                await page.getByRole('button', { name: 'History filters', exact: true }).click();
             }
             await search.fill(HISTORY_TX_ID);
             const rows = page.locator('[data-history-key]');
             await expect(rows).toHaveCount(1);
+            // The filters are a popover over the list; close it to reach the row.
+            await page.keyboard.press('Escape');
+            await expect(search).toBeHidden();
             await expectNoHorizontalOverflow(page, 'filtered History');
             await rows.getByRole('button').click();
 
@@ -173,7 +176,7 @@ test.describe('Receive to History on LG K51', { tag: '@lg-k51' }, () => {
             await expect(detailRow(page, 'From').locator('[title]').first()).toHaveAttribute('title', HISTORY_SOURCE);
             await expect(detailRow(page, 'To').locator('[title]').first()).toHaveAttribute('title', receiveAddress);
             await expect(detailRow(page, 'Amount')).toContainText('+1');
-            await expect(detailRow(page, 'Tick')).toContainText('RAREPEPE');
+            await expect(detailRow(page, 'Tick')).toContainText('STUDIOPASS');
             await expectNoHorizontalOverflow(page, 'transaction detail');
         });
 

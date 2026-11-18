@@ -136,12 +136,18 @@ export async function selectNamedToken(page, field, {
     // has been typed, because discovery is a search. The search sits behind
     // the picker's Filter button.
     await searchTokenPicker(page, tick);
+    // On a narrow screen the open filter panel floats over the results, so close it.
+    const filter = page.getByRole('button', { name: 'Filter coins and tokens', exact: true });
+    if (await filter.getAttribute('aria-expanded') === 'true') await filter.click();
 
     const row = page.locator(`[data-balance-key="${chainId}:${tick}"]`).first();
     await expect(row, `the asset picker lists no ${tick} on ${chainLabel}. On the GIVE side that `
         + 'means the source address does not hold it; on the GET side it means platform discovery '
         + 'returned nothing, which is a venue answer rather than a wallet one')
         .toBeVisible({ timeout: timeoutMs });
+    // An open filter panel keeps the list re-flowing, so close it before the tap lands.
+    const filterToggle = page.getByRole('button', { name: 'Filter coins and tokens', exact: true });
+    if (await filterToggle.getAttribute('aria-expanded') === 'true') await filterToggle.click();
     await row.click();
 
     // Assert the selection took, for the same reason the chain helper does:

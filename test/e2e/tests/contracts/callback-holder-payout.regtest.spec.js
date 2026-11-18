@@ -39,6 +39,7 @@ import {
     waitForTokenBalance,
     waitForValidAction,
     approveConfirm,
+    searchMyTokens,
 } from '../../fixtures/regtest.js';
 import { kdfStepTimeout } from '../../timeout-budget.js';
 import { fieldByLabel } from '../../fixtures/fields.js';
@@ -92,13 +93,15 @@ async function approveAndReadTxid(page, what, { typedCallback = false } = {}) {
 async function openManageToken(page) {
     await openPaletteCommand(page, 'My tokens');
     const main = page.getByRole('main');
-    const search = fieldByLabel(main, 'Search your tokens by ticker or description');
-    await expect(search, 'My Tokens did not render').toBeVisible({ timeout: 30_000 });
-    await search.fill(TICK);
+    // The search sits in the title bar's "Filter tokens" menu, outside main.
+    await searchMyTokens(page, TICK);
     const row = main.getByRole('button', { name: `Open ${TICK} token details`, exact: true }).first();
     await expectMyTokensRow(main, row, `${TICK} is missing from My Tokens`);
     await row.click();
-    await expect(main.getByRole('heading', { name: TICK, exact: true }))
+    // The token page names its asset in the window title; its header has no heading.
+    await expect(page).toHaveTitle(new RegExp(`\\b${TICK}\\b`), { timeout: 30_000 });
+    // The token page's own filter menu says the detail, not the list, is open.
+    await expect(page.getByRole('button', { name: 'Filter token content', exact: true }))
         .toBeVisible({ timeout: 30_000 });
     return main;
 }

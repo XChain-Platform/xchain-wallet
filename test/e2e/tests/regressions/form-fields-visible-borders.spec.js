@@ -64,9 +64,10 @@ async function selectHeldGiveToken(page) {
         chainLabel: 'Bitcoin',
         tick: 'PEPECASH',
     });
-    // Every amount field carries Max (disabled when nothing is held), so look in You give.
+    // Swap's Max is an icon button on the available line under the amount,
+    // not an action inside the field, so it is asserted here and not measured.
     await expect(main.getByRole('region', { name: 'You give' })
-        .getByRole('button', { name: 'Use max available amount' })).toBeVisible();
+        .getByRole('button', { name: 'Max you give amount' })).toBeVisible();
 }
 
 async function expectVisibleFieldsHaveBorders(page, label) {
@@ -244,7 +245,7 @@ for (const theme of THEMES) {
                     await gotoPaletteRoute(page, 'Swap');
                     await expect(page.getByRole('heading', { name: 'Swap Tokens', exact: true })).toBeVisible();
                     await selectHeldGiveToken(page);
-                    await checkScreen(page, `${context} / Swap`, ['Max']);
+                    await checkScreen(page, `${context} / Swap`);
                 });
 
                 await test.step(`${context} / Receive`, async () => {
@@ -255,19 +256,29 @@ for (const theme of THEMES) {
 
                 await test.step(`${context} / Settings search`, async () => {
                     await openSettings(page);
-                    await expect(page.getByRole('button', { name: 'Filter settings' })).toBeVisible();
+                    // The search sits behind the Filter settings button.
+                    await page.getByRole('button', { name: 'Filter settings' }).click();
+                    await expect(page.getByRole('searchbox', { name: 'Search settings' })).toBeVisible();
                     await checkScreen(page, `${context} / Settings search`);
                 });
 
                 await test.step(`${context} / Contacts`, async () => {
                     await gotoSection(page, 'Contacts');
                     await expect(page.getByRole('heading', { name: 'Contacts', exact: true })).toBeVisible();
+                    // The search sits in the panel behind Filter contacts.
+                    await page.getByRole('button', { name: 'Filter contacts', exact: true }).click();
+                    await expect(page.getByRole('searchbox', { name: 'Search contacts' })).toBeVisible();
                     await checkScreen(page, `${context} / Contacts`);
+                    // Close the panel so the palette shortcut is not typed into its search.
+                    await page.getByRole('button', { name: 'Filter contacts', exact: true }).click();
                 });
 
                 await test.step(`${context} / Addresses`, async () => {
                     await gotoPaletteRoute(page, 'Addresses');
                     await expect(page.getByRole('heading', { name: 'Addresses', exact: true })).toBeVisible();
+                    // The search sits in the panel behind Filter addresses.
+                    await page.getByRole('button', { name: 'Filter addresses', exact: true }).click();
+                    await expect(page.getByRole('searchbox', { name: 'Search addresses' })).toBeVisible();
                     await checkScreen(page, `${context} / Addresses`);
                 });
             }

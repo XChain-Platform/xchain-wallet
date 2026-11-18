@@ -48,6 +48,7 @@ import {
     REGTEST_COIN,
     fundAddress,
     healVenueClock,
+    selectListNetwork,
     selectVenueChain,
     minerRpc,
     mintXchain,
@@ -241,14 +242,15 @@ async function openCreateMarket(page) {
 }
 
 async function gotoBettingHub(page) {
-    await openPaletteCommand(page, 'Betting');
+    await openPaletteCommand(page, 'Prediction markets');
     await expect(page.getByRole('button', { name: 'Create market', exact: true }))
         .toBeVisible({ timeout: 30_000 });
     // The HUB has a NetworkField of its own (BetFeedsList), separate from the
     // create form's, and it defaults to Bitcoin - so a market created on the
     // venue chain is simply not in the list this lists, and finding it by
-    // "#<index>" waits out its budget looking at the wrong chain.
-    await selectVenueChain(page.getByRole('main'), 'Network');
+    // "#<index>" waits out its budget looking at the wrong chain. It sits in
+    // the title bar's filter menu.
+    await selectListNetwork(page, 'Filter prediction markets');
 }
 
 test.describe('BET round trip on regtest', () => {
