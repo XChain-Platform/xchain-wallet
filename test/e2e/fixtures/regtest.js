@@ -1334,7 +1334,7 @@ export async function openHistoryDetail(page, row) {
     return {
         split,
         pane: page.getByRole('main'),
-        title: page.getByRole('banner').filter({ hasText: '#' }).first(),
+        title: page.getByRole('banner').filter({ has: page.getByRole('heading', { level: 1 }) }).first(),
     };
 }
 

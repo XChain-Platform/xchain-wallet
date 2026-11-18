@@ -132,15 +132,18 @@ async function classifyPaste(page, text) {
     // observable, because the parent switches views in the same state update.
     const routed = page.getByTestId('scan-route');
     // A browser with no camera grant shows QrScanner's camera notice
-    // (cameraErrorText: "Camera access is turned off...") in the same notice
-    // slot before anything is pasted. It is about the camera, not the paste,
-    // so it is never the paste's verdict; ScanRoute's own refusals never
+    // (cameraErrorText: "Camera access is turned off...") before anything is
+    // pasted, and FormPage merges it with ScanRoute's own status into one
+    // notice box, a line each. The camera line is about the camera, not the
+    // paste, so it is dropped from the verdict; ScanRoute's own refusals never
     // mention the camera.
-    const failed = scanStatus(page).filter({ hasNotText: /\bcamera\b/i });
+    const failed = scanStatus(page);
+    const verdictText = (raw) => raw.split('\n').map((line) => line.trim())
+        .filter((line) => line && !/\bcamera\b/i.test(line)).join('\n');
     let outcome = null;
     await expect.poll(async () => {
         if (await routed.count() === 0) outcome = 'routed';
-        else if (await failed.count() > 0) outcome = (await failed.first().innerText()).trim();
+        else if (await failed.count() > 0) outcome = verdictText(await failed.first().innerText()) || null;
         return outcome;
     }, {
         timeout: 30_000,
