@@ -50,6 +50,28 @@ async function expectNoHorizontalOverflow(page, label) {
     ).toBeLessThanOrEqual(clientWidth + 1);
 }
 
+/**
+ * Filters the contact list to one network. On the Contacts page the network
+ * filter sits inside the Filter contacts panel; Send's address-book picker
+ * shows it on the screen itself. Either opens the full-screen network list,
+ * and the panel is closed again so the filtered list is what the next step reads.
+ */
+async function pickContactNetwork(page, network) {
+    const panel = page.getByRole('dialog', { name: 'Filter contacts' });
+    const direct = page.getByRole('main').getByRole('button', { name: /^Filter by network/ });
+    const openPanel = page.getByRole('button', { name: 'Filter contacts', exact: true });
+    await expect(direct.or(openPanel).or(panel).first()).toBeVisible();
+    if (!(await direct.isVisible()) && !(await panel.isVisible())) await openPanel.click();
+    const filter = (await panel.isVisible())
+        ? panel.getByRole('button', { name: /^Filter by network/ })
+        : direct;
+    await filter.click();
+    await page.getByRole('dialog', { name: 'Network' })
+        .getByRole('button', { name: `Select ${network}`, exact: true }).click();
+    if (await panel.isVisible()) await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+}
+
 for (const viewport of VIEWPORTS) {
     test(`contact CRUD and Send recipient picking fit the ${viewport.name} viewport`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
@@ -72,25 +94,23 @@ for (const viewport of VIEWPORTS) {
             await page.getByRole('textbox', { name: 'Notes', exact: true }).fill('Primary Bitcoin recipient');
             await page.getByRole('button', { name: 'Update Contact', exact: true }).click();
 
-            await expect(page.getByRole('heading', { name: 'View Contact' })).toBeVisible();
-            await expect(page.getByRole('main').getByText(EDITED_NAME, { exact: true })).toBeVisible();
+            // A phone shows the contact on its own View Contact screen; a wide
+            // screen shows it in the detail panel beside the list, named by the contact.
+            await expect(page.getByRole('heading', { name: 'View Contact' })
+                .or(page.getByRole('region', { name: EDITED_NAME, exact: true })).first()).toBeVisible();
+            await expect(page.getByRole('main').getByText(EDITED_NAME, { exact: true }).first()).toBeVisible();
             await expectNoHorizontalOverflow(page, `${viewport.name} edited contact`);
-            await page.getByRole('button', { name: 'Back to previous screen' }).click();
+            const back = page.getByRole('button', { name: 'Back to previous screen' });
+            if (await back.isVisible()) await back.click();
             await expect(contactRow(page, EDITED_NAME)).toBeVisible();
         });
 
         await test.step('filter contacts by network', async () => {
-            const filter = page.getByRole('button', { name: /^Filter by network/ });
-            // The filter opens the full-screen network list.
-            await filter.click();
-            await page.getByRole('dialog', { name: 'Network' })
-                .getByRole('button', { name: 'Select Litecoin', exact: true }).click();
+            await pickContactNetwork(page, 'Litecoin');
             await expect(contactRow(page, EDITED_NAME)).toHaveCount(0);
             await expect(page.getByText('No results for these filters', { exact: true })).toBeVisible();
 
-            await filter.click();
-            await page.getByRole('dialog', { name: 'Network' })
-                .getByRole('button', { name: 'Select Bitcoin', exact: true }).click();
+            await pickContactNetwork(page, 'Bitcoin');
             await expect(contactRow(page, EDITED_NAME)).toBeVisible();
             await expectNoHorizontalOverflow(page, `${viewport.name} filtered contacts`);
         });
@@ -98,14 +118,12 @@ for (const viewport of VIEWPORTS) {
         await test.step('pick the contact from Send on the Bitcoin chain', async () => {
             await gotoSection(page, 'Send');
             const bitcoinAsset = page.getByRole('button', {
-                name: 'Change asset (currently Bitcoin)',
+                name: 'Asset: BTC on Bitcoin',
             });
             await expect(bitcoinAsset).toBeVisible();
             await page.getByRole('button', { name: 'Open address book' }).click();
             await expect(page.getByRole('heading', { name: 'Contacts' })).toBeVisible();
-            await page.getByRole('button', { name: /^Filter by network/ }).click();
-            await page.getByRole('dialog', { name: 'Network' })
-                .getByRole('button', { name: 'Select Bitcoin', exact: true }).click();
+            await pickContactNetwork(page, 'Bitcoin');
             await expectNoHorizontalOverflow(page, `${viewport.name} Send contacts picker`);
 
             const pickerRow = page.getByRole('main').getByRole('button')

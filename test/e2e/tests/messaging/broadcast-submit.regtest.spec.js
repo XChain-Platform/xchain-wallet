@@ -48,7 +48,7 @@ async function onboardOntoBroadcastForm(page, walletName) {
     await createWallet(page, { password: PASSWORD, name: walletName });
     await switchToRegtest(page, PASSWORD);
 
-    await openPaletteCommand(page, 'Post an announcement');
+    await openPaletteCommand(page, 'Broadcast');
     let main = page.getByRole('main');
     await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
@@ -59,7 +59,7 @@ async function onboardOntoBroadcastForm(page, walletName) {
     await page.reload();
     await unlockAfterReload(page, PASSWORD);
 
-    await openPaletteCommand(page, 'Post an announcement');
+    await openPaletteCommand(page, 'Broadcast');
     main = page.getByRole('main');
     await expect(fieldByLabel(main, 'Message')).toBeVisible({ timeout: 30_000 });
     await selectVenueChain(main);
