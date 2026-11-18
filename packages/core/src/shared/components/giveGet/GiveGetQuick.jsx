@@ -39,7 +39,7 @@ import styles from './GiveGet.module.css';
  * @property {string} amount
  * @property {(raw: string) => void} onAmountChange
  * @property {string} amountLabel                  accessible field name, e.g. 'Give amount'
- * @property {number | string | null} [divisibility] the asset's decimal places; the amount shows padded to them once editing ends (U61)
+ * @property {number | string | null} [divisibility] the asset's decimal places; once editing ends a fractional amount pads to them and a whole one shows without decimals (U61)
  * @property {boolean} [ownership]                 ownership mode: the amount gives way to the name
  * @property {string} [ownershipHint]             static note for ownership mode; it joins the card's '?' tip, never a line (U57)
  * @property {import('react').ReactNode} [balanceText]

@@ -86,13 +86,16 @@ describe('MintForm amount format and help tips', () => {
         expect(await screen.findByRole('button', { name: 'About From address' })).toBeInTheDocument();
     });
 
-    it('pads a whole amount to an 8-place token once the edit ends', async () => {
+    it('keeps a whole amount whole and pads a fractional one to an 8-place token once the edit ends', async () => {
         mountMint({ divisibility: 8 });
         await screen.findByText(/available to mint/);
         const field = await amountField();
         fireEvent.change(field, { target: { value: '1' } });
         fireEvent.blur(field);
-        await waitFor(() => expect(field.value).toBe('1.00000000'));
+        await waitFor(() => expect(field.value).toBe('1'));
+        fireEvent.change(field, { target: { value: '1.5' } });
+        fireEvent.blur(field);
+        await waitFor(() => expect(field.value).toBe('1.50000000'));
     });
 
     it('refuses a fraction for a whole-number token with a field error and holds Mint', async () => {

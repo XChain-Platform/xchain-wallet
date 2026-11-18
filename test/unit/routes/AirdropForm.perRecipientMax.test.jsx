@@ -215,13 +215,16 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
         expect(amountField().value).toBe('3');
     });
 
-    it('pads the per-recipient amount to the selected token format', async () => {
+    it('shows the per-recipient amount in the selected token format', async () => {
         mountAirdrop({ divisibility: 8 });
         await pasteRecipients();
         fireEvent.change(amountField(), { target: { value: '1' } });
         fireEvent.blur(amountField());
+        expect(amountField()).toHaveValue('1');
 
-        expect(amountField()).toHaveValue('1.00000000');
+        fireEvent.change(amountField(), { target: { value: '1.5' } });
+        fireEvent.blur(amountField());
+        expect(amountField()).toHaveValue('1.50000000');
     });
 
     it('discloses the balance left by per-recipient rounding', async () => {
@@ -331,7 +334,7 @@ describe('AirdropForm Max fills a per-recipient share, not the balance', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to previous screen' }));
 
-        expect(await amountField()).toHaveValue('10.00000000');
+        expect(await amountField()).toHaveValue('10');
         expect(screen.getByRole('textbox', { name: 'Recipients' }))
             .toHaveValue(RECIPIENTS.join('\n'));
     });

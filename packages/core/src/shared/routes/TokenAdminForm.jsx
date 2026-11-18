@@ -81,6 +81,7 @@ import {
 } from '../utils/issueFieldValidation.js';
 import { currentListMemberCount } from '../../flows/listMembership.js';
 import { compareDecimalStrings, formatWithThousands, groupDecodedAmounts, tokenAmountPrecisionError } from '../utils/amountFormat.js';
+import { padToDecimals } from '../components/AmountField.jsx';
 import { exceedsHeadroom, mintHeadroom } from '../utils/mintHeadroom.js';
 import { isNativeCoinTick, unknownTickMessage } from '../utils/dividendTickChecks.js';
 import { tickLookupVerdict } from '../utils/listTickItems.js';
@@ -423,9 +424,9 @@ export function TokenAdminForm({ walletId, mode, onBack, initialChainId, initial
         && Number.isInteger(callbackTokenInfo?.divisibility)
         ? callbackTokenInfo.divisibility
         : null;
-    // Payout per unit follows the callback token's own format: every
-    // edit is checked against its decimal places, and a valid value is padded
-    // to them when the callback token changes or the field loses focus.
+    // Payout per unit follows the callback token's own format (U61): every
+    // edit is checked against its decimal places, and the value re-formats
+    // when the callback token changes or the field loses focus.
     const callbackAmountPrecisionError = mode === 'callback-settings' && callbackAmount.trim()
         && callbackTokenDivisibility != null
         ? tokenAmountPrecisionError(callbackAmount.trim(), {
@@ -2263,12 +2264,12 @@ const MODE_FROM_HELP = {
 };
 
 /**
- * Re-formats Payout per unit to the callback token's decimal places: "1"
- * reads "1.00000000" at 8, and "1.00000000" reads "1" again at 0, because
- * only the padding zeros are dropped before padding to the new places. Any
- * significant digit stays, so a value finer than the token allows keeps its
- * digits and its field error. A blank or malformed value, or an unknown
- * precision, comes back unchanged.
+ * Re-formats Payout per unit to the callback token's format, the way every
+ * amount field shows it: "1" and "1.00000000" read "1", and "1.5" reads
+ * "1.50000000" at 8 and "1.50" at 2, because the padding zeros are dropped
+ * before the shared formatter runs. Any significant digit stays, so a value
+ * finer than the token allows keeps its digits and its field error. A blank
+ * or malformed value, or an unknown precision, comes back unchanged.
  *
  * @param {string} value
  * @param {number | null} places
@@ -2278,8 +2279,5 @@ function padCallbackAmount(value, places) {
     const text = String(value ?? '').trim();
     if (places == null || !/^\d+(?:\.\d*)?$/.test(text)) return value;
     const bare = text.includes('.') ? text.replace(/0+$/, '').replace(/\.$/, '') : text;
-    const dot = bare.indexOf('.');
-    const have = dot === -1 ? 0 : bare.length - dot - 1;
-    if (have >= places) return bare;
-    return `${bare}${dot === -1 ? '.' : ''}${'0'.repeat(places - have)}`;
+    return padToDecimals(bare, places);
 }

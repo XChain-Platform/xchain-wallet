@@ -13,7 +13,7 @@ test('a payment link opened while locked lands on a prefilled Send after unlock'
     await page.goto(`/?uri=${encodeURIComponent(`bitcoin:${ADDRESS}?amount=0.001`)}`);
     await unlockWallet(page);
     await expect(page.locator('#send-destination')).toHaveValue(ADDRESS);
-    // Coin amounts show their exact 8-decimal format (U61).
+    // A fractional coin amount pads to its 8 decimals; a whole one stays whole (U61).
     await expect(page.locator('#send-amount')).toHaveValue('0.00100000');
 });
 
@@ -43,12 +43,12 @@ test('a second link delivered while Send is open replaces the form', async ({ pa
     await expect(page.getByRole('region', { name: 'App header', exact: true })).toBeVisible({ timeout: 90_000 });
 
     await page.evaluate((url) => globalThis.__deliverLink(url), `bitcoin:${ADDRESS}?amount=1`);
-    await expect(page.locator('#send-amount')).toHaveValue('1.00000000');
+    await expect(page.locator('#send-amount')).toHaveValue('1');
     await page.locator('#send-amount').fill('0.7');
 
     await page.evaluate((url) => globalThis.__deliverLink(url), `bitcoin:${OTHER}?amount=2`);
     await expect(page.locator('#send-destination')).toHaveValue(OTHER);
-    await expect(page.locator('#send-amount')).toHaveValue('2.00000000');
+    await expect(page.locator('#send-amount')).toHaveValue('2');
 });
 
 test('a link delivered after Approve waits and is dropped when the user leaves by another route', async ({ page }) => {
@@ -170,6 +170,6 @@ test('Done on a Send result opens the payment link that waited behind the approv
     // Done is a leave from the result, so the waiting link opens its form.
     await main.getByRole('button', { name: 'Done', exact: true }).click();
     await expect(page.locator('#send-destination')).toHaveValue(OTHER);
-    await expect(page.locator('#send-amount')).toHaveValue('2.00000000');
+    await expect(page.locator('#send-amount')).toHaveValue('2');
     await expect(page.getByTestId('waiting-link-dropped')).toHaveCount(0);
 });

@@ -142,9 +142,12 @@ describe('SellOwnershipForm UI rulings', () => {
         mount();
 
         const price = await screen.findByRole('textbox', { name: 'Price (BTC)' });
+        fireEvent.change(price, { target: { value: '1.5' } });
+        fireEvent.blur(price);
+        expect(price).toHaveValue('1.50000000');
         fireEvent.change(price, { target: { value: '1' } });
         fireEvent.blur(price);
-        expect(price).toHaveValue('1.00000000');
+        expect(price).toHaveValue('1');
 
         fireEvent.change(price, { target: { value: '1.123456789' } });
         expect(await screen.findByText('Amount can have at most 8 decimal places.')).toBeInTheDocument();

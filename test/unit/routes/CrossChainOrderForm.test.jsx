@@ -476,7 +476,7 @@ describe('CrossChainOrderForm', () => {
         await pickGiveToken(utils, 'OTHER');
         await pickGetToken(utils, 'WANTED');
         expect(pickerName(utils, 'Give token')).toBe('Give token: OTHER on Dogecoin');
-        expect(utils.getByLabelText(/^Give amount/).value).toBe('10.00000000');
+        expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
         expect(utils.getByLabelText(/^Get amount/).value).toBe('');
 
         await pickGiveToken(utils, 'JDOG');
@@ -712,7 +712,7 @@ describe('CrossChainOrderForm', () => {
         fireEvent.click(utils.getByRole('button', { name: 'Back to previous screen' }));
         expect(onBack).not.toHaveBeenCalled();
         expect(utils.getByLabelText(/^Give amount/).value).toBe('10');
-        expect(utils.getByLabelText(/^Get amount/).value).toBe('20.00000000');
+        expect(utils.getByLabelText(/^Get amount/).value).toBe('20');
         expect(utils.getByLabelText('Receive at').value).toBe(`  ${BTC_ADDRESS.address}  `);
         expect(utils.getByLabelText('Memo').value).toBe('  exact memo  ');
     });
