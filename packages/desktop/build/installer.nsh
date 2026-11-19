@@ -118,12 +118,12 @@
 ; (main/protocol.js), under HKCU\Software\Classes. Nothing removed them, so
 ; after an uninstall xchain: still pointed at an exe that no longer
 ; existed, and the coin schemes the app declined were left as empty keys
-; holding only a `URL Protocol` value.
+; holding only `URL Protocol` and `SharedHostApplication` values.
 ;
 ; A key goes only when it is ours: its open command starts with this
-; install's own folder, or it is the empty shell Electron leaves behind
-; (no command, no default value, no subkey, `URL Protocol` its only
-; value). A handler another wallet registered is left exactly as it is.
+; install's own folder, or it is an empty shell that registers no handler
+; at all (no command, no default value, no subkey, and no value but those
+; two). A handler another wallet registered is left exactly as it is.
 ;
 ; Skipped when ${isUpdated}: the installer runs the previous version's
 ; uninstaller with --updated on every update and every reinstall
@@ -142,17 +142,32 @@
       DetailPrint `Removed the ${SCHEME}: handler this install registered`
     ${endIf}
   ${else}
+    ; No command. An empty shell has no subkey, no default value, and no
+    ; value but `URL Protocol` and `SharedHostApplication` (Windows adds
+    ; the latter, "!", to these keys: measured on both test VMs on
+    ; v0.343.0). Any other value or a subkey means someone else's data.
     ClearErrors
-    ReadRegStr $R2 HKCU "$R1" ""
     EnumRegKey $R3 HKCU "$R1" 0
-    EnumRegValue $R4 HKCU "$R1" 0
-    EnumRegValue $R5 HKCU "$R1" 1
-    ${if} $R2 == ""
+    ${ifNot} ${Errors}
     ${andIf} $R3 == ""
-    ${andIf} $R4 == "URL Protocol"
-    ${andIf} $R5 == ""
-      DeleteRegKey HKCU "$R1"
-      DetailPrint `Removed the empty ${SCHEME}: key the app left`
+      ReadRegStr $R2 HKCU "$R1" ""
+      ${if} $R2 == ""
+        StrCpy $R4 "empty"
+        StrCpy $R5 0
+        ${Do}
+          EnumRegValue $R3 HKCU "$R1" $R5
+          ${if} $R3 != ""
+          ${andIf} $R3 != "URL Protocol"
+          ${andIf} $R3 != "SharedHostApplication"
+            StrCpy $R4 "foreign"
+          ${endIf}
+          IntOp $R5 $R5 + 1
+        ${LoopUntil} $R5 > 31
+        ${if} $R4 == "empty"
+          DeleteRegKey HKCU "$R1"
+          DetailPrint `Removed the empty ${SCHEME}: key the app left`
+        ${endIf}
+      ${endIf}
     ${endIf}
   ${endIf}
   ClearErrors
