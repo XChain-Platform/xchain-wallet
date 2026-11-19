@@ -11,6 +11,12 @@
 // Campaign coverage map, "Onboarding & wallet lifecycle" -> "backup-pointer
 // restore" (§15.4), plus the browser half and.
 //
+// SINCE restore-v2 (2026-11-14) THE BACKUP TAB TAKES A CHOSEN FILE ONLY. The
+// pointer QR scan left with the paste box (test/unit/routes/ImportWallet.backupPointer.test.jsx
+// pins that), so the lanes below choose the exported file instead of scanning
+// a pointer, and no camera or remote host is involved. The pointer story that
+// follows is the history those lanes grew from.
+//
 // THE USER STORY, from `uri/backupPointer.js`: a user publishes their encrypted
 // backup somewhere (an https mirror, a self-hosted blob), keeps a small QR that
 // says only WHERE it lives, and later restores from it by showing that QR to a
@@ -43,11 +49,10 @@
 // spec asserts the request the wallet actually made rather than trusting that
 // it made one.
 //
-// THREE PASSWORDS, AND THEY ARE DELIBERATELY ALL DIFFERENT HERE.
-// The restore screen asks for the password that opens the FILE, the password
-// the wallet used on the device it came FROM, and the password this device
-// will unlock with from now on. A spec that reused one string for two of them
-// would pass just as happily against code that confused them.
+// THE PASSWORDS ARE DELIBERATELY DIFFERENT HERE. The file's password (the
+// backup password) is not the one the wallet inside was sealed under, so the
+// tab has to ask for the wallet's own, and a spec that reused one string for
+// both would pass just as happily against code that confused them.
 //
 // RUN IT:
 //   cd test/e2e && npx playwright test \
@@ -77,7 +82,6 @@ import {
     LICENSE_ACCEPTED_AT_KEY,
     LICENSE_ACCEPTED_VERSION_KEY,
 } from '../../fixtures/wallet.js';
-import { launchWithQrCamera } from '../../fixtures/qrCamera.js';
 import {
     REGTEST_ADDRESS_RE,
     REGTEST_CHAIN_LABEL,
@@ -98,21 +102,8 @@ import { chooseBackupFile, restoreBackupFile } from '../../fixtures/backupRestor
 const DEVICE_PASSWORD = 'regtestpassword123';
 /** Deliberately NOT the device password: the two are independent by design. */
 const BACKUP_PASSWORD = 'backup-envelope-password-9182';
-/**
- * The password the RESTORING device picks for itself, and it matches neither
- * of the other two on purpose. is the claim that a restored wallet is
- * re-sealed onto whatever this device unlocks with; if the spec reused
- * DEVICE_PASSWORD the re-key could be a no-op and everything would still pass.
- */
-const NEW_DEVICE_PASSWORD = 'this-device-password-4471';
-
 const ORIGIN_WALLET = 'Origin Wallet';
 const SECOND_DEVICE_WALLET = 'Second Device Wallet';
-
-/** Where the pointer says the envelope lives. Nothing resolves this name. */
-const ENVELOPE_URL = 'https://backup.example.test/vault/origin.json';
-const POINTER_NAME = 'Origin backup';
-const POINTER_QR = `xchain-backup:1?loc=${encodeURIComponent(ENVELOPE_URL)}&name=${encodeURIComponent(POINTER_NAME)}`;
 
 const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183}`;
 
@@ -205,22 +196,6 @@ async function exportEnvelope(page, { walletName, words }) {
 }
 
 /**
- * Fills the restore screen's three password fields.
- *
- * The third field is labelled by MODE, and the labels are the contract: the
- * unit suites assert on exactly these strings, so a copy change that breaks a
- * user's ability to tell the three apart breaks here too.
- */
-async function fillRestorePasswords(page, { backup, wallet, device, mode = 'fresh' }) {
-    await fieldByLabel(page, 'Backup password').fill(backup);
-    await fieldByLabel(page, 'Password of the wallet in this backup').fill(wallet);
-    await page.getByLabel(
-        mode === 'add' ? 'Your password on this device' : 'Password for this device',
-        { exact: true },
-    ).fill(device);
-}
-
-/**
  * A browser context that has never held a wallet, with the license gate
  * pre-accepted the same way the `page` fixture does it.
  *
@@ -245,7 +220,7 @@ async function freshContext(browser, extra = {}) {
 /**
  * Attaches what a second-device page shows, for a failure that happened on it.
  *
- * The second device runs in its own browser (`launchWithQrCamera`), which the
+ * The second device runs in its own context, which the
  * run's trace and failure screenshots do not cover, so without this a hang on
  * that device leaves no record of the screen it hung on.
  */
@@ -291,32 +266,38 @@ async function readVenueReceiveAddress(page) {
 }
 
 /**
- * Skips the calling test on a browser with no Shape Detection API. `QrScanner`
- * reads frames through the native `BarcodeDetector`, which Chromium ships on
- * macOS, Windows and Android but not on Linux, so a Linux venue runner cannot
- * read any camera QR no matter what the wallet does. Probed on a real
- * localhost origin because the API is secure-context only.
- *
- * @param {import('@playwright/test').Browser} browser
+ * Restores a chosen backup file onto a device that already has a wallet. The
+ * tab asks for one password, then for the wallet's own and for this device's
+ * only when each differs, so the extra fields are filled when they appear.
  */
-async function skipWithoutBarcodeDetector(browser) {
-    const context = await browser.newContext();
-    try {
-        const probe = await context.newPage();
-        await probe.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
-        const present = await probe.evaluate(() => typeof window.BarcodeDetector === 'function');
-        test.skip(!present, 'this browser has no BarcodeDetector (Chromium on Linux), so no camera QR can be read');
-    } finally {
-        await context.close();
+async function restoreBackupFileInAddMode(page, { content, backupPassword, walletPassword, devicePassword }) {
+    await chooseBackupFile(page, content);
+    await page.getByLabel('Backup password', { exact: true }).fill(backupPassword);
+    const restore = page.getByRole('button', { name: 'Restore', exact: true });
+    await restore.click();
+    const walletField = page.getByLabel('Wallet password', { exact: true });
+    const deviceField = page.getByLabel('Your password on this device', { exact: true });
+    const notice = page.getByRole('button', { name: 'Continue', exact: true });
+    // At most two follow-up asks, one per extra field.
+    for (let i = 0; i < 3; i += 1) {
+        await walletField.or(deviceField).or(notice).first()
+            .waitFor({ state: 'visible', timeout: kdfStepTimeout() });
+        if (await notice.isVisible()) return;
+        if (await walletField.isVisible() && !(await walletField.inputValue())) {
+            await walletField.fill(walletPassword);
+        }
+        if (await deviceField.isVisible() && !(await deviceField.inputValue())) {
+            await deviceField.fill(devicePassword);
+        }
+        await restore.click();
     }
 }
 
-test.describe('backup-pointer restore (§15.4)', () => {
+test.describe('backup restore onto another device (§15.4)', () => {
     test.use({ actionTimeout: 30_000 });
     test.setTimeout(900_000);
 
-    test('a pointer QR restores the wallet it points at, onto another device', async ({ page, browser: probeBrowser }) => {
-        await skipWithoutBarcodeDetector(probeBrowser);
+    test('a backup file restores the wallet it holds, onto another device', async ({ page, browser }) => {
         /** @type {string} */
         let envelope;
 
@@ -325,26 +306,10 @@ test.describe('backup-pointer restore (§15.4)', () => {
             envelope = await exportEnvelope(page, { walletName: ORIGIN_WALLET, words });
         });
 
-        const browser = await launchWithQrCamera(POINTER_QR);
         /** @type {import('@playwright/test').Page | null} */
         let two = null;
-        /** Every request the wallet made for the envelope. */
-        const fetched = [];
+        const context = await freshContext(browser);
         try {
-            const context = await freshContext(browser, {
-                permissions: ['camera'],
-                ignoreHTTPSErrors: true,
-            });
-
-            await context.route(ENVELOPE_URL, async (route) => {
-                fetched.push(route.request().url());
-                await route.fulfill({
-                    status: 200,
-                    contentType: 'application/json',
-                    body: envelope,
-                });
-            });
-
             two = await context.newPage();
 
             await test.step('DEVICE TWO: a different wallet on a different vault', async () => {
@@ -354,66 +319,38 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 });
             });
 
-            await test.step('scan the pointer and restore', async () => {
+            await test.step('choose the backup file and restore', async () => {
                 await openWalletPicker(two);
 
                 await two.getByRole('button', { name: 'Add wallet' }).click();
                 await two.getByRole('button', { name: 'Import wallet' }).click();
                 await two.getByRole('tab', { name: 'Encrypted backup' }).click();
 
-                const scanBtn = two.getByRole('button', { name: 'Scan pointer QR', exact: true });
-                await scanBtn.click();
-                const cancel = two.getByRole('button', { name: 'Cancel scan', exact: true });
-                await expect(cancel, 'the pointer scanner never opened').toBeVisible({ timeout: 30_000 });
-                await expect(cancel, 'the pointer scanner never read the QR in front of it')
-                    .toBeHidden({ timeout: 60_000 });
-
-                const card = two.getByRole('status').filter({ hasText: /Backup pointer loaded/ });
-                await expect(card, 'the scanned pointer was not accepted').toBeVisible({ timeout: 30_000 });
-                await expect(card,
-                    'the pointer card does not show where the backup would be fetched from, which is '
-                    + 'the user\'s only chance to notice a pointer aimed somewhere they did not choose')
-                    .toContainText(ENVELOPE_URL);
-
-                // Three fields, not one. In ADD mode the device
-                // password is the one this browser already unlocks with, and
-                // the wallet password is device one's - which happens to be
-                // the same string here only because device one and device two
-                // were both created with DEVICE_PASSWORD. The fresh lane below
-                // keeps all three distinct.
-                await fillRestorePasswords(two, {
-                    backup: BACKUP_PASSWORD,
-                    wallet: DEVICE_PASSWORD,
-                    device: DEVICE_PASSWORD,
-                    mode: 'add',
+                // The Backup tab takes a chosen file only (restore-v2,
+                // 2026-11-14): the pointer scan left with the paste box, and
+                // a pointer is now resolved by saving the file it names.
+                await expect(two.getByRole('button', { name: /scan/i }),
+                    'the Backup tab offers a scanner again, so this spec should drive it')
+                    .toHaveCount(0);
+                await restoreBackupFileInAddMode(two, {
+                    content: envelope,
+                    backupPassword: BACKUP_PASSWORD,
+                    walletPassword: DEVICE_PASSWORD,
+                    devicePassword: DEVICE_PASSWORD,
                 });
-                await two.getByRole('button', { name: 'Restore', exact: true }).click();
                 // The restore ends on the donation notice; Continue is what
                 // hands the wallet over, so answer it before waiting on the shell.
                 await acknowledgeImportNotice(two);
-                // A restore is a derivation like any create or unlock (the
-                // backup's own password, then the device vault), so it takes
-                // the shared KDF budget rather than a number picked here. The
-                // 180_000 this replaced was the CI value transcribed by hand:
-                // right on CI by luck, and unable to follow the budget the
-                // day the budget moves.
                 await expect(openedWalletHome(two), 'the restore never returned to an unlocked wallet')
                     .toBeVisible({ timeout: kdfStepTimeout() });
             });
 
-            await test.step('the wallet that was pointed at is now on this device', async () => {
-                expect(fetched.length,
-                    'the wallet never fetched the pointer\'s location, so whatever it restored did '
-                    + 'not come from where the QR said it would')
-                    .toBeGreaterThan(0);
-                expect(fetched.every((u) => u.startsWith('https://')),
-                    'the pointer was fetched over something other than https').toBe(true);
-
+            await test.step('the wallet in the file is now on this device', async () => {
                 await openWalletPicker(two);
 
                 const main = two.getByRole('main');
                 await expect(main.getByText(ORIGIN_WALLET, { exact: false }).first(),
-                    'device two does not hold the wallet the pointer named, so the restore reported '
+                    'device two does not hold the wallet the file held, so the restore reported '
                     + 'success over nothing')
                     .toBeVisible({ timeout: 30_000 });
                 await expect(main.getByText(SECOND_DEVICE_WALLET, { exact: false }).first(),
@@ -422,10 +359,10 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     .toBeVisible({ timeout: 30_000 });
             });
         } catch (err) {
-            await attachDeviceScreen(two, 'device-two', { envelopeFetches: fetched.length });
+            await attachDeviceScreen(two, 'device-two');
             throw err;
         } finally {
-            await browser.close();
+            await context.close();
         }
     });
 
@@ -441,9 +378,8 @@ test.describe('backup-pointer restore (§15.4)', () => {
     // the balances are right, and the failure waits until the user's first
     // spend - by which time they have thrown away the paper. So the last step
     // signs a real transaction and asks the chain whether it landed.
-    test('A FRESH install restores from a pointer, and the restored wallet can sign',
-        async ({ page, browser: probeBrowser }) => {
-            await skipWithoutBarcodeDetector(probeBrowser);
+    test('A FRESH install restores from a backup file, and the restored wallet can sign',
+        async ({ page, browser }) => {
             /** @type {string} */
             let envelope;
             /** @type {string} */
@@ -464,57 +400,28 @@ test.describe('backup-pointer restore (§15.4)', () => {
                 envelope = await exportEnvelope(page, { walletName: ORIGIN_WALLET, words });
             });
 
-            const browser = await launchWithQrCamera(POINTER_QR);
             /** @type {import('@playwright/test').Page | null} */
             let two = null;
-            const fetched = [];
+            const context = await freshContext(browser);
             try {
-                const context = await freshContext(browser, {
-                    permissions: ['camera'],
-                    ignoreHTTPSErrors: true,
-                });
-
-                await context.route(ENVELOPE_URL, async (route) => {
-                    fetched.push(route.request().url());
-                    await route.fulfill({
-                        status: 200,
-                        contentType: 'application/json',
-                        body: envelope,
-                    });
-                });
-
                 two = await context.newPage();
 
-                await test.step('DEVICE TWO: no wallet at all, and it restores from the QR', async () => {
+                await test.step('DEVICE TWO: no wallet at all, and it restores from the file', async () => {
                     await openFreshRestoreScreen(two);
 
-                    const scanBtn = two.getByRole('button', { name: 'Scan pointer QR', exact: true });
-                    await expect(scanBtn,
-                        'a device with no wallet is not offered the pointer scanner, so the only lane '
-                        + 'that needs it most cannot be reached')
-                        .toBeVisible({ timeout: 30_000 });
-                    await scanBtn.click();
-
-                    const cancel = two.getByRole('button', { name: 'Cancel scan', exact: true });
-                    await expect(cancel, 'the pointer scanner never opened').toBeVisible({ timeout: 30_000 });
-                    await expect(cancel, 'the pointer scanner never read the QR in front of it')
-                        .toBeHidden({ timeout: 60_000 });
-
-                    const card = two.getByRole('status').filter({ hasText: /Backup pointer loaded/ });
-                    await expect(card, 'the scanned pointer was not accepted').toBeVisible({ timeout: 30_000 });
-                    await expect(card).toContainText(ENVELOPE_URL);
-
-                    // The three secrets, all different. `NEW_DEVICE_PASSWORD`
-                    // is the point of the fresh lane: there is no device
-                    // password yet, so the user gets to choose one, and the
-                    // restored wallet has to be re-sealed onto it.
-                    await fillRestorePasswords(two, {
-                        backup: BACKUP_PASSWORD,
-                        wallet: DEVICE_PASSWORD,
-                        device: NEW_DEVICE_PASSWORD,
-                        mode: 'fresh',
+                    await expect(two.getByRole('button', { name: /scan/i }),
+                        'the Backup tab offers a scanner again, so this spec should drive it')
+                        .toHaveCount(0);
+                    // A fresh install has no device password to ask for: the
+                    // restored wallet keeps the password it was sealed under
+                    // on device one, which the tab asks for once the backup
+                    // password has opened the file. The backup password is
+                    // deliberately a different string.
+                    await restoreBackupFile(two, {
+                        content: envelope,
+                        backupPassword: BACKUP_PASSWORD,
+                        walletPassword: DEVICE_PASSWORD,
                     });
-                    await two.getByRole('button', { name: 'Restore', exact: true }).click();
                     await acknowledgeImportNotice(two);
 
                     await expect(unlockedShell(two),
@@ -524,22 +431,13 @@ test.describe('backup-pointer restore (§15.4)', () => {
                         .toBeVisible({ timeout: kdfStepTimeout() });
                 });
 
-                await test.step('it came from the pointer, over https', async () => {
-                    expect(fetched.length,
-                        'the wallet never fetched the pointer\'s location, so whatever it restored '
-                        + 'did not come from where the QR said it would')
-                        .toBeGreaterThan(0);
-                    expect(fetched.every((u) => u.startsWith('https://')),
-                        'the pointer was fetched over something other than https').toBe(true);
-                });
-
-                await test.step('the device now unlocks with the password the USER chose', async () => {
+                await test.step('the device now unlocks with the wallet\'s own password', async () => {
                     // Not a formality. The vault was created here, during the
-                    // restore, under a password that appears nowhere in the
-                    // backup - so a lane that quietly kept the source device's
-                    // password would strand the user on their next reload.
+                    // restore, and a fresh install keeps the wallet's own
+                    // password (restore-v2), so a reload that cannot unlock
+                    // under it would strand the user.
                     await two.reload();
-                    await unlockAfterReload(two, NEW_DEVICE_PASSWORD);
+                    await unlockAfterReload(two, DEVICE_PASSWORD);
                 });
 
                 await test.step('it is device one\'s wallet, derived from device one\'s seed', async () => {
@@ -607,10 +505,10 @@ test.describe('backup-pointer restore (§15.4)', () => {
                     expect(Number(utxo.amount)).toBeCloseTo(Number(SEND_AMOUNT), 8);
                 });
             } catch (err) {
-                await attachDeviceScreen(two, 'device-two', { envelopeFetches: fetched.length });
+                await attachDeviceScreen(two, 'device-two');
                 throw err;
             } finally {
-                await browser.close();
+                await context.close();
             }
         });
 

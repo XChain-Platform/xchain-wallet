@@ -25,16 +25,10 @@
 //   SCAN      a recovery phrase on a QR lands in the phrase box intact, with the
 //             `bip39:` prefix some generators emit stripped, and imports to an
 //             unlocked wallet.
-//   REFUSAL   the SAME phrase QR held up to the BACKUP lane is REFUSED. That
-//             lane classifies what it scanned and takes only a backup pointer;
-//             the comment on `handleBackupQrFrame` states the rule it is
-//             enforcing - "we never silently import secret material from a
-//             stray scan" - and the assertion is not just that it says no, but
-//             that the phrase did not land in the backup box either.
-//   POINTER   a real §15.4 backup-pointer QR loads, and the screen shows the
-//             LOCATION it would fetch from before the user commits to it. That
-//             is the only chance a user gets to notice a pointer aimed
-//             somewhere they did not expect.
+//   NO SCANNER the BACKUP lane no longer scans at all (restore-v2, 2026-11-14):
+//             it takes a chosen file, so a recovery phrase on a camera has no
+//             way into it. The assertion is that no scan control is offered
+//             and nothing is shown as a chosen backup.
 //   GARBAGE   a QR that is neither (the pointer URI, held up to the PHRASE
 //             lane) cannot be imported: the word-count validator refuses it.
 //
@@ -72,10 +66,9 @@ const PHRASE =
  */
 const PHRASE_QR = `bip39:${PHRASE}`;
 
-/** A §15.4 pointer. The location is deliberately one nothing will fetch. */
-const POINTER_NAME = 'Laptop backup';
+/** A §15.4 pointer. Held up to the PHRASE lane, which must not take it as a phrase. */
 const POINTER_LOCATION = 'https://backup.example.test/vault/envelope.json';
-const POINTER_QR = `xchain-backup:1?loc=${encodeURIComponent(POINTER_LOCATION)}&name=${encodeURIComponent(POINTER_NAME)}`;
+const POINTER_QR = `xchain-backup:1?loc=${encodeURIComponent(POINTER_LOCATION)}`;
 
 const BASE_URL = `http://localhost:${Number(process.env.XC_PREVIEW_PORT) || 4183}`;
 
@@ -197,54 +190,24 @@ test.describe('QR scan on the import screen (§15.4)', () => {
             }
         });
 
-        await test.step('REFUSAL: the same phrase QR is refused by the BACKUP lane', async () => {
-            // The rule `handleBackupQrFrame` exists to enforce: a lane that
-            // accepts a location must not quietly swallow a seed because one
-            // happened to be in front of the camera.
+        await test.step('NO SCANNER: the BACKUP lane takes a chosen file and offers no scan', async () => {
+            // The Backup tab lost its pointer scan with the paste box
+            // (restore-v2, 2026-11-14; pinned by
+            // test/unit/routes/ImportWallet.backupPointer.test.jsx). A seed
+            // held up to the camera therefore has no way into that lane, and
+            // the lane must not grow one quietly.
             const { page, close } = await importScreenFacing(PHRASE_QR, { lane: 'backup' });
             try {
-                expect(await scan(page, 'Scan pointer QR'),
-                    'the backup-pointer scanner never processed the QR in front of it')
-                    .toBe(true);
-
-                await expect(page.getByRole('alert'),
-                    'a recovery phrase was scanned into the BACKUP lane and the screen said nothing')
-                    .toContainText(/not a backup pointer/i, { timeout: 30_000 });
-
-                // The refusal has to be a refusal, not a redirect: nothing may
-                // have been captured on the way past.
-                await expect(page.getByRole('status').filter({ hasText: /Backup pointer loaded/ }),
-                    'a recovery phrase was accepted AS a backup pointer')
+                await expect(page.getByLabel('Backup file', { exact: true }),
+                    'the Backup tab did not open, so its lack of a scanner proves nothing')
+                    .toBeAttached({ timeout: 30_000 });
+                await expect(page.getByRole('button', { name: /scan/i }),
+                    'the Backup tab offers a QR scanner, so a stray scan of a seed has a way into '
+                    + 'the lane that takes a backup')
                     .toHaveCount(0);
-                // The backup arrives as a chosen file; a scan must not load one.
                 await expect(page.getByRole('region', { name: 'Chosen backup file' }),
-                    'the scanned recovery phrase was loaded as the backup to restore, so a '
-                    + 'stray scan of a seed ends up in what the user is about to submit')
+                    'a backup file is shown as chosen though none was')
                     .toHaveCount(0);
-            } finally {
-                await close();
-            }
-        });
-
-        await test.step('POINTER: a real backup pointer loads and shows where it points', async () => {
-            const { page, close } = await importScreenFacing(POINTER_QR, { lane: 'backup' });
-            try {
-                expect(await scan(page, 'Scan pointer QR'),
-                    'the backup-pointer scanner never read the pointer QR')
-                    .toBe(true);
-
-                const card = page.getByRole('status').filter({ hasText: /Backup pointer loaded/ });
-                await expect(card, 'a valid backup pointer was not accepted')
-                    .toBeVisible({ timeout: 30_000 });
-                // The location is the only thing standing between a user and a
-                // pointer aimed somewhere they did not choose, so it has to be
-                // ON the screen, not just in the parsed object.
-                await expect(card,
-                    'the pointer card does not show the location it would fetch the backup from')
-                    .toContainText(POINTER_LOCATION);
-                await expect(card,
-                    'the pointer card does not show the label the pointer carries')
-                    .toContainText(POINTER_NAME);
             } finally {
                 await close();
             }
@@ -262,7 +225,8 @@ test.describe('QR scan on the import screen (§15.4)', () => {
                 await page.getByLabel(/^Confirm( password)?$/).fill(PASSWORD);
                 await page.getByRole('button', { name: 'Import', exact: true }).click();
 
-                await expect(page.getByRole('alert'),
+                // The field's own sentence; the form-errors summary above it repeats it.
+                await expect(page.getByRole('alert').filter({ hasNotText: /Fix \d+ things? to continue/ }),
                     'a backup-pointer URI scanned into the recovery-phrase box was accepted as a '
                     + 'recovery phrase')
                     .toContainText(/Expected 12, 15, 18, 21, or 24 words/i, { timeout: 30_000 });
