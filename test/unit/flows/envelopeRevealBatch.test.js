@@ -94,10 +94,11 @@ function revealPsbtCarrying(action, rawData = CIPHERTEXT) {
 // One byte of the approved string changed, as a substituted leaf would carry it.
 const oneByteOff = (s) => `${s.slice(0, -1)}${s.endsWith('a') ? 'b' : 'a'}`;
 
-const realArgs = (revealPsbt, actionString = BATCH) => ({
+// Bind the file bytes the leaf carries, as the composing caller does.
+const realArgs = (revealPsbt, actionString = BATCH, rawData = CIPHERTEXT) => ({
     commit: COMMIT, reveal: REVEAL, envelope: ENVELOPE, ownAddresses: [SOURCE], actionString,
     decodeRevealAction: () => sdk.decoder.decodeActionFromPsbt(revealPsbt),
-    revealPsbt, network: NETWORK,
+    revealPsbt, network: NETWORK, rawData,
     assertEnvelopeCarrierBinding: sdk.decoder.assertEnvelopeCarrierBinding,
 });
 
@@ -114,9 +115,10 @@ describe('checkEnvelopeReveal on a BATCH the wallet composed', () => {
     });
 
     it('passes a plain FILE carried exactly', () => {
-        const hex = revealPsbtCarrying(PLAIN_FILE, Buffer.from('hello world '.repeat(8)));
+        const text = Buffer.from('hello world '.repeat(8));
+        const hex = revealPsbtCarrying(PLAIN_FILE, text);
         expect(sdk.decoder.decodeActionFromPsbt(hex)).toMatchObject({ ok: true, actionString: PLAIN_FILE });
-        expect(checkEnvelopeReveal(realArgs(hex, PLAIN_FILE))).toEqual({ ok: true });
+        expect(checkEnvelopeReveal(realArgs(hex, PLAIN_FILE, text))).toEqual({ ok: true });
     });
 
     it('refuses a BATCH with one changed byte as tampered', () => {
@@ -154,7 +156,7 @@ describe('every other undecodable action still refuses', () => {
         }).address);
         const list = sdk.actions.createAction({ action: 'LIST', params: { VERSION: '0', TYPE: '2', ITEM: items } }).actionString;
         const hex = revealPsbtCarrying(list, null);
-        expect(checkEnvelopeReveal(realArgs(hex, list)))
+        expect(checkEnvelopeReveal(realArgs(hex, list, null)))
             .toEqual({ ok: false, reason: 'REVEAL_ACTION_UNDECODABLE', decodeReason: 'REST_FIELD_UNSUPPORTED' });
     });
 
