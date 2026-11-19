@@ -127,9 +127,11 @@ async function signAndVerify(page, viewportName) {
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()))
         .toBe(signature);
 
+    // The wallet menu matches the Sign and Verify commands by title only, and
+    // its catalogue row is "Verify signature" (walletMenu.row.verifySignature).
     await openPaletteRoute(
         page,
-        'Verify a signature',
+        'Verify signature',
         'Verify Signature',
         'Verify Signature',
     );
