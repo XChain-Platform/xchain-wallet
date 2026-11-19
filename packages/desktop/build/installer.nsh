@@ -117,8 +117,11 @@
 ; and dogecoin:) at runtime with setAsDefaultProtocolClient
 ; (main/protocol.js), under HKCU\Software\Classes. Nothing removed them, so
 ; after an uninstall xchain: still pointed at an exe that no longer
-; existed, and the coin schemes the app declined were left as empty keys
-; holding only `URL Protocol` and `SharedHostApplication` values.
+; existed. Both test VMs also held bitcoin, litecoin and dogecoin keys with
+; no handler in them, only `URL Protocol` and `SharedHostApplication` ("!")
+; values. Where those came from is not established: a v0.343.0 launch and
+; a v0.343.1 candidate launch on a VM without them did not create them, so
+; they predate this build (an older build, or Windows itself).
 ;
 ; A key goes only when it is ours: its open command starts with this
 ; install's own folder, or it is an empty shell that registers no handler
@@ -143,9 +146,9 @@
     ${endIf}
   ${else}
     ; No command. An empty shell has no subkey, no default value, and no
-    ; value but `URL Protocol` and `SharedHostApplication` (Windows adds
-    ; the latter, "!", to these keys: measured on both test VMs on
-    ; v0.343.0). Any other value or a subkey means someone else's data.
+    ; value but `URL Protocol` and `SharedHostApplication`, the two the
+    ; handler-less keys on the test VMs carried (see above). Any other
+    ; value or a subkey means someone else's data.
     ClearErrors
     EnumRegKey $R3 HKCU "$R1" 0
     ${ifNot} ${Errors}
