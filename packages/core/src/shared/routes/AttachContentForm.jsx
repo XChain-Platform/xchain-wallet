@@ -316,16 +316,21 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     // still works: the chain's active address, else the newest HD
     // external, else the first remaining record (a hardware-only wallet).
     // A dispenser-delegated address is never the default.
+    // An owner read by the form can answer after that default, so a default
+    // the user has not changed moves to the owner when it answers.
+    const defaultFromIdRef = useRef(/** @type {string | null} */ (null));
     useEffect(() => {
-        if (!addressesByChain || !activeByChain || fromAddressId) return;
+        if (!addressesByChain || !activeByChain) return;
+        if (fromAddressId && fromAddressId !== defaultFromIdRef.current) return;
         const all = addressesByChain[chainId] || [];
         if (ownerAddress) {
             const match = all.find((a) => a.address === ownerAddress);
-            if (match) { setFromAddressId(match.id); return; }
+            if (match) { defaultFromIdRef.current = null; setFromAddressId(match.id); return; }
         }
+        if (fromAddressId) return;
         const funding = all.filter((a) => a.role !== 'dispenser');
         const picked = preferredSourceId(funding, activeByChain[chainId]) || funding[0]?.id || all[0]?.id;
-        if (picked) setFromAddressId(picked);
+        if (picked) { defaultFromIdRef.current = picked; setFromAddressId(picked); }
     }, [addressesByChain, activeByChain, chainId, fromAddressId, ownerAddress]);
 
     useEffect(() => {
@@ -738,6 +743,9 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             return;
         }
         if (issuerEligibility.pending) {
+            // A tick read before it was issued can sit cached as unknown, so
+            // the refused tap asks again.
+            if (!issuerAddress) invalidateTokenInfo(chainId, tick);
             refuse('from', `Wait for the wallet to verify the current owner of ${tick}.`);
             return;
         }

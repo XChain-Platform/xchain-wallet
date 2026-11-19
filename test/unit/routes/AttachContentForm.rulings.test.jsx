@@ -8,6 +8,7 @@ import React from 'react';
 import buttonStyles from '../../../packages/core/src/ui/Button.module.css';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AttachContentForm } from '../../../packages/core/src/shared/routes/AttachContentForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const OWNER = Object.freeze({
@@ -129,6 +130,7 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     globalThis.FileReader = OriginalFileReader;
+    __clearTokenInfoCache();
 });
 
 describe('AttachContentForm app-wide form rulings', () => {
@@ -166,6 +168,16 @@ describe('AttachContentForm app-wide form rulings', () => {
         fireEvent.click(network);
         expect(screen.queryByRole('dialog')).toBeNull();
         expect(screen.queryByRole('button', { name: /Litecoin|Dogecoin/ })).toBeNull();
+    });
+
+    it('moves From to the owner when the owner read answers after the default', async () => {
+        let answer;
+        const getTokenInfo = vi.fn(() => new Promise((resolve) => { answer = resolve; }));
+        mount(messagingFor({ addresses: [OTHER, OWNER], active: OTHER, overrides: { getTokenInfo } }), null);
+        await waitFor(() => expect(screen.getByLabelText('From address')).toHaveValue(OTHER.address));
+        answer({ chainId: CHAIN, tick: 'ART', creator: OWNER.address });
+        await composeReady();
+        expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('seeds From with the owner address even when another address is active', async () => {

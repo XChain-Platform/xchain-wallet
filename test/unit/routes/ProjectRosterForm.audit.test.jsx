@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ProjectRosterForm } from '../../../packages/core/src/shared/routes/ProjectRosterForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { tokenInfoCacheKey, writeTokenInfoCache } from '../../../packages/core/src/shared/utils/tokenInfoCache.js';
 
 // Tokens join the list only through the token picker; this stand-in picks
 // whatever ticker is typed into it, on the chain the form locked it to.
@@ -102,6 +103,21 @@ describe('ProjectRosterForm editing validation', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
         expect(await screen.findByRole('form', { name: 'Review official token list' })).toBeTruthy();
         expect(screen.queryByText(UNKNOWN_ISSUER)).toBeNull();
+    });
+
+    // The Issue form's ticker check caches a not-yet-issued tick as null for
+    // the cache TTL, and a mounted read never re-asks on its own.
+    it('asks the explorer again when a tap finds the owner still unread', async () => {
+        writeTokenInfoCache(tokenInfoCacheKey(CHAIN, 'PROJ'), null);
+        const getTokenInfo = vi.fn().mockResolvedValue({ chainId: CHAIN, tick: 'PROJ', creator: ADDRESS.address });
+        mount(messagingWith({ getTokenInfo }), null);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+        addToken('VALID');
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
+        await waitFor(() => expect(screen.getAllByText('Wait for the wallet to verify the current owner of PROJ.').length).toBeGreaterThan(0));
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledTimes(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
+        expect(await screen.findByRole('form', { name: 'Review official token list' })).toBeTruthy();
     });
 
     it('answers a tap while the owner read is in flight with the wait refusal', async () => {

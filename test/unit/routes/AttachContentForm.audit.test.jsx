@@ -9,6 +9,7 @@ import { typeCustomRate } from '../../helpers/customNetworkFee.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AttachContentForm } from '../../../packages/core/src/shared/routes/AttachContentForm.jsx';
 import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
+import { tokenInfoCacheKey, writeTokenInfoCache } from '../../../packages/core/src/shared/utils/tokenInfoCache.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = Object.freeze({
@@ -185,6 +186,20 @@ describe('AttachContentForm validation and review', () => {
         fireEvent.click(attach);
         await waitFor(() => expect(screen.getAllByText('Wait for the wallet to verify the current owner of ART.').length).toBeGreaterThan(0));
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
+    });
+
+    // The Issue form's ticker check caches a not-yet-issued tick as null for
+    // the cache TTL, and a mounted read never re-asks on its own.
+    it('asks the explorer again when a tap finds the owner still unread', async () => {
+        writeTokenInfoCache(tokenInfoCacheKey(CHAIN, 'ART'), null);
+        const getTokenInfo = vi.fn().mockResolvedValue({ chainId: CHAIN, tick: 'ART', creator: SOURCE.address });
+        mount(messagingFor({ overrides: { getTokenInfo } }), null);
+        await chooseFile('art.png', 'image/png');
+        await review();
+        await waitFor(() => expect(screen.getAllByText('Wait for the wallet to verify the current owner of ART.').length).toBeGreaterThan(0));
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledTimes(1));
+        await review();
+        expect(await screen.findByRole('form', { name: 'Review artwork upload' })).toBeInTheDocument();
     });
 
     it('asks the explorer again when a tap follows a failed owner read', async () => {
