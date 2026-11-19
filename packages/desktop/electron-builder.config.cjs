@@ -1071,10 +1071,16 @@ const config = {
         // on the same path. Pinned explicitly here rather than left to a
         // default that reads the npm scope of a private workspace package.
         executableName: 'xchain-wallet',
-        // See the mac.icon comment: explicit on every platform. Linux
-        // takes the PNG master and electron-builder derives the sizes the
-        // .desktop entry and the AppImage need.
-        icon: 'build/icon.png',
+        // See the mac.icon comment: explicit on every platform. A DIRECTORY
+        // of sizes, not the PNG master. Given the single 1024x1024 file,
+        // electron-builder derives nothing: through v0.343.0 the .deb
+        // installed hicolor/1024x1024 alone, and GTK's lookup of
+        // `xchain-wallet` at 48, 64, 128 and 256 came back NOT FOUND, so
+        // menus and docks drew a generic icon. build/icons holds NxN.png
+        // from 16 to 512, each scaled from build/icon.png (recipe in
+        // build/README.md); desktop-linux-integration.smoke.js checks
+        // every size.
+        icon: 'build/icons',
         // The store target is appended OUTSIDE the staging ternary, same
         // reasoning as win/appx: inside the production branch, buildSnap's
         // own `&& !isStaging` would be unreachable and would read as
@@ -1090,7 +1096,12 @@ const config = {
             // aimed at it (see buildSnap).
             ...(buildSnap ? [{ target: 'snap', arch: ARCHES }] : []),
         ],
-        category: 'Finance',
+        // A registered MAIN category first. `Finance` is an additional
+        // category in the freedesktop menu spec, and alone it drew two
+        // desktop-file-validate hints on v0.343.0 and could file the app
+        // under a catch-all menu section. Office is the main category the
+        // validator itself names for Finance.
+        category: 'Office;Finance',
         maintainer: 'Dankest, LLC <support@xchain.io>',
         synopsis: 'Self-custodial multi-chain XChain Platform wallet',
         // NO `description` HERE, on purpose. app-builder-lib uses one value

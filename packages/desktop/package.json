@@ -11,6 +11,8 @@
     "author": {
         "name": "Dankest, LLC"
     },
+    "_desktopNameNote": "LINUX WINDOW IDENTITY. Electron sets the Wayland app_id and the X11 WM_CLASS from `desktopName`, and electron-builder writes the same value (minus .desktop) as the launcher's StartupWMClass. Unset through v0.343.0: the window said xchain-wallet-desktop while the launcher said XChain Wallet, so docks never matched the running window to its launcher. It must equal the installed .desktop file name, which is linux.executableName plus .desktop.",
+    "desktopName": "xchain-wallet.desktop",
     "main": "./main/index.js",
     "type": "module",
     "scripts": {
