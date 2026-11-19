@@ -129,13 +129,20 @@ describe('dispenser async safety', () => {
         fireEvent.change(await screen.findByLabelText(/^Give amount/), { target: { value: '10' } });
         fireEvent.change(screen.getByLabelText(/^Escrow amount/), { target: { value: '100' } });
         fireEvent.change(screen.getByLabelText(/^Trigger price/), { target: { value: '0.001' } });
-        const create = await screen.findByRole('button', { name: 'Create Dispenser' });
-        await waitFor(() => expect(create).toBeEnabled());
-
-        const form = create.closest('form');
+        // Create is never disabled (G130), so its enabled state says nothing
+        // about readiness. Review needs the resolved source address, which the
+        // From section names once it has one. The form is found at the moment
+        // of the submit: a node found before an await can have been replaced
+        // by a remount, and a submit on a detached form reaches no handler.
+        await screen.findByRole('button', { name: /^From.*bc1qso/ });
+        const form = screen.getByRole('button', { name: 'Create Dispenser' }).closest('form');
         fireEvent.submit(form);
         fireEvent.submit(form);
-        expect(messaging.generateDispenserAddress).toHaveBeenCalledTimes(1);
+        const said = screen.queryAllByRole('alert').map((node) => node.textContent).join(' | ');
+        expect(
+            messaging.generateDispenserAddress,
+            `form connected: ${form.isConnected}; the form said: ${said || 'nothing'}`,
+        ).toHaveBeenCalledTimes(1);
 
         await act(async () => generated.resolve({
             id: 'dispenser', address: 'bc1qderivedderivedderivedderivedderivedde', source: 'hd',

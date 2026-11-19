@@ -218,6 +218,14 @@ async function displayedBalance(page, tick) {
 async function expectHomeBalance(page, tick, expected) {
     await gotoSection(page, 'Home');
     await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
+    // Home reuses a saved balance read for five minutes, across a reload
+    // (BALANCE_MAX_AGE_MS), and only this device's own broadcasts mark it
+    // stale. The holder's payout comes from the owner's CALLBACK, so without
+    // the menu's Refresh the holder's Home keeps showing the empty read it
+    // took before the callback (run 44500883200: no balance request at all
+    // after the reload, "No tokens yet" for 90 s).
+    await openPaletteCommand(page, 'Refresh');
+    await expect(unlockedShell(page)).toBeVisible({ timeout: kdfStepTimeout() });
     await showHomeBalances(page, 'tokens');
     await expect.poll(() => displayedBalance(page, tick), {
         timeout: 90_000,

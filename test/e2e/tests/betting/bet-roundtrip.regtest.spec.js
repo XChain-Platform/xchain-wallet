@@ -40,7 +40,9 @@
 //    (wrong outcome index, wrong tick, wrong stake) passes the first and fails
 //    the second.
 
-import { createWallet, expect, openFormSection, openPaletteCommand, test } from '../../fixtures/wallet.js';
+import {
+    createWallet, expect, lockWallet, openFormSection, openPaletteCommand, test, unlockWallet,
+} from '../../fixtures/wallet.js';
 import {
     EXPLORER_URL,
     explorerJson as venueJson,
@@ -654,6 +656,14 @@ test.describe('BET round trip on regtest', () => {
             // of the last block), so waiting past DEADLINE and then mining is
             // what stamps a block over it. Polled rather than slept in one go
             // so a run that is already past the deadline pays nothing.
+            //
+            // The wallet is locked for the wait and unlocked after it. Nothing
+            // here touches the wallet, and on a quick venue the wait alone is
+            // the whole DEADLINE_LEAD_SEC (run 44500883200 placed the bet 39 s
+            // after creating the market and then waited 897 s), which meets the
+            // default 15 min idle auto-lock and left the next step facing the
+            // lock screen. Locking first makes the state the same either way.
+            await lockWallet(page);
             while (Math.floor(Date.now() / 1000) <= deadlineSec + 30) {
                 await new Promise((r) => setTimeout(r, 5_000));
             }
@@ -665,6 +675,7 @@ test.describe('BET round trip on regtest', () => {
 
             const feed = await waitForFeed(feedIndex, (f) => f?.feed_status === 'closed', 'closed');
             expect(Number(feed.closed_block), 'the latch stamped its block').toBeGreaterThan(0);
+            await unlockWallet(page, PASSWORD);
         });
 
         await test.step('resolve from the oracle console and pay the winner', async () => {

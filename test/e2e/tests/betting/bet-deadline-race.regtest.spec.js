@@ -539,7 +539,6 @@ test.describe('BET deadline race', () => {
         await test.step('the preflight override still stops before signing and reports the refusal', async () => {
             const ack = page.locator('[data-testid^="ack-"]').first();
             await ack.check();
-            await approveWhenReady(page);
 
             // The earlier acknowledgement belongs only to the preflight report.
             // The form's fresh market read is a final safety gate and cannot be
@@ -550,8 +549,16 @@ test.describe('BET deadline race', () => {
             const refusal = page.getByRole('alert').filter({
                 hasText: /market no longer accepts purchases.*Nothing was sent/i,
             });
-            await expect(refusal, 'the final market re-check reports no outcome')
-                .toBeVisible({ timeout: 120_000 });
+            // Not approveWhenReady: it reads a tap that ends in a signing error
+            // as a failure, and that error IS what this step asserts. A tap in
+            // the review's short settle is dropped without a word, so the tap
+            // repeats until the refusal shows; a tap while the re-check is in
+            // flight is ignored by the confirm screen.
+            await expect(page.getByTestId('confirm-checking')).toHaveCount(0, { timeout: 120_000 });
+            await expect(async () => {
+                await page.getByTestId('confirm-approve').click();
+                await expect(refusal).toBeVisible({ timeout: 15_000 });
+            }, 'the final market re-check reports no outcome').toPass({ timeout: 120_000 });
             await expect(page.getByTestId('confirm-modal')).toBeVisible();
             await expect(page.getByTestId('bet-result')).toHaveCount(0);
 
