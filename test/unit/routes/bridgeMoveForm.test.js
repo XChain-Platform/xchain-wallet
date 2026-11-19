@@ -68,6 +68,17 @@ const LTC_ADDRESS = {
 // Loaded CI venues need well over 4 s for the wallet list to fill Receive at.
 const WAIT = { timeout: slowTimeout(15000) };
 
+// Fakes only the timeout and interval clocks. A default vi.useFakeTimers() also
+// fakes performance, Date and setImmediate, and React's scheduler reads
+// performance.now() to order its queued work. Work it queues while that clock
+// reads epoch milliseconds is stamped far ahead of the real clock that returns
+// afterEach, so later mounts in the file never flush their passive effects:
+// the form shows Bitcoin but never fills Receive at or the balance, and every
+// wait runs out its full timeout. Only the debounce timers need to be driven.
+function useFakeTimeouts() {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+}
+
 /**
  * @param {object} [opts]
  * @param {Record<string, any[]>} [opts.byChain]
@@ -188,7 +199,7 @@ describe('BridgeMoveForm: the destination is resolved from the user\'s own accou
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
         );
-        vi.useFakeTimers();
+        useFakeTimeouts();
         fireEvent.change(amountInput(), { target: { value: '1' } });
         await advanceFeeQuote();
         expect(requoteNativeFee).toHaveBeenCalled();
@@ -456,7 +467,7 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
         );
-        vi.useFakeTimers();
+        useFakeTimeouts();
         fireEvent.change(amountInput(), { target: { value: '0.01' } });
         await advanceFeeQuote();
 
@@ -479,7 +490,7 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
         );
-        vi.useFakeTimers();
+        useFakeTimeouts();
         fireEvent.change(amountInput(), { target: { value: '0.01' } });
         await advanceFeeQuote();
         expect(screen.getByText(/costs 0.05 XCHAIN in protocol fees/i)).toBeInTheDocument();
@@ -492,7 +503,7 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
         );
-        vi.useFakeTimers();
+        useFakeTimeouts();
         fireEvent.change(amountInput(), { target: { value: '0.01' } });
         await advanceFeeQuote();
         expect(screen.queryByText(/in protocol fees/i)).toBeNull();
@@ -504,7 +515,7 @@ describe('BridgeMoveForm: unhappy path - amount below the protocol fee', () => {
             () => expect(screen.getByLabelText('Receive at')).toHaveValue(DOGE_ADDRESS.address),
             WAIT,
         );
-        vi.useFakeTimers();
+        useFakeTimeouts();
         fireEvent.change(amountInput(), { target: { value: '1' } });
         await advanceFeeQuote();
         expect(document.querySelector('[data-fees-row="protocol"]')).toHaveTextContent('0.05 XCHAIN');
