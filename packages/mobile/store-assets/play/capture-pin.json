@@ -2,35 +2,35 @@
     "_comment": "Written by tools/release/verify-listing-assets.mjs (--write --set play), this set has no capture harness, so its pin is bootstrapped with --how derived. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
     "set": "play",
     "capturedFrom": {
-        "commit": "58564166d4369acea6fe9330360eab3ed1e46209",
-        "version": "0.341.2",
+        "commit": "3029b0d5a2ad9e4aba6e6f957140f1f4bb849e3e",
+        "version": "0.343.0",
         "how": "derived"
     },
-    "observedAt": "2026-10-13T12:52:21.859Z",
+    "observedAt": "2026-11-19T17:01:35.857Z",
     "assets": {
         "screenshots/01-balances.png": {
-            "sha256": "5abc48b419ea1bd52ac0031fce35f772579207db1ca9ca918fbb46f0654c9b52",
+            "sha256": "9d0826c12177e2aa127a66e546ff661266015a1befa40599d34e89d4a810e39b",
             "width": 1080,
             "height": 1920,
-            "shows": "Phone: balances/Home over a regtest wallet, store profile"
+            "shows": "Phone: balances/Home over the demo wallet dataset, with fiat totals and the value chart"
         },
         "screenshots/02-receive.png": {
-            "sha256": "42f919a7fa8f3c6fcf78a3b53c8c35bc26791fe6c004445e0f31319dba16ccef",
+            "sha256": "c16ac497b3dcce525757c8cfb661333bfb20a769e1005414f9974867708d3c32",
             "width": 1080,
             "height": 1920,
             "shows": "Phone: Receive, address plus QR"
         },
         "screenshots/03-confirm.png": {
-            "sha256": "9a0246de2cfeac2a44bb1ffeed460ff18f16b202f8ea0263f4b0862903dce559",
+            "sha256": "c049ee837c3bdf5450b46595c69b1b9e94c579c249d526314c780762f4ee27da",
             "width": 1080,
             "height": 1920,
-            "shows": "Phone: the Approve/Reject signing screen"
+            "shows": "Phone: Send form, single payment with recipient, asset and amount"
         },
         "screenshots/04-biometric.png": {
-            "sha256": "3389315c922c4a732cc46ab076e3731f56ae03e871ec1dbeaa05d3ee4b1e14e4",
+            "sha256": "4f329404323644ca0228b5b64058eee58b2922b71831f758d81209736517b410",
             "width": 1080,
             "height": 1920,
-            "shows": "Phone: Safety settings - biometric unlock, panic mode, duress passphrase"
+            "shows": "Phone: Security settings - password, auto-lock, biometric unlock, sending safeguards"
         },
         "icon-512.png": {
             "sha256": "d912ea8f8612edb2d2d7eb6f35b12795386471a2f6a04951a34b45455e769f72",
@@ -39,10 +39,10 @@
             "shows": "Store icon, cropped to the shipped launcher icon composition"
         },
         "feature-graphic-1024x500.png": {
-            "sha256": "04071f7d8733c0f04d1057711d2e8d7a251c02319f5dc4e621d84d6134ee743b",
+            "sha256": "ba685a7d2d31285a5fe36f487c2f208edaecce692f3a17749b37916ad9d4d07d",
             "width": 1024,
             "height": 500,
-            "shows": "Feature graphic: white lockup on the brand gradient"
+            "shows": "Feature graphic: the Chrome promo tile design, logo, \"One wallet for everything blockchain\", coin icons"
         }
     }
 }

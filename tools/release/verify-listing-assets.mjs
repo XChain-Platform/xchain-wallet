@@ -321,9 +321,9 @@ export const PLAY_SIZES = [
 export const PLAY_ASSETS = [
     {
         name: 'screenshots/01-balances.png',
-        shows: 'Phone: balances/Home over a regtest wallet, store profile',
-        // The fiat total is on screen (as $0.00, regtest carrying no price
-        // feed), so the market layer is part of what this one depicts.
+        shows: 'Phone: balances/Home over the demo wallet dataset, with fiat totals and the value chart',
+        // The fiat total and the value chart are on screen, so the market
+        // layer is part of what this one depicts.
         depends: [...PLAY_SHELL, 'packages/core/src/market'],
     },
     {
@@ -335,14 +335,16 @@ export const PLAY_ASSETS = [
     },
     {
         name: 'screenshots/03-confirm.png',
-        shows: 'Phone: the Approve/Reject signing screen',
-        // What a confirm screen SAYS it is signing comes out of the decoder and
-        // the signer surface, which is the half of this image a reviewer reads.
+        shows: 'Phone: Send form, single payment with recipient, asset and amount',
+        // The file keeps its 03-confirm name from the first listing set; since
+        // v0.343.0 it shows the Send form (uploaded to Play as 03-send). The
+        // form previews what will be signed, so the decoder and signer stay in.
         depends: [...PLAY_SHELL, 'packages/core/src/decoder', 'packages/core/src/signers'],
     },
     {
         name: 'screenshots/04-biometric.png',
-        shows: 'Phone: Safety settings - biometric unlock, panic mode, duress passphrase',
+        // Keeps its 04-biometric name; uploaded to Play as 04-security.
+        shows: 'Phone: Security settings - password, auto-lock, biometric unlock, sending safeguards',
         depends: [...PLAY_SHELL, 'packages/core/src/schemas/settings.js', 'packages/core/src/storage'],
     },
     {
@@ -360,7 +362,7 @@ export const PLAY_ASSETS = [
     },
     {
         name: 'feature-graphic-1024x500.png',
-        shows: 'Feature graphic: white lockup on the brand gradient',
+        shows: 'Feature graphic: the Chrome promo tile design, logo, "One wallet for everything blockchain", coin icons',
         // No wallet UI at all, so UI churn legitimately does not stale it.
         depends: ['packages/core/src/branding'],
     },

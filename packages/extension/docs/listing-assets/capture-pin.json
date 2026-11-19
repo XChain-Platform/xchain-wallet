@@ -2,20 +2,20 @@
     "_comment": "Written by tools/release/verify-listing-assets.mjs (--write --set extension), normally from the end of a successful packages/extension/scripts/capture-listing-screenshots.mjs run. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
     "set": "extension",
     "capturedFrom": {
-        "commit": "a7c8cac7ab1f6a63751963ef5f2f8543e86dd11d",
-        "version": "0.342.1",
-        "how": "derived"
+        "commit": "3029b0d5a2ad9e4aba6e6f957140f1f4bb849e3e",
+        "version": "0.343.0",
+        "how": "capture"
     },
-    "observedAt": "2026-11-18T00:24:21.018Z",
+    "observedAt": "2026-11-18T19:26:29.374Z",
     "assets": {
         "screenshot-popup.png": {
-            "sha256": "081a22513e374cfaeecc3bfeaab71d0d15d3c5ca16f6ad9bb0e6937b5e90dafb",
+            "sha256": "907bdbcdb626ff7bab532825c85bfae29a0ceeec896d652e93bab1ce096c896d",
             "width": 1280,
             "height": 800,
             "shows": "Toolbar popup, Home view"
         },
         "screenshot-sidepanel.png": {
-            "sha256": "67346cd99c9f321f199b30a6f56caf70b6c79e1d74766a93512cdcc656da1a6c",
+            "sha256": "d075006389b5a5ae19a29d36f6a19b249ba40202f12f088d3a9f479b034c061b",
             "width": 1280,
             "height": 800,
             "shows": "Side panel, DeFi view"

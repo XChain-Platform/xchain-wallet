@@ -2,26 +2,26 @@
     "_comment": "Written by tools/release/verify-listing-assets.mjs (--write --set mas), normally from the end of a successful packages/desktop/scripts/capture-listing-screenshots.mjs run. Records WHICH BUILD the store listing images depict, which their pixel dimensions cannot say. Do not hand-edit: a pin that was not written by a capture is a claim about a capture nobody watched.",
     "set": "mas",
     "capturedFrom": {
-        "commit": "a7c8cac7ab1f6a63751963ef5f2f8543e86dd11d",
-        "version": "0.342.1",
+        "commit": "62dc08873ffd018b02d7e6c94b8de86dccee2203",
+        "version": "0.343.0",
         "how": "capture"
     },
-    "observedAt": "2026-11-18T00:04:05.017Z",
+    "observedAt": "2026-11-18T21:06:59.496Z",
     "assets": {
         "screenshot-home.png": {
-            "sha256": "87a8af36533901a361227160a1e7c5a0a1855f44ce24e3fc243da15158a02d01",
+            "sha256": "19641128a8f9ff99d71499bc0a62b0bc27d2823486fb57d8c80c18ae9079f0dd",
             "width": 1440,
             "height": 900,
             "shows": "Desktop window, wide Home with the XCHAIN token selected"
         },
         "screenshot-exchange.png": {
-            "sha256": "f360b54f5f5577013aaee24feb728b0aeeea909861ea74d01f812b523c21b751",
+            "sha256": "b7e0a803ded0135cf60d3e9acda24ef778e49b984fde2889c0d7b1cbf66ef94a",
             "width": 1440,
             "height": 900,
             "shows": "Desktop window, Exchange (DEX) with a market selected"
         },
         "screenshot-my-tokens.png": {
-            "sha256": "915473747c0d4c2b8bd294066a04b546ec47c8b404c8ef66dbd4320cf9bf59b1",
+            "sha256": "2d16538d38e78869af25206d9df64c5991c8f2490428267aaba50b1e387ff5f1",
             "width": 1440,
             "height": 900,
             "shows": "Desktop window, My Tokens with an issued token selected and its owner actions"
