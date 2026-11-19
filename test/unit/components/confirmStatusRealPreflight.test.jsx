@@ -68,7 +68,7 @@ const notFound = () => Object.assign(new Error('Request failed with status code 
 const refused = (what) => async () => { throw new Error(`network read refused in test: ${what}`); };
 
 // The real SDK the wallet builds for this chain, its explorer approving and answering every read.
-function realSdkFor(chainId, { failTokenRead = false } = {}) {
+function realSdkFor(chainId, { failTokenRead = false, dryRunDown = false } = {}) {
     const XChainSDK = requireSdkDeep('xchainSdkIndex').XChainSDK;
     const registry = new SDKRegistry({ chainRegistry: defaultRegistry(), sdkFactory: adaptXChainSDK(XChainSDK) });
     const sdk = registry.get(chainId);
@@ -78,8 +78,16 @@ function realSdkFor(chainId, { failTokenRead = false } = {}) {
             if (key !== 'constructor' && typeof sdk.hub[key] === 'function') sdk.hub[key] = refused(`hub.${key}`);
         }
     }
-    sdk.explorer.getPreflight = async () => ({ supported: true, valid: true, status: 'valid' });
-    sdk.explorer.getStatus = async () => ({ last_block: { [sdk.explorer.coin]: 300000 } });
+    sdk.explorer.getPreflight = dryRunDown
+        // What the wallet sees when the request never answers: an aborted fetch or a timeout.
+        ? async () => { throw new Error('Explorer request failed: Network Error'); }
+        : async () => ({ supported: true, valid: true, status: 'valid' });
+    // The explorer layer backs the whole host off after that transport failure
+    // (explorerRateLimit.js, 1.5 to 2.5 s), so a read the pre-flight makes beside
+    // the dry run can miss its own budget too: an ISSUE's activation read does.
+    sdk.explorer.getStatus = dryRunDown
+        ? async () => { throw Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' }); }
+        : async () => ({ last_block: { [sdk.explorer.coin]: 300000 } });
     sdk.explorer.getToken = async (tick) => {
         if (failTokenRead) throw new Error('timeout of 8000ms exceeded');
         if (TOKENS[tick]) return TOKENS[tick];
@@ -235,6 +243,21 @@ describe.skipIf(!installed)('Confirm status on the real pre-flight path', () => 
         expect(out.state).toBe('settleChecks');
         expect(out.text).not.toMatch(/server-side|capability|_[A-Z]{3,}/);
     }, 30_000);
+
+    // A dry run that never answered (an aborted request, a timeout) is not a
+    // reason to doubt the action: the notice says it was not checked with the
+    // network, never the "check this" warning a real concern raises. A
+    // fee-bearing action carries the forfeit warning the modal strips, and the
+    // activation read that missed beside the dry run must not hold it at warn.
+    it.each(CHAINS)('a new-token ISSUE on %s whose dry run never answers is not checked, not a warning', async (chainId) => {
+        const out = await confirmNotice(chainId, action('ISSUE|0|NEWTOK|1000||8||1000'), { dryRunDown: true });
+        // Mainnet's activation is fixed in the SDK, so only a venue that reads it misses it.
+        if (chainId !== 'bitcoin-mainnet') expect(out.unverified).toContain('ISSUE_TICK_COIN_PREFIX');
+        expect(out.state).toBe('notChecked');
+        expect(out.text).toContain('Not checked with the network');
+        expect(out.text).not.toContain('Check this before you approve');
+    }, 30_000);
+
 
     it('a mainnet send in exponent form keeps the amount rule red', async () => {
         const out = await confirmNotice('bitcoin-mainnet', action('SEND|0|XCP|1e2|own-dest'));

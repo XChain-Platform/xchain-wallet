@@ -250,3 +250,66 @@ describe('confirm screen protocol-fee disclosure', () => {
         expect(unknownProtocolFeeNamed()).toBe(false);
     });
 });
+
+// A dry run that never answered (an aborted request or a timeout) on a
+// fee-bearing action: the SDK's forfeit warning is filtered out, and a check
+// that also missed its read beside the dry run (an activation lookup the
+// explorer layer's backoff held past its budget) must not keep the notice at
+// the red "check this" warning. Nothing judged the action, so it is not
+// checked. A rejection the dry run did answer keeps the failure.
+describe('confirm status when the dry run does not answer', () => {
+    const UNANSWERED = {
+        code: 'DRYRUN_UNAVAILABLE', severity: 'info', source: 'dryrun', data: {},
+        message: 'The network dry-run was unavailable (Explorer request failed: Network Error); relying on client checks.',
+    };
+    const MISSED_READ = { check: 'ISSUE_TICK_COIN_PREFIX', reason: 'activation lookup unavailable' };
+    const unanswered = (extra = {}) => ({
+        verdict: 'warn', restricted: false, stateHeight: null, quote: null,
+        findings: [NATIVE_FEE_FINDING, UNANSWERED],
+        unverified: [MISSED_READ],
+        ...extra,
+    });
+
+    it('says not checked, never the warning, when a read beside it also missed', () => {
+        render(<ConfirmActionModal {...base({ report: unanswered() })} />);
+        const status = screen.getByTestId('confirm-status');
+        expect(status.getAttribute('data-state')).toBe('notChecked');
+        expect(status.textContent).toContain('Not checked with the network');
+        expect(status.textContent).not.toContain('Check this before you approve');
+    });
+
+    it('says not checked for a restricted report the network never judged', () => {
+        render(<ConfirmActionModal {...base({ report: unanswered({ unverified: [], restricted: true }) })} />);
+        expect(screen.getByTestId('confirm-status').getAttribute('data-state')).toBe('notChecked');
+    });
+
+    it('keeps a warning the client checks raised', () => {
+        const tick = { code: 'TICK_FORMAT', severity: 'warning', source: 'client', message: 'reserved name' };
+        render(<ConfirmActionModal {...base({
+            report: unanswered({ findings: [NATIVE_FEE_FINDING, tick, UNANSWERED] }),
+        })} />);
+        expect(screen.getByTestId('confirm-status').getAttribute('data-state')).toBe('warn');
+    });
+
+    it('keeps the failure when the dry run answered with a rejection', () => {
+        const rejected = {
+            code: 'DRYRUN_INVALID', severity: 'error', source: 'dryrun', overridable: true,
+            message: 'The network reports this will fail: invalid: TICK (exists)', data: { status: 'invalid: TICK (exists)' },
+        };
+        render(<ConfirmActionModal {...base({
+            report: { ...unanswered(), verdict: 'fail', findings: [NATIVE_FEE_FINDING, rejected], unverified: [MISSED_READ] },
+        })} />);
+        expect(screen.getByTestId('confirm-status').getAttribute('data-state')).toBe('fail');
+    });
+
+    it('keeps an approved report with a check it could not read short of a clean pass', () => {
+        render(<ConfirmActionModal {...base({
+            report: {
+                ...REPORT('0.50000000'), verdict: 'warn',
+                findings: [...REPORT('0.50000000').findings, NATIVE_FEE_FINDING],
+                unverified: [MISSED_READ],
+            },
+        })} />);
+        expect(['pass', 'notChecked']).not.toContain(screen.getByTestId('confirm-status').getAttribute('data-state'));
+    });
+});

@@ -171,11 +171,17 @@ export function reportWithoutUnverifiedNativeFeeWarning(report) {
         finding?.code !== 'NATIVE_FEE_FORFEIT'
     ));
     if (findings.length === report.findings.length) return report;
-    const hasVisibleConcern = findings.some((finding) => (
+    const hasFinding = findings.some((finding) => (
         finding?.severity === 'warning' || finding?.severity === 'error'
-    )) || report.restricted
+    ));
+    // A dry run that never answered (aborted, timed out or declined) leaves the
+    // report not checked whatever else missed beside it: the warn notice shows
+    // no unverified line, so holding warn would read as a reason the action
+    // fails. preflightCheckState keeps it notChecked, never a pass.
+    const unanswered = findings.some((finding) => finding?.code === 'DRYRUN_UNAVAILABLE');
+    const hasVisibleConcern = hasFinding || (!unanswered && (report.restricted
         // A check settlement decides is the blue note, never a concern that holds warn.
-        || (report.unverified || []).some((u) => !isSettleTimeUnverified(u));
+        || (report.unverified || []).some((u) => !isSettleTimeUnverified(u))));
     return {
         ...report,
         findings,
