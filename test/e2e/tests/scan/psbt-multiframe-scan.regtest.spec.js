@@ -77,9 +77,11 @@ async function signPanelFacing(frames) {
     await page.goto(BASE_URL);
     await createWallet(page, { password: PASSWORD, name: 'Signer Wallet', navigate: false });
 
-    // Found by its keyword, not its title: "psbt" is what a user who knows the
-    // format types.
-    await openPaletteCommand(page, 'psbt', { option: /^Sign a transaction/ });
+    // Found by its title. The wallet menu's search matches titles only for
+    // the catalogue rows and the Sign commands (searchOnlyTitle in
+    // commandRegistry.js), so the "psbt" keyword no longer finds it; the
+    // catalogue row is "Sign transaction" (walletMenu.row.signTransaction).
+    await openPaletteCommand(page, 'Sign transaction', { option: /^Sign (a )?transaction/i });
 
     const box = fieldByLabel(page, 'Unsigned transaction code');
     await expect(box, 'the Sign panel did not open').toBeVisible({ timeout: 30_000 });
