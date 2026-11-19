@@ -121,3 +121,92 @@ describe('checkReachability fast-fail verdict', () => {
         }
     });
 });
+
+// Replays of a regtest web-shell trace (tokens/airdrop.regtest.spec.js:920,
+// four shard drivers loading the explorer). Every service answered, yet the
+// form said the wallet had no network connection:
+//   - the encoders answered their pings in about 250 ms;
+//   - the hub answered without CORS headers, so its ping failed in the browser;
+//   - the explorer's /status was slow (2.8 s) or held behind a 429 pause;
+//   - 800 ms in, the direct checks went to every service, the ones that had
+//     already answered included, and each came back blocked by the services'
+//     Cross-Origin-Resource-Policy: same-origin header, which fetch reports
+//     exactly like a refused connection.
+// The round was called offline-refused and published at once.
+describe('checkReachability under load, as the trace showed it', () => {
+    const CHAINS = ['bitcoin-regtest', 'litecoin-regtest', 'dogecoin-regtest'];
+    const answersAfter = (ms, value = { ok: true }) => () => new Promise((resolve) => setTimeout(() => resolve(value), ms));
+
+    it('never lets a direct check overrule a service that already answered', async () => {
+        const wired = [];
+        const res = await checkReachability({
+            sdkRegistry: registryFor(sdkWith({ encoder: async () => true, hub: async () => false, explorer: answersAfter(150) })),
+            chainIds: CHAINS,
+            timeoutMs: 600,
+            wireDelayMs: 40,
+            wireTimeoutMs: 100,
+            wireCheck: async (_sdk, service) => { wired.push(service); return 'refused'; },
+        });
+        expect(wired).not.toContain('encoder');
+        expect(res.failedFast).toBeUndefined();
+        expect(res.overall).toBe('degraded');
+        for (const chain of res.perChain) {
+            expect(chain.services).toEqual({ encoder: 'reachable', hub: 'unreachable', explorer: 'reachable' });
+        }
+    });
+
+    it('counts an explorer held behind a rate-limit pause as reachable, from the direct check and at the budget', async () => {
+        let pausedFor = 0;
+        const limiter = { pausedSeconds: () => pausedFor };
+        const sdk = sdkWith({ encoder: async () => true, hub: async () => false, explorer: hangs });
+        sdk.explorer.client.__xcRateLimiter = limiter;
+        // The 429 that pauses the host lands on another request after the probe has queued.
+        setTimeout(() => { pausedFor = 6; }, 10);
+        const res = await checkReachability({
+            sdkRegistry: registryFor(sdk),
+            chainIds: CHAINS,
+            timeoutMs: 200,
+            wireDelayMs: 40,
+            wireTimeoutMs: 100,
+            wireCheck: async () => 'refused',
+        });
+        expect(res.failedFast).toBeUndefined();
+        expect(res.overall).toBe('degraded');
+        expect(res.perChain[0].services.explorer).toBe('reachable');
+    });
+
+    it('reads a response the browser withheld for its resource policy as an answer, not a refusal', async () => {
+        const modes = [];
+        vi.stubGlobal('fetch', async (_url, init) => {
+            modes.push(init.mode);
+            // A no-cors read of a Cross-Origin-Resource-Policy: same-origin response
+            // rejects exactly like a refused connection; the CORS read gets through.
+            if (init.mode === 'no-cors') throw new TypeError('Failed to fetch');
+            return { status: 200 };
+        });
+        try {
+            const res = await run(
+                sdkWith({ encoder: hangs, hub: async () => false, explorer: hangs }),
+                { timeoutMs: 250, wireDelayMs: 20, wireTimeoutMs: 100 },
+            );
+            expect(modes).toContain('cors');
+            expect(res.failedFast).toBeUndefined();
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('still calls a refused connection refused when neither read gets an answer', async () => {
+        vi.stubGlobal('fetch', async () => { throw new TypeError('Failed to fetch'); });
+        try {
+            const res = await run(
+                sdkWith({ encoder: hangs, hub: async () => false, explorer: hangs }),
+                { timeoutMs: 5000, wireDelayMs: 20, wireTimeoutMs: 100 },
+            );
+            expect(res.overall).toBe('offline');
+            expect(res.failedFast).toBe(true);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+});

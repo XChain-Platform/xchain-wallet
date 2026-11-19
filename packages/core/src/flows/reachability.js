@@ -209,12 +209,18 @@ async function probeChain({
     if (configured.length === 0) return full;
 
     // Every service refusing the connection is the verdict without waiting out
-    // the probes the request layer is still retrying.
+    // the probes the request layer is still retrying. Only a probe still pending
+    // is asked about: a service that has answered is up, and a direct check that
+    // says otherwise is misreading it.
     const wireTimer = setTimeout(() => {
         for (const name of configured) {
-            if (refusals.has(name)) continue;
+            if (refusals.has(name) || refusals.answered(name)) continue;
+            if (heldByRateLimit(name, sdk)) {
+                refusals.answer(name);
+                continue;
+            }
             wireCheck(sdk, name, wireTimeoutMs).then((answer) => {
-                if (answer !== 'refused') return;
+                if (answer !== 'refused' || refusals.answered(name)) return;
                 if (errors[name] === undefined) errors[name] = 'connection refused';
                 refusals.mark(name);
             });
@@ -239,25 +245,42 @@ async function probeChain({
 
 /**
  * Which services have turned the connection away outright. It completes once
- * every configured service has, and never completes if any one has not.
+ * every configured service has, and never completes if any one has not, or if
+ * any one has answered: an answer outranks a refusal read off the same check.
  *
  * @param {string[]} names
  */
 function createRefusalTracker(names) {
     const seen = new Set();
+    const heard = new Set();
     /** @type {() => void} */
     let finish = () => {};
     const done = new Promise((resolve) => { finish = () => resolve(undefined); });
-    const complete = () => names.length > 0 && names.every((name) => seen.has(name));
+    const complete = () => names.length > 0 && names.every((name) => seen.has(name) && !heard.has(name));
     return {
         done,
         has: (name) => seen.has(name),
+        answered: (name) => heard.has(name),
         complete,
         mark(name) {
             seen.add(name);
             if (complete()) finish();
         },
+        answer(name) {
+            heard.add(name);
+        },
     };
+}
+
+/**
+ * The explorer's request layer holds every request to a host it has paused for
+ * a rate limit, and a host that sent a 429 has answered, so a probe still
+ * waiting while the pause lasts is waiting on an explorer that is up. The pause
+ * can begin after the probe queued, so this is asked when the probe is overdue,
+ * not only when it starts.
+ */
+function heldByRateLimit(name, sdk) {
+    return name === 'explorer' && explorerPausedSeconds(sdk) > 0;
 }
 
 /** A probe error that is a refused connection, as opposed to a timeout or an HTTP answer. */
@@ -274,8 +297,14 @@ async function runProbe(name, sdk, probe, timeoutMs, latencyMs, errors, values, 
         const value = await runWithTimeout(() => probe(sdk), timeoutMs);
         latencyMs[name] = Date.now() - start;
         if (values) values[name] = value;
+        refusals.answer(name);
         return 'reachable';
     } catch (e) {
+        if (e && e.code === PROBE_TIMEOUT_CODE && heldByRateLimit(name, sdk)) {
+            latencyMs[name] = Date.now() - start;
+            refusals.answer(name);
+            return 'reachable';
+        }
         errors[name] = e && e.message ? e.message : String(e);
         if (isRefusal(e)) refusals.mark(name);
         return 'unreachable';
@@ -485,6 +514,12 @@ function wireUrl(sdk, service) {
  * ends means it was refused (connection refused, DNS failure, device offline);
  * running out of budget says only that the link is slow.
  *
+ * A browser rejects a no-cors read of a response marked
+ * Cross-Origin-Resource-Policy: same-origin (every XChain service sends it)
+ * exactly as it rejects a refused connection, and rejects a CORS read of a
+ * response without CORS headers the same way. So both reads go out, and the
+ * service has answered when either one gets through.
+ *
  * @type {WireCheck}
  */
 async function defaultWireCheck(sdk, service, timeoutMs) {
@@ -493,14 +528,17 @@ async function defaultWireCheck(sdk, service, timeoutMs) {
     const controller = new AbortController();
     let outOfTime = false;
     const timer = setTimeout(() => { outOfTime = true; controller.abort(); }, timeoutMs);
+    const read = (mode) => fetch(url, {
+        method: 'HEAD', mode, cache: 'no-store', credentials: 'omit', signal: controller.signal,
+    });
     try {
-        await fetch(url, {
-            method: 'HEAD', mode: 'no-cors', cache: 'no-store', credentials: 'omit', signal: controller.signal,
-        });
+        await Promise.any([read('no-cors'), read('cors')]);
         return 'answered';
     } catch (e) {
-        return outOfTime || (e && e.name === 'AbortError') ? 'unknown' : 'refused';
+        const reasons = e && Array.isArray(e.errors) ? e.errors : [e];
+        return outOfTime || reasons.some((r) => r && r.name === 'AbortError') ? 'unknown' : 'refused';
     } finally {
         clearTimeout(timer);
+        controller.abort();
     }
 }
