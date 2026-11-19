@@ -21,6 +21,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { feeForRate, networkFeeEditor } from '../../helpers/customNetworkFee.js';
+import { slowTimeout } from '../../helpers/testEnvSpeed.js';
 
 // The pickers are whole screens of their own. Stubbed to the one fact each case
 // is about (which chain the picker was opened on), so this stays about the move
@@ -62,7 +63,10 @@ const LTC_ADDRESS = {
     id: 'a-ltc', address: 'ltc1qdevmock02cc', publicKey: '02cc', derivationPath: "m/84'/2'/0'/0/0", source: 'hd',
 };
 
-const WAIT = { timeout: 4000 };
+// 4 s on a dev box; scaled so coverage instrumentation on a loaded runner does not
+// outrun it (the debounced balance read and every async mount settle inside it).
+// Loaded CI venues need well over 4 s for the wallet list to fill Receive at.
+const WAIT = { timeout: slowTimeout(15000) };
 
 /**
  * @param {object} [opts]
@@ -664,7 +668,13 @@ describe('BridgeMoveForm: invalid action fields', () => {
     it('explains an empty stored destination before review', async () => {
         const emptyDestination = { ...DOGE_ADDRESS, address: '' };
         const messaging = mount({ byChain: { [BTC]: [BTC_ADDRESS], [DOGE]: [emptyDestination] } });
+        // An empty Receive at is also what the field shows before the wallet's
+        // addresses load, so that alone proves nothing. The balance footer lands
+        // after the addresses and the 400 ms balance debounce, so waiting for it
+        // proves the form is settled; a press earlier is dropped silently as "no
+        // destination account yet" and the notice never appears.
         await waitFor(() => expect(screen.getByLabelText('Receive at')).toHaveValue(''), WAIT);
+        await waitFor(() => expect(screen.getByText(/10 XCHAIN available/i)).toBeInTheDocument(), WAIT);
         fireEvent.change(amountInput(), { target: { value: '1' } });
         expect(moveButton()).toBeEnabled();
         await act(async () => {

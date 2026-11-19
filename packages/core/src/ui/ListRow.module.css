@@ -155,3 +155,14 @@
     width: var(--xc-icon-size);
     height: var(--xc-icon-size);
 }
+
+/* An expandable row points its chevron right while closed and down while open
+   (G21), as a form section does. The clipped box turns with its glyph, so the
+   open chevron keeps both arms and the row keeps its width. */
+.interactive[aria-expanded='true'] > .chevron {
+    transform: rotate(90deg);
+}
+
+:where([dir='rtl']) .interactive[aria-expanded='true'] > .chevron {
+    transform: rotate(-90deg);
+}

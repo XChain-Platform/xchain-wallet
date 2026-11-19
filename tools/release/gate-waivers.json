@@ -10,5 +10,17 @@
         "ruled_by": "operator (J-Dog)",
         "ruled_at": "2026-10-15",
         "note": "verdict only classifies the other jobs and is waived because it reports the waived e2e-regtest result"
+    },
+    {
+        "version": "0.343.0",
+        "workflow": "ci.yml",
+        "jobs": [
+            "e2e-regtest (rolling shard)",
+            "verdict"
+        ],
+        "reason": "the rolling regtest shard on the release head failed only on spec copies fixed on develop after the cut (bet-deadline-race, bet-roundtrip, bet-unhappy-stakes, bet-watcher-mode, order-match-coinpay, buy-funding) and on regtest venue lag (callback-holder-payout, which passed twice against the release head on a second regtest venue); no failure is a release-code bug; every other ci.yml job must pass on the release merge commit",
+        "ruled_by": "operator (J-Dog)",
+        "ruled_at": "2026-11-18",
+        "note": "verdict only classifies the other jobs and is waived because it reports the waived e2e-regtest result"
     }
 ]

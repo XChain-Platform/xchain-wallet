@@ -56,7 +56,12 @@ function messaging() {
         listWallets: vi.fn().mockResolvedValue([{ id: 'wallet-1', name: 'W', walletMode: 'watcher' }]),
         signerReady: vi.fn().mockResolvedValue({ ready: false }),
         getSignerStatus: vi.fn().mockResolvedValue({ status: 'watcher' }),
-        getWalletBalances: vi.fn().mockResolvedValue({}),
+        // ALPHA is held in full. The form reads this balance after a 400 ms debounce, and an
+        // empty answer that lands after the Create Swap press reads as 0 ALPHA, which
+        // refuses the 2 ALPHA give and leaves Approve a silent no-op.
+        getWalletBalances: vi.fn().mockResolvedValue({
+            [CHAIN]: [{ address: ADDRESS.address, balances: { tokens: [{ tick: 'ALPHA', quantity: '100.0', divisibility: 8 }] } }],
+        }),
         getTokenInfo: vi.fn().mockResolvedValue({ divisibility: 8 }),
         buildActionPsbtRequest: vi.fn().mockResolvedValue({ txid: 'swap-txid' }),
     };

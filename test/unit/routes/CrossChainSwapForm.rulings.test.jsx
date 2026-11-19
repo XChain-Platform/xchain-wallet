@@ -148,6 +148,14 @@ afterEach(() => {
 });
 
 describe('CrossChainSwapForm UI rulings', () => {
+    // U18: the page is titled Cross-Chain Swap, so its main section is titled
+    // Swap, as the Swap form's is, rather than repeating the page title.
+    it('titles the main section Swap, not the page title again', async () => {
+        const { container } = mount();
+        await screen.findByRole('button', { name: 'Create Cross-Chain Swap' });
+        expect(container.querySelector('[data-form-section="swap"] [data-form-section-title]')).toHaveTextContent(/^Swap$/);
+    });
+
     it('uses a named success action and field-specific help without static escrow hints', async () => {
         showFullView();
         mount();

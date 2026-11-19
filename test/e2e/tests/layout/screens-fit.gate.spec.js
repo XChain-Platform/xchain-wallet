@@ -67,6 +67,30 @@ test('a box that scrolls sideways inside its own width passes and a page that sc
     expect(failures.join('\n')).toContain('page scrolls sideways');
 });
 
+test('a chevron box clipped to its middle third passes and a glyph cut by that clip fails', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 });
+    // G07: the row chevron's 32px icon box shows only its middle third.
+    const slot = (d) => `<span style="display: inline-flex; justify-content: center; width: calc(32px / 3); overflow: hidden">
+        <svg width="32" height="32" viewBox="0 0 24 24" style="flex: 0 0 auto" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="${d}"/></svg></span>`;
+    await page.setContent(`<main id="xc-main"><button id="row">Row ${slot('m9 18 6-6-6-6')}</button></main>`);
+    expect(fitFailures('right chevron', await page.evaluate(measureInPage, {}))).toEqual([]);
+    await page.setContent(`<main id="xc-main"><button id="row">Row ${slot('m6 9 6 6 6-6')}</button></main>`);
+    const failures = fitFailures('down chevron', await page.evaluate(measureInPage, {}));
+    expect(failures.join('\n')).toContain('clipped {"el":"path"');
+});
+
+test('an inline run inside an ellipsis box passes and the same run in a plain clip box fails', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 });
+    const line = (overflow) => `<div style="width: 120px; white-space: nowrap; overflow: hidden; ${overflow}">
+        <bdi dir="ltr">50,000 XCHAIN staked with the validator</bdi></div>`;
+    await page.setContent(`<main id="xc-main">${line('text-overflow: ellipsis')}</main>`);
+    expect(fitFailures('ellipsis', await page.evaluate(measureInPage, {}))).toEqual([]);
+    await page.setContent(`<main id="xc-main">${line('')}</main>`);
+    const failures = fitFailures('clip', await page.evaluate(measureInPage, {}));
+    expect(failures.join('\n')).toContain('clipped {"el":"bdi');
+});
+
 for (const { name, viewport } of VIEWPORTS) {
     test(`every screen fits at ${name}`, async ({ page }) => {
         test.setTimeout(20 * 60 * 1000);
@@ -80,6 +104,10 @@ for (const { name, viewport } of VIEWPORTS) {
             onResult: (result) => screens.push(result),
         });
         await page.goto('/');
+        // Measure the carousel, not the boot splash before it: the splash's
+        // progress fill slides through its clipped track by design.
+        await page.getByRole('button', { name: 'Skip' }).or(page.getByRole('button', { name: 'Create new wallet' }))
+            .first().waitFor({ state: 'visible', timeout: 60_000 });
         await sweep.measure('onboarding: intro carousel');
         await dismissIntroCarousel(page);
         await sweep.measure('onboarding: welcome');

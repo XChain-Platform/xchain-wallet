@@ -846,7 +846,9 @@ function OfferRow({ entry, tick, onAction, oracleFeedsFor }) {
         ? dispenserRateLabel(row, oracleFeedsFor(chainId, row))
         : null;
     const actionLabel = action === 'buy' ? 'Buy' : 'Sell';
-    const kindLabel = kind === 'dispenser' ? 'Dispenser' : 'Order';
+    // An order names its own side (the viewer buys from a sell order), so
+    // rows of one list never repeat one bare title (U18).
+    const kindLabel = kind === 'dispenser' ? 'Dispenser' : action === 'buy' ? 'Sell order' : 'Buy order';
     const priced = unit !== null && Boolean(quote);
     const side = action === 'buy' ? 'buy' : 'sell';
     // The whole row is the control (G111): it opens what the old Buy or Sell

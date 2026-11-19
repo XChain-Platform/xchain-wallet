@@ -135,6 +135,19 @@ describe('BetFeedsList wide split', () => {
         expect(await screen.findByRole('region', { name: 'Second market' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Second market' })).toHaveAttribute('aria-current', 'true');
     });
+
+    // With no markets nothing is picked, so the detail says to pick one, as
+    // the Dispensers split does, instead of loading for ever.
+    it('shows the select-a-market state, not a loading detail, once an empty list has answered', async () => {
+        layoutWidth = 1046;
+        const messaging = { ...makeMessaging(), betFeeds: vi.fn().mockResolvedValue({ data: [] }) };
+        mount(messaging);
+
+        const detail = await screen.findByRole('region', { name: 'Prediction market' });
+        expect(await within(detail).findByText('Select a prediction market')).toBeInTheDocument();
+        expect(screen.queryByText('Loading market…')).toBeNull();
+        expect(detail).not.toHaveAttribute('aria-busy', 'true');
+    });
 });
 
 describe('BetFeedsList narrow behavior', () => {

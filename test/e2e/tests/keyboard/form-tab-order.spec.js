@@ -57,7 +57,10 @@ async function expectVisualTabOrderAndFocusRings(page, form, label) {
             const marker = `${index}`;
             const rect = element.getBoundingClientRect();
             element.dataset.e2eFormControl = marker;
-            return { marker, top: rect.top, left: rect.left };
+            // Rows are read by vertical centre, not top edge: a row centres
+            // controls of different heights, such as a 24px help button
+            // beside a 44px switch hit area, whose tops differ by 10px.
+            return { marker, middle: rect.top + rect.height / 2, left: rect.left };
         });
     });
     expect(controls.length, `${label}: the form has no keyboard controls`).toBeGreaterThan(0);
@@ -142,13 +145,13 @@ async function expectVisualTabOrderAndFocusRings(page, form, label) {
     for (let index = 1; index < controls.length; index += 1) {
         const previous = controls[index - 1];
         const current = controls[index];
-        const movesDown = current.top >= previous.top - 3;
-        const staysLeftToRight = Math.abs(current.top - previous.top) > 3
+        const movesDown = current.middle >= previous.middle - 3;
+        const staysLeftToRight = Math.abs(current.middle - previous.middle) > 3
             || current.left >= previous.left - 3;
         expect(
             movesDown && staysLeftToRight,
-            `${label}: Tab moves from control ${previous.marker} at (${previous.left}, ${previous.top}) `
-                + `to control ${current.marker} at (${current.left}, ${current.top})`,
+            `${label}: Tab moves from control ${previous.marker} centred at (${previous.left}, ${previous.middle}) `
+                + `to control ${current.marker} centred at (${current.left}, ${current.middle})`,
         ).toBe(true);
     }
     expect(missingRings, `${label}: every keyboard-focused control paints a visible ring`)

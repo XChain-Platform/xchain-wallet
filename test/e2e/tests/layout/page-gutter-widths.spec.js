@@ -27,9 +27,12 @@ const VIEWPORTS = [
     { width: 1440, height: 900, gutter: 8 },
 ];
 
+// At the wide width Home and History open as a list beside a detail panel.
+// That split body never scrolls, so it reserves no scrollbar lane of its own
+// (fdd5fa244); the list scroller named here keeps the stable lane instead.
 const ROUTES = [
-    { name: 'Home', template: 'list' },
-    { name: 'History', template: 'list' },
+    { name: 'Home', template: 'list', wideSplitList: 'Balances list' },
+    { name: 'History', template: 'list', wideSplitList: 'History entries' },
     { name: 'Send', template: 'form', formName: 'Send' },
     { name: 'Receive', template: 'form', formName: 'Receive payment' },
     { name: 'Settings', template: 'list' },
@@ -73,8 +76,8 @@ async function openRoute(page, route) {
     await settle(page);
 }
 
-async function geometry(page, isFormRoute) {
-    return page.getByRole('main').evaluate((main, formRoute) => {
+async function geometry(page, isFormRoute, splitListName = null) {
+    return page.getByRole('main').evaluate((main, { formRoute, listName }) => {
         // Skip the empty notices slot, which renders no box or a zero-height one.
         const block = Array.from(main.children).find((el) => el.getBoundingClientRect().height > 0);
         // A plain form sits in a page wrapper beside its notices, so the form
@@ -97,6 +100,7 @@ async function geometry(page, isFormRoute) {
         const borderWidth = main.offsetWidth - main.clientWidth;
         const contentLeft = mainBox.left + main.clientLeft + paddingLeft;
         const contentRight = mainBox.left + main.clientLeft + main.clientWidth - paddingRight;
+        const splitList = listName ? main.querySelector(`[aria-label="${listName}"]`) : null;
 
         return {
             gutter: paddingLeft,
@@ -110,6 +114,9 @@ async function geometry(page, isFormRoute) {
             // carries just the scroller border.
             startGutter: main.clientLeft,
             scrollbarGutter: borderWidth - main.clientLeft,
+            splitListLane: splitList
+                ? splitList.offsetWidth - splitList.clientWidth - splitList.clientLeft
+                : null,
             directForms: Array.from(main.children)
                 .flatMap((element) => (isForm(element)
                     ? [element]
@@ -122,7 +129,7 @@ async function geometry(page, isFormRoute) {
                 paddingLeft: parseFloat(firstStyle.paddingLeft),
             },
         };
-    }, isFormRoute);
+    }, { formRoute: isFormRoute, listName: splitListName });
 }
 
 test('page templates keep one responsive gutter and the intended wide-screen shape', async ({ page }) => {
@@ -136,7 +143,8 @@ test('page templates keep one responsive gutter and the intended wide-screen sha
         for (const route of ROUTES) {
             await test.step(`${viewport.width}px / ${route.name}`, async () => {
                 await openRoute(page, route);
-                const measured = await geometry(page, route.template === 'form');
+                const wideSplit = viewport.width === 1440 && route.wideSplitList;
+                const measured = await geometry(page, route.template === 'form', wideSplit ? route.wideSplitList : null);
 
                 expect(measured.gutter, 'Screen owns the tier gutter')
                     .toBeCloseTo(viewport.gutter, 5);
@@ -149,9 +157,16 @@ test('page templates keep one responsive gutter and the intended wide-screen sha
                 if (route.template === 'list') {
                     expect(measured.firstLeft, 'ListPage starts on the same x as PageHeader')
                         .toBeCloseTo(measured.contentLeft, 5);
-                    if (viewport.width === 1440) {
+                    if (wideSplit) {
+                        expect(measured.scrollbarGutter, 'the split body reserves no scrollbar lane of its own')
+                            .toBe(0);
+                        expect(measured.splitListLane, `${route.wideSplitList} reserves a stable scrollbar gutter`)
+                            .toBeGreaterThan(0);
+                    } else if (viewport.width === 1440) {
                         expect(measured.scrollbarGutter, 'Screen reserves a stable scrollbar gutter')
                             .toBeGreaterThan(0);
+                    }
+                    if (viewport.width === 1440) {
                         expect(measured.firstRight, 'ListPage reaches the scrollbar-side content edge')
                             // The wide split layout rounds this edge to a device pixel, so within half a pixel.
                             .toBeCloseTo(measured.contentRight, 0);

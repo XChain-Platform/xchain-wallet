@@ -1352,7 +1352,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                                         settings={settings}
                                     />
                                 )}
-                                chevron={txOpen ? <Icon.ChevronDownIcon /> : true}
+                                chevron
                             />
                             {txOpen ? (
                                 <div className={batchStyles.txBody}>
@@ -1399,7 +1399,7 @@ export function BatchComposerForm({ walletId, onBack, hasDexSurface = true }) {
                                                             )}
                                                             title={sentence.title}
                                                             subtitle={sentence.subtitle || null}
-                                                            chevron={open ? <Icon.ChevronDownIcon /> : true}
+                                                            chevron
                                                         />
                                                         {open ? (
                                                             <div className={batchStyles.editor}>

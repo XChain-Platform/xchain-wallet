@@ -7,6 +7,9 @@
 // thirds as wide as the content lane, centred on it, with the checkbox and
 // Accept and continue directly under the card, a short landscape phone
 // 844px wide included. Below 834px the terms still fill the full lane width.
+// Accept and continue stays a compact button sized to its one-line label at
+// every width; it never stretches across a phone lane (operator ruling
+// 2026-11-18: the full-width phone Accept was rejected).
 
 import { expect, test } from '../../fixtures/wallet.js';
 
@@ -36,6 +39,18 @@ async function measure(page) {
         const accept = [...element.querySelectorAll('button')].find((b) => /Accept and continue/i.test(b.textContent));
         const paragraphs = terms.querySelectorAll('p');
         const box = (node) => node.getBoundingClientRect();
+        // Lines of the label text only: the leading icon is not a text line.
+        const labelTops = [];
+        const walker = document.createTreeWalker(accept, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            if (!node.textContent.trim()) continue;
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            for (const rect of range.getClientRects()) {
+                if (rect.width > 0 && rect.height > 0) labelTops.push(Math.round(rect.top));
+            }
+        }
+        const acceptLabelLines = new Set(labelTops).size;
         const style = getComputedStyle(terms);
         const main = document.getElementById('xc-main');
         const mainStyle = getComputedStyle(main);
@@ -69,6 +84,7 @@ async function measure(page) {
             acceptLeft: box(accept).left,
             acceptRight: box(accept).right,
             acceptWidth: box(accept).width,
+            acceptLabelLines,
             paddingLeft: Number.parseFloat(style.paddingLeft),
             paddingRight: Number.parseFloat(style.paddingRight),
             paddingTop: Number.parseFloat(style.paddingTop),
@@ -130,11 +146,16 @@ for (const viewport of WIDE) {
     });
 }
 
-test('license Accept spans the full phone width at 390x844', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/');
-    const layout = await measure(page);
-    const laneWidth = layout.laneRight - layout.laneLeft;
-    expect(Math.abs(layout.acceptWidth - laneWidth), 'Accept spans the content lane').toBeLessThanOrEqual(1);
-    expect(Math.abs(layout.acceptLeft - layout.laneLeft), 'Accept starts on the lane edge').toBeLessThanOrEqual(1);
-});
+for (const viewport of NARROW) {
+    test(`license Accept stays compact on one line at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+        await page.setViewportSize(viewport);
+        await page.goto('/');
+        const layout = await measure(page);
+        const laneWidth = layout.laneRight - layout.laneLeft;
+        expect(layout.acceptWidth, 'Accept is sized to its label, not stretched across the lane')
+            .toBeLessThanOrEqual(laneWidth * 0.75);
+        expect(layout.acceptLabelLines, 'Accept label sits on one line').toBe(1);
+        expect(layout.acceptLeft, 'Accept starts inside the content lane').toBeGreaterThanOrEqual(layout.laneLeft - 1);
+        expect(layout.acceptRight, 'Accept ends inside the content lane').toBeLessThanOrEqual(layout.laneRight + 1);
+    });
+}
