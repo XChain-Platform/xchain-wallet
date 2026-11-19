@@ -18,15 +18,39 @@ import { enterDemoWallet } from '../fixtures/responsive.js';
 // the test's own output directory.
 const OUT_ROOT = process.env.FIELD_OUT || '';
 
+// The big amounts on the Quick Give/Get cards (G31) are borderless and
+// transparent by operator sign-off (fe2bc59bb); the card's own 1px border
+// frames each one. As in form-fields-visible-borders.spec.js (bc5edd3fe), a
+// field stands in on its card only while it draws no border or shadow of its
+// own and the card draws a border on every side. Create dispenser names its
+// cards per fill. CARD_FRAMED pins the exemption to those two amounts, so any
+// other field that loses its tokens (the Escrow amount in the same card
+// included) still fails.
+const GIVE_GET_CARDS = ['You give', 'You get', 'You give per fill', 'You get per fill'];
+const CARD_FRAMED = {
+    'page-Create dispenser': ['You get per fill: Trigger price (BTC)', 'You give per fill: Give amount per fill'],
+};
+
 /** Runs in the page: computed style of every visible field. */
-function readFields() {
+function readFields(cardNames) {
     const out = [];
+    const sides = ['Top', 'Right', 'Bottom', 'Left'];
+    const shadowIsVisible = (value) => value !== 'none'
+        && value.split(/,(?![^()]*\))/).some((layer) => !/\btransparent\b/i.test(layer)
+            && !/rgba\([^)]*,\s*0\)/i.test(layer));
     document.activeElement?.blur?.();
     const sel = 'input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=range]):not([type=file]), select, textarea';
     for (const el of document.querySelectorAll(sel)) {
         const r = el.getBoundingClientRect();
         if (r.width < 8 || r.height < 8) continue;
         const cs = getComputedStyle(el);
+        const selfOutlined = sides.some((side) => parseFloat(cs[`border${side}Width`]) >= 1)
+            || shadowIsVisible(cs.boxShadow);
+        const card = el.closest(cardNames.map((name) => `section[aria-label="${name}"]`).join(', '));
+        const cardStyle = card ? getComputedStyle(card) : null;
+        const cardFramed = !selfOutlined && Boolean(cardStyle)
+            && sides.every((side) => parseFloat(cardStyle[`border${side}Width`]) >= 1
+                && cardStyle[`border${side}Style`] !== 'none');
         out.push({
             el: `${el.tagName.toLowerCase()}${el.type ? `[${el.type}]` : ''}#${el.id || ''} "${(el.getAttribute('aria-label') || el.name || el.placeholder || '').slice(0, 30)}"`,
             disabled: el.disabled || el.getAttribute('aria-disabled') === 'true',
@@ -35,6 +59,7 @@ function readFields() {
             border: cs.borderTopColor,
             borderWidth: cs.borderTopWidth,
             radius: cs.borderTopLeftRadius,
+            framedBy: cardFramed ? `${card.getAttribute('aria-label')}: ${el.getAttribute('aria-label') || ''}` : undefined,
         });
     }
     return out;
@@ -58,7 +83,7 @@ test('dark mode fields share the field tokens', async ({ page }, testInfo) => {
     const snap = async (label) => {
         await page.mouse.move(1, 1);
         await page.waitForTimeout(400);
-        screens[label] = await page.evaluate(readFields);
+        screens[label] = await page.evaluate(readFields, GIVE_GET_CARDS);
         await page.screenshot({ path: join(outDir, `${label.replace(/[^a-z0-9]+/gi, '-')}.png`) });
     };
 
@@ -151,10 +176,14 @@ test('dark mode fields share the field tokens', async ({ page }, testInfo) => {
         return r;
     }, disabled);
     const key = (f) => `${f.bg}|${f.border}|${f.radius}`;
+    const framed = Object.fromEntries(Object.entries(screens)
+        .map(([label, fs]) => [label, fs.filter((f) => f.framedBy).map((f) => f.framedBy).sort()])
+        .filter(([, list]) => list.length));
+    expect(framed, 'fields framed by a Give/Get card instead of their own field tokens').toEqual(CARD_FRAMED);
     const mismatches = [];
     for (const state of [false, true]) {
         const expected = await expectedFor(state);
-        const all = Object.entries(screens).flatMap(([label, fs]) => fs.filter((f) => !f.error && f.disabled === state && !f.readOnly)
+        const all = Object.entries(screens).flatMap(([label, fs]) => fs.filter((f) => !f.error && f.disabled === state && !f.readOnly && !f.framedBy)
             .map((f) => ({ label, ...f })));
         for (const f of all) if (key(f) !== expected) mismatches.push(`${state ? 'disabled' : 'enabled'} ${f.label} ${f.el}: ${key(f)} (expected ${expected})`);
     }

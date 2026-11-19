@@ -90,4 +90,25 @@ describe('<ListRow>', () => {
         expect(historyCss).not.toContain('var(--xc-shadow-nav-indicator)');
         expect(css).not.toContain('var(--xc-page-gutter)');
     });
+
+    // G21: an expandable row's chevron points right while closed and down while
+    // open. The slot shows only the middle third of a 32px box, so a down glyph
+    // drawn in it loses its arms; the open state turns the whole clipped box.
+    it('turns the standard chevron down on an open expandable row instead of drawing a down glyph in the slot', () => {
+        const css = readFileSync('packages/core/src/ui/ListRow.module.css', 'utf8');
+        expect(css).toMatch(/\.interactive\[aria-expanded='true'\]\s*>\s*\.chevron\s*\{[^}]*transform:\s*rotate\(90deg\)/s);
+        expect(css).toMatch(/\[dir='rtl'\]\)\s*\.interactive\[aria-expanded='true'\]\s*>\s*\.chevron\s*\{[^}]*transform:\s*rotate\(-90deg\)/s);
+
+        render(<ListRow title="Transaction 1" chevron aria-expanded onClick={() => {}} />);
+        const row = screen.getByRole('button', { name: 'Transaction 1' });
+        expect(row).toHaveAttribute('aria-expanded', 'true');
+        expect(row.querySelector('svg path')).toHaveAttribute('d', 'm9 18 6-6-6-6');
+
+        for (const file of [
+            'packages/core/src/shared/routes/BatchComposerForm.jsx',
+            'packages/core/src/shared/components/MultiSendRecipients.jsx',
+        ]) {
+            expect(readFileSync(file, 'utf8'), file).not.toMatch(/chevron=\{[^}]*ChevronDownIcon/);
+        }
+    });
 });

@@ -64,6 +64,9 @@ for (const { name, viewport } of VIEWPORTS) {
             onResult: (result) => screens.push(result),
         });
         await page.goto('/');
+        // Measure the carousel, not the boot splash before it.
+        await page.getByRole('button', { name: 'Skip' }).or(page.getByRole('button', { name: 'Create new wallet' }))
+            .first().waitFor({ state: 'visible', timeout: 60_000 });
         await sweep.measure('onboarding: intro carousel');
         await dismissIntroCarousel(page);
         await sweep.measure('onboarding: welcome');

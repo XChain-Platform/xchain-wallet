@@ -307,6 +307,13 @@ async function placeAndApprove(utils) {
 }
 
 describe('CrossChainOrderForm', () => {
+    // U18: the page is titled Cross-Chain Order, so its main section is titled
+    // Order, as Create Order's is, rather than repeating the page title.
+    it('titles the main section Order, not the page title again', async () => {
+        const { utils } = await mount({ initialChainId: DOGE });
+        expect(utils.container.querySelector('[data-form-section="order"] [data-form-section-title]')).toHaveTextContent(/^Order$/);
+    });
+
     it('uses field help, memo label state, and no standalone order-fill disclosure', async () => {
         const { utils } = await mount({ initialChainId: DOGE });
         // Full shows every field; From and Order Terms are closed sections.

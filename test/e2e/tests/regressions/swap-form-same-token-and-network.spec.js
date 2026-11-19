@@ -6,11 +6,15 @@
 // Swap tokens on the dev mock: the same token on both sides is refused before
 // any review is prepared, and a network change starts the chain-scoped terms
 // over so a token, amount or list picked on one chain never reaches another.
+// The asset decides the network (ruling G31): once a token is picked the
+// Network field is locked, so the network changes by picking a give token on
+// another chain, which moves the swap there and clears the rest.
 
 import { createWallet, expect, openPaletteCommand, revealChainPicker, test } from '../../fixtures/wallet.js';
 import { selectNamedToken } from '../../fixtures/crossChain.js';
 
 const BTC = { chainId: 'bitcoin-mainnet', chainLabel: 'Bitcoin' };
+const LTC = { chainId: 'litecoin-mainnet', chainLabel: 'Litecoin' };
 
 async function pickNetwork(main, name, ticker) {
     const trigger = main.getByRole('button', { name: /^Network:/ });
@@ -41,8 +45,12 @@ test('refuses the same token on both sides and clears terms on a network change'
     await expect(main.getByText('Give and get tickers must differ.')).toHaveCount(0);
     await main.getByRole('textbox', { name: /^Get amount/ }).fill('3');
 
-    await pickNetwork(main, 'Litecoin', 'LTC');
-    await expect(main.getByRole('button', { name: /^Give token:/ })).toHaveAccessibleName(/^Give token:\s*Select a token/);
+    const network = main.getByRole('button', { name: /^Network:/ });
+    await revealChainPicker(main, network, 'Network');
+    await expect(network, 'a picked token holds the swap to its network').toBeDisabled();
+
+    await selectNamedToken(page, 'Give token', { ...LTC, tick: 'LITEGEM' });
+    await expect(network).toHaveAttribute('aria-label', 'Network: Litecoin');
     await expect(main.getByRole('button', { name: /^Get token:/ })).toHaveAccessibleName(/^Get token:\s*Select a token/);
     await expect(main.getByRole('textbox', { name: /^Give amount/ })).toHaveValue('');
     await expect(main.getByRole('textbox', { name: /^Get amount/ })).toHaveValue('');

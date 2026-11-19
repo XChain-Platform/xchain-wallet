@@ -5,13 +5,6 @@
     margin-bottom: var(--xc-space-2);
 }
 
-/* On a wide screen the tabs and the list card keep one readable column in the middle. */
-.browse,
-.resultGroup {
-    max-width: 760px;
-    margin-inline: auto;
-}
-
 /* The toggle is the first thing under the header, so the page's own 8px gap
    (ListPage) is the only space above it. */
 .browse {
