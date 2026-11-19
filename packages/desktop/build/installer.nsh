@@ -69,16 +69,19 @@
 ; price is that defining it replaces the template's own check of the old
 ; uninstaller's result, so that check is restated below unchanged.
 ;
-; WHEN IT MOVES THE FOLDER. Only for a fresh per-machine install on a
-; native arm64 machine still aimed at the template's default: no
-; per-machine InstallLocation was stored and $INSTDIR is exactly
-; `$PROGRAMFILES\${APP_FILENAME}`. An existing install, including a
-; v0.343.0 one in Program Files (x86), keeps its stored InstallLocation:
-; moving a live install would strand the user's pinned shortcuts and any
-; path a tool recorded, for a cosmetic gain. A /D= path is left alone
-; too. The interactive directory page still shows the x86 default before
-; this runs (no hook exists between the mode page and that page); the
-; files land in Program Files either way.
+; WHEN IT MOVES THE FOLDER. Only in the arm64 installer (the x64 one
+; compiles none of this), only for a fresh per-machine install on a
+; native arm64 machine, and only when $INSTDIR is still exactly the
+; template's default, `$PROGRAMFILES\${APP_FILENAME}`. A folder the user
+; chose is never moved: no /D= on the command line (the template copies
+; /D= into $INSTDIR, so without this test a /D= naming the x86 default
+; would be moved too), and on the interactive directory page any folder
+; other than the default. An existing install, including a v0.343.0 one
+; in Program Files (x86), keeps its stored InstallLocation: moving a live
+; install would strand the user's pinned shortcuts and any path a tool
+; recorded, for a cosmetic gain. The interactive directory page still
+; shows the x86 default before this runs (no hook exists between the mode
+; page and that page); left as shown, the files land in Program Files.
 !macro customUnInstallCheck
   Var /GLOBAL xcOldUninstallerFailedToLaunch
   StrCpy $xcOldUninstallerFailedToLaunch "0"
@@ -87,7 +90,12 @@
 
   !ifdef APP_ARM64
     !ifndef APP_64
+      ; multiUser.nsh's own /D= reader; it saves and restores $R5 to $R9,
+      ; and $R0 (the old uninstaller's exit code, read below) is untouched.
+      Var /GLOBAL xcInstallDirArg
+      !insertmacro GetDParameter $xcInstallDirArg
       ${if} $installMode == "all"
+      ${andIf} $xcInstallDirArg == ""
       ${andIf} $perMachineInstallationFolder == ""
       ${andIf} $INSTDIR == "$PROGRAMFILES\${APP_FILENAME}"
       ${andIf} ${IsNativeARM64}

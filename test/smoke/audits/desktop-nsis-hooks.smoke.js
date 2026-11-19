@@ -20,7 +20,8 @@
 //     existing user's icons blank. customInstall rewrites them.
 //   - An arm64 all-users install went to Program Files (x86), because
 //     multiUser.nsh picks $PROGRAMFILES64 only under APP_64.
-//     customUnInstallCheck moves a fresh one to Program Files.
+//     customUnInstallCheck moves a fresh one still aimed at the default
+//     folder to Program Files; a /D= or other chosen folder stays put.
 //   - Uninstall left HKCU\Software\Classes\xchain pointing at a deleted exe.
 //     customUnInstall removes the handlers this install registered: a
 //     scheme key whose open command starts with the install folder, and
@@ -91,8 +92,15 @@ assert.match(install, /SHChangeNotify\(i 0x8000000, i 0, i 0, i 0\)/,
 const check = macroBody('customUnInstallCheck');
 assert.match(check, /!ifdef APP_ARM64[\s\S]*!ifndef APP_64/,
     'the Program Files move is compiled into the arm64-only installer alone');
+// A folder the user chose is never moved: the template copies /D= into
+// $INSTDIR, so a /D= naming the x86 default would otherwise look like it.
+assert.match(check, /!insertmacro GetDParameter \$xcInstallDirArg[\s\S]*\$\{andIf\} \$xcInstallDirArg == ""/,
+    'the Program Files move reads /D= and is skipped whenever one was given');
+assert.ok(!/\$R0\b/.test(check.slice(0, check.indexOf('${IsNativeARM64}'))),
+    'the move leaves $R0 (the old uninstaller\'s exit code) alone');
 for (const cond of [
     '$installMode == "all"',
+    '$xcInstallDirArg == ""',
     '$perMachineInstallationFolder == ""',
     '$INSTDIR == "$PROGRAMFILES\\${APP_FILENAME}"',
     '${IsNativeARM64}',
@@ -183,11 +191,18 @@ if (tpl && existsSync(join(tpl, 'installSection.nsh'))) {
         'uninstallOldVersion still passes --updated to the old uninstaller');
 
     const multi = read('multiUser.nsh');
+    const installerNsi = read('installer.nsi');
     assert.match(multi, /StrCpy \$0 "\$PROGRAMFILES"\s*!ifdef APP_64\s*\$\{if\} \$\{RunningX64\}\s*StrCpy \$0 "\$PROGRAMFILES64"/,
         'multiUser.nsh still picks $PROGRAMFILES64 under APP_64 only (if upstream fixed arm64, '
         + 'customUnInstallCheck\'s move can go)');
     assert.match(multi, /ReadRegStr \$perMachineInstallationFolder HKLM "\$\{INSTALL_REGISTRY_KEY\}" InstallLocation/,
         'setInstallModePerAllUsers still reads the stored per-machine location into $perMachineInstallationFolder');
+    assert.match(multi, /^!macro GetDParameter outVar\b[\s\S]*?Push \$R5[\s\S]*?StrCpy \$\{outVar\} \$R9\s*Pop \$R5[\s\S]*?!macroend/m,
+        'multiUser.nsh still defines GetDParameter, saving the registers it uses');
+    assert.match(multi, /!insertmacro GetDParameter \$R0\s*\$\{If\} \$R0 != ""\s*StrCpy \$INSTDIR \$R0/,
+        'the template still copies a /D= path into $INSTDIR (why customUnInstallCheck reads it)');
+    assert.ok(installerNsi.indexOf('!include "multiUser.nsh"') < installerNsi.indexOf('!include "installUtil.nsh"'),
+        'GetDParameter is defined before installUtil.nsh expands customUnInstallCheck');
 
     const uninst = read('uninstaller.nsh');
     assert.ok(uninst.indexOf('!insertmacro customUnInstall') > uninst.indexOf('!insertmacro setLinkVars'),
