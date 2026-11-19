@@ -11,6 +11,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { AttachContentForm } from '../../../packages/core/src/shared/routes/AttachContentForm.jsx';
 import { GatedPublishForm } from '../../../packages/core/src/shared/routes/GatedPublishForm.jsx';
 import { PublishFileForm } from '../../../packages/core/src/shared/routes/PublishFileForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 import { publishWalletModes, resetWalletModes } from '../../../packages/core/src/shared/hooks/useWalletMode.js';
 import { maxPublicFileBytes } from '../../../packages/core/src/flows/fileSizeLimits.js';
 import { formatBytes } from '../../../packages/core/src/shared/utils/formatBytes.js';
@@ -84,21 +85,23 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     resetWalletModes();
+    __clearTokenInfoCache();
     globalThis.FileReader = originalFileReader;
 });
 
 describe('publish forms replace file state safely', () => {
     it('refuses gated publishing before review when the issuer is unknown', async () => {
         const client = messaging();
+        client.getTokenInfo = vi.fn().mockResolvedValue({ chainId: CHAIN, tick: 'GATE', loadError: true });
         mount(
             <GatedPublishForm walletId="w" chainId={CHAIN} tick="GATE" issuerAddress={null} onBack={() => {}} />,
             client,
         );
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
-        );
-        expect(screen.getByRole('button', { name: 'Publish File' })).toBeDisabled();
+        // The owner read settles after mount, so the wait is on the text.
+        await waitFor(() => expect(screen.getAllByText("The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.").length).toBeGreaterThan(0));
+        // G130: the button keeps its colour and a tap is refused at the top.
+        expect(screen.getByRole('button', { name: 'Publish File' })).toBeEnabled();
         expect(client.buildActionPsbtRequest).not.toHaveBeenCalled();
     });
 

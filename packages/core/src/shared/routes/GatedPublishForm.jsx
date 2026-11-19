@@ -35,6 +35,8 @@ import { imagePreviewDataUrl, publishFileType } from '../utils/publishingFile.js
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { actionTextSafetyError } from '../utils/actionTextSafety.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { OwnAddressPickerScreen } from '../components/OwnAddressPickerScreen.jsx';
 import { TokenField } from '../components/TokenField.jsx';
 import { TokenPicker } from './TokenPicker.jsx';
@@ -165,6 +167,11 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
     const [selectedChainId, setSelectedChainId] = useState(chainId);
     const [gateTick, setGateTick] = useState(tick);
     const [gateOwnerAddress, setGateOwnerAddress] = useState(issuerAddress);
+    // The token page hands over the owner it resolved, but a tap on its row
+    // can land before that read does, so with no owner handed over the form
+    // reads the token record itself (null while the read is in flight).
+    const ownerRecord = useTokenInfo({ chainId: selectedChainId, tick: gateTick, skip: !!gateOwnerAddress || !gateTick });
+    const ownerAddress = gateOwnerAddress || ownerRecord?.creator || null;
     const [fromOverrideId, setFromOverrideId] = useState(/** @type {string | null} */ (null));
     const [fromPickerOpen, setFromPickerOpen] = useState(false);
     const [gateTokenPickerOpen, setGateTokenPickerOpen] = useState(false);
@@ -366,14 +373,14 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
         const onChain = addressesByChain[selectedChainId] || [];
         const override = fromOverrideId ? onChain.find((a) => a.id === fromOverrideId) : null;
         if (override) return override;
-        if (gateOwnerAddress) return onChain.find((a) => a.address === gateOwnerAddress) || null;
+        if (ownerAddress) return onChain.find((a) => a.address === ownerAddress) || null;
         return onChain[0] || null;
-    }, [addressesByChain, selectedChainId, fromOverrideId, gateOwnerAddress]);
+    }, [addressesByChain, selectedChainId, fromOverrideId, ownerAddress]);
     // Ownership is judged once a gate token is picked; before that the
     // missing token is the refusal, not an unknown owner.
     const issuerEligibility = gateTick
         ? tokenIssuerEligibility({
-            tokenInfo: { creator: gateOwnerAddress },
+            tokenInfo: gateOwnerAddress ? { creator: gateOwnerAddress } : ownerRecord,
             addressesByChain,
             chainId: selectedChainId,
             tick: gateTick,
@@ -612,9 +619,16 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
 
     function formReviewProblem(thresholdValue) {
         if (issuerEligibility.pending) {
+            // A tick read before it was issued can sit cached as unknown, so
+            // the refused tap asks again.
+            if (!gateOwnerAddress) invalidateTokenInfo(selectedChainId, gateTick);
             return ['from', `Wait for the wallet to verify the current owner of ${gateTick}.`];
         }
-        if (issuerEligibility.error) return ['from', issuerEligibility.error];
+        if (issuerEligibility.error) {
+            // A failed owner read is asked again, so a later tap can pass.
+            if (ownerRecord?.loadError) invalidateTokenInfo(selectedChainId, gateTick);
+            return ['from', issuerEligibility.error];
+        }
         if (!fileMeta) return ['file', 'Pick a file first.'];
         if (!fromAddress) {
             return ['from', ownerMissing
@@ -1109,8 +1123,9 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 <FormAction
                     icon={isWatcherMode ? <PlusIcon /> : <UploadIcon />}
                     loading={stage === 'submitting' || multipartUpload.running}
-                    disabled={issuerEligibility.pending || !!issuerEligibility.error
-                        || multipartUpload.running}
+                    // G130: an owner still being checked or not confirmed is
+                    // refused at the top of the review handler.
+                    disabled={multipartUpload.running}
                 >
                     {/* Title Case action label; the palette keeps its own
                         sentence-case string, so the button recases it. */}
