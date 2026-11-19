@@ -759,6 +759,14 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             refuse('artwork', 'Pick a file first.');
             return;
         }
+        // G130: the multi-part quote holds the review by refusal, never by a
+        // disabled button. With no fee rate the quote can never start, so
+        // that reads as failed, not as an endless wait.
+        if (!multipartMethod.ready) {
+            const quoteFailed = !!multipartMethod.error || multipartRate === null;
+            refuse('artwork', t(quoteFailed ? 'publishFile.quote.failed' : 'publishFile.quote.wait'));
+            return;
+        }
         if (!fileParams?.NAME) {
             refuse('artwork', 'The file name cannot be empty. Rename the file and choose it again.');
             return;
@@ -1382,10 +1390,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                     icon={<Icon.UploadIcon />}
                     loading={genesisRefreshing}
                     // G130: an owner still being checked or not confirmed is
-                    // refused at the top of the review handler. A file held
-                    // by reference (bytes null) still waits for its
-                    // multi-part quote, so the review can name it.
-                    disabled={!multipartMethod.ready}
+                    // refused at the top of the review handler, as is a
+                    // multi-part quote that is not ready.
                 >
                     Attach Artwork
                 </FormAction>

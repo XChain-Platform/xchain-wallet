@@ -27,6 +27,8 @@ const messages = {
     'publishFile.fileTooLarge': 'That file is {size}; with this metadata the on-chain ceiling is {cap}.',
     'publishFile.metadataTooLarge': 'With this title/memo the on-chain ceiling is {cap} and the file is {size}. Shorten the title or memo.',
     'publishFile.pickFile': 'Pick a file first.',
+    'publishFile.quote.wait': 'Wait for the wallet to work out the parts and the fee.',
+    'publishFile.quote.failed': "The wallet couldn't work out the parts and the fee. Choose the file again.",
     'publishFile.noSigner': 'No signing address available on this network.',
     'publishFile.badCharacters': "File name, title, and memo can't contain | or ; characters.",
     'publishFile.signOnConfirm': 'Publishing is signed on the confirm screen. Go back and select Publish File again.',

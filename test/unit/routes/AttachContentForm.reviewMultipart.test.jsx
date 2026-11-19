@@ -14,7 +14,7 @@ import { MessagingProvider } from '../../../packages/core/src/shared/MessagingPr
 import { AttachContentForm } from '../../../packages/core/src/shared/routes/AttachContentForm.jsx';
 
 // Each quote waits on a gate the test opens, so the pending window is real.
-const quoteGate = vi.hoisted(() => ({ held: false, release: null, waiting: null }));
+const quoteGate = vi.hoisted(() => ({ held: false, fail: false, release: null, waiting: null }));
 
 vi.mock('../../../packages/core/src/flows/multipartQuotePreview.js', async (importOriginal) => {
     const actual = await importOriginal();
@@ -22,6 +22,7 @@ vi.mock('../../../packages/core/src/flows/multipartQuotePreview.js', async (impo
         ...actual,
         previewMultipartQuotes: vi.fn(async (args) => {
             if (quoteGate.held) await quoteGate.waiting;
+            if (quoteGate.fail) throw new Error('quote failed');
             return actual.previewMultipartQuotes(args);
         }),
     };
@@ -91,6 +92,7 @@ afterEach(() => {
     cleanup();
     quoteGate.release?.();
     quoteGate.held = false;
+    quoteGate.fail = false;
     quoteGate.release = null;
     quoteGate.waiting = null;
 });
@@ -116,23 +118,37 @@ describe('Attach artwork review of a multi-part upload', () => {
         expect(within(form).getByTestId('review-upload-fee')).toHaveTextContent(`${fee} BTC`);
     });
 
-    it('keeps Attach Artwork disabled until the multi-part quote resolves', async () => {
+    it('refuses a tap until the multi-part quote resolves, with the button kept enabled', async () => {
         holdQuotes();
         mount(clientFor());
         await pickByReference();
         await screen.findAllByText('Working out the parts and the fee.');
         const attach = screen.getByRole('button', { name: 'Attach Artwork' });
-        expect(attach).toBeDisabled();
+        // G130: the button keeps its colour; the tap is refused at the top.
+        expect(attach).toBeEnabled();
         fireEvent.click(attach);
+        await waitFor(() => expect(screen.getAllByText('Wait for the wallet to work out the parts and the fee.').length).toBeGreaterThan(0));
         expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
 
         quoteGate.release();
         await screen.findAllByText(/\d+ parts, \d+ transactions/);
-        await waitFor(() => expect(attach).toBeEnabled());
         fireEvent.click(attach);
         const form = await screen.findByRole('form', { name: 'Review artwork upload' });
         expect(within(form).getByTestId('review-upload-method'))
             .toHaveTextContent(/^Taproot upload, \d+ parts, \d+ transactions$/);
         expect(within(form).getByTestId('review-upload-fee')).toHaveTextContent(/^[\d.]+ BTC$/);
+    });
+
+    it('answers a tap after a failed quote with the choose-again refusal', async () => {
+        quoteGate.fail = true;
+        mount(clientFor());
+        await pickByReference();
+        const attach = screen.getByRole('button', { name: 'Attach Artwork' });
+        expect(attach).toBeEnabled();
+        // The failed quote has settled before the tap.
+        await waitFor(() => expect(document.querySelector('[data-upload-fee="taproot"]')?.textContent || '').not.toMatch(/[\d.]+ BTC/));
+        fireEvent.click(attach);
+        await waitFor(() => expect(screen.getAllByText("The wallet couldn't work out the parts and the fee. Choose the file again.").length).toBeGreaterThan(0));
+        expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
     });
 });
