@@ -1320,7 +1320,7 @@ export function CrossChainSwapForm({ walletId, onBack }) {
             {/* The main section, open, holds both sides in either view. */}
             <FormSection
                 id="swap"
-                title="Cross-Chain Swap"
+                title="Swap"
                 icon={Icon.SwapIcon}
                 {...bind('swap')}
                 revealKey={revealOn(swapHasError)}

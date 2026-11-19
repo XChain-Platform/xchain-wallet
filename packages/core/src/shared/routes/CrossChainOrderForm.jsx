@@ -1134,7 +1134,7 @@ export function CrossChainOrderForm({ walletId, onBack, initialChainId, initialF
             {/* The main section, open, holds both sides in either view. */}
             <FormSection
                 id="order"
-                title="Cross-Chain Order"
+                title="Order"
                 icon={Icon.MarketIcon}
                 {...bind('order')}
                 revealKey={revealOn(orderHasError)}

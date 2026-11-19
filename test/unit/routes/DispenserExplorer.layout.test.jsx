@@ -173,4 +173,14 @@ describe('DispenserExplorer browse layout', () => {
         expect(screen.getAllByRole('tabpanel')).toHaveLength(1);
         await waitFor(() => expect(screen.getAllByTestId('dispenser-result-facts').length).toBe(popular.length));
     });
+
+    // U02: the tabs and the list card fill the page content width at every
+    // width, as on the other list pages, rather than a centred column.
+    it('lets the tabs and the list card fill the content width', () => {
+        const css = readCss('packages/core/src/shared/routes/DispenserExplorer.module.css');
+        for (const selector of ['.browse', '.resultGroup']) {
+            expect(ruleBody(css, selector), selector).not.toMatch(/max-width|margin-inline/);
+        }
+        expect(css).not.toMatch(/max-width:\s*760px/);
+    });
 });

@@ -457,7 +457,9 @@ assert.ok(!SIGNING_SECRET.test(ci),
 // workflow is the only thing standing between the release gate and 29 red
 // smokes on every master commit. Each assertion below pins one thing that has
 // to stay true for the docs-coupled smokes to actually RUN.
-const testJob = ci.slice(ci.indexOf('\n  test:'), ci.indexOf('\n  build:'));
+// The gate runs in the `test-shard` legs; `test` is only their aggregator.
+const testJob = ci.slice(ci.indexOf('\n  test-shard:'), ci.indexOf('\n  build:'));
+assert.ok(ci.indexOf('\n  test-shard:') >= 0, 'ci.yml has no `test-shard` job running the test gate');
 
 // The checkout itself, and it must be UNCONDITIONAL. It used to be gated on
 // an XCHAIN_DOCS_READ_KEY deploy key because the docs repo was private; the

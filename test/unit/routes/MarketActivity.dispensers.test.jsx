@@ -128,10 +128,12 @@ describe('Marketplace on explorer-shaped rows', () => {
             getOrderbook: vi.fn().mockResolvedValue({ data: [] }),
             getMarketHistory: vi.fn().mockResolvedValue({ data: [] }),
         });
-        const row = await screen.findByRole('button', { name: /^Sell: .*Order/ });
+        const row = await screen.findByRole('button', { name: /^Sell: .*, Buy order/ });
         const price = row.querySelector('[data-offer-price]');
         expect(price.getAttribute('data-side')).toBe('sell');
-        expect(within(row).getByText('Order')).toBeInTheDocument();
+        // An order wanting the token is a Buy order; the bare word Order never titles a row.
+        expect(within(row).getByText('Buy order')).toBeInTheDocument();
+        expect(within(row).queryByText('Order')).toBeNull();
         expect(row.querySelector('button')).toBeNull();
         fireEvent.click(row);
         // The Trade page replaces the Offers list in place.
@@ -201,6 +203,8 @@ describe('Marketplace on explorer-shaped rows', () => {
         await screen.findAllByText('BTC each');
         expect(offerPrices()).toContain('0.0004BTC each');
         expect(screen.getByText('10 XCHAIN for sale')).toBeInTheDocument();
+        // An order selling the token is a Sell order.
+        expect(screen.getByText('Sell order')).toBeInTheDocument();
         expect(messaging.getOrderDetail).not.toHaveBeenCalled();
         expect(screen.queryByText(/99 XCHAIN/)).toBeNull();
     });

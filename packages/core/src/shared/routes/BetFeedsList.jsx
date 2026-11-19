@@ -558,6 +558,15 @@ export function BetFeedsList({
     const showPanel = twoPanel;
     if (showPanel) {
         const fallback = <div role="status" aria-label="Loading market detail">Loading market…</div>;
+        // With nothing picked, the detail loads only while the list does; once
+        // the list has answered it says to pick a market, as Dispensers does.
+        const detailPending = (!liveRows || betsPending) && !error;
+        const detailEmpty = (
+            <EmptyState
+                title="Select a prediction market"
+                body="Choose a prediction market from the list to see its details."
+            />
+        );
         return (
             <Screen variant={variant} header={header} bodyClassName={listDetailStyles.twoPanelBody}>
                 <ListDetailSplit
@@ -570,13 +579,13 @@ export function BetFeedsList({
                     list={listPage}
                     listLabel="Prediction markets"
                     detailLabel={shownMarket?.label || 'Prediction market'}
-                    detailBusy={!shownRef}
+                    detailBusy={!shownRef && detailPending}
                     detailFallback={fallback}
                     detail={shownRef ? (
                         <Fragment key={`${shownRef.chainId}:${shownRef.feedIndex}`}>
                             {renderMarket(shownRef)}
                         </Fragment>
-                    ) : fallback}
+                    ) : detailPending ? fallback : detailEmpty}
                 />
             </Screen>
         );
