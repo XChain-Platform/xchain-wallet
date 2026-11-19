@@ -20,6 +20,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, act as domAct, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
+import { slowTimeout } from '../../helpers/testEnvSpeed.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { PublishFileForm } from '../../../packages/core/src/shared/routes/PublishFileForm.jsx';
 import { composeForConfirm } from '../../../packages/core/src/flows/composeForConfirm.js';
@@ -168,7 +169,7 @@ async function pickFile(utils, size = FILE_BYTES) {
 }
 
 async function publishAndApprove(utils) {
-    await waitFor(() => expect(utils.getByRole('button', { name: 'Publish File' }).disabled).toBe(false));
+    await waitFor(() => expect(utils.getByRole('button', { name: 'Publish File' }).disabled).toBe(false), WAIT);
     // No acknowledgement checkbox; the confirm screen states the permanence.
     expect(utils.queryByRole('checkbox')).toBeNull();
     await domAct(async () => { fireEvent.click(utils.getByRole('button', { name: 'Publish File' })); await drain(); });
@@ -178,11 +179,16 @@ async function publishAndApprove(utils) {
         const el = utils.getByTestId('confirm-approve');
         expect(el.disabled).toBe(false);
         return el;
-    }, { timeout: 10_000 });
+    }, WAIT);
     expect(utils.getByTestId('confirm-summary-notice').textContent)
         .toBe("Upload method: Taproot upload. The file stays on the blockchain for good and can't be deleted.");
     await domAct(async () => { fireEvent.click(approve); await drain(); });
 }
+
+// Loaded CI venues need well over the default waits for the compose and confirm
+// round trips and for async mounts; scaled so a loaded runner does not outrun them.
+const WAIT = { timeout: slowTimeout(15000) };
+const TEST_TIMEOUT = slowTimeout(60000);
 
 describe('a public file above the legacy cap publishes as a Taproot envelope through the confirm lane', () => {
     beforeEach(() => { localStorage.clear(); });
@@ -192,7 +198,7 @@ describe('a public file above the legacy cap publishes as a Taproot envelope thr
         const utils = await mount(h);
         await pickFile(utils);
         await publishAndApprove(utils);
-        await waitFor(() => expect(h.broadcastTx).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(h.broadcastTx).toHaveBeenCalledTimes(2), WAIT);
 
         const compose = h.calls.find((c) => c.method === 'composeForConfirm');
         expect(compose.req.encoderOpts.encoding).toBe('AUTO');
@@ -221,15 +227,15 @@ describe('a public file above the legacy cap publishes as a Taproot envelope thr
         expect(h.trace[2].pending).toEqual([ENVELOPE.commitTxid]);
         expect(listPendingCommits()).toHaveLength(0);
         // The reveal carries the action, so its txid is the one shown.
-        await waitFor(() => expect(utils.getByText('REVEALTXID')).toBeTruthy());
-    });
+        await waitFor(() => expect(utils.getByText('REVEALTXID')).toBeTruthy(), WAIT);
+    }, TEST_TIMEOUT);
 
     it('holds the commit the confirm screen checks to the address and value the recovery record names', async () => {
         const h = harness();
         const utils = await mount(h);
         await pickFile(utils);
         await publishAndApprove(utils);
-        await waitFor(() => expect(h.broadcastTx).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(h.broadcastTx).toHaveBeenCalledTimes(2), WAIT);
         const composed = await h.createTx.mock.results[0].value;
         expect(composed.encoding).toBe('TAPROOT');
         const direct = await composeForConfirm({
@@ -244,37 +250,37 @@ describe('a public file above the legacy cap publishes as a Taproot envelope thr
         expect(direct.expectedOutputs.addressed).toContainEqual(
             expect.objectContaining({ address: ENVELOPE.commitAddress, value: ENVELOPE.commitValue }));
         expect(direct.expectedOutputs.encoding).toBe('TAPROOT');
-    });
+    }, TEST_TIMEOUT);
 
     it('refuses signing and broadcast when the reveal is lost between compose and Approve', async () => {
         const h = harness({ dropReveal: true });
         const utils = await mount(h);
         await pickFile(utils);
-        await waitFor(() => expect(utils.getByRole('button', { name: 'Publish File' }).disabled).toBe(false));
+        await waitFor(() => expect(utils.getByRole('button', { name: 'Publish File' }).disabled).toBe(false), WAIT);
         await domAct(async () => {
             fireEvent.click(utils.getByRole('button', { name: 'Publish File' }));
             await drain();
         });
-        await waitFor(() => expect(h.calls.some((c) => c.method === 'composeForConfirm')).toBe(true));
-        const approve = await waitFor(() => utils.getByTestId('confirm-approve'), { timeout: 10_000 });
+        await waitFor(() => expect(h.calls.some((c) => c.method === 'composeForConfirm')).toBe(true), WAIT);
+        const approve = await waitFor(() => utils.getByTestId('confirm-approve'), WAIT);
         await domAct(async () => {
             fireEvent.click(approve);
             await drain();
         });
-        await waitFor(() => expect(h.calls.some((c) => c.method === 'fileAction')).toBe(true));
+        await waitFor(() => expect(h.calls.some((c) => c.method === 'fileAction')).toBe(true), WAIT);
 
         expect(h.signPsbt).not.toHaveBeenCalled();
         expect(h.broadcastTx).not.toHaveBeenCalled();
         expect(listPendingCommits()).toHaveLength(0);
-        await waitFor(() => expect(utils.container.textContent).toMatch(/did not\s+arrive with the first/));
+        await waitFor(() => expect(utils.container.textContent).toMatch(/did not\s+arrive with the first/), WAIT);
         expect(utils.container.textContent).not.toMatch(/TAPROOT pair/);
-    });
+    }, TEST_TIMEOUT);
 
     it('keeps a hardware source on the legacy ceiling and never asks for AUTO', async () => {
         const h = harness({ byChain: { [CHAIN]: [TREZOR] } });
         const utils = await mount(h);
         await pickFile(utils);
-        await waitFor(() => expect(utils.container.textContent).toMatch(/on-chain ceiling is/));
+        await waitFor(() => expect(utils.container.textContent).toMatch(/on-chain ceiling is/), WAIT);
         expect(h.calls.some((c) => c.method === 'composeForConfirm')).toBe(false);
-    });
+    }, TEST_TIMEOUT);
 });

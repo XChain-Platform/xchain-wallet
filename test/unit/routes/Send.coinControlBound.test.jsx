@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 
+import { slowTimeout } from '../../helpers/testEnvSpeed.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { COIN_CONTROL_ROW_LIMIT, Send } from '../../../packages/core/src/shared/routes/Send.jsx';
 
@@ -77,13 +78,18 @@ function mount() {
 
 afterEach(() => cleanup());
 
+// Loaded CI venues need well over the default waits for the compose and confirm
+// round trips and for async mounts; scaled so a loaded runner does not outrun them.
+const WAIT = { timeout: slowTimeout(15000) };
+const TEST_TIMEOUT = slowTimeout(60000);
+
 describe('coin control over a very large input set', () => {
     it('lists a bounded window, says so, and Select all still takes every input', async () => {
         mount();
-        fireEvent.change(await screen.findByLabelText(/^To$/), { target: { value: TO } });
+        fireEvent.change(await screen.findByLabelText(/^To$/, undefined, WAIT), { target: { value: TO } });
         fireEvent.change(screen.getByLabelText(/^Amount \(/), { target: { value: '0.001' } });
         fireEvent.click(screen.getByText('Advanced', { selector: '[data-form-section-title]' }));
-        await waitFor(() => expect(screen.getByRole('switch', { name: 'Coin control enabled' })).not.toBeDisabled());
+        await waitFor(() => expect(screen.getByRole('switch', { name: 'Coin control enabled' })).not.toBeDisabled(), WAIT);
         fireEvent.click(screen.getByRole('switch', { name: 'Coin control enabled' }));
 
         expect(screen.getAllByRole('checkbox')).toHaveLength(COIN_CONTROL_ROW_LIMIT);
@@ -92,5 +98,5 @@ describe('coin control over a very large input set', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Select All' }));
         expect(within(screen.getByLabelText('Coin control summary')).getByText('0.025 BTC')).toBeInTheDocument();
-    });
+    }, TEST_TIMEOUT);
 });
