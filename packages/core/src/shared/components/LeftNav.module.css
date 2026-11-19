@@ -73,7 +73,7 @@
 
 /* Width changes animate only once the first frame has painted and never
    during a drag, so a reload paints the saved state in place and the edge
-   tracks the pointer 1:1 (the Prometheus sidebar's sb-anim rule). */
+   tracks the pointer 1:1. */
 .layout[data-xc-side-menu-motion='on'] > .sidebar {
     transition: width 120ms ease-out;
 }
@@ -583,8 +583,8 @@
     border: 0;
 }
 
-/* ── G100 side menu edge: the Prometheus sidebar's chevron tab and resize
-   strip, on the menu's inline-end edge. The edge box is a zero-width grid
+/* G100 side menu edge: the chevron tab and resize strip sit on the menu's
+   inline-end edge. The edge box is a zero-width grid
    item in the menu's cell, pinned to its end, so both controls ride the
    edge at every width and in every state. */
 .sideMenuEdge {

@@ -296,10 +296,9 @@ function inlineSign(el) {
 }
 
 /**
- * G100: the side menu's edge controls, mirrored from the Prometheus
- * dashboard's sidebar (a chevron tab riding the menu's edge that collapses
- * and restores it, and a resize strip on the same edge). The wallet adds the
- * third state and keyboard support: the tab is a real button (Enter/Space
+ * G100: the side menu's edge controls include a chevron tab riding the menu's
+ * edge that collapses and restores it, plus a resize strip on the same edge.
+ * The wallet adds the third state and keyboard support: the tab is a real button (Enter/Space
  * collapses or restores, Left/Right step through collapsed, icons and full),
  * and the strip is a focusable `separator` (Left/Right resize, Shift for
  * larger steps, Home/End to the minimum and maximum, Enter or a double-click
@@ -514,7 +513,7 @@ export function FullLayoutWithNav({ nav, bottomBar, header, notices, children })
     const [defaultWidth, setDefaultWidth] = useState(SIDE_MENU_FALLBACK_WIDTH_PX);
     const [dragExtra, setDragExtra] = useState(/** @type {number | null} */ (null));
     // Transitions switch on only after the first frame, so the saved state
-    // paints in place on load instead of animating in (Prometheus sb-anim).
+    // paints in place on load instead of animating in.
     const [animate, setAnimate] = useState(false);
     const extraCeiling = sideMenuExtraCeiling(layoutWidth, defaultWidth);
     const appliedExtra = menuState === 'full'
