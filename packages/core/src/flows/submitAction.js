@@ -378,6 +378,8 @@ export async function submitAction({
 
     // Set once phase 1 is on the network: submitWithSigner emits these phases only after it lands.
     let phase1Landed = false;
+    // Set the moment the signer is about to be handed bytes; a failure before it signed nothing.
+    let signingStarted = false;
     // The landed commit's txid, kept apart from the record's txid, which a queued reveal overwrites.
     let commitTxid = null;
 
@@ -385,6 +387,7 @@ export async function submitAction({
     // so both fire for every phase.
     const composedOnProgress = async (phase, data) => {
         // Record the landing before any await: most progress calls are not awaited.
+        if (phase === 'signing') signingStarted = true;
         if (phase === 'envelope_revealing' || phase === 'p2sh_spending' || phase === 'waiting') {
             phase1Landed = true;
         }
@@ -650,6 +653,9 @@ export async function submitAction({
             // stamp below can finish the record once the vault opens again.
             if (err && typeof err === 'object') {
                 if (pending) err.pendingTxId = pending.id;
+                // Nothing was signed, so the confirm screen can hand its held
+                // inputs back; the flag crosses the transport beside `code`.
+                if (!signingStarted) err.refusedBeforeSigning = true;
                 if (phase1Landed) {
                     err.commitLanded = true;
                     err.commitTxid = commitTxid;

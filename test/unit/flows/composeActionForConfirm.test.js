@@ -686,6 +686,7 @@ describe('composeActionForConfirm host envelope shape', () => {
     const DROPPED = [
         'encoderOpts',          // ADS-folded build opts; host-side only
         'carrierScripts',       // consumed by the host tamper check
+        'approvedActionString', // consumed by the host envelope reveal check
     ];
 
     function composedActionKeys() {

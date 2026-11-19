@@ -18,6 +18,7 @@
 // the tamper wording.
 
 import { createRequire } from 'node:module';
+import zlib from 'node:zlib';
 import { describe, it, expect, vi } from 'vitest';
 import bitcoin from 'bitcoinjs-lib';
 import {
@@ -67,8 +68,9 @@ const REVEAL = Object.freeze({
 
 // A reveal PSBT whose envelope leaf carries `action`, in the leaf grammar the
 // SDK parses: OP_FALSE OP_IF "XCHN" 0x00 <payload pushes> OP_ENDIF <key> OP_CHECKSIG.
-function revealPsbtCarrying(action) {
-    const payload = bitcoin.script.compile([Buffer.from(action, 'utf8')]);
+function revealPsbtCarrying(action, rawBytes = null) {
+    const payload = bitcoin.script.compile(
+        [Buffer.from(action, 'utf8'), ...(rawBytes === null ? [] : [Buffer.from(rawBytes)])]);
     const pushes = [];
     for (let at = 0; at < payload.length; at += 520) pushes.push(payload.subarray(at, at + 520));
     const script = bitcoin.script.compile([
@@ -88,7 +90,7 @@ function revealPsbtCarrying(action) {
 const realArgs = (revealPsbt) => ({
     commit: COMMIT, reveal: REVEAL, envelope: ENVELOPE, ownAddresses: [SOURCE], actionString: ACTION,
     decodeRevealAction: () => sdk.decoder.decodeActionFromPsbt(revealPsbt),
-    revealPsbt, network: NETWORK,
+    revealPsbt, network: NETWORK, rawData: null,
     assertEnvelopeCarrierBinding: sdk.decoder.assertEnvelopeCarrierBinding,
 });
 
@@ -205,5 +207,129 @@ describe('both signing paths refuse an undecodable reveal honestly', () => {
         });
         expect(run(revealPsbtCarrying(ACTION))).toThrow(HONEST);
         expect(run(revealPsbtCarrying(listAction(ITEMS.slice(1))))).toThrow(MISMATCH);
+    });
+});
+
+// The same reveal check holds the leaf's payload push to the bytes the user
+// handed the encoder, with the real SDK rule, compressed and uncompressed.
+describe('checkEnvelopeReveal binds the payload push to the approved bytes', () => {
+    const FILE = 'FILE|0|big.bin|application/octet-stream|Taproot test||';
+    const FILE_BYTES = Buffer.from('the file the user chose to publish. '.repeat(12), 'latin1');
+    const SWAPPED_BYTES = Buffer.from('the file the user chose to publish. '.repeat(12).toUpperCase(), 'latin1');
+    const withDeflateField = (action) => {
+        const parts = action.split('|');
+        while (parts.length <= 10) parts.push('');
+        parts[10] = '1';
+        return parts.join('|');
+    };
+    const verdictFor = (revealPsbt, extra = {}) => checkEnvelopeReveal({
+        ...realArgs(revealPsbt), actionString: FILE, rawData: FILE_BYTES.toString('latin1'),
+        decodeRevealAction: () => ({ ok: true, actionString: FILE }), ...extra,
+    });
+
+    it('accepts the approved action carrying the approved bytes', () => {
+        expect(verdictFor(revealPsbtCarrying(FILE, FILE_BYTES))).toEqual({ ok: true });
+    });
+
+    it('refuses the approved action carrying substituted bytes of the same length', () => {
+        expect(SWAPPED_BYTES.length).toBe(FILE_BYTES.length);
+        expect(verdictFor(revealPsbtCarrying(FILE, SWAPPED_BYTES)))
+            .toEqual({ ok: false, reason: 'REVEAL_CARRIER_BINDING' });
+    });
+
+    it('refuses a payload push on an action that was approved with no payload', () => {
+        expect(verdictFor(revealPsbtCarrying(FILE, FILE_BYTES), { rawData: null }))
+            .toEqual({ ok: false, reason: 'REVEAL_CARRIER_BINDING' });
+    });
+
+    it('refuses when the caller states no rawData, even on a reveal that carries the right bytes', () => {
+        expect(verdictFor(revealPsbtCarrying(FILE, FILE_BYTES), { rawData: undefined }))
+            .toEqual({ ok: false, reason: 'REVEAL_CARRIER_BINDING' });
+    });
+
+    describe('after the encoder compressed the payload', () => {
+        const carried = withDeflateField(FILE);
+        const deflated = (bytes) => zlib.deflateRawSync(bytes);
+        const compressedVerdict = (leafBytes, extra = {}) => verdictFor(
+            revealPsbtCarrying(carried, leafBytes),
+            {
+                actionString: carried, approvedActionString: FILE,
+                decodeRevealAction: () => ({ ok: true, actionString: carried }), ...extra,
+            });
+
+        it('accepts the rewritten string with the deflated original bytes', () => {
+            expect(compressedVerdict(deflated(FILE_BYTES))).toEqual({ ok: true });
+        });
+
+        it('refuses the rewritten string with deflated substituted bytes', () => {
+            expect(compressedVerdict(deflated(SWAPPED_BYTES)))
+                .toEqual({ ok: false, reason: 'REVEAL_CARRIER_BINDING' });
+        });
+
+        it('refuses when the rewritten string is handed over as the approved one', () => {
+            expect(compressedVerdict(deflated(FILE_BYTES), { approvedActionString: carried }))
+                .toEqual({ ok: false, reason: 'REVEAL_CARRIER_BINDING' });
+        });
+    });
+});
+
+describe('both signing paths carry rawData to the envelope binding', () => {
+    const FILE = 'FILE|0|big.bin|application/octet-stream|Taproot test||';
+    const BYTES = 'file bytes the user chose to publish, repeated: '.repeat(8);
+    const CARRIED = FILE.split('|').concat(Array(5).fill('')).slice(0, 10).concat('1').join('|');
+    const fileSdk = (revealPsbt, carriedAction) => {
+        const stub = sdkFor(revealPsbt);
+        stub.actions.createAction = vi.fn(() => ({ actionString: FILE, action: 'FILE', version: 0 }));
+        stub.decoder.decodeActionFromPsbt = vi.fn(() => ({ ok: true, actionString: carriedAction }));
+        return stub;
+    };
+    const composeWith = (revealPsbt, compression, carriedAction = FILE) => {
+        const stub = fileSdk(revealPsbt, carriedAction);
+        stub.encoder.createTx = vi.fn(async () => ({
+            psbt: 'COMMIT', encoding: 'TAPROOT', revealPsbt, envelope: { ...ENVELOPE }, compression,
+        }));
+        return composeActionForConfirm({
+            vault: { settings: { get: async () => ({ ads: { enabled: false, perChain: {} } }) } },
+            chainRegistry: { get: () => ({ coin: 'BTC', networkKind: 'regtest', addressTypes: ['p2tr'] }) },
+            sdkRegistry: { get: () => stub },
+            chainId: NETWORK,
+            actionData: { action: 'FILE', params: {} },
+            encoderOpts: { pubkey: `02${'11'.repeat(32)}`, rawData: BYTES, encoding: 'AUTO' },
+            source: SOURCE,
+            ownAddresses: [SOURCE],
+            signer: { source: 'hd' },
+        }).catch((e) => e);
+    };
+    const intent = (revealPsbt, rawData) => () => assertBuiltActionMatchesIntent({
+        sdk: fileSdk(revealPsbt, FILE),
+        encoded: { psbt: 'COMMIT', encoding: 'TAPROOT', revealPsbt, envelope: { ...ENVELOPE } },
+        actionString: FILE, bareNativePayment: false, ownAddresses: [SOURCE], rawData,
+    });
+
+    it('assertBuiltActionMatchesIntent signs the approved bytes and refuses swapped ones', () => {
+        expect(intent(revealPsbtCarrying(FILE, Buffer.from(BYTES, 'latin1')), BYTES)).not.toThrow();
+        expect(intent(revealPsbtCarrying(FILE, Buffer.from(BYTES.toUpperCase(), 'latin1')), BYTES)).toThrow(MISMATCH);
+    });
+
+    it('composeActionForConfirm refuses an uncompressed reveal whose bytes were swapped', async () => {
+        const ok = await composeWith(revealPsbtCarrying(FILE, Buffer.from(BYTES, 'latin1')), null);
+        expect(ok.tamperVerified).toBe(true);
+        const err = await composeWith(revealPsbtCarrying(FILE, Buffer.from(BYTES.toUpperCase(), 'latin1')), null);
+        expect(err).toBeInstanceOf(TamperDetectedError);
+        expect(err.details.reason).toBe('REVEAL_CARRIER_BINDING');
+    });
+
+    it('composeActionForConfirm checks a compressed reveal against the original bytes', async () => {
+        const report = (bytes) => ({
+            compressed: true, data: CARRIED, rawData: zlib.deflateRawSync(bytes).toString('latin1'),
+        });
+        const honest = zlib.deflateRawSync(Buffer.from(BYTES, 'latin1'));
+        const ok = await composeWith(revealPsbtCarrying(CARRIED, honest), report(Buffer.from(BYTES, 'latin1')), CARRIED);
+        expect(ok.tamperVerified).toBe(true);
+        expect(ok).not.toHaveProperty('approvedActionString');
+        const swapped = zlib.deflateRawSync(Buffer.from(BYTES.toUpperCase(), 'latin1'));
+        const err = await composeWith(revealPsbtCarrying(CARRIED, swapped), report(Buffer.from(BYTES.toUpperCase(), 'latin1')), CARRIED);
+        expect(err).toBeInstanceOf(TamperDetectedError);
+        expect(err.details.reason).toBe('REVEAL_CARRIER_BINDING');
     });
 });

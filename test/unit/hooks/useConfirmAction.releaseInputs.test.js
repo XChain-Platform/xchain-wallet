@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { composeForConfirm } from '../../../packages/core/src/flows/composeForConfirm.js';
 import { refusedBeforeSigning, useConfirmAction } from '../../../packages/core/src/shared/hooks/useConfirmAction.js';
+import { hydrateEnvelopeError } from '../../../packages/extension/src/background/MessageHost.js';
 
 const RESERVATION_ID = '0123456789abcdef0123456789abcdef';
 
@@ -334,5 +335,45 @@ describe('useConfirmAction encoder reservation release', () => {
         expect(releaseInputs).toHaveBeenCalledTimes(2);
         expect((await confirmation).error).toMatchObject({ reason: 'user-rejected' });
         expect(confirmationSettled).toBe(true);
+    });
+});
+
+describe('useConfirmAction host-side refusal before signing', () => {
+    const hostRefusal = (flagged) => hydrateEnvelopeError({
+        name: 'PanicModeActiveError',
+        message: 'Frozen. Nothing was sent.',
+        ...(flagged ? { refusedBeforeSigning: true } : {}),
+    });
+
+    it('releases once for a refusal rebuilt from the wire with the flag', async () => {
+        const releaseInputs = vi.fn(async () => ({ released: true }));
+        const { compose } = makeCompose({ releaseInputs });
+        const hook = renderHook(() => useConfirmAction());
+        const refusal = hostRefusal(true);
+        const { confirmation } = await readyConfirm(hook.result, compose, async () => { throw refusal; });
+
+        await act(async () => {
+            await hook.result.current.approve({});
+        });
+        expect((await confirmation).error).toBe(refusal);
+        hook.unmount();
+
+        expect(releaseInputs).toHaveBeenCalledOnce();
+        expect(releaseInputs).toHaveBeenCalledWith(RESERVATION_ID);
+    });
+
+    it('keeps the hold for the same refusal rebuilt without the flag', async () => {
+        const releaseInputs = vi.fn(async () => ({ released: true }));
+        const { compose } = makeCompose({ releaseInputs });
+        const hook = renderHook(() => useConfirmAction());
+        const { confirmation } = await readyConfirm(hook.result, compose, async () => { throw hostRefusal(false); });
+
+        await act(async () => {
+            await hook.result.current.approve({});
+        });
+        await confirmation;
+        hook.unmount();
+
+        expect(releaseInputs).not.toHaveBeenCalled();
     });
 });

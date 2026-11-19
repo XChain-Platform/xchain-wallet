@@ -6,17 +6,20 @@
 // This file is part of XChain Platform. Licensed under the GNU Affero
 // General Public License v3.0 or later; see LICENSE.md.
 
-export function desktopFileRefOf(file, bridge) {
+// A picked file as a reference main can open without the page naming a path:
+// the preload registers it and answers a token, which main redeems once.
+export async function desktopFileRefOf(file, bridge) {
     if (typeof file !== 'object' || file === null) return null;
 
     try {
         const size = file.size;
         if (!Number.isSafeInteger(size) || size < 0) return null;
-        const filePathOf = bridge?.filePathOf;
-        if (typeof filePathOf !== 'function') return null;
-        const path = filePathOf.call(bridge, file);
-        if (typeof path !== 'string' || path.length === 0) return null;
-        return { kind: 'path', path, size };
+        const fileTokenOf = bridge?.fileTokenOf;
+        if (typeof fileTokenOf !== 'function') return null;
+        const issued = await fileTokenOf.call(bridge, file);
+        if (typeof issued?.token !== 'string' || issued.token.length === 0) return null;
+        if (issued.size !== size) return null;
+        return { kind: 'picked', token: issued.token, size };
     } catch {
         return null;
     }

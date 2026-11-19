@@ -43,7 +43,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-    announcedGateFallback, argConflicts, classify, drift, EXECUTABLE_GATES, firstRefusal, gateFallbackFor,
+    ancestry, announcedGateFallback, argConflicts, classify, drift, EXECUTABLE_GATES, firstRefusal, gateFallbackFor,
     gateFallbackMismatch, LIB_SH_DEPENDENCIES, PIN_FORMAT, PIN_PATH, pinPathFiles, probe, probeEnv, scopeMismatch,
     signingPathFiles, STEPS, timeoutFromArgs, uncoveredByPin,
 } from '../../../tools/release/phase4-rehearsal.mjs';
@@ -97,6 +97,17 @@ assert.ok(REPO_PATH_FILES.every((p) => typeof pin.repoPath?.[p] === 'string'),
 
     const walletRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
     const head = spawnSync('git', ['-C', walletRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+
+    // `check` reads the files on disk, so it cannot answer for another ref: the flag is refused, and a
+    // git failure in the ancestry test is `unknown`, which drift() reads as drift rather than behind.
+    assert.equal(ancestry(walletRoot, head, 'HEAD'), 'ancestor', 'HEAD is its own ancestor');
+    assert.equal(ancestry(walletRoot, head, 'no-such-ref-for-ancestry'), 'unknown',
+        'an unresolvable ref is neither ancestor nor not-ancestor, so it can never read as behind');
+    const refused = spawnSync(process.execPath, [fileURLToPath(new URL('../../../tools/release/phase4-rehearsal.mjs',
+        import.meta.url)), 'check', '--against', 'origin/master'], { encoding: 'utf8' });
+    assert.equal(refused.status, 2, 'check --against must exit 2, not hash the working tree under another ref\'s name');
+    assert.match(refused.stderr, /cannot answer for another ref/);
+
     const hashes = Object.fromEntries(staging.script.map((p) => [p,
         createHash('sha256').update(readFileSync(join(walletRoot, p))).digest('hex')]));
     const work = mkdtempSync(join(tmpdir(), 'phase4-pin-'));

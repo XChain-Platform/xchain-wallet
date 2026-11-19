@@ -66,6 +66,7 @@ function makeHost(sendHold, activeNetworkRef = { current: 'mainnet' }) {
         vault: {
             settings: { get: async () => ({ activeNetwork: activeNetworkRef.current }) },
             wallets: { list: async () => [] },
+            addresses: { list: async () => [] },
         },
         chainRegistry: {
             get: (id) => {

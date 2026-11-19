@@ -18,6 +18,7 @@ import { useGovernanceChainIds } from '../hooks/useGovernanceAddressesPresent.js
 import { t } from '../../i18n/index.js';
 import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/governance.js';
+import '../../i18n/locales/en/walletMenu.js';
 import { userFacingMessage } from '../utils/userFacingMessage.js';
 import { formatDecimalAmount } from '../utils/amountFormat.js';
 import { latestBallotRows, pollResultSummary, pollRowForDisplay } from './pollDisplay.js';
@@ -368,12 +369,12 @@ export function GovernancePolls({ walletId, onOpenPoll, onCreate, onDelegate, on
                 <ListDetailSplit
                     measureRef={layoutRef}
                     storageKey="governance"
-                    resizeLabel="Resize the governance list"
-                    resizeHint="Drag to resize the governance list, or press Enter to reset."
+                    resizeLabel={t('governance.resizeList')}
+                    resizeHint={t('governance.resizeListHint')}
                     layoutName="two-panel"
                     listHeader={tabsToolbar}
                     list={children}
-                    listLabel="Governance polls"
+                    listLabel={t('walletMenu.row.governancePolls')}
                     detailLabel={shownPoll.question || t('governance.pollNumber', { id: String(shownPoll.action_index) })}
                     detail={(
                         <PollDetail

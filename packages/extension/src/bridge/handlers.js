@@ -19,11 +19,14 @@
 // annotation (the content script injects `origin: location.origin`).
 //
 // Permission model (§43.3): checked against `ConnectedSite.permissions`:
-//   canSignAction[KIND] === 'always'  → proceed without prompt
-//   canSignAction[KIND] === 'ask'     → prompt via approvals
+//   canSignAction[KIND] === 'always'  → prompt via approvals, review and password
+//                                       still required; the screen does not
+//                                       offer to save the grant again
+//   canSignAction[KIND] === 'ask'     → prompt via approvals, offering to save
 //   canSignAction[KIND] === 'never'   → hard reject
-//   canSignMessage === true           → proceed without prompt
+//   canSignMessage === true           → prompt for the password only
 //   canSignMessage === false          → prompt via approvals
+// No grant skips the password: every signature is unlocked by it.
 //
 // Unknown-origin / first-time requests must go through `bridge.connect`
 // which creates the ConnectedSite record; other handlers reject with
@@ -783,39 +786,50 @@ export function registerBridgeHandlers(host, opts = {}) {
 
         // Grouped approval: when the shell implements approvals.parallel it
         // shows ONE modal listing every action and captures the password once.
-        // A rejection there rejects the entire batch (nothing is signed). The
-        // returned per-action decision is threaded into executeSignAction so it
-        // does not re-prompt. Shells without the grouped modal fall back to the
+        // A rejection there rejects the entire batch (nothing is signed). Each
+        // row is resolved into the protocol shape BEFORE the modal, and the
+        // same resolved values are what that slot is signed with, so the
+        // modal shows the amount that settles. A slot refused while resolving
+        // never reaches the modal and is answered in its own entry. The
+        // returned decision is threaded into executeSignAction so it does not
+        // re-prompt. Shells without the grouped modal fall back to the
         // per-action approvals.signAction prompt inside executeSignAction.
+        const slots = actions.map(() => ({ failure: null, resolved: null }));
         let groupDecision = null;
         if (typeof approvals.parallel === 'function') {
-            groupDecision = await approvals.parallel({
-                origin: req.origin,
-                kind: 'parallel',
-                ...approvalRequester(req),
-                actions: actions.map((a) => ({
-                    chainId: a?.chainId,
-                    action: a?.action,
-                    payload: a?.params,
-                })),
-            });
-            if (!groupDecision?.approved) throw new UserRejectedError('parallel');
-            if (!groupDecision.password) {
-                throw bridgeError('NO_PASSWORD', 'grouped approval must return password');
+            const rows = [];
+            for (const [i, action] of actions.entries()) {
+                try {
+                    const slot = await groupedSlot(parallelSlotRequest(req, action), deps, site);
+                    slots[i].resolved = slot.resolved;
+                    rows.push(slot.row);
+                } catch (err) {
+                    slots[i].failure = err;
+                }
+            }
+            if (rows.length > 0) {
+                groupDecision = await approvals.parallel({
+                    origin: req.origin,
+                    kind: 'parallel',
+                    ...approvalRequester(req),
+                    actions: rows,
+                });
+                if (!groupDecision?.approved) throw new UserRejectedError('parallel');
+                if (!groupDecision.password) {
+                    throw bridgeError('NO_PASSWORD', 'grouped approval must return password');
+                }
             }
         }
 
         const results = [];
+        let slotIndex = 0;
         for (const action of actions) {
-            const actionReq = {
-                origin: req.origin,
-                appName: req.appName,
-                appIcon: req.appIcon,
-                ...approvalRequester(req),
-                chainId: action?.chainId,
-                action: action?.action,
-                params: action?.params,
-            };
+            const slot = slots[slotIndex++];
+            if (slot.failure) {
+                results.push(bridgeErrorResult(withoutDuressCue(slot.failure)));
+                continue;
+            }
+            const actionReq = parallelSlotRequest(req, action);
             try {
                 // executeSignAction already answers in the SignActionResult
                 // envelope, so a batch entry is that value verbatim: one shape
@@ -827,6 +841,7 @@ export function registerBridgeHandlers(host, opts = {}) {
                     // With a grouped decision, reuse it for every action so the
                     // user is not prompted N more times after approving once.
                     decision: groupDecision,
+                    resolved: slot.resolved ?? undefined,
                 }));
             } catch (err) {
                 // Same translation the register() wrapper applies to a
@@ -949,6 +964,20 @@ export function registerBridgeHandlers(host, opts = {}) {
 }
 
 
+// The per-slot request a batch entry is signed with, and the same shape the
+// grouped modal row is resolved from.
+function parallelSlotRequest(req, action) {
+    return {
+        origin: req.origin,
+        appName: req.appName,
+        appIcon: req.appIcon,
+        ...approvalRequester(req),
+        chainId: action?.chainId,
+        action: action?.action,
+        params: action?.params,
+    };
+}
+
 // Sign one bridge ACTION end to end: chain/account gate → user approval →
 // SEND/SWEEP flow. Shared by bridge.signAction (single) and bridge.parallel
 // (batch) so the per-action security invariants exist in exactly one place.
@@ -999,8 +1028,7 @@ async function executeSignAction(req, deps, ctx) {
     // call was fed a key it does not accept. Read the published name
     // first, keep the legacy one as a fallback, and accept an address record as
     // well as a plain string since in-repo callers pass both.
-    const rawFrom = req.params?.fromAddress ?? req.params?.from;
-    const spendFromAddress = typeof rawFrom === 'string' ? rawFrom : rawFrom?.address;
+    const spendFromAddress = spendFromOf(req.params);
 
     // §43.3: enforce the per-account scope granted at connect. SEND/SWEEP
     // both spend from the source address; a site scoped to a subset of accounts
@@ -1012,50 +1040,21 @@ async function executeSignAction(req, deps, ctx) {
     // once: it keys the auto-sign cache and is the fallback walletId below.
     const walletId = await walletIdForAddress(deps.vault, spendFromAddress);
 
-    // Published destination / asset names, mapped once here so the approval
-    // screen and the flow call read the same fields. The legacy in-repo names
-    // (`to`, `tick`, `amount`) stay as fallbacks; nothing in the repo sends
-    // both.
+    // Published destination / asset names, mapped once so the approval screen
+    // and the flow call read the same fields. A grouped batch resolves them
+    // before its one modal and hands them in, so what that modal showed is
+    // what is signed here.
     const params = req.params ?? {};
     // Shape first, BEFORE the prompt (the same order bridge.signPsbt uses): a
     // request carrying a signing-divergence key must never reach the user, because
     // the screen it would render is the wrong description of what would be signed.
     assertNoSigningDivergenceParams(params);
     assertSupportedSweepParams(actionName, params);
-    const toAddress = params.toAddress ?? params.to;
-    const sendTick = params.asset ?? params.tick;
-    // One of the published gaps is a UNIT gap, not a name gap: `amountRaw` is
-    // an integer in BASE units while the flow signs a human-scale decimal
-    // AMOUNT (nativePayment.satsStringFromDecimal multiplies it by 1e8 to size
-    // the real output). Renamed rather than converted, the reference dApp's own
-    // `{ asset: 'BTC', amountRaw: '10000' }` (0.0001 BTC) signs as 10,000 BTC.
-    //
-    // Converted BEFORE the approval on purpose: the screen describes whichever
-    // payload the prompt below is handed, so a conversion made after it would
-    // sign a magnitude the user was never shown, which is the same 1e8 swing
-    // relocated rather than fixed. Only entered when the caller actually sent
-    // `amountRaw`, so the legacy decimal path and the gate ordering pinned by
-    // test/unit/bridge/parallel.test.js are untouched.
-    const needsScale = actionName === 'SEND'
-        && params.amountRaw !== undefined && params.amountRaw !== null
-        && (params.amount === undefined || params.amount === null);
-    // A source the vault does not hold is refused BEFORE the indexer is asked
-    // to price it, so an unknown address still reports ADDRESS_NOT_FOUND rather
-    // than a scale failure. Hoisted only on this path: doing it for every
-    // action would move ADDRESS_NOT_FOUND ahead of USER_REJECTED and break the
-    // batch gate order that same parallel.test.js pins.
-    let fromSource = needsScale
-        ? await requireSourceRecord(deps, req.chainId, spendFromAddress)
-        : null;
-    const sendAmount = needsScale
-        ? await decimalAmountFromBaseUnits({
-            deps,
-            chainId: req.chainId,
-            address: spendFromAddress,
-            tick: sendTick,
-            amountRaw: params.amountRaw,
-        })
-        : params.amount;
+    assertSingleSendAmount(actionName, params);
+    const resolved = ctx.resolved
+        ?? await resolveSendValues(req, deps, params, spendFromAddress);
+    const { toAddress, sendTick, sendAmount } = resolved;
+    let { fromSource } = resolved;
 
     // Cluster Q FOLLOWUP 3: Developer-Mode localhost auto-sign. Only for the
     // single-action path (preDecision means the grouped parallel modal already
@@ -1101,9 +1100,14 @@ async function executeSignAction(req, deps, ctx) {
             chainId: req.chainId,
             ...approvalRequester(req),
             action: actionName,
-            payload: approvalPayload(actionName, {
-                params, toAddress, tick: sendTick, amount: sendAmount, spendFromAddress,
-            }),
+            payload: {
+                ...approvalPayload(actionName, {
+                    params, toAddress, tick: sendTick, amount: sendAmount, spendFromAddress,
+                }),
+                // The grant is already stored, so the screen does not offer
+                // to save it again. Review and password stay required.
+                ...(permission === 'always' ? { alreadyGranted: true } : {}),
+            },
         });
     }
     if (!decision?.approved) throw new UserRejectedError('signAction');
@@ -1277,6 +1281,101 @@ function assertSupportedSweepParams(actionName, params) {
         'INVALID_PARAMS',
         'per-asset SWEEP is not supported; use SEND to move a single asset',
     );
+}
+
+const isSet = (v) => v !== undefined && v !== null;
+
+// The spending address a request names: the published `fromAddress` first, the
+// legacy `from` as a fallback, and an address record accepted as well as a
+// plain string since in-repo callers pass both.
+function spendFromOf(params) {
+    const rawFrom = params?.fromAddress ?? params?.from;
+    return typeof rawFrom === 'string' ? rawFrom : rawFrom?.address;
+}
+
+// A SEND that carries both amount fields answers "how much" twice, in two
+// units: the published `amountRaw` is a base-unit integer and the legacy
+// `amount` a human-scale decimal. Picking either silently could sign a
+// magnitude 1e8 off the one the page meant, so the request is refused before
+// any prompt or read.
+function assertSingleSendAmount(actionName, params) {
+    if (actionName !== 'SEND') return;
+    if (isSet(params?.amount) && isSet(params?.amountRaw)) {
+        throw bridgeError('INVALID_PARAMS', 'SEND takes amountRaw or amount, not both');
+    }
+}
+
+// `amountRaw` is an integer in BASE units while the flow signs a human-scale
+// decimal AMOUNT (nativePayment.satsStringFromDecimal multiplies it by 1e8 to
+// size the real output), so it is converted rather than renamed:
+// `{ asset: 'BTC', amountRaw: '10000' }` is 0.0001 BTC, not 10,000 BTC.
+function needsAmountScale(actionName, params) {
+    return actionName === 'SEND' && isSet(params.amountRaw) && !isSet(params.amount);
+}
+
+// The destination, asset and amount a request means, in the flow's vocabulary.
+// Resolved BEFORE any approval: the screen describes whichever payload it is
+// handed, so a conversion made after it would sign a magnitude the user was
+// never shown. The vault lookup runs only on the `amountRaw` path, and an
+// unknown source is refused before the indexer is asked to price it, so the
+// gate order pinned by test/unit/bridge/parallel.test.js is untouched.
+async function resolveSendValues(req, deps, params, spendFromAddress) {
+    const toAddress = params.toAddress ?? params.to;
+    const sendTick = params.asset ?? params.tick;
+    if (!needsAmountScale(req.action, params)) {
+        return { toAddress, sendTick, sendAmount: params.amount, fromSource: null };
+    }
+    const fromSource = await requireSourceRecord(deps, req.chainId, spendFromAddress);
+    const sendAmount = await decimalAmountFromBaseUnits({
+        deps,
+        chainId: req.chainId,
+        address: spendFromAddress,
+        tick: sendTick,
+        amountRaw: params.amountRaw,
+    });
+    return { toAddress, sendTick, sendAmount, fromSource };
+}
+
+// One modal row for the grouped parallel approval, in the protocol shape the
+// single-action prompt renders, plus the resolved values the slot is later
+// signed with. A refused slot throws and never reaches the modal.
+//
+// Every refusal executeSignAction raises before its own prompt is raised here
+// first, in the same order, for every supported slot: the chain grant, the
+// never policy, the active network, the per-account scope, then the shape
+// checks. They read only the site's own grant and the wallet settings, so a
+// slot the wallet would refuse is answered in its own entry instead of being
+// listed as approvable. An action kind this wallet does not sign keeps its
+// row (it carries no payload to convert) and is answered after the modal. The
+// source-record lookup and the indexer read stay confined to the `amountRaw`
+// path inside resolveSendValues, so an unknown source on any other slot still
+// reports after the user's decision, as the per-action prompt order pins.
+// When every slot is refused no modal opens at all.
+async function groupedSlot(slotReq, deps, site) {
+    const { action: actionName, chainId } = slotReq;
+    assertChainPermitted(site, chainId);
+    if (!SUPPORTED_BRIDGE_ACTIONS.includes(actionName)) {
+        return { row: { chainId, action: actionName, payload: {} }, resolved: null };
+    }
+    if (site.permissions.canSignAction?.[actionName] === 'never') {
+        throw bridgeError('ACTION_REJECTED_BY_POLICY', actionName);
+    }
+    await assertChainOnActiveNetwork(deps, chainId);
+    const params = slotReq.params ?? {};
+    const spendFromAddress = spendFromOf(params);
+    await assertAddressPermitted(deps, site, chainId, spendFromAddress);
+    assertNoSigningDivergenceParams(params);
+    assertSupportedSweepParams(actionName, params);
+    assertSingleSendAmount(actionName, params);
+    const resolved = await resolveSendValues(slotReq, deps, params, spendFromAddress);
+    const payload = approvalPayload(actionName, {
+        params,
+        toAddress: resolved.toAddress,
+        tick: resolved.sendTick,
+        amount: resolved.sendAmount,
+        spendFromAddress,
+    });
+    return { row: { chainId, action: actionName, payload }, resolved };
 }
 
 // The allowlisted subset of a page's params for `actionName`. Absent keys stay

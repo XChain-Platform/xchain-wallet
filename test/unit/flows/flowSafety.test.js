@@ -227,6 +227,34 @@ describe('backup wallet and network scope', () => {
         expect(payload.connectedSites[0].permissions.accounts[0]).not.toBe('account-1');
     });
 
+    it('moves software address signer ids to the re-minted wallet id in add mode', () => {
+        const payload = {
+            wallet: { id: 'wallet-1', importedKeys: [{ addressId: 'imp-1' }] },
+            accounts: [{ id: 'account-1', walletId: 'wallet-1' }],
+            addresses: [
+                { id: 'hd-1', source: 'hd', accountId: 'account-1', signerId: 'wallet-1' },
+                { id: 'imp-1', source: 'imported-wif', accountId: null, signerId: 'wallet-1' },
+                { id: 'unlinked', source: 'hd', accountId: 'account-1', signerId: null },
+                { id: 'other', source: 'hd', accountId: 'account-1', signerId: 'wallet-9' },
+                { id: 'led-1', source: 'ledger', accountId: 'account-1', signerId: 'dev-1' },
+            ],
+            signers: [{ id: 'dev-1', walletId: 'wallet-1' }],
+            connectedSites: [],
+            pendingTxs: [],
+        };
+
+        remintIdentifiers(payload);
+
+        const byOldId = (oldId) => payload.addresses[['hd-1', 'imp-1', 'unlinked', 'other', 'led-1'].indexOf(oldId)];
+        expect(payload.wallet.id).not.toBe('wallet-1');
+        expect(byOldId('hd-1').signerId).toBe(payload.wallet.id);
+        expect(byOldId('imp-1').signerId).toBe(payload.wallet.id);
+        expect(byOldId('unlinked').signerId).toBeNull();
+        expect(byOldId('other').signerId).toBe('wallet-9');
+        expect(byOldId('led-1').signerId).toBe(payload.signers[0].id);
+        expect(payload.signers[0].id).not.toBe('dev-1');
+    });
+
     it('rejects another wallet account before writing any vault state', async () => {
         capture.decoded = {
             payloadVersion: 1,

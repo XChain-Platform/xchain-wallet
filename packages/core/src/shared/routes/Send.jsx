@@ -4597,7 +4597,7 @@ export function Send({ walletId, accountId, onBack, prefill = null, onDone, onCh
                         : (chainId ? [chainId] : [])}
                     chainRegistry={chainRegistry}
                     onNetworkChange={onNetworkChange}
-                    networkHelp="The chain this payment is sent on. Your From address, the token and the network fee are all on this network."
+                    networkHelp={t('send.networkHelp')}
                     address={fromAddress?.address || null}
                     addressId="send-from"
                     revealKey={sectionErrorKey(sendFormErrorIds.has('send-from'))}

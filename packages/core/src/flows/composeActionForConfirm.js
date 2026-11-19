@@ -90,8 +90,8 @@ function hasOwnChangeOutput(outputs, expectedOutputs, ownAddresses) {
  * The confirmation surface receives this shape, not `ComposedAction`.
  *
  * `ComposedAction` is the INTERNAL shape composeForConfirm returns; the
- * envelope below drops two of its fields (`encoderOpts`, `carrierScripts` -
- * host-side build material the popup neither needs nor can act on), carries
+ * envelope below drops three of its fields (`encoderOpts`, `carrierScripts`,
+ * `approvedActionString` - host-side build material the popup neither needs nor can act on), carries
  * every other one (the envelope-shape tests hold each `ComposedAction`
  * property to "carried or on the drop list"), and adds the fields the
  * compose step never had: the target `chainId`, the exact fees
@@ -287,7 +287,9 @@ export async function composeActionForConfirm({
     // A Taproot envelope is two transactions signed on one Approve, so the
     // reveal is checked too and each transaction's own fee is stated.
     const envelopeFees = await releasingOnRefusal(composed, () => (composed.revealPsbt
-        ? checkedEnvelopeFees({ sdk, composed, commit: decomposed, own })
+        ? checkedEnvelopeFees({
+            sdk, composed, commit: decomposed, own, rawData: encoderOpts.rawData ?? null,
+        })
         : null));
     if (envelopeFees) networkFeeSats = envelopeFees.totalFeeSats;
 
@@ -514,9 +516,12 @@ export async function composeActionForConfirm({
  * other than the approved one: the user signs it on the same Approve, so an
  * unchecked reveal would be an unchecked signature.
  *
+ * The reveal's payload push is bound to `rawData`, the bytes the caller handed
+ * the encoder, and not to the stored form the encoder may have deflated.
+ *
  * @returns {{ commitFeeSats: number|null, revealFeeSats: number|null, totalFeeSats: number|null }}
  */
-function checkedEnvelopeFees({ sdk, composed, commit, own }) {
+function checkedEnvelopeFees({ sdk, composed, commit, own, rawData }) {
     const reveal = sdk.wallet.decomposePsbt(composed.revealPsbt);
     const verdict = checkEnvelopeReveal({
         commit,
@@ -524,6 +529,8 @@ function checkedEnvelopeFees({ sdk, composed, commit, own }) {
         envelope: composed.envelope,
         ownAddresses: own,
         actionString: composed.actionString,
+        approvedActionString: composed.approvedActionString ?? composed.actionString,
+        rawData,
         // The co-signer decoder reads the envelope leaf; the inline extractor
         // the commit check uses cannot see it.
         decodeRevealAction: () => sdk.decoder.decodeActionFromPsbt(composed.revealPsbt),

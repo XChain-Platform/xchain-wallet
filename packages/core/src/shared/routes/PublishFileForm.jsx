@@ -933,7 +933,7 @@ export function PublishFileForm({ walletId, onBack }) {
                 {reviewPreviewUrl ? (
                     <img
                         src={reviewPreviewUrl}
-                        alt={t('publishFile.previewAlt', { name: fileMeta?.name || 'file' })}
+                        alt={fileMeta?.name ? t('publishFile.previewAlt', { name: fileMeta.name }) : t('publishFile.previewAltFile')}
                         width={160}
                         height={160}
                         loading="lazy"
@@ -1109,7 +1109,7 @@ export function PublishFileForm({ walletId, onBack }) {
                     {multipartAvailable ? (
                         <MultipartUploadSection
                             {...multipartUpload.sectionProps}
-                            fallbackMessage="The multi-part upload could not continue. Try again or use Unfinished uploads."
+                            fallbackMessage={t('publishFile.multipartFallback')}
                         />
                     ) : null}
                     {/* Title comes before the file. */}

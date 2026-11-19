@@ -48,6 +48,7 @@ import { actionDisplayLabel } from '../utils/actionDisplayLabel.js';
 import { ActivityRow, actionIconForAction } from '../components/ActivityRow.jsx';
 import { flows as flowsLib } from '@xchain-wallet/core';
 import '../../i18n/locales/en/history.js';
+import '../../i18n/locales/en/confirmStandard.js';
 import '../../i18n/locales/en/actionsMenu.js';
 import '../../i18n/locales/en/ui.js';
 import {
@@ -2293,11 +2294,11 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
             <ListDetailSplit
                 measureRef={layoutRef}
                 storageKey="history"
-                resizeLabel="Resize the history list"
-                resizeHint="Drag to resize the history list, or press Enter to reset."
+                resizeLabel={t('history.resizeList')}
+                resizeHint={t('history.resizeListHint')}
                 layoutName="two-panel"
                 list={listPage}
-                listLabel="History entries"
+                listLabel={t('history.listLabel')}
                 detail={(
                     <ActionDetail
                         key={detailEntry.key}
@@ -2308,7 +2309,7 @@ export function History({ walletId, accountId, onBack, onReceive, onSelectEntry,
                         embedded
                     />
                 )}
-                detailLabel="Action details"
+                detailLabel={t('confirmStandard.facts')}
             />
         </Screen>
     );

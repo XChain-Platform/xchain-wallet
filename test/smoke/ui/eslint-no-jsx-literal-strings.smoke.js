@@ -74,6 +74,13 @@ const DOCUMENTED_USER_FACING_ATTRS = [
     'lead', 'legend', 'closeLabel', 'searchLabel', 'subtitle', 'chainLabel',
     'accessibleLabel', 'visibleLabel', 'labelPrefix', 'unavailableMessage', 'intro',
     'secondaryActionLabel', 'secondaryLabel', 'doneLabel',
+    'addressLabel', 'pickerLabel', 'pickerLockedReason', 'iconLockedReason',
+    'addressHelp', 'networkHelp', 'expiresHelp', 'flipLabel',
+    'resizeLabel', 'resizeHint', 'listLabel', 'detailLabel',
+    'searchPlaceholder', 'disabledReason', 'fallbackMessage',
+    'payBalance', 'amountLabel', 'give', 'get',
+    'clearLabel', 'inputLabel', 'chooseLabel', 'pickLabel', 'viewLabel',
+    'winnerLabel', 'chartRegionLabel', 'tabsLabel', 'infoLabel',
 ];
 for (const attr of DOCUMENTED_USER_FACING_ATTRS) {
     assert.ok(USER_FACING_ATTRS.has(attr), `${attr} is in USER_FACING_ATTRS`);
@@ -572,6 +579,25 @@ assert.ok(sourceFiles(join(root, 'packages', 'web', 'src')).length > 0, 'the wal
 assert.ok(NOTE_OR_KICKER_ATTR.test('<Row value={x} note={y} />'), 'the note/kicker pattern matches an attribute');
 assert.ok(!NOTE_OR_KICKER_ATTR.test('<div role="note" />'), 'the note/kicker pattern ignores role="note"');
 
+// 19j. A copy prop the set does not name ships its English unseen, one hop
+// before the attribute that renders it. Any JSX attribute named *Label,
+// *Help, *Hint, *Reason, *Placeholder or *Message that holds a string literal
+// must therefore be in the set, unless it is a DOM attribute for a keyboard
+// or a technical id.
+const COPY_SUFFIX_LITERAL_ATTR = /(?:^|\s)([A-Za-z]+(?:Label|Help|Hint|Reason|Placeholder|Message))=(?:"[^"]*[A-Za-z]{2}[^"]*"|'[^']*[A-Za-z]{2}[^']*')/gm;
+const NON_COPY_SUFFIX_ATTRS = new Set(['enterKeyHint']);
+const unenrolled = new Set();
+for (const file of packageSrcDirs.flatMap(sourceFiles)) {
+    for (const match of readFileSync(file, 'utf8').matchAll(COPY_SUFFIX_LITERAL_ATTR)) {
+        if (!USER_FACING_ATTRS.has(match[1]) && !NON_COPY_SUFFIX_ATTRS.has(match[1])) unenrolled.add(match[1]);
+    }
+}
+assert.deepStrictEqual([...unenrolled].sort(), [],
+    'every *Label / *Help / *Hint / *Reason / *Placeholder / *Message attribute with a literal is in USER_FACING_ATTRS');
+const probeAttr = (source) => [...source.matchAll(COPY_SUFFIX_LITERAL_ATTR)].map((m) => m[1]);
+assert.deepStrictEqual(probeAttr('<Row fooHelp="Some help text" />'), ['fooHelp'], 'the sweep pattern matches a copy-suffixed literal attribute');
+assert.deepStrictEqual(probeAttr('<Row fooHelp={t("k")} inputMode="numeric" />'), [], 'the sweep pattern ignores a translated value and other attributes');
+
 // 22. Copy hoisted into a module-scope constant table reaches a sink
 // through an identifier, which the four inline gates read as invisible.
 // The sink decides: an unread table, a technical attribute and a
@@ -582,6 +608,11 @@ const tCall = (value) => ({
     type: 'CallExpression',
     callee: identifier('t'),
     arguments: [literal('test.key'), objectExpr(prop('value', value))],
+});
+const tCallKey = (key, value) => ({
+    type: 'CallExpression',
+    callee: identifier('t'),
+    arguments: [literal('test.key'), objectExpr(prop(key, value))],
 });
 // `computed` models HINTS[mode]: the property is a runtime value, not a key.
 const member = (object, name, computed = false) => ({
@@ -670,6 +701,22 @@ v = findViolations(tCall(logical(identifier('label'), literal('Change unavailabl
 assert.strictEqual(v.length, 1, 'flags nullish fallback copy passed into t() variables');
 v = findViolations(tCall(logical(identifier('label'), tCall(identifier('fallback')), '??')));
 assert.strictEqual(v.length, 0, 'allows a translated nullish fallback passed into t() variables');
+v = findViolations(tCall(logical(identifier('unit'), literal('coin'), '||')));
+assert.strictEqual(v.length, 1, 'flags `||` fallback copy passed into t() variables');
+v = findViolations(tCall(conditional(literal('buy bid'), literal('sell ask'))));
+assert.strictEqual(v.length, 1, 'flags ternary copy passed into t() variables');
+v = findViolations(tCall(conditional(literal('buy bid'), tCall(identifier('other')))));
+assert.strictEqual(v.length, 1, 'flags a ternary with one literal branch passed into t() variables');
+v = findViolations(tCall(logical(identifier('range'), literal(''), '||')));
+assert.strictEqual(v.length, 0, 'a trivial `||` fallback in a t() variable stays silent');
+v = findViolations(tCall(conditional(tCall(identifier('on')), tCall(identifier('off')))));
+assert.strictEqual(v.length, 0, 'a ternary of translated values in a t() variable stays silent');
+v = findViolations(tCallKey('sideState', conditional(literal('bid'), literal('ask'))));
+assert.strictEqual(v.length, 0, 'an ICU select argument named ...State stays silent');
+v = findViolations(tCall(conditional(literal('Trezor'), literal('Ledger'))));
+assert.strictEqual(v.length, 0, 'brand names no language translates stay silent in a t() variable');
+v = findViolations(tCall(logical(identifier('unit'), literal('BTC'), '||')));
+assert.strictEqual(v.length, 0, 'a ticker fallback stays silent in a t() variable');
 
 // ─── Export surface ───────────────────────────────────────────────
 //
@@ -827,6 +874,13 @@ visitors.CallExpression(tCall(logical(identifier('label'), literal('Change unava
 assert.strictEqual(reports.length, 27, 'create() flags nullish fallback copy passed into t() variables');
 visitors.CallExpression(tCall(logical(identifier('label'), tCall(identifier('fallback')), '??')));
 assert.strictEqual(reports.length, 27, 'create() allows a translated nullish fallback in t() variables');
+visitors.CallExpression(tCall(logical(identifier('unit'), literal('coin'), '||')));
+assert.strictEqual(reports.length, 28, 'create() flags `||` fallback copy passed into t() variables');
+visitors.CallExpression(tCall(conditional(literal('buy bid'), literal('sell ask'))));
+assert.strictEqual(reports.length, 29, 'create() flags ternary copy passed into t() variables');
+visitors.CallExpression(tCallKey('sideState', conditional(literal('bid'), literal('ask'))));
+visitors.CallExpression(tCall(conditional(literal('Trezor'), literal('Ledger'))));
+assert.strictEqual(reports.length, 29, 'create() skips select arguments and brand names in t() variables');
 
 // File filtering — smoke-file path is auto-skipped.
 const smokeContext = {

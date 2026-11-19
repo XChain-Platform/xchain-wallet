@@ -138,6 +138,9 @@ const messages = {
     'history.summary.linkSolo': 'Cross-chain link: {leader}',
     'history.summary.linkSameChain': 'Link: {peer} ↔ {leader}',
     'history.summary.linkSameChainSolo': 'Link: {leader}',
+    'history.resizeList': 'Resize the history list',
+    'history.resizeListHint': 'Drag to resize the history list, or press Enter to reset.',
+    'history.listLabel': 'History entries',
 };
 
 addEnglish(messages);

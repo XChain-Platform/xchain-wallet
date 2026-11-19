@@ -490,6 +490,33 @@ describe('desktop main entry point', () => {
         expect(sender.webContents.send).not.toHaveBeenCalledWith('xchain:state-changed', { kind: 'session' });
     });
 
+    it('registers a picked file only for the trusted frame, one path, and a regular file', async () => {
+        electron.app.whenReady.mockResolvedValueOnce();
+        await import('../../../packages/desktop/main/index.js');
+        await vi.waitFor(() => expect(electron.ipcHandlers.has('xchain:register-picked-file')).toBe(true));
+        const register = electron.ipcHandlers.get('xchain:register-picked-file');
+        const dir = mkdtempSync(join(tmpdir(), 'xchain-picked-main-'));
+        const filePath = join(dir, 'picked.bin');
+        writeFileSync(filePath, 'abcd');
+        const trusted = { senderFrame: { url: appIndex }, sender: { getURL: () => appIndex } };
+        const foreign = {
+            senderFrame: { url: 'https://connect.trezor.io/9/iframe.html' },
+            sender: { getURL: () => 'https://connect.trezor.io/9/iframe.html' },
+        };
+
+        try {
+            await expect(register(foreign, filePath)).resolves.toBeNull();
+            await expect(register(trusted, filePath, '/etc/hosts')).resolves.toBeNull();
+            await expect(register(trusted)).resolves.toBeNull();
+            await expect(register(trusted, dir)).resolves.toBeNull();
+            const answer = await register(trusted, filePath);
+            expect(Object.keys(answer).sort()).toEqual(['size', 'token']);
+            expect(answer.size).toBe(4);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     it('restores, shows, and focuses the Electron window receiving a link', async () => {
         const { focusDeepLinkTarget } = await vi.importActual(
             '../../../packages/desktop/main/protocol.js',

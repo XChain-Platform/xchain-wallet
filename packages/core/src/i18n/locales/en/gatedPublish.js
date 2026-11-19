@@ -82,6 +82,7 @@ const messages = {
     'gatedPublish.carriedTooLarge':
         'This file is {bytes}; an encrypted file can be at most {max} with this title and memo. Pick a smaller file or publish it as Public.',
     'gatedPublish.networkHelp': 'The network the file is published on; a token-gated file goes on the gate token\'s network.',
+    'gatedPublish.multipartFallback': "Couldn't continue the multipart upload.",
 };
 
 addEnglish(messages);

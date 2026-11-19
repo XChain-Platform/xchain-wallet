@@ -28,6 +28,7 @@
 import { explorerCoinCode, tickerForCoin } from '../registry/coinTicker.js';
 import { decimalToBaseUnitsRounded } from '../shared/utils/amountFormat.js';
 import { importedAddressIdsFor } from './_importedAddressIds.js';
+import { completeBalancePages } from './balancePages.js';
 import { synthesizeDemoBalances } from './demoFixtures.js';
 import { UNCONFIRMED_COMMITTED_STATUSES } from './pendingDeltas.js';
 import { explorerFreshScope, explorerReadFresh } from '../sdk/explorerRateLimit.js';
@@ -499,7 +500,10 @@ async function fetchAddressShape({ sdk, address, nativeTicker, descriptor, opts 
         sdk.getBalances(address, opts).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
         sdk.getAddress(address).catch((e) => (e instanceof Error ? e : new Error(String(e)))),
     ]);
-    return shapeFromReads({ balResp, addrResp, nativeTicker, descriptor, address });
+    const fullBalResp = balResp instanceof Error
+        ? balResp
+        : await completeBalancePages({ sdk, address, first: balResp, opts });
+    return shapeFromReads({ balResp: fullBalResp, addrResp, nativeTicker, descriptor, address });
 }
 
 /**
@@ -1053,20 +1057,25 @@ async function batchChunkEntries({ sdk, chunk, nativeTicker, descriptor, opts })
         });
     }
     if (!isBatchShape(resp, chunk[0].address)) return fallBack();
-    return chunk.map((addr) => {
+    return Promise.all(chunk.map(async (addr) => {
         const base = baseEntryFor(addr);
         const { balResp, addrResp } = readsFromBatchEntry(
             resp ? resp[addr.address] : null, addr.address,
         );
         try {
+            // A batch slot holds one page of the ledger; only a slot whose total
+            // outruns its page costs a per-address read for the rest.
+            const full = balResp instanceof Error
+                ? balResp
+                : await completeBalancePages({ sdk, address: addr.address, first: balResp, opts });
             base.balances = shapeFromReads({
-                balResp, addrResp, nativeTicker, descriptor, address: addr.address,
+                balResp: full, addrResp, nativeTicker, descriptor, address: addr.address,
             });
         } catch (e) {
             applyFailure(base, e);
         }
         return base;
-    });
+    }));
 }
 
 /**

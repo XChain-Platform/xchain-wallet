@@ -72,6 +72,10 @@ const messages = {
     // The Market price field's hint: the side's best quote fills at once.
     'market.trade.bestAskFillsNow': 'Best ask, fills now',
     'market.trade.bestBidFillsNow': 'Best bid, fills now',
+    'market.trade.youPay': 'You pay',
+    'market.trade.flipToSell': 'Flip to sell',
+    'market.trade.flipToBuy': 'Flip to buy',
+    'market.trade.balance': 'Balance {amount}',
 };
 
 addEnglish(messages);

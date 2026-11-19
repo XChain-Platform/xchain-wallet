@@ -115,6 +115,7 @@ export function assertBuiltActionMatchesIntent({
             envelope,
             ownAddresses: own,
             actionString,
+            rawData: rawData ?? null,
             decodeRevealAction: () => sdk.decoder.decodeActionFromPsbt(encoded.revealPsbt),
             revealPsbt: encoded.revealPsbt,
             network: sdk.config && sdk.config.network,

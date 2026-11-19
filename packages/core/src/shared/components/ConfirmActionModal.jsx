@@ -810,7 +810,8 @@ export function ConfirmActionModal({
             {t('components.confirmActionModal.aHardwareDeviceVerifiesNative')}
         </p>
     ) : null;
-    const pageLabel = t('components.confirmActionModal.confirm', { value: (headline !== undefined ? headline : head.sentence) || 'action' });
+    const confirmName = (headline !== undefined ? headline : head.sentence) || '';
+    const pageLabel = t('components.confirmActionModal.confirm', { nameState: confirmName ? 'named' : 'unnamed', value: confirmName });
 
     // The confirm page always opens at its top; it must not inherit how far
     // the form behind it was scrolled.

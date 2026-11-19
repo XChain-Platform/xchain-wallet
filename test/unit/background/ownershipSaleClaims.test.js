@@ -47,6 +47,7 @@ function makeHost() {
         vault: {
             settings: { get: async () => ({ activeNetwork: 'mainnet' }) },
             wallets: { list: async () => [] },
+            addresses: { list: async () => [] },
         },
         chainRegistry: {
             get: (id) => (id === 'bitcoin-mainnet' ? { id, networkKind: 'mainnet' } : null),

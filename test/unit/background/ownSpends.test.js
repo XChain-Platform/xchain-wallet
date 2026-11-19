@@ -59,6 +59,7 @@ import { OWN_SPEND_HOLD_MS, createOwnSpendLedger } from '../../../packages/exten
 import { isAlreadyOnNetworkRejection } from '../../../packages/core/src/flows/broadcastPermanence.js';
 import { submitFailureMessage } from '../../../packages/core/src/shared/utils/submitFailureMessage.js';
 import { QUIT_DEFERRING_MESSAGE_TYPES } from '../../../packages/desktop/main/quitGuard.js';
+import { BROADCAST_MESSAGE_TYPES } from '../../../packages/core/src/shared/utils/broadcastRoutes.js';
 
 // Each fake PSBT names the outpoints it spends.
 const PSBT_INPUTS = {
@@ -381,6 +382,41 @@ describe('every action the background signs over the same coins', () => {
         const routes = [...QUIT_DEFERRING_MESSAGE_TYPES]
             .filter((type) => /^action\.[A-Za-z]+$/.test(type) && type !== 'action.send');
         expect(routes.length).toBeGreaterThan(40);
+        sendTokenMock.mockResolvedValueOnce({ txid: 'tx-a' });
+        const host = makeHost();
+        await host.handle(sendRequest('psbt-a', 'recipient-one', '0.0003'));
+
+        const unclaimed = [];
+        for (const type of routes) {
+            const reply = await host.handle(actionRequest(type, 'psbt-b'));
+            if (reply?.error?.name !== 'InputsAlreadySpentError') unclaimed.push(type);
+        }
+        expect(unclaimed).toEqual([]);
+    });
+
+    it('claims the coins of the handshake and label publish routes before they sign', async () => {
+        sendTokenMock.mockResolvedValueOnce({ txid: 'tx-a' });
+        const host = makeHost();
+        await host.handle(sendRequest('psbt-a', 'recipient-one', '0.0003'));
+
+        await expect(host.handle(actionRequest('messaging.handshake', 'psbt-b'))).resolves.toEqual(SPENT);
+        await expect(host.handle(actionRequest('wallet.publishLabels', 'psbt-b'))).resolves.toEqual(SPENT);
+        const prepared = actionRequest('wallet.publishLabels', 'psbt-b');
+        const { chainId, ...rest } = prepared.request;
+        await expect(host.handle({ type: prepared.type, request: { ...rest, preparation: { chainId } } }))
+            .resolves.toEqual(SPENT);
+    });
+
+    it('leaves no software broadcast route unclaimed without a stated reason', async () => {
+        const exempt = new Map([
+            ['action.send', 'claims inside sendWithHold'],
+            ['broadcast.signedTx', 'claims the raw transaction in its own wrapper'],
+            ['broadcast.queue.broadcast', 'its coins are held through the queue entry'],
+            ['tx.replace', 'replaces a transaction this wallet already holds the coins of'],
+            ['multisigSign.finalize', 'finalizes a session whose PSBT the cosigners built; no claim path yet'],
+        ]);
+        const routes = [...BROADCAST_MESSAGE_TYPES].filter((type) => !type.endsWith('.hw') && !exempt.has(type));
+        expect(routes).toEqual(expect.arrayContaining(['messaging.handshake', 'wallet.publishLabels', 'action.order']));
         sendTokenMock.mockResolvedValueOnce({ txid: 'tx-a' });
         const host = makeHost();
         await host.handle(sendRequest('psbt-a', 'recipient-one', '0.0003'));

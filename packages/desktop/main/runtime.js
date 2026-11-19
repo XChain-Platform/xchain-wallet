@@ -76,7 +76,7 @@ import { startLabelSyncRestoreTask } from '@xchain-wallet/extension/src/backgrou
 import { createVaultKeyring } from '@xchain-wallet/extension/src/background/vaultKeyring.js';
 
 import { createDesktopMessageHost } from './messageHost.js';
-import { applyAutoLockReport, hasEnforceableWindow, stampAutoLockActivity } from './autoLockState.js';
+import { applyAutoLockReport, armProvisionalAutoLock, hasEnforceableWindow, stampAutoLockActivity } from './autoLockState.js';
 import { handlePanicStateMessage, PANIC_STATE_MESSAGE_TYPES } from './panicModeState.js';
 
 /**
@@ -505,6 +505,9 @@ export async function ensureHost(runtime) {
             // Re-applies routing on any settings.update touching `privacy`,
             // so the toggle takes effect on the next request.
             onPrivacySettingsChanged: runtime.onPrivacySettingsChanged,
+            // A saved endpoint override drops the chain's SDK instance; the
+            // watcher rebinds its socket to the new one.
+            onSdkEndpointsChanged: async () => { await runtime.notificationService?.refresh(); },
             surfaceStateEvents: {
                 async publish(kind) {
                     if (kind !== 'network') return;
@@ -961,6 +964,15 @@ export async function handleIpcMessage(runtime, message) {
                         // resurface on the next message if it's real.
                         console.error('[xchain] ensureHost after unlock failed:', err);
                     }
+                    // Until the renderer reports, the session carries the
+                    // vault's own window instead of no deadline.
+                    await withAutoLockStoreLane(runtime, () => armProvisionalAutoLock(
+                        runtime.autoLockStore,
+                        () => runtime.vault?.settings.get() ?? null,
+                        Date.now(),
+                    )).catch((err) => {
+                        console.error('[xchain] provisional auto-lock record could not be saved:', err);
+                    });
                 },
                 startLabelSyncRestore: (opts) => startLabelSyncRestoreTask({
                     walletId: opts.walletId,

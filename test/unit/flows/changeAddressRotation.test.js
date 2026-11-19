@@ -247,16 +247,16 @@ describe('deriveChangeAddress', () => {
 
     it('tags a hardware-derived change address with the device kind', async () => {
         const hw = makeSigner('trezor');
-        const hwVault = makeVault({ addresses: [sourceRecord({ source: 'trezor' })] });
+        const hwVault = makeVault({ addresses: [sourceRecord({ source: 'trezor', signerId: 'signer-1' })] });
         const record = await deriveChangeAddress(opts(hwVault, hw));
         expect(record.source).toBe('trezor');
     });
 
     it('keeps hardware change branches separate inside a legacy wallet', async () => {
         const rows = [
-            sourceRecord({ source: 'trezor' }),
+            sourceRecord({ source: 'trezor', signerId: 'signer-1' }),
             sourceRecord({
-                source: 'trezor', address: 'legacy-change-9', addressType: 'p2pkh',
+                source: 'trezor', signerId: 'signer-1', address: 'legacy-change-9', addressType: 'p2pkh',
                 derivationPath: "m/44'/1'/0'/1/9", role: 'change',
             }),
         ];

@@ -101,6 +101,7 @@ import {
 } from './errorBoundary.js';
 import { stateChangeForMessage } from './multiWindowState.js';
 import { saveBackupFile } from './backupSave.js';
+import { registerPickedFile } from './pickedFileRegistration.js';
 import { writeFile as writeFileAsync } from 'node:fs/promises';
 import { createQuitDeferral, isQuitDeferringMessage } from './quitGuard.js';
 import {
@@ -1350,6 +1351,15 @@ void runMainTask(async () => {
             reportMainFailure('wipe-storage IPC action', err);
             return { ok: false, error: 'wipe-storage: operation failed' };
         }
+    });
+
+    // A file the user picked, as the preload resolved it: answers an opaque
+    // token and the size, never the path. Main opens an upload's file only
+    // through a token issued here, so page script cannot name a path.
+    ipcMain.handle('xchain:register-picked-file', async (event, ...args) => {
+        if (!isTrustedSender(event)) return null;
+        if (args.length !== 1) return null;
+        return registerPickedFile(args[0]);
     });
 
     // Save an encrypted backup through the native dialog. The renderer hands

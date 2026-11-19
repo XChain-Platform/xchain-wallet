@@ -17,6 +17,7 @@ import { networks } from 'bitcoinjs-lib';
 import {
     assertBroadcastSignaturesVerify,
     assertTxSignaturesVerify,
+    PREVOUT_NOT_UNSPENT,
     prevoutsFromTracker,
 } from '../../../packages/core/src/signers/verifyTxSignatures.js';
 import { SIGNATURE_MISMATCH_MESSAGE } from '../../../packages/core/src/signers/verifyInputSignatures.js';
@@ -182,5 +183,35 @@ describe('cost at 200 inputs', () => {
         // A loose ceiling, so a quadratic regression shows without timing flake.
         expect(ms).toBeLessThan(10_000);
         console.info(`[cost] 200 ${type} inputs verified in ${ms.toFixed(0)} ms`);
+    });
+});
+
+describe('prevoutsFromTracker spent-coin tag', () => {
+    const run = (built, getUtxos) => prevoutsFromTracker({
+        txHex: built.txHex, getUtxos, network: networks.bitcoin, signerId: 'raw',
+    });
+
+    it('tags a coin the tracker no longer lists, keeping the refusal itself', async () => {
+        const built = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
+        const err = await run(built, async () => ({ utxos: [] })).catch((e) => e);
+        expect(err).toMatchObject({ name: 'SignatureMismatchError', code: 'SIGNATURE_MISMATCH', reason: PREVOUT_NOT_UNSPENT, inputIndex: 0 });
+        expect(typeof err.address).toBe('string');
+        expect(err.message).toBe(SIGNATURE_MISMATCH_MESSAGE);
+    });
+
+    it('leaves a failed tracker read untagged', async () => {
+        const built = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
+        const err = await run(built, async () => { throw new Error('down'); }).catch((e) => e);
+        expect(err.code).toBe('SIGNATURE_MISMATCH');
+        expect(err.reason).toBeUndefined();
+    });
+
+    it('leaves a script mismatch untagged', async () => {
+        const built = signedTxFor({ inputs: [{ type: 'p2wpkh' }] });
+        const tracker = trackerFor(built.prevouts);
+        for (const rows of tracker.byAddress.values()) rows[0].scriptPubKey = `0014${'ab'.repeat(20)}`;
+        const err = await run(built, tracker.getUTXOs).catch((e) => e);
+        expect(err.code).toBe('SIGNATURE_MISMATCH');
+        expect(err.reason).toBeUndefined();
     });
 });

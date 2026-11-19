@@ -39,8 +39,13 @@
 //     message, description, lead, legend, closeLabel, searchLabel, subtitle,
 //     chainLabel, accessibleLabel, visibleLabel, labelPrefix,
 //     unavailableMessage, intro, secondaryActionLabel, secondaryLabel,
-//     doneLabel (the USER_FACING_ATTRS set below is the authority; keep this
-//     list in step with it). The names from `heading` on are component props
+//     doneLabel, addressLabel, pickerLabel, pickerLockedReason,
+//     iconLockedReason, addressHelp, networkHelp, expiresHelp, flipLabel,
+//     resizeLabel, resizeHint, listLabel, detailLabel, searchPlaceholder,
+//     disabledReason, fallbackMessage, payBalance, amountLabel, give, get,
+//     clearLabel, inputLabel, chooseLabel, pickLabel, viewLabel, winnerLabel,
+//     chartRegionLabel, tabsLabel, infoLabel (the USER_FACING_ATTRS set below
+//     is the authority; keep this list in step with it). The names from `heading` on are component props
 //     rather than DOM attributes: shipping components
 //     render copy through them, so a DOM-only set left that copy out of the
 //     translator index.
@@ -81,9 +86,12 @@
 //     (`T.file` judges only `file`), a computed key reaches every entry,
 //     and only string-shaped values count, so an id or a nested object
 //     beside the copy stays silent. A table no sink reads is never judged.
-//   - Nullish fallbacks in translation variables:
-//     t('key', { value: label ?? 'Unavailable' }) → flagged. Passing a
-//     second t() call or a runtime value as the fallback stays silent.
+//   - Fallbacks and branches in translation variables:
+//     t('key', { value: label ?? 'Unavailable' }), a `||` fallback or a
+//     ternary whose branch is copy → flagged. Passing a second t() call
+//     or a runtime value as the fallback stays silent, and
+//     so do a variable named `...State` (an ICU select argument) and a
+//     fallback to Ledger, Trezor or BTC, which no language translates.
 //
 // What the rule cannot see, so a clean run is not proof a screen has no
 // untranslated copy:
@@ -94,6 +102,10 @@
 //     descriptor array that is filtered and mapped before it renders, or
 //     a function-local `const retry = { label: 'Try again' }` passed as
 //     recovery={retry}).
+//   - A t() variable named `...State`, which is skipped as an ICU select
+//     argument. English written as its value (a branch id that happens to
+//     read as a word) is not judged, so keep the words in the dictionary's
+//     select branches.
 //   - Copy props and descriptor keys outside USER_FACING_ATTRS, wherever
 //     the copy is written; a component that renders copy through a new
 //     prop name needs that name added to the set.
@@ -347,6 +359,57 @@ const USER_FACING_ATTRS = new Set([
     'secondaryActionLabel',
     'secondaryLabel',
     'doneLabel',
+    // Props written one hop earlier than the sink they reach. FromSection
+    // forwards `addressLabel`, `pickerLabel`, `addressHelp`, `networkHelp` and
+    // `pickerLockedReason` (as AddressField's `iconLockedReason`) to field
+    // labels, tips and the locked icon's title; the expiration fields
+    // forward `expiresHelp` to the Expires tip; GiveGetQuick renders
+    // `flipLabel` as the flip button's aria-label and title, and its `give` /
+    // `get` objects carry `label` and `amountLabel` (the swap ticket's
+    // `payBalance` becomes its `balanceText`); ListDetailSplit forwards
+    // `resizeLabel`, `resizeHint`, `listLabel` and `detailLabel` to the
+    // splitter's and regions' DOM aria-labels and title; the list toolbar's
+    // `searchPlaceholder` is the search box's placeholder; ActionList renders
+    // `disabledReason` verbatim; MultipartUploadSection renders
+    // `fallbackMessage` as its status line. Across packages/*/src each name
+    // is a JSX attribute or prop default carrying copy or a runtime value,
+    // which no gate reports, and the same-named identifiers (CSS-module
+    // classes, locals, helper functions) are not JSX attributes or prop
+    // keys. `give` and `get` appear only as the GiveGet ticket objects.
+    'addressLabel',
+    'pickerLabel',
+    'pickerLockedReason',
+    'iconLockedReason',
+    'addressHelp',
+    'networkHelp',
+    'expiresHelp',
+    'flipLabel',
+    'resizeLabel',
+    'resizeHint',
+    'listLabel',
+    'detailLabel',
+    'searchPlaceholder',
+    'disabledReason',
+    'fallbackMessage',
+    'payBalance',
+    'amountLabel',
+    'give',
+    'get',
+    // The same one-hop shape in the field components: ListField and FileField
+    // forward `clearLabel`, `inputLabel` and `chooseLabel` to button text and
+    // aria-labels, TargetField and the GiveGet address row forward `pickLabel`,
+    // FormFrame forwards `viewLabel` to its view switch, the outcome layouts
+    // render `winnerLabel`, `chartRegionLabel` and `tabsLabel` as pill text and
+    // aria-labels, and StopSlider forwards `infoLabel` to its InfoTip.
+    'clearLabel',
+    'inputLabel',
+    'chooseLabel',
+    'pickLabel',
+    'viewLabel',
+    'winnerLabel',
+    'chartRegionLabel',
+    'tabsLabel',
+    'infoLabel',
 ]);
 
 // There is deliberately no technical-attribute deny-list here. Both
@@ -465,7 +528,20 @@ function branchCopy(node, allow = [], minLength = 2) {
     return null;
 }
 
-/** Return untranslated nullish fallback copy passed as a t() variable. */
+// Names that read the same in every language, so a fallback to one of them
+// inside a translated template is not English copy.
+const UNTRANSLATED_NAMES = ['BTC', 'Ledger', 'Trezor'];
+
+// A variable named `...State` is the argument of an ICU `select`: its value
+// picks a branch whose text lives in the dictionary, so it is an id, not copy.
+const SELECT_ARGUMENT_KEY = /State$/;
+
+/**
+ * Return untranslated copy passed as a t() variable through a `??`, `||` or
+ * `&&` fallback or a ternary. The English lands inside an otherwise
+ * translated template, so it reaches no other gate: the enclosing attribute
+ * or content container holds a call, which they do not open.
+ */
 function translationVarViolations(node, allow = [], minLength = 2) {
     if (node?.type !== 'CallExpression' || node.callee?.type !== 'Identifier' || node.callee.name !== 't') {
         return [];
@@ -475,8 +551,9 @@ function translationVarViolations(node, allow = [], minLength = 2) {
     const out = [];
     for (const prop of vars.properties ?? []) {
         if ((prop?.type !== 'Property' && prop?.type !== 'ObjectProperty') || prop.computed) continue;
-        if (prop.value?.type !== 'LogicalExpression' || prop.value.operator !== '??') continue;
-        const copy = branchCopy(prop.value, allow, minLength);
+        if (prop.value?.type !== 'LogicalExpression' && prop.value?.type !== 'ConditionalExpression') continue;
+        if (prop.key?.type === 'Identifier' && SELECT_ARGUMENT_KEY.test(prop.key.name)) continue;
+        const copy = branchCopy(prop.value, [...allow, ...UNTRANSLATED_NAMES], minLength);
         if (copy === null) continue;
         out.push({
             node: prop.value,

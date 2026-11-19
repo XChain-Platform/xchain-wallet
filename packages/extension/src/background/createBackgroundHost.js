@@ -54,7 +54,8 @@ import {
 import { logConsole } from '@xchain-wallet/core/shared/utils/logConsole.js';
 import { getDefaultAlertInbox } from '@xchain-wallet/core/shared/alertInbox.js';
 import { rawTxid } from '@xchain-wallet/core/signers/verifySignedTx.js';
-import { assertBroadcastSignaturesVerify } from '@xchain-wallet/core/signers/verifyTxSignatures.js';
+import { PREVOUT_NOT_UNSPENT, assertBroadcastSignaturesVerify } from '@xchain-wallet/core/signers/verifyTxSignatures.js';
+import { spentInputsVerdict } from '@xchain-wallet/core/flows/deployLegWait.js';
 import { MessageHost } from './MessageHost.js';
 import { registerBridgeHandlers } from '../bridge/handlers.js';
 import {
@@ -861,6 +862,41 @@ const SPENDING_ACTION_TYPES = [
     'clearVoteDelegation', 'contractStake',
 ].map((name) => `action.${name}`);
 
+// Software-signed routes outside the action.* namespace that spend coins and
+// broadcast; each claims them like the action routes above.
+const SPENDING_ROUTES_OUTSIDE_ACTIONS = ['messaging.handshake', 'wallet.publishLabels'];
+
+/**
+ * The stored Address a signing request names: by id when that resolves, else by
+ * the `from.address` string among the request wallet's own addresses, so a
+ * request that omits or misstates the id cannot dodge the checks below. Records
+ * of one kind sharing the string (a network copy) resolve to the first; records
+ * that disagree on source or device are refused rather than picked between.
+ *
+ * @param {any} req
+ * @param {any} vault
+ * @returns {Promise<any | null>} null when nothing stored matches
+ */
+async function storedRecordForSigning(req, vault) {
+    const named = req?.from?.addressId ?? req?.addressId;
+    if (typeof named === 'string' && named.length > 0) {
+        const byId = await vault.addresses.get(named);
+        if (byId) return byId;
+    }
+    const walletId = req?.walletId;
+    const text = req?.from?.address;
+    if (typeof walletId !== 'string' || walletId.length === 0) return null;
+    if (typeof text !== 'string' || text.length === 0) return null;
+    const matches = [];
+    for (const a of await vault.addresses.list()) {
+        if (a.address === text && (await addressInWallet(vault, a, walletId))) matches.push(a);
+    }
+    if (matches.every((m) => m.source === matches[0].source && m.signerId === matches[0].signerId)) {
+        return matches[0] ?? null;
+    }
+    throw new Error(`address "${text}" matches stored addresses of different kinds in this wallet; pick it by id`);
+}
+
 /**
  * Check a signing request's signer choice against the vault's own record of
  * the address it names. The request carries `signerId` and the address id
@@ -875,7 +911,8 @@ const SPENDING_ACTION_TYPES = [
  * flow refuses those two itself, or that signs nothing, passes `leaveToFlow`
  * and gets back true for a device address that names no device, which means
  * "hand the flow no signer". A record that cannot be found is left to the
- * flow, which reports the missing address.
+ * flow, which reports the missing address. A request with no id is resolved by
+ * its address string within the request wallet before that rule applies.
  *
  * @param {any} req
  * @param {any} vault
@@ -883,10 +920,9 @@ const SPENDING_ACTION_TYPES = [
  * @returns {Promise<boolean>} true when the pooled signer must not be used
  */
 async function checkSignerAgainstStoredAddress(req, vault, leaveToFlow) {
-    const named = req?.from?.addressId ?? req?.addressId;
-    if (typeof named !== 'string' || named.length === 0) return false;
-    const record = await vault.addresses.get(named);
+    const record = await storedRecordForSigning(req, vault);
     if (!record) return false;
+    const named = record.id;
     const signerId = typeof req?.signerId === 'string' && req.signerId.length > 0 ? req.signerId : null;
     if (record.source === 'watch-only') {
         if (leaveToFlow) return false;
@@ -1053,6 +1089,23 @@ function permanentReleasePatch(entry, failure) {
         txid: entry.commitTxid ?? entry.txid ?? null,
         error: failure,
     };
+}
+
+/**
+ * The refusal a queued entry settles with when its inputs are spent and the chain,
+ * not a node, said why. `conflict` retires the entry as permanent, `unknown` backs
+ * it off as transient. The settlement reads the same text classifier it applies to
+ * a node's refusal, so each wording is chosen to land on its side of that split
+ * (spent-conflict wording is permanent; a network-read failure is transient), and
+ * neither reads as "already on the network".
+ *
+ * @param {'conflict'|'unknown'} verdict
+ * @returns {Error}
+ */
+function spentInputsError(verdict) {
+    return new Error(verdict === 'conflict'
+        ? 'The coins this transaction spends were already spent by another transaction, so it can never confirm. Compose a fresh transaction.'
+        : 'The coins this transaction spends appear spent, but the network could not confirm whether this transaction landed. Check your history before discarding it.');
 }
 
 const QUEUED_BROADCAST_RETRY_BASE_MS = 1_000;
@@ -1306,6 +1359,10 @@ export function createBackgroundHost(deps) {
         // and extension shells cannot proxy their own traffic and pass
         // nothing, which is why this is a dep rather than shared logic.
         onPrivacySettingsChanged,
+        // Called with the chain ids whose SDK instance a saved endpoint
+        // override dropped, so a shell holding a live socket on one can
+        // re-sync it.
+        onSdkEndpointsChanged,
         // Resolver that turns a web-accessible-resource path into a URL a
         // dApp can load (getSupportedChains uses it for chain icons).
         // Defaults inside registerBridgeHandlers to chrome.runtime.getURL;
@@ -1748,17 +1805,36 @@ export function createBackgroundHost(deps) {
     }
     // A restore that replaces the Settings record can bring custom chains and
     // endpoint overrides the latched boot pass never saw. Hydrate straight from
-    // a fresh read instead of through the latch: a boot pass still in flight
-    // read the pre-restore record, and hydration only adds, so the two cannot
-    // undo each other. Seed first, overrides second, for the reason above.
+    // a fresh read instead of through the latch. The restored record replaces
+    // the old one outright, so the registry is reconciled to it (chains the
+    // record dropped or changed leave or swap, and their cached SDK clients
+    // go with them), after any boot pass still in flight has finished adding
+    // from the pre-restore record. Seed first, overrides second, for the
+    // reason above.
     async function rehydrateAfterSettingsRestore(vault, chainRegistry, sdkRegistry) {
         if (!vault || !chainRegistry) return;
+        let moved = false;
         try {
-            registry.hydrateCustomChainsFromSettings(chainRegistry, await vault.settings.get());
+            if (customChainsSeedPromise) await customChainsSeedPromise;
+            const restored = await vault.settings.get();
+            // A record that never held a custom chain carries no list at all,
+            // and the reconcile treats a missing list as "unknown"; after a
+            // restore the stored record is the truth, so it reads as empty.
+            const result = registry.reconcileCustomChainsFromSettings(
+                chainRegistry,
+                restored && typeof restored === 'object' && !Array.isArray(restored.customChains)
+                    ? { ...restored, customChains: [] }
+                    : restored,
+            );
+            for (const id of [...result.removed, ...result.replaced]) {
+                try { sdkRegistry?.invalidate?.(id); } catch { /* a cache drop never fails the restore */ }
+            }
+            moved = result.added.length + result.removed.length + result.replaced.length > 0;
         } catch {
             // The restore already committed; a failed re-read must not fail it.
         }
         await applyEndpointOverridesFromVault(vault, sdkRegistry);
+        if (moved) await publishSurfaceState('custom-chains', {});
     }
     // Seed BEFORE the override pass, and seed here rather than only on
     // settings.get. A host can start with no UI attached at all: an MV3
@@ -2284,7 +2360,17 @@ export function createBackgroundHost(deps) {
         // endpoints actually moved.
         if (patch && Object.prototype.hasOwnProperty.call(patch, 'sdkEndpoints')
             && typeof sdkRegistry?.applyEndpointOverridesFromSettings === 'function') {
-            sdkRegistry.applyEndpointOverridesFromSettings(result);
+            const applied = sdkRegistry.applyEndpointOverridesFromSettings(result);
+            // Live sockets were opened on the instances just dropped; a shell
+            // that holds them re-syncs here. A network event is not used: it
+            // remounts the popup's network state.
+            if (applied?.changed?.length > 0 && typeof onSdkEndpointsChanged === 'function') {
+                try {
+                    await onSdkEndpointsChanged(applied.changed);
+                } catch (err) {
+                    console.error('[xchain] endpoint change follow-up failed:', err);
+                }
+            }
         }
         // Cluster S FOLLOWUP 1: refresh the sign-throttle limit cache
         // when the patch touches signThrottle so users see the change
@@ -4049,6 +4135,7 @@ export function createBackgroundHost(deps) {
         getQueue,
         restoreQueueFromVault,
         reconcileRestoredEntries,
+        syncEntryToDurableRecord,
         enqueueOnBroadcastFailure,
         enqueueSignedBroadcast,
         isWalletRemoved,
@@ -4604,6 +4691,8 @@ export function createBackgroundHost(deps) {
             // Reassigned once a two-phase entry's commit lands: from then on the
             // entry is its reveal, and every settlement below describes that.
             let entry = q[idx];
+            // A queue save a refused write left behind the vault must not resend the commit.
+            if (await syncEntryToDurableRecord(vault, entry)) await persistQueue();
             // The coins this entry spends, held once it goes out (see ownSpends.js).
             const queuedSpend = rawTxOutpoints(entry.signedTxHex);
             const queuedSpendTxid = txidOfRaw(entry.signedTxHex);
@@ -4640,11 +4729,23 @@ export function createBackgroundHost(deps) {
             // older build or changed outside this process. Resolve the spent
             // scripts and amounts again immediately before any durable claim or
             // network call, so a refusal leaves the entry queued and unsent.
-            await assertBroadcastSignaturesVerify({
-                sdk,
-                txHex: entry.signedTxHex,
-                signerId: 'broadcast.queue.broadcast',
-            });
+            //
+            // Coins that are no longer unspent are not a forged signature: an
+            // earlier send landed and only its reply was lost, or another
+            // transaction took the coins. The bytes still never go out, but the
+            // chain is asked which of the two it was and the entry settles on
+            // that answer instead of staying queued behind a signature error.
+            let spentVerdict = null;
+            try {
+                await assertBroadcastSignaturesVerify({
+                    sdk,
+                    txHex: entry.signedTxHex,
+                    signerId: 'broadcast.queue.broadcast',
+                });
+            } catch (verifyErr) {
+                if (verifyErr?.reason !== PREVOUT_NOT_UNSPENT) throw verifyErr;
+                spentVerdict = await spentInputsVerdict({ sdk, txid: queuedSpendTxid, address: verifyErr.address });
+            }
             // Claim the durable half before the bytes go out, the same write
             // core's drain makes at the same point. A record reading 'queued'
             // is what the reload recovery treats as proof that its transaction
@@ -4700,14 +4801,21 @@ export function createBackgroundHost(deps) {
             // would delete a different, still-valid signed transaction.
             let result;
             try {
+                // Spent inputs that no transaction of this entry explains settle
+                // through the catch below like any other refused send, with the
+                // chain's answer standing in for the node's.
+                if (spentVerdict === 'conflict' || spentVerdict === 'unknown') {
+                    throw spentInputsError(spentVerdict);
+                }
                 // A two-phase entry carries its signed reveal: the commit goes
                 // first, and the reveal follows in this same call, so the commit
                 // is never sent alone. A refused commit falls to the catch below
                 // with the entry unchanged, so it is settled as the pair it is.
+                // A commit the chain already holds is not sent again.
                 const reveal = schemas.pendingTx.queuedRevealOf(entry);
                 if (reveal) {
                     try {
-                        await sdk.encoder.broadcastTx(entry.signedTxHex);
+                        if (spentVerdict !== 'landed') await sdk.encoder.broadcastTx(entry.signedTxHex);
                     } catch (commitErr) {
                         // "Already known" is the commit delivered by an attempt
                         // interrupted before its reveal: the reveal still goes out.
@@ -4724,7 +4832,10 @@ export function createBackgroundHost(deps) {
                         throw freezeErr;
                     }
                 }
-                result = await sdk.encoder.broadcastTx(entry.signedTxHex);
+                // Bytes the chain already holds are settled as delivered, never resent.
+                result = spentVerdict === 'landed' && !reveal
+                    ? { txid: entry.txid ?? (queuedSpendTxid || null), alreadyOnNetwork: true }
+                    : await sdk.encoder.broadcastTx(entry.signedTxHex);
             } catch (err) {
                 if (revealFrozen !== null && err === revealFrozen) throw err;
                 // The same permanence split the core queue applies,
@@ -6978,9 +7089,15 @@ export function createBackgroundHost(deps) {
     });
 
     // Every software-signed action that spends coins claims them around its
-    // whole route (see withSpendClaim); a send claims inside sendWithHold.
-    for (const type of SPENDING_ACTION_TYPES) {
-        host.wrap(type, (handler) => (req, routeDeps) => withSpendClaim(req, routeDeps, (claimDeps) => handler(req, claimDeps)));
+    // whole route (see withSpendClaim); a send claims inside sendWithHold. The
+    // handshake and the label publish sign the same way outside the action.*
+    // namespace, and a label publish names its chain in the preparation.
+    for (const type of [...SPENDING_ACTION_TYPES, ...SPENDING_ROUTES_OUTSIDE_ACTIONS]) {
+        host.wrap(type, (handler) => (req, routeDeps) => {
+            const chainId = req?.chainId ?? req?.preparation?.chainId;
+            return withSpendClaim(chainId === req?.chainId ? req : { ...req, chainId }, routeDeps,
+                (claimDeps) => handler(req, claimDeps));
+        });
     }
 
     // A raw signed transaction claims the coins it spends before it goes out,

@@ -278,6 +278,8 @@ export class NotificationService {
             this._connectFailures.delete(chainId);
         }
 
+        this._dropSwappedConnections(desiredChains);
+
         // Drop subscriptions no longer wanted.
         for (const [key, entry] of Array.from(this._subs.entries())) {
             if (!desired.has(key)) {
@@ -315,6 +317,40 @@ export class NotificationService {
                 try { if (sdk.disconnectWs) sdk.disconnectWs(); } catch (e) { this._log.warn('NotificationService: disconnect failed', e); }
                 this._conns.delete(chainId);
             }
+        }
+    }
+
+    /**
+     * Forget a connected chain whose registry instance was replaced (an
+     * endpoint override moved, a custom chain was re-added, the pool changed),
+     * so the sync that follows reconnects it on the new instance. A cached
+     * socket and its subscriptions would otherwise keep streaming from the
+     * endpoint the operator just moved away from.
+     * @param {Set<string>} desiredChains
+     */
+    _dropSwappedConnections(desiredChains) {
+        // A chain whose old endpoint never connected is retrying (or has given
+        // up) on the old instance; a new instance gets a fresh attempt set.
+        for (const [chainId, state] of Array.from(this._connectFailures.entries())) {
+            if (!desiredChains.has(chainId) || !state.sdk) continue;
+            let current = null;
+            try { current = this._getSdkForChain(chainId); } catch { continue; }
+            if (!current || current === state.sdk) continue;
+            this._retireConnectFailure(state);
+            this._connectFailures.delete(chainId);
+        }
+        for (const [chainId, sdk] of Array.from(this._conns.entries())) {
+            if (!desiredChains.has(chainId)) continue;
+            let current = null;
+            try { current = this._getSdkForChain(chainId); } catch { continue; }
+            if (!current || current === sdk) continue;
+            for (const [key, entry] of Array.from(this._subs.entries())) {
+                if (entry.chainId !== chainId) continue;
+                try { entry.unsub(); } catch (e) { this._log.warn('NotificationService: unsubscribe failed', e); }
+                this._subs.delete(key);
+            }
+            try { if (sdk.disconnectWs) sdk.disconnectWs(); } catch (e) { this._log.warn('NotificationService: disconnect failed', e); }
+            this._conns.delete(chainId);
         }
     }
 

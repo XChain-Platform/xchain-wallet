@@ -164,6 +164,7 @@ describe('checkEnvelopeReveal', () => {
         ownAddresses: [SOURCE],
         actionString: ACTION,
         decodeRevealAction: () => ({ ok: true, actionString: ACTION }),
+        rawData: null,
         assertEnvelopeCarrierBinding: () => {},
     });
 

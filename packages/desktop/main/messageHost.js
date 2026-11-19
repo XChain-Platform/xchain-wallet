@@ -26,7 +26,7 @@
 // the Node-level smoke tests all resolve it the same way.
 import { createFileRefResolver } from '@xchain-wallet/core/flows/fileRefSource.js';
 import { createBackgroundHost } from '@xchain-wallet/extension/src/background/createBackgroundHost.js';
-import { createPathFileRefKind } from './pathFileRefKind.js';
+import { createPickedFileRefKind } from './pickedFileRefKind.js';
 
 /**
  * @typedef {Object} DesktopHostDeps
@@ -63,7 +63,7 @@ export function createDesktopMessageHost(deps) {
     if (!deps?.chainRegistry) throw new Error('createDesktopMessageHost: chainRegistry is required');
     if (!deps?.sdkRegistry) throw new Error('createDesktopMessageHost: sdkRegistry is required');
     const resolveFileRef = createFileRefResolver({
-        kinds: { path: createPathFileRefKind() },
+        kinds: { picked: createPickedFileRefKind() },
     });
     const desktopDeps = new Proxy(deps, {
         get(target, property, receiver) {

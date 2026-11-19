@@ -19,6 +19,7 @@ import {
     legMayBeOnChain,
     legNotIndexedError,
     indexerWaitMessage,
+    spentInputsVerdict,
 } from '../../../packages/core/src/flows/deployLegWait.js';
 
 const TX = 'fb246c85'.padEnd(64, '0');
@@ -120,5 +121,47 @@ describe('indexerWaitMessage', () => {
 
     it('is null with no wait in progress', () => {
         expect(indexerWaitMessage(null)).toBeNull();
+    });
+});
+
+describe('spentInputsVerdict', () => {
+    const block = (res) => vi.fn(async () => res);
+    const verdict = (sdk) => spentInputsVerdict({ sdk, txid: TX, address: ADDR });
+
+    it('is landed when the block index holds the transaction', async () => {
+        expect(await verdict({ encoder: { getTxBlock: block({ block_height: 9 }) } })).toBe('landed');
+    });
+
+    it('is landed when the source address mempool lists it, whatever its change paid', async () => {
+        const sdk = {
+            encoder: { getTxBlock: block({}), getUTXOs: vi.fn(async () => []) },
+            getUnconfirmed: vi.fn(async () => [{ tx_hash: TX.toUpperCase() }]),
+        };
+        expect(await verdict(sdk)).toBe('landed');
+    });
+
+    it('is a conflict only when the block index and the address mempool both answered without it', async () => {
+        const sdk = { encoder: { getTxBlock: block({}) }, getUnconfirmed: vi.fn(async () => []) };
+        expect(await verdict(sdk)).toBe('conflict');
+    });
+
+    it('is unknown while the address mempool holds another transaction, as a fee-bump original does', async () => {
+        const sdk = { encoder: { getTxBlock: block({}) }, getUnconfirmed: vi.fn(async () => [{ tx_hash: 'original' }]) };
+        expect(await verdict(sdk)).toBe('unknown');
+    });
+
+    it('is unknown, never a conflict, when the tracker answered but the mempool cannot be read', async () => {
+        const sdk = { encoder: { getTxBlock: block({}), getUTXOs: vi.fn(async () => []) } };
+        expect(await verdict(sdk)).toBe('unknown');
+    });
+
+    it('is unknown when the mempool read fails or the block read fails', async () => {
+        const failing = vi.fn(async () => { throw new Error('down'); });
+        expect(await verdict({ encoder: { getTxBlock: block({}) }, getUnconfirmed: failing })).toBe('unknown');
+        expect(await verdict({ encoder: { getTxBlock: failing }, getUnconfirmed: vi.fn(async () => []) })).toBe('unknown');
+    });
+
+    it('is unknown when the SDK offers no chain read at all', async () => {
+        expect(await verdict({})).toBe('unknown');
     });
 });

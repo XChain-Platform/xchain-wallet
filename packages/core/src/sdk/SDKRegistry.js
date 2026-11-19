@@ -232,8 +232,9 @@ export class SDKRegistry {
      * REPLACES the whole map (unlike `setEndpointOverrides`, which merges)
      * so "Reset to default" on a chain actually reverts it, and
      * invalidates only the chains whose effective endpoints moved, so a
-     * settings save unrelated to endpoints does not tear down live SDK
-     * instances (and their WebSockets).
+     * settings save unrelated to endpoints does not drop live SDK
+     * instances. A dropped instance is only forgotten here; whoever holds
+     * its WebSocket (the notification service) rebinds on its next sync.
      *
      * @param {{ sdkEndpoints?: Record<string, any> }} settings full Settings record
      * @returns {{ changed: string[] }} chain ids whose instances were dropped

@@ -186,6 +186,34 @@ describe('multipart publish piece action indexes', () => {
     });
 });
 
+describe('multipart publish fee rate fallback', () => {
+    it('prices from the encoder fee tiers, never the transaction-building estimate, when no rate is given', async () => {
+        const h = harness();
+        h.encoder.estimateFee = vi.fn(async (params) => h.encoder.createTx(params));
+        h.encoder.getFeeTiers = vi.fn(async () => ({ low: 1, medium: 2, high: 3 }));
+        const result = await publishMultipartFile(options(h, { rate: undefined }));
+        expect(result.record.stage).toBe('complete');
+        expect(h.encoder.getFeeTiers).toHaveBeenCalledTimes(1);
+        expect(h.encoder.estimateFee).not.toHaveBeenCalled();
+        const funding = h.encoder.createTx.mock.calls.map(([arg]) => arg).find((arg) => arg.customOutputs);
+        expect(funding.feePerKb).toBe(3000);
+    });
+
+    it('reads the tiers from the SDK when it carries them, and refuses a missing high tier', async () => {
+        const h = harness();
+        h.sdk.getFeeTiers = vi.fn(async () => ({ low: 1, medium: 2 }));
+        await expect(publishMultipartFile(options(h, { rate: undefined })))
+            .rejects.toThrow(/invalid high fee rate/);
+        expect(h.sdk.getFeeTiers).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses to guess a rate when the encoder cannot read fee tiers', async () => {
+        const h = harness();
+        await expect(publishMultipartFile(options(h, { rate: undefined })))
+            .rejects.toThrow(/fee rate is required/);
+    });
+});
+
 describe('multipart publish lane-specific builds', () => {
     it('uses two create calls for each non-segwit envelope piece', async () => {
         const h = harness({ buildMode: 'two_step' });

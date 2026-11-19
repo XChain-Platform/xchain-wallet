@@ -91,6 +91,7 @@ const messages = {
     'ui.feeSelector.speedValueText': '{speed}: {amount}',
     'ui.feeSelector.speedValueTextEta': '{speed}: {amount} · ~{eta} min',
     'ui.feeSelector.networkFeeAmountTicker': 'Network fee amount ({ticker})',
+    'ui.targetField.pickLabel': 'Choose another target',
 };
 
 addEnglish(messages);

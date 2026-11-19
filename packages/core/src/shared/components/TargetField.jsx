@@ -48,7 +48,7 @@ export function TargetField({
     icon,
     hint,
     onPick,
-    pickLabel = 'Choose another target',
+    pickLabel = t('ui.targetField.pickLabel'),
     pickLockedReason,
 }) {
     const id = useId();

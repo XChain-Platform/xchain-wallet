@@ -106,7 +106,9 @@ function runPreload() {
 
     const originalLoad = Module._load;
     Module._load = function patchedLoad(request, ...rest) {
-        if (request === 'electron') return { contextBridge, ipcRenderer };
+        if (request === 'electron') {
+            return { contextBridge, ipcRenderer, webUtils: { getPathForFile: () => '/picked/file.bin' } };
+        }
         return originalLoad.call(this, request, ...rest);
     };
     try {
@@ -257,6 +259,8 @@ describe('desktop preload: the renderer sandbox surface', () => {
         await bridge.sendMessage({ type: 'session.status' });
         await bridge.wipeStorage();
         await bridge.saveBackupFile({ fileName: 'w-backup.xchain-wallet', content: '{}' });
+        // The picked-file registration is walked so main must answer on it.
+        await bridge.fileTokenOf({ name: 'a.bin' });
         await win.openDetached({ initialView: 'history' });
         await win.setScreenProtected(true);
         await registry.getRemoteDescriptors();
@@ -286,7 +290,7 @@ describe('desktop preload: the renderer sandbox surface', () => {
         ]);
         // Sanity: the walk above must actually have produced traffic, or the
         // agreement checks below are vacuously true.
-        expect(used.size).toBe(13);
+        expect(used.size).toBe(14);
 
         const registered = mainRegisteredChannels();
         for (const channel of used) {

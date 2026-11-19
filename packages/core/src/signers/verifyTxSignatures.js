@@ -38,6 +38,9 @@
 //     verify against a later key than the one before it, in script order, as
 //     the interpreter matches them, under the legacy hash (p2sh) or the BIP143
 //     hash with the witness script as scriptCode.
+//   - p2sh and p2wsh data-carrier reveals: `<signature> <pubkey> <script>` over
+//     the exact carrier script verifyCarrierReveal.js recognizes, under the same
+//     legacy or BIP143 hash.
 //   - p2tr key path: the BIP341 signature hash over every input's amount and
 //     script, verified with BIP340 against the output key.
 // Script-path spends, an annex, any other sighash type and any other script are
@@ -51,6 +54,7 @@ import { schnorr } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha2';
 import { bech32, createBase58check } from '@scure/base';
 import { readSignedRawTx } from './verifySignedTx.js';
+import { checkCarrierSpend, parseCarrierScript } from './verifyCarrierReveal.js';
 import {
     SignatureMismatchError,
     bip143Digester,
@@ -169,6 +173,13 @@ function checkMultisig(items, scriptHex, digestFor, wantSighash) {
     return null;
 }
 
+/** A multisig or data-carrier script spend, whichever the script is. */
+function checkScriptSpend(items, scriptHex, digestFor, wantSighash) {
+    return parseCarrierScript(scriptHex)
+        ? checkCarrierSpend(items, scriptHex, digestFor, wantSighash)
+        : checkMultisig(items, scriptHex, digestFor, wantSighash);
+}
+
 /** The BIP341 key-path SIGHASH_DEFAULT / SIGHASH_ALL digest builder. */
 function bip341Digester(tx, amounts, scripts) {
     const shaPrevouts = sha256Hex(tx.inputs.map(outpoint).join(''));
@@ -224,10 +235,11 @@ export function assertTxSignaturesVerify({ txHex, prevouts, signerId }) {
             if (!bip143) bip143 = bip143Digester(tx);
             return () => bip143(i, scriptCode, amount);
         };
-        const checkWitnessMultisig = (witnessScript) => {
+        const checkWitnessMultisig = (witnessScript, allowCarrier = true) => {
             if (witness.length < 2) throw fail('the witness does not end in a witness script');
             if (witness[witness.length - 1] !== witnessScript) throw fail('the witness script is not the one the prevout commits to');
-            const reason = checkMultisig(witness.slice(0, -1), witnessScript, segwitDigest(witnessScript), ecdsaSighash);
+            const check = allowCarrier ? checkScriptSpend : checkMultisig;
+            const reason = check(witness.slice(0, -1), witnessScript, segwitDigest(witnessScript), ecdsaSighash);
             if (reason) throw fail(reason);
         };
         const checkWitnessKey = (keyHash) => {
@@ -270,10 +282,10 @@ export function assertTxSignaturesVerify({ txHex, prevouts, signerId }) {
                 if (pushes.length !== 1) throw fail('the scriptSig is not the redeem script push');
                 const witnessScript = witness[witness.length - 1] ?? '';
                 if (sha256Hex(witnessScript) !== inner[1]) throw fail('the witness script does not match the redeem script');
-                checkWitnessMultisig(witnessScript);
+                checkWitnessMultisig(witnessScript, false);
             } else {
                 if (witness.some((item) => item.length > 0)) throw fail('a p2sh input carries a witness');
-                const reason = checkMultisig(pushes.slice(0, -1), redeem, () => legacyDigest(tx, i, redeem), ecdsaSighash);
+                const reason = checkScriptSpend(pushes.slice(0, -1), redeem, () => legacyDigest(tx, i, redeem), ecdsaSighash);
                 if (reason) throw fail(reason);
             }
         } else if ((m = /^5120([0-9a-f]{64})$/.exec(script))) {
@@ -333,15 +345,20 @@ function spentScriptOf(scriptSigHex, witness) {
         const h = hash160(pushes[1]);
         return { script: `76a914${h}88ac`, kind: 'base58', version: 'pubKeyHash', program: h };
     }
-    if (!hasWitness && pushes.length >= 3 && pushes[0] === '' && parseMultisigScript(pushes[pushes.length - 1])) {
-        const h = hash160(pushes[pushes.length - 1]);
+    const lastPush = pushes[pushes.length - 1];
+    const multisigSpend = pushes.length >= 3 && pushes[0] === '' && parseMultisigScript(lastPush);
+    const carrierSpend = pushes.length === 3 && parseCarrierScript(lastPush);
+    if (!hasWitness && (multisigSpend || carrierSpend)) {
+        const h = hash160(lastPush);
         return { script: `a914${h}87`, kind: 'base58', version: 'scriptHash', program: h };
     }
     const keyWitness = witness.length === 2 && witness[1].length === 66 && isPubkey(witness[1]);
-    const scriptWitness = witness.length >= 3 && witness[0] === '' && parseMultisigScript(witness[witness.length - 1]);
+    const witnessScript = witness[witness.length - 1];
+    const scriptWitness = witness.length >= 3 && ((witness[0] === '' && parseMultisigScript(witnessScript))
+        || (witness.length === 3 && parseCarrierScript(witnessScript)));
     let program = null;
     if (keyWitness) program = `0014${hash160(witness[1])}`;
-    else if (scriptWitness) program = `0020${sha256Hex(witness[witness.length - 1])}`;
+    else if (scriptWitness) program = `0020${sha256Hex(witnessScript)}`;
     if (!program) return null;
     if (pushes.length === 0) {
         return { script: program, kind: 'bech32', version: 0, program: program.slice(4) };
@@ -367,6 +384,15 @@ function addressOf(spent, network) {
     if (!Number.isInteger(version) || version < 0 || version > 0xff) return null;
     return createBase58check(sha256).encode(hexToBytes(uintLE(version, 1) + spent.program));
 }
+
+/**
+ * The `reason` on a SignatureMismatchError thrown because a spent coin is no
+ * longer in its address's unspent list. The failure is still a refusal; the tag
+ * only lets a caller that holds the transaction's id ask the chain whether the
+ * coins went to this transaction or to another one. A tracker read that failed
+ * is not tagged: an unanswered read says nothing about whether anything was spent.
+ */
+export const PREVOUT_NOT_UNSPENT = 'PREVOUT_NOT_UNSPENT';
 
 /**
  * Establish every input's prevout from the UTXO tracker. Each input's spending
@@ -417,7 +443,11 @@ export async function prevoutsFromTracker({ txHex, getUtxos, network, signerId }
         const row = byAddress.get(address).find((r) => String(r?.txid || '').toLowerCase() === input.prevTxHash
             && Number(r?.vout) === input.prevTxIndex);
         if (!row) {
-            throw new SignatureMismatchError(signerId, `input ${i}: ${address} lists no unspent ${input.prevTxHash}:${input.prevTxIndex}`);
+            const missing = new SignatureMismatchError(signerId, `input ${i}: ${address} lists no unspent ${input.prevTxHash}:${input.prevTxIndex}`);
+            missing.reason = PREVOUT_NOT_UNSPENT;
+            missing.address = address;
+            missing.inputIndex = i;
+            throw missing;
         }
         const reported = String(row.scriptPubKey || '').toLowerCase();
         if (reported !== spent.script) {

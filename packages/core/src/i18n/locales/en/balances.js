@@ -28,6 +28,7 @@ const messages = {
     'balances.pendingBalanceHidden': 'Pending balance hidden',
     'balances.pending': '••• pending',
     'balances.pending2': '{formatAmountValue} pending',
+    'balances.pendingUnknown': 'Pending not fully known yet',
     'balances.fiatValueHidden': 'Fiat value hidden',
     'balances.fiatValueUnavailable': 'Fiat value unavailable',
     'balances.balanceCouldnTBeLoaded': "Balance couldn't be loaded",

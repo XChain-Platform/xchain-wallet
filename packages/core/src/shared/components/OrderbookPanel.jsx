@@ -265,7 +265,7 @@ function LevelRow({ level, maxCumulative, side, onPick }) {
                     <button
                         type="button"
                         onClick={onPick}
-                        aria-label={t('components.orderbookPanel.pickPrice', { value: side === 'bid' ? 'buy bid' : 'sell ask', displayPrice: level.displayPrice })}
+                        aria-label={t('components.orderbookPanel.pickPrice', { sideState: side === 'bid' ? 'bid' : 'ask', displayPrice: level.displayPrice })}
                         className={tableStyles.cellButton}
                     >
                         {formatBookNumber(level.displayPrice)}
@@ -330,7 +330,7 @@ function SplitBook({ book, onPickPrice, tick2, lastPrice, lastDirection }) {
             <button
                 type="button"
                 onClick={() => onPickPrice(level.displayPrice, side)}
-                aria-label={t('components.orderbookPanel.pickPrice', { value: side === 'bid' ? 'buy bid' : 'sell ask', displayPrice: level.displayPrice })}
+                aria-label={t('components.orderbookPanel.pickPrice', { sideState: side === 'bid' ? 'bid' : 'ask', displayPrice: level.displayPrice })}
                 className={`${tableStyles.cellButton} ${styles.splitPick}`}
             >
                 {text}

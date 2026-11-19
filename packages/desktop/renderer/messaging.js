@@ -804,13 +804,13 @@ export function listPendingDeploys(req) {
 }
 
 /** Multi-part file upload or resume. */
-export function fileMultipart(opts) {
+export async function fileMultipart(opts) {
     const inlineFile = opts?.fileRef?.kind === 'inline' ? opts.fileRef.blob : null;
-    const pathRef = inlineFile
-        ? desktopFileRefOf(inlineFile, /** @type {any} */ (globalThis).xchainWalletBridge)
+    const pickedRef = inlineFile
+        ? await desktopFileRefOf(inlineFile, /** @type {any} */ (globalThis).xchainWalletBridge)
         : null;
-    return /** @type {any} */ (sendMessage('action.fileMultipart', pathRef
-        ? { ...opts, fileRef: pathRef }
+    return /** @type {any} */ (sendMessage('action.fileMultipart', pickedRef
+        ? { ...opts, fileRef: pickedRef }
         : opts));
 }
 

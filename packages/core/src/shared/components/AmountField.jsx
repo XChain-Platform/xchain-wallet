@@ -281,7 +281,7 @@ export function AmountField({
                             }}
                             aria-pressed={isFiat}
                             aria-label={isFiat
-                                ? t('components.amountField.switchInputTo', { value: tickUpper || 'coin' })
+                                ? t('components.amountField.switchInputTo', { unitState: tickUpper ? 'named' : 'unnamed', value: tickUpper })
                                 : t('components.amountField.switchInputTo2', { fiatCcy })}
                         >
                             <span className={styles.amountSwapValue}>{derivedText}</span>

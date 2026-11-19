@@ -38,7 +38,7 @@ const REVEAL = Object.freeze({
 const base = (extra = {}) => ({
     commit: COMMIT, reveal: REVEAL, envelope: ENVELOPE, ownAddresses: [SOURCE], actionString: ACTION,
     decodeRevealAction: () => ({ ok: true, actionString: ACTION }),
-    revealPsbt: 'REVEAL', network: 'regtest',
+    revealPsbt: 'REVEAL', network: 'regtest', rawData: null,
     ...extra,
 });
 
@@ -47,8 +47,30 @@ describe('checkEnvelopeReveal carrier binding', () => {
         const assertEnvelopeCarrierBinding = vi.fn();
         expect(checkEnvelopeReveal(base({ assertEnvelopeCarrierBinding }))).toEqual({ ok: true });
         expect(assertEnvelopeCarrierBinding).toHaveBeenCalledWith({
-            revealPsbt: 'REVEAL', actionString: ACTION, network: 'regtest',
+            revealPsbt: 'REVEAL', actionString: ACTION, rawData: null, network: 'regtest',
         });
+    });
+
+    it('hands the rule the composed action string and the original bytes, not the carried string', () => {
+        const assertEnvelopeCarrierBinding = vi.fn();
+        const composed = ACTION;
+        const carried = 'FILE|0|big.bin|application/octet-stream|Taproot test||||||||deflate-raw';
+        const verdict = checkEnvelopeReveal(base({
+            assertEnvelopeCarrierBinding, actionString: carried, approvedActionString: composed,
+            rawData: 'file bytes', decodeRevealAction: () => ({ ok: true, actionString: carried }),
+        }));
+        expect(verdict).toEqual({ ok: true });
+        expect(assertEnvelopeCarrierBinding).toHaveBeenCalledWith({
+            revealPsbt: 'REVEAL', actionString: composed, rawData: 'file bytes', network: 'regtest',
+        });
+    });
+
+    it('refuses without calling the rule when the caller never stated rawData', () => {
+        const assertEnvelopeCarrierBinding = vi.fn();
+        const args = base({ assertEnvelopeCarrierBinding });
+        delete args.rawData;
+        expect(checkEnvelopeReveal(args)).toEqual({ ok: false, reason: 'REVEAL_CARRIER_BINDING' });
+        expect(assertEnvelopeCarrierBinding).not.toHaveBeenCalled();
     });
 
     it('refuses a substituted reveal the binding rule rejects', () => {
@@ -106,7 +128,9 @@ describe('composeActionForConfirm carrier binding', () => {
         const rule = vi.fn();
         const composed = await composeActionForConfirm(harness(rule));
         expect(composed.tamperVerified).toBe(true);
-        expect(rule).toHaveBeenCalledWith({ revealPsbt: 'REVEAL', actionString: ACTION, network: 'regtest' });
+        expect(rule).toHaveBeenCalledWith({
+            revealPsbt: 'REVEAL', actionString: ACTION, rawData: 'x'.repeat(51200), network: 'regtest',
+        });
     });
 
     it('refuses with a tamper error when the SDK exposes no rule', async () => {

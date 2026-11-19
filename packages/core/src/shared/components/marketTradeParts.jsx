@@ -14,6 +14,7 @@
 
 import { roundDecimalString, trimAmountTail } from '../utils/amountFormat.js';
 import { t } from '../../i18n/index.js';
+import '../../i18n/locales/en/components.js';
 import '../../i18n/locales/en/market.js';
 import { GiveGetQuick } from './giveGet/index.js';
 import styles from './MarketTrading.module.css';
@@ -48,13 +49,13 @@ export function SwapTicket({ side, chainId, payTick, getTick, payValue, getValue
         <div className={styles.quickTicket} onBlur={onSettle}>
             <GiveGetQuick
                 give={{
-                    label: 'You pay',
+                    label: t('market.trade.youPay'),
                     asset: { chainId, tick: payTick },
                     assetLabel: t('market.trade.payAsset'),
                     onOpenAsset: fixedAsset,
                     amount: payValue,
                     onAmountChange: onPayChange,
-                    amountLabel: 'You pay',
+                    amountLabel: t('market.trade.youPay'),
                     footNote: (
                         <span className={buying ? styles.flipTagBuy : styles.flipTagSell}>
                             {buying ? t('market.trade.buying') : t('market.trade.selling')}
@@ -63,17 +64,17 @@ export function SwapTicket({ side, chainId, payTick, getTick, payValue, getValue
                     balanceText: payBalance,
                 }}
                 get={{
-                    label: 'You get',
+                    label: t('components.giveGet.youGet'),
                     asset: { chainId, tick: getTick },
                     assetLabel: t('market.trade.getAsset'),
                     onOpenAsset: fixedAsset,
                     amount: getValue,
                     onAmountChange: onGetChange,
-                    amountLabel: 'You get',
+                    amountLabel: t('components.giveGet.youGet'),
                     balanceText: getNote || undefined,
                 }}
                 onFlip={onFlip}
-                flipLabel={buying ? 'Flip to sell' : 'Flip to buy'}
+                flipLabel={buying ? t('market.trade.flipToSell') : t('market.trade.flipToBuy')}
             />
         </div>
     );

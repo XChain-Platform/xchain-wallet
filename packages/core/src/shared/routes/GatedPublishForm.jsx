@@ -1191,7 +1191,7 @@ export function GatedPublishForm({ walletId, chainId, tick, issuerAddress = null
                 // The page status already names a failed issuer check or form error;
                 // a resume-list failure under it would stack a second page message.
                 listError={formError || ownerMissing ? null : multipartUpload.listError}
-                fallbackMessage="Could not continue the multipart upload."
+                fallbackMessage={t('gatedPublish.multipartFallback')}
             />
 
             {/* Title comes before the file, as on Attach artwork. */}

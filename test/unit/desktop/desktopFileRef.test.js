@@ -19,17 +19,19 @@ function stubFile(size = 42) {
     };
 }
 
-describe('desktop file references', () => {
-    it('returns a path reference with the file size', () => {
-        const file = stubFile(123);
-        const bridge = { filePathOf: vi.fn(() => '/tmp/example.bin') };
+const ok = (token = 'tok-1', size = 42) => vi.fn(async () => ({ token, size }));
 
-        expect(desktopFileRefOf(file, bridge)).toEqual({
-            kind: 'path',
-            path: '/tmp/example.bin',
+describe('desktop file references', () => {
+    it('returns a path reference with the file size', async () => {
+        const file = stubFile(123);
+        const bridge = { fileTokenOf: ok('tok-123', 123) };
+
+        await expect(desktopFileRefOf(file, bridge)).resolves.toEqual({
+            kind: 'picked',
+            token: 'tok-123',
             size: 123,
         });
-        expect(bridge.filePathOf).toHaveBeenCalledWith(file);
+        expect(bridge.fileTokenOf).toHaveBeenCalledWith(file);
         expect(file.arrayBuffer).not.toHaveBeenCalled();
         expect(file.text).not.toHaveBeenCalled();
         expect(file.stream).not.toHaveBeenCalled();
@@ -37,25 +39,28 @@ describe('desktop file references', () => {
     });
 
     it.each([
-        ['an empty path', stubFile(), { filePathOf: () => '' }],
-        ['a non-string path', stubFile(), { filePathOf: () => 123 }],
-        ['a throwing path lookup', stubFile(), { filePathOf: () => { throw new Error('unavailable'); } }],
+        ['an empty path', stubFile(), { fileTokenOf: async () => null }],
+        ['a non-string path', stubFile(), { fileTokenOf: async () => ({ token: 123, size: 42 }) }],
+        ['a throwing path lookup', stubFile(), { fileTokenOf: async () => { throw new Error('unavailable'); } }],
         ['a missing bridge', stubFile(), undefined],
         ['a bridge without filePathOf', stubFile(), {}],
-        ['a string argument', 'file', { filePathOf: () => '/tmp/example.bin' }],
-        ['a negative size', stubFile(-1), { filePathOf: () => '/tmp/example.bin' }],
-        ['a fractional size', stubFile(1.5), { filePathOf: () => '/tmp/example.bin' }],
-        ['an unsafe size', stubFile(Number.MAX_SAFE_INTEGER + 1), { filePathOf: () => '/tmp/example.bin' }],
-    ])('returns null for %s', (_label, file, bridge) => {
-        expect(desktopFileRefOf(file, bridge)).toBeNull();
+        ['a string argument', 'file', { fileTokenOf: ok() }],
+        ['a negative size', stubFile(-1), { fileTokenOf: ok() }],
+        ['a fractional size', stubFile(1.5), { fileTokenOf: ok() }],
+        ['an unsafe size', stubFile(Number.MAX_SAFE_INTEGER + 1), { fileTokenOf: ok() }],
+        ['an empty token', stubFile(), { fileTokenOf: ok('') }],
+        ['a token registered for a different size', stubFile(42), { fileTokenOf: ok('tok-1', 43) }],
+        ['a synchronous throw from the lookup', stubFile(), { fileTokenOf: () => { throw new Error('unavailable'); } }],
+    ])('returns null for %s', async (_label, file, bridge) => {
+        await expect(desktopFileRefOf(file, bridge)).resolves.toBeNull();
     });
 
-    it('does not read file contents when path lookup fails', () => {
+    it('does not read file contents when path lookup fails', async () => {
         const files = [stubFile(), stubFile(), stubFile()];
 
-        desktopFileRefOf(files[0], { filePathOf: () => '' });
-        desktopFileRefOf(files[1], { filePathOf: () => ({}) });
-        desktopFileRefOf(files[2], { filePathOf: () => { throw new Error('unavailable'); } });
+        await desktopFileRefOf(files[0], { fileTokenOf: async () => null });
+        await desktopFileRefOf(files[1], { fileTokenOf: async () => ({}) });
+        await desktopFileRefOf(files[2], { fileTokenOf: async () => { throw new Error('unavailable'); } });
 
         for (const file of files) {
             expect(file.arrayBuffer).not.toHaveBeenCalled();
@@ -63,5 +68,14 @@ describe('desktop file references', () => {
             expect(file.stream).not.toHaveBeenCalled();
             expect(file.slice).not.toHaveBeenCalled();
         }
+    });
+
+    it('never carries a filesystem path in the reference it returns', async () => {
+        const bridge = { fileTokenOf: vi.fn(async () => ({ token: 'tok-9', size: 42, path: '/etc/hosts' })) };
+
+        const ref = await desktopFileRefOf(stubFile(42), bridge);
+
+        expect(Object.keys(ref).sort()).toEqual(['kind', 'size', 'token']);
+        expect(JSON.stringify(ref)).not.toContain('/etc/hosts');
     });
 });

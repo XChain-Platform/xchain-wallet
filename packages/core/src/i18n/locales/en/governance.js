@@ -132,6 +132,8 @@ const messages = {
     'governance.detail.ballotChooseOne': 'Choose 1',
     'governance.detail.ballotChooseUpTo': 'Choose up to {count}',
     'governance.detail.ballotSplit': 'Split weight across options',
+    'governance.resizeList': 'Resize the governance list',
+    'governance.resizeListHint': 'Drag to resize the governance list, or press Enter to reset.',
 };
 
 addEnglish(messages);

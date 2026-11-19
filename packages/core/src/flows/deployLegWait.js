@@ -116,6 +116,48 @@ export async function legChainStatus({ sdk, txid, address }) {
 }
 
 /**
+ * What the chain says about a signed transaction whose inputs are no longer
+ * unspent, so a caller can settle it without sending its bytes again.
+ *
+ *   landed    the transaction itself is in a block or in the mempool
+ *   conflict  another transaction spent its coins: the block index answered
+ *             without it AND the source address's own unconfirmed list was read
+ *             and is empty
+ *   unknown   anything else, including an SDK that cannot read the mempool
+ *
+ * "Conflict" is stricter than legChainStatus's "dropped": that status can also
+ * come from the tracker's outputs alone, and a transaction whose change went to
+ * another address is invisible there while still sitting in the mempool. Only
+ * the source address's unconfirmed rows list a leg by its inputs.
+ *
+ * Any unconfirmed row on the address keeps the answer at "unknown". Those rows
+ * do not name the coins they spend, and a fee-bump replacement spends the very
+ * coins of the original it evicts: the original sits in the mempool, hides the
+ * coins from the unspent list, and the replacement is in no block, so it reads
+ * like a lost race while it can still win. Once the mempool holds nothing for
+ * the address, the coins went to a transaction that is gone from it.
+ *
+ * @param {{ sdk: any, txid: string, address: string }} args
+ * @returns {Promise<'landed'|'conflict'|'unknown'>}
+ */
+export async function spentInputsVerdict({ sdk, txid, address }) {
+    const status = await legChainStatus({ sdk, txid, address });
+    if (status === 'confirmed' || status === 'mempool') return 'landed';
+    if (status !== 'dropped') return 'unknown';
+    if (!address || typeof sdk?.getUnconfirmed !== 'function') return 'unknown';
+    let rows;
+    try {
+        rows = await sdk.getUnconfirmed(address);
+    } catch {
+        return 'unknown';
+    }
+    if (!Array.isArray(rows)) return 'unknown';
+    const wanted = lower(txid);
+    if (rows.some((r) => r && lower(r.tx_hash) === wanted)) return 'landed';
+    return rows.some((r) => r) ? 'unknown' : 'conflict';
+}
+
+/**
  * The error a leg ends with when its wait runs out. It names which case it
  * is, and only the dropped case invites sending the leg again: re-sending a
  * leg that is on chain or in the mempool spends a second fee on a duplicate.

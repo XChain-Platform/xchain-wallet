@@ -37,6 +37,7 @@
 
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { provisionalAutoLockSignal } from '@xchain-wallet/core/shared/hooks/autoLockGuard.js';
 
 /**
  * @typedef {Object} AutoLockState
@@ -196,6 +197,26 @@ export async function applyAutoLockReport(store, signal, now) {
         lastActivity = current.lastActivity;
     }
     await store.save({ armed: true, idleMs, lastActivity });
+}
+
+/**
+ * Record the deadline an unlocked session carries until the renderer reports.
+ * A window that never reaches the unlocked screen (the 25th-word capture, the
+ * post-create notice) would otherwise leave no record, and an OS screen lock
+ * or suspend would find nothing to enforce. The renderer's first settled
+ * report overwrites it.
+ *
+ * Settings the reader cannot return take the default window rather than no
+ * deadline.
+ *
+ * @param {FileAutoLockStore} store
+ * @param {() => unknown} readSettings
+ * @param {number} now
+ */
+export async function armProvisionalAutoLock(store, readSettings, now) {
+    let settings = null;
+    try { settings = await readSettings(); } catch { /* default window */ }
+    return applyAutoLockReport(store, provisionalAutoLockSignal(settings), now);
 }
 
 /**

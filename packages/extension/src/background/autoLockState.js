@@ -33,6 +33,8 @@
 // locks; an arm storage refuses reports `saved: false` so the route locks,
 // since a restarted worker would find no record and never lock.
 
+import { provisionalAutoLockSignal } from '@xchain-wallet/core/shared/hooks/autoLockGuard.js';
+
 const KEY = 'xchain:autolock';
 
 // The session.autolock reply reason for an arm storage refused; the shared
@@ -181,6 +183,26 @@ export async function applyAutoLockSignal(signal, now) {
     if (armedAt !== null) next.armedAt = armedAt;
     const written = await writeAutoLockState(next);
     return { saved: written || signal.activity === true };
+}
+
+/**
+ * Record the deadline an unlocked session carries until a foreground reports:
+ * the popup that would arm it can close mid-unlock, or sit on a screen that
+ * never reaches the unlocked state, and a session with no record never locks.
+ * The first settled report overwrites this one, so Never and a demo wallet
+ * still disarm on the normal path.
+ *
+ * Settings the reader cannot return take the default window rather than no
+ * deadline.
+ *
+ * @param {() => unknown} readSettings
+ * @param {number} now
+ * @returns {Promise<{ saved: boolean }>}
+ */
+export async function armProvisionalAutoLock(readSettings, now) {
+    let settings = null;
+    try { settings = await readSettings(); } catch { /* default window */ }
+    return applyAutoLockSignal(provisionalAutoLockSignal(settings), now);
 }
 
 /**

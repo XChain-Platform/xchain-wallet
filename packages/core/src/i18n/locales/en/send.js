@@ -201,6 +201,9 @@ const messages = {
     'send.multiText.fileHelp':
         'A .csv or .txt file with one recipient per line: {format}. A header row is fine. A valid file fills the box above, where you can still edit it.',
     'send.multiText.fileInput': 'Choose a CSV file of recipients',
+    'send.fromSection.addressLabel': 'From address',
+    'send.fromSection.pickerLockedReason': 'This action signs from this address only',
+    'send.networkHelp': 'The chain this payment is sent on. Your From address, the token and the network fee are all on this network.',
 };
 
 addEnglish(messages);

@@ -11,12 +11,13 @@
 // Approvals interface: §43.4 request-approval flow.
 //
 // Bridge handlers consult `ConnectedSite.permissions` first; anything
-// that isn't already permitted (`canSignAction[KIND] === 'always'`,
-// `canSignMessage === true`) must route through the user's approval
-// popup before proceeding. The background doesn't open popups itself;
-// shells inject an `Approvals` implementation that knows how to
-// prompt the user (open chrome.action popup, window.open for desktop,
-// etc.).
+// that isn't already permitted must route through the user's approval
+// popup before proceeding. A stored grant (`canSignAction[KIND] === 'always'`,
+// `canSignMessage === true`) only stops the popup offering to save it again:
+// the review and the password prompt still run. The background doesn't
+// open popups itself; shells inject an `Approvals` implementation that
+// knows how to prompt the user (open chrome.action popup, window.open
+// for desktop, etc.).
 //
 // The default `rejectAll` implementation refuses everything with
 // `USER_APPROVAL_REQUIRED`. Callers who haven't wired the popup get
@@ -71,7 +72,7 @@
  * @typedef {Object} ParallelApprovalRequest
  * @property {string} origin
  * @property {'parallel'} kind
- * @property {{ chainId?: string, action?: string, payload?: unknown }[]} actions   the whole batch, in input order
+ * @property {{ chainId?: string, action?: string, payload?: unknown }[]} actions   the batch in input order; each payload is the protocol shape the single-action prompt renders (TICK / AMOUNT / DESTINATION), already converted from the page's params. A slot the wallet refused while resolving it is left out and answered in its own result.
  */
 
 /**

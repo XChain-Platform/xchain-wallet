@@ -11,6 +11,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { openPathPartSource } from '../../../packages/desktop/main/filePartPathSource.js';
+import { pickedFileTokens } from '../../../packages/desktop/main/pickedFileTokens.js';
 
 const { createBackgroundHost, sendMessage } = vi.hoisted(() => ({
     createBackgroundHost: vi.fn(() => ({ handle: vi.fn() })),
@@ -160,15 +161,15 @@ describe('desktop path part source', () => {
             slice: vi.fn(),
         };
         globalThis.xchainWalletBridge = {
-            filePathOf: vi.fn(() => '/picked/large.bin'),
+            fileTokenOf: vi.fn(async () => ({ token: 'picked-token', size: LARGE_FILE_SIZE })),
         };
         const request = { walletId: 'wallet-1', fileRef: { kind: 'inline', blob: file } };
 
-        fileMultipart(request);
+        await fileMultipart(request);
 
         expect(sendMessage).toHaveBeenCalledWith('action.fileMultipart', {
             walletId: 'wallet-1',
-            fileRef: { kind: 'path', path: '/picked/large.bin', size: LARGE_FILE_SIZE },
+            fileRef: { kind: 'picked', token: 'picked-token', size: LARGE_FILE_SIZE },
         });
         expect(file.arrayBuffer).not.toHaveBeenCalled();
         expect(file.text).not.toHaveBeenCalled();
@@ -189,12 +190,41 @@ describe('desktop path part source', () => {
         expect(hostDeps.chainRegistry).toBe(deps.chainRegistry);
         expect(hostDeps.sdkRegistry).toBe(deps.sdkRegistry);
         expect(hostDeps.fileBlobs).toBeNull();
-        const source = await hostDeps.resolveFileRef({
-            kind: 'path',
+        const token = pickedFileTokens.issue({
             path: filePath,
+            size: fileStat.size,
+            mtimeMs: fileStat.mtimeMs,
+        });
+        const source = await hostDeps.resolveFileRef({
+            kind: 'picked',
+            token,
             size: fileStat.size,
         });
         expect(source).toMatchObject({ size: fileStat.size, mtimeMs: fileStat.mtimeMs });
         expect(await source.readSlice(5, 9)).toEqual(Buffer.from('path'));
+    });
+
+    it('refuses a raw path reference from the page and reads nothing', async () => {
+        const filePath = await tempFile('unpicked.bin', Buffer.from('not picked by the user'));
+        const fileStat = await fs.promises.stat(filePath);
+        const openSpy = vi.spyOn(fs.promises, 'open');
+        createDesktopMessageHost({ vault: {}, chainRegistry: {}, sdkRegistry: {} });
+        const { resolveFileRef } = createBackgroundHost.mock.calls[0][0];
+
+        await expect(resolveFileRef({ kind: 'path', path: filePath, size: fileStat.size }))
+            .rejects.toMatchObject({ code: 'FILE_REF_UNSUPPORTED' });
+        expect(openSpy).not.toHaveBeenCalled();
+    });
+
+    it('redeems a picked token only once through the message host', async () => {
+        const filePath = await tempFile('once.bin', Buffer.from('one use only'));
+        const fileStat = await fs.promises.stat(filePath);
+        createDesktopMessageHost({ vault: {}, chainRegistry: {}, sdkRegistry: {} });
+        const { resolveFileRef } = createBackgroundHost.mock.calls[0][0];
+        const token = pickedFileTokens.issue({ path: filePath, size: fileStat.size, mtimeMs: fileStat.mtimeMs });
+        const ref = { kind: 'picked', token, size: fileStat.size };
+
+        await expect(resolveFileRef(ref)).resolves.toMatchObject({ size: fileStat.size });
+        await expect(resolveFileRef(ref)).rejects.toMatchObject({ code: 'FILE_REF_INVALID' });
     });
 });

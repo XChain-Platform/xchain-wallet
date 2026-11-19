@@ -110,14 +110,14 @@ const messages = {
     'components.openOrdersPanel.filled2': '••••• filled',
     'components.openOrdersPanel.filled3': '{filled}/{size} filled',
     'components.openOrdersPanel.open': 'open',
-    'components.openOrdersPanel.coinpayAutoPay': 'Auto pay {value}',
+    'components.openOrdersPanel.coinpayAutoPay': 'Auto pay {autoPayState, select, on {on} other {off (notify-only)}}',
     'components.openOrdersPanel.autoPayHelp': 'On, this wallet sends the coin payment for a match on this order before its payment window closes. Off, it only notifies you so you can pay by hand.',
     'components.openOrdersPanel.cancelOrder': 'Cancel order #',
     'components.openOrdersPanel.from': 'from',
     'components.openOrdersPanel.thisSubmitsACancellationTransaction':
         "This submits a cancellation transaction for the remaining order. Once confirmed, it can't be undone.",
     'components.openOrdersPanel.cancelOrder2': 'Cancel Order',
-    'components.confirmActionModal.confirm': 'Confirm {value}',
+    'components.confirmActionModal.confirm': 'Confirm {nameState, select, named {{value}} other {action}}',
     'components.confirmActionModal.signingWith': 'Signing with',
     'components.confirmActionModal.messageToSign': 'Message to sign',
     'components.confirmActionModal.signingAddress': 'Signing address',
@@ -319,7 +319,7 @@ const messages = {
     'components.orderbookPanel.price': 'Price (',
     'components.orderbookPanel.total': 'Total (',
     'components.orderbookPanel.sizeLabel': 'Size',
-    'components.orderbookPanel.pickPrice': 'Pick {value} price {displayPrice}',
+    'components.orderbookPanel.pickPrice': 'Pick {sideState, select, bid {buy bid} other {sell ask}} price {displayPrice}',
     'components.collectiblesView.collectiblesAppearHereAfterThis':
         'Collectibles appear here after this wallet receives them.',
     'components.collectiblesView.collectibles': 'Collectibles',
@@ -422,7 +422,7 @@ const messages = {
     'components.networkStatusIndicator.noSelectedChainIsReachable': 'No selected network is reachable.',
     'components.networkStatusIndicator.networkSettings': 'Network settings',
     'components.amountField.useMaxAvailableAmount': 'Use max available amount',
-    'components.amountField.switchInputTo': 'Switch input to {value}',
+    'components.amountField.switchInputTo': 'Switch input to {unitState, select, named {{value}} other {coin}}',
     'components.amountField.switchInputTo2': 'Switch input to {fiatCcy}',
     'components.layoutModeToggle.openAs': 'Open as',
     'components.layoutModeToggle.openAsHelp': 'Popup opens the wallet in a small window over the page. Sidebar keeps it open beside the page while you browse.',
@@ -617,6 +617,7 @@ const messages = {
         'A private key has no recovery phrase. Save an encrypted backup file now so this key can be restored if this device is lost or erased.',
     'components.backupAfterKeyImport.save': 'Save Backup File',
     'components.backupAfterKeyImport.dismiss': 'Not now',
+    'components.giveGet.flipLabel': 'Flip give and get',
 };
 
 addEnglish(messages);

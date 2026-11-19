@@ -285,9 +285,12 @@ function fundingOutputs(sdk, encoded, signed) {
 
 async function feeRate(opts, sdk) {
     if (Number.isFinite(opts.rate) && opts.rate > 0) return Number(opts.rate);
-    const estimate = sdk.encoder.estimateFee ?? sdk.encoder.estimate_fee;
+    // The encoder's `estimateFee` builds a transaction; the fee tiers are read
+    // through `getFeeTiers` (the JSON-RPC `estimate_fee` call underneath).
+    const owner = typeof sdk.getFeeTiers === 'function' ? sdk : sdk.encoder;
+    const estimate = owner?.getFeeTiers ?? owner?.estimate_fee;
     if (typeof estimate !== 'function') throw new Error('publishMultipartFile: fee rate is required');
-    const result = await estimate.call(sdk.encoder);
+    const result = await estimate.call(owner);
     const high = result?.high?.rate ?? result?.high;
     if (!Number.isFinite(high) || high <= 0) throw new Error('publishMultipartFile: invalid high fee rate');
     return Number(high);

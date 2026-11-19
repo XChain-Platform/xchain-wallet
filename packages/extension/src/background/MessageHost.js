@@ -193,7 +193,7 @@ const NUMERIC_ERROR_FIELDS = ['retryAfterMs', 'burst', 'windowMs'];
  * Flatten an Error into the wire envelope's `error` payload.
  *
  * @param {unknown} err
- * @returns {{ ok: false, error: { name: string, message: string, code?: string, retryAfterMs?: number, burst?: number, windowMs?: number } }}
+ * @returns {{ ok: false, error: { name: string, message: string, code?: string, retryAfterMs?: number, burst?: number, windowMs?: number, refusedBeforeSigning?: true } }}
  */
 export function serializeError(err) {
     const any = /** @type {any} */ (err);
@@ -206,6 +206,10 @@ export function serializeError(err) {
         const value = any ? any[field] : undefined;
         if (typeof value === 'number' && Number.isFinite(value)) error[field] = value;
     }
+    // A submit refused before the signer saw any bytes carries this so the
+    // confirm screen, which only receives the envelope, can hand its held
+    // inputs back. It crosses only when true, so other envelopes keep their shape.
+    if (any && any.refusedBeforeSigning === true) error.refusedBeforeSigning = true;
     return { ok: false, error };
 }
 
@@ -215,7 +219,7 @@ export function serializeError(err) {
  * envelope uses this, so `code` survives the round trip in all of them rather
  * than in whichever one was patched last.
  *
- * @param {{ name?: string, message?: string, code?: string, retryAfterMs?: number, burst?: number, windowMs?: number } | undefined} payload
+ * @param {{ name?: string, message?: string, code?: string, retryAfterMs?: number, burst?: number, windowMs?: number, refusedBeforeSigning?: boolean } | undefined} payload
  * @param {string} [fallbackMessage]
  * @returns {Error}
  */
@@ -227,5 +231,6 @@ export function hydrateEnvelopeError(payload, fallbackMessage = 'unknown error')
         const value = payload ? /** @type {any} */ (payload)[field] : undefined;
         if (typeof value === 'number' && Number.isFinite(value)) err[field] = value;
     }
+    if (payload?.refusedBeforeSigning === true) err.refusedBeforeSigning = true;
     return err;
 }

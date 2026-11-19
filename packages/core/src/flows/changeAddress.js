@@ -48,6 +48,26 @@ export const CHANGE_BRANCH = 1;
 const isHdSource = (source) => source === 'hd' || isDeviceAddressSource(source);
 
 /**
+ * Does the signer in hand own the key material behind the spending address?
+ * The seed signer the host pools cannot derive a hardware account's
+ * independent keys (walletAddressDiscovery guards discovery the same way), so
+ * deriving change with it would move device-custody value to a hot key. A
+ * device record without a signer id cannot be tied to a device and fails the
+ * check.
+ */
+function signerOwnsSource(signer, sourceRecord) {
+    let source;
+    try {
+        source = addressSourceForSignerKind(signer.kind);
+    } catch {
+        return false;
+    }
+    if (source !== sourceRecord.source) return false;
+    if (!isDeviceAddressSource(source)) return true;
+    return typeof sourceRecord.signerId === 'string' && signer.id === sourceRecord.signerId;
+}
+
+/**
  * Is change-address rotation switched on in this Settings record?
  *
  * Strict `=== true`: the flag is optional on v2-tolerant records and an
@@ -178,6 +198,7 @@ export async function deriveChangeAddress({
     // No record, no account, or a non-HD source: nothing to rotate onto.
     if (!sourceRecord) return null;
     if (!isHdSource(sourceRecord.source)) return null;
+    if (!signerOwnsSource(signer, sourceRecord)) return null;
     if (typeof sourceRecord.accountId !== 'string' || !sourceRecord.accountId) return null;
 
     const account = await vault.accounts.get(sourceRecord.accountId);

@@ -476,10 +476,11 @@ function usage() {
       tools/release/pins/phase4-rehearsal-pin.json. Refuses to write a pin for a run
       it did not just watch, or for one the timeout killed.
 
-  check [--against <ref>] [--pin <file>]
+  check [--pin <file>]
       Has the script side of the signing path moved since the pinned
-      observation? Exits 1 naming every file that changed, 3 if there is
-      no pin at all. Repo-side (tag tree) divergence is reported, not
+      observation? Hashes this checkout's files on disk and tests ancestry
+      against HEAD; to check another ref, check it out and run it there.
+      Exits 1 naming every file that changed, 3 if there is no pin at all. Repo-side (tag tree) divergence is reported, not
       gated: only a rehearsal at a newer tag can re-pin it.
 
 Exit codes: 0 clean, 1 drift or a failed probe, 2 usage, 3 no pin.`);
@@ -614,12 +615,18 @@ function cmdPin(argv) {
 // The CI venue always tests the pushed commit, where the distinction cannot
 // arise, so a behind-tree report would have been noise on every stale
 // checkout and signal on none.
-function isAncestor(root, a, b) {
+//
+// The bytes hashed are the files on disk, and the commit those bytes belong to
+// is HEAD, so ancestry is always tested against HEAD. A git failure (an
+// unresolvable ref, an unborn HEAD) is neither answer: it is `unknown`, and an
+// unknown direction is drift, never behind.
+export function ancestry(root, a, b) {
     const r = spawnSync('git', ['-C', root, 'merge-base', '--is-ancestor', a, b], { stdio: 'ignore' });
-    return r.status === 0;
+    if (r.status === 0) return 'ancestor';
+    return r.status === 1 ? 'not-ancestor' : 'unknown';
 }
 
-export function drift({ pinFile = PIN_PATH, against = 'HEAD' } = {}) {
+export function drift({ pinFile = PIN_PATH } = {}) {
     if (!existsSync(pinFile)) return { ok: false, missing: true, moved: [] };
     const pin = JSON.parse(readFileSync(pinFile, 'utf8'));
     const files = pinPathFiles(pin);
@@ -641,7 +648,7 @@ export function drift({ pinFile = PIN_PATH, against = 'HEAD' } = {}) {
         && spawnSync('git', ['-C', WALLET_ROOT, 'cat-file', '-e', `${pin.scriptRef}^{commit}`],
             { stdio: 'ignore' }).status === 0;
     const behind = moved.length > 0 && resolvable
-        && !isAncestor(WALLET_ROOT, pin.scriptRef, against);
+        && ancestry(WALLET_ROOT, pin.scriptRef, 'HEAD') === 'not-ancestor';
 
     return {
         ok: moved.length === 0 || behind, missing: false, moved, behind,
@@ -691,9 +698,14 @@ function reportRepoSide(d) {
 }
 
 function cmdCheck(argv) {
-    const against = arg(argv, '--against') || 'HEAD';
+    if (argv.includes('--against')) {
+        console.error('[phase4-rehearsal] check hashes the files on disk and tests ancestry against HEAD, '
+            + 'so it cannot answer for another ref.'
+            + '\n  To check a ref, check it out (a git worktree is enough) and run `check` there.');
+        return 2;
+    }
     const pinFile = arg(argv, '--pin') || PIN_PATH;
-    const d = drift({ pinFile, against });
+    const d = drift({ pinFile });
     if (d.missing) {
         console.error('[phase4-rehearsal] no pin at ' + pinFile
             + '\n  Nothing records where Phase 4 was last rehearsed, which is the state that let'
@@ -708,7 +720,7 @@ function cmdCheck(argv) {
     }
     if (d.ok) {
         console.log(`[phase4-rehearsal] OK: the ${d.files.script.length} script-side signing-path files `
-            + `at ${against} are byte-identical to the rehearsal pinned at ${String(d.pin.scriptRef).slice(0, 8)} `
+            + `on disk at HEAD are byte-identical to the rehearsal pinned at ${String(d.pin.scriptRef).slice(0, 8)} `
             + `(reached '${d.pin.reached}', observed ${d.pin.observedAt}).`);
         reportRepoSide(d);
         reportUncovered(d.pin);

@@ -117,7 +117,8 @@ export interface Balance {
 // ---------------------------------------------------------------------------
 
 // Per-action-type permission:
-//   'always' - wallet signs without prompting
+//   'always' - the grant is stored: the wallet does not offer to save it
+//              again, but still shows the review and asks for the password
 //   'ask'    - wallet prompts every time (default)
 //   'never'  - wallet rejects without prompting
 export type ActionPermission = 'always' | 'ask' | 'never';

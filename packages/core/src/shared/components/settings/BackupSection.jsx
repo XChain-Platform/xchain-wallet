@@ -1102,12 +1102,12 @@ function DryRunForm({ busy, error, walletFormat, onCancel, onSubmit, direct = fa
                     the top of the form column (G120, U15). */}
                 {direct ? (
                     <Notice tone="info" role="note" testId="test-backup-note">
-                        {t('settings.backup.enterTheRecoveryPhraseFrom', { value: gapLimitValid ? gapLimitNumber : 'selected' })}
+                        {t('settings.backup.enterTheRecoveryPhraseFrom', { countState: gapLimitValid ? 'number' : 'selected', value: gapLimitNumber })}
                     </Notice>
                 ) : null}
                 <FormSection
                     title={direct ? undefined : t('settings.backup.testBackup')}
-                    description={direct ? undefined : t('settings.backup.enterTheRecoveryPhraseFrom', { value: gapLimitValid ? gapLimitNumber : 'selected' })}
+                    description={direct ? undefined : t('settings.backup.enterTheRecoveryPhraseFrom', { countState: gapLimitValid ? 'number' : 'selected', value: gapLimitNumber })}
                 >
                     <Textarea
                         id="backup-test-phrase"

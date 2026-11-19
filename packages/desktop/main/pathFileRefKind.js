@@ -8,7 +8,7 @@ import path from 'node:path';
 
 import { openPathPartSource } from './filePartPathSource.js';
 
-function fileRefInvalidError() {
+export function fileRefInvalidError() {
     const error = new Error('The selected file reference is invalid');
     error.code = 'FILE_REF_INVALID';
     return error;

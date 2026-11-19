@@ -64,7 +64,7 @@ import styles from './GiveGet.module.css';
  *   With `children`, an in-place collapsible section (open / onToggle).
  * @param {import('react').ReactNode} [props.after]
  */
-export function GiveGetQuick({ give, get, onFlip, flipLabel = 'Flip give and get', singleSide = false, notice, rate, ownership, terms, after }) {
+export function GiveGetQuick({ give, get, onFlip, flipLabel = t('components.giveGet.flipLabel'), singleSide = false, notice, rate, ownership, terms, after }) {
     return (
         <>
             <div className={styles.pair}>

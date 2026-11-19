@@ -47,6 +47,7 @@ const messages = {
     'publishFile.review.from': 'Publishing from',
     'publishFile.review.permanent': "Permanent: the published bytes live on-chain forever and can't be deleted or edited later.",
     'publishFile.previewAlt': 'Preview of {name}',
+    'publishFile.previewAltFile': 'Preview of file',
     'publishFile.from.networkHelp': "The chain the file is published on. Your From address and the fee are on this network, and the file's bytes are stored in transactions on it.",
     'publishFile.from.addressHelp': "The wallet address that pays the network fee and is recorded as the file's publisher.",
     'publishFile.titleField.help': 'A short label stored on-chain with the published file.',
@@ -57,6 +58,7 @@ const messages = {
     'publishFile.details.type': 'Type',
     'publishFile.details.size': 'Size',
     'publishFile.details.bytes': '{bytes}',
+    'publishFile.multipartFallback': "The multi-part upload couldn't continue. Try again or use Unfinished uploads.",
 };
 
 addEnglish(messages);

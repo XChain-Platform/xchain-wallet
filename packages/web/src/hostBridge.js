@@ -832,7 +832,8 @@ class WebBroadcastClaims extends Set {
 // Signing routes hand their flow a hook that queues the signed bytes when the
 // broadcast fails, so the lease has to outlive that network call the way the
 // queue routes' own claims make it outlive theirs.
-const QUEUE_WRITING_ROUTE = /^(action\.|wallet\.publishLabels$|broadcast\.queue\.enqueue$|broadcast\.signedTx$|messaging\.handshake$|tx\.replace$|multisigSign\.finalize$)/;
+const QUEUE_WRITING_ROUTE = /^(action\.|wallet\.publishLabels$|broadcast\.queue\.enqueue$|broadcast\.signedTx$|messaging\.handshake(\.hw)?$|tx\.replace$|multisigSign\.finalize$)/;
+export const __queueWritingRouteForTests = QUEUE_WRITING_ROUTE;
 let routeClaimSeq = 0;
 
 async function runRouteHoldingLease(store, type, run) {
@@ -898,6 +899,11 @@ function installPageWipeSeal() {
     return true;
 }
 let notificationService = null;
+// A saved endpoint override drops the chain's SDK instance; the watcher
+// rebinds its socket to the new one.
+async function refreshNotificationSockets() {
+    await notificationService?.refresh();
+}
 let priceAlertWatcher = null;
 let governancePollWatcher = null;
 let coinpayAutopayWatcher = null;
@@ -1557,6 +1563,10 @@ export function __createWebVaultMultiTabHarnessForTests() {
             dispatch: (type, run) => runRouteHoldingLease(store, type, run),
             whenReleased: () => coordinator.whenReleased(),
             state: coordinator.state,
+            bootedAt: () => store.bootedAt,
+            restoreFromVault: (vaultArg, chainRegistryArg, walletId) => (
+                queue.restoreQueueFromVault(vaultArg, chainRegistryArg, walletId)
+            ),
         };
     }
 
@@ -1706,6 +1716,7 @@ export async function createWalletLocal(req) {
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
             loadAmountRules: loadWebAmountRules,
+            onSdkEndpointsChanged: refreshNotificationSockets,
         });
         ownHost = host;
         startNotifications();
@@ -1860,6 +1871,7 @@ export async function importMnemonicLocal(req) {
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
             loadAmountRules: loadWebAmountRules,
+            onSdkEndpointsChanged: refreshNotificationSockets,
         });
         ownHost = host;
         startNotifications();
@@ -2065,6 +2077,7 @@ export async function importBackupLocal(req) {
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
             loadAmountRules: loadWebAmountRules,
+            onSdkEndpointsChanged: refreshNotificationSockets,
         });
         ownHost = host;
         startNotifications();
@@ -2150,6 +2163,7 @@ export async function createHardwareWalletLocal(req) {
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
             loadAmountRules: loadWebAmountRules,
+            onSdkEndpointsChanged: refreshNotificationSockets,
         });
         ownHost = host;
         startNotifications();
@@ -2318,6 +2332,7 @@ export async function unlockWalletLocal(req) {
             broadcastQueueStore: sharedBroadcastQueueStore(),
             vaultKeyring: webVaultKeyring(),
             loadAmountRules: loadWebAmountRules,
+            onSdkEndpointsChanged: refreshNotificationSockets,
         });
         ownHost = host;
         startNotifications();

@@ -202,7 +202,7 @@ export function AddAccountForm({ walletId, onBack, onCreated }) {
                 >
                     <div data-hardware-waiting="" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--xc-space-2)', minWidth: 0 }}>
                         <Notice tone="info" title={t('hardwareManage.waitingNoticeTitle')} role="note">
-                            {t('hardwareManage.waitingLine', { name: added.account.name || 'The account' })}
+                            {t('hardwareManage.waitingLine', { nameState: added.account.name ? 'named' : 'unnamed', name: added.account.name })}
                         </Notice>
                         {added.waiting.length ? (
                             <>

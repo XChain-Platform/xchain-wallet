@@ -235,9 +235,12 @@ function publishedError(response, trusted) {
             error: { name: 'BridgeError', code: 'INTERNAL_ERROR', message: 'bridge: INTERNAL_ERROR' },
         };
     }
+    // The pre-signing flag is for the wallet's own confirm screen; a page sees
+    // the published error shape only.
+    const { refusedBeforeSigning, ...published } = error;
     // bridgeErrorCodeFor hands a published code straight back, so an envelope
     // the handlers already translated is returned untouched by identity.
-    const code = bridgeErrorCodeFor(error);
-    if (code === error.code) return response;
-    return { ...response, error: { ...error, code } };
+    const code = bridgeErrorCodeFor(published);
+    if (code === published.code && refusedBeforeSigning === undefined) return response;
+    return { ...response, error: { ...published, code } };
 }

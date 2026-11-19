@@ -45,8 +45,19 @@ import { assertRevealPaysApprovedOutputs } from './p2shRevealOutputs.js';
 import { compiledPayloadByteLen, envelopeEncoderOpts } from '../flows/envelopeSelection.js';
 import { chunkLaneOpener, signerSubject } from '../shared/utils/chunkLaneCopy.js';
 import { assertBuiltActionMatchesIntent } from '../flows/verifyBuiltAction.js';
+import { isDeviceSignerKind } from '../schemas/constants.js';
 
 export { RevealInputsRefusedError } from './p2shRevealInputs.js';
+
+// A device signer cannot sign a segwit input from its amount and script alone:
+// Ledger and Trezor both need the whole previous transaction. The encoder
+// attaches it only when asked, so a build whose signer is a device asks here,
+// once, for every flow that reaches the atomic build.
+function deviceSignerBuildOpts(signer) {
+    let kind;
+    try { kind = signer?.kind; } catch { kind = undefined; }
+    return isDeviceSignerKind(kind) ? { attachPrevTx: true } : {};
+}
 
 // Broadcast signed bytes, treating "the node already holds this txid" as delivery: the
 // answer comes from a later re-send of the same signed bytes after a lost response.
@@ -526,6 +537,7 @@ export async function submitWithSigner({
             encoded = await encoder.createTx({
                 ...(bareNativePayment ? {} : { data: createResult.actionString }),
                 ...effectiveEncoderOpts,
+                ...deviceSignerBuildOpts(signer),
             });
         } catch (err) {
             throw annotateEncoderFeeRequirement(err, preflight.quote);

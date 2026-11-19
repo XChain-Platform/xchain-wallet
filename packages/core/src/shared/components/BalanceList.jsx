@@ -324,9 +324,12 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
     const quantitySpeech = row.unavailable === 'all'
         ? 'Balance unavailable'
         : `${row.unavailable === 'partial' ? 'At least ' : ''}${quantityLabel} ${row.tick}${hasPending ? ' confirmed' : ''}`;
-    const pendingSpeech = hasPending
-        ? `${formatAmount(row.pendingQuantity, row.divisibility, numberFormat)} ${row.tick} pending`
-        : '';
+    const pendingUnknown = row.pendingUnknown === true && row.unavailable !== 'all';
+    const pendingUnknownLabel = t('balances.pendingUnknown');
+    const pendingSpeech = [
+        hasPending ? `${formatAmount(row.pendingQuantity, row.divisibility, numberFormat)} ${row.tick} pending` : '',
+        pendingUnknown ? pendingUnknownLabel : '',
+    ].filter(Boolean).join(', ');
     const fiatSpeechValue = formatFiatAmountForSpeech(fiat, fiatCurrency);
     const fiatSpeech = fiatSpeechValue
         ? `${row.unavailable === 'partial' ? 'At least ' : ''}${fiatSpeechValue}${!isNative && row.fiatRateSource === 'market' ? ', DEX price' : ''}`
@@ -419,6 +422,9 @@ const BalanceRowEl = memo(function BalanceRowEl({ row, multisig, onSelect, getAc
                                 ? t('balances.pending')
                                 : t('balances.pending2', { formatAmountValue: formatAmount(row.pendingQuantity, row.divisibility, numberFormat) })}
                         </span>
+                    ) : null}
+                    {pendingUnknown && !balancesHidden ? (
+                        <span className={styles.fiat} data-testid="balance-pending-unknown">{pendingUnknownLabel}</span>
                     ) : null}
                     {row.escrowed ? (
                         <span className={styles.fiat} data-testid="balance-escrowed">
@@ -554,7 +560,7 @@ export function detectSpamCandidates(rows) {
  */
 export function isSmallBalanceRow(row, fiatThreshold = SMALL_BALANCE_FIAT_DEFAULT) {
     if (!row) return false;
-    if (row.escrowed || row.unavailable || safeBigInt(row.pendingQuantity) > 0n) return false;
+    if (row.escrowed || row.unavailable || row.pendingUnknown || safeBigInt(row.pendingQuantity) > 0n) return false;
     const q = safeBigInt(row.quantity);
     if (q < 0n) return false;
     if (q === 0n) return true;
@@ -680,6 +686,7 @@ export function buildBalanceRows(balances, chainRegistry, activeByChain = null) 
                     nativeAcc.pendingQuantity = (nativeAcc.pendingQuantity || 0n)
                         + safeBigInt(b.native.pendingQuantity);
                 }
+                if (b.native.pendingUnknown === true) nativeAcc.pendingUnknown = true;
             }
 
             if (Array.isArray(b.tokens)) {

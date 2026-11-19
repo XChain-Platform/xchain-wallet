@@ -935,7 +935,7 @@ const messages = {
     'settings.backup.writeItOnPaperOr':
         '{RECOVERY_PHRASE_WARNING} Write it on paper or store it in a password manager.',
     'settings.backup.enterTheRecoveryPhraseFrom':
-        "Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first {value} addresses on every active network from it and lists any that don't match. Nothing is saved.",
+        "Enter the recovery phrase from your paper backup (or password manager). The wallet rebuilds the first {countState, select, number {{value}} other {selected}} addresses on every active network from it and lists any that don't match. Nothing is saved.",
     'settings.backup.afterUploadingTheEncryptedFile':
         "After uploading the encrypted file to an HTTPS address you control, enter that address to make a QR for another device. The QR contains only the address and wallet name. It doesn't contain the backup file or password.",
     'settings.backup.theLabelsContactsAreEncrypted':

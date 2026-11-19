@@ -3,6 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { AUTOLOCK_NEVER, resolveAutoLockMinutes } from '../../schemas/settingsStartup.js';
+
 export const AUTO_LOCK_GUARD_CHANGED_EVENT = 'xc:auto-lock-guard-changed';
 
 /**
@@ -73,4 +75,20 @@ export async function withAutoLockHold(run) {
     } finally {
         release();
     }
+}
+
+/**
+ * The auto-lock report a shell records when a session opens, before any
+ * foreground has reported. The vault's own timeout applies, Never stays
+ * disarmed, and settings that could not be read take the default window so an
+ * open session is never left without a deadline. The foreground's first
+ * settled report replaces it.
+ *
+ * @param {{ autolockMinutes?: unknown } | null | undefined} settings
+ * @returns {{ armed: boolean, idleMs: number }}
+ */
+export function provisionalAutoLockSignal(settings) {
+    const minutes = resolveAutoLockMinutes(settings?.autolockMinutes);
+    if (minutes === AUTOLOCK_NEVER) return { armed: false, idleMs: 0 };
+    return { armed: true, idleMs: minutes * 60 * 1000 };
 }

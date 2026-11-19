@@ -33,18 +33,24 @@ import { exactNetworkFeeSats } from './psbtNetworkFee.js';
  * @param {{ inputs?: object[], outputs?: object[] }} args.reveal   decomposed reveal PSBT
  * @param {{ commitTxid: string, commitVout: number, commitValue: number|string, commitAddress: string }} args.envelope
  * @param {Iterable<string>} args.ownAddresses   addresses the reveal may pay
- * @param {string} args.actionString             the action string the user approved
+ * @param {string} args.actionString             the action string the reveal's envelope leaf carries
  * @param {() => { ok: boolean, actionString?: string, reason?: string }} args.decodeRevealAction
  *   reads the action the reveal's envelope leaf carries
+ * @param {string|Uint8Array|null} args.rawData   the payload the caller handed the encoder, or NULL
+ *   when the action carries none. Required: UNDEFINED refuses, because an omitted payload
+ *   would leave the leaf's payload push unchecked.
+ * @param {string} [args.approvedActionString]   the action string as composed, before any
+ *   transparent compression rewrote its COMPRESSION field; defaults to `actionString`
  * @param {string} [args.revealPsbt]   the reveal PSBT as built, handed to the carrier binding rule
  * @param {string} [args.network]      network name the carrier binding rule parses the PSBT on
- * @param {(a: { revealPsbt: string, actionString: string, network?: string }) => void} [args.assertEnvelopeCarrierBinding]
- *   the SDK's envelope carrier binding rule; throws when the reveal does not carry the action
+ * @param {(a: { revealPsbt: string, actionString: string, rawData: string|Uint8Array|null, network?: string }) => void} [args.assertEnvelopeCarrierBinding]
+ *   the SDK's envelope carrier binding rule; throws when the reveal does not carry the
+ *   action and the payload
  * @returns {EnvelopeRevealVerdict}
  */
 export function checkEnvelopeReveal({
     commit, reveal, envelope, ownAddresses, actionString, decodeRevealAction,
-    revealPsbt, network, assertEnvelopeCarrierBinding,
+    rawData, approvedActionString, revealPsbt, network, assertEnvelopeCarrierBinding,
 }) {
     const commitOutputs = Array.isArray(commit?.outputs) ? commit.outputs : [];
     const revealInputs = Array.isArray(reveal?.inputs) ? reveal.inputs : [];
@@ -87,13 +93,10 @@ export function checkEnvelopeReveal({
         return { ok: false, reason: 'REVEAL_ACTION_MISMATCH' };
     }
 
-    // The SDK's own rule for what a reveal must carry, so the wallet and the
-    // submit path cannot disagree about a substituted reveal.
-    // A missing rule refuses: an unchecked reveal must never pass.
-    if (typeof assertEnvelopeCarrierBinding !== 'function') {
-        return { ok: false, reason: 'REVEAL_CARRIER_BINDING' };
-    }
-    try { assertEnvelopeCarrierBinding({ revealPsbt, actionString, network }); } catch {
+    if (!carrierBindingHolds({
+        assertEnvelopeCarrierBinding, revealPsbt, network, rawData,
+        actionString: approvedActionString ?? actionString,
+    })) {
         return { ok: false, reason: 'REVEAL_CARRIER_BINDING' };
     }
     // Still a refusal: the bytes match, but the decoder could not read them,
@@ -102,6 +105,22 @@ export function checkEnvelopeReveal({
         return { ok: false, reason: 'REVEAL_ACTION_UNDECODABLE', decodeReason: decoded.reason };
     }
     return { ok: true };
+}
+
+// The SDK's own rule for what a reveal must carry, so the wallet and the submit
+// path cannot disagree about a substituted reveal. Anything short of a clean
+// pass is false: a missing rule refuses, and so does an omitted rawData, which
+// the rule reads as "leave the payload push unchecked". The rule reads a
+// rewritten COMPRESSION field as "the payload is deflated", so it is handed the
+// action string as composed, not the string the leaf carries.
+function carrierBindingHolds({ assertEnvelopeCarrierBinding, revealPsbt, actionString, rawData, network }) {
+    if (typeof assertEnvelopeCarrierBinding !== 'function' || rawData === undefined) return false;
+    try {
+        assertEnvelopeCarrierBinding({ revealPsbt, actionString, rawData, network });
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 // Decoder refusals that are about an action's variadic size, never its bytes.

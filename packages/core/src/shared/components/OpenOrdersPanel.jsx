@@ -532,7 +532,7 @@ export function OpenOrdersPanel({ walletId, chainId, tick1, tick2, status, query
                                             color: 'var(--xc-text-muted)',
                                         }}>
                                             <Switch
-                                                label={t('components.openOrdersPanel.coinpayAutoPay', { value: on ? 'on' : 'off (notify-only)' })}
+                                                label={t('components.openOrdersPanel.coinpayAutoPay', { autoPayState: on ? 'on' : 'off' })}
                                                 help={t('components.openOrdersPanel.autoPayHelp')}
                                                 checked={on}
                                                 onChange={() => handleAutopayToggle(consent)}

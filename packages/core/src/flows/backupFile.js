@@ -661,8 +661,9 @@ function remapActiveAddressOverrides(accounts, addressIdMap) {
 
 /**
  * Give each signer a new id under the re-minted wallet and move hardware
- * address links with it. Only device addresses point at SignerRecords, so
- * every other address keeps its signerId.
+ * address links with it. Only device addresses point at SignerRecords; a
+ * software address (hd, imported-wif) names its wallet as the signer, so it
+ * follows the wallet id and any other signerId is kept.
  *
  * @param {BackupPayload} decoded
  * @param {Map<string, string>} walletIdMap
@@ -679,10 +680,9 @@ function remintSignerIds(decoded, walletIdMap) {
         }
     }
     for (const addr of decoded.addresses ?? []) {
-        if (!addr || !SIGNER_RECORD_SOURCES.has(addr.source)) continue;
-        if (typeof addr.signerId === 'string' && signerIdMap.has(addr.signerId)) {
-            addr.signerId = signerIdMap.get(addr.signerId);
-        }
+        if (!addr || typeof addr.signerId !== 'string') continue;
+        const moved = SIGNER_RECORD_SOURCES.has(addr.source) ? signerIdMap : walletIdMap;
+        if (moved.has(addr.signerId)) addr.signerId = moved.get(addr.signerId);
     }
 }
 
@@ -711,6 +711,7 @@ function remapSiteGrants(sites, accountIdMap) {
  *   - account.id, account.walletId, account.activeAddressByChainId values
  *   - address.id, address.accountId
  *   - signer.id, signer.walletId, hardware address.signerId
+ *   - software address.signerId (the wallet id)
  *   - pendingTx.id    (kept independent; pending txs are address-scoped
  *                     via chain / network / `fromAddress`, not id-scoped)
  *

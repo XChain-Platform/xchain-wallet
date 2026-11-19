@@ -72,6 +72,9 @@ const ADDRESSES = [
     row({ id: 'solo-w2', source: 'ledger', signerId: 'dev-2', accountId: 'acct-2', address: 'bcrt1qsolo' }),
     row({ id: 'dup-a', source: 'ledger', signerId: 'dev-1', address: 'bcrt1qdup' }),
     row({ id: 'dup-b', source: 'ledger', signerId: 'dev-1', address: 'bcrt1qdup' }),
+    row({ id: 'wo-in-wallet', source: 'watch-only', derivationPath: "m/84'/1'/0'/0/7", address: 'bcrt1qwatched' }),
+    row({ id: 'mixed-hd', source: 'hd', address: 'bcrt1qmixed' }),
+    row({ id: 'mixed-led', source: 'ledger', signerId: 'dev-1', address: 'bcrt1qmixed' }),
 ];
 
 function makeHost() {
@@ -163,6 +166,56 @@ describe('a software route signs only with the signer the stored address calls f
         sendTokenMock.mockReset().mockResolvedValue({ txid: 't' });
         const res = await send(makeHost(), { from: from('missing', { source: 'hd' }) });
         expect(res.ok, JSON.stringify(res.error)).toBe(true);
+    });
+});
+
+describe('a software route resolves a request with no usable address id by its address string', () => {
+    const idless = (address, extra = {}) => ({ from: { address, publicKey: 'pub', derivationPath: null, ...extra } });
+
+    it('refuses a stored device address named only by string, whatever source the request claims', async () => {
+        sendTokenMock.mockReset();
+        const res = await send(makeHost(), idless('bcrt1qled', { source: 'hd' }));
+        expect(res.ok).toBe(false);
+        expect(res.error.message).toMatch(/ledger address; sign it with its own device/);
+        expect(sendTokenMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses a stored device address when the request names a stale id', async () => {
+        sendTokenMock.mockReset();
+        const res = await send(makeHost(), { from: from('gone', { address: 'bcrt1qled', source: 'hd' }) });
+        expect(res.ok).toBe(false);
+        expect(res.error.message).toMatch(/own device/);
+        expect(sendTokenMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses a stored watch-only address named only by string', async () => {
+        sendTokenMock.mockReset();
+        const res = await send(makeHost(), idless('bcrt1qwatched', { source: 'hd' }));
+        expect(res.ok).toBe(false);
+        expect(res.error.message).toMatch(/watch-only/);
+        expect(sendTokenMock).not.toHaveBeenCalled();
+    });
+
+    it('signs a stored software address named only by string', async () => {
+        sendTokenMock.mockReset().mockResolvedValue({ txid: 't' });
+        const res = await send(makeHost(), idless('bcrt1qhd', { source: 'hd' }));
+        expect(res.ok, JSON.stringify(res.error)).toBe(true);
+        expect(sendTokenMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not resolve a string that only another wallet holds', async () => {
+        sendTokenMock.mockReset().mockResolvedValue({ txid: 't' });
+        const res = await send(makeHost(), idless('bcrt1qother', { source: 'hd' }));
+        expect(res.ok, JSON.stringify(res.error)).toBe(true);
+        expect(sendTokenMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses a string whose stored copies disagree on source', async () => {
+        sendTokenMock.mockReset();
+        const res = await send(makeHost(), idless('bcrt1qmixed', { source: 'hd' }));
+        expect(res.ok).toBe(false);
+        expect(res.error.message).toMatch(/different kinds/);
+        expect(sendTokenMock).not.toHaveBeenCalled();
     });
 });
 

@@ -121,6 +121,7 @@ function carriedPayloadOf(composedActionString, suppliedRawData, compression) {
  *
  * @typedef {Object} ComposedAction
  * @property {string|null} actionString        NULL on a bare native payment (there is no action)
+ * @property {string|null} approvedActionString  the action string as composed, before any transparent compression rewrote its COMPRESSION field; NULL on a bare native payment
  * @property {string|null} action              NULL on a bare native payment
  * @property {number|string|null} version      NULL on a bare native payment
  * @property {boolean} bareNativePayment       true when the request carries no XChain content
@@ -534,6 +535,9 @@ export async function composeForConfirm({
         // it is what the confirm checks compare against and what the submit path
         // re-declares on the prebuilt lane.
         actionString: encodedActionString,
+        // The string before the encoder's compression pass, which is the one the
+        // envelope carrier binding rule must be handed beside the original bytes.
+        approvedActionString: bareNativePayment ? null : createResult.actionString,
         action: bareNativePayment ? null : createResult.action,
         version: bareNativePayment ? null : createResult.version,
         bareNativePayment,

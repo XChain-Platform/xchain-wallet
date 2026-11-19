@@ -53,8 +53,10 @@ import {
  * @property {Set<string>} removedWallets  walletIds removed while this store is live, in memory only;
  *   every host built over the store reads it, so a torn-down host's late
  *   failure hook cannot queue a wallet a later host removed. Cleared by a seal
- * @property {number} bootedAt  wall-clock ms this store was built; the vault restore
- *   reads a 'broadcasting' PendingTx created after it as this process's own live call
+ * @property {number} bootedAt  wall-clock ms this store was built or last took a writer lease; the
+ *   vault restore reads a 'broadcasting' PendingTx created after it as this process's own live call.
+ *   A lease handoff restamps it, because a record another page wrote under an earlier lease
+ *   predates the new one and belongs to a call that page can no longer finish
  */
 
 /**
@@ -464,6 +466,9 @@ function adoptStoredState(store, snapshot, settlements, known) {
  */
 export async function refreshBroadcastQueueStore(store) {
     if (!store || store.sealed) return false;
+    // The lease is exclusive and its release waits for every claimed call, so
+    // no 'broadcasting' record written before this point is still being sent.
+    store.bootedAt = Date.now();
     if (!store.storage) {
         store.dormant = false;
         return false;

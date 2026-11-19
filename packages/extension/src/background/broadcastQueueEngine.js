@@ -56,6 +56,35 @@ function queuedRevealFields(source) {
 }
 
 /**
+ * Rewrite, in place, a two-phase queue entry still holding its commit into the
+ * reveal its durable record says is owed. The queue save that follows an advance
+ * is best effort, so a refused save leaves the stored entry one phase behind the
+ * record, and a retry of it would send the commit again instead of the reveal.
+ * Only a record that is still sendable and names the same commit is trusted;
+ * every other entry field is left as it is.
+ *
+ * @param {any} entry
+ * @param {any} record
+ * @returns {boolean} whether the entry changed
+ */
+function syncEntryToCommitLandedRecord(entry, record) {
+    if (!entry || record?.commitLanded !== true || entry.commitLanded === true) return false;
+    if (record.status !== 'queued' && record.status !== 'broadcasting') return false;
+    if (typeof record.txHex !== 'string' || !record.txHex) return false;
+    const commitTxid = typeof record.commitTxid === 'string' ? record.commitTxid.toLowerCase() : '';
+    const entryTxid = typeof entry.txid === 'string' ? entry.txid.toLowerCase() : '';
+    if (commitTxid && entryTxid && commitTxid !== entryTxid) return false;
+    entry.signedTxHex = record.txHex;
+    if (typeof record.txid === 'string' && record.txid) entry.txid = record.txid;
+    else delete entry.txid;
+    delete entry.revealTxHex;
+    delete entry.revealTxid;
+    delete entry.commitTxid;
+    Object.assign(entry, commitLandedFields(record));
+    return true;
+}
+
+/**
  * The donation verdict a queued entry carries, reduced to its known fields, or
  * null when it is malformed. The fiat amount and currency are what the booking
  * takes off the donation queue; an entry from an older build has neither and
@@ -761,7 +790,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
             });
         }
     }
-    // Whether a record was created after this store was built (a store with no boot stamp claims none).
+    // Whether a record was created after this store was built or last took its lease (a store with no boot stamp claims none).
     function createdInThisProcess(record) {
         const created = Date.parse(record.createdAt);
         return Number.isFinite(queueStore.bootedAt) && Number.isFinite(created)
@@ -890,6 +919,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
                 retired.add(entry.id);
                 continue;
             }
+            if (syncEntryToCommitLandedRecord(entry, record)) relabelled = true;
             // Sampled after the read: a broadcast that took the claim during it holds the record legitimately.
             if (record.status === 'broadcasting' && entry.resumedClaim !== true
                 && !queueStore.inFlight?.has(`${walletId}:${entry.id}`)) {
@@ -1082,6 +1112,28 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         return 'closed';
     }
     /**
+     * Bring one live entry up to the phase its durable record holds, reading the
+     * record itself. The broadcast route runs this before it verifies and sends the
+     * entry's bytes, since a window can reach the send without a list having
+     * reconciled the restored queue first. A record the vault cannot answer for
+     * leaves the entry as it is.
+     *
+     * @param {any} vault
+     * @param {any} entry
+     * @returns {Promise<boolean>} whether the entry changed
+     */
+    async function syncEntryToDurableRecord(vault, entry) {
+        if (typeof entry?.pendingTxId !== 'string' || !entry.pendingTxId) return false;
+        if (typeof vault?.pendingTxs?.get !== 'function') return false;
+        let record;
+        try {
+            record = await vault.pendingTxs.get(entry.pendingTxId);
+        } catch (_e) {
+            return false;
+        }
+        return syncEntryToCommitLandedRecord(entry, record);
+    }
+    /**
      * Apply one patch to a PendingTx the queue still owns, reporting which of
      * the three outcomes above happened.
      *
@@ -1105,8 +1157,19 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         }
         if (!existing) return 'closed';
         if (existing.status !== 'queued' && existing.status !== 'broadcasting') return 'closed';
+        // The network holds a landed commit's spend, so a refusal never retires its
+        // record as 'failed', whichever entry or journal entry the patch came from.
+        const written = patch?.status === 'failed' && existing.commitLanded === true
+            ? {
+                ...existing,
+                ...patch,
+                status: 'broadcast',
+                broadcastAt: existing.broadcastAt ?? new Date().toISOString(),
+                txid: existing.commitTxid ?? existing.txid ?? null,
+            }
+            : { ...existing, ...patch };
         try {
-            await vault.pendingTxs.put({ ...existing, ...patch });
+            await vault.pendingTxs.put(written);
         } catch (_e) {
             return 'unreachable';
         }
@@ -1155,6 +1218,7 @@ export function createBroadcastQueueEngine({ store: queueStore, importedAddressI
         getQueue,
         restoreQueueFromVault,
         reconcileRestoredEntries,
+        syncEntryToDurableRecord,
         enqueueOnBroadcastFailure,
         enqueueSignedBroadcast,
         isWalletRemoved,

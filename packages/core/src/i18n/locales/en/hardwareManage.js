@@ -45,7 +45,7 @@ const messages = {
     'hardwareManage.waitingTitle': 'Waiting Networks',
     'hardwareManage.waitingList': 'Networks waiting for their app',
     'hardwareManage.waitingNoticeTitle': 'Account Added',
-    'hardwareManage.waitingLine': '{name} is added. Open each app below on your Ledger to add its network, or add it later from the account\'s Addresses tab.',
+    'hardwareManage.waitingLine': '{nameState, select, named {{name}} other {The account}} is added. Open each app below on your Ledger to add its network, or add it later from the account\'s Addresses tab.',
 
     // Unlink page: the title is also the one button's label.
     'hardwareManage.unlinkTitle': 'Unlink Wallet',

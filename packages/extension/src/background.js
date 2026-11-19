@@ -70,6 +70,7 @@ import {
     readAutoLockState,
     stampAutoLockActivity,
     clearAutoLockState,
+    armProvisionalAutoLock,
     shouldAutoLock,
 } from './background/autoLockState.js';
 import {
@@ -468,6 +469,9 @@ async function buildHost() {
         loadAmountRules: () => flowsLib.amountRulesFromSdk(preflightAmountModules),
         approvals: approvalBroker,
         surfaceStateEvents,
+        // A saved endpoint override drops the chain's SDK instance; the
+        // watcher rebinds its socket to the new one.
+        onSdkEndpointsChanged: async () => { await notificationService?.refresh(); },
         // §26: an auto-lock arm storage refused locks at once (fail closed).
         onAutoLockArmRefused: async () => {
             try {
@@ -864,11 +868,13 @@ attachSessionMetaListener({
     onUnlocked: () => {
         lastActivityStampAt = 0;
         lockBackstop.noteUnlocked();
-        // Drop an earlier session's deadline before publishing unlocked. The
-        // popup re-arms with the current timeout once it receives that state.
+        // Drop the previous unlock's deadline and record one for this unlock
+        // before publishing unlocked (a popup that never settles would leave none).
         return sequenceUnlockedSession({
             clearAutoLockState,
             continueUnlock: () => ensureHost()
+                .finally(() => armProvisionalAutoLock(() => (vault ? vault.settings.get() : null), Date.now())
+                    .catch((err) => { console.error('[xchain] provisional auto-lock record could not be saved:', err); }))
                 .then(() => surfaceStateEvents.publish('session', { state: 'unlocked' }))
                 .catch((err) => {
                     console.error('[xchain] ensureHost after unlock failed:', err);

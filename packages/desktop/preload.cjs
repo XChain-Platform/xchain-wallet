@@ -23,6 +23,12 @@
 //     every MessageHost call (unlock, sendToken, etc.). Mirrors the
 //     extension popup + web shell wire format.
 //
+//   - `xchainWalletBridge.fileTokenOf(file)`. Turns a File the user picked
+//     into an opaque single-use token and its size. The preload reads the
+//     file's path and registers it with main; the page never receives a
+//     path, and main opens an upload's file only through a token it issued,
+//     so a compromised renderer cannot aim the read at a path of its choosing.
+//
 //   - `xchainWalletBridge.wipeStorage()`. The shared
 //     `wipeWalletStorage` helper can only reach localStorage +
 //     IndexedDB, and this shell keeps its vault, kdfParams meta,
@@ -116,6 +122,7 @@ const OPEN_WINDOW_CHANNEL = 'xchain:open-window';
 const STATE_CHANGE_CHANNEL = 'xchain:state-changed';
 const WIPE_STORAGE_CHANNEL = 'xchain:wipe-storage';
 const SAVE_BACKUP_CHANNEL = 'xchain:save-backup';
+const REGISTER_PICKED_FILE_CHANNEL = 'xchain:register-picked-file';
 const CHAIN_REGISTRY_CHANNEL = 'xchain:chain-registry';
 const UPDATER_EVENT_CHANNEL = 'xchain:updater';
 const UPDATER_INSTALL_CHANNEL = 'xchain:updater-install';
@@ -252,11 +259,21 @@ function validateSignerMessage(args) {
 }
 
 contextBridge.exposeInMainWorld('xchainWalletBridge', {
-    filePathOf(file) {
+    /**
+     * An opaque single-use handle for a file the user picked. The path is
+     * read here and goes to main only; the page gets the token and the size.
+     * @param {File} file
+     * @returns {Promise<{ token: string, size: number } | null>}
+     */
+    async fileTokenOf(file) {
         if (arguments.length !== 1 || file === null || typeof file !== 'object') return null;
         try {
             const path = electron.webUtils?.getPathForFile(file);
-            return typeof path === 'string' && path.length > 0 ? path : null;
+            if (typeof path !== 'string' || path.length === 0) return null;
+            const issued = await ipcRenderer.invoke(REGISTER_PICKED_FILE_CHANNEL, path);
+            return typeof issued?.token === 'string' && issued.token.length > 0 && Number.isSafeInteger(issued.size)
+                ? { token: issued.token, size: issued.size }
+                : null;
         } catch {
             return null;
         }
