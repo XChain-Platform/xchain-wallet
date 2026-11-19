@@ -5,7 +5,12 @@
     "private": true,
     "_homepageNote": "REQUIRED BY THE .deb LANE, not decoration. fpm refuses to build without a homepage and electron-builder surfaces it as a hard failure ('Please specify project homepage'), so with this unset the Linux lane cannot produce *.deb - a REQUIRED row in tools/release/expected-artifacts.txt. It must live here rather than in electron-builder.config.cjs, whose v26 schema rejects a root 'homepage' key. Product site, not the company site the root package.json carries, because this is the URL a Debian user reads out of the installed package's metadata.",
     "homepage": "https://xchain.io",
-    "description": "Electron desktop shell for XChain Wallet (Windows / macOS / Linux) - Phase 2 §40.12: main-process signing isolation (§9.3.2), OS keychain auto-unlock, WebHID hardware signer pairing, electron-builder packaging with Level-2 reproducible pre-signing artifacts (§51), URI scheme registration, and electron-updater wiring.",
+    "_descriptionNote": "USER-FACING, and kept to one short sentence on purpose. electron-builder writes `description` into every Windows shortcut's comment (NSIS CreateShortCut), the uninstall entry's Comments, the installer's FileDescription, the AppX manifest and, with no linux.description set, the Linux .desktop Comment and the deb/snap descriptions. Windows caps a shortcut comment at 260 characters: the 318-character developer note this field held through v0.343.0 overflowed it, corrupted each shortcut's icon location, and left the desktop, Start-menu and taskbar icons blank. test/smoke/audits/desktop-shortcut-text.smoke.js holds the limit. The developer note it replaced: Electron desktop shell for XChain Wallet (Windows / macOS / Linux) - Phase 2 §40.12: main-process signing isolation (§9.3.2), OS keychain auto-unlock, WebHID hardware signer pairing, electron-builder packaging with Level-2 reproducible pre-signing artifacts (§51), URI scheme registration, and electron-updater wiring.",
+    "description": "Self-custodial wallet for the XChain Platform.",
+    "_authorNote": "USER-FACING on Windows. electron-builder reads `author.name` as the company name: it is the Publisher column in Apps and Features (the uninstall entry), and the CompanyName in every exe's version resource. Unset through v0.343.0, so Windows listed the wallet with no publisher. The name matches the root package.json author and the copyright line; no email, as no package in this repo carries one.",
+    "author": {
+        "name": "Dankest, LLC"
+    },
     "main": "./main/index.js",
     "type": "module",
     "scripts": {

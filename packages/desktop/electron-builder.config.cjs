@@ -967,6 +967,15 @@ const config = {
         allowToChangeInstallationDirectory: true,
         perMachine: false,
         deleteAppDataOnUninstall: false,
+        // The installer and uninstaller hooks: shortcuts rewritten on every
+        // install so an update repairs the v0.343.0 ones, an arm64
+        // all-users install placed in Program Files, and the URL handlers
+        // the app registered removed on uninstall. Named explicitly for the
+        // same reason as the icons: app-builder-lib also finds
+        // build/installer.nsh by default, but that lookup says nothing
+        // when the file is missing, and a named one that is missing
+        // fails the build. desktop-nsis-hooks.smoke.js holds the macros.
+        include: 'build/installer.nsh',
         // Deterministic uninstaller name; the default injects a timestamp.
         uninstallDisplayName: '${productName}',
         // Differential updates are a non-goal (§7), so do not emit
@@ -1084,10 +1093,15 @@ const config = {
         category: 'Finance',
         maintainer: 'Dankest, LLC <support@xchain.io>',
         synopsis: 'Self-custodial multi-chain XChain Platform wallet',
-        description:
-            'Self-custodial wallet for the XChain Platform (Bitcoin, Dogecoin, '
-                + 'Litecoin). Supports token issuance, hardware wallets (Ledger + '
-                + 'Trezor via WebHID), and the full XChain action surface.',
+        // NO `description` HERE, on purpose. app-builder-lib uses one value
+        // for the .desktop entry's Comment (the menu tooltip) AND the deb and
+        // snap long descriptions (LinuxTargetHelper.getDescription), so the
+        // multi-sentence text this key once held became a 184-character
+        // tooltip. Unset, all of them read package.json's one-line
+        // `description`, the same sentence the Windows shortcuts carry.
+        // A `desktop.entry.Comment` override is no fix: computeDesktopEntry
+        // assigns Comment from the description after merging desktop.entry.
+        // test/smoke/audits/desktop-shortcut-text.smoke.js holds the limits.
     },
     appImage: {
         // Named like every other artifact (§7.1). Forcing it here is also
