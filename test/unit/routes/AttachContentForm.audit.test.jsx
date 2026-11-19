@@ -8,6 +8,7 @@ import React from 'react';
 import { typeCustomRate } from '../../helpers/customNetworkFee.js';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { AttachContentForm } from '../../../packages/core/src/shared/routes/AttachContentForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 const CHAIN = 'bitcoin-mainnet';
 const SOURCE = Object.freeze({
@@ -18,6 +19,8 @@ const SOURCE = Object.freeze({
     source: 'hd',
     signerId: 'signer-1',
 });
+
+const UNKNOWN_ISSUER = "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.";
 
 let OriginalFileReader;
 
@@ -139,6 +142,7 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     globalThis.FileReader = OriginalFileReader;
+    __clearTokenInfoCache();
 });
 
 describe('AttachContentForm validation and review', () => {
@@ -146,11 +150,55 @@ describe('AttachContentForm validation and review', () => {
         const client = messagingFor();
         mount(client, null);
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
-        );
-        expect(screen.getByRole('button', { name: 'Attach Artwork' })).toBeDisabled();
+        // The owner read settles after mount, so the wait is on the text.
+        await waitFor(() => expect(screen.getAllByText(UNKNOWN_ISSUER).length).toBeGreaterThan(0));
+        // G130: the button keeps its colour and a tap is refused at the top.
+        const attach = screen.getByRole('button', { name: 'Attach Artwork' });
+        expect(attach).toBeEnabled();
+        await chooseFile();
+        fireEvent.click(attach);
+        await waitFor(() => expect(screen.getAllByText(UNKNOWN_ISSUER).length).toBeGreaterThan(0));
+        expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
         expect(client.composeForConfirm).not.toHaveBeenCalled();
+    });
+
+    // The regtest roster trace (2026-11-18): the owner row was tapped 80 ms
+    // after the token page mounted, before its token read named the owner, so
+    // the form opened with no issuer and stayed refused for good.
+    it('reads the owner itself when it opens before the token page named one', async () => {
+        const client = messagingFor({ overrides: {
+            getTokenInfo: vi.fn().mockResolvedValue({ chainId: CHAIN, tick: 'ART', creator: SOURCE.address }),
+        } });
+        mount(client, null);
+        await chooseFile('art.png', 'image/png');
+        await review();
+        expect(await screen.findByRole('form', { name: 'Review artwork upload' })).toBeInTheDocument();
+        expect(screen.queryByText(UNKNOWN_ISSUER)).toBeNull();
+    });
+
+    it('answers a tap while the owner read is in flight with the wait refusal', async () => {
+        const client = messagingFor({ overrides: { getTokenInfo: vi.fn(() => new Promise(() => {})) } });
+        mount(client, null);
+        await chooseFile();
+        const attach = screen.getByRole('button', { name: 'Attach Artwork' });
+        expect(attach).toBeEnabled();
+        fireEvent.click(attach);
+        await waitFor(() => expect(screen.getAllByText('Wait for the wallet to verify the current owner of ART.').length).toBeGreaterThan(0));
+        expect(screen.queryByRole('form', { name: 'Review artwork upload' })).toBeNull();
+    });
+
+    it('asks the explorer again when a tap follows a failed owner read', async () => {
+        const getTokenInfo = vi.fn()
+            .mockResolvedValueOnce({ chainId: CHAIN, tick: 'ART', loadError: true })
+            .mockResolvedValue({ chainId: CHAIN, tick: 'ART', creator: SOURCE.address });
+        mount(messagingFor({ overrides: { getTokenInfo } }), null);
+        await waitFor(() => expect(screen.getAllByText(UNKNOWN_ISSUER).length).toBeGreaterThan(0));
+        await chooseFile('art.png', 'image/png');
+        await review();
+        // The refused tap asks again; the next tap goes through.
+        await waitFor(() => expect(getTokenInfo).toHaveBeenCalledTimes(2));
+        await review();
+        expect(await screen.findByRole('form', { name: 'Review artwork upload' })).toBeInTheDocument();
     });
 
     it('shows normalized FILE values and keeps the draft when Back returns to the form', async () => {

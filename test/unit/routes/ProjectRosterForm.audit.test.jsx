@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessagingProvider } from '../../../packages/core/src/shared/MessagingProvider.jsx';
 import { ProjectRosterForm } from '../../../packages/core/src/shared/routes/ProjectRosterForm.jsx';
+import { __clearTokenInfoCache } from '../../../packages/core/src/shared/hooks/useTokenInfo.js';
 
 // Tokens join the list only through the token picker; this stand-in picks
 // whatever ticker is typed into it, on the chain the form locked it to.
@@ -26,6 +27,7 @@ function addToken(tick) {
     fireEvent.click(screen.getByRole('button', { name: 'Pick token' }));
 }
 
+const UNKNOWN_ISSUER = "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.";
 const CHAIN = 'dogecoin-testnet';
 const ADDRESS = {
     id: 'address-1',
@@ -62,18 +64,55 @@ function mount(messaging = messagingWith(), issuerAddress = ADDRESS.address) {
     );
 }
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    __clearTokenInfoCache();
+});
 
 describe('ProjectRosterForm editing validation', () => {
     it('refuses before review when the issuer is unknown', async () => {
-        const messaging = messagingWith({ createList: vi.fn() });
+        const messaging = messagingWith({
+            createList: vi.fn(),
+            getTokenInfo: vi.fn().mockResolvedValue({ chainId: CHAIN, tick: 'PROJ', loadError: true }),
+        });
         mount(messaging, null);
 
-        expect(await screen.findByRole('alert')).toHaveTextContent(
-            "The token's issuer could not be confirmed, so this action is not available. Try again when the explorer answers.",
-        );
-        expect(screen.getByRole('button', { name: 'Create and Link' })).toBeDisabled();
+        // The owner read settles after mount, so the wait is on the text.
+        await waitFor(() => expect(screen.getAllByText(UNKNOWN_ISSUER).length).toBeGreaterThan(0));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+        // G130: the button keeps its colour and a tap is refused at the top.
+        const submit = screen.getByRole('button', { name: 'Create and Link' });
+        expect(submit).toBeEnabled();
+        fireEvent.click(submit);
+        expect(await screen.findByRole('alert')).toHaveTextContent(UNKNOWN_ISSUER);
+        expect(screen.queryByRole('form', { name: 'Review official token list' })).toBeNull();
         expect(messaging.createList).not.toHaveBeenCalled();
+    });
+
+    // The regtest trace (content-registry:478, 2026-11-18): Official list was
+    // tapped 80 ms after the token page mounted, before its token read named
+    // the owner, so the form opened with no issuer and Create and Link stayed
+    // disabled for good.
+    it('reads the owner itself when it opens before the token page named one', async () => {
+        mount(messagingWith({
+            getTokenInfo: vi.fn().mockResolvedValue({ chainId: CHAIN, tick: 'PROJ', creator: ADDRESS.address }),
+        }), null);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+        addToken('VALID');
+        fireEvent.click(screen.getByRole('button', { name: 'Create and Link' }));
+        expect(await screen.findByRole('form', { name: 'Review official token list' })).toBeTruthy();
+        expect(screen.queryByText(UNKNOWN_ISSUER)).toBeNull();
+    });
+
+    it('answers a tap while the owner read is in flight with the wait refusal', async () => {
+        mount(messagingWith({ getTokenInfo: vi.fn(() => new Promise(() => {})) }), null);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add Token' })).toBeEnabled());
+        addToken('VALID');
+        const submit = screen.getByRole('button', { name: 'Create and Link' });
+        expect(submit).toBeEnabled();
+        fireEvent.click(submit);
+        await waitFor(() => expect(screen.getAllByText('Wait for the wallet to verify the current owner of PROJ.').length).toBeGreaterThan(0));
+        expect(screen.queryByRole('form', { name: 'Review official token list' })).toBeNull();
     });
 
     it('keeps protocol-valid spelling and refuses a case-insensitive duplicate', async () => {

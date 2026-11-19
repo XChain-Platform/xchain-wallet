@@ -51,6 +51,8 @@ import { TickerIcon } from '../components/TickerIcon.jsx';
 import { coinFromChainId } from '../components/BalanceList.jsx';
 import { MAX_MEMO_LENGTH, memoLengthError } from '../utils/memoLimit.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import { listMetaSupported } from '../../flows/listFormatSupport.js';
 import { findListOwner } from '../../flows/listMembership.js';
@@ -184,6 +186,11 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
     const [loadError, setLoadError] = useState(/** @type {string | null} */ (null));
     const [chainId, setChainId] = useState(initialChainId);
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
+    // The token page hands over the owner it resolved, but a tap on its row
+    // can land before that read does, so with no owner handed over the form
+    // reads the token record itself (null while the read is in flight).
+    const ownerRecord = useTokenInfo({ chainId, tick, skip: !!issuerAddress });
+    const ownerAddress = issuerAddress || ownerRecord?.creator || null;
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
     // The project's ISSUE action index (the LINK's second leg).
@@ -440,14 +447,14 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
     useEffect(() => {
         if (!addressesByChain || !activeByChain || fromAddressId) return;
         const all = addressesByChain[chainId] || [];
-        if (issuerAddress) {
-            const match = all.find((a) => a.address === issuerAddress);
+        if (ownerAddress) {
+            const match = all.find((a) => a.address === ownerAddress);
             if (match) { setFromAddressId(match.id); return; }
         }
         const funding = all.filter((a) => a.role !== 'dispenser');
         const picked = preferredSourceId(funding, activeByChain[chainId]) || funding[0]?.id || all[0]?.id;
         if (picked) setFromAddressId(picked);
-    }, [addressesByChain, activeByChain, chainId, fromAddressId, issuerAddress]);
+    }, [addressesByChain, activeByChain, chainId, fromAddressId, ownerAddress]);
 
     useEffect(() => {
         if (stage === 'review-list' || stage === 'review-link') {
@@ -523,7 +530,7 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
     const issuerEligibility = tokenIssuerEligibility({
-        tokenInfo: { creator: issuerAddress },
+        tokenInfo: issuerAddress ? { creator: issuerAddress } : ownerRecord,
         addressesByChain,
         chainId,
         tick,
@@ -708,6 +715,8 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
             return;
         }
         if (issuerEligibility.error) {
+            // A failed owner read is asked again, so a later tap can pass.
+            if (ownerRecord?.loadError) invalidateTokenInfo(chainId, tick);
             setFormError(issuerEligibility.error);
             return;
         }
@@ -1407,7 +1416,9 @@ export function ProjectRosterForm({ walletId, chainId: initialChainId, tick, iss
                 <FormAction
                     icon={hasRoster ? <Icon.SaveIcon /> : <Icon.LinkIcon />}
                     loading={submitting}
-                    disabled={issuerEligibility.pending || !!issuerEligibility.error || submitting}
+                    // G130: an owner still being checked or not confirmed is
+                    // refused at the top of the review handler; loading
+                    // ignores repeat taps while a review composes.
                 >
                     {hasRoster ? t('projectRoster.save') : t('projectRoster.create')}
                 </FormAction>

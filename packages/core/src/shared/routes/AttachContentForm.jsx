@@ -37,6 +37,8 @@ import { FileField } from '../components/FileField.jsx';
 import { UploadMethodField, UploadMethodReviewRows, useUploadMethod } from '../components/UploadMethodField.jsx';
 import { publicFileCompiledBytes } from '../../flows/uploadMethod.js';
 import { tokenIssuerEligibility } from '../utils/tokenIssuerEligibility.js';
+import { invalidateTokenInfo } from '../utils/tokenInfoCache.js';
+import { useTokenInfo } from '../hooks/useTokenInfo.js';
 import { nativeFeeForFeelessAction } from '../../flows/feeBearingActions.js';
 import { normalizeGenesisRow } from './ManageToken.jsx';
 import {
@@ -221,6 +223,12 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     const [fromAddressId, setFromAddressId] = useState(/** @type {string | null} */ (null));
     const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
+    // The token page hands over the owner it resolved, but a tap on its row
+    // can land before that read does, so with no owner handed over the form
+    // reads the token record itself (null while the read is in flight).
+    const ownerRecord = useTokenInfo({ chainId, tick, skip: !!issuerAddress });
+    const ownerAddress = issuerAddress || ownerRecord?.creator || null;
+
     // The token's ISSUE action index (the LINK's second leg). Fetched
     // from the same genesis endpoint ManageToken renders.
     const [issueActionIndex, setIssueActionIndex] = useState(/** @type {string | null} */ (null));
@@ -311,14 +319,14 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
     useEffect(() => {
         if (!addressesByChain || !activeByChain || fromAddressId) return;
         const all = addressesByChain[chainId] || [];
-        if (issuerAddress) {
-            const match = all.find((a) => a.address === issuerAddress);
+        if (ownerAddress) {
+            const match = all.find((a) => a.address === ownerAddress);
             if (match) { setFromAddressId(match.id); return; }
         }
         const funding = all.filter((a) => a.role !== 'dispenser');
         const picked = preferredSourceId(funding, activeByChain[chainId]) || funding[0]?.id || all[0]?.id;
         if (picked) setFromAddressId(picked);
-    }, [addressesByChain, activeByChain, chainId, fromAddressId, issuerAddress]);
+    }, [addressesByChain, activeByChain, chainId, fromAddressId, ownerAddress]);
 
     useEffect(() => {
         if (stage === 'review-file' || stage === 'review-link') {
@@ -369,7 +377,7 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
         return (addressesByChain[chainId] || []).find((a) => a.id === fromAddressId) || null;
     }, [chainId, fromAddressId, addressesByChain]);
     const issuerEligibility = tokenIssuerEligibility({
-        tokenInfo: { creator: issuerAddress },
+        tokenInfo: issuerAddress ? { creator: issuerAddress } : ownerRecord,
         addressesByChain,
         chainId,
         tick,
@@ -734,6 +742,8 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
             return;
         }
         if (issuerEligibility.error) {
+            // A failed owner read is asked again, so a later tap can pass.
+            if (ownerRecord?.loadError) invalidateTokenInfo(chainId, tick);
             refuse('from', issuerEligibility.error);
             return;
         }
@@ -1363,11 +1373,11 @@ export function AttachContentForm({ walletId, chainId, tick, issuerAddress = nul
                 <FormAction
                     icon={<Icon.UploadIcon />}
                     loading={genesisRefreshing}
-                    disabled={genesisRefreshing
-                        // A file held by reference (bytes null) still waits
-                        // for its multi-part quote, so the review can name it.
-                        || !multipartMethod.ready
-                        || issuerEligibility.pending || !!issuerEligibility.error}
+                    // G130: an owner still being checked or not confirmed is
+                    // refused at the top of the review handler. A file held
+                    // by reference (bytes null) still waits for its
+                    // multi-part quote, so the review can name it.
+                    disabled={!multipartMethod.ready}
                 >
                     Attach Artwork
                 </FormAction>

@@ -190,7 +190,8 @@ describe('AttachContentForm app-wide form rulings', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'The selected source address does not own ART. Choose the current owner address.',
         );
-        expect(screen.getByRole('button', { name: 'Attach Artwork' })).toBeDisabled();
+        // G130: the button keeps its colour; a tap is refused at the top.
+        expect(screen.getByRole('button', { name: 'Attach Artwork' })).toBeEnabled();
     });
 
     it('labels the file chooser with a help tip and keeps only the live limit under it', async () => {
