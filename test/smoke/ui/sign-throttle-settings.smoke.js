@@ -101,7 +101,7 @@ assert.match(hostSrc, /let cachedThrottleLimits =/,
     'host owns a cachedThrottleLimits closure variable');
 assert.match(
     hostSrc,
-    /async function refreshThrottleLimitsFromVault\(\)/,
+    /async function refreshThrottleLimitsFromVault\(\{ force = false \} = \{\}\)/,
     'host has an async refresh function',
 );
 assert.match(

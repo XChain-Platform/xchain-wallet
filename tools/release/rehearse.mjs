@@ -70,7 +70,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, readdirSync, realpathSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { join, dirname, resolve as resolvePath } from 'node:path';
+import { basename, join, dirname, resolve as resolvePath } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
@@ -88,6 +88,17 @@ const UPDATE_VERIFY = resolvePath(HERE, '../../packages/desktop/main/updateVerif
 const WALLET_ROOT = resolvePath(HERE, '../..');
 
 export const RECORD_VERSION = 1;
+
+export function artifactArch(name) {
+    const file = basename(String(name));
+    if (file.includes('arm64') || file.includes('aarch64')) return 'arm64';
+    if (file.includes('armv7l') || file.includes('armhf')) return 'armv7l';
+    if (file.includes('universal')) return 'universal';
+    if (file.includes('i386') || file.includes('i686') || file.includes('ia32')) return 'ia32';
+    if (file.includes('x86_64') || file.includes('amd64')
+        || file.includes('-x64') || file.includes('_x64')) return 'x64';
+    return null;
+}
 
 // ------------------------------------------------- the automated swap check
 //
@@ -315,13 +326,10 @@ function assign(entry, key, value) {
  * anywhere. `selection` reports which of the two branches fired so a
  * rehearsal can refuse the fallback rather than pass on a coin flip.
  *
- * `candidates` is reported because the fallback is only DANGEROUS when
- * there was a choice to get wrong. Linux gets one pointer per arch, so
- * its ymls list a single AppImage and taking the first is taking the only
- * one; Windows and macOS put both arches in one file, where the same
- * branch silently hands a machine the other architecture's installer.
- * Same upstream code path, opposite consequence, so the caller needs the
- * count to tell them apart.
+ * `candidates` is reported because a fallback among several files is
+ * order-dependent and is refused immediately. A one-file fallback still
+ * needs the caller's independent filename architecture check before it is
+ * accepted.
  *
  * macOS is NOT only `findFile`. MacUpdater first runs `filterFilesForArch`
  * over the list, and an Apple-silicon Mac (Rosetta included) keeps only the
@@ -534,6 +542,16 @@ export async function probeLane({ lane, feedBase, channel, tag, fetch: fetchImpl
             `${lane.arch} matched no filename and fell back to the first of ${candidates} `
             + `listed .${lane.format} files (${file.url}). electron-updater would hand this `
             + 'machine that artifact whatever arch it is. Artifact names must carry their arch.',
+        );
+    }
+    const selectedArch = artifactArch(file.url);
+    entry.checks.selectedArch = selectedArch;
+    if (selectedArch !== lane.arch) {
+        return fail(
+            'selection',
+            `${lane.id} requires ${lane.arch}, but selected ${file.url} names `
+            + `${selectedArch ?? 'no arch token'}. electron-updater would install that artifact `
+            + 'for this lane.',
         );
     }
 

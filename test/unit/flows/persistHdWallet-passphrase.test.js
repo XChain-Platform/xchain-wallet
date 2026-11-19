@@ -170,7 +170,7 @@ describe('flows/_persistHdWallet passphrase capture (§15.6)', () => {
     it('puts the wallet record exactly once, whether or not a passphrase is captured', async () => {
         for (const passphraseEnabled of [true, false]) {
             const vault = await openVault();
-            const putSpy = vi.spyOn(vault.wallets, 'put');
+            const putSpy = vi.spyOn(vault, 'putManyGuarded');
 
             await persist(vault, {
                 passphraseEnabled,
@@ -178,6 +178,7 @@ describe('flows/_persistHdWallet passphrase capture (§15.6)', () => {
             });
 
             expect(putSpy).toHaveBeenCalledTimes(1);
+            expect(await vault.wallets.count()).toBe(1);
             putSpy.mockRestore();
         }
     });

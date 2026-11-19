@@ -933,6 +933,7 @@ async function checkSignerAgainstStoredAddress(req, vault, leaveToFlow) {
         if (signerId !== record.signerId) {
             throw new Error(`address "${named}" is a ${record.source} address; sign it with its own device`);
         }
+        await resolveSigner({ vault, address: record });
         return false;
     }
     if (signerId !== null) {
@@ -1500,13 +1501,13 @@ export function createBackgroundHost(deps) {
                         ? await vault.wallets.get(entry.walletId)
                         : null;
                     if (!wallet) continue;
-                    const record = await vault.pendingTxs.get(entry.pendingTxId);
                     let summary = null;
-                    if (record) {
-                        const patch = finishPatchFor(entry, record);
-                        if (patch) await vault.pendingTxs.put({ ...record, ...patch });
+                    await vault.pendingTxs.update(entry.pendingTxId, (record) => {
+                        if (!record) return null;
                         summary = typeof record.actionSummary === 'string' ? record.actionSummary : null;
-                    }
+                        const patch = finishPatchFor(entry, record);
+                        return patch ? { ...record, ...patch } : null;
+                    });
                     kept.push({ ...entry, finished: true, summary });
                 } catch {
                     // The vault could not answer; the next list retries this one.
@@ -1734,16 +1735,16 @@ export function createBackgroundHost(deps) {
         })();
     }
 
-    // Cluster S FOLLOWUP 1: sign-throttle limits read from settings.
-    // The throttle's `getLimits` returns from a closure cache so reads
-    // are sync. The cache is hydrated asynchronously (vault.settings.get
-    // is async) by `refreshThrottleLimitsFromVault()`, called both at
-    // host construction and after every successful settings.update.
-    // While the cache is null (first refresh hasn't completed yet), the
-    // throttle falls back to its defaults: fine for a short window.
+    // The throttle reads limits from a synchronous closure cache. The host
+    // fills that cache from settings and signing waits for the first attempt,
+    // so a restart cannot briefly substitute the default limits.
     let cachedThrottleLimits = /** @type {{ burst?: number, windowMs?: number } | null} */ (null);
     /** @type {import('@xchain-wallet/core').storage.Vault | null} */
-    let throttleVault = null;
+    let throttleVault = hostDeps?.vault ?? null;
+    let throttleLimitsLoaded = false;
+    /** @type {Promise<void> | null} */
+    let throttleLimitsLoadPromise = null;
+    let throttleLimitsLoadIsForced = false;
     // Cluster Q FOLLOWUP 2: track whether we've already seeded the
     // chainRegistry instance with the persisted custom chains. The
     // registry is module-scoped in the shell entry (extension/web/
@@ -1834,6 +1835,11 @@ export function createBackgroundHost(deps) {
             // The restore already committed; a failed re-read must not fail it.
         }
         await applyEndpointOverridesFromVault(vault, sdkRegistry);
+        if (throttleVault !== vault) {
+            throttleVault = vault;
+            throttleLimitsLoaded = false;
+        }
+        await refreshThrottleLimitsFromVault({ force: true });
         if (moved) await publishSurfaceState('custom-chains', {});
     }
     // Seed BEFORE the override pass, and seed here rather than only on
@@ -1852,40 +1858,67 @@ export function createBackgroundHost(deps) {
         await applyEndpointOverridesFromVault(hostDeps?.vault, hostDeps?.sdkRegistry);
     })();
 
-    async function refreshThrottleLimitsFromVault() {
-        if (!throttleVault) return;
+    async function refreshThrottleLimitsFromVault({ force = false } = {}) {
+        let vault = throttleVault;
+        if (!vault || (!force && throttleLimitsLoaded)) return;
+        if (throttleLimitsLoadPromise) {
+            const inFlightWasForced = throttleLimitsLoadIsForced;
+            await throttleLimitsLoadPromise;
+            if ((!force && throttleLimitsLoaded) || (force && inFlightWasForced)) return;
+            vault = throttleVault;
+            if (!vault) return;
+        }
+        if (throttleLimitsLoadPromise) return throttleLimitsLoadPromise;
+        const load = (async () => {
+            try {
+                const settings = await vault.settings.get();
+                if (throttleVault !== vault) return;
+                cachedThrottleLimits = settings?.signThrottle ?? null;
+                throttleLimitsLoaded = true;
+            } catch {
+                // A failed read does not latch, so the next trigger retries.
+            }
+        })();
+        throttleLimitsLoadPromise = load;
+        throttleLimitsLoadIsForced = force;
         try {
-            const settings = await throttleVault.settings.get();
-            cachedThrottleLimits = settings?.signThrottle ?? null;
-        } catch {
-            // Vault not open yet (boot race) or read failed: keep
-            // whatever was previously cached. The next refresh will
-            // try again.
+            await load;
+        } finally {
+            if (throttleLimitsLoadPromise === load) {
+                throttleLimitsLoadPromise = null;
+                throttleLimitsLoadIsForced = false;
+            }
         }
     }
-    // Cluster S FOLLOWUP 2: persist throttle state across SW restarts.
-    // The throttle is constructed with onPersist wired to the storage
-    // adapter; bucket state is hydrated asynchronously via the throttle's
-    // `seed()` method as soon as the load resolves. While hydration is
-    // pending, the throttle checks requests against an empty bucket, so up
-    // to one burst can slip through right after an SW restart; `seed()`
-    // then merges the restored timestamps with those live ones. That
-    // pending window is the one gap in otherwise persistent bucket state.
+    const signThrottleLimitsHydrated = refreshThrottleLimitsFromVault();
+    // Bucket state is persisted across worker restarts. The saved timestamps
+    // are merged before a signing route can make its first throttle check.
     const signThrottle = createSignThrottle({
         getLimits: () => cachedThrottleLimits || {},
         onPersist: signThrottleStorage
             ? (snapshot) => signThrottleStorage.save(snapshot)
             : undefined,
     });
-    if (signThrottleStorage) {
-        void (async () => {
+    const signThrottleHydrated = signThrottleStorage
+        ? (async () => {
             try {
                 const snapshot = await signThrottleStorage.load();
                 signThrottle.seed(snapshot?.buckets || {});
             } catch {
                 // Hydration failed: start fresh.
             }
-        })();
+        })()
+        : Promise.resolve();
+
+    async function whenSignThrottleReady(vault) {
+        await Promise.all([signThrottleHydrated, signThrottleLimitsHydrated]);
+        if (vault && throttleVault !== vault) {
+            throttleVault = vault;
+            throttleLimitsLoaded = false;
+        }
+        if (!throttleLimitsLoaded && throttleVault) {
+            await refreshThrottleLimitsFromVault();
+        }
     }
 
     // §19.5.2 label auto-sync. One scheduler per host, and a host IS an
@@ -2263,13 +2296,12 @@ export function createBackgroundHost(deps) {
 
 
     host.register('settings.get', async (_req, { vault, chainRegistry, sdkRegistry }) => {
-        // Cluster S FOLLOWUP 1: opportunistic throttle-limits cache
-        // hydration. The bridge handlers don't await this, so the very
-        // first sign request after SW restart may run on stale defaults
-        // for one bucket; the second onward sees the user-configured
-        // limits.
-        if (!throttleVault) {
+        // Retry a failed construction-time read once settings are available.
+        if (throttleVault !== vault) {
             throttleVault = vault;
+            throttleLimitsLoaded = false;
+        }
+        if (!throttleLimitsLoaded) {
             void refreshThrottleLimitsFromVault();
         }
         // Cluster Q FOLLOWUP 2: opportunistic custom-chain re-seed,
@@ -2377,7 +2409,7 @@ export function createBackgroundHost(deps) {
         // take effect on the very next sign request.
         if (patch && Object.prototype.hasOwnProperty.call(patch, 'signThrottle')) {
             throttleVault = vault;
-            await refreshThrottleLimitsFromVault();
+            await refreshThrottleLimitsFromVault({ force: true });
         }
         // Privacy settings that change how requests are MADE
         // have to take effect on the next request, not the next restart.
@@ -4280,7 +4312,7 @@ export function createBackgroundHost(deps) {
         const accounts = await vault.accounts.findBy('walletId', walletId);
         const accountIds = new Set(accounts.map((account) => account.id));
         const addresses = await vault.addresses.list();
-        const importedAddressIds = await importedAddressIdsFor(vault, walletId);
+        const importedAddressIds = await importedAddressIdsForStrict(vault, walletId);
         const walletAddresses = addresses.filter((address) => (
             accountIds.has(address.accountId) || importedAddressIds.has(address.id)
         ));
@@ -7122,7 +7154,13 @@ export function createBackgroundHost(deps) {
         }
     });
 
-    registerBridgeHandlers(host, { approvals, events: bridgeEvents, signThrottle, getAssetUrl });
+    registerBridgeHandlers(host, {
+        approvals,
+        events: bridgeEvents,
+        signThrottle,
+        signThrottleReady: whenSignThrottleReady,
+        getAssetUrl,
+    });
     // A dApp SEND or SWEEP builds its PSBT after the approval and claims its
     // coins there, before it signs. A page names no reviewed PSBT to claim.
     for (const type of ['bridge.signAction', 'bridge.parallel']) {

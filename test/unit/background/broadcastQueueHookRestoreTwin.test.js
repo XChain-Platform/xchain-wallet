@@ -70,6 +70,15 @@ const hookEntry = (extra = {}) => ({
 });
 
 describe('the auto-enqueue hook after a vault rebuild of the same PendingTx', () => {
+    it('restores a durable ADS verdict from the queued record', async () => {
+        const { engine } = await boot();
+        await engine.restoreQueueFromVault(vaultWithQueuedRecord({ adsCommit: VERDICT }), chainRegistry, W);
+
+        expect(engine.getQueue(W)).toEqual([
+            expect.objectContaining({ pendingTxId: 'p1', adsCommit: VERDICT }),
+        ]);
+    });
+
     it('keeps one entry and moves the hook verdict onto the rebuilt one', async () => {
         const { storage, engine } = await boot();
         await engine.restoreQueueFromVault(vaultWithQueuedRecord(), chainRegistry, W);

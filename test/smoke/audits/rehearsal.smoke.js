@@ -43,6 +43,7 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
 import {
+    artifactArch,
     parseUpdateInfo,
     selectFileForArch,
     probeLane,
@@ -114,7 +115,13 @@ for (const [name, label] of Object.entries(ARTIFACTS)) {
         'arch-check', join(root, 'tools/release/lib.sh'), name], { encoding: 'utf8' }).trim();
     assert.equal(arch, label.split('-')[1],
         `fixture ${name} must carry the arch token lib.sh xr_artifact_arch reads (got '${arch}')`);
+    assert.equal(artifactArch(name), arch, `${name} must have the same architecture in both gates`);
 }
+for (const [name, want] of [
+    ['wallet-aarch64.AppImage', 'arm64'], ['wallet_armhf.deb', 'armv7l'],
+    ['wallet-universal.zip', 'universal'], ['wallet-ia32.exe', 'ia32'],
+    ['wallet.AppImage', null], ['wallet-other.exe', null],
+]) assert.equal(artifactArch(name), want, `architecture of ${name}`);
 
 function sha512b64(text) { return createHash('sha512').update(text).digest('base64'); }
 
@@ -257,6 +264,7 @@ const good = makeFeed('feed-good');
     for (const r of results) {
         assert.ok(r.ok, `lane ${r.id} passes: ${r.failed} ${r.reason}`);
         assert.equal(r.checks.signedManifest, 'ok', `${r.id} checked the signed manifest`);
+        assert.equal(r.checks.selectedArch, r.arch, `${r.id} selected its own architecture`);
     }
 
     // Every lane resolved a DIFFERENT artifact, and each one carries its
@@ -282,9 +290,8 @@ const good = makeFeed('feed-good');
         assert.equal(r.checks.selection, 'by-arch', `${id} must resolve by name, not by order`);
         assert.equal(r.checks.candidates, 2, `${id} really did have a choice to get wrong`);
     }
-    // ...and the Linux lanes legitimately have only one candidate EACH,
-    // which is why the same fallback is allowed there. Note what that
-    // means now that both formats share a pointer: the two candidates in
+    // The Linux lanes have one candidate each, with acceptance decided by
+    // the independent architecture check. The two candidates in
     // `stable-linux.yml` are told apart by EXTENSION before arch is ever
     // considered, so an AppImage install can never fall back onto the deb
     // (which would be a root-privileged install of the wrong artifact).
@@ -344,6 +351,33 @@ const good = makeFeed('feed-good');
     }
     assert.ok(results.filter((r) => r.os !== 'win32').every((r) => r.ok),
         'and no other lane is affected');
+}
+
+{
+    const feed = makeFeed('feed-selection-architecture-mismatches', { mutate: ({ pointers }) => {
+        pointers[`${CHANNEL}.yml`] = pointerBody([
+            `xchain-wallet-setup-${VERSION}-arm64.exe`,
+        ]);
+        pointers[`${CHANNEL}-mac.yml`] = pointerBody([
+            `xchain-wallet-${VERSION}-x64-mac.zip`,
+        ]);
+        pointers[`${CHANNEL}-linux.yml`] = pointerBody([
+            `xchain-wallet-${VERSION}-arm64.AppImage`,
+            `xchain-wallet_${VERSION}_arm64.deb`,
+        ]);
+        pointers[`${CHANNEL}-linux-arm64.yml`] = pointerBody([
+            `xchain-wallet-${VERSION}-x86_64.AppImage`,
+            `xchain-wallet_${VERSION}_amd64.deb`,
+        ]);
+    } });
+    const results = await probeAll(feed.dir);
+    const failed = results.filter((r) => !r.ok);
+    assert.deepEqual(failed.map((r) => r.id).sort(), [
+        'linux-arm64-appimage', 'linux-arm64-deb', 'linux-x64-appimage',
+        'linux-x64-deb', 'mac-arm64', 'win-x64',
+    ]);
+    assert.ok(failed.every((r) => r.failed === 'selection'),
+        `architecture mismatches must fail selection: ${JSON.stringify(failed, null, 2)}`);
 }
 
 {

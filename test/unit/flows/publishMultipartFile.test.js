@@ -57,6 +57,7 @@ function txid(number) {
 
 function harness({
     lane = 'envelope', buildMode = 'one_call', multipart = 'complete', signedStart = 0,
+    fundingChangeValue = null,
 } = {}) {
     const events = [];
     const broadcasts = [];
@@ -72,7 +73,12 @@ function harness({
                 psbt: 'funding-psbt',
                 outputs: opts.customOutputs.map((output, vout) => ({
                     vout, ...output, scriptPubKey: `script-${vout}`,
-                })),
+                })).concat(fundingChangeValue === null ? [] : [{
+                    vout: opts.customOutputs.length,
+                    address: SOURCE.address,
+                    value: fundingChangeValue,
+                    scriptPubKey: 'change-script',
+                }]),
             };
             if (opts.options?.envelopeCommitHex) return { psbt: 'two-step-reveal' };
             if (lane === 'standard') return { psbt: 'standard-commit', encoding: 'P2SH' };
@@ -166,6 +172,17 @@ describe('multipart publish funding and envelope delivery', () => {
             (piece) => piece.actionIndex !== null,
         ));
         expect(sent.wave.pieces.every((piece) => piece.signedTxids.length === 2)).toBe(true);
+    });
+
+    it('keeps exact large change values through funding output matching', async () => {
+        const h = harness({ fundingChangeValue: '9007199254740993' });
+        const result = await publishMultipartFile(options(h));
+        expect(result.record.stage).toBe('complete');
+        const funded = h.vault.history.find((record) => record.wave?.fundingTxid ?? record.fundingTxid);
+        const fundingOutputs = funded.wave?.fundingOutputs ?? funded.fundingOutputs;
+        expect(fundingOutputs).toHaveLength(3);
+        expect(fundingOutputs.every((output) => Number.isSafeInteger(output.value))).toBe(true);
+        expect(h.broadcasts).toHaveLength(7);
     });
 });
 

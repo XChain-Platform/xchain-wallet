@@ -127,6 +127,7 @@ function resolveChainIconUrl(getAssetUrl, icon) {
  * @param {{
  *   approvals?: import('./Approvals.js').Approvals,
  *   signThrottle?: ReturnType<typeof createSignThrottle>,
+ *   signThrottleReady?: (vault: import('@xchain-wallet/core').storage.Vault) => Promise<void>,
  *   events?: typeof noopBridgeEvents,
  *   signPasswordCache?: import('./signPasswordCache.js').SignPasswordCache,
  *   getAssetUrl?: (path: string) => string,
@@ -135,6 +136,7 @@ function resolveChainIconUrl(getAssetUrl, icon) {
 export function registerBridgeHandlers(host, opts = {}) {
     const approvals = opts.approvals ?? rejectAllApprovals;
     const signThrottle = opts.signThrottle ?? createSignThrottle();
+    const signThrottleReady = opts.signThrottleReady ?? (async () => {});
     const events = opts.events ?? noopBridgeEvents;
     const getAssetUrl = opts.getAssetUrl ?? defaultAssetUrl;
     // Cluster Q FOLLOWUP 3: Developer-Mode localhost auto-sign. Holds a
@@ -553,6 +555,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         } catch {
             throw bridgeError('INVALID_PARAMS', 'message contains hidden or deceptive characters');
         }
+        await signThrottleReady(deps.vault);
         assertNotThrottled(signThrottle, req);
 
         const settings = await deps.vault.settings.get().catch(() => null);
@@ -615,6 +618,7 @@ export function registerBridgeHandlers(host, opts = {}) {
     register('bridge.signAction', async (req, deps) => {
         await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
+        await signThrottleReady(deps.vault);
         assertNotThrottled(signThrottle, req);
         const settings = await deps.vault.settings.get().catch(() => null);
         // executeSignAction owns the chain/account gate, the approval, and the
@@ -637,6 +641,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
+        await signThrottleReady(deps.vault);
         assertNotThrottled(signThrottle, req);
         // Shape first (pure, before the user is prompted); ownership AND the
         // per-account grant scope after the approval, like sign-in and
@@ -702,6 +707,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         const site = await requireSite(deps.vault, req);
         assertChainPermitted(site, req.chainId);
         assertSighashTypeShape(req.sighashType);
+        await signThrottleReady(deps.vault);
         assertNotThrottled(signThrottle, req);
         const account = await findCoSignerAccountByAddress({
             vault: deps.vault,
@@ -774,6 +780,7 @@ export function registerBridgeHandlers(host, opts = {}) {
         const site = await requireSite(deps.vault, req);
         // One throttle token for the whole batch (not one per action): the user
         // sees a single grouped modal, so it is one sign gesture to rate-limit.
+        await signThrottleReady(deps.vault);
         assertNotThrottled(signThrottle, req);
 
         const actions = Array.isArray(req.actions) ? req.actions : null;
@@ -856,6 +863,7 @@ export function registerBridgeHandlers(host, opts = {}) {
     register('bridge.signIn', async (req, deps) => {
         await assertNotBlocked(req, deps);
         const site = await requireSite(deps.vault, req);
+        await signThrottleReady(deps.vault);
         assertNotThrottled(signThrottle, req);
         // Reject a separator-poisoned appId/nonce BEFORE prompting. Both arrive
         // from the page, and " | " is the challenge's reserved field delimiter,

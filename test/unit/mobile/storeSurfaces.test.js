@@ -27,8 +27,8 @@
 // is why the build itself fails shut on (3) via the vite guard plugin, and why
 // the item's closure ran both builds and diffed them.
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 
@@ -46,8 +46,10 @@ import * as realDex from '../../../packages/web/src/surfaces/dex.jsx';
 import * as hiddenDex from '../../../packages/web/src/surfaces/dex.hidden.jsx';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(here, '..', '..', '..');
 const webSrc = join(here, '..', '..', '..', 'packages', 'web', 'src');
 const surfacesDir = join(webSrc, 'surfaces');
+const coreSrc = join(repoRoot, 'packages', 'core', 'src');
 
 /** Every .js/.jsx file under packages/web/src, so no importer can hide. */
 function webSourceFiles(dir = webSrc, out = []) {
@@ -153,6 +155,21 @@ describe('the DEX route components', () => {
         expect(offenders).toEqual([]);
     });
 
+    it('are unreachable through retained web routes and their core imports', () => {
+        const { offenders, reached } = retainedWebImportGraph();
+        expect(reached.has(join(coreSrc, 'shared', 'routes', 'DispenserExplorer.jsx'))).toBe(true);
+        expect(offenders).toEqual([]);
+    });
+
+    it('the transitive guard detects a core route importing a DEX module', () => {
+        const target = join(coreSrc, 'shared', 'routes', 'DispenserExplorer.jsx');
+        const readSource = (file) => file === target
+            ? `${readFileSync(file, 'utf8')}\nimport './MarketsList.jsx';\n`
+            : readFileSync(file, 'utf8');
+        const { offenders } = retainedWebImportGraph(readSource);
+        expect(offenders.some((chain) => chain.endsWith('DispenserExplorer.jsx -> packages/core/src/shared/routes/MarketsList.jsx'))).toBe(true);
+    });
+
     it('are all actually imported by the surface module', () => {
         // The other direction: a module listed in SURFACE_MODULES but no longer
         // imported here is a stale entry, and a stale entry makes the build
@@ -214,4 +231,48 @@ function dexCode() {
 /** Every static and dynamic import specifier in `code`. */
 function importSpecifiers(code) {
     return [...code.matchAll(/(?:\bfrom|\bimport\s*\(|^\s*import)\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]);
+}
+
+function stripComments(code) {
+    return code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"])\/\/.*$/gm, '$1');
+}
+
+function jsModule(base) {
+    for (const candidate of [base, `${base}.js`, `${base}.jsx`, join(base, 'index.js'), join(base, 'index.jsx')]) {
+        if (!candidate.startsWith(`${repoRoot}${sep}`)) continue;
+        if (existsSync(candidate) && statSync(candidate).isFile() && /\.jsx?$/.test(candidate)) return candidate;
+    }
+    return null;
+}
+
+function resolveImport(specifier, importer) {
+    if (specifier.startsWith('.')) return jsModule(resolve(dirname(importer), specifier));
+    const corePrefix = '@xchain-wallet/core/shared/';
+    if (specifier.startsWith(corePrefix)) {
+        return jsModule(join(coreSrc, 'shared', specifier.slice(corePrefix.length)));
+    }
+    return null;
+}
+
+function retainedWebImportGraph(readSource = (file) => readFileSync(file, 'utf8')) {
+    const owner = join(surfacesDir, 'dex.jsx');
+    const roots = webSourceFiles().filter((file) => file !== owner);
+    const queue = roots.map((file) => ({ file, chain: [relative(repoRoot, file)] }));
+    const reached = new Set();
+    const offenders = [];
+    while (queue.length > 0) {
+        const current = queue.shift();
+        if (reached.has(current.file)) continue;
+        reached.add(current.file);
+        const code = stripComments(readSource(current.file));
+        for (const specifier of importSpecifiers(code)) {
+            const child = resolveImport(specifier, current.file);
+            if (!child || child === owner) continue;
+            const chain = [...current.chain, relative(repoRoot, child)];
+            const dexModule = SURFACE_MODULES.dex.find((mod) => child.endsWith(`${sep}${mod.replaceAll('/', sep)}`));
+            if (dexModule) offenders.push(chain.join(' -> '));
+            else if (!reached.has(child)) queue.push({ file: child, chain });
+        }
+    }
+    return { offenders, reached };
 }

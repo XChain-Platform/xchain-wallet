@@ -269,7 +269,7 @@ function normalizeOutput(output, index) {
     return {
         vout: Number(output.vout ?? output.index ?? output.n ?? index),
         address: output.address ?? output.scriptPubKey?.address,
-        value: Number(output.value),
+        value: output.value,
         scriptPubKey: typeof output.scriptPubKey === 'string'
             ? output.scriptPubKey
             : (output.scriptPubKey?.hex ?? output.scriptPubKeyHex ?? output.script),

@@ -106,6 +106,11 @@ assert.match(
     /assertSigningAllowed\(\)/,
     'drainQueuedBroadcast calls assertSigningAllowed()',
 );
+const queuedBroadcastChecks = queuedBroadcastSrc.match(/assertSigningAllowed\(\)/g) ?? [];
+assert.ok(
+    queuedBroadcastChecks.length >= 3,
+    'drainQueuedBroadcast checks the freeze before the claim, after the claim, and before a reveal',
+);
 
 // --- host broadcast routes: both gated (item a6f2ffd5 / 303056b9) -----
 //

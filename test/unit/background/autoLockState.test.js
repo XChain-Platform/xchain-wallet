@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     readAutoLockState,
+    AutoLockStateMalformedError,
     AutoLockStateUnreadableError,
     applyAutoLockSignal,
     stampAutoLockActivity,
@@ -103,10 +104,54 @@ describe('autoLockState arm/stamp/clear', () => {
     });
 
     it('a rejected/absent idleMs never arms a lock', async () => {
-        await applyAutoLockSignal({ armed: true, idleMs: 'oops' }, 1000);
-        const s = await readAutoLockState();
-        expect(s.idleMs).toBe(0);
-        expect(shouldAutoLock(s, 9_999_999)).toBe(false);
+        for (const idleMs of ['oops', undefined, NaN, 0, -1, Infinity]) {
+            expect(await applyAutoLockSignal({ armed: true, idleMs }, 1000)).toEqual({ saved: false });
+        }
+        expect(await readAutoLockState()).toBeNull();
+    });
+
+    it('ignores malformed activity without weakening an existing deadline', async () => {
+        await applyAutoLockSignal({ armed: true, idleMs: 60_000 }, 1000);
+        expect(await applyAutoLockSignal({ armed: true, idleMs: 'oops', activity: true }, 2000))
+            .toEqual({ saved: true });
+        expect(await readAutoLockState()).toEqual({ armed: true, idleMs: 60_000, lastActivity: 1000 });
+    });
+
+    it('rejects malformed stored records as unreadable', async () => {
+        const store = installSessionArea();
+        const malformed = [
+            {}, null, 'x', [],
+            { armed: 'true', idleMs: 60_000, lastActivity: 1 },
+            { armed: 1, idleMs: 60_000, lastActivity: 1 },
+            { armed: true, lastActivity: 1 },
+            { armed: true, idleMs: 0, lastActivity: 1 },
+            { armed: true, idleMs: '60000', lastActivity: 1 },
+            { armed: true, idleMs: 60_000 },
+            { armed: true, idleMs: 60_000, lastActivity: 1, armedAt: 'x' },
+        ];
+        for (const value of malformed) {
+            store.set('xchain:autolock', value);
+            let error;
+            try { await readAutoLockState(); } catch (err) { error = err; }
+            expect(error).toBeInstanceOf(AutoLockStateMalformedError);
+            expect(error).toBeInstanceOf(AutoLockStateUnreadableError);
+        }
+    });
+
+    it('keeps an explicit disarm valid', async () => {
+        const store = installSessionArea();
+        store.set('xchain:autolock', { armed: false, idleMs: 0, lastActivity: 1000 });
+        const state = await readAutoLockState();
+        expect(state).toEqual({ armed: false, idleMs: 0, lastActivity: 1000 });
+        expect(shouldAutoLock(state, 9_999_999)).toBe(false);
+    });
+
+    it('does not rewrite a malformed record while stamping activity', async () => {
+        const store = installSessionArea();
+        const malformed = { armed: true, idleMs: 60_000 };
+        store.set('xchain:autolock', malformed);
+        await stampAutoLockActivity(2000);
+        expect(store.get('xchain:autolock')).toBe(malformed);
     });
 });
 

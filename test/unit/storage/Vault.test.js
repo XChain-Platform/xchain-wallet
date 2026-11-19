@@ -185,6 +185,40 @@ describe('storage/Vault concurrency and consistency', () => {
         expect((await vault.contacts.list()).map((record) => record.name).sort())
             .toEqual(['First', 'Second']);
     });
+
+    it('putManyGuarded reruns its guard after a backend conflict', async () => {
+        const backend = new InMemoryBackend();
+        const stale = new Vault({ backend, masterKey: KEY });
+        const current = new Vault({ backend, masterKey: KEY });
+        await Promise.all([stale.open(), current.open()]);
+        await current.contacts.put(createContact({
+            name: 'Concurrent',
+            entries: [{ chain: 'bitcoin', address: 'concurrent', label: '' }],
+        }));
+        const wallet = createWallet({
+            name: 'Candidate',
+            origin: 'created',
+            format: 'bip39',
+            passphraseEnabled: false,
+            encryptedSeed: 'c2VlZA==',
+            kdfParams: { algorithm: 'argon2id', salt: 'c2FsdA==', iterations: 1, memory: 8192, parallelism: 1 },
+        });
+        let builds = 0;
+
+        await expect(stale.putManyGuarded((document) => {
+            builds += 1;
+            if (document.contacts.length > 0) throw new Error('guard refused reloaded document');
+            return [{ store: stale.wallets, record: wallet }];
+        })).rejects.toThrow('guard refused reloaded document');
+
+        expect(builds).toBe(2);
+        expect(await stale.contacts.count()).toBe(1);
+        expect(await stale.wallets.count()).toBe(0);
+        const reopened = new Vault({ backend, masterKey: KEY });
+        await reopened.open();
+        expect(await reopened.contacts.count()).toBe(1);
+        expect(await reopened.wallets.count()).toBe(0);
+    });
 });
 
 describe('storage/Vault rekey (password change)', () => {

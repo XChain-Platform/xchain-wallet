@@ -25,8 +25,9 @@ import {
 import { createWallet as createWalletRecord } from '../schemas/wallet.js';
 import { createAccount } from '../schemas/account.js';
 import { createAddress } from '../schemas/address.js';
+import { createDefaultSettings, inflateSettings } from '../schemas/settings.js';
 import { tickerForCoin } from '../registry/coinTicker.js';
-import { ensureSettingsNow } from './seedSettings.js';
+import { seedSettingsForChains } from './seedSettings.js';
 import { serializeSettingsWrites } from './settings.js';
 import { unlockWalletRecord } from './unlockWallet.js';
 import { defaultAddressTypeForFormat } from './_defaultAddressType.js';
@@ -51,13 +52,30 @@ export class DuplicateWalletError extends Error {
 async function existingWalletNameFor(vault, derived) {
     const stored = await vault.addresses.list();
     for (const { address } of derived) {
-        const match = stored.find((existing) => existing.source === 'hd'
-            && existing.address === address.address
-            && existing.chain === address.chain
-            && existing.network === address.network);
+        const match = stored.find((existing) => sameHdAddress(existing, address));
         if (!match) continue;
         const account = await vault.accounts.get(match.accountId);
         const wallet = account ? await vault.wallets.get(account.walletId) : null;
+        return wallet?.name || 'another wallet';
+    }
+    return null;
+}
+
+function sameHdAddress(existing, candidate) {
+    return existing.source === 'hd'
+        && existing.address === candidate.address
+        && existing.chain === candidate.chain
+        && existing.network === candidate.network;
+}
+
+function existingWalletNameInDocument(document, derived) {
+    for (const { address } of derived) {
+        const match = document.addresses.find((existing) => sameHdAddress(existing, address));
+        if (!match) continue;
+        const account = document.accounts.find((record) => record.id === match.accountId);
+        const wallet = account
+            ? document.wallets.find((record) => record.id === account.walletId)
+            : null;
         return wallet?.name || 'another wallet';
     }
     return null;
@@ -81,6 +99,39 @@ function sameValue(left, right) {
     const rightKeys = set(right);
     return leftKeys.length === rightKeys.length
         && leftKeys.every((key) => Object.hasOwn(right, key) && sameValue(left[key], right[key]));
+}
+
+function walletGraphEntries({
+    document, vault, walletRecord, account, addresses,
+    chainRegistry, activeChainIds, activeNetwork,
+}) {
+    const duplicateOf = existingWalletNameInDocument(document, addresses);
+    if (duplicateOf !== null) throw new DuplicateWalletError(duplicateOf);
+    if (document.wallets.some((record) => record.id === walletRecord.id)) {
+        throw new Error(`persistHdWallet: wallet "${walletRecord.id}" already exists; refusing to overwrite its stored secret`);
+    }
+    if (document.accounts.some((record) => record.id === account.id)) {
+        throw new Error(`persistHdWallet: account id collision "${account.id}"`);
+    }
+    for (const { address } of addresses) {
+        if (document.addresses.some((record) => record.id === address.id)) {
+            throw new Error(`persistHdWallet: address id collision "${address.id}"`);
+        }
+    }
+    const existingSettings = document.settings ? inflateSettings(document.settings) : null;
+    let currentSettings = existingSettings ?? createDefaultSettings();
+    if (!existingSettings && activeNetwork) {
+        currentSettings = { ...currentSettings, activeNetwork };
+    }
+    const seededSettings = seedSettingsForChains(currentSettings, chainRegistry, activeChainIds);
+    return [
+        ...(!sameValue(existingSettings, seededSettings)
+            ? [{ store: vault.settings, record: seededSettings }]
+            : []),
+        { store: vault.wallets, record: walletRecord },
+        { store: vault.accounts, record: account },
+        ...addresses.map(({ address }) => ({ store: vault.addresses, record: address })),
+    ];
 }
 
 export function settingsSeedDelta(before, seeded, chainIds) {
@@ -192,38 +243,6 @@ export async function persistHdWallet({
     let walletRecord;
     let account;
     let signer;
-    let settingsSeed = null;
-    let accountPutAttempted = false;
-    let walletPutAttempted = false;
-    let settingsPutAttempted = false;
-    const addressPutIds = [];
-    const rollback = async (error) => {
-        const rollbackErrors = [];
-        if (settingsPutAttempted) {
-            try {
-                await rollbackSettingsSeed(vault, settingsSeed);
-            } catch (e) {
-                rollbackErrors.push(e);
-            }
-        }
-        for (const id of addressPutIds.reverse()) {
-            try { await vault.addresses.delete(id); } catch (e) { rollbackErrors.push(e); }
-        }
-        if (walletPutAttempted && walletRecord) {
-            try { await vault.wallets.delete(walletRecord.id); } catch (e) { rollbackErrors.push(e); }
-        }
-        if (accountPutAttempted && account) {
-            try { await vault.accounts.delete(account.id); } catch (e) { rollbackErrors.push(e); }
-        }
-        if (rollbackErrors.length > 0) {
-            throw new AggregateError(
-                [error, ...rollbackErrors],
-                'persistHdWallet: persistence and rollback failed',
-                { cause: error },
-            );
-        }
-        throw error;
-    };
 
     let setupFailed = false;
     let setupError;
@@ -294,7 +313,7 @@ export async function persistHdWallet({
     } finally {
         masterKey.fill(0);
     }
-    if (setupFailed) await rollback(setupError);
+    if (setupFailed) throw setupError;
 
     try {
         // 6. Seal the BIP39 passphrase under this wallet's own master
@@ -346,41 +365,22 @@ export async function persistHdWallet({
         const duplicateOf = await existingWalletNameFor(vault, addresses);
         if (duplicateOf !== null) throw new DuplicateWalletError(duplicateOf);
 
-        // 8. Seed per-chain Settings entries (fees + ADS) for any
-        //    active chain not already configured. Idempotent: a user's
-        //    customized fee strategy on an earlier wallet is preserved
-        //    if they create a second wallet in the same vault. This runs
-        //    before wallet records so a settings failure cannot leave an
-        //    incomplete wallet behind; rollback restores the prior settings.
-        settingsPutAttempted = true;
-        await serializeSettingsWrites(vault, async () => {
-            await ensureSettingsNow(
-                vault,
-                chainRegistry,
-                activeChainIds,
-                { activeNetwork },
-                ({ before, seeded }) => {
-                    settingsSeed = settingsSeedDelta(before, seeded, activeChainIds);
-                },
-            );
-        });
-
-        // 9. Persist the complete wallet graph. Every generated id is new,
-        //    so removing these records restores the pre-call graph if a
-        //    collection write fails after mutating the in-memory vault.
-        //    A failure here is undone by rollback() in the catch below.
-        walletPutAttempted = true;
-        await vault.wallets.put(walletRecord);
-        accountPutAttempted = true;
-        await vault.accounts.put(account);
-        for (const { address } of addresses) {
-            addressPutIds.push(address.id);
-            await vault.addresses.put(address);
-        }
+        // 8. Recheck every precondition and persist settings plus the complete
+        //    wallet graph in one queued document save. The settings queue keeps
+        //    this read-modify-write ordered with settings patches, while the
+        //    guarded builder also reruns against a conflict-reloaded document.
+        await serializeSettingsWrites(vault, () => vault.putManyGuarded((document) => walletGraphEntries({
+            document,
+            vault,
+            walletRecord,
+            account,
+            addresses,
+            chainRegistry,
+            activeChainIds,
+            activeNetwork,
+        })));
 
         return { wallet: walletRecord, account, addresses };
-    } catch (error) {
-        await rollback(error);
     } finally {
         signer.lock();
     }

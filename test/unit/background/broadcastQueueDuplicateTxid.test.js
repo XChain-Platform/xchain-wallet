@@ -67,6 +67,12 @@ describe('broadcast queue rows are unique by txid', () => {
             pendingTxs: {
                 get: async (id) => records.get(id) ?? null,
                 put: async (record) => { records.set(record.id, record); },
+                update: async (id, decide) => {
+                    const next = decide(records.get(id) ?? null);
+                    if (next == null) return false;
+                    records.set(id, next);
+                    return true;
+                },
             },
         };
 

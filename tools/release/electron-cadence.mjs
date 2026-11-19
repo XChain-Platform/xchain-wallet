@@ -105,7 +105,7 @@ export function readPinnedVersion({
     return { version: match[1].trim(), range };
 }
 
-/**
+/*
  * Compare the pin against what upstream currently offers.
  *
  * A MISSING FIELD IS NOT A CLEAN COMPARISON. The two `|| {}` defaults below
@@ -120,7 +120,8 @@ export function readPinnedVersion({
  * that arrives without an exception to catch.
  *
  * So the evidence each verdict rests on is REQUIRED rather than defaulted,
- * and anything absent lands in `missing` and makes the state inconclusive.
+ * and anything absent or unparseable lands in `missing`. An invalid timestamp
+ * is missing evidence, not a value that age arithmetic may silently accept.
  * The precedence runs the other way round, though, and deliberately: what we
  * DID detect is true regardless of what we could not read, so a real patch,
  * major or support-window violation still reports `behind` even with gaps.
@@ -129,6 +130,100 @@ export function readPinnedVersion({
  * @param {string} version   the version we ship
  * @param {Object} packument registry document (dist-tags + time)
  */
+const msOf = (value) => {
+    if (typeof value !== 'string' || value.trim() === '') return null;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+function checkPatch(version, ourMajor, newest, time, nowMs, problems, missing) {
+    if (!newest || newest === version) return;
+    const newestReleased = time[newest] ?? null;
+    const newestMs = msOf(newestReleased);
+    let owed = null;
+    if (newestMs == null) {
+        owed = newest;
+        if (newestReleased != null) {
+            missing.push(`time["${newest}"] has unparseable release date ${JSON.stringify(newestReleased)}`);
+        }
+    } else if (nowMs != null) {
+        if ((nowMs - newestMs) / 86400000 > POLICY.PATCH_GRACE_DAYS) owed = newest;
+        else {
+            const overdue = [];
+            for (const candidate of Object.keys(time)) {
+                if (!STABLE.test(candidate) || majorOf(candidate) !== ourMajor
+                    || compareStable(candidate, version) <= 0) continue;
+                const candidateMs = msOf(time[candidate]);
+                if (candidateMs == null) {
+                    missing.push(`time["${candidate}"] has unparseable release date ${JSON.stringify(time[candidate])}`);
+                } else if ((nowMs - candidateMs) / 86400000 > POLICY.PATCH_GRACE_DAYS) {
+                    overdue.push(candidate);
+                }
+            }
+            owed = overdue.sort(compareStable).pop() ?? null;
+        }
+    }
+    if (owed) {
+        problems.push({
+            kind: 'patch',
+            detail: owed === newest
+                ? `${version} is not the newest ${ourMajor}.x: ${newest} exists`
+                : `${version} is behind ${owed}, out past the ${POLICY.PATCH_GRACE_DAYS}-day `
+                    + `patch grace (newest ${ourMajor}.x: ${newest})`,
+            since: time[owed] ?? null,
+        });
+    } else if (nowMs != null) {
+        problems.push({
+            kind: 'patch-pending',
+            detail: `${newest} shipped ${time[newest]?.slice(0, 10)}; `
+                + `take it within ${POLICY.PATCH_GRACE_DAYS} days of release`,
+            since: time[newest] ?? null,
+        });
+    }
+}
+
+function checkMajors(ourMajor, latestMajor, tags, time, nowMs, problems, missing) {
+    const newerMajors = Object.keys(tags).map((tag) => /^(\d+)-x-y$/.exec(tag))
+        .filter(Boolean).map((match) => Number(match[1]))
+        .filter((major) => major > ourMajor && major <= latestMajor).sort((a, b) => a - b);
+    for (const major of newerMajors) {
+        const firstStable = `${major}.0.0`;
+        const released = time[firstStable] ?? null;
+        const releasedMs = msOf(released);
+        if (releasedMs == null) {
+            missing.push(released == null
+                ? `time["${firstStable}"] (no release date, so §9's ${POLICY.MAJOR_GRACE_DAYS}-day clock for Electron ${major} cannot run)`
+                : `time["${firstStable}"] has unparseable release date ${JSON.stringify(released)}`);
+            continue;
+        }
+        if (nowMs == null) continue;
+        const ageDays = Math.floor((nowMs - releasedMs) / 86400000);
+        if (ageDays > POLICY.MAJOR_GRACE_DAYS) problems.push({
+            kind: 'major',
+            detail: `Electron ${major} shipped ${released.slice(0, 10)}, ${ageDays} days ago, `
+                + `past §9's ${POLICY.MAJOR_GRACE_DAYS}-day rule`,
+            since: released,
+        });
+    }
+}
+
+function checkSupport(ourMajor, latestMajor, problems) {
+    const oldest = latestMajor - (POLICY.SUPPORTED_MAJORS - 1);
+    if (ourMajor < oldest) problems.push({
+        kind: 'unsupported',
+        detail: `Electron ${ourMajor} is outside upstream's support window `
+            + `(newest ${POLICY.SUPPORTED_MAJORS}: ${oldest}-${latestMajor}); `
+            + 'no security fixes are published for it at any version',
+    });
+    else if (ourMajor === oldest && latestMajor > ourMajor) problems.push({
+        kind: 'about-to-be-unsupported',
+        detail: `Electron ${ourMajor} is the OLDEST supported major; `
+            + `when ${latestMajor + 1} ships it stops receiving fixes`,
+    });
+    return oldest;
+}
+
+/** Compare the pinned version with registry evidence. */
 export function assess(version, packument) {
     const tags = packument['dist-tags'] || {};
     const time = packument.time || {};
@@ -136,131 +231,27 @@ export function assess(version, packument) {
     const latest = tags.latest;
     const latestMajor = majorOf(latest);
     const newestOnOurMajor = tags[`${ourMajor}-x-y`] ?? null;
-
     const problems = [];
     const missing = [];
-
-    // The support-window arithmetic and every major comparison below is
-    // driven by this one value, so without it the tool has no verdict to
-    // give - it merely has no findings, which is a different thing.
     if (!latest || !Number.isFinite(latestMajor)) {
-        missing.push("dist-tags.latest (no newest stable version to compare against)");
+        missing.push('dist-tags.latest (no newest stable version to compare against)');
     }
-    // Without our own major's channel tag the `patch` check cannot fire,
-    // so "we are on the newest patch of our major" would be assumed rather
-    // than checked. It is legitimately absent once our major falls out of
-    // upstream's window, which the `unsupported` problem reports on its
-    // own - and that problem outranks this gap in the precedence below.
     if (!newestOnOurMajor) {
         missing.push(`dist-tags.${ourMajor}-x-y (nothing to compare our patch level against)`);
     }
-
-    const nowMs = Date.parse(packument._now ?? new Date().toISOString());
-    const ageDaysOf = (v) => (time[v] ? (nowMs - Date.parse(time[v])) / 86400000 : null);
-    if (newestOnOurMajor && newestOnOurMajor !== version) {
-        // The patch that is OWED: the newest one on our major that has been
-        // out past the grace. A newest patch with no release date is owed at
-        // once, so a sparse document cannot buy a quiet week.
-        const newestAge = ageDaysOf(newestOnOurMajor);
-        let owed = null;
-        if (newestAge == null || newestAge > POLICY.PATCH_GRACE_DAYS) {
-            owed = newestOnOurMajor;
-        } else {
-            owed = Object.keys(time)
-                .filter((v) => STABLE.test(v) && majorOf(v) === ourMajor)
-                .filter((v) => compareStable(v, version) > 0)
-                .filter((v) => ageDaysOf(v) > POLICY.PATCH_GRACE_DAYS)
-                .sort(compareStable)
-                .pop() ?? null;
-        }
-        if (owed) {
-            problems.push({
-                kind: 'patch',
-                detail: owed === newestOnOurMajor
-                    ? `${version} is not the newest ${ourMajor}.x: ${newestOnOurMajor} exists`
-                    : `${version} is behind ${owed}, out past the ${POLICY.PATCH_GRACE_DAYS}-day `
-                        + `patch grace (newest ${ourMajor}.x: ${newestOnOurMajor})`,
-                // Within a major, Electron releases are almost entirely
-                // Chromium security backports. Being behind here is the
-                // straightforward "we ship known-fixed bugs" case.
-                since: time[owed] ?? null,
-            });
-        } else {
-            // Not a failure: the newer patch is still inside its grace, and
-            // likely inside pnpm's one-day floor, so no pin could take it yet.
-            problems.push({
-                kind: 'patch-pending',
-                detail: `${newestOnOurMajor} shipped ${time[newestOnOurMajor]?.slice(0, 10)}; `
-                    + `take it within ${POLICY.PATCH_GRACE_DAYS} days of release`,
-                since: time[newestOnOurMajor] ?? null,
-            });
-        }
+    const clock = packument._now ?? new Date().toISOString();
+    const nowMs = msOf(clock);
+    if (packument._now != null && nowMs == null) {
+        missing.push(`_now has unparseable timestamp ${JSON.stringify(packument._now)}`);
     }
-
-    // Every stable major newer than ours, oldest first, with how long it
-    // has been out. §9's clock starts at each major's release.
-    const newerMajors = Object.keys(tags)
-        .map((t) => /^(\d+)-x-y$/.exec(t))
-        .filter(Boolean)
-        .map((m) => Number(m[1]))
-        .filter((m) => m > ourMajor && m <= latestMajor)
-        .sort((a, b) => a - b);
-
-    for (const major of newerMajors) {
-        const firstStable = `${major}.0.0`;
-        const released = time[firstStable] ?? null;
-        const ageDays = released
-            ? Math.floor((Date.parse(packument._now ?? new Date().toISOString())
-                - Date.parse(released)) / 86400000)
-            : null;
-        if (released == null) {
-            // The quiet half of the same defect: no timestamp means no
-            // clock, and no clock produced no problem at all. §9's grace
-            // window simply never fired for that major, silently.
-            missing.push(`time["${firstStable}"] (no release date, so §9's `
-                + `${POLICY.MAJOR_GRACE_DAYS}-day clock for Electron ${major} cannot run)`);
-        }
-        if (ageDays != null && ageDays > POLICY.MAJOR_GRACE_DAYS) {
-            problems.push({
-                kind: 'major',
-                detail: `Electron ${major} shipped ${released?.slice(0, 10)}, `
-                    + `${ageDays} days ago, past §9's ${POLICY.MAJOR_GRACE_DAYS}-day rule`,
-                since: released,
-            });
-        }
-    }
-
-    const oldestSupported = latestMajor - (POLICY.SUPPORTED_MAJORS - 1);
-    if (ourMajor < oldestSupported) {
-        problems.push({
-            kind: 'unsupported',
-            detail: `Electron ${ourMajor} is outside upstream's support window `
-                + `(newest ${POLICY.SUPPORTED_MAJORS}: ${oldestSupported}-${latestMajor}); `
-                + 'no security fixes are published for it at any version',
-        });
-    } else if (ourMajor === oldestSupported && latestMajor > ourMajor) {
-        // Not a failure, but the one worth seeing coming: the next major
-        // upstream ships drops us out of support entirely.
-        problems.push({
-            kind: 'about-to-be-unsupported',
-            detail: `Electron ${ourMajor} is the OLDEST supported major; `
-                + `when ${latestMajor + 1} ships it stops receiving fixes`,
-        });
-    }
-
-    // PRECEDENCE, STATED RATHER THAN INFERRED. A violation we actually
-    // detected outranks evidence we could not read: a patch, a major or a
-    // support-window breach is true whatever else the document was missing,
-    // and downgrading it to "inconclusive" would lose a real finding to a
-    // bookkeeping gap. Only when nothing was detected does a gap decide the
-    // verdict, and then it decides it against silence. `about-to-be-
-    // unsupported` and `patch-pending` stay warnings.
-    const WARNINGS = new Set(['about-to-be-unsupported', 'patch-pending']);
-    const detected = problems.some((p) => !WARNINGS.has(p.kind));
+    checkPatch(version, ourMajor, newestOnOurMajor, time, nowMs, problems, missing);
+    checkMajors(ourMajor, latestMajor, tags, time, nowMs, problems, missing);
+    const oldestSupported = checkSupport(ourMajor, latestMajor, problems);
+    const warnings = new Set(['about-to-be-unsupported', 'patch-pending']);
+    const detected = problems.some((problem) => !warnings.has(problem.kind));
     let state = 'ok';
     if (detected) state = 'behind';
     else if (missing.length) state = 'inconclusive';
-
     return {
         version,
         major: ourMajor,
@@ -271,8 +262,6 @@ export function assess(version, packument) {
         problems,
         state,
         missing,
-        // Kept and DERIVED, so every existing --json reader keeps parsing
-        // and now fails closed: an inconclusive run is not ok.
         ok: state === 'ok',
     };
 }

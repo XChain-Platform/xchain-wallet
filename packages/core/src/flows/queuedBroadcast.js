@@ -28,6 +28,7 @@
 // record to preserve the work.
 
 import { createPendingTx, queuedRevealOf } from '../schemas/pendingTx.js';
+import { rawTxid } from '../signers/verifySignedTx.js';
 import { assertSigningAllowed } from './panicMode.js';
 import { assertMainnetActionAllowed } from './mainnetPrelaunch.js';
 import { classifyBroadcastFailure, isAlreadyOnNetworkRejection } from './broadcastPermanence.js';
@@ -60,6 +61,17 @@ export class NoQueuedTxError extends Error {
         this.name = 'NoQueuedTxError';
         this.pendingTxId = id;
     }
+}
+
+function deliveredTxid(txHex, result, fallback) {
+    if (typeof fallback === 'string' && fallback) return fallback;
+    let fromBytes = null;
+    try { fromBytes = rawTxid(txHex); } catch { /* response or stored id may still be usable */ }
+    const response = typeof result === 'string' ? result : result?.txid;
+    const normalized = (value) => (
+        typeof value === 'string' && /^[0-9a-f]{64}$/i.test(value) ? value.toLowerCase() : null
+    );
+    return normalized(fromBytes) ?? normalized(response);
 }
 
 /**
@@ -151,8 +163,8 @@ export async function listQueuedBroadcasts({ vault, chainId, chainRegistry }) {
 
 /**
  * Attempt to broadcast a single queued PendingTx. Transitions:
- *   success              → status='broadcast', broadcastAt = now
- *   already on network   → status='broadcast' (the node holds this txid)
+ *   success              → status='broadcast', broadcastAt and txid recorded
+ *   already on network   → status='broadcast', bytes-derived txid recorded
  *   transient failure    → stays 'queued', error recorded, retry allowed
  *   permanent failure    → status='failed' (§5.3: inputs gone; only a
  *                          re-compose can succeed, so it stops retrying)
@@ -282,16 +294,26 @@ export async function drainQueuedBroadcast({
                 // a refused write leaves the pair on disk, and a resume re-sends
                 // the commit, which the node answers as already known.
             }
+            // The commit request is a window in which another context can arm
+            // the freeze. Keep its landed reveal queued until the freeze lifts.
+            try {
+                assertSigningAllowed();
+            } catch (err) {
+                try { await vault.pendingTxs.put({ ...current, status: 'queued', error: null }); } catch { /* retry resumes the pair */ }
+                throw err;
+            }
         }
 
+        let broadcastResult;
         try {
-            await sdk.encoder.broadcastTx(current.txHex);
+            broadcastResult = await sdk.encoder.broadcastTx(current.txHex);
         } catch (err) {
             // Settle "already known" as delivery: the node holds this txid, so
             // retiring it as 'failed' would invite a re-compose that pays twice.
             if (isAlreadyOnNetworkRejection(err)) {
                 const delivered = {
                     ...current,
+                    txid: deliveredTxid(current.txHex, null, current.txid),
                     status: 'broadcast',
                     broadcastAt: new Date().toISOString(),
                     error: null,
@@ -308,6 +330,7 @@ export async function drainQueuedBroadcast({
 
         const broadcast = {
             ...current,
+            txid: deliveredTxid(current.txHex, broadcastResult, current.txid),
             status: 'broadcast',
             broadcastAt: new Date().toISOString(),
             error: null,

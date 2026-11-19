@@ -162,6 +162,11 @@ assert.match(
     /signThrottle\.seed\(snapshot\?\.buckets \|\| \{\}\)/,
     'host hydrates the throttle via seed() after load',
 );
+assert.match(
+    hostSrc,
+    /signThrottleReady: whenSignThrottleReady/,
+    'bridge signing receives the throttle hydration gate',
+);
 
 // Don't reference the default/SDK-default constants; only the export shape.
 void SIGN_THROTTLE_DEFAULT_BURST;

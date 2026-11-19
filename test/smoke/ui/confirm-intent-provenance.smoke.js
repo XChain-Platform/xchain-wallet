@@ -103,6 +103,25 @@ const decodedSources = screenSrc.match(/^\s*(const decoded|decoded=).*$/gm) || [
 assert.equal(decodedSources.length, 2,
     `exactly one derivation and one use of \`decoded\`, saw:\n  ${decodedSources.join('\n  ')}`);
 
+// Send keeps its form mounted while compose is pending. Its confirmation
+// summary must therefore use the same frozen request as compose, not whatever
+// recipients the draft holds when the host answers.
+const sendSrc = read('packages', 'core', 'src', 'shared', 'routes', 'Send.jsx');
+const sendSnapshotIdx = sendSrc.indexOf('confirmSendSnapshotRef.current = createSendConfirmSnapshot({');
+const sendComposeIdx = sendSrc.indexOf('compose: () => messaging.composeForConfirm(sendBase)');
+assert.ok(sendSnapshotIdx > -1 && sendComposeIdx > sendSnapshotIdx,
+    'Send freezes confirmation fields from sendBase before composing that request');
+const sendConfirmBlock = sendSrc.slice(
+    sendSrc.indexOf('if (confirmModalOpen) {'),
+    sendSrc.indexOf('// Why the review', sendSrc.indexOf('if (confirmModalOpen) {')),
+);
+assert.match(sendConfirmBlock, /const snapshot = confirmSendSnapshotRef\.current;/,
+    'Send confirmation reads the frozen compose snapshot');
+assert.match(sendConfirmBlock, /recipients: snapshotLegs\.map/,
+    'Send confirmation recipient rows come from the frozen compose snapshot');
+assert.ok(!/recipients: sendLegs\.map/.test(sendConfirmBlock),
+    'Send confirmation does not rebuild recipient rows from the live draft');
+
 // --- 4. the dApp approval window describes host-side too -------------
 
 const approval = read('packages', 'extension', 'src', 'approval', 'kinds', 'SignApproval.jsx');

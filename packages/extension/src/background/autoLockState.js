@@ -28,10 +28,10 @@
 // within the browser session (so the alarm keeps working across SW restarts)
 // but is cleared on browser close, the same lifetime as the session key.
 //
-// The backstop fails closed. A record storage cannot read is an unknown
-// deadline, so the read throws AutoLockStateUnreadableError and the alarm
-// locks; an arm storage refuses reports `saved: false` so the route locks,
-// since a restarted worker would find no record and never lock.
+// The backstop fails closed. A record storage cannot read or that has no
+// enforceable armed deadline throws AutoLockStateUnreadableError, so the alarm
+// locks. An arm with no usable idle window, or one storage refuses, reports
+// `saved: false` so the route locks.
 
 import { provisionalAutoLockSignal } from '@xchain-wallet/core/shared/hooks/autoLockGuard.js';
 
@@ -75,6 +75,15 @@ export class AutoLockStateUnreadableError extends Error {
     }
 }
 
+/** Storage returned a record that cannot enforce the promised deadline. */
+export class AutoLockStateMalformedError extends AutoLockStateUnreadableError {
+    constructor() {
+        super(new Error('malformed auto-lock record'));
+        this.name = 'AutoLockStateMalformedError';
+        this.message = 'auto-lock record is malformed';
+    }
+}
+
 /**
  * Null means no record. A read storage refuses throws
  * AutoLockStateUnreadableError rather than reading as no record, which would
@@ -93,14 +102,25 @@ export async function readAutoLockState() {
         throw new AutoLockStateUnreadableError(err);
     }
     const v = got?.[KEY];
-    if (!v || typeof v !== 'object') return null;
+    if (v === undefined) return null;
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) {
+        throw new AutoLockStateMalformedError();
+    }
+    if (typeof v.armed !== 'boolean') throw new AutoLockStateMalformedError();
+    if (v.armed === true) {
+        if (!Number.isFinite(v.idleMs) || v.idleMs <= 0) throw new AutoLockStateMalformedError();
+        if (!Number.isFinite(v.lastActivity) || v.lastActivity <= 0) throw new AutoLockStateMalformedError();
+    }
+    if (v.armedAt !== undefined && !Number.isFinite(v.armedAt)) {
+        throw new AutoLockStateMalformedError();
+    }
     /** @type {AutoLockState} */
     const state = {
-        armed: v.armed === true,
-        idleMs: typeof v.idleMs === 'number' ? v.idleMs : 0,
-        lastActivity: typeof v.lastActivity === 'number' ? v.lastActivity : 0,
+        armed: v.armed,
+        idleMs: Number.isFinite(v.idleMs) ? v.idleMs : 0,
+        lastActivity: Number.isFinite(v.lastActivity) ? v.lastActivity : 0,
     };
-    if (typeof v.armedAt === 'number') state.armedAt = v.armedAt;
+    if (Number.isFinite(v.armedAt)) state.armedAt = v.armedAt;
     return state;
 }
 
@@ -162,6 +182,9 @@ export async function applyAutoLockSignal(signal, now) {
         return { saved: true };
     }
     const idleMs = Number(signal.idleMs);
+    if (!Number.isFinite(idleMs) || idleMs <= 0) {
+        return { saved: signal.activity === true };
+    }
     const current = await readForUpdate();
     if (signal.activity === true && !current?.armed) return { saved: true };
     let lastActivity = now;
@@ -177,7 +200,7 @@ export async function applyAutoLockSignal(signal, now) {
     /** @type {AutoLockState} */
     const next = {
         armed: true,
-        idleMs: Number.isFinite(idleMs) && idleMs > 0 ? idleMs : 0,
+        idleMs,
         lastActivity,
     };
     if (armedAt !== null) next.armedAt = armedAt;

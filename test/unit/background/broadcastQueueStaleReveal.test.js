@@ -35,6 +35,12 @@ function memCollection() {
     return {
         get: async (id) => (m.has(id) ? copy(m.get(id)) : null),
         put: async (rec) => { m.set(rec.id, copy(rec)); },
+        update: async (id, decide) => {
+            const next = decide(m.has(id) ? copy(m.get(id)) : null);
+            if (next == null) return false;
+            m.set(id, copy(next));
+            return true;
+        },
         list: async () => Array.from(m.values()).map(copy),
         delete: async (id) => m.delete(id),
         find: async (id) => (m.has(id) ? copy(m.get(id)) : null),
@@ -47,6 +53,39 @@ const chainRegistry = {
     list: () => [],
     chainIdFor: (coin, network) => (coin === 'litecoin' && network === 'regtest' ? CHAIN : null),
 };
+
+function deferred() {
+    let resolve;
+    const promise = new Promise((done) => { resolve = done; });
+    return { promise, resolve };
+}
+
+function serializedCollection(seed, firstWriteGate) {
+    let current = structuredClone(seed);
+    let tail = Promise.resolve();
+    let firstWrite = true;
+    const enqueue = (operation) => {
+        const result = tail.then(operation);
+        tail = result.catch(() => {});
+        return result;
+    };
+    return {
+        get: async () => structuredClone(current),
+        put: (record) => enqueue(async () => {
+            if (firstWrite) {
+                firstWrite = false;
+                await firstWriteGate.promise;
+            }
+            current = structuredClone(record);
+        }),
+        update: (id, decide) => enqueue(() => {
+            const next = decide(current?.id === id ? structuredClone(current) : null);
+            if (next == null) return false;
+            current = structuredClone(next);
+            return true;
+        }),
+    };
+}
 
 function bootHost({ pendingTxs, broadcastTx, entries }) {
     const saved = [];
@@ -207,6 +246,19 @@ describe('a permanent refusal settled against the durable record', () => {
         expect(await pendingTxs.get('p1')).toMatchObject({
             status: 'broadcast', txid: 'txid-PHASE1', commitLanded: true, error: 'spent',
         });
+    });
+
+    it('does not replay a stale queued patch over an earlier terminal write', async () => {
+        const gate = deferred();
+        const pendingTxs = serializedCollection(advancedRecord(), gate);
+        const { vault, engine } = engineOver(pendingTxs);
+        const landed = pendingTxs.put({ ...advancedRecord(), status: 'broadcast', txid: 'landed-txid' });
+        const replay = engine.applyPendingTxPatch(vault, 'p1', { status: 'queued', txid: null });
+
+        gate.resolve();
+        await landed;
+        await expect(replay).resolves.toBe('closed');
+        expect(await pendingTxs.get('p1')).toMatchObject({ status: 'broadcast', txid: 'landed-txid' });
     });
 
     it('still writes failed over a record whose commit never landed', async () => {

@@ -63,6 +63,8 @@ const signer = (id, walletId, kind = 'ledger') => ({
 const ADDRESSES = [
     row({ id: 'hd-1', address: 'bcrt1qhd' }),
     row({ id: 'led-1', source: 'ledger', signerId: 'dev-1', address: 'bcrt1qled' }),
+    row({ id: 'led-unlinked', source: 'ledger', signerId: null, address: 'bcrt1qunlinked' }),
+    row({ id: 'led-on-trezor', source: 'ledger', signerId: 'dev-t', address: 'bcrt1qledontrezor' }),
     row({ id: 'wo-1', source: 'watch-only', accountId: null, derivationPath: null, address: 'bcrt1qwo' }),
     row({ id: 'other-led', source: 'ledger', signerId: 'dev-2', accountId: 'acct-2', address: 'bcrt1qother' }),
     row({ id: 'shared-w1', source: 'ledger', signerId: 'dev-1', address: SHARED }),
@@ -85,7 +87,11 @@ function makeHost() {
             { schemaVersion: 2, id: 'acct-2', walletId: 'w2', index: 0, name: 'Two', activeAddressByChainId: {}, createdAt: '2026-01-01T00:00:00.000Z' },
         ]),
         addresses: memCollection(ADDRESSES),
-        signers: memCollection([signer('dev-1', 'w1'), signer('dev-2', 'w2')]),
+        signers: memCollection([
+            signer('dev-1', 'w1'),
+            signer('dev-2', 'w2'),
+            signer('dev-t', 'w1', 'trezor'),
+        ]),
         settings: {
             _rec: { schemaVersion: 2, activeNetwork: 'regtest', fees: {}, ads: { enabled: false, perChain: {} }, privacy: {} },
             async get() { return JSON.parse(JSON.stringify(this._rec)); },
@@ -131,6 +137,33 @@ describe('a software route signs only with the signer the stored address calls f
         const res = await send(makeHost(), { from: from('led-1'), signerId: 'dev-2' });
         expect(res.ok).toBe(false);
         expect(res.error.message).toMatch(/own device/);
+        expect(sendTokenMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses an unlinked hardware address on action and message signing routes', async () => {
+        sendTokenMock.mockReset();
+        const action = await send(makeHost(), {
+            from: from('led-unlinked', { source: 'hd' }), password: 'pw',
+        });
+        const message = await send(makeHost(), {
+            addressId: 'led-unlinked', message: 'hi', password: 'pw',
+        }, 'auth.signMessage');
+
+        expect(action.ok).toBe(false);
+        expect(action.error.message).toMatch(/no signerId/);
+        expect(message.ok).toBe(false);
+        expect(message.error.message).toMatch(/no signerId/);
+        expect(sendTokenMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses a linked signer whose kind contradicts the stored address source', async () => {
+        sendTokenMock.mockReset();
+        const res = await send(makeHost(), {
+            from: from('led-on-trezor'), signerId: 'dev-t',
+        });
+
+        expect(res.ok).toBe(false);
+        expect(res.error.message).toMatch(/doesn't match signer kind/);
         expect(sendTokenMock).not.toHaveBeenCalled();
     });
 

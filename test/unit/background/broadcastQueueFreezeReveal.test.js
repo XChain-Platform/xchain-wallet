@@ -42,6 +42,12 @@ function memCollection() {
         _map: m,
         get: async (id) => (m.has(id) ? copy(m.get(id)) : null),
         put: async (rec) => { m.set(rec.id, copy(rec)); },
+        update: async (id, decide) => {
+            const next = decide(m.has(id) ? copy(m.get(id)) : null);
+            if (next == null) return false;
+            m.set(id, copy(next));
+            return true;
+        },
         list: async () => Array.from(m.values()).map(copy),
         delete: async (id) => m.delete(id),
         find: async (id) => (m.has(id) ? copy(m.get(id)) : null),
@@ -52,15 +58,19 @@ function memCollection() {
 /** Arms the freeze on the first write that claims a record as 'broadcasting'. */
 function armingOnClaim(base) {
     let armed = false;
+    const arm = (record) => {
+        if (!armed && record?.status === 'broadcasting') {
+            armed = true;
+            activatePanicMode();
+        }
+        return record;
+    };
     return {
         ...base,
         put: async (rec) => {
-            if (!armed && rec.status === 'broadcasting') {
-                armed = true;
-                activatePanicMode();
-            }
-            return base.put(rec);
+            return base.put(arm(rec));
         },
+        update: (id, decide) => base.update(id, (current) => arm(decide(current))),
     };
 }
 

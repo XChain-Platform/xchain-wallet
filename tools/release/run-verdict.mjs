@@ -48,6 +48,7 @@
 //   node tools/release/run-verdict.mjs --run <run-id> [--repo owner/name]
 //   node tools/release/run-verdict.mjs --branch master [--repo owner/name]
 //   node tools/release/run-verdict.mjs --from <jobs.json>
+// Aggregate jobs are excluded by default; pass --include-aggregates to inspect them.
 //
 // Env:
 //   GITHUB_TOKEN   needed for any network form; needs `actions: read`, plus
@@ -73,6 +74,10 @@ export const JOB_STATE = {
     /** Queued or in progress. Not an outcome yet. */
     RUNNING: 'running',
 };
+
+// Aggregates fail whenever a shard does, including a cancelled shard. Counting
+// them would turn infrastructure into a stated assertion already represented by the shard.
+export const CI_AGGREGATE_JOBS = Object.freeze(['test', 'coverage', 'e2e']);
 
 /** Verdicts a whole run can reach. Only `red` names an assertion. */
 export const VERDICT = {
@@ -344,6 +349,9 @@ Usage:
 
   --exclude <job>  leave a job out; repeatable. The \`verdict\` job passes its
                    own name, because it is still running while it reads.
+  --include-aggregates
+                   include test, coverage and e2e aggregate jobs. They are
+                   excluded by default because shard jobs carry the findings.
   --json           machine-readable output.
 
 Exit: 0 the run is green or carries no finding, 1 red for a stated assertion,
@@ -359,7 +367,8 @@ hit its time limit is RED, named by the step that hung: a hang is a finding.`);
         process.exit(2);
     };
 
-    const exclude = argAll('exclude');
+    const includeAggregates = process.argv.includes('--include-aggregates');
+    const explicitExcludes = argAll('exclude');
     const asJson = process.argv.includes('--json');
     const from = arg('from');
 
@@ -441,6 +450,11 @@ hit its time limit is RED, named by the step that hung: a hang is a finding.`);
         run = { ...meta, jobs };
     }
 
+    const aggregateExcludes = includeAggregates ? [] : (run.jobs ?? [])
+        .filter((job) => CI_AGGREGATE_JOBS.includes(job?.name)
+            && (job?.steps ?? []).some((step) => /^Every .* (?:leg|shard)s? passed$/.test(step?.name)))
+        .map((job) => job.name);
+    const exclude = [...new Set([...aggregateExcludes, ...explicitExcludes])];
     const result = classifyRun(run, { exclude });
     const text = asJson ? JSON.stringify(result, null, 2) : formatVerdict(result);
     process.stdout.write(`${text}\n`);

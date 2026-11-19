@@ -726,11 +726,13 @@ export async function submitAction({
                     const revealMark = !phase1Landed && err.revealTxHex
                         ? { revealTxHex: err.revealTxHex, revealTxid: err.revealTxid ?? null }
                         : {};
+                    const queuedAdsCommit = { chainId, ...adsVerdict() };
                     const pendingSaved = await stampPending({
                         status: 'queued',
                         txid: err.txid,
                         txHex: err.signedTxHex,
                         error: err && err.message ? String(err.message) : String(err),
+                        adsCommit: queuedAdsCommit,
                         ...commitMark,
                         ...revealMark,
                     });
@@ -758,7 +760,7 @@ export async function submitAction({
                                 // bytes so the queue's eventual-success handler
                                 // books it (a queued tx is what donates, not
                                 // the failed immediate attempt). §5.3.4.
-                                adsCommit: { chainId, ...adsVerdict() },
+                                adsCommit: queuedAdsCommit,
                             }) !== false;
                         } catch (_inner) {
                             // Swallow callback errors; the broadcast

@@ -661,8 +661,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        # `test`, `coverage` and `e2e` are aggregators over their shard jobs:
-        # they fail whenever a shard did, cancelled ones included, so counting
-        # them would turn a cancelled shard into a stated assertion. The shard
-        # jobs carry every finding by name.
-        run: node tools/release/run-verdict.mjs --run ${{ github.run_id }} --exclude verdict --exclude test --exclude coverage --exclude e2e
+        # Aggregate exclusions are defined by CI_AGGREGATE_JOBS in run-verdict.mjs.
+        run: node tools/release/run-verdict.mjs --run ${{ github.run_id }} --exclude verdict

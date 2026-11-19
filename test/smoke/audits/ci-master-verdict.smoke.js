@@ -57,7 +57,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { classifyRun, exitCodeFor, JOB_STATE, VERDICT } from '../../../tools/release/run-verdict.mjs';
+import {
+    CI_AGGREGATE_JOBS, classifyRun, exitCodeFor, JOB_STATE, VERDICT,
+} from '../../../tools/release/run-verdict.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..');
@@ -271,6 +273,19 @@ assert.match(verdict, /--exclude verdict\b/,
     + 'while it reads, so including itself makes every run classify as PENDING and the job reports '
     + 'nothing, forever.');
 
+assert.doesNotMatch(verdict, /--exclude (?:test|coverage|e2e)\b/,
+    'aggregate exclusions must come from run-verdict.mjs so operator and CI policy cannot drift.');
+const workflowAggregates = [...jobs]
+    .filter(([, blockText]) => /name:\s*Every .* (?:leg|shard)s? passed/.test(blockText))
+    .map(([name]) => name)
+    .sort();
+assert.deepEqual([...CI_AGGREGATE_JOBS].sort(), workflowAggregates,
+    'the classifier aggregate policy must match the aggregate jobs in ci.yml');
+for (const name of CI_AGGREGATE_JOBS) {
+    assert.match(jobs.get(name), /^\s*needs:\s*\[[^\]]*-shard[^\]]*\]/m,
+        `${name} must aggregate at least one shard job`);
+}
+
 assert.match(verdict, /^\s*if:\s*\$\{\{\s*always\(\)\s*\}\}\s*$/m,
     'the `verdict` job is not `if: ${{ always() }}`. Gating it on the other jobs succeeding '
     + 'silences it in exactly the case it exists for: a run that went red without saying why.');
@@ -388,6 +403,24 @@ const greenRun = classifyRun(fixture('31152887714-green.json'));
 assert.equal(greenRun.verdict, VERDICT.GREEN,
     'run 31152887714 passed every job and must classify as GREEN.');
 
+const currentAggregateRun = {
+    id: 0,
+    conclusion: 'failure',
+    jobs: [
+        { name: 'test-shard (1)', status: 'completed', conclusion: 'cancelled', steps: [] },
+        {
+            name: 'test', status: 'completed', conclusion: 'failure',
+            steps: [{ name: 'Every test leg passed', status: 'completed', conclusion: 'failure' }],
+        },
+    ],
+};
+const rawAggregate = classifyRun(currentAggregateRun);
+assert.equal(rawAggregate.verdict, VERDICT.RED);
+assert.deepEqual(rawAggregate.assertions, ['test / Every test leg passed']);
+const withoutAggregates = classifyRun(currentAggregateRun, { exclude: [...CI_AGGREGATE_JOBS] });
+assert.equal(withoutAggregates.verdict, VERDICT.NO_VERDICT);
+assert.deepEqual(withoutAggregates.assertions, []);
+
 // A job still running is not an outcome. Taken from the verdict job's own
 // position: it reads its run while it is itself in progress, which is why it
 // passes `--exclude verdict`.
@@ -418,7 +451,7 @@ const hungSteps = [
     { name: 'Upload Playwright report', status: 'completed', conclusion: 'skipped' },
     { name: 'Complete job', status: 'completed', conclusion: 'success' },
 ];
-const hungJob = (over) => ({ name: 'e2e', status: 'completed', steps: hungSteps, ...over });
+const hungJob = (over) => ({ name: 'e2e-regtest', status: 'completed', steps: hungSteps, ...over });
 for (const [label, job] of [
     ['a cancelled job carrying the timeout annotation', hungJob({ conclusion: 'cancelled', annotation: TIMEOUT_NOTE })],
     ['a cancelled job whose timeout annotation is not the first',
@@ -426,9 +459,10 @@ for (const [label, job] of [
     ['a `timed_out` job', hungJob({ conclusion: 'timed_out' })],
 ]) {
     const hung = classifyRun({ id: 0, jobs: [job] });
-    assert.equal(stateOf(hung, 'e2e'), JOB_STATE.TIMED_OUT, `${label} must be reported as timed out`);
+    assert.equal(stateOf(hung, 'e2e-regtest'), JOB_STATE.TIMED_OUT, `${label} must be reported as timed out`);
     assert.equal(hung.verdict, VERDICT.RED, `${label} is a hung step, a finding, never infrastructure to re-run`);
-    assert.deepEqual(hung.assertions, ['e2e / Run E2E suite (timed out)'], `${label} must name the step that hung`);
+    assert.deepEqual(hung.assertions, ['e2e-regtest / Run E2E suite (timed out)'],
+        `${label} must name the step that hung`);
     assert.equal(exitCodeFor(hung.verdict), 1, `${label} must fail the verdict job`);
 }
 const concurrencyCancel = classifyRun({ id: 0, jobs: [hungJob({
@@ -436,7 +470,7 @@ const concurrencyCancel = classifyRun({ id: 0, jobs: [hungJob({
     annotations: ['Canceling since a higher priority waiting request for ci-refs/pull/61/merge-ref exists',
         'The operation was canceled.'],
 })] });
-assert.equal(stateOf(concurrencyCancel, 'e2e'), JOB_STATE.CANCELLED,
+assert.equal(stateOf(concurrencyCancel, 'e2e-regtest'), JOB_STATE.CANCELLED,
     'a mid-run cancel by a newer push carries no finding and must stay CANCELLED');
 assert.equal(concurrencyCancel.verdict, VERDICT.NO_VERDICT);
 assert.equal(stateOf(classifyRun({ id: 0, jobs: [{ name: 'e2e', status: 'completed', conclusion: 'timed_out', steps: [] }] }), 'e2e'),
@@ -507,6 +541,15 @@ assert.equal(stateOf(classifyRun({ id: 0, jobs: [{ name: 'e2e', status: 'complet
     try {
         const offlineFile = join(work, 'run.json');
         writeFileSync(offlineFile, JSON.stringify({ ...meta, jobs: stubJobs }));
+        const aggregateFile = join(work, 'aggregate-run.json');
+        writeFileSync(aggregateFile, JSON.stringify(currentAggregateRun));
+        const aggregateDefault = await cli(['--from', aggregateFile, '--json']);
+        assert.equal(aggregateDefault.status, 0,
+            'the operator default must not relabel a cancelled shard through its aggregate job');
+        assert.equal(JSON.parse(aggregateDefault.stdout).verdict, VERDICT.NO_VERDICT);
+        const aggregateRaw = await cli(['--from', aggregateFile, '--include-aggregates', '--json']);
+        assert.equal(aggregateRaw.status, 1);
+        assert.equal(JSON.parse(aggregateRaw.stdout).verdict, VERDICT.RED);
         const offline = await cli(['--from', offlineFile, '--json']);
         const online = await cli(['--run', '1', '--repo', 'o/r', '--json']);
         assert.notEqual(online.status, 2,
@@ -520,7 +563,8 @@ assert.equal(stateOf(classifyRun({ id: 0, jobs: [{ name: 'e2e', status: 'complet
         const timedOut = await cli(['--run', '2', '--repo', 'o/r', '--json']);
         assert.equal(timedOut.status, 1,
             `a cancelled job whose annotation says it hit its time limit must exit 1; stderr: ${timedOut.stderr}`);
-        assert.deepEqual(JSON.parse(timedOut.stdout).assertions, ['e2e / Run E2E suite (timed out)']);
+        assert.deepEqual(JSON.parse(timedOut.stdout).assertions,
+            ['e2e-regtest / Run E2E suite (timed out)']);
         const unread = await cli(['--run', '3', '--repo', 'o/r', '--json']);
         assert.equal(unread.status, 0, 'a refused annotation on a cancelled job leaves it CANCELLED, exit 0');
         assert.equal(JSON.parse(unread.stdout).jobs[0].state, JOB_STATE.CANCELLED);

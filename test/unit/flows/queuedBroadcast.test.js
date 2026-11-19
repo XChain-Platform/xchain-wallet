@@ -62,6 +62,8 @@ const chainRegistry = {
     ),
 };
 
+const GENESIS_COINBASE = '01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4d04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000';
+
 describe('drainQueuedBroadcast: panic-mode freeze', () => {
     afterEach(() => {
         deactivatePanicMode();
@@ -122,6 +124,33 @@ describe('drainQueuedBroadcast: panic-mode freeze', () => {
         await expect(drainQueuedBroadcast({
             vault, sdkRegistry, chainRegistry, pendingTxId: 'missing',
         })).rejects.toBeInstanceOf(NoQueuedTxError);
+    });
+
+    it('keeps a landed reveal queued when panic mode activates during its commit request', async () => {
+        const pendingTxs = memCollection([queuedPendingTx({
+            txid: 'commit-id', revealTxHex: 'reveal-hex', revealTxid: 'reveal-id',
+        })]);
+        const sent = [];
+        const sdkRegistry = { get: () => ({ encoder: { broadcastTx: async (hex) => {
+            sent.push(hex);
+            if (sent.length === 1) activatePanicMode({ durationMs: 60 * 60 * 1000 });
+            return {};
+        } } }) };
+
+        await expect(drainQueuedBroadcast({
+            vault: { pendingTxs }, sdkRegistry, chainRegistry, pendingTxId: 'ptx-1',
+        })).rejects.toBeInstanceOf(PanicModeActiveError);
+        expect(sent).toEqual(['deadbeef']);
+        expect(await pendingTxs.get('ptx-1')).toMatchObject({
+            status: 'queued', txid: 'reveal-id', txHex: 'reveal-hex', commitLanded: true,
+        });
+
+        deactivatePanicMode();
+        await drainQueuedBroadcast({
+            vault: { pendingTxs }, sdkRegistry, chainRegistry, pendingTxId: 'ptx-1',
+        });
+        expect(sent).toEqual(['deadbeef', 'reveal-hex']);
+        expect((await pendingTxs.get('ptx-1')).status).toBe('broadcast');
     });
 });
 
@@ -300,5 +329,27 @@ describe('drainQueuedBroadcast: in-flight / idempotency guard', () => {
         });
         expect(broadcastCalls).toBe(1);
         expect(result.broadcast).toBe(true);
+    });
+
+    it('records normalized transaction ids for successful and already-known deliveries', async () => {
+        const responseRows = memCollection([queuedPendingTx()]);
+        const responseSdk = {
+            get: () => ({ encoder: { broadcastTx: async () => ({ txid: 'AB'.repeat(32) }) } }),
+        };
+        const response = await drainQueuedBroadcast({
+            vault: { pendingTxs: responseRows }, sdkRegistry: responseSdk,
+            chainRegistry, pendingTxId: 'ptx-1',
+        });
+        expect(response.pendingTx.txid).toBe('ab'.repeat(32));
+
+        const knownRows = memCollection([queuedPendingTx({ txHex: GENESIS_COINBASE })]);
+        const knownSdk = {
+            get: () => ({ encoder: { broadcastTx: async () => { throw new Error('txn-already-known'); } } }),
+        };
+        const known = await drainQueuedBroadcast({
+            vault: { pendingTxs: knownRows }, sdkRegistry: knownSdk,
+            chainRegistry, pendingTxId: 'ptx-1',
+        });
+        expect(known.pendingTx.txid).toBe('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b');
     });
 });

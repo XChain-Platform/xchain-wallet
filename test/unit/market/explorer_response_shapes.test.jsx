@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { bucketizeMatches } from '../../../packages/core/src/market/bucketize.js';
 import { normalizeMarketHistoryRow } from '../../../packages/core/src/market/history_rows.js';
-import { normalizeMarket } from '../../../packages/core/src/shared/routes/MarketsList.jsx';
+import { normalizeMarket } from '../../../packages/core/src/market/marketRow.js';
 
 describe('explorer market response shapes', () => {
     it('buckets the projected market history fields', () => {

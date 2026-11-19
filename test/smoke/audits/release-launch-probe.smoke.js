@@ -264,6 +264,33 @@ async function launchUntilReady(cmd, args = []) {
 }
 
 {
+    const marker = join(work, 'exited-parent-helper.pid');
+    const exitedParent = script('exited-parent-helper.sh',
+        `sleep 60 & echo $! > ${JSON.stringify(marker)}; echo starting; exit 7`);
+    const obs = await launchAndWatch(exitedParent, [], { timeoutMs: 8000 });
+    assert.equal(obs.exited, true, 'a helper holding stdout must not hide its parent exit');
+    assert.equal(obs.exitCode, 7);
+    assert.ok(obs.waitedMs < 4000, `must resolve on parent exit, not pipe close (${obs.waitedMs}ms)`);
+    assert.match(evaluate(obs).reason, /exited with code 7/);
+
+    const pid = Number(readFileSync(marker, 'utf8').trim());
+    let alive = true;
+    for (let i = 0; i < 20 && alive; i += 1) {
+        try { process.kill(pid, 0); await new Promise((r) => setTimeout(r, 100)); } catch { alive = false; }
+    }
+    assert.equal(alive, false, `helper ${pid} survived cleanup after its parent exited`);
+}
+
+{
+    const fatal = '# Fatal process out of memory: Failed to reserve virtual memory for CodeRange';
+    const crasher = script('exited-parent-crash.sh', `sleep 60 & echo ${JSON.stringify(fatal)} >&2; exit 1`);
+    const obs = await launchAndWatch(crasher, [], { timeoutMs: 8000 });
+    assert.equal(obs.exited, true);
+    assert.match(obs.output, /Fatal process out of memory/);
+    assert.match(evaluate(obs).reason, /CRASHED/);
+}
+
+{
     // Crash output from a process that is still technically up.
     const crasher = script('crasher.sh',
         'echo "# Fatal process out of memory: Failed to reserve virtual memory for CodeRange"; '

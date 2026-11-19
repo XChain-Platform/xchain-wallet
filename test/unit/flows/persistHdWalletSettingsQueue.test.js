@@ -85,7 +85,7 @@ describe('wallet setup seeding waits for settings writes already queued', () => 
         const registry = new ChainRegistry();
         await ensureSettings(vault, registry, ['bitcoin-regtest']);
 
-        const walletPut = vi.spyOn(vault.wallets, 'put');
+        const guardedPut = vi.spyOn(vault, 'putManyGuarded');
         let release;
         const held = serializeSettingsWrites(vault, () => new Promise((resolve) => { release = resolve; }));
         const imported = importMnemonic({
@@ -99,24 +99,24 @@ describe('wallet setup seeding waits for settings writes already queued', () => 
             kdfParams: LOW_COST_KDF_PARAMS,
         });
 
-        const wroteEarly = await waitFor(() => walletPut.mock.calls.length > 0, 3000);
+        const wroteEarly = await waitFor(() => guardedPut.mock.calls.length > 0, 3000);
         expect(wroteEarly).toBe(false);
 
         release();
         await held;
         await imported;
-        expect(walletPut).toHaveBeenCalledTimes(1);
+        expect(guardedPut).toHaveBeenCalledTimes(1);
     });
 });
 
 describe('a failed wallet setup on a vault that already has settings', () => {
     it('removes the chain entries it seeded and keeps the ones that were already there', async () => {
-        const vault = new Vault({ backend: new InMemoryBackend(), masterKey: new Uint8Array(32).fill(9) });
+        const backend = new InMemoryBackend();
+        const vault = new Vault({ backend, masterKey: new Uint8Array(32).fill(9) });
         await vault.open();
         const registry = new ChainRegistry();
         await ensureSettings(vault, registry, ['bitcoin-regtest']);
-        const put = vault.addresses.put;
-        vault.addresses.put = async (record) => { await put(record); throw new Error('address save failed'); };
+        backend.save = async () => { throw new Error('address save failed'); };
 
         await expect(importMnemonic({
             password: 'correct-horse-battery-staple',

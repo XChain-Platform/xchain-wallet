@@ -25,8 +25,8 @@
 // The cases are the decisions the tool makes, one each: current, a patch
 // behind on our own major, a major past the grace window, a major still
 // inside it, out of the support window entirely, the oldest-supported
-// warning, an unreadable pin, and an unreachable registry - which must
-// NEVER read as current.
+// warning, invalid timestamps, an unreadable pin, and an unreachable
+// registry - which must NEVER read as current.
 
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
@@ -218,6 +218,43 @@ function packument({ tags, time = {} }) {
     assert.equal(both.state, 'behind', 'a detected violation outranks an evidence gap');
     assert.equal(both.ok, false);
     assert.ok(both.problems.some((p) => p.kind === 'major'), 'and the finding survives');
+
+    for (const invalid of ['invalid', '']) {
+        const badMajorDate = assess('44.1.0', packument({
+            tags: { latest: '45.0.0', '45-x-y': '45.0.0', '44-x-y': '44.1.0' },
+            time: { '45.0.0': invalid },
+        }));
+        assert.equal(badMajorDate.state, 'inconclusive',
+            'an unreadable major release date cannot produce a clean verdict');
+        assert.equal(badMajorDate.ok, false);
+        assert.ok(badMajorDate.missing.some((entry) => entry.includes('45.0.0')));
+    }
+
+    const badNewestPatch = assess('44.1.0', packument({
+        tags: { latest: '44.1.1', '44-x-y': '44.1.1' },
+        time: { '44.1.0': daysAgo(20), '44.1.1': 'invalid' },
+    }));
+    assert.equal(badNewestPatch.state, 'behind',
+        'an unreadable newest patch date follows the existing owed-at-once rule');
+    assert.equal(badNewestPatch.problems[0].kind, 'patch');
+    assert.ok(badNewestPatch.missing.some((entry) => entry.includes('44.1.1')));
+
+    const badOlderPatch = assess('44.0.0', packument({
+        tags: { latest: '44.2.0', '44-x-y': '44.2.0' },
+        time: { '44.1.0': 'garbage', '44.2.0': daysAgo(1) },
+    }));
+    assert.equal(badOlderPatch.state, 'inconclusive',
+        'an unreadable older candidate cannot be dropped from the patch clock');
+    assert.ok(badOlderPatch.missing.some((entry) => entry.includes('44.1.0')));
+
+    const badClock = assess('44.0.0', {
+        'dist-tags': { latest: '45.0.0', '45-x-y': '45.0.0', '44-x-y': '44.2.0' },
+        time: { '44.2.0': daysAgo(40), '45.0.0': daysAgo(60) },
+        _now: 'not-a-date',
+    });
+    assert.equal(badClock.state, 'inconclusive', 'an unreadable clock cannot drive age findings');
+    assert.ok(badClock.missing.some((entry) => /_now/.test(entry)));
+    assert.equal(badClock.problems.some((problem) => ['patch', 'major'].includes(problem.kind)), false);
 }
 
 // ------------------------------------------------- the pin it actually reads
@@ -285,6 +322,25 @@ function packument({ tags, time = {} }) {
         assert.match(nothing.stderr, /INCONCLUSIVE/);
         assert.match(nothing.stderr, /dist-tags\.latest/);
         assert.doesNotMatch(nothing.stdout, /CURRENT/);
+
+        const pinned = readPinnedVersion().version;
+        const pinnedMajor = Number(pinned.split('.')[0]);
+        const nextMajor = pinnedMajor + 1;
+        const invalidDate = join(tmp, 'invalid-date.json');
+        writeFileSync(invalidDate, JSON.stringify(packument({
+            tags: {
+                latest: `${nextMajor}.0.0`,
+                [`${nextMajor}-x-y`]: `${nextMajor}.0.0`,
+                [`${pinnedMajor}-x-y`]: pinned,
+            },
+            time: { [`${nextMajor}.0.0`]: 'invalid' },
+        })));
+        const inconclusive = spawnSync(process.execPath, [TOOL, '--offline', invalidDate],
+            { encoding: 'utf8' });
+        assert.equal(inconclusive.status, 3, 'an invalid release date exits 3');
+        assert.match(inconclusive.stderr, /INCONCLUSIVE/);
+        assert.match(inconclusive.stderr, new RegExp(`${nextMajor}\\.0\\.0`));
+        assert.doesNotMatch(inconclusive.stdout, /CURRENT/);
 
         // --json is what a cron or a dashboard would read.
         const asJson = spawnSync(process.execPath, [TOOL, '--offline', behind, '--json'],

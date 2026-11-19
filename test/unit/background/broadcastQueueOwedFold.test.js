@@ -65,6 +65,13 @@ function memVault() {
                 if (vault.closed) throw new Error('VaultStateError: vault is closed');
                 records.set(rec.id, copy(rec));
             },
+            update: async (id, decide) => {
+                if (vault.closed) throw new Error('VaultStateError: vault is closed');
+                const next = decide(records.has(id) ? copy(records.get(id)) : null);
+                if (next == null) return false;
+                records.set(id, copy(next));
+                return true;
+            },
             delete: async (id) => {
                 if (vault.closed) throw new Error('VaultStateError: vault is closed');
                 return records.delete(id);

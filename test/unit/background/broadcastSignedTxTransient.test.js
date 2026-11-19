@@ -27,6 +27,12 @@ function memCollection() {
     return {
         get: async (id) => (records.has(id) ? copy(records.get(id)) : null),
         put: vi.fn(async (record) => { records.set(record.id, copy(record)); }),
+        update: async (id, decide) => {
+            const next = decide(records.has(id) ? copy(records.get(id)) : null);
+            if (next == null) return false;
+            records.set(id, copy(next));
+            return true;
+        },
         list: async () => Array.from(records.values()).map(copy),
         delete: async (id) => records.delete(id),
         find: async (id) => (records.has(id) ? copy(records.get(id)) : null),
