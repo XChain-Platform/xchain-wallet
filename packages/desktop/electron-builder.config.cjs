@@ -885,6 +885,37 @@ const config = {
         provisioningProfile: process.env.MAS_PROVISIONING_PROFILE || null,
         // The store lists by category; this mirrors mac.category.
         category: 'public.app-category.finance',
+        // App Store Connect asks every upload whether the app uses
+        // non-exempt encryption; declaring it in Info.plist answers it once
+        // per build instead of in a dialog per version. The same answer the
+        // iOS app gives in packages/mobile/ios/App/App/Info.plist: the
+        // wallet uses only standard, exempt cryptography. deepAssign merges
+        // this into mac.extendInfo, so the camera text stays.
+        extendInfo: {
+            ITSAppUsesNonExemptEncryption: false,
+        },
+        // NO UNIVERSAL ASAR MERGE. With the merge on, the v0.343.0 store
+        // build hung inside @electron/universal and electron-builder exited
+        // 0 with no .pkg (MAS-RESULT.txt, builds 2 and 3): the security
+        // override `glob: ^14.0.6` in pnpm-workspace.yaml gives
+        // @electron/asar 3.4.1 glob 14, whose API asar's promisify(glob)
+        // never settles on. The override is a security floor and stays.
+        // Off is sound because the store build carries no native module
+        // (files below), so both arch halves hold the same app.asar, and
+        // @electron/universal refuses the build, loudly, if they ever
+        // differ.
+        mergeASARs: false,
+        // tiny-secp256k1's compiled binding stays out of the store build.
+        // A Mac install compiles it for the host arch only, so the x64 half
+        // of a universal app would carry an arm64 Mach-O, which
+        // @electron/universal refuses (v0.343.0 build-1). Its index.js
+        // falls back to the pure-JS implementation when the binding is
+        // absent, which is what the v0.342.1 and v0.343.0 store builds
+        // shipped after moving build/ aside by hand. Store build only: the
+        // Linux packages ship the binding their install compiles.
+        files: [
+            '!**/node_modules/tiny-secp256k1/build{,/**/*}',
+        ],
     },
 
     // --- Windows -------------------------------------------------------
